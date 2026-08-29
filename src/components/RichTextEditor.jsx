@@ -12,7 +12,7 @@ import {
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSpellcheckStatus } from '../hooks/useSpellcheckStatus';
 import { SpellcheckHelpDialog } from './SpellcheckHelpDialog';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -128,8 +128,8 @@ function Toolbar({ editor }) {
         active={!noDictionary && spellcheckEnabled}
         title={
           noDictionary
-            ? 'Spellcheck needs a dictionary — click to see how to install one'
-            : spellcheckEnabled ? 'Spellcheck on — click to turn off' : 'Spellcheck off — click to turn on'
+            ? t('editor.spellcheckNeedsDictionaryClickSee')
+            : spellcheckEnabled ? t('editor.spellcheckClickTurnOff') : t('editor.spellcheckOffClickTurn')
         }
       >
         <SpellCheck size={S} />
@@ -163,6 +163,7 @@ async function insertImageFiles(editor, files, pos) {
 }
 
 export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
+  const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const editor = useEditor({
     extensions: [
@@ -172,7 +173,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
       Underline,
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+        HTMLAttributes: { target: '_blank', rel: t('editor.noopenerNoreferrer') },
       }),
       Placeholder.configure({ placeholder }),
       // allowBase64: compose restores initialData.body HTML after minimize /

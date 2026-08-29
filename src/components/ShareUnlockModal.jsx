@@ -13,7 +13,7 @@ import {
   xIntentUrl,
   linkedinShareUrl,
 } from '../config/shareUnlock';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -95,7 +95,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
       if (res.status === 'slow_down') { wait += 5000; continue; }
       if (res.status === 'pending') continue;
       // expired | denied | error
-      setGh(g => ({ ...g, stage: 'error', error: `Authorization ${res.status}. Try again.` }));
+      setGh(g => ({ ...g, stage: 'error', error: t('shareUnlock.authorizationTryAgain', { res: res.status }) }));
       polling.current = false;
       return;
     }
@@ -103,7 +103,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
 
   const startGithub = async () => {
     const inv = invoke();
-    if (!inv) { setGh(g => ({ ...g, stage: 'error', error: 'Desktop app required.' })); return; }
+    if (!inv) { setGh(g => ({ ...g, stage: 'error', error: t('shareUnlock.desktopAppRequired') })); return; }
     setGh({ stage: 'starting', userCode: '', uri: '', error: '' });
     try {
       const r = await inv('github_device_start');
@@ -130,8 +130,8 @@ export default function ShareUnlockModal({ onSubscribe }) {
   if (!shareUnlock) return null;
 
   const milestone = emailsBackedUp > 0
-    ? `${emailsBackedUp.toLocaleString()} emails just landed safely in your vault.`
-    : `Your backup just finished.`;
+    ? t('shareUnlock.emailsJustLandedSafelyVault', { emailsBackedUp: emailsBackedUp.toLocaleString() })
+    : t('shareUnlock.backupJustFinished');
 
   return (
     <Dialog
@@ -225,12 +225,13 @@ export default function ShareUnlockModal({ onSubscribe }) {
 // ── Rows ────────────────────────────────────────────────────────────────────
 
 function RowShell({ icon, label, days, done, children }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-3 p-3 rounded-xl bg-mail-bg border border-mail-border">
       <div className="shrink-0 text-mail-text">{icon}</div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-mail-text">{label}</div>
-        <div className="text-xs text-mail-text-muted">{done ? 'Unlocked' : `+${days} days`}</div>
+        <div className="text-xs text-mail-text-muted">{done ? t('shareUnlock.unlocked') : `+${days} days`}</div>
       </div>
       <div className="shrink-0">{children}</div>
     </div>

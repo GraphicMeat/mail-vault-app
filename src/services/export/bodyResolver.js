@@ -4,6 +4,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hydrateInlineImages } from '../attachmentUtils';
 import { getGraphMessageId, graphMessageToEmail } from '../../stores/mailStore';
 import { resolveEmailLocation, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
+import { t } from '../../i18n/index.js';
 
 // Extracted from useChatBodyLoader.fetchOne so the export and the reading pane
 // resolve a body the same way. The guards are the point: the vault is keyed
@@ -16,7 +17,7 @@ import { resolveEmailLocation, bodyMatchesHeader } from '../../stores/slices/uni
 // re-check, hydrate.
 export async function resolveMessageBody(header, store) {
   const loc = resolveEmailLocation(header, store);
-  if (!loc) return { ok: false, reason: 'location unknown' };
+  if (!loc) return { ok: false, reason: t('svc.bodyResolver.locationUnknown') };
 
   const { accountId, mailbox } = loc;
 
@@ -38,7 +39,7 @@ export async function resolveMessageBody(header, store) {
   }
 
   const account = store.accounts.find(a => a.id === accountId) || null;
-  if (!account) return { ok: false, reason: 'account unavailable' };
+  if (!account) return { ok: false, reason: t('svc.bodyResolver.accountUnavailable') };
 
   let fresh = account;
   try { fresh = await ensureFreshToken(account); } catch (_) { /* stale token still worth a try */ }
@@ -58,13 +59,13 @@ export async function resolveMessageBody(header, store) {
       remote = await api.fetchEmailLight(fresh, header.uid, mailbox, accountId);
     }
   } catch (err) {
-    return { ok: false, reason: `fetch failed: ${err.message || err}` };
+    return { ok: false, reason: t('svc.bodyResolver.fetchFailed', { err: err.message || err }) };
   }
 
   // Last line of defence: this is the server's own answer for this uid, so a
   // retry only asks the same blind question again.
-  if (!remote) return { ok: false, reason: 'not found' };
-  if (!bodyMatchesHeader(header, remote)) return { ok: false, reason: 'Message-ID mismatch' };
+  if (!remote) return { ok: false, reason: t('svc.bodyResolver.found') };
+  if (!bodyMatchesHeader(header, remote)) return { ok: false, reason: t('svc.bodyResolver.messageIdMismatch') };
 
   const hydrated = await hydrateInlineImages(remote, accountId, mailbox);
   return { ok: true, email: { ...hydrated, _accountId: accountId } };

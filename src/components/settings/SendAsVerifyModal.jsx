@@ -4,7 +4,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { ensureFreshToken } from '../../services/authUtils';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 /**
  * Verify a send-as address by actually sending a test message from it.
@@ -38,13 +38,13 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
         { ...fresh, name: displayName || fresh.name || undefined, fromEmail: sendAsAddress },
         {
           to: recipient.trim(),
-          subject: 'MailVault send-as test',
-          text: `This is a test message sent from ${sendAsAddress} to confirm your mail server accepts it as a sender address.`,
+          subject: t('settings.sendAs.mailvaultSendTest'),
+          text: t('settings.sendAs.testMessageSentConfirmMail', { sendAsAddress }),
         },
         null
       );
       setStatus('ok');
-      setMessage(`${account.smtpHost || 'The server'} accepted ${sendAsAddress}. Check ${recipient.trim()} for the test message.`);
+      setMessage(t('settings.sendAs.acceptedCheckTestMessage', { account: account.smtpHost || 'The server', sendAsAddress, recipient: recipient.trim() }));
     } catch (err) {
       setStatus('error');
       setMessage(typeof err === 'string' ? err : (err?.message || 'Send failed'));
@@ -75,7 +75,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
             data-testid="send-as-verify-send"
           >
             {status !== 'sending' && <Send size={14} />}
-            {status === 'sending' ? 'Sending…' : 'Send test'}
+            {status === 'sending' ? t('settings.sendAs.sending') : t('settings.sendAs.sendTest2')}
           </Button>
         </div>
       }

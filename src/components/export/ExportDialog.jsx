@@ -7,7 +7,7 @@ import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
 import { buildExport } from '../../services/export/exportService';
 import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportSaver';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 // The label reads "Image" over a hint, but the accessible name is just the
 // choice: "One tall image" and "Separate images" both contain the word image,
@@ -61,8 +61,8 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
       const result = await buildExport({ messages, format, layout, mirror, account, mailbox });
       if (!result.ok) {
         setNotice(result.reason === 'premium'
-          ? 'Export is a Premium feature.'
-          : 'This message could not be exported.');
+          ? t('export.dialog.exportPremiumFeature')
+          : t('export.dialog.messageCouldExported'));
         return;
       }
       if (result.files.length === 1) await saveOneFile(result.files[0], 'Export');
@@ -70,13 +70,13 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
 
       if (result.partial) {
         const n = result.failures.length;
-        setNotice(`Exported. ${n} message${n === 1 ? '' : 's'} could not be exported: `
+        setNotice(t('export.dialog.exportedMessageCouldExported', { n, n2: n === 1 ? '' : 's' })
           + result.failures.map(f => f.subject || f.uid).join(', '));
       } else {
         onClose?.();
       }
     } catch (err) {
-      setNotice(`Export failed: ${err.message || err}`);
+      setNotice(t('export.dialog.exportFailed', { err: err.message || err }));
     } finally {
       setBusy(false);
     }
@@ -131,7 +131,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
             <Button variant="primary" size="sm" onClick={run} disabled={busy}>
-              {busy ? <Loader size={14} className="animate-spin" /> : 'Export'}
+              {busy ? <Loader size={14} className="animate-spin" /> : t('common.export')}
             </Button>
           </div>
         </>

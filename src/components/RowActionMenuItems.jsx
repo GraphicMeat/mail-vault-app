@@ -6,7 +6,7 @@ import { describeServerDelete, describeDeleteEverywhere } from '../utils/custody
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
 import { useExportStore } from '../stores/exportStore';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 /**
  * Contents of a row's 3-dot menu.
@@ -172,12 +172,12 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
                 useMailStore.getState().loadEmails();
               },
               {
-                title: 'Delete from server?',
+                title: t('rowMenu.deleteServer2'),
                 description: describeServerDelete(
                   serverEmails.length,
                   serverEmails.filter(em => em.isArchived).length,
                 ),
-                confirmLabel: 'Delete from server',
+                confirmLabel: t('rowMenu.deleteServer'),
               }
             );
           }}
@@ -202,9 +202,9 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
             onRequestDelete(
               () => runScoped(purgeSelectedEverywhere, { destructive: true }),
               {
-                title: 'Delete everywhere?',
+                title: t('rowMenu.deleteEverywhere2'),
                 description: describeDeleteEverywhere(emails.length),
-                confirmLabel: 'Delete everywhere',
+                confirmLabel: t('rowMenu.deleteEverywhere'),
               }
             );
           }}

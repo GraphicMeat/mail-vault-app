@@ -5,7 +5,7 @@ import { ToastShell } from './ui/ToastShell';
 import { CheckCircle2, Loader2, AlertTriangle } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import * as api from '../services/api.js';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 export function MigrationToast({ showSettings, onOpenSettings }) {
   const t = useT();
@@ -168,12 +168,12 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
               )}
               <span className="text-sm font-semibold text-mail-text truncate">
                 {total_emails > 0
-                  ? `Migrating ${current_folder || 'INBOX'} ${percent}% (${migrated_emails}/${total_emails})`
-                  : `Migrating ${current_folder || 'INBOX'}... (${migrated_emails} emails)`}
+                  ? t('migration.toast.migrating', { current_folder: current_folder || 'INBOX', percent, migrated_emails, total_emails })
+                  : t('migration.toast.migratingEmails', { current_folder: current_folder || 'INBOX', migrated_emails })}
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-mail-border mt-2 overflow-hidden">
-              <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
+              <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: t('sidebar.text', { percent }) }} />
             </div>
             {rateLimitCountdown > 0 && (
               <p className="text-xs text-mail-warning font-semibold mt-1">Rate limited -- retrying in {rateLimitCountdown}s</p>

@@ -7,7 +7,7 @@ import { buildExport, SAMPLE } from '../../services/export/exportService';
 import { saveOneFile, openInDefaultApp } from '../../services/export/exportSaver';
 import { SAMPLE_MESSAGE, SAMPLE_THREAD, SAMPLE_META } from '../../utils/exportSampleData';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 // Rendered once per session. The samples go through the real pipeline on
 // fixture data — if the renderer breaks, the upsell shows it before a customer
@@ -84,9 +84,9 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
                   only way to actually look at a sample before paying. */}
               <div className="grid grid-cols-2 gap-1.5 mt-auto">
                 <Button variant="secondary" size="sm" fullWidth
-                  onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(`Could not open the sample. (${e?.message || e})`)); }}>{t('common.open')}</Button>
+                  onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(t('export.upsell.couldOpenSample', { e: e?.message || e }))); }}>{t('common.open')}</Button>
                 <Button variant="secondary" size="sm" fullWidth
-                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(`Could not save the sample. (${e?.message || e})`)); }}>{t('common.save')}</Button>
+                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(t('export.upsell.couldSaveSample', { e: e?.message || e }))); }}>{t('common.save')}</Button>
               </div>
             </div>
           ))}

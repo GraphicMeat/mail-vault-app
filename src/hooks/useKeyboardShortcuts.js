@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { t } from '../i18n/index.js';
 
 /**
  * Actions that should still fire when the user is focused on an
@@ -26,10 +27,10 @@ function isTypingTarget(el) {
  */
 function eventToKeyString(e) {
   const parts = [];
-  if (e.metaKey) parts.push('Meta');
-  if (e.ctrlKey) parts.push('Ctrl');
+  if (e.metaKey) parts.push(t('hook.useKeyboardShortcuts.meta'));
+  if (e.ctrlKey) parts.push(t('hook.useKeyboardShortcuts.ctrl'));
   if (e.altKey) parts.push('Alt');
-  if (e.shiftKey && e.key.length > 1) parts.push('Shift'); // only explicit Shift for named keys
+  if (e.shiftKey && e.key.length > 1) parts.push(t('hook.useKeyboardShortcuts.shift')); // only explicit Shift for named keys
 
   let key = e.key;
   // Normalise common key names
@@ -109,7 +110,7 @@ export function useKeyboardShortcuts(actionHandlers) {
 
       // Build the candidate sequence string
       const candidate = sequenceRef.current
-        ? `${sequenceRef.current} ${keyStr}`
+        ? t('hook.useKeyboardShortcuts.text', { sequenceRef: sequenceRef.current, keyStr })
         : keyStr;
 
       // Check if candidate is a prefix of a longer sequence

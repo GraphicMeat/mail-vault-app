@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 export function LinkAlertIcon({ level, size = 14, alerts }) {
   const t = useT();
@@ -12,7 +12,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
   if (!level) return null;
 
   const isRed = level === 'red';
-  const title = isRed ? 'Dangerous links detected' : 'Suspicious links detected';
+  const title = isRed ? t('alert.link.dangerousLinksDetected') : t('alert.link.suspiciousLinksDetected');
 
   return (
     <>
@@ -46,7 +46,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
                 <div className="flex items-center gap-2 mb-2">
                   <AlertTriangle size={12} className={alert.level === 'red' ? 'text-mail-danger' : 'text-mail-warning'} />
                   <span className={`text-xs font-medium ${alert.level === 'red' ? 'text-mail-danger' : 'text-mail-warning'}`}>
-                    {alert.level === 'red' ? 'Dangerous' : 'Suspicious'}
+                    {alert.level === 'red' ? t('alert.link.dangerous') : t('alert.link.suspicious')}
                   </span>
                 </div>
                 <div className="text-xs text-mail-text-muted mb-1">{t('alert.link.linkTextSays')}</div>

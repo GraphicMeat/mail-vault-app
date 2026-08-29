@@ -20,6 +20,7 @@
 
 import { bodyStamp } from './linkSafety';
 import { TRACKER_PATTERNS } from './trackerList';
+import { t as tr } from '../i18n/index.js';
 
 /** Path segments that only ever belong to a beacon, not to artwork. */
 const BEACON_PATH = /\/(open|opens|beacon|pixel|track|tracking|trk|impression)(\.(gif|png|jpg|jpeg|webp))?(\/|\?|$)|\/o\/|\/q\/|\/wf\/open|open\.(gif|png|aspx|php)/i;
@@ -68,14 +69,14 @@ function shapeReason(img) {
   const w = styleW ?? attrW;
   const h = styleH ?? attrH;
   if (w !== null && h !== null && w <= 3 && h <= 3) {
-    return `Invisible ${w}×${h} image — a read receipt, not a picture`;
+    return tr('util.trackerDetect.invisibleImageReadReceiptPicture', { w, h });
   }
 
-  if (HIDDEN_STYLE.test(style)) return 'Image hidden with CSS so you never see it load';
+  if (HIDDEN_STYLE.test(style)) return tr('util.trackerDetect.imageHiddenCssSoNever');
   // A beacon is often wrapped rather than styled itself.
   const hiddenParent = img.closest?.('[style*="display"], [style*="visibility"], [style*="opacity"]');
   if (hiddenParent && hiddenParent !== img && HIDDEN_STYLE.test(hiddenParent.getAttribute('style') || '')) {
-    return 'Image hidden inside a collapsed container';
+    return tr('util.trackerDetect.imageHiddenInsideCollapsedContainer');
   }
   return null;
 }

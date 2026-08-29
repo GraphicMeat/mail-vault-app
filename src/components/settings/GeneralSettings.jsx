@@ -3,14 +3,16 @@ import { AppearanceSettings } from './AppearanceSettings';
 import { BehaviorSettings } from './BehaviorSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { ShortcutsSettings } from './ShortcutsSettings';
+import { useT, t  } from '../../i18n/index.js';
 
 export function GeneralSettings({ accounts }) {
+  const t = useT();
   const [generalSubTab, setGeneralSubTab] = useState('appearance');
   const generalSubTabs = [
-    { id: 'appearance', label: 'Appearance' },
-    { id: 'behavior', label: 'Behavior' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'shortcuts', label: 'Keyboard Shortcuts' },
+    { id: 'appearance', label: t('settings.appearance.appearance') },
+    { id: 'behavior', label: t('generalSettings.behavior') },
+    { id: 'notifications', label: t('settings.notifications.notifications') },
+    { id: 'shortcuts', label: t('shortcuts.keyboardShortcuts') },
   ];
 
   return (

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, FolderSearch, Loader } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as api from '../services/api';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 /**
  * Shown across the top of the main view when the mail storage folder cannot be
@@ -37,16 +37,16 @@ export function VaultAlertBanner() {
     setError('');
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ directory: true, title: 'Find your MailVault mail folder' });
+      const selected = await open({ directory: true, title: t('vaultAlert.findMailvaultMailFolder') });
       if (!selected) return;
 
       const info = await api.vaultInspectFolder(selected);
       if (info.kind === 'empty' || info.kind === 'occupied') {
-        setError('No mail found in that folder. Pick the folder your mail was moved to — the one containing the "Maildir" folder.');
+        setError(t('vaultAlert.noMailFoundFolderPick'));
         return;
       }
       if (info.kind === 'other_vault') {
-        setError('That folder holds a different MailVault store. Pick the folder belonging to this installation, or reset the storage location in Settings.');
+        setError(t('vaultAlert.folderHoldsDifferentMailvaultStore'));
         return;
       }
       setVaultStatus(await api.vaultAdopt(selected));
@@ -66,8 +66,8 @@ export function VaultAlertBanner() {
         </p>
         <p className="text-xs text-mail-text-muted mt-0.5 truncate">
           {vaultStatus.displayPath
-            ? `MailVault stores your mail in ${vaultStatus.displayPath}, which is not available right now.`
-            : 'The folder holding your mail is not available right now.'}
+            ? t('vaultAlert.mailvaultStoresMailWhichAvailable', { vaultStatus: vaultStatus.displayPath })
+            : t('vaultAlert.folderHoldingMailAvailableRight')}
           {' '}Reconnect the drive, or point MailVault at the folder if it moved.
         </p>
         {error && <p className="text-xs text-mail-danger mt-1">{error}</p>}

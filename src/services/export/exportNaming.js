@@ -1,3 +1,4 @@
+import { t } from '../../i18n/index.js';
 // Names for exported files. Every segment has to survive macOS, Windows and
 // Linux, so the reserved set is the union of all three, not any one of them.
 
@@ -29,24 +30,24 @@ function rootSubject(subject) {
 
 export function singleName(message, ext) {
   const d = message.date;
-  return `${day(d)} ${time(d)} - ${senderLabel(message.from)} - ${safeSegment(message.subject)}.${ext}`;
+  return t('svc.exportNaming.text', { day: day(d), time: time(d), senderLabel: senderLabel(message.from), safeSegment: safeSegment(message.subject), ext });
 }
 
 export function threadName(messages, ext) {
   const sorted = [...messages].sort((a, b) => a.date - b.date);
   const first = day(sorted[0].date);
   const last = day(sorted[sorted.length - 1].date);
-  const range = first === last ? first : `${first} to ${last}`;
-  return `${range} - ${rootSubject(sorted[0].subject)}.${ext}`;
+  const range = first === last ? first : t('svc.exportNaming.to', { first, last });
+  return t('svc.exportNaming.text2', { range, rootSubject: rootSubject(sorted[0].subject), ext });
 }
 
 export function threadMemberName(message, index, ext) {
   const d = message.date;
-  return `${pad(index + 1)} - ${day(d)} ${time(d)} - ${senderLabel(message.from)}.${ext}`;
+  return t('svc.exportNaming.text3', { pad: pad(index + 1), day: day(d), time: time(d), senderLabel: senderLabel(message.from), ext });
 }
 
 export function pageName(baseName, page, total) {
   if (total <= 1) return baseName;
   const dot = baseName.lastIndexOf('.');
-  return `${baseName.slice(0, dot)} (${page} of ${total})${baseName.slice(dot)}`;
+  return t('svc.exportNaming.of', { baseName: baseName.slice(0, dot), page, total, baseName2: baseName.slice(dot) });
 }

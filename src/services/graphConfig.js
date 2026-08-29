@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 // ── Graph transport configuration ─────────────────────────────────────────
 // Single source of truth for Graph API constants and helpers.
 // Previously duplicated in mailStore.js, AccountPipeline.js, EmailPipelineManager.js.
@@ -77,7 +78,7 @@ export function graphFoldersToMailboxes(graphFolders) {
 export function graphMessageToEmail(graphMsg, uid) {
   const from = graphMsg.from
     ? { name: graphMsg.from.emailAddress?.name || null, address: graphMsg.from.emailAddress?.address || '' }
-    : { name: 'Unknown', address: 'unknown@unknown.com' };
+    : { name: t('settings.cleanup.unknown'), address: 'unknown@unknown.com' };
 
   const to = (graphMsg.toRecipients || []).map(r => ({
     name: r.emailAddress?.name || null,

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { checkSenderVerification, parseAuthResults } from '../../utils/senderCheck';
 import { getSenderName } from '../../utils/emailParser';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
 
@@ -120,7 +120,7 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
             <div className="flex items-center gap-2 text-xs border-t border-mail-border pt-1.5 mt-1.5">
               <span className={`inline-block w-2 h-2 rounded-full ${replyToMatches ? 'bg-mail-success' : 'bg-mail-warning'}`} />
               <span className="text-mail-text-muted">{t('email.header.reply')}</span>
-              <span className="text-mail-text">{replyToMatches ? 'matches sender' : replyToAddr}</span>
+              <span className="text-mail-text">{replyToMatches ? t('email.header.matchesSender') : replyToAddr}</span>
             </div>
           )}
         </div>
@@ -242,7 +242,7 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
                   ) : (
                     <Code size={12} />
                   )}
-                  {loadingRaw ? 'Loading...' : showRaw ? 'Rendered' : 'View Source'}
+                  {loadingRaw ? t('chat.bubble.loading') : showRaw ? t('email.sender.rendered') : t('email.sender.viewSource')}
                 </button>
               </motion.div>
             )}

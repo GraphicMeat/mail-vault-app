@@ -1,7 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 export function SenderAlertIcon({ level, email, size = 14 }) {
   const t = useT();
@@ -12,7 +12,7 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
   if (!level) return null;
 
   const isRed = level === 'red';
-  const title = isRed ? 'Sender impersonation detected' : 'Suspicious sender name';
+  const title = isRed ? t('alert.sender.senderImpersonationDetected') : t('alert.sender.suspiciousSenderName');
 
   const fromName = email?.from?.name || '';
   const fromAddress = email?.from?.address || '';
@@ -44,8 +44,8 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
       >
         <p className="text-sm text-mail-text-muted">
           {isRed
-            ? 'The sender\'s display name shows a different email address than the actual sender. This is a common phishing technique to impersonate trusted contacts.'
-            : 'The sender\'s display name looks like a domain that doesn\'t match the actual sender domain. This could indicate impersonation.'}
+            ? t('alert.sender.senderSDisplayNameShows')
+            : t('alert.sender.senderSDisplayNameLooks')}
         </p>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">

@@ -6,7 +6,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 /**
  * The dialog's contents, split into their own component on purpose:
@@ -46,18 +46,18 @@ function TrackerDialogBody({ info, trackers, blocked, isPremium, onOpenFeaturePa
       {!blocked && (
         <div className="p-3 rounded-lg border border-mail-border bg-mail-surface">
           <div className="text-sm font-medium text-mail-text">
-            {isPremium ? 'Blocking is switched off' : 'Tracker Blocking is a Premium feature'}
+            {isPremium ? t('alert.tracker.blockingSwitchedOff') : t('alert.tracker.trackerBlockingPremiumFeature')}
           </div>
           <p className="text-xs text-mail-text-muted mt-1">
             {isPremium
-              ? 'Turn it on and MailVault strips these beacons out of every email before it renders.'
-              : 'Premium strips these beacons out of every email before it renders — the sender learns nothing.'}
+              ? t('alert.tracker.turnMailvaultStripsTheseBeacons')
+              : t('alert.tracker.premiumStripsTheseBeaconsOut')}
           </p>
           {!isPremium && !IS_APPSTORE_BUILD && (
             <p className="text-xs text-mail-text-muted mt-1">{priceBlurb}</p>
           )}
           <Button variant="primary" size="sm" pill className="mt-3 text-xs" onClick={onOpenFeaturePage}>
-            {isPremium ? 'Turn on blocking' : 'See how blocking works'}
+            {isPremium ? t('alert.tracker.turnBlocking') : t('alert.tracker.seeHowBlockingWorks')}
           </Button>
         </div>
       )}
@@ -77,6 +77,7 @@ function TrackerDialogBody({ info, trackers, blocked, isPremium, onOpenFeaturePa
  * falls back to vendor names when it hasn't).
  */
 export function TrackerAlertIcon({ info, trackers, blocked, size = 14 }) {
+  const t = useT();
   const [showModal, setShowModal] = useState(false);
   const billingProfile = useSettingsStore(s => s.billingProfile);
 
@@ -87,8 +88,8 @@ export function TrackerAlertIcon({ info, trackers, blocked, size = 14 }) {
   const isPremium = hasPremiumAccess(billingProfile);
   const count = info.count;
   const title = blocked
-    ? `Tracking blocked (${count})`
-    : `This email tracks you (${count})`;
+    ? t('alert.tracker.trackingBlocked', { count })
+    : t('alert.tracker.emailTracks', { count });
   const Glyph = blocked ? EyeOff : Eye;
   const tone = blocked ? 'text-mail-accent-text' : 'text-mail-warning';
 
