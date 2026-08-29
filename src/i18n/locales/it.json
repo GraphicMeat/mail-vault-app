@@ -552,8 +552,6 @@
   "selection.deleteServer": "Elimina dal server",
   "selection.deleteServer2": "Eliminare {{deleteScope}} dal server? {{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "Eliminare {{deleteScope}} dal server, dalla cassaforte e dal disco di backup? Non resterà alcuna copia. Non è reversibile.",
-  "selection.emailCount_one": "{{count}} email",
-  "selection.emailCount_other": "{{count}} email",
   "selection.emailsInConversations_one": "{{emails}} email in {{count}} conversazione",
   "selection.emailsInConversations_other": "{{emails}} email in {{count}} conversazioni",
   "selection.exportSelected": "Esporta la selezione",

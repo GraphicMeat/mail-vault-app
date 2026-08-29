@@ -552,8 +552,6 @@
   "selection.deleteServer": "Supprimer du serveur",
   "selection.deleteServer2": "Supprimer {{deleteScope}} du serveur ? {{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "Supprimer {{deleteScope}} du serveur, du coffre et du disque de sauvegarde ? Aucune copie ne subsistera nulle part. Action irréversible.",
-  "selection.emailCount_one": "{{count}} e-mail",
-  "selection.emailCount_other": "{{count}} e-mails",
   "selection.emailsInConversations_one": "{{emails}} e-mails dans {{count}} conversation",
   "selection.emailsInConversations_other": "{{emails}} e-mails dans {{count}} conversations",
   "selection.exportSelected": "Exporter la sélection",

@@ -552,8 +552,6 @@
   "selection.deleteServer": "서버에서 삭제",
   "selection.deleteServer2": "{{deleteScope}}을(를) 서버에서 삭제할까요? {{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "{{deleteScope}}을(를) 서버, 보관함, 백업 드라이브에서 삭제할까요? 어디에도 사본이 남지 않으며 되돌릴 수 없습니다.",
-  "selection.emailCount_one": "메일 {{count}}통",
-  "selection.emailCount_other": "메일 {{count}}통",
   "selection.emailsInConversations_one": "대화 {{count}}개에 메일 {{emails}}통",
   "selection.emailsInConversations_other": "대화 {{count}}개에 메일 {{emails}}통",
   "selection.exportSelected": "선택 항목 내보내기",

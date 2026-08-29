@@ -553,8 +553,6 @@
   "selection.deleteServer": "Vom Server löschen",
   "selection.deleteServer2": "{{deleteScope}} vom Server löschen? {{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "{{deleteScope}} vom Server, aus dem Tresor und vom Sicherungslaufwerk löschen? Nirgendwo bleibt eine Kopie. Das lässt sich nicht rückgängig machen.",
-  "selection.emailCount_one": "{{count}} E-Mail",
-  "selection.emailCount_other": "{{count}} E-Mails",
   "selection.emailsInConversations_one": "{{emails}} E-Mails in {{count}} Unterhaltung",
   "selection.emailsInConversations_other": "{{emails}} E-Mails in {{count}} Unterhaltungen",
   "selection.exportSelected": "Auswahl exportieren",

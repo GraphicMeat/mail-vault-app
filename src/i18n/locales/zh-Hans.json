@@ -552,8 +552,6 @@
   "selection.deleteServer": "从服务器删除",
   "selection.deleteServer2": "要从服务器删除 {{deleteScope}} 吗？{{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "要从服务器、保险库和备份盘中删除 {{deleteScope}} 吗？任何地方都不会留下副本，且无法撤销。",
-  "selection.emailCount_one": "{{count}} 封邮件",
-  "selection.emailCount_other": "{{count}} 封邮件",
   "selection.emailsInConversations_one": "{{count}} 个会话中的 {{emails}} 封邮件",
   "selection.emailsInConversations_other": "{{count}} 个会话中的 {{emails}} 封邮件",
   "selection.exportSelected": "导出所选",

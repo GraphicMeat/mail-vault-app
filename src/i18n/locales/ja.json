@@ -552,8 +552,6 @@
   "selection.deleteServer": "サーバーから削除",
   "selection.deleteServer2": "{{deleteScope}} をサーバーから削除しますか？{{vaultClause}}",
   "selection.deleteServerVaultBackupDrive": "{{deleteScope}} をサーバー・保管庫・バックアップドライブから削除しますか？どこにもコピーは残らず、元に戻せません。",
-  "selection.emailCount_one": "メール {{count}} 件",
-  "selection.emailCount_other": "メール {{count}} 件",
   "selection.emailsInConversations_one": "{{count}} 件の会話に {{emails}} 通",
   "selection.emailsInConversations_other": "{{count}} 件の会話に {{emails}} 通",
   "selection.exportSelected": "選択項目を書き出す",

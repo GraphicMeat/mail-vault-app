@@ -1458,8 +1458,6 @@
   "list.skippedNeedsResync_other": "{{count}} were skipped because this mailbox needs to resync — resync it, then try again.",
   "list.loadedAllRead_one": "{{count}} loaded message has all been read",
   "list.loadedAllRead_other": "{{count}} loaded messages have all been read",
-  "selection.emailCount_one": "{{count}} email",
-  "selection.emailCount_other": "{{count}} emails",
   "selection.emailsInConversations_one": "{{emails}} emails in {{count}} conversation",
   "selection.emailsInConversations_other": "{{emails}} emails in {{count}} conversations"
 }
