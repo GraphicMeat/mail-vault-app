@@ -190,7 +190,7 @@ export function BehaviorSettings() {
                   {t('settings.behavior.delayBeforeMarkingRead')}
                 </label>
                 <span className="text-sm font-medium text-mail-accent-text">
-                  {markAsReadDelay} {markAsReadDelay === 1 ? 'second' : 'seconds'}
+                  {t('common.secondCount', { count: markAsReadDelay })}
                 </span>
               </div>
               <input

@@ -730,7 +730,7 @@ function EmailViewerComponent({ onComposeReply }) {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2 text-sm text-mail-text-muted">
                   <Paperclip size={14} />
-                  <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
+                  <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
                 </div>
                 {realAttachments.length > 1 && (
                   <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} account={activeAccountId} folder={activeMailbox} />

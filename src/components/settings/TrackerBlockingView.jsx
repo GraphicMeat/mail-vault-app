@@ -199,8 +199,8 @@ export function TrackerBlockingView({ onUpgrade }) {
         {stats.messages > 0 ? (
           <>
             <p className="text-xs text-mail-text-muted">
-              {stats.pixels} tracking {stats.pixels === 1 ? 'pixel' : 'pixels'} found across{' '}
-              {stats.messages} {stats.messages === 1 ? 'message' : 'messages'} you have opened.
+              {t('settings.tracking.pixelsFound', { count: stats.pixels })}{' '}
+              {t('settings.tracking.messagesOpened', { count: stats.messages })}
             </p>
             {stats.top.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-2">

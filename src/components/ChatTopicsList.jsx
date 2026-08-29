@@ -119,7 +119,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
         <div className="flex items-center gap-3 mt-1 text-xs text-mail-text-muted">
           <span className="flex items-center gap-1">
             <MessageCircle size={12} />
-            {topic.emails.length} message{topic.emails.length !== 1 ? 's' : ''}
+            {t('common.messageCount', { count: topic.emails.length })}
           </span>
 
           {dateRangeText && (

@@ -152,7 +152,7 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
             {topic.subject}
           </h2>
           <p className="text-[11px] text-mail-text-muted truncate leading-tight">
-            {correspondent.name} &middot; {topic.emails.length} message{topic.emails.length !== 1 ? 's' : ''}
+            {correspondent.name} &middot; {t('common.messageCount', { count: topic.emails.length })}
           </p>
         </div>
       </div>

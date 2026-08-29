@@ -1188,7 +1188,7 @@ function EmailListComponent() {
                               .join(', ')
                               || 'No other participants'
                             }
-                            <span> · {item.topic.emails.length} email{item.topic.emails.length !== 1 ? 's' : ''}</span>
+                            <span> · {t('common.emailCount', { count: item.topic.emails.length })}</span>
                           </div>
                         </div>
                         {item.topic.unreadCount > 0 && (

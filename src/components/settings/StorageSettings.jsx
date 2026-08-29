@@ -228,7 +228,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
               <div className="pr-4">
                 <div className="text-sm text-mail-text">{t('settings.storage.messagesPreviousServer')}</div>
                 <div className="text-xs text-mail-text-muted">
-                  {orphanStats.count.toLocaleString()} saved {orphanStats.count === 1 ? 'message' : 'messages'}
+                  {t('settings.storage.savedOrphans', { count: orphanStats.count })}
                   {' '}({(orphanStats.bytes / (1024 * 1024)).toFixed(1)} MB) that this server no longer has.
                   {' '}They are kept in the vault and are not shown in your mailboxes. Deleting them is permanent.
                 </div>
@@ -679,7 +679,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       try {
                         const result = await runCleanupRules();
                         if (result.archived > 0 || result.deleted > 0) {
-                          setCleanupResult(`Cleaned up ${result.deleted} email${result.deleted !== 1 ? 's' : ''}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
+                          setCleanupResult(`${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
                         } else {
                           setCleanupResult('No emails matched cleanup criteria');
                         }

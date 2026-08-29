@@ -613,7 +613,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="px-6 py-3 border-t border-mail-border shrink-0">
             <p className="text-xs text-mail-text-muted mb-2 flex items-center gap-1">
               <Paperclip size={12} />
-              {attachments.length} attachment{attachments.length !== 1 ? 's' : ''}
+              {t('common.attachmentCount', { count: attachments.length })}
             </p>
             <div className="flex flex-wrap gap-2">
               {attachments.map((att, i) => {
@@ -852,8 +852,8 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               </h3>
               <p className="text-sm text-mail-text-muted mb-4">
                 {bulkAction === 'delete'
-                  ? t('settings.cleanup.emailPermanentlyDeletedServer', { selectedIds: selectedIds.size, selectedIds2: selectedIds.size !== 1 ? 's' : '' })
-                  : t('settings.cleanup.emailSavedLocalArchive', { selectedIds: selectedIds.size, selectedIds2: selectedIds.size !== 1 ? 's' : '' })}
+                  ? t('settings.cleanup.willDeleteFromServer', { count: selectedIds.size })
+                  : t('settings.cleanup.willSaveToArchive', { count: selectedIds.size })}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="bg-mail-bg"

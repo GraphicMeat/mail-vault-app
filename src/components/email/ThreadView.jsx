@@ -296,6 +296,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
 function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply }) {
+  const t = useT();
   const [expanded, setExpanded] = useState(isNewest);
   const [, forceUpdate] = useState(0);
   const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -439,7 +440,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
             <div className="mt-3 pl-9">
               <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
                 <Paperclip size={12} />
-                <span>{realAttachments.length} Attachment{realAttachments.length !== 1 ? 's' : ''}</span>
+                <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {realAttachments.map((attachment, index) => (
@@ -561,7 +562,7 @@ export function ThreadView({ thread, onComposeReply }) {
             {thread.subject}
           </h1>
           <span className="text-xs text-mail-text-muted">
-            {thread.messageCount} message{thread.messageCount !== 1 ? 's' : ''} in thread
+            {t('email.thread.messagesInThread', { count: thread.messageCount })}
           </span>
         </div>
 

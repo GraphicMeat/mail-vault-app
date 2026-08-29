@@ -24,16 +24,16 @@ function TrackerDialogBody({ info, trackers, blocked, isPremium, onOpenFeaturePa
     <>
       <p className="text-sm text-mail-text-muted">
         {blocked
-          ? `MailVault removed ${count === 1 ? 'a tracking pixel' : `${count} tracking pixels`} from this email before it rendered. The sender was not told that you opened it.`
-          : `${count === 1 ? 'A hidden tracking pixel' : `${count} hidden tracking pixels`} loaded when this email opened. The sender now knows when you read it, how often, and roughly where you were.`}
+          ? t('alert.tracker.removed', { count })
+          : t('alert.tracker.loaded', { count })}
       </p>
 
       <div className="space-y-2 max-h-[45vh] overflow-y-auto">
-        {trackers && trackers.length > 0 ? trackers.map((t, i) => (
+        {trackers && trackers.length > 0 ? trackers.map((tracker, i) => (
           <div key={i} className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-            <div className="text-sm font-medium text-mail-text">{t.vendor}</div>
-            <div className="text-xs text-mail-text-muted mt-0.5">{t.reason}</div>
-            <div className="text-xs font-mono text-mail-text-muted break-all mt-1.5">{t.url}</div>
+            <div className="text-sm font-medium text-mail-text">{tracker.vendor}</div>
+            <div className="text-xs text-mail-text-muted mt-0.5">{tracker.reason}</div>
+            <div className="text-xs font-mono text-mail-text-muted break-all mt-1.5">{tracker.url}</div>
           </div>
         )) : vendors.map((v, i) => (
           <div key={i} className="p-3 rounded-lg bg-mail-surface border border-mail-border">
