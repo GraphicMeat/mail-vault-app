@@ -913,7 +913,7 @@
   "settings.ai.noreply": "noreply@...",
   "settings.ai.userExampleCom": "user@example.com",
   "settings.backup.verify.server": "Server",
-  "settings.tab.general": "General",
+  "settings.tab.general": "Général",
   "settings.cleanup.archiveEmails": "Archiver les e-mails ?",
   "settings.cleanup.automaticallyClassifyEmailsIntoCategories": "Classez automatiquement vos e-mails en catégories — newsletters, promotions, notifications — puis faites le ménage en masse avec des suggestions de conservation, d'archivage et de suppression.",
   "settings.cleanup.canArchive": "Archivable",

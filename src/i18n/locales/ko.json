@@ -913,7 +913,7 @@
   "settings.ai.noreply": "noreply@...",
   "settings.ai.userExampleCom": "user@example.com",
   "settings.backup.verify.server": "Server",
-  "settings.tab.general": "General",
+  "settings.tab.general": "일반",
   "settings.cleanup.archiveEmails": "메일을 보관할까요?",
   "settings.cleanup.automaticallyClassifyEmailsIntoCategories": "메일을 뉴스레터, 프로모션, 알림 같은 카테고리로 자동 분류한 뒤, 보관·저장·삭제 제안으로 한 번에 정리하세요.",
   "settings.cleanup.canArchive": "보관 가능",

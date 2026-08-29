@@ -913,7 +913,7 @@
   "settings.ai.noreply": "noreply@...",
   "settings.ai.userExampleCom": "user@example.com",
   "settings.backup.verify.server": "Server",
-  "settings.tab.general": "General",
+  "settings.tab.general": "常规",
   "settings.cleanup.archiveEmails": "要归档这些邮件吗？",
   "settings.cleanup.automaticallyClassifyEmailsIntoCategories": "自动把邮件归入通讯、促销、通知等类别，然后凭借保留、归档、删除的智能建议批量清理。",
   "settings.cleanup.canArchive": "可归档",

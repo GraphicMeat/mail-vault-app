@@ -913,7 +913,7 @@
   "settings.ai.noreply": "noreply@...",
   "settings.ai.userExampleCom": "user@example.com",
   "settings.backup.verify.server": "Server",
-  "settings.tab.general": "General",
+  "settings.tab.general": "一般",
   "settings.cleanup.archiveEmails": "メールをアーカイブしますか？",
   "settings.cleanup.automaticallyClassifyEmailsIntoCategories": "メールをニュースレター・プロモーション・通知などのカテゴリに自動分類し、保持・アーカイブ・削除の提案でまとめて整理できます。",
   "settings.cleanup.canArchive": "アーカイブ可",
