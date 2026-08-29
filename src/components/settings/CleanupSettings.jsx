@@ -776,7 +776,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           </div>
         ) : (
           <div ref={listParentRef} className="flex-1 overflow-y-auto min-h-0">
-            <div style={{ height: t('settings.cleanup.px2', { virtualizer: virtualizer.getTotalSize() }), width: '100%', position: 'relative' }}>
+            <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualItem => {
                 const item = filteredResults[virtualItem.index];
                 return (
@@ -787,7 +787,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                       top: 0,
                       left: 0,
                       width: '100%',
-                      height: t('settings.cleanup.px3', { virtualItem: virtualItem.size }),
+                      height: `${virtualItem.size}px`,
                       transform: `translateY(${virtualItem.start}px)`,
                     }}
                   >

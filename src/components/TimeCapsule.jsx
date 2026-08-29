@@ -296,7 +296,7 @@ function SnapshotBrowser({ accountId }) {
                   key={vr.key}
                   style={{
                     position: 'absolute', top: 0, width: '100%',
-                    height: t('timeCapsule.px', { vr: vr.size }), transform: `translateY(${vr.start}px)`,
+                    height: `${vr.size}px`, transform: `translateY(${vr.start}px)`,
                   }}
                 >
                   <button

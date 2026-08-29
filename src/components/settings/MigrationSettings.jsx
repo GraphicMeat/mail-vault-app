@@ -480,7 +480,7 @@ export default function MigrationSettings({ onUpgrade }) {
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-mail-surface-hover ${
                               isSelected ? 'text-mail-text' : 'text-mail-text-muted'
                             }`}
-                            style={{ paddingLeft: t('settings.migration.px', { depth: 8 + depth * 24 }) }}
+                            style={{ paddingLeft: `${8 + depth * 24}px` }}
                           >
                             <input
                               type="checkbox"
