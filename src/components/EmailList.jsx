@@ -118,17 +118,17 @@ export function formatPurgeEverywhereOutcome(result) {
 
   const clauses = [`${deleted} removed.`];
   if (failed > 0) {
-    clauses.push(t('list.couldDeletedServerLeftUntouched', { failed, failed2: failed === 1 ? 'was' : 'were' }));
+    clauses.push(t('list.deleteFailedOnServer', { count: failed }));
   }
   if (queuedBackup > 0) {
-    clauses.push(t('list.backupRemovedWhenBackupDrive', { queuedBackup, queuedBackup2: queuedBackup === 1 ? 'copy' : 'copies' }));
+    clauses.push(t('list.backupWillBeRemoved', { count: queuedBackup }));
   }
   if (needsResync > 0) {
     // The UID space couldn't be trusted, so these were held back entirely —
     // no server delete, no vault purge, no backup purge. Without this clause
     // a user selecting only stale-UID messages sees "0 removed" and nothing
     // else, with no hint that retrying won't help until the mailbox resyncs.
-    clauses.push(t('list.skippedBecauseMailboxNeedsResync', { needsResync, needsResync2: needsResync === 1 ? 'was' : 'were' }));
+    clauses.push(t('list.skippedNeedsResync', { count: needsResync }));
   }
   return clauses.join(' ');
 }
@@ -1033,7 +1033,7 @@ function EmailListComponent() {
                 <p>{t('list.noUnreadMessages')}</p>
                 <p className="text-sm mt-2">
                   {sortedEmails.length > 0
-                    ? t('list.loadedAllBeenRead', { sortedEmails: sortedEmails.length.toLocaleString(), sortedEmails2: sortedEmails.length === 1 ? t('list.message') : t('list.messages') })
+                    ? t('list.loadedAllRead', { count: sortedEmails.length })
                     : t('list.folderEmpty')}
                 </p>
                 <button
