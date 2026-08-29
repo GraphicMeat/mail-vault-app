@@ -143,7 +143,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
               disabled={moving}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-mail-text
                         hover:bg-mail-surface-hover transition-colors disabled:opacity-50 text-left"
-              style={{ paddingLeft: tr('moveTo.px', { folder: 12 + folder.depth * 16 }) }}
+              style={{ paddingLeft: `${12 + folder.depth * 16}px` }}
             >
               <FolderSymlink size={14} className="text-mail-text-muted flex-shrink-0" />
               <span className="truncate">{mailboxLabel(folder.name)}</span>

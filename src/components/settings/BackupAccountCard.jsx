@@ -43,7 +43,7 @@ function formatRelativeTime(timestamp) {
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
-  if (secs < 60) return t('settings.backup.account.s', { Math: Math.round(secs) });
+  if (secs < 60) return `${Math.round(secs)}s`;
   const m = Math.floor(secs / 60);
   const s = Math.round(secs % 60);
   return s > 0 ? t('settings.backup.account.mS', { m, s }) : t('settings.backup.account.m', { m });
