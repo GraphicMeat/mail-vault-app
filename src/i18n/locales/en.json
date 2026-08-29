@@ -1162,8 +1162,6 @@
   "settings.appearance.collapsedToggleExpand": "Collapsed with toggle to expand",
   "selection.selected": "{{summary}} selected",
   "selection.selectedConversations": "{{summary}} selected ({{summary2}} conversations)",
-  "selection.email": "{{summary}} email{{summary2}}",
-  "selection.emailsConversation": "{{summary}} emails in {{summary2}} conversation{{summary23}}",
   "selection.deleteServerVaultBackupDrive": "Delete {{deleteScope}} from the server, your vault, and your backup drive? No copy will be left anywhere. This cannot be undone.",
   "selection.deleteServer2": "Delete {{deleteScope}} from the server? {{vaultClause}}",
   "util.emailParser.justNow": "Just now",
@@ -1467,5 +1465,9 @@
   "list.skippedNeedsResync_one": "{{count}} was skipped because this mailbox needs to resync — resync it, then try again.",
   "list.skippedNeedsResync_other": "{{count}} were skipped because this mailbox needs to resync — resync it, then try again.",
   "list.loadedAllRead_one": "{{count}} loaded message has all been read",
-  "list.loadedAllRead_other": "{{count}} loaded messages have all been read"
+  "list.loadedAllRead_other": "{{count}} loaded messages have all been read",
+  "selection.emailCount_one": "{{count}} email",
+  "selection.emailCount_other": "{{count}} emails",
+  "selection.emailsInConversations_one": "{{emails}} emails in {{count}} conversation",
+  "selection.emailsInConversations_other": "{{emails}} emails in {{count}} conversations"
 }

@@ -135,8 +135,8 @@ export function SelectionActionBar() {
   // a bare message count reads as wrong to whoever ticked two boxes — say both
   // numbers whenever they differ.
   const deleteScope = summary.threads === summary.emails
-    ? t('selection.email', { summary: summary.emails, summary2: summary.emails !== 1 ? 's' : '' })
-    : t('selection.emailsConversation', { summary: summary.emails, summary2: summary.threads, summary23: summary.threads !== 1 ? 's' : '' });
+    ? t('selection.emailCount', { count: summary.emails })
+    : t('selection.emailsInConversations', { emails: summary.emails, count: summary.threads });
 
   return (
     <AnimatePresence>
