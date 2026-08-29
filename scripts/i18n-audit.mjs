@@ -71,13 +71,20 @@ function jsxStrings(src) {
  *   export const X = forwardRef(function X                const X = forwardRef(function X
  *   const X = React.memo(function X
  */
-const DECL = /^(?:export\s+)?(?:default\s+)?(?:class\s+([A-Z][A-Za-z0-9_]*)|const\s+([A-Z][A-Za-z0-9_]*)\s*=|(?:async\s+)?function\s+([A-Z][A-Za-z0-9_]*))/;
+// Lowercase helpers are declarations too. Omitting them blames their t() calls
+// on whatever Capitalized thing was declared above, which is how a real gap can
+// read as clean — and how a helper can be told it needs a hook it cannot hold.
+const DECL = /^(?:export\s+)?(?:default\s+)?(?:class\s+([A-Z][A-Za-z0-9_]*)|const\s+([A-Za-z_$][\w$]*)\s*=|(?:async\s+)?function\s+([A-Za-z_$][\w$]*))/;
 
 function declarations(src) {
   const d = [];
   src.split('\n').forEach((l, i) => {
     const m = DECL.exec(l);
-    if (m) d.push({ line: i + 1, name: m[1] || m[2] || m[3], isClass: !!m[1] });
+    if (!m) return;
+    // `const LABEL = 'x'` is data, not a component. Only a declaration that is
+    // actually a function can be one — and only a function can hold a hook.
+    const isFn = !!m[3] || /=>|\bfunction\b/.test(l);
+    d.push({ line: i + 1, name: m[1] || m[2] || m[3], isClass: !!m[1], isFn });
   });
   return d;
 }
@@ -92,10 +99,23 @@ function hookGaps(src) {
   // re-render on a locale change.
   const importsT = /import\s*\{[^}]*\bt\b[^}]*\}\s*from\s*['"][^'"]*i18n/.test(src);
   const isClassAt = (n) => !!find(n)?.isClass;
+  // A plain helper (lowercase name) or a module-scope call cannot hold a hook.
+  // Both are satisfied by the module-level `t` import, which works because the
+  // active catalog is module state. Only a CAPITALIZED component needs useT(),
+  // because only a component re-renders — and the subscription is the point.
+  const needsHook = (n) => {
+    const d = find(n);
+    if (!d) return !importsT;              // module scope: the import is enough
+    if (d.isClass) return !importsT;       // a class cannot call a hook
+    // React's own rule: only a Capitalized name is a component. A lowercase
+    // helper is an ordinary function and may not call a hook at all.
+    if (!d.isFn || !/^[A-Z]/.test(d.name)) return !importsT;
+    return true;                           // a component: needs the subscription
+  };
   const uses = new Set();
   const hooked = new Set();
   lines.forEach((l, i) => {
-    if (/(?<![A-Za-z0-9_.])t\(\s*['"`]/.test(l) && !(isClassAt(i + 1) && importsT)) uses.add(owner(i + 1));
+    if (/(?<![A-Za-z0-9_.])t\(\s*['"`]/.test(l) && needsHook(i + 1)) uses.add(owner(i + 1));
     if (/\bconst\s+t\s*=\s*useT\(\)/.test(l)) hooked.add(owner(i + 1));
   });
   return [...uses].filter(n => !hooked.has(n));

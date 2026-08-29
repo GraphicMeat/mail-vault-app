@@ -84,3 +84,35 @@ describe('i18n-audit and the extractor agree about string literals', () => {
     expect(out).not.toMatch(/In a literal/);
   });
 });
+
+/**
+ * Literal extraction reaches plain helpers and module scope, neither of which
+ * can hold a hook. Both are satisfied by the module-level `t` import — the
+ * catalog is module state. Only a capitalized component needs useT(), because
+ * only a component re-renders, and the subscription is the entire point.
+ */
+const IMPORT = "import { t } from '../i18n/index.js';\n";
+
+describe('helpers versus components', () => {
+  it('accepts a lowercase helper using the module-level t', () => {
+    const f = fixture(IMPORT + "function describeThing() {\n  return t('a.b');\n}\n");
+    expect(run('hooks', f)).toBe('');
+  });
+
+  it('accepts a module-scope call when t is imported', () => {
+    const f = fixture(IMPORT + "const LABEL = t('a.b');\n");
+    expect(run('hooks', f)).toBe('');
+  });
+
+  it('still demands useT in a capitalized component, import or not', () => {
+    const f = fixture(IMPORT + "function Widget() {\n  return <span>{t('a.b')}</span>;\n}\n");
+    expect(run('hooks', f)).toMatch(/Widget/);
+  });
+
+  it('does not blame a helper’s call on the component declared above it', () => {
+    const f = fixture(IMPORT +
+      "function Widget() {\n  const t = useT();\n  return <span>{t('a.b')}</span>;\n}\n" +
+      "function helper() {\n  return t('c.d');\n}\n");
+    expect(run('hooks', f)).toBe('');
+  });
+});
