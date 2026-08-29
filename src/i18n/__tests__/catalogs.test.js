@@ -3,14 +3,17 @@ import en from '../locales/en.json';
 import identicalOk from '../locales/IDENTICAL_OK.json';
 import es from '../locales/es.json';
 import fr from '../locales/fr.json';
-import it from '../locales/it.json';
+// NOT `it`: that shadows vitest's own `it`, and every test in this file then
+// calls the Italian catalog object instead of declaring a case —
+// "TypeError: default is not a function", reported at the it() line.
+import itIT from '../locales/it.json';
 import de from '../locales/de.json';
 import ptBR from '../locales/pt-BR.json';
 import ja from '../locales/ja.json';
 import ko from '../locales/ko.json';
 import zhHans from '../locales/zh-Hans.json';
 
-const catalogs = { es, fr, it, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhHans };
+const catalogs = { es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhHans };
 const LOCALES = Object.keys(catalogs);
 
 const placeholders = (s) => (String(s).match(/\{\{(\w+)\}\}/g) || []).sort();
