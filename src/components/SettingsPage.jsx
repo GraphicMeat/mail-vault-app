@@ -43,31 +43,31 @@ import { TimeCapsuleView } from './TimeCapsule';
 import { useT } from '../i18n/index.js';
 
 const featureTabs = [
-  { id: 'cleanup', label: 'Email Cleanup', icon: Sparkles },
-  { id: 'time-capsule', label: 'Time Capsule', icon: Clock },
-  { id: 'tracking', label: 'Tracker Blocking', icon: EyeOff },
-  { id: 'migration', label: 'Migration', icon: ArrowLeftRight },
-  { id: 'backup', label: 'Backup & Restore', icon: Clock },
+  { id: 'cleanup', labelKey: 'settings.tab.cleanup', icon: Sparkles },
+  { id: 'time-capsule', labelKey: 'settings.tab.timeCapsule', icon: Clock },
+  { id: 'tracking', labelKey: 'settings.tab.tracking', icon: EyeOff },
+  { id: 'migration', labelKey: 'settings.tab.migration', icon: ArrowLeftRight },
+  { id: 'backup', labelKey: 'settings.tab.backup', icon: Clock },
 ];
 
 const settingsTabs = [
-  { id: 'general', label: 'General', icon: Palette },
-  { id: 'accounts', label: 'Accounts', icon: User },
-  { id: 'templates', label: 'Templates', icon: FileText },
-  { id: 'storage', label: 'Storage', icon: HardDrive },
-  { id: 'data-usage', label: 'Data Usage', icon: Gauge },
-  { id: 'security', label: 'Security', icon: Shield },
-  { id: 'billing', label: 'Billing', icon: CreditCard },
+  { id: 'general', labelKey: 'settings.tab.general', icon: Palette },
+  { id: 'accounts', labelKey: 'settings.tab.accounts', icon: User },
+  { id: 'templates', labelKey: 'settings.tab.templates', icon: FileText },
+  { id: 'storage', labelKey: 'settings.tab.storage', icon: HardDrive },
+  { id: 'data-usage', labelKey: 'settings.tab.dataUsage', icon: Gauge },
+  { id: 'security', labelKey: 'settings.tab.security', icon: Shield },
+  { id: 'billing', labelKey: 'settings.tab.billing', icon: CreditCard },
   // Literal, not t(): this array is module-level and evaluated once at import,
   // so a t() call here would freeze English at load and never re-translate.
   // Plan 2 moves these labels to keys resolved at render.
-  { id: 'language', label: 'Language', icon: Languages },
+  { id: 'language', labelKey: 'settings.tab.language', icon: Languages },
 ];
 
 const systemTabs = [
-  { id: 'daemon', label: 'Background Daemon', icon: Server },
-  { id: 'logs', label: 'Logs', icon: ScrollText },
-  { id: 'help', label: 'Help & Support', icon: Mail },
+  { id: 'daemon', labelKey: 'settings.tab.daemon', icon: Server },
+  { id: 'logs', labelKey: 'settings.tab.logs', icon: ScrollText },
+  { id: 'help', labelKey: 'settings.tab.help', icon: Mail },
 ];
 
 const allTabs = [...featureTabs, ...settingsTabs, ...systemTabs];
@@ -126,13 +126,13 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
 
           <nav className="flex-1 p-2 overflow-y-auto">
             {[
-              { label: 'Features', tabs: featureTabs },
-              { label: 'Settings', tabs: settingsTabs },
-              { label: 'System', tabs: systemTabs },
+              { labelKey: 'settings.section.features', tabs: featureTabs },
+              { labelKey: 'settings.section.settings', tabs: settingsTabs },
+              { labelKey: 'settings.section.system', tabs: systemTabs },
             ].map((section, i) => (
-              <React.Fragment key={section.label}>
+              <React.Fragment key={section.labelKey}>
                 {i > 0 && <div className="mx-3 my-2 border-t border-mail-border" />}
-                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-mail-text-muted uppercase tracking-wider">{section.label}</p>
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-mail-text-muted uppercase tracking-wider">{t(section.labelKey)}</p>
                 {section.tabs.map(tab => (
                   <button
                     key={tab.id}
@@ -144,7 +144,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
                                  : 'text-mail-text-muted hover:bg-mail-surface-hover hover:text-mail-text'}`}
                   >
                     <tab.icon size={18} />
-                    <span className="text-sm font-medium">{tab.label}</span>
+                    <span className="text-sm font-medium">{t(tab.labelKey)}</span>
                   </button>
                 ))}
               </React.Fragment>
@@ -166,8 +166,8 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
               )}
               <h3 className="text-lg font-semibold text-mail-text truncate">
                 {hasConfigSubView && subView === 'config'
-                  ? `${currentTab?.label} Settings`
-                  : currentTab?.label}
+                  ? t('settingsPage.tabSettings', { tab: currentTab ? t(currentTab.labelKey) : '' })
+                  : (currentTab ? t(currentTab.labelKey) : '')}
               </h3>
             </div>
             <div className="flex items-center gap-2">
