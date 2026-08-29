@@ -33,8 +33,10 @@ import {
   EyeOff,
   Server,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 function SavedBadge({ visible }) {
+  const t = useT();
   return (
     <AnimatePresence>
       {visible && (
@@ -45,7 +47,7 @@ function SavedBadge({ visible }) {
           className="ml-auto flex items-center gap-1 text-xs font-normal text-mail-text-muted"
         >
           <Check size={13} />
-          Saved
+          {t('settings.accounts.saved')}
         </motion.span>
       )}
     </AnimatePresence>
@@ -53,6 +55,7 @@ function SavedBadge({ visible }) {
 }
 
 export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
+  const t = useT();
   const { removeAccount } = useAccountStore();
   const {
     signatures,
@@ -374,12 +377,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       <div className="w-72 border-r border-mail-border bg-mail-surface/50 overflow-y-auto">
         <div className="p-4">
           <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-3">
-            Your Accounts
+            {t('settings.accounts.accounts')}
           </div>
           {accounts.length === 0 ? (
             <div className="text-center py-8 text-mail-text-muted">
               <Mail size={32} className="mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No accounts configured</p>
+              <p className="text-sm">{t('common.noAccountsConfigured')}</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -398,7 +401,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         onClick={(e) => { e.stopPropagation(); moveAccount(account.id, -1); }}
                         disabled={index === 0}
                         className={`p-0.5 rounded transition-colors ${index === 0 ? 'opacity-0' : 'hover:bg-mail-border'}`}
-                        title="Move up"
+                        title={t('settings.accounts.moveUp')}
                       >
                         <ChevronUp size={12} className="text-mail-text-muted" />
                       </button>
@@ -406,7 +409,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 1); }}
                         disabled={index === orderedAccounts.length - 1}
                         className={`p-0.5 rounded transition-colors ${index === orderedAccounts.length - 1 ? 'opacity-0' : 'hover:bg-mail-border'}`}
-                        title="Move down"
+                        title={t('settings.accounts.moveDown')}
                       >
                         <ChevronDown size={12} className="text-mail-text-muted" />
                       </button>
@@ -447,7 +450,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                         rounded-lg transition-all"
             >
               <Plus size={16} />
-              Add Account
+              {t('settings.accounts.addAccount')}
             </button>
           )}
         </div>
@@ -461,7 +464,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <User size={18} className="text-mail-accent-text" />
-                Account Settings
+                {t('settings.accounts.accountSettings')}
                 <SavedBadge visible={autoSaved} />
               </h4>
 
@@ -481,7 +484,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Display Name
+                    {t('settings.accounts.displayName')}
                   </label>
                   <p className="text-sm text-mail-text-muted mb-2">
                     Name shown in the "From" field when sending emails
@@ -490,7 +493,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     type="text"
                     value={accountDisplayName}
                     onChange={(e) => setAccountDisplayName(e.target.value)}
-                    placeholder="John Doe"
+                    placeholder={t('settings.accounts.johnDoe')}
                     className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                               text-mail-text placeholder-mail-text-muted
                               focus:border-mail-accent transition-all"
@@ -500,7 +503,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 {/* Send mail as */}
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Send Mail As
+                    {t('settings.accounts.sendMail')}
                   </label>
                   <p className="text-sm text-mail-text-muted mb-2">
                     Address used in the "From" header when sending. Leave blank to send from{' '}
@@ -534,12 +537,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                                 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                       title={sendAsIsValid ? 'Send a test message from this address' : 'Enter a valid address first'}
                     >
-                      Verify
+                      {t('settings.accounts.verify')}
                     </button>
                   </div>
                   {sendAsSuggestions.length > 0 && (
                     <div className="flex items-center gap-2 flex-wrap mt-2" data-testid="send-as-suggestions">
-                      <span className="text-xs text-mail-text-muted">You've sent as:</span>
+                      <span className="text-xs text-mail-text-muted">{t('settings.accounts.veSent')}</span>
                       {sendAsSuggestions.map(s => (
                         <button
                           key={s.address}
@@ -547,7 +550,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="text-xs font-mono px-2 py-1 rounded-md border border-mail-border
                                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover
                                     transition-colors"
-                          title="You have sent as this address before"
+                          title={t('settings.accounts.haveSentAddressBefore')}
                         >
                           {s.address}
                         </button>
@@ -559,10 +562,10 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 {/* Avatar Color */}
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Avatar Color
+                    {t('settings.accounts.avatarColor')}
                   </label>
                   <p className="text-sm text-mail-text-muted mb-2">
-                    Color used for the account avatar in the sidebar
+                    {t('settings.accounts.colorUsedAccountAvatarSidebar')}
                   </p>
                   <div className="flex items-center gap-2 flex-wrap">
                     {AVATAR_COLORS.map(color => {
@@ -587,9 +590,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       <button
                         onClick={() => clearAccountColor(selectedAccountId)}
                         className="text-xs text-mail-text-muted hover:text-mail-text transition-colors ml-1"
-                        title="Reset to default"
+                        title={t('common.resetToDefault')}
                       >
-                        Reset
+                        {t('common.reset')}
                       </button>
                     )}
                   </div>
@@ -611,7 +614,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       {isAccountHidden(selectedAccountId) ? 'Account Hidden' : 'Account Visible'}
                     </div>
                     <div className="text-sm text-mail-text-muted">
-                      Hidden accounts are removed from the sidebar and stop syncing
+                      {t('settings.accounts.hiddenAccountsRemovedSidebarStop')}
                     </div>
                   </div>
                 </div>
@@ -674,16 +677,16 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <FileText size={18} className="text-mail-accent-text" />
-                Email Signature
+                {t('settings.accounts.emailSignature')}
                 <SavedBadge visible={autoSaved} />
               </h4>
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-medium text-mail-text">Enable Signature</div>
+                    <div className="font-medium text-mail-text">{t('settings.accounts.enableSignature')}</div>
                     <div className="text-sm text-mail-text-muted">
-                      Automatically add to outgoing emails
+                      {t('settings.accounts.automaticallyAddOutgoingEmails')}
                     </div>
                   </div>
                   <ToggleSwitch
@@ -697,17 +700,17 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Signature Content
+                    {t('settings.accounts.signatureContent')}
                   </label>
                   <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
                     <RichTextEditor
                       content={signatureHtml}
                       onUpdate={(html) => setSignatureHtml(html)}
-                      placeholder="Best regards, John Doe"
+                      placeholder={t('settings.accounts.bestRegardsJohnDoe')}
                     />
                   </div>
                   <p className="text-xs text-mail-text-muted mt-2">
-                    Bold, italic, links and lists are supported. Changes save automatically.
+                    {t('settings.accounts.boldItalicLinksListsSupported')}
                   </p>
                 </div>
               </div>
@@ -717,18 +720,18 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <Send size={18} className="text-mail-accent-text" />
-                Sent Folder
+                {t('settings.accounts.sentFolder')}
                 <SavedBadge visible={saved} />
               </h4>
 
               <p className="text-sm text-mail-text-muted mb-4">
-                MailVault auto-detects the Sent folder via IMAP SPECIAL-USE and common names, and can create one on the server if none exists. Override here if the wrong folder is selected.
+                {t('settings.accounts.mailvaultAutoDetectsSentFolder')}
               </p>
 
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    Sent folder
+                    {t('settings.accounts.sentFolder2')}
                   </label>
                   <select
                     value={sentOverride}
@@ -745,7 +748,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   </select>
                   {selectedAccount.sentFolderOverride && (
                     <p className="text-xs text-mail-text-muted mt-2">
-                      Current saved override: <code className="text-mail-text">{selectedAccount.sentFolderOverride}</code>
+                      {t('settings.accounts.currentSavedOverride')} <code className="text-mail-text">{selectedAccount.sentFolderOverride}</code>
                     </p>
                   )}
                 </div>
@@ -766,7 +769,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
                               text-mail-text rounded-lg transition-colors text-sm font-medium
                               flex items-center gap-2 disabled:opacity-50"
-                    title="Ask the server to auto-detect or create a Sent folder"
+                    title={t('settings.accounts.askServerAutoDetectCreate')}
                   >
                     {autoCreatingSent ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                     {autoCreatingSent ? 'Working…' : 'Auto-detect or create'}
@@ -780,7 +783,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
                 <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                   <Server size={18} className="text-mail-accent-text" />
-                  Mail Server
+                  {t('settings.accounts.mailServer')}
                 </h4>
 
                 <p className="text-sm text-mail-text-muted mb-4">
@@ -790,12 +793,12 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-mail-text-muted space-y-0.5">
                     <div>
-                      IMAP: <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
+                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
                       {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
                         <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
                       )}
                     </div>
-                    <div>SMTP: <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
+                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
                   </div>
                   <button
                     onClick={() => openChangeServer(selectedAccountId)}
@@ -803,7 +806,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                               rounded-lg transition-colors flex items-center gap-2 text-sm"
                   >
                     <Server size={16} />
-                    Change server
+                    {t('settings.accounts.changeServer')}
                   </button>
                 </div>
               </div>
@@ -813,7 +816,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <Key size={18} className="text-mail-accent-text" />
-                Authentication
+                {t('settings.accounts.authentication')}
               </h4>
 
               {/* Auth type badge */}
@@ -825,7 +828,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   {selectedAccount.authType === 'oauth2' ? (
                     <><Shield size={12} /> {selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} OAuth2</>
                   ) : (
-                    <><Key size={12} /> Password</>
+                    <><Key size={12} /> {t('settings.accounts.password')}</>
                   )}
                 </span>
                 {selectedAccount.authType === 'oauth2' && (
@@ -834,9 +837,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       ? 'bg-mail-success/10 text-mail-success border border-mail-success/20'
                       : 'bg-mail-warning/10 text-mail-warning border border-mail-warning/20'}`}>
                     {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now() ? (
-                      <><Link size={12} /> Connected</>
+                      <><Link size={12} /> {t('settings.accounts.connected')}</>
                     ) : (
-                      <><Unlink size={12} /> Token expired</>
+                      <><Unlink size={12} /> {t('settings.accounts.tokenExpired')}</>
                     )}
                   </span>
                 )}
@@ -877,7 +880,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     <div className="flex items-center gap-3 p-3 bg-mail-warning/10 border border-mail-warning/20 rounded-lg mb-4">
                       <div className="w-3 h-3 bg-mail-warning rounded-full" />
                       <span className="text-sm text-mail-text">
-                        Password not found. Please re-enter your password to reconnect.
+                        {t('settings.accounts.passwordNotFoundPleaseRe')}
                       </span>
                     </div>
                   )}
@@ -886,13 +889,13 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     <div className="space-y-4">
                       <div>
                         <label className="block text-sm font-medium text-mail-text mb-2">
-                          New Password
+                          {t('settings.accounts.newPassword')}
                         </label>
                         <input
                           type="password"
                           value={newPassword}
                           onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Enter your email password"
+                          placeholder={t('settings.accounts.enterEmailPassword')}
                           className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                     text-mail-text placeholder-mail-text-muted
                                     focus:border-mail-accent transition-all"
@@ -905,7 +908,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
                                     text-white rounded-lg transition-colors disabled:opacity-50"
                         >
-                          Save Password
+                          {t('settings.accounts.savePassword')}
                         </button>
                         <button
                           onClick={() => {
@@ -915,14 +918,14 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
                                     text-mail-text rounded-lg transition-colors"
                         >
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between">
                       <div>
-                        <div className="font-medium text-mail-text">Password</div>
+                        <div className="font-medium text-mail-text">{t('settings.accounts.password')}</div>
                         <div className="text-sm text-mail-text-muted">
                           {selectedAccount.password ? 'Stored securely in system keychain' : 'Not configured'}
                         </div>
@@ -943,7 +946,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             <div className="bg-mail-surface border border-mail-danger/30 rounded-xl p-5 mt-6">
               <h4 className="font-semibold text-mail-danger mb-4 flex items-center gap-2">
                 <Trash2 size={18} />
-                Remove Account
+                {t('settings.accounts.removeAccount')}
               </h4>
 
               <p className="text-sm text-mail-text-muted mb-4">
@@ -955,7 +958,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 onClick={() => setShowRemoveConfirm(true)}
               >
                 <Trash2 size={16} />
-                Remove This Account
+                {t('settings.accounts.removeAccount2')}
               </Button>
 
               <AnimatePresence>
@@ -975,7 +978,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       </p>
                       {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) && (
                         <p className="text-sm text-mail-warning mb-2">
-                          This is your last account. Removing it will also sign this device out of Premium and release the device seat.
+                          {t('settings.accounts.lastAccountRemovingWillAlso')}
                         </p>
                       )}
                       <div className="flex items-center gap-2 mt-3">
@@ -1002,7 +1005,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="px-4 py-2 bg-mail-border hover:bg-mail-border/80
                                     text-mail-text rounded-lg transition-colors text-sm"
                         >
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                       </div>
                     </div>
@@ -1015,7 +1018,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
           <div className="flex items-center justify-center h-full text-mail-text-muted">
             <div className="text-center">
               <User size={48} className="mx-auto mb-4 opacity-30" />
-              <p>Select an account to configure</p>
+              <p>{t('settings.accounts.selectAccountConfigure')}</p>
             </div>
           </div>
         )}

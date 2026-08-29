@@ -4,6 +4,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { ensureFreshToken } from '../../services/authUtils';
+import { useT } from '../../i18n/index.js';
 
 /**
  * Verify a send-as address by actually sending a test message from it.
@@ -18,6 +19,7 @@ import { ensureFreshToken } from '../../services/authUtils';
  * the user's Sent folder.
  */
 export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName, onClose }) {
+  const t = useT();
   const [recipient, setRecipient] = useState(account?.email || '');
   const [status, setStatus] = useState('idle'); // idle | sending | ok | error
   const [message, setMessage] = useState('');
@@ -54,17 +56,17 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
       open={isOpen}
       onClose={onClose}
       data-testid="send-as-verify-modal"
-      title="Verify send-as address"
+      title={t('settings.sendAs.verifySendAddress')}
       description={
         <>
-          Sends one test message from <span className="font-mono text-mail-text">{sendAsAddress}</span>{' '}
+          {t('settings.sendAs.sendsOneTestMessage')} <span className="font-mono text-mail-text">{sendAsAddress}</span>{' '}
           so you can see whether your server accepts it. Signed in as{' '}
           <span className="font-mono">{account?.email}</span>.
         </>
       }
       footer={
         <div className="flex justify-end gap-2 w-full">
-          <Button variant="ghost" onClick={onClose}>Close</Button>
+          <Button variant="ghost" onClick={onClose}>{t('common.close')}</Button>
           <Button
             variant="primary"
             onClick={runVerify}
@@ -79,12 +81,12 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
       }
     >
       <div>
-          <label className="block text-sm font-medium text-mail-text mb-2">Send test to</label>
+          <label className="block text-sm font-medium text-mail-text mb-2">{t('settings.sendAs.sendTest')}</label>
           <input
             type="email"
             value={recipient}
             onChange={(e) => { setRecipient(e.target.value); setStatus('idle'); }}
-            placeholder="you@example.com"
+            placeholder={t('settings.sendAs.exampleCom')}
             data-testid="send-as-verify-recipient"
             className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                       text-mail-text placeholder-mail-text-muted focus:border-mail-accent transition-all"

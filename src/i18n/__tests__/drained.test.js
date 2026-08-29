@@ -10,6 +10,9 @@ const DONE = [
   'src/components/settings/StorageSettings.jsx',
   'src/components/settings/AppearanceSettings.jsx',
   'src/components/settings/MailStorageLocation.jsx',
+  'src/components/settings/AccountSettings.jsx',
+  'src/components/settings/AISettings.jsx',
+  'src/components/settings/SendAsVerifyModal.jsx',
 ];
 
 function audit(mode, files) {
