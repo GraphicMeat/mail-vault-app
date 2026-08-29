@@ -2,6 +2,7 @@
 
 import * as db from '../db';
 import * as api from '../api';
+import { t } from '../../i18n/index.js';
 
 
 // ── changeServer workflow ──
@@ -15,10 +16,10 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
   const get = () => useMailStore.getState();
 
   const existing = get().accounts.find(a => a.id === accountId);
-  if (!existing) throw new Error('Account not found');
+  if (!existing) throw new Error(t('errors.accountNotFound'));
 
   if (existing.authType === 'oauth2') {
-    throw new Error('Change server is not available for OAuth accounts');
+    throw new Error(t('errors.changeServerOauth'));
   }
 
   const candidate = {
@@ -32,14 +33,14 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
   // Guard against colliding with a DIFFERENT existing account (same email+server).
   const candidateKey = db.accountLogicalKey(candidate);
   const collision = get().accounts.find(a => a.id !== accountId && db.accountLogicalKey(a) === candidateKey);
-  if (collision) throw new Error('This email on this server is already added');
+  if (collision) throw new Error(t('errors.duplicateAccount'));
 
   console.log('[mailStore] changeServer — verifying IMAP with new password...');
   try {
     await api.testConnection(candidate);
   } catch (error) {
     const msg = typeof error === 'string' ? error : error?.message || 'IMAP connection failed';
-    throw new Error(`IMAP: ${msg}`);
+    throw new Error(t('errors.imapPrefixed', { msg }));
   }
 
   console.log('[mailStore] changeServer — verifying SMTP...');
@@ -47,7 +48,7 @@ export async function changeServer(accountId, { imapHost, imapPort, imapSecurity
     await api.smtpTestConnection(candidate);
   } catch (error) {
     const msg = typeof error === 'string' ? error : error?.message || 'SMTP connection failed';
-    throw new Error(`SMTP: ${msg}`);
+    throw new Error(t('errors.smtpPrefixed', { msg }));
   }
 
   // Both legs verified — persist. store_password writes the OS keychain entry

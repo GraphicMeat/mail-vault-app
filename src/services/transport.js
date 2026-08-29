@@ -8,6 +8,7 @@
  */
 
 import { daemonCall } from './daemonClient.js';
+import { t } from '../i18n/index.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -223,7 +224,7 @@ export function getDaemonHealth() {
 async function tauriInvoke(command, args) {
   if (!invoke) {
     await new Promise(r => setTimeout(r, 100));
-    if (!invoke) throw new Error('Tauri invoke not available');
+    if (!invoke) throw new Error(t('errors.tauriUnavailable'));
   }
   return invoke(command, args);
 }

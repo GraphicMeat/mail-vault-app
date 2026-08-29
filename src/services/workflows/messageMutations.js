@@ -9,6 +9,9 @@ import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
+// Aliased: this module binds `t` locally (tombstone loop vars), which
+// would shadow the catalog lookup inside those callbacks.
+import { t as tr } from '../../i18n/index.js';
 
 
 // One message as local-index.json stores it. `local_index_append` upserts by
@@ -58,7 +61,7 @@ export async function saveEmailLocally(uid) {
       const email = await api.fetchEmail(account, uid, mailbox);
 
       if (!email.rawSource) {
-        throw new Error('Email has no raw source data');
+        throw new Error(tr('errors.noRawSource'));
       }
 
       const invoke = window.__TAURI__?.core?.invoke;
@@ -347,7 +350,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
         const graphId = await resolveGraphMessageId(accountId, mailbox, uid, {
           row: candidate, token: account.oauth2AccessToken,
         });
-        if (!graphId) throw new Error('Cannot delete: no Graph message ID found for this email.');
+        if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
         await api.deleteEmail(account, uid, mailbox);
@@ -842,7 +845,7 @@ export async function deleteSelectedFromServer() {
         const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, {
           row: emailObj, token: account.oauth2AccessToken,
         });
-        if (!graphId) throw new Error(`No Graph message ID for UID ${realUid}`);
+        if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: realUid }));
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
         await api.deleteEmail(account, realUid, mailbox);
@@ -1114,7 +1117,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
           const graphId = await resolveGraphMessageId(t.accountId, t.mailbox, t.uid, {
             row: t.row, token: account.oauth2AccessToken,
           });
-          if (!graphId) throw new Error(`No Graph ID for UID ${t.uid}`);
+          if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: t.uid }));
           await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
         } else {
           await api.deleteEmail(account, t.uid, t.mailbox);
@@ -1255,12 +1258,12 @@ export async function moveEmails(uids, targetMailbox) {
         activeAccountId, activeMailbox, uid, { row: rowOf(uid), token: account.oauth2AccessToken },
       )))).filter(Boolean);
       if (messageIds.length !== uids.length) {
-        throw new Error('Cannot move: no Graph message ID for some of the selected emails.');
+        throw new Error(tr('errors.noGraphIdMove'));
       }
 
       const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
       if (!targetFolder || !targetFolder._graphFolderId) {
-        throw new Error(`Cannot move: target folder "${targetMailbox}" not found.`);
+        throw new Error(tr('errors.moveTargetNotFound', { folder: targetMailbox }));
       }
 
       await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);

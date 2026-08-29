@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
 import { ensureFreshToken } from '../authUtils';
+import { t } from '../../i18n/index.js';
 
 
 // ── addAccount workflow ──
@@ -18,7 +19,7 @@ export async function addAccount(accountData) {
   const newKey = db.accountLogicalKey(accountData);
   const existingAccount = get().accounts.find(a => db.accountLogicalKey(a) === newKey);
   if (existingAccount) {
-    throw new Error('This email on this server is already added');
+    throw new Error(t('errors.duplicateAccount'));
   }
 
   const account = {

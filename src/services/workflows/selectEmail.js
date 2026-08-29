@@ -12,6 +12,7 @@ import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cach
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { probeServerCopy } from './probeServerCopy';
+import { t } from '../../i18n/index.js';
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
@@ -222,7 +223,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // copy that failed the check above leaves nothing to render. Throwing
       // hands the catch below its header-only path, which shows the row with
       // an explicit body error — the one honest option left.
-      throw new Error('No local copy for this message (the vault entry under this UID is another message)');
+      throw new Error(t('errors.noLocalCopyUidMismatch'));
     } else if (account && isGraphAccount(account)) {
       // 3a. Graph API: fetch full message by Graph message ID
       const freshAccount = await ensureFreshToken(account);

@@ -6,6 +6,7 @@ import { initDB, initBasic, accountDir } from './accounts.js';
 import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
 import { custodySource } from '../../stores/slices/custody.js';
+import { t } from '../../i18n/index.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -22,7 +23,7 @@ function parseLocalId(localId) {
 
 export async function saveEmails(emails, accountId, mailbox) {
   await initDB();
-  if (!invoke) throw new Error('Tauri invoke not available');
+  if (!invoke) throw new Error(t('errors.tauriUnavailable'));
 
   const results = [];
   for (const email of emails) {
@@ -55,7 +56,7 @@ export async function archiveEmail(accountId, mailbox, uid) {
   try {
     const summaries = await invoke('maildir_list', { accountId, mailbox, requireFlag: null });
     const summary = summaries.find(s => s.uid === numericUid);
-    if (!summary) throw new Error(`Email UID ${uid} not found in Maildir`);
+    if (!summary) throw new Error(t('errors.uidNotInMaildir', { uid }));
 
     const newFlags = [...summary.flags];
     if (!newFlags.includes('archived')) {

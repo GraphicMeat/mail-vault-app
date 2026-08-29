@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { isGraphAccount } from '../graphConfig';
 import { ensureFreshToken } from '../authUtils';
+import { t } from '../../i18n/index.js';
 
 
 // ── updateAccount workflow ──
@@ -18,14 +19,14 @@ export async function updateAccount(accountId, patch) {
   const get = () => useMailStore.getState();
 
   const existing = get().accounts.find(a => a.id === accountId);
-  if (!existing) throw new Error('Account not found');
+  if (!existing) throw new Error(t('errors.accountNotFound'));
 
   const updated = { ...existing, ...patch, id: accountId, updatedAt: new Date().toISOString() };
 
   // Guard against colliding with a DIFFERENT existing account (same email+server).
   const updatedKey = db.accountLogicalKey(updated);
   const collision = get().accounts.find(a => a.id !== accountId && db.accountLogicalKey(a) === updatedKey);
-  if (collision) throw new Error('This email on this server is already added');
+  if (collision) throw new Error(t('errors.duplicateAccount'));
 
   console.log('[mailStore] updateAccount — testing connection to new server...');
   try {

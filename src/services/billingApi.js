@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Billing API client — communicates with the hosted website API (not Tauri IPC).
  * All Stripe interactions happen server-side; this client handles checkout/portal
@@ -36,9 +37,9 @@ async function billingFetch(endpoint, options = {}) {
     });
   } catch (err) {
     if (err.name === 'TimeoutError' || err.name === 'AbortError') {
-      throw new Error('Billing service timed out. Please try again.');
+      throw new Error(t('errors.billingTimeout'));
     }
-    throw new Error('Could not reach billing service. Check your internet connection.');
+    throw new Error(t('errors.billingUnreachable'));
   }
 
   // Handle 429 with Retry-After
@@ -52,7 +53,7 @@ async function billingFetch(endpoint, options = {}) {
   if (!res.ok) {
     let body;
     try { body = await res.json(); } catch {
-      throw new Error(`Billing service error (${res.status}) on ${endpoint}.`);
+      throw new Error(t('errors.billingHttp', { status: res.status, endpoint }));
     }
     throw new Error(body.message || body.error || `Billing request failed (${res.status}).`);
   }
@@ -155,7 +156,7 @@ export async function openInBrowser(url) {
   }
   const win = window.open(url, '_blank');
   if (!win) {
-    throw new Error('Could not open browser. Please allow pop-ups for this app.');
+    throw new Error(t('errors.cannotOpenBrowser'));
   }
   return true;
 }

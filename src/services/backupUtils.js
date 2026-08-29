@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Build the ZIP-internal path for a backup email file.
  * @param {string} email - Account email address
@@ -40,10 +41,10 @@ export function parseBackupManifest(jsonString) {
   const manifest = JSON.parse(jsonString);
 
   if (!manifest.version) {
-    throw new Error('Invalid manifest: missing version');
+    throw new Error(t('errors.manifestNoVersion'));
   }
   if (!Array.isArray(manifest.accounts)) {
-    throw new Error('Invalid manifest: missing accounts array');
+    throw new Error(t('errors.manifestNoAccounts'));
   }
 
   return {

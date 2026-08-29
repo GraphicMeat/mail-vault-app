@@ -1,5 +1,6 @@
 import * as api from './api';
 import { ensureFreshToken } from './authUtils';
+import { t } from '../i18n/index.js';
 
 // Operation states: 'idle' | 'archiving' | 'verifying' | 'deleting' | 'complete' | 'cancelled' | 'error'
 
@@ -31,7 +32,7 @@ class BulkOperationManager {
    */
   async start({ type, accountId, account, mailbox, uids, onProgress }) {
     if (this.isRunning) {
-      throw new Error('An operation is already running');
+      throw new Error(t('errors.operationRunning'));
     }
 
     this._cancelled = false;

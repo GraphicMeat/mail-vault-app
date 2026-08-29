@@ -3,6 +3,7 @@
 // In Tauri mode, transport.send() tries daemon socket first, then Tauri invoke().
 
 import { send as transportSend } from './transport.js';
+import { t } from '../i18n/index.js';
 
 const IS_TAURI = typeof window !== 'undefined' && !!window.__TAURI__;
 
@@ -657,6 +658,6 @@ export async function removeMigratedEmails(incompleteMigration) {
   // Always clear state regardless of removal success
   await clearMigrationState();
   if (errors.length > 0) {
-    throw new Error(`Removal partially failed: ${errors.join('; ')}. Some emails may remain at the destination.`);
+    throw new Error(t('errors.removalPartiallyFailed', { errors: errors.join('; ') }));
   }
 }
