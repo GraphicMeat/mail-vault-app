@@ -345,3 +345,86 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
     overflow-wrap: anywhere;
   }
 }
+
+/* Language strip — a row of flags under the nav links, the same picker
+   graphicmeat.com carries in its header, in MailVault's accent instead of its
+   red. The endonym stays in the DOM for screen readers and crawlers and is
+   hidden visually (font-size: 0 on the link, restored on the flag), so the row
+   reads as flags without a language losing its name.
+
+   Flags sit desaturated until you reach for one: the row is navigation, not
+   decoration, and nine saturated flags would outshout the nav above them. */
+.mv-lang {
+  border-top: 1px solid rgb(226 232 240 / 0.7);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.dark .mv-lang { border-top-color: rgb(51 65 85 / 0.7); }
+.mv-lang::-webkit-scrollbar { display: none; }
+
+.mv-lang ul {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: clamp(4px, 1.2vw, 14px);
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  padding: 0 4px;
+  list-style: none;
+}
+.mv-lang li { display: flex; margin: 0; }
+
+.mv-lang li a {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 6px;
+  font-size: 0;               /* hides the endonym without hiding it from a11y */
+  text-decoration: none;
+}
+.mv-lang li a span {
+  font-size: 1.05rem;
+  line-height: 1;
+  filter: saturate(0.6);
+  opacity: 0.6;
+  transition: filter 0.2s, opacity 0.2s, transform 0.2s;
+}
+.mv-lang li a::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 2px;
+  background: #6366f1;
+  transform: scaleX(0);
+  transition: transform 0.2s;
+}
+.mv-lang li a:hover span,
+.mv-lang li a:focus-visible span,
+.mv-lang li a[aria-current="page"] span {
+  filter: saturate(1);
+  opacity: 1;
+  transform: translateY(-1px);
+}
+.mv-lang li a:hover::after,
+.mv-lang li a:focus-visible::after,
+.mv-lang li a[aria-current="page"]::after { transform: scaleX(1); }
+.mv-lang li a:focus-visible { outline: 1px solid rgb(99 102 241 / 0.5); outline-offset: -4px; }
+
+/* Every row in the mobile menu is a touch target; the flags are no exception. */
+@media (max-width: 767px) {
+  .mv-lang ul { justify-content: flex-start; }
+  .mv-lang li a { min-width: 44px; height: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mv-lang li a span,
+  .mv-lang li a::after { transition: none; }
+  .mv-lang li a:hover span,
+  .mv-lang li a:focus-visible span,
+  .mv-lang li a[aria-current="page"] span { transform: none; }
+}

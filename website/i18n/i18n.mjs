@@ -28,16 +28,21 @@ const ROOT = path.resolve(HERE, '..');
 const ORIGIN = 'https://mailvaultapp.com';
 const ORIGIN_RE = /https:\/\/mailvaultapp\.com([^"\\]*)/g;
 
+// Order, flags and endonyms match graphicmeat.com's picker, so the two sites
+// read as one family. A flag is a country and not a language — the endonym is
+// what actually carries the meaning, and it stays in the DOM for screen readers
+// and crawlers even though the row shows only flags.
 export const LOCALES = [
-  { dir: 'de',    hreflang: 'de',      htmlLang: 'de',      ogLocale: 'de_DE', name: 'Deutsch' },
-  { dir: 'fr',    hreflang: 'fr',      htmlLang: 'fr',      ogLocale: 'fr_FR', name: 'Français' },
-  { dir: 'es',    hreflang: 'es',      htmlLang: 'es',      ogLocale: 'es_ES', name: 'Español' },
-  { dir: 'it',    hreflang: 'it',      htmlLang: 'it',      ogLocale: 'it_IT', name: 'Italiano' },
-  { dir: 'pt-br', hreflang: 'pt-BR',   htmlLang: 'pt-BR',   ogLocale: 'pt_BR', name: 'Português (BR)' },
-  { dir: 'ja',    hreflang: 'ja',      htmlLang: 'ja',      ogLocale: 'ja_JP', name: '日本語' },
-  { dir: 'ko',    hreflang: 'ko',      htmlLang: 'ko',      ogLocale: 'ko_KR', name: '한국어' },
-  { dir: 'zh',    hreflang: 'zh-Hans', htmlLang: 'zh-Hans', ogLocale: 'zh_CN', name: '简体中文' },
+  { dir: 'de',    hreflang: 'de',      htmlLang: 'de',      ogLocale: 'de_DE', flag: '🇩🇪', name: 'Deutsch' },
+  { dir: 'fr',    hreflang: 'fr',      htmlLang: 'fr',      ogLocale: 'fr_FR', flag: '🇫🇷', name: 'Français' },
+  { dir: 'es',    hreflang: 'es',      htmlLang: 'es',      ogLocale: 'es_ES', flag: '🇪🇸', name: 'Español' },
+  { dir: 'it',    hreflang: 'it',      htmlLang: 'it',      ogLocale: 'it_IT', flag: '🇮🇹', name: 'Italiano' },
+  { dir: 'ja',    hreflang: 'ja',      htmlLang: 'ja',      ogLocale: 'ja_JP', flag: '🇯🇵', name: '日本語' },
+  { dir: 'ko',    hreflang: 'ko',      htmlLang: 'ko',      ogLocale: 'ko_KR', flag: '🇰🇷', name: '한국어' },
+  { dir: 'zh',    hreflang: 'zh-Hans', htmlLang: 'zh-Hans', ogLocale: 'zh_CN', flag: '🇨🇳', name: '简体中文' },
+  { dir: 'pt-br', hreflang: 'pt-BR',   htmlLang: 'pt-BR',   ogLocale: 'pt_BR', flag: '🇧🇷', name: 'Português (Brasil)' },
 ];
+const EN = { hreflang: 'en', flag: '🇬🇧', name: 'English' };
 
 // Pages deliberately left in English. changelog.html is generated from
 // CHANGELOG.md and rewritten on every release; privacy/terms are legal text we
@@ -418,6 +423,21 @@ export function render(html, pageRel, loc, dict) {
 
   const pageUrl = ORIGIN + (localizePath(urlPathOf(pageRel), loc) || urlPathOf(pageRel));
 
+  // The switcher markup is identical on every copy, so the "you are here" state
+  // has to be moved to this locale's own link at render time.
+  const en = html.indexOf('data-lang="en"');
+  if (en !== -1) {
+    const marker = ' aria-current="page"';
+    const at = html.indexOf(marker, en);
+    const tagEnd = html.indexOf('>', en);
+    if (at !== -1 && at < tagEnd) edits.push({ start: at, end: at + marker.length, text: '' });
+  }
+  const cur = html.indexOf(`data-lang="${loc.hreflang}"`);
+  if (cur !== -1) {
+    const at = html.indexOf('>', html.indexOf('href=', cur));
+    if (at !== -1) edits.push({ start: at, end: at, text: ' aria-current="page"' });
+  }
+
   for (const tag of tags) {
     const a = tag.attrs;
 
@@ -491,19 +511,22 @@ function alternatesBlock(rel) {
 
 function switcherBlock(rel) {
   const p = urlPathOf(rel);
-  const link = (href, hl, name) =>
-    `          <a data-i18n-abs translate="no" hreflang="${hl}" href="${href}" class="hover:text-primary-500 transition-colors">${name}</a>`;
-  const links = [link(p, 'en', 'English')];
-  for (const loc of LOCALES) links.push(link(localizePath(p, loc), loc.hreflang, loc.name));
+  // The English source is itself a rendered page, so it carries the current-page
+  // marker; render() moves it to whichever locale it is emitting.
+  const row = (href, l, current) =>
+    `        <li><a data-i18n-abs translate="no" data-lang="${l.hreflang}" lang="${l.hreflang}" `
+    + `hreflang="${l.hreflang}" href="${href}"${current ? ' aria-current="page"' : ''}>`
+    + `<span aria-hidden="true">${l.flag}</span> ${l.name}</a></li>`;
   return [
-    '    <!-- i18n:switcher -->',
-    '    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">',
-    '      <nav aria-label="Choose a language" class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-500 dark:text-slate-400">',
-    ...links,
-    '      </nav>',
-    '    </div>',
-    '    <!-- /i18n:switcher -->',
-    '',
+      '      <!-- i18n:switcher -->',
+      '      <div class="mv-lang" role="navigation" aria-label="Choose a language">',
+      '        <ul>',
+      row(p, EN, true),
+      ...LOCALES.map((loc) => row(localizePath(p, loc), loc)),
+      '        </ul>',
+      '      </div>',
+      '      <!-- /i18n:switcher -->',
+      '',
   ].join('\n');
 }
 
@@ -533,10 +556,14 @@ export function inject() {
     const withAlt = spliceMarked(out, 'alternates', alternatesBlock(rel), '</head>');
     if (!withAlt) { missing.push(`${rel}: no </head>`); continue; }
     out = withAlt;
-    // The billing return pages carry no footer or nav — hreflang alone localizes
-    // them; a lone language bar on a two-line confirmation would be noise.
-    const withSw = spliceMarked(out, 'switcher', switcherBlock(rel), '  </footer>');
-    if (withSw) out = withSw; else noFooter.push(rel);
+    // The flag row lives inside the fixed banner nav, as a second row under the
+    // links — the same position graphicmeat.com puts it in. Any previously
+    // injected block (this used to sit in the footer) is stripped first, so the
+    // switcher moves rather than being duplicated.
+    out = out.replace(/[ \t]*<!-- i18n:switcher -->[\s\S]*?<!-- \/i18n:switcher -->\n?/, '');
+    const navEnd = out.indexOf('\n  </nav>');
+    if (navEnd === -1) { noFooter.push(rel); }
+    else out = out.slice(0, navEnd + 1) + switcherBlock(rel) + out.slice(navEnd + 1);
     if (out !== src) { fs.writeFileSync(file, out); touched++; }
   }
   console.log(`inject: ${touched} English page(s) updated`

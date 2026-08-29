@@ -245,9 +245,19 @@ describe('localizePath', () => {
 });
 
 describe('LOCALES', () => {
-  it('is the agreed big 8, each with a distinct directory and hreflang', () => {
+  it('is the agreed big 8, in the order graphicmeat.com shows them', () => {
     expect(LOCALES.map((l) => l.hreflang))
-      .toEqual(['de', 'fr', 'es', 'it', 'pt-BR', 'ja', 'ko', 'zh-Hans']);
+      .toEqual(['de', 'fr', 'es', 'it', 'ja', 'ko', 'zh-Hans', 'pt-BR']);
     expect(new Set(LOCALES.map((l) => l.dir)).size).toBe(8);
+  });
+
+  it('gives every locale a flag and an endonym for the picker', () => {
+    // The flag row renders l.flag and the endonym is the accessible name behind
+    // it; a locale missing either ships a blank link.
+    for (const l of LOCALES) {
+      expect(l.flag, l.dir).toMatch(/\p{Regional_Indicator}{2}/u);
+      expect(l.name, l.dir).toBeTruthy();
+    }
+    expect(new Set(LOCALES.map((l) => l.flag)).size).toBe(8);
   });
 });
