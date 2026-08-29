@@ -7,7 +7,7 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = {
@@ -284,7 +284,7 @@ export function AccountModal({ onClose }) {
   const handleAutoDetect = async () => {
     console.log('[AccountModal] handleAutoDetect called');
     if (!formData.email || !formData.password) {
-      setError('Enter your email address and password first — auto-detect signs in to confirm the settings it finds.');
+      setError(t('account.enterEmailAddressPasswordFirst'));
       return;
     }
 
@@ -365,7 +365,7 @@ export function AccountModal({ onClose }) {
             setDetectedProvider({
               key: 'auto',
               config: {
-                name: `Auto-detected (${pattern.imapHost})`,
+                name: t('account.autoDetected', { pattern: pattern.imapHost }),
                 ...pattern,
                 imapPort: guess.imapPort,
                 smtpPort: guess.smtpPort
@@ -390,7 +390,7 @@ export function AccountModal({ onClose }) {
           smtpHost: guess.patterns[0].smtpHost,
           smtpPort: guess.smtpPort
         }));
-        setError('No settings found for this domain. Your provider\u2019s help pages list its IMAP and SMTP hostnames — enter them below and we filled in a best guess to start from.');
+        setError(t('account.noSettingsFoundDomainProvider'));
       }
 
       setShowManualConfig(true);
@@ -526,7 +526,7 @@ export function AccountModal({ onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border">
           <h2 id={titleId} className="text-lg font-semibold text-mail-text">
-            {step === 1 ? 'Choose Email Provider' : 'Add Account'}
+            {step === 1 ? t('account.chooseEmailProvider') : t('settings.accounts.addAccount')}
           </h2>
           <Button variant="ghost" icon size="xs" onClick={handleClose} aria-label={t('common.close')}>
             <X size={20} />
@@ -744,7 +744,7 @@ export function AccountModal({ onClose }) {
               {!(showOAuth2Option && authType === 'oauth2') && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    {isFastmail ? 'Login Address' : 'Email Address'} *
+                    {isFastmail ? t('account.loginAddress') : t('account.emailAddress')} *
                   </label>
                   <div className="relative">
                     <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
@@ -969,7 +969,7 @@ export function AccountModal({ onClose }) {
                   disabled={testing || success || (authType === 'oauth2' && !oauthConnected)}
                   loading={testing}
                 >
-                  {testing ? 'Testing Connection...' : success ? (
+                  {testing ? t('account.testingConnection') : success ? (
                     <>
                       <Check size={18} />
                       {t('account.connected')}

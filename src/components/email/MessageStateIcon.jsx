@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Cloud, CloudOff, HardDrive } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 import { custodyProof, custodySource } from '../../stores/slices/custody';
+import { t } from '../../i18n/index.js';
 
 /**
  * Where a message lives, as one glyph.
@@ -38,12 +39,12 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
       // The vault absence belongs in the LABEL here. "On the server and backup
       // drive" names two places, neither of them the vault, and a user scanning
       // only the bold line reads that as safe.
-      label: dot === 'filled' ? 'On the server and backup drive — not in your vault' : 'On the server',
+      label: dot === 'filled' ? t('email.state.serverBackupDriveVault') : t('email.state.server'),
       detail: dot === 'filled'
-        ? 'Not in your vault — restore it to read it here.'
+        ? t('email.state.vaultRestoreReadHere')
         : dot === 'hollow'
-          ? "Not in your vault. Backup drive not connected — can't verify."
-          : 'Not saved to your vault yet.',
+          ? t('email.state.vaultBackupDriveConnectedT')
+          : t('email.state.savedVaultYet'),
     };
   }
 
@@ -66,9 +67,9 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
     // mailbox, and a label store (Gmail) keeps its own under All Mail or the Bin.
     // The sweep visited those.
     const nothingElseHasIt = proof !== 'we-deleted';
-    const gone = proof === 'never-on-server' ? 'It was never on the server.'
-      : proof === 'we-deleted' ? 'You deleted the server copy.'
-      : 'Someone else deleted the server copy.';
+    const gone = proof === 'never-on-server' ? t('email.state.wasNeverServer')
+      : proof === 'we-deleted' ? t('email.state.deletedServerCopy')
+      : t('email.state.someoneElseDeletedServerCopy');
     return {
       // Its own glyph, not the vault's. Emerald and gold converge under
       // deuteranopia and the tooltip is hover/focus-only, so with a shared
@@ -79,13 +80,13 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
       tone: 'only-copy',
       dot,
       label: dot === 'filled'
-        ? 'In your vault and backup drive'
-        : dot === 'hollow' ? 'Your only known copy' : 'Your only copy',
+        ? t('email.state.vaultBackupDrive')
+        : dot === 'hollow' ? t('email.state.onlyKnownCopy') : t('email.state.onlyCopy'),
       detail: dot === 'filled'
-        ? `${gone} Two copies left.`
+        ? t('email.state.twoCopiesLeft', { gone })
         : dot === 'hollow'
-          ? `${gone} Backup drive not connected — can't verify.`
-          : nothingElseHasIt ? `${gone} Nothing else has it.` : gone,
+          ? t('email.state.backupDriveConnectedTVerify', { gone })
+          : nothingElseHasIt ? t('email.state.nothingElse', { gone }) : gone,
     };
   }
 
@@ -95,8 +96,8 @@ export function describeMessageState(email, { backedUp = false, serverKnown = fa
     icon: 'drive',
     tone: 'local',
     dot,
-    label: dot === 'filled' ? 'Saved in your vault and backup drive' : 'Saved in your vault',
-    detail: (unknownServer ? 'Server copy not verified yet.' : 'Also still on the server.')
+    label: dot === 'filled' ? t('email.state.savedVaultBackupDrive') : t('email.state.savedVault'),
+    detail: (unknownServer ? t('email.state.serverCopyVerifiedYet') : t('email.state.alsoStillServer'))
       + (unknownServer && dot === 'hollow' ? ' Backup drive not connected.' : '')
       + (!unknownServer && dot === 'filled' ? ' Three copies.' : '')
       + (!unknownServer && dot === 'hollow' ? " Backup drive not connected — can't verify." : ''),

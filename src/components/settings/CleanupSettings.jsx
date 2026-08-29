@@ -32,7 +32,7 @@ import {
   Lock, Loader, Trash2, Archive, Clock, Sparkles, ChevronLeft, Paperclip,
 } from 'lucide-react';
 import { formatEmailDate } from '../../utils/dateFormat';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 const DEFAULT_CATEGORIES = [
   'newsletter', 'promotional', 'notification', 'transactional',
@@ -145,7 +145,7 @@ function ActionDropdown({ current, onChange }) {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function senderName(from) {
-  if (!from) return 'Unknown';
+  if (!from) return t('settings.cleanup.unknown');
   // "Name <email>" → Name
   const match = from.match(/^(.+?)\s*<.*>$/);
   if (match) return match[1].trim();
@@ -192,7 +192,7 @@ function CleanupHtmlBody({ html }) {
     <iframe
       ref={ref}
       sandbox="allow-same-origin"
-      style={{ width: '100%', height: `${height}px`, border: 'none' }}
+      style={{ width: '100%', height: t('settings.cleanup.px', { height }), border: 'none' }}
       title={t('settings.cleanup.emailPreview')}
     />
   );
@@ -321,7 +321,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     if (!activeAccountId) return;
     if (prevCategoriesRef.current !== customCategories) {
       prevCategoriesRef.current = customCategories;
-      setClassStatus({ status: 'Running', classified: 0, total: 0, skipped_by_rules: 0 });
+      setClassStatus({ status: t('settings.cleanup.running'), classified: 0, total: 0, skipped_by_rules: 0 });
       classificationService.run(activeAccountId).catch(() => {});
     }
   }, [activeAccountId, customCategories]);
@@ -352,7 +352,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
 
   const handleClassifyNow = async () => {
     if (!activeAccountId) return;
-    setClassStatus({ status: 'Running', classified: 0, total: 0, skipped_by_rules: 0 });
+    setClassStatus({ status: t('settings.cleanup.running'), classified: 0, total: 0, skipped_by_rules: 0 });
     try { await classificationService.run(activeAccountId); } catch {}
   };
 
@@ -543,11 +543,11 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         <Loader className="w-10 h-10 text-mail-accent-text mb-4 animate-spin" />
         <h3 className="font-semibold text-base mb-2">{t('settings.cleanup.classifyingEmails')}</h3>
         <p className="text-sm text-mail-text-muted mb-4">
-          {classStatus.total > 0 ? `${classStatus.classified} / ${classStatus.total} processed` : 'Preparing...'}
+          {classStatus.total > 0 ? t('settings.cleanup.processed', { classStatus: classStatus.classified, classStatus2: classStatus.total }) : t('settings.cleanup.preparing')}
         </p>
         <div className="w-full max-w-xs h-2 bg-mail-surface-hover rounded-full overflow-hidden">
           {classStatus.total > 0
-            ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
+            ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: t('settings.cleanup.text', { pct }) }} />
             : <div className="h-full bg-mail-accent/50 rounded-full animate-pulse" style={{ width: '100%' }} />}
         </div>
       </div>
@@ -567,10 +567,10 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     const c = previewItem.classification || previewItem;
     const email = previewEmail || previewItem;
     const from = typeof email.from === 'object'
-      ? `${email.from?.name || ''} <${email.from?.address || ''}>`.trim()
+      ? t('settings.cleanup.text2', { email: email.from?.name || '', email2: email.from?.address || '' }).trim()
       : (email.from || 'Unknown');
     const to = Array.isArray(email.to)
-      ? email.to.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
+      ? email.to.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
       : '';
     const rawAttachments = Array.isArray(previewEmail?.attachments) ? previewEmail.attachments : [];
     const attachments = _getRealAttachments ? _getRealAttachments(rawAttachments, previewEmail?.html) : [];
@@ -646,11 +646,11 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
             <Loader size={16} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text">
-              Classifying... {classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : 'Preparing...'}
+              Classifying... {classStatus.total > 0 ? t('settings.cleanup.text4', { classStatus: classStatus.classified, classStatus2: classStatus.total }) : t('settings.cleanup.preparing')}
             </span>
             <div className="flex-1 h-1.5 bg-mail-surface-hover rounded-full overflow-hidden">
               {classStatus.total > 0
-                ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: `${classStatus.classified / classStatus.total * 100}%` }} />
+                ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: t('settings.cleanup.text5', { classStatus: classStatus.classified / classStatus.total * 100 }) }} />
                 : <div className="h-full bg-mail-accent/50 rounded-full animate-pulse" style={{ width: '100%' }} />}
             </div>
           </div>
@@ -717,7 +717,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             <div className="flex-1 h-1.5 bg-mail-border rounded-full overflow-hidden">
               <div
                 className="h-full bg-mail-accent rounded-full transition-all"
-                style={{ width: `${bulkProgress.total ? (bulkProgress.completed / bulkProgress.total) * 100 : 0}%` }}
+                style={{ width: t('settings.cleanup.text6', { bulkProgress: bulkProgress.total ? (bulkProgress.completed / bulkProgress.total) * 100 : 0 }) }}
               />
             </div>
             <span className="text-xs text-mail-text-muted shrink-0">{bulkProgress.completed}/{bulkProgress.total}</span>
@@ -776,7 +776,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           </div>
         ) : (
           <div ref={listParentRef} className="flex-1 overflow-y-auto min-h-0">
-            <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+            <div style={{ height: t('settings.cleanup.px2', { virtualizer: virtualizer.getTotalSize() }), width: '100%', position: 'relative' }}>
               {virtualizer.getVirtualItems().map(virtualItem => {
                 const item = filteredResults[virtualItem.index];
                 return (
@@ -787,7 +787,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                       top: 0,
                       left: 0,
                       width: '100%',
-                      height: `${virtualItem.size}px`,
+                      height: t('settings.cleanup.px3', { virtualItem: virtualItem.size }),
                       transform: `translateY(${virtualItem.start}px)`,
                     }}
                   >
@@ -848,12 +848,12 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
             >
               <h3 className="text-lg font-semibold text-mail-text mb-2">
-                {bulkAction === 'delete' ? 'Delete emails?' : 'Archive emails?'}
+                {bulkAction === 'delete' ? t('settings.cleanup.deleteEmails') : t('settings.cleanup.archiveEmails')}
               </h3>
               <p className="text-sm text-mail-text-muted mb-4">
                 {bulkAction === 'delete'
-                  ? `${selectedIds.size} email${selectedIds.size !== 1 ? 's' : ''} will be permanently deleted from the server.`
-                  : `${selectedIds.size} email${selectedIds.size !== 1 ? 's' : ''} will be saved to your local archive.`}
+                  ? t('settings.cleanup.emailPermanentlyDeletedServer', { selectedIds: selectedIds.size, selectedIds2: selectedIds.size !== 1 ? 's' : '' })
+                  : t('settings.cleanup.emailSavedLocalArchive', { selectedIds: selectedIds.size, selectedIds2: selectedIds.size !== 1 ? 's' : '' })}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="bg-mail-bg"
@@ -867,7 +867,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                     bulkAction === 'delete' ? 'bg-mail-danger-fill hover:bg-mail-danger' : 'bg-mail-accent-fill hover:bg-mail-accent-hover'
                   }`}
                 >
-                  {bulkAction === 'delete' ? 'Delete' : 'Archive'}
+                  {bulkAction === 'delete' ? t('common.delete') : t('common.archive')}
                 </button>
               </div>
             </motion.div>

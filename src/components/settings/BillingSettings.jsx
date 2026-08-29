@@ -32,7 +32,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
@@ -56,35 +56,35 @@ export function signInFailureNotice(result, { appStore = IS_APPSTORE_BUILD } = {
   if (!result.hasSubscription) {
     if (appStore) {
       return result.customerId
-        ? 'No active subscription on this email.'
-        : 'No subscription found for this email. Sign in with the email you used when you subscribed.';
+        ? t('settings.billing.noActiveSubscriptionEmail')
+        : t('settings.billing.noSubscriptionFoundEmailSign');
     }
     return result.customerId
-      ? 'No active subscription on this email. Pick a plan below to start one.'
-      : 'No subscription found for this email. Pick a plan below, or sign in with the email you used at checkout.';
+      ? t('settings.billing.noActiveSubscriptionEmailPick')
+      : t('settings.billing.noSubscriptionFoundEmailPick');
   }
   if (result.premiumAccess && result.clientAccessGranted === false) {
-    return 'Subscription is active, but this device could not be activated. Remove a device from another machine, then try again.';
+    return t('settings.billing.subscriptionActiveButDeviceCould');
   }
   switch (result.status) {
     case 'canceled':
       return appStore
-        ? 'This subscription has ended.'
-        : 'This subscription has ended. Pick a plan below to resubscribe.';
+        ? t('settings.billing.subscriptionEnded')
+        : t('settings.billing.subscriptionEndedPickPlanBelow');
     case 'past_due':
     case 'unpaid':
       return appStore
-        ? 'Payment failed on this subscription. Update your payment method where you manage it.'
-        : 'Payment failed on this subscription. Update your payment method in Manage Subscription.';
+        ? t('settings.billing.paymentFailedSubscriptionUpdatePayment')
+        : t('settings.billing.paymentFailedSubscriptionUpdatePayment2');
     case 'incomplete':
     case 'incomplete_expired':
       return appStore
-        ? 'Checkout was never completed for this email.'
-        : 'Checkout was never completed for this email. Pick a plan below to finish signing up.';
+        ? t('settings.billing.checkoutWasNeverCompletedEmail')
+        : t('settings.billing.checkoutWasNeverCompletedEmail2');
     default:
       return appStore
-        ? `Subscription status "${result.status || 'unknown'}" does not grant premium access.`
-        : `Subscription status "${result.status || 'unknown'}" does not grant premium access. Check Manage Subscription.`;
+        ? t('settings.billing.subscriptionStatusDoesGrantPremium', { result: result.status || 'unknown' })
+        : t('settings.billing.subscriptionStatusDoesGrantPremium2', { result: result.status || 'unknown' });
   }
 }
 
@@ -103,19 +103,19 @@ export function premiumDropNotice(previous, next, { appStore = IS_APPSTORE_BUILD
   if (hasPremiumAccess(next)) return null;
   const reason = signInFailureNotice(next, { appStore });
   return reason
-    ? `Premium access ended on this device. ${reason}`
-    : 'Premium access ended on this device.';
+    ? t('settings.billing.premiumAccessEndedDevice', { reason })
+    : t('settings.billing.premiumAccessEndedDevice2');
 }
 
 function timeAgo(dateStr) {
   if (!dateStr) return 'never';
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1) return t('settings.billing.justNow');
+  if (mins < 60) return t('settings.billing.mAgo', { mins });
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  if (hrs < 24) return t('settings.billing.hAgo', { hrs });
+  return t('settings.billing.dAgo', { Math: Math.floor(hrs / 24) });
 }
 
 export function BillingSettings() {
@@ -186,14 +186,14 @@ export function BillingSettings() {
   // Derived sign-in state — must be declared before any effects that reference it
   const isSignedIn = isPremium && !!billingEmail;
   const signInDisabled = syncing || !selectedEmail || cooldownRemaining > 0;
-  const signInLabel = syncing ? 'Signing in...'
-    : cooldownRemaining > 0 ? `Wait ${cooldownRemaining}s`
-    : 'Sign In to Premium';
-  const statusLabel = !billingProfile?.hasSubscription ? 'Free'
-    : billingProfile.status === 'active' ? `Premium ${billingProfile.interval === 'year' ? 'Yearly' : 'Monthly'}`
-    : billingProfile.status === 'trialing' ? 'Premium (Trial)'
-    : billingProfile.status === 'past_due' ? 'Premium (Past Due)'
-    : billingProfile.status === 'canceled' ? 'Canceled'
+  const signInLabel = syncing ? t('settings.billing.signing')
+    : cooldownRemaining > 0 ? t('settings.billing.waitS', { cooldownRemaining })
+    : t('settings.billing.signPremium');
+  const statusLabel = !billingProfile?.hasSubscription ? t('settings.billing.free')
+    : billingProfile.status === 'active' ? t('settings.billing.premium', { billingProfile: billingProfile.interval === 'year' ? 'Yearly' : 'Monthly' })
+    : billingProfile.status === 'trialing' ? t('settings.billing.premiumTrial')
+    : billingProfile.status === 'past_due' ? t('settings.billing.premiumPastDue')
+    : billingProfile.status === 'canceled' ? t('settings.billing.canceled')
     : billingProfile.status || 'Unknown';
 
   // Load client info once
@@ -213,7 +213,7 @@ export function BillingSettings() {
     } catch (e) {
       // The API answers 503 with a bare code (`pricing_unavailable`) and no prose.
       const msg = e.message || '';
-      setPricingError(/\s/.test(msg) ? msg : 'The billing service is temporarily unavailable.');
+      setPricingError(/\s/.test(msg) ? msg : t('settings.billing.billingServiceTemporarilyUnavailable'));
     } finally {
       setPricingLoading(false);
     }
@@ -435,7 +435,7 @@ export function BillingSettings() {
     if (warning) {
       setLogoutToast({ message: warning, type: 'warning' });
     } else {
-      setLogoutToast({ message: 'Signed out of Premium on this device.', type: 'success' });
+      setLogoutToast({ message: t('settings.billing.signedOutPremiumDevice'), type: 'success' });
     }
   };
 
@@ -479,8 +479,8 @@ export function BillingSettings() {
             {isPremium && billingProfile?.status !== 'trialing' && billingProfile?.currentPeriodEnd && (
               <p className="text-xs text-mail-text-muted">
                 {billingProfile.cancelAtPeriodEnd
-                  ? `Access until ${formatDate(billingProfile.currentPeriodEnd)}`
-                  : `Renews ${formatDate(billingProfile.currentPeriodEnd)}`}
+                  ? t('settings.billing.accessUntil', { formatDate: formatDate(billingProfile.currentPeriodEnd) })
+                  : t('settings.billing.renews', { formatDate: formatDate(billingProfile.currentPeriodEnd) })}
               </p>
             )}
             {billingProfile?.status === 'past_due' && (
@@ -581,9 +581,9 @@ export function BillingSettings() {
         const mode = pricing.pricingMode;
         const showCurrencyHint = mode === 'fallback' || mode === 'adaptive';
         const hintText = mode === 'adaptive'
-          ? `Prices shown in ${pricing.currency.toUpperCase()}. Checkout will convert to your local currency.`
+          ? t('settings.billing.pricesShownCheckoutConvertLocal', { pricing: pricing.currency.toUpperCase() })
           : mode === 'fallback'
-          ? `Charged in ${pricing.currency.toUpperCase()}`
+          ? t('settings.billing.charged', { pricing: pricing.currency.toUpperCase() })
           : null;
         return (
           <>
@@ -618,13 +618,13 @@ export function BillingSettings() {
                   <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">
                     {yearlyPlan.trialEligible && yearlyPlan.trialDays
-                      ? `${yearlyPlan.trialDays} days free, then ~${yearlyPlan.monthlyEquivalent}/month`
+                      ? t('settings.billing.daysFreeThenMonth', { yearlyPlan: yearlyPlan.trialDays, yearlyPlan2: yearlyPlan.monthlyEquivalent })
                       : `~${yearlyPlan.monthlyEquivalent}/month`}
                   </p>
                   <button onClick={() => handleCheckout(yearlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'yearly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    {yearlyPlan.trialEligible && yearlyPlan.trialDays ? 'Start Free Trial' : 'Upgrade'}
+                    {yearlyPlan.trialEligible && yearlyPlan.trialDays ? t('settings.billing.startFreeTrial') : t('common.upgrade')}
                   </button>
                 </div>
               )}
@@ -702,7 +702,7 @@ export function BillingSettings() {
 
           <div className="w-full h-1.5 bg-mail-border rounded-full mb-3">
             <div className={`h-full rounded-full transition-all ${activeClientCount >= clientLimit ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-              style={{ width: `${Math.min(100, (activeClientCount / clientLimit) * 100)}%` }} />
+              style={{ width: t('settings.billing.text', { Math: Math.min(100, (activeClientCount / clientLimit) * 100) }) }} />
           </div>
 
           {replacedNotice && <p className="text-xs text-mail-warning mb-3">{replacedNotice}</p>}

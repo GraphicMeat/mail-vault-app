@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 // The words this product uses for where a message lives, in one place.
 //
 // PRODUCT.md fixes the vocabulary: the place a copy is kept is "your vault",
@@ -21,23 +22,23 @@
  */
 export function vaultClause(total, inVault) {
   if (inVault === 0) {
-    return 'No copy is in your vault, so this cannot be undone.';
+    return t('custody.noCopyVaultSoCannot');
   }
   if (inVault >= total) {
     return total === 1
-      ? 'Your vault keeps the copy, and you can put it back on the server later.'
-      : 'Your vault keeps the copies, and you can put them back on the server later.';
+      ? t('custody.vaultKeepsCopyPutBack')
+      : t('custody.vaultKeepsCopiesPutThem');
   }
   const exposed = total - inVault;
-  return `${inVault.toLocaleString()} of them are in your vault. The other ${exposed.toLocaleString()} ${exposed === 1 ? 'exists' : 'exist'} only on the server and will be gone for good.`;
+  return t('custody.themVaultOtherOnlyServer', { inVault: inVault.toLocaleString(), exposed: exposed.toLocaleString(), exposed2: exposed === 1 ? 'exists' : 'exist' });
 }
 
 /** Confirmation body for "Delete from server" on a row or a thread. */
 export function describeServerDelete(total, inVault) {
   const lead = total === 1
-    ? 'This email leaves the server.'
-    : `These ${total.toLocaleString()} emails leave the server.`;
-  return `${lead} ${vaultClause(total, inVault)}`;
+    ? t('custody.emailLeavesServer')
+    : t('custody.theseEmailsLeaveServer', { total: total.toLocaleString() });
+  return t('custody.text', { lead, vaultClause: vaultClause(total, inVault) });
 }
 
 /**
@@ -46,6 +47,6 @@ export function describeServerDelete(total, inVault) {
  */
 export function describeDeleteEverywhere(total) {
   return total === 1
-    ? 'This email leaves the server, your vault, and your backup drive. No copy will be left anywhere. This cannot be undone.'
-    : `These ${total.toLocaleString()} emails leave the server, your vault, and your backup drive. No copy will be left anywhere. This cannot be undone.`;
+    ? t('custody.emailLeavesServerVaultBackup')
+    : t('custody.theseEmailsLeaveServerVault', { total: total.toLocaleString() });
 }

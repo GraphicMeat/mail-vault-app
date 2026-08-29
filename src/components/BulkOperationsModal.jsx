@@ -7,7 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const ACTION_STYLES = {
   archive: {
@@ -345,10 +345,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
   // only" already tells the user the other two locations aren't touched; the
   // legend above states whether a backup is configured without claiming contents.
   const deleteDescription = archivedSelectedCount === 0
-    ? 'Remove from the server. No copy is in your vault, so this is permanent.'
+    ? t('bulk.ops.removeServerNoCopyVault')
     : archivedSelectedCount < selectedCount
-      ? 'Remove from the server only. Only the emails already in your vault keep a copy.'
-      : 'Remove from the server only. Your vault keeps its copy.';
+      ? t('bulk.ops.removeServerOnlyOnlyEmails')
+      : t('bulk.ops.removeServerOnlyVaultKeeps');
 
   const handleConfirm = () => {
     if (selectedAction === 'delete' || selectedAction === 'archive_and_delete' || selectedAction === 'delete_everywhere') {
@@ -404,7 +404,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             <h2 id={titleId} className="text-lg font-semibold text-mail-text">
               {showDeleteConfirm
                 ? CONFIRM_COPY[selectedAction].title
-                : step === 1 ? 'Bulk Email Operations' : `Choose Action for ${selectedCount.toLocaleString()} Emails`}
+                : step === 1 ? t('bulk.ops.bulkEmailOperations') : t('bulk.ops.chooseActionEmails', { selectedCount: selectedCount.toLocaleString() })}
             </h2>
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('bulk.ops.minimizeSelectionKept')}>
               <X size={18} />
@@ -489,13 +489,13 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <label className="text-xs font-medium text-mail-text-muted uppercase tracking-wide mb-2 block">{t('bulk.ops.presets')}</label>
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { type: 'today', label: 'Today' },
-                    { type: 'yesterday', label: 'Yesterday' },
-                    { type: 'last_week', label: 'Last Week' },
-                    { type: 'last_30', label: 'Last 30 Days' },
-                    { type: 'last_90', label: 'Last 90 Days' },
-                    { type: 'this_year', label: 'This Year' },
-                    { type: 'last_year', label: 'Last Year' },
+                    { type: 'today', label: t('bulk.ops.today') },
+                    { type: 'yesterday', label: t('bulk.ops.yesterday') },
+                    { type: 'last_week', label: t('bulk.ops.lastWeek') },
+                    { type: 'last_30', label: t('bulk.ops.last30Days') },
+                    { type: 'last_90', label: t('bulk.ops.last90Days') },
+                    { type: 'this_year', label: t('bulk.ops.year2') },
+                    { type: 'last_year', label: t('bulk.ops.lastYear') },
                     { type: 'all', label: 'All' },
                   ].map(preset => {
                     const isActive = selectedRange?.type === preset.type;
@@ -551,7 +551,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               {/* Footer */}
               <div className="flex items-center justify-between pt-3 border-t border-mail-border">
                 <span className="text-sm text-mail-text-muted">
-                  {selectedCount > 0 ? `${selectedCount.toLocaleString()} emails selected` : 'Select a date range'}
+                  {selectedCount > 0 ? t('bulk.ops.emailsSelected', { selectedCount: selectedCount.toLocaleString() }) : t('bulk.ops.selectDateRange')}
                 </span>
                 <div className="flex gap-2">
                   <Button variant="ghost" className="hover:bg-mail-border"
@@ -600,32 +600,32 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   {
                     id: 'archive',
                     icon: HardDrive,
-                    label: 'Archive',
-                    description: 'Copy into your vault. Stays on the server too.',
+                    label: t('common.archive'),
+                    description: t('bulk.ops.copyIntoVaultStaysServer'),
                   },
                   ...(hasArchivedSelected ? [{
                     id: 'unarchive',
                     icon: ArchiveRestore,
-                    label: 'Unarchive',
-                    description: 'Delete the vault copy. The server copy is kept.',
+                    label: t('rowMenu.unarchive'),
+                    description: t('bulk.ops.deleteVaultCopyServerCopy'),
                   }] : []),
                   {
                     id: 'delete',
                     icon: Trash2,
-                    label: 'Delete from Server',
+                    label: t('bulk.ops.deleteServer'),
                     description: deleteDescription,
                   },
                   {
                     id: 'archive_and_delete',
                     icon: Archive,
-                    label: 'Archive & Delete',
-                    description: 'Copy into your vault, verify each one, then remove from the server.',
+                    label: t('bulk.ops.archiveDelete'),
+                    description: t('bulk.ops.copyIntoVaultVerifyEach'),
                   },
                   {
                     id: 'delete_everywhere',
                     icon: Trash2,
-                    label: 'Delete Everywhere',
-                    description: 'Remove from the server, your vault, and your backup drive. Unrecoverable.',
+                    label: t('bulk.ops.deleteEverywhere'),
+                    description: t('bulk.ops.removeServerVaultBackupDrive'),
                   },
                 ].map(action => {
                   const isActive = selectedAction === action.id;
@@ -692,7 +692,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                       : ACTION_STYLES[selectedAction].color
                   }}
                 >
-                  {selectedAction ? ACTION_STYLES[selectedAction].confirmLabel : 'Start'}
+                  {selectedAction ? ACTION_STYLES[selectedAction].confirmLabel : t('bulk.ops.start')}
                 </button>
               </div>
             </div>
