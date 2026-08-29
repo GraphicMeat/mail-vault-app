@@ -17,6 +17,7 @@ import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
+import { useT } from '../i18n/index.js';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -91,6 +92,7 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
 }
 
 function AttachmentPreview({ attachment, onRemove }) {
+  const t = useT();
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -108,7 +110,7 @@ function AttachmentPreview({ attachment, onRemove }) {
       <span className="text-xs text-mail-text-muted">{formatSize(attachment.size)}</span>
       <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
         onClick={onRemove}
-        title="Remove attachment"
+        title={t('compose.removeAttachment')}
       >
         <X size={14} className="text-mail-text-muted" />
       </Button>
@@ -121,6 +123,7 @@ function AttachmentPreview({ attachment, onRemove }) {
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
+  const t = useT();
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
@@ -275,7 +278,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
 
     // Build quoted content as HTML — stored separately for collapsible display
-    const quotedHeaderHtml = `<p><strong>Original Message</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
+    const quotedHeaderHtml = `<p><strong>{t('compose.originalMessage')}</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
     const quotedBodyHtml = replyTo.html
       ? replyTo.html
       : textToHtml(replyTo.text || '');
@@ -1113,14 +1116,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             {onMinimize && (
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
                 onClick={handleMinimize}
-                title="Minimize"
+                title={t('common.minimize')}
               >
                 <Minimize2 size={16} className="text-mail-text-muted" />
               </Button>
             )}
             <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
               onClick={confirmClose}
-              title="Close"
+              title={t('common.close')}
             >
               <X size={16} className="text-mail-text-muted" />
             </Button>
@@ -1150,7 +1153,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 single account means it has an override or a mined alias. */}
             {identities.length > 1 && (
               <div className="flex items-center gap-2">
-                <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">From:</label>
+                <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.from')}</label>
                 <div className="relative flex-1">
                   <select
                     data-testid="compose-from"
@@ -1192,7 +1195,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <RecipientField
               name="to"
               label="To:"
-              placeholder="recipient@example.com"
+              placeholder={t('compose.recipientExampleCom')}
               value={formData.to}
               onChange={handleChange}
               setValue={(v) => setFormData(prev => ({ ...prev, to: v }))}
@@ -1204,7 +1207,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <RecipientField
               name="cc"
               label="Cc:"
-              placeholder="cc@example.com"
+              placeholder={t('compose.ccExampleCom')}
               value={formData.cc}
               onChange={handleChange}
               setValue={(v) => setFormData(prev => ({ ...prev, cc: v }))}
@@ -1216,7 +1219,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             <RecipientField
               name="bcc"
               label="Bcc:"
-              placeholder="bcc@example.com"
+              placeholder={t('compose.bccExampleCom')}
               value={formData.bcc}
               onChange={handleChange}
               setValue={(v) => setFormData(prev => ({ ...prev, bcc: v }))}
@@ -1226,14 +1229,14 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             
             {/* Subject */}
             <div className="flex items-center gap-2">
-              <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">Subject:</label>
+              <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.subject2')}</label>
               <input
                 type="text"
                 name="subject"
                 data-testid="compose-subject"
                 value={formData.subject}
                 onChange={handleChange}
-                placeholder="Subject"
+                placeholder={t('compose.subject')}
                 spellCheck={spellcheckEnabled}
                 className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
                           outline-none text-sm py-1"
@@ -1271,7 +1274,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <div data-testid="compose-inline-dropzone-hint"
                    className="pointer-events-none absolute inset-x-0 top-0 z-10 flex justify-center pt-2">
                 <span className="rounded-full bg-mail-accent-fill px-3 py-1 text-xs font-medium text-white shadow">
-                  Drop an image to place it in the message
+                  {t('compose.dropImagePlaceMessage')}
                 </span>
               </div>
             )}
@@ -1284,7 +1287,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 plainTextRef.current = text;
                 setError(null);
               }}
-              placeholder="Write your message..."
+              placeholder={t('compose.writeMessage')}
             />
           </div>
 
@@ -1300,7 +1303,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                          border-mail-accent/60 bg-mail-accent/5 py-3 text-sm text-mail-text-muted"
             >
               <Paperclip size={16} />
-              <span>Drop here to attach as a file</span>
+              <span>{t('compose.dropHereAttachFile')}</span>
             </div>
           )}
 
@@ -1355,7 +1358,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <Button variant="ghost" icon size="md" className="hover:bg-mail-border"
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                title="Attach files"
+                title={t('compose.attachFiles')}
               >
                 <Paperclip size={18} className="text-mail-text-muted" />
               </Button>
@@ -1364,7 +1367,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   type="button"
                   data-testid="compose-templates-btn"
                   onClick={() => { setShowTemplates(v => !v); setSavingTemplate(false); }}
-                  title="Templates"
+                  title={t('compose.templates')}
                 >
                   <BookTemplate size={18} className="text-mail-text-muted" />
                 </Button>
@@ -1389,7 +1392,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                     )}
                     {emailTemplates.length === 0 && (
                       <div data-testid="compose-templates-empty" className="px-3 py-2 text-xs text-mail-text-muted">
-                        No templates yet
+                        {t('compose.noTemplatesYet')}
                       </div>
                     )}
                     <div className="border-t border-mail-border">
@@ -1401,7 +1404,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                             value={templateName}
                             onChange={(e) => setTemplateName(e.target.value)}
                             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSaveTemplate(); } }}
-                            placeholder="Template name..."
+                            placeholder={t('compose.templateName')}
                             autoFocus
                             className="flex-1 bg-transparent text-sm text-mail-text placeholder-mail-text-muted
                                       outline-none border border-mail-border rounded px-2 py-1"
@@ -1414,7 +1417,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                             className="px-2 py-1 text-xs bg-mail-accent-fill text-white rounded
                                       hover:bg-mail-accent-hover disabled:opacity-50 transition-colors"
                           >
-                            Save
+                            {t('common.save')}
                           </button>
                         </div>
                       ) : (
@@ -1425,7 +1428,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                           className="w-full text-left px-3 py-2 text-sm text-mail-accent-text
                                     hover:bg-mail-surface-hover transition-colors"
                         >
-                          Save as Template
+                          {t('compose.saveTemplate')}
                         </button>
                       )}
                     </div>
@@ -1441,7 +1444,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 className="px-4 py-2 text-mail-text-muted hover:text-mail-text
                           transition-colors text-sm"
               >
-                Discard
+                {t('common.discard')}
               </button>
               <select
                 data-testid="compose-delay"
@@ -1449,9 +1452,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 onChange={(e) => setComposeDelay(Number(e.target.value))}
                 className="px-2 py-2 bg-mail-bg border border-mail-border rounded-lg
                           text-xs text-mail-text-muted cursor-pointer"
-                title="Send delay"
+                title={t('compose.sendDelay')}
               >
-                <option value={0}>Send now</option>
+                <option value={0}>{t('compose.sendNow')}</option>
                 <option value={15}>15s delay</option>
                 <option value={30}>30s delay</option>
                 <option value={60}>1m delay</option>
@@ -1463,7 +1466,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 type="submit"
                 data-testid="compose-send"
                 disabled={sending}
-                title="Send (Shift+Enter)"
+                title={t('compose.sendShiftEnter')}
                 className="flex items-center gap-2 px-4 py-2 bg-mail-accent-fill
                           hover:bg-mail-accent-hover disabled:opacity-50
                           text-white font-medium rounded-lg transition-all text-sm"
@@ -1471,12 +1474,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 {sending ? (
                   <>
                     <Loader size={16} className="animate-spin" />
-                    Sending...
+                    {t('compose.sending')}
                   </>
                 ) : (
                   <>
                     <Send size={16} />
-                    Send
+                    {t('compose.send')}
                   </>
                 )}
               </button>
@@ -1493,15 +1496,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         size="sm"
         panelBg="bg-mail-surface"
         data-testid="compose-discard-dialog"
-        title="Discard message?"
+        title={t('compose.discardMessage')}
         description="You have unsaved changes. This message will be permanently discarded."
         footer={
           <div className="flex justify-end gap-2 w-full">
             <Button variant="ghost" onClick={() => setShowDiscardDialog(false)} data-autofocus>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button variant="danger" onClick={() => { setShowDiscardDialog(false); closeDiscarding(); }}>
-              Discard
+              {t('common.discard')}
             </Button>
           </div>
         }

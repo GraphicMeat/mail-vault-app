@@ -33,6 +33,11 @@ const DONE = [
   'src/components/settings/LogsSettings.jsx',
   'src/components/settings/DataUsageSettings.jsx',
   'src/components/settings/DaemonSettings.jsx',
+  'src/components/ComposeModal.jsx',
+  'src/components/AccountModal.jsx',
+  'src/components/ChangeServerModal.jsx',
+  'src/components/RichTextEditor.jsx',
+  'src/components/ContactsPicker.jsx',
 ];
 
 function audit(mode, files) {

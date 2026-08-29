@@ -11,10 +11,12 @@ import { resolveEmailSettings, dnsMailHealth } from '../services/api.js';
 import { detectProvider } from './AccountModal.jsx';
 import { deriveSuggestion, classifyVerifyError, nextStepAfterVerify } from './changeServer/helpers.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
 export default function ChangeServerModal() {
+  const t = useT();
   const accountId = useSettingsStore((s) => s.changeServerAccountId);
   const closeChangeServer = useSettingsStore((s) => s.closeChangeServer);
   const activeRestore = useSettingsStore((s) => s.activeRestore);
@@ -211,7 +213,7 @@ export default function ChangeServerModal() {
             <Server size={18} /> Change server — {account.email}
           </h2>
           {step === 2 && activeRestore && (
-            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label="Minimize" title="Minimize — restore continues in the background">
+            <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>
               <Minus size={18} />
             </Button>
           )}
@@ -228,39 +230,39 @@ export default function ChangeServerModal() {
 
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
-                <label className="block text-xs text-mail-text-muted mb-1">IMAP host</label>
+                <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.imapHost')}</label>
                 <input className={inputClass} value={form.imapHost} onChange={(e) => setForm((f) => ({ ...f, imapHost: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs text-mail-text-muted mb-1">IMAP port</label>
+                <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.imapPort')}</label>
                 <input type="number" className={inputClass} value={form.imapPort} onChange={(e) => setForm((f) => ({ ...f, imapPort: Number(e.target.value) }))} />
               </div>
               <div>
-                <label className="block text-xs text-mail-text-muted mb-1">SMTP host</label>
+                <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.smtpHost')}</label>
                 <input className={inputClass} value={form.smtpHost} onChange={(e) => setForm((f) => ({ ...f, smtpHost: e.target.value }))} />
               </div>
               <div>
-                <label className="block text-xs text-mail-text-muted mb-1">SMTP port</label>
+                <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.smtpPort')}</label>
                 <input type="number" className={inputClass} value={form.smtpPort} onChange={(e) => setForm((f) => ({ ...f, smtpPort: Number(e.target.value) }))} />
               </div>
               <div>
-                <label className="block text-xs text-mail-text-muted mb-1">Security</label>
+                <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.security')}</label>
                 <select className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
                   <option value="ssl">SSL/TLS</option>
-                  <option value="starttls">STARTTLS</option>
-                  <option value="none">None</option>
+                  <option value="starttls">{t('changeServer.starttls')}</option>
+                  <option value="none">{t('changeServer.none')}</option>
                 </select>
               </div>
             </div>
 
             <div className="mb-3">
-              <label className="block text-xs text-mail-text-muted mb-1">Password</label>
+              <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.password')}</label>
               <input
                 type="password"
                 className={inputClass}
                 value={form.password}
                 onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="New server password"
+                placeholder={t('changeServer.newServerPassword')}
               />
             </div>
 
@@ -280,7 +282,7 @@ export default function ChangeServerModal() {
                 onClick={handleClose}
                 disabled={!!busyLeg}
               >
-                Cancel
+                {t('common.cancel')}
               </Button>
               <button
                 className="bg-mail-accent-fill text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent-hover transition-colors disabled:opacity-50"
@@ -316,7 +318,7 @@ export default function ChangeServerModal() {
                   <Button variant="secondary" className="bg-transparent"
                     onClick={() => setStep(3)}
                   >
-                    Skip
+                    {t('changeServer.skip')}
                   </Button>
                   <Button variant="primary"
                     onClick={handleStartRestore}
@@ -341,12 +343,12 @@ export default function ChangeServerModal() {
                   <Button variant="secondary" className="bg-transparent"
                     onClick={() => restoreManager.cancel()}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                   <Button variant="primary"
                     onClick={handleMinimize}
                   >
-                    <Minus size={14} /> Minimize
+                    <Minus size={14} /> {t('common.minimize')}
                   </Button>
                 </div>
               </div>
@@ -369,7 +371,7 @@ export default function ChangeServerModal() {
                   <Button variant="primary"
                     onClick={handleRestoreContinue}
                   >
-                    Continue
+                    {t('changeServer.continue')}
                   </Button>
                 </div>
               </div>
@@ -385,11 +387,11 @@ export default function ChangeServerModal() {
               </div>
             )}
             {!dnsHealth.loading && dnsHealth.failed && (
-              <div className="text-mail-text-muted mb-4">Couldn't check DNS records.</div>
+              <div className="text-mail-text-muted mb-4">{t('changeServer.couldnTCheckDnsRecords')}</div>
             )}
             {!dnsHealth.loading && !dnsHealth.failed && dnsHealth.warnings?.length === 0 && (
               <div className="flex items-center gap-2 text-mail-success mb-4">
-                <CheckCircle2 size={16} /> DNS looks good — MX, SPF and DKIM found.
+                <CheckCircle2 size={16} /> {t('changeServer.dnsLooksGoodMxSpf')}
               </div>
             )}
             {!dnsHealth.loading && !dnsHealth.failed && dnsHealth.warnings?.length > 0 && (
@@ -403,7 +405,7 @@ export default function ChangeServerModal() {
             )}
             <div className="flex justify-end">
               <Button variant="primary" onClick={handleClose}>
-                Done
+                {t('common.done')}
               </Button>
             </div>
           </div>

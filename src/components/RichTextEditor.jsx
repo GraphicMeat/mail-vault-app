@@ -12,6 +12,7 @@ import {
 import { useSettingsStore } from '../stores/settingsStore';
 import { useSpellcheckStatus } from '../hooks/useSpellcheckStatus';
 import { SpellcheckHelpDialog } from './SpellcheckHelpDialog';
+import { useT } from '../i18n/index.js';
 
 function ToolbarButton({ onClick, active, disabled, title, children }) {
   return (
@@ -36,6 +37,7 @@ function ToolbarDivider() {
 }
 
 function Toolbar({ editor }) {
+  const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const setSpellcheckEnabled = useSettingsStore((s) => s.setSpellcheckEnabled);
   const spellcheckStatus = useSpellcheckStatus();
@@ -73,49 +75,49 @@ function Toolbar({ editor }) {
 
   return (
     <div className="flex items-center gap-0.5 px-2 py-1 border-b border-mail-border bg-mail-surface/50 flex-wrap">
-      <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title="Bold (Ctrl+B)">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} title={t('editor.boldCtrlB')}>
         <Bold size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title="Italic (Ctrl+I)">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} title={t('editor.italicCtrlI')}>
         <Italic size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title="Underline (Ctrl+U)">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} title={t('editor.underlineCtrlU')}>
         <UnderlineIcon size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title="Strikethrough">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} title={t('editor.strikethrough')}>
         <Strikethrough size={S} />
       </ToolbarButton>
 
       <ToolbarDivider />
 
-      <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title="Bullet List">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} title={t('editor.bulletList')}>
         <List size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title="Numbered List">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} title={t('editor.numberedList')}>
         <ListOrdered size={S} />
       </ToolbarButton>
 
       <ToolbarDivider />
 
-      <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title="Blockquote">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} title={t('editor.blockquote')}>
         <Quote size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title="Code Block">
+      <ToolbarButton onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} title={t('editor.codeBlock')}>
         <Code size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={setLink} active={editor.isActive('link')} title="Insert Link">
+      <ToolbarButton onClick={setLink} active={editor.isActive('link')} title={t('editor.insertLink')}>
         <LinkIcon size={S} />
       </ToolbarButton>
 
       <ToolbarDivider />
 
-      <ToolbarButton onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} title="Clear Formatting">
+      <ToolbarButton onClick={() => editor.chain().focus().unsetAllMarks().clearNodes().run()} title={t('editor.clearFormatting')}>
         <RemoveFormatting size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title="Undo">
+      <ToolbarButton onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()} title={t('editor.undo')}>
         <Undo size={S} />
       </ToolbarButton>
-      <ToolbarButton onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title="Redo">
+      <ToolbarButton onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()} title={t('editor.redo')}>
         <Redo size={S} />
       </ToolbarButton>
 

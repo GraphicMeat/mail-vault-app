@@ -12,6 +12,7 @@ import {
   getContactsForAccount,
   subscribeContactsIndex,
 } from '../utils/contactsIndex';
+import { useT } from '../i18n/index.js';
 
 function useContactsIndex() {
   const emails = useMailStore(s => s.emails);
@@ -63,6 +64,7 @@ function getTrailingToken(value) {
 // to the sender's contacts. Users can still tap "All" or another chip to
 // override within the current compose session.
 export function ContactsPickerButton({ value, onChange, fieldName, boostAccountId = null }) {
+  const t = useT();
   const index = useContactsIndex();
   const accounts = useAccountStore(s => s.accounts) || [];
   const accountColors = useSettingsStore(s => s.accountColors);
@@ -127,9 +129,9 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                            transition-colors ${effectiveFilterId === null
                              ? 'bg-mail-accent-fill text-white'
                              : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
-                title="All accounts"
+                title={t('contacts.allAccounts')}
               >
-                All
+                {t('contacts.all')}
               </button>
               {accounts.map(a => {
                 const active = effectiveFilterId === a.id;
@@ -166,7 +168,7 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                          transition-colors ${tab === 'latest' ? 'text-mail-accent-text border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
             >
               <Clock size={12} />
-              Latest
+              {t('contacts.latest')}
             </button>
             <button
               type="button"
@@ -175,13 +177,13 @@ export function ContactsPickerButton({ value, onChange, fieldName, boostAccountI
                          transition-colors ${tab === 'popular' ? 'text-mail-accent-text border-b-2 border-mail-accent' : 'text-mail-text-muted hover:text-mail-text'}`}
             >
               <Star size={12} />
-              Most popular
+              {t('contacts.mostPopular')}
             </button>
           </div>
           <div className="max-h-72 overflow-y-auto">
             {list.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-mail-text-muted">
-                No contacts yet
+                {t('contacts.noContactsYet')}
               </div>
             ) : (
               list.map(c => (

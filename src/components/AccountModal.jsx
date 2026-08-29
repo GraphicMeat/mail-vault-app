@@ -7,6 +7,7 @@ import { isPersonalMicrosoftEmail } from '../services/graphConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
+import { useT } from '../i18n/index.js';
 
 // Common email provider configurations
 export const PROVIDER_CONFIGS = {
@@ -137,6 +138,7 @@ function guessServerSettings(email) {
 }
 
 export function AccountModal({ onClose }) {
+  const t = useT();
   const titleId = useId();
   const { addAccount } = useAccountStore();
 
@@ -526,7 +528,7 @@ export function AccountModal({ onClose }) {
           <h2 id={titleId} className="text-lg font-semibold text-mail-text">
             {step === 1 ? 'Choose Email Provider' : 'Add Account'}
           </h2>
-          <Button variant="ghost" icon size="xs" onClick={handleClose} aria-label="Close">
+          <Button variant="ghost" icon size="xs" onClick={handleClose} aria-label={t('common.close')}>
             <X size={20} />
           </Button>
         </div>
@@ -566,7 +568,7 @@ export function AccountModal({ onClose }) {
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium text-mail-text text-sm truncate">Other / Custom</div>
-                  <div className="text-xs text-mail-text-muted truncate">Auto-detect or manual config</div>
+                  <div className="text-xs text-mail-text-muted truncate">{t('account.autoDetectManualConfig')}</div>
                 </div>
               </button>
             </div>
@@ -620,7 +622,7 @@ export function AccountModal({ onClose }) {
                       name="email"
                       value={formData.email}
                       onChange={handleInputChange}
-                      placeholder="you@outlook.com"
+                      placeholder={t('account.outlookCom')}
                       required
                       className="w-full pl-10 pr-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text placeholder-mail-text-muted
@@ -666,7 +668,7 @@ export function AccountModal({ onClose }) {
                           className="w-full text-sm text-mail-text-muted hover:text-mail-text
                                      py-1.5 transition-colors"
                         >
-                          Cancel
+                          {t('common.cancel')}
                         </button>
                       )}
                     </>
@@ -687,14 +689,14 @@ export function AccountModal({ onClose }) {
                         <div className="mt-2 space-y-2">
                           <input
                             type="text"
-                            placeholder="Custom Client ID (optional)"
+                            placeholder={t('account.customClientIdOptional')}
                             value={formData.oauth2CustomClientId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2CustomClientId: e.target.value }))}
                             className="w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded text-mail-text placeholder-mail-text-muted"
                           />
                           <input
                             type="text"
-                            placeholder="Tenant ID (optional, e.g. contoso.onmicrosoft.com)"
+                            placeholder={t('account.tenantIdOptionalEG')}
                             value={formData.oauth2TenantId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2TenantId: e.target.value }))}
                             className="w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded text-mail-text placeholder-mail-text-muted"
@@ -730,7 +732,7 @@ export function AccountModal({ onClose }) {
                   name="name"
                   value={formData.name}
                   onChange={handleInputChange}
-                  placeholder="John Doe"
+                  placeholder={t('account.johnDoe')}
                   className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                             text-mail-text placeholder-mail-text-muted
                             focus:border-mail-accent focus:ring-1 focus:ring-mail-accent
@@ -807,12 +809,12 @@ export function AccountModal({ onClose }) {
                   {autoDetecting ? (
                     <>
                       <Loader size={18} className="animate-spin" />
-                      Detecting settings...
+                      {t('account.detectingSettings')}
                     </>
                   ) : (
                     <>
                       <Wand2 size={18} />
-                      Auto-detect Server Settings
+                      {t('account.autoDetectServerSettings')}
                     </>
                   )}
                 </button>
@@ -824,7 +826,7 @@ export function AccountModal({ onClose }) {
                   <div className="border-t border-mail-border pt-4 mt-4">
                     <h3 className="text-sm font-medium text-mail-text mb-3 flex items-center gap-2">
                       <Server size={16} />
-                      Server Settings
+                      {t('account.serverSettings')}
                     </h3>
                   </div>
 
@@ -838,7 +840,7 @@ export function AccountModal({ onClose }) {
                         name="imapHost"
                         value={formData.imapHost}
                         onChange={handleInputChange}
-                        placeholder="imap.example.com"
+                        placeholder={t('account.imapExampleCom')}
                         required
                         className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
                                   text-mail-text placeholder-mail-text-muted text-sm
@@ -847,7 +849,7 @@ export function AccountModal({ onClose }) {
                     </div>
                     <div>
                       <label className="block text-sm text-mail-text-muted mb-1.5">
-                        IMAP Port
+                        {t('account.imapPort')}
                       </label>
                       <input
                         type="number"
@@ -862,7 +864,7 @@ export function AccountModal({ onClose }) {
 
                   <div>
                     <label className="block text-sm text-mail-text-muted mb-1.5">
-                      Security
+                      {t('account.security')}
                     </label>
                     <select
                       name="imapSecurity"
@@ -872,8 +874,8 @@ export function AccountModal({ onClose }) {
                                 text-mail-text text-sm focus:border-mail-accent transition-all"
                     >
                       <option value="ssl">SSL/TLS</option>
-                      <option value="starttls">STARTTLS</option>
-                      <option value="none">None</option>
+                      <option value="starttls">{t('account.starttls')}</option>
+                      <option value="none">{t('account.none')}</option>
                     </select>
                   </div>
 
@@ -887,7 +889,7 @@ export function AccountModal({ onClose }) {
                         name="smtpHost"
                         value={formData.smtpHost}
                         onChange={handleInputChange}
-                        placeholder="smtp.example.com"
+                        placeholder={t('account.smtpExampleCom')}
                         required
                         className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
                                   text-mail-text placeholder-mail-text-muted text-sm
@@ -896,7 +898,7 @@ export function AccountModal({ onClose }) {
                     </div>
                     <div>
                       <label className="block text-sm text-mail-text-muted mb-1.5">
-                        SMTP Port
+                        {t('account.smtpPort')}
                       </label>
                       <input
                         type="number"
@@ -938,7 +940,7 @@ export function AccountModal({ onClose }) {
                             rounded-lg text-sm text-mail-success"
                 >
                   <Check size={16} />
-                  Account added successfully!
+                  {t('account.accountAddedSuccessfully')}
                 </motion.div>
               )}
 
@@ -957,7 +959,7 @@ export function AccountModal({ onClose }) {
                   className="px-4 py-2.5 text-mail-text-muted hover:text-mail-text
                             transition-colors"
                 >
-                  Back
+                  {t('account.back')}
                 </button>
                 <Button
                   type="submit"
@@ -970,7 +972,7 @@ export function AccountModal({ onClose }) {
                   {testing ? 'Testing Connection...' : success ? (
                     <>
                       <Check size={18} />
-                      Connected!
+                      {t('account.connected')}
                     </>
                   ) : (
                     'Add Account'
@@ -997,16 +999,16 @@ export function AccountModal({ onClose }) {
                 className="bg-mail-surface border border-mail-border rounded-xl p-6 mx-4 max-w-xs"
                 onClick={(e) => e.stopPropagation()}
               >
-                <h3 className="text-base font-semibold text-mail-text mb-2">Discard changes?</h3>
+                <h3 className="text-base font-semibold text-mail-text mb-2">{t('account.discardChanges')}</h3>
                 <p className="text-sm text-mail-text-muted mb-4">
-                  All entered details will be lost.
+                  {t('account.allEnteredDetailsWillLost')}
                 </p>
                 <div className="flex gap-3">
                   <Button variant="subtle" size="sm" className="flex-1" onClick={() => setShowDiscardConfirm(false)}>
-                    Keep Editing
+                    {t('account.keepEditing')}
                   </Button>
                   <Button variant="danger" size="sm" className="flex-1" onClick={onClose}>
-                    Discard
+                    {t('common.discard')}
                   </Button>
                 </div>
               </motion.div>
