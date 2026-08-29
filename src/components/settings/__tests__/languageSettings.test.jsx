@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react';
 import { LanguageSettings } from '../LanguageSettings';
 import { setLocale, getLocale, LOCALES } from '../../../i18n/index.js';
 
@@ -18,11 +18,14 @@ describe('LanguageSettings', () => {
     expect(screen.getAllByTestId(/^language-row-/)).toHaveLength(LOCALES.length);
   });
 
+  // Scoped to the radiogroup: the report form below also renders every native
+  // name as a <select> option, so an unscoped getByText matches twice.
   it('labels each row with its native name', () => {
     render(<LanguageSettings />);
-    expect(screen.getByText('Deutsch')).toBeTruthy();
-    expect(screen.getByText('日本語')).toBeTruthy();
-    expect(screen.getByText('简体中文')).toBeTruthy();
+    const rows = within(screen.getByRole('radiogroup'));
+    expect(rows.getByText('Deutsch')).toBeTruthy();
+    expect(rows.getByText('日本語')).toBeTruthy();
+    expect(rows.getByText('简体中文')).toBeTruthy();
   });
 
   it('marks the active locale as selected and no other', () => {

@@ -16,6 +16,7 @@ import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
+import { useT } from '../i18n/index.js';
 import {
   Inbox,
   Send,
@@ -75,6 +76,7 @@ const UNIFIED_FOLDERS = [
 ];
 
 function UnifiedFolderList({ tagCloud = false }) {
+  const t = useT();
   const unifiedFolder = useAccountStore(s => s.unifiedFolder);
   const switchUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
 
@@ -82,7 +84,7 @@ function UnifiedFolderList({ tagCloud = false }) {
     return (
       <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          All Accounts
+          {t('sidebar.allAccounts')}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {UNIFIED_FOLDERS.map(folder => {
@@ -111,7 +113,7 @@ function UnifiedFolderList({ tagCloud = false }) {
   return (
     <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
       <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-        All Accounts
+        {t('sidebar.allAccounts')}
       </div>
       {UNIFIED_FOLDERS.map(folder => {
         const isActive = unifiedFolder === folder.id;
@@ -196,6 +198,7 @@ function CollapsedBackupIcon({ onOpenBackup }) {
 }
 
 function BackupIndicator({ onOpenBackup }) {
+  const t = useT();
   const activeBackup = useBackupStore(s => s.activeBackup);
   if (!activeBackup || !activeBackup.active) return null;
 
@@ -368,6 +371,7 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
   account, connectionErrorType, activeMailbox, activateAccount,
   retryKeychainAccess, setShowErrorModal, onOpenAccounts, wrapperClassName = 'mt-2',
 }) {
+  const t = useT();
   return (
     <div className={`${wrapperClassName} p-2 rounded-lg border ${
       connectionErrorType === 'passwordMissing'
@@ -379,11 +383,11 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Key size={14} />
-              <span>Password missing</span>
+              <span>{t('sidebar.passwordMissing')}</span>
             </div>
             <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
               onClick={retryKeychainAccess}
-              title="Retry"
+              title={t('sidebar.retry')}
             >
               <RefreshCw size={12} />
             </Button>
@@ -393,34 +397,34 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
             className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
                        hover:bg-mail-warning/30 rounded transition-colors text-center"
           >
-            Re-enter Password in Settings
+            {t('sidebar.reenterPassword')}
           </button>
         </div>
       ) : (
         <div className="flex items-center justify-between text-xs text-mail-danger">
           <div className="flex items-center gap-2">
             {connectionErrorType === 'offline' ? (
-              <><WifiOff size={14} /><span>No internet</span></>
+              <><WifiOff size={14} /><span>{t('sidebar.noInternet')}</span></>
             ) : connectionErrorType === 'outlookOAuth' ? (
-              <><ServerOff size={14} /><span>Microsoft issue</span></>
+              <><ServerOff size={14} /><span>{t('sidebar.microsoftIssue')}</span></>
             ) : connectionErrorType === 'oauthExpired' ? (
-              <><Key size={14} /><span>OAuth2 expired</span></>
+              <><Key size={14} /><span>{t('sidebar.oauth2Expired')}</span></>
             ) : connectionErrorType === 'timeout' ? (
-              <><RefreshCw size={14} /><span>Timed out</span></>
+              <><RefreshCw size={14} /><span>{t('sidebar.timedOut')}</span></>
             ) : (
-              <><ServerOff size={14} /><span>Server error</span></>
+              <><ServerOff size={14} /><span>{t('sidebar.serverError')}</span></>
             )}
           </div>
           <div className="flex items-center gap-1">
             <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
               onClick={() => setShowErrorModal(true)}
-              title="View error details"
+              title={t('sidebar.viewErrorDetails')}
             >
               <Info size={12} />
             </Button>
             <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
               onClick={() => activateAccount(account.id, activeMailbox)}
-              title="Retry connection"
+              title={t('sidebar.retryConnection')}
             >
               <RefreshCw size={12} />
             </Button>
@@ -432,15 +436,15 @@ export const ConnectionErrorCard = memo(function ConnectionErrorCard({
         connectionErrorType === 'serverError') && (
         <div className="mt-1.5">
           <div className="text-[11px] text-mail-text-muted text-center mb-1">
-            Switched email providers or servers?
+            {t('sidebar.switchedProviders')}
           </div>
           <button
             onClick={() => useSettingsStore.getState().openChangeServer(account.id)}
             className="w-full px-2 py-1 text-[11px] font-medium text-mail-text-muted
                        hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
-            title="Re-point this account to a new IMAP/SMTP server, keeping your local mail"
+            title={t('sidebar.repointAccount')}
           >
-            Change server
+            {t('sidebar.changeServer')}
           </button>
         </div>
       )}
@@ -506,6 +510,7 @@ function StatRow({ label, bucket }) {
 
 /** Portaled hover bubble: 7-day bar chart + totals, click opens Settings > Data Usage. */
 function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLeave }) {
+  const t = useT();
   const week = stats ? lastDaysSeries(stats.days, 7) : [];
   const peak = Math.max(1, ...week.map(d => d.down + d.up));
 
@@ -520,10 +525,10 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
       {stats ? (
         <>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-mail-text-muted">Last 7 days</span>
+            <span className="text-mail-text-muted">{t('sidebar.lastNDays', { n: 7 })}</span>
             <span className="flex items-center gap-2 text-[10px] text-mail-text-muted">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent" />down</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent/45" />up</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent" />{t('sidebar.down')}</span>
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent/45" />{t('sidebar.up')}</span>
             </span>
           </div>
 
@@ -568,7 +573,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
           </div>
         </>
       ) : (
-        <div className="text-mail-text-muted">Loading...</div>
+        <div className="text-mail-text-muted">{t('sidebar.loading')}</div>
       )}
     </div>,
     document.body
@@ -576,6 +581,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
 }
 
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend }) {
+  const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const mailboxes = useAccountStore(s => s.mailboxes);
@@ -772,17 +778,17 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           open={Boolean(showErrorModal && connectionError)}
           onClose={() => setShowErrorModal(false)}
           padded={false}
-          aria-label="Error details"
+          aria-label={t('sidebar.errorDetailsLabel')}
           panelClassName="overflow-hidden"
         >
             <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
-              <h3 className="text-sm font-semibold text-mail-text">Error Details</h3>
+              <h3 className="text-sm font-semibold text-mail-text">{t('sidebar.errorDetails')}</h3>
               <Button
                 variant="ghost"
                 icon
                 size="xs"
                 onClick={() => setShowErrorModal(false)}
-                aria-label="Close"
+                aria-label={t('sidebar.close')}
               >
                 <X size={14} />
               </Button>
@@ -804,7 +810,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   }}
                   className="mt-3 text-sm text-mail-accent-text hover:text-mail-accent-hover transition-colors underline"
                 >
-                  Learn more in our FAQ
+                  {t('sidebar.learnMoreFaq')}
                 </button>
               )}
             </div>
@@ -819,7 +825,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div data-tauri-drag-region className="w-full py-3 flex justify-center border-b border-mail-border flex-shrink-0">
           <Button variant="ghost" icon size="md"
             onClick={toggleSidebarCollapsed}
-            title="Expand sidebar"
+            title={t('sidebar.expandSidebar')}
           >
             <PanelLeftOpen size={18} className="text-mail-text-muted" />
           </Button>
@@ -830,7 +836,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <button
             onClick={onCompose}
             className="p-2.5 bg-mail-accent-fill hover:bg-mail-accent-hover text-white rounded-lg transition-colors"
-            title="Compose"
+            title={t('sidebar.compose')}
           >
             <PenSquare size={16} />
           </button>
@@ -846,7 +852,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                          ${unifiedInbox
                            ? 'bg-mail-accent/10 text-mail-accent-text'
                            : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
-              title="All Inboxes"
+              title={t('sidebar.allInboxes')}
             >
               <Inbox size={16} />
             </button>
@@ -885,7 +891,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               data-testid="add-account-btn"
               onClick={onAddAccount}
               className="p-1.5 hover:bg-mail-surface-hover rounded-lg transition-all"
-              title="Add Account"
+              title={t('sidebar.addAccount')}
             >
               <Plus size={16} className="text-mail-text-muted" />
             </button>
@@ -955,7 +961,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </Button>
           <Button variant="ghost" icon size="sm"
             onClick={refreshCurrentView}
-            title="Refresh emails"
+            title={t('sidebar.refreshEmails')}
           >
             <RefreshCw size={15} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
           </Button>
@@ -963,19 +969,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
           <Button variant="ghost" icon size="sm"
             onClick={onOpenSettings}
-            title="Settings"
+            title={t('sidebar.settings')}
           >
             <Settings size={15} className="text-mail-text-muted" />
           </Button>
           <Button variant="ghost" icon size="sm"
             onClick={onReportBug}
-            title="Report a bug"
+            title={t('sidebar.reportABug')}
           >
             <Bug size={15} className="text-mail-text-muted" />
           </Button>
           <Button variant="ghost" icon size="sm"
             onClick={onReferFriend}
-            title="Refer a friend"
+            title={t('sidebar.referAFriend')}
           >
             <Gift size={15} className="text-mail-text-muted" />
           </Button>
@@ -1007,8 +1013,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {/* Logo */}
       <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center justify-between flex-shrink-0">
         <h1 className="text-xl font-display font-bold">
-          <span className="text-mail-accent-text">Mail</span>
-          <span className="text-mail-text">Vault</span>
+          <span className="text-mail-accent-text">{t('sidebar.mail')}</span>
+          <span className="text-mail-text">{t('sidebar.vault')}</span>
         </h1>
         <div className="flex items-center gap-1">
           <Button variant="ghost" icon size="md"
@@ -1023,13 +1029,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </Button>
           <Button variant="ghost" icon size="md"
             onClick={refreshCurrentView}
-            title="Refresh emails"
+            title={t('sidebar.refreshEmails')}
           >
             <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
           </Button>
           <Button variant="ghost" icon size="md"
             onClick={toggleSidebarCollapsed}
-            title="Collapse sidebar"
+            title={t('sidebar.collapseSidebar')}
           >
             <PanelLeftClose size={18} className="text-mail-text-muted" />
           </Button>
@@ -1045,7 +1051,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                      font-medium rounded-lg transition-colors"
         >
           <PenSquare size={18} />
-          Compose
+          {t('sidebar.compose')}
         </button>
       </div>
 
@@ -1063,10 +1069,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                                ${unifiedInbox
                                  ? 'bg-mail-accent-fill text-white border-mail-accent'
                                  : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
-                    title="All Inboxes"
+                    title={t('sidebar.allInboxes')}
                   >
                     <Inbox size={12} />
-                    <span>All Inboxes</span>
+                    <span>{t('sidebar.allInboxes')}</span>
                   </button>
                 )}
                 {orderedAccounts.map(account => (
@@ -1100,7 +1106,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   <div className="flex items-center justify-between text-xs text-mail-warning">
                     <div className="flex items-center gap-2">
                       <AlertTriangle size={14} />
-                      <span>Showing cached data</span>
+                      <span>{t('sidebar.showingCachedData')}</span>
                     </div>
                     <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
                       // Not activateAccount: that lands in the sync probe's 10s
@@ -1109,7 +1115,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       // reported as doing nothing. refreshCurrentView clears the
                       // probe first, so an explicit retry always reaches the server.
                       onClick={refreshCurrentView}
-                      title="Retry connection"
+                      title={t('sidebar.retryConnection')}
                     >
                       <RefreshCw size={12} />
                     </Button>
@@ -1148,7 +1154,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-mail-accent/15">
                 <Inbox size={16} className={unifiedInbox ? 'text-mail-accent-text' : 'text-mail-text-muted'} />
               </div>
-              <div className="text-sm font-medium">All Inboxes</div>
+              <div className="text-sm font-medium">{t('sidebar.allInboxes')}</div>
             </div>
           )}
 
@@ -1186,7 +1192,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   <div className="flex items-center justify-between text-xs text-mail-warning">
                     <div className="flex items-center gap-2">
                       <AlertTriangle size={14} />
-                      <span>Showing cached data</span>
+                      <span>{t('sidebar.showingCachedData')}</span>
                     </div>
                     <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
                       // Not activateAccount: that lands in the sync probe's 10s
@@ -1195,7 +1201,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       // reported as doing nothing. refreshCurrentView clears the
                       // probe first, so an explicit retry always reaches the server.
                       onClick={refreshCurrentView}
-                      title="Retry connection"
+                      title={t('sidebar.retryConnection')}
                     >
                       <RefreshCw size={12} />
                     </Button>
@@ -1231,7 +1237,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                         hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
             >
               <Plus size={16} />
-              Add Account
+              {t('sidebar.addAccount')}
             </button>
           )}
         </div>
@@ -1266,13 +1272,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           document.addEventListener('mousemove', handleMouseMove);
           document.addEventListener('mouseup', handleMouseUp);
         }}
-        title="Drag to resize"
+        title={t('sidebar.dragToResize')}
       />
 
       {/* View Mode Toggle */}
       <div className="p-3 border-b border-mail-border flex-shrink-0">
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          View Mode
+          {t('sidebar.viewMode')}
         </div>
         <div className="flex gap-1 bg-mail-bg rounded-lg p-1">
           {[
@@ -1308,7 +1314,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {!unifiedInbox && tagCloud && (
         <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
           <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-            Folders
+            {t('sidebar.folders')}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {sortedMailboxes.flatMap(mailbox => {
@@ -1359,7 +1365,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       )}
       {!unifiedInbox && !tagCloud && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
         <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          Folders
+          {t('sidebar.folders')}
         </div>
 
         {sortedMailboxes.map(mailbox => {
@@ -1438,21 +1444,21 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           onClick={onOpenSettings}
         >
           <Settings size={14} />
-          Settings
+          {t('sidebar.settings')}
         </Button>
         <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onReportBug}
-          title="Report a bug"
+          title={t('sidebar.reportABug')}
         >
           <Bug size={14} />
-          Report a bug
+          {t('sidebar.reportABug')}
         </Button>
         <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onReferFriend}
-          title="Refer a friend"
+          title={t('sidebar.referAFriend')}
         >
           <Gift size={14} />
-          Refer a friend
+          {t('sidebar.referAFriend')}
         </Button>
         {totalEmails > 0 && (
           <div className="flex items-center gap-1 px-2 mt-1 text-xs text-mail-text-muted">
