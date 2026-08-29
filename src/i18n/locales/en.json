@@ -1,4 +1,6 @@
 {
   "sidebar.allInboxes": "All Inboxes",
-  "sidebar.lastNDays": "Last {{n}} days"
+  "sidebar.lastNDays": "Last {{n}} days",
+  "inbox.unread_one": "{{count}} unread message",
+  "inbox.unread_other": "{{count}} unread messages"
 }

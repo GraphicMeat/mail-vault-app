@@ -18,3 +18,21 @@ describe('t', () => {
     expect(t('nope.not.here')).toBe('nope.not.here');
   });
 });
+
+describe('t plurals', () => {
+  it('picks the _one form at count 1', () => {
+    expect(t('inbox.unread', { count: 1 })).toBe('1 unread message');
+  });
+
+  it('picks the _other form at count 2', () => {
+    expect(t('inbox.unread', { count: 2 })).toBe('2 unread messages');
+  });
+
+  it('picks the _other form at count 0 in English', () => {
+    expect(t('inbox.unread', { count: 0 })).toBe('0 unread messages');
+  });
+
+  it('falls back to the bare key when no plural forms exist', () => {
+    expect(t('sidebar.allInboxes', { count: 3 })).toBe('All Inboxes');
+  });
+});
