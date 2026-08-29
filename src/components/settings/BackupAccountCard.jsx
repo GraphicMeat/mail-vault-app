@@ -20,6 +20,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { useT } from '../../i18n/index.js';
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '--';
@@ -64,6 +65,7 @@ function formatTimestamp(ts) {
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account, isPaidUser, globalEnabled, highlighted, onUpgrade }, ref) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   const backupSchedules = useSettingsStore(s => s.backupSchedules);
   const backupState = useSettingsStore(s => s.backupState);
@@ -221,21 +223,21 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           >
             <div className="space-y-3 pt-3 border-t border-mail-border">
               <div className="pt-3 border-t border-mail-border">
-                <label className="text-xs text-mail-text-muted mb-1 block">What to back up</label>
+                <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.account.whatBackUp')}</label>
                 <select
                   value={config.scope || ''}
                   onChange={(e) => handleConfigChange('scope', e.target.value || null)}
                   className={selectClass}
                 >
                   <option value="">Use global setting ({globalScope === 'all' ? 'All emails' : 'Archived only'})</option>
-                  <option value="archived">Archived emails only</option>
+                  <option value="archived">{t('settings.backup.account.archivedEmailsOnly')}</option>
                   <option value="all">All emails (download from server)</option>
                 </select>
               </div>
 
               <div className="pt-3 border-t border-mail-border">
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs text-mail-text-muted">Folders to back up</label>
+                  <label className="text-xs text-mail-text-muted">{t('settings.backup.account.foldersBackUp')}</label>
                   <Button variant="link" size="xs" className="p-0 text-xs"
                     onClick={() => setShowFolderPicker(!showFolderPicker)}
                   >
@@ -251,7 +253,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                         onChange={() => handleConfigChange('folders', config.folders ? null : accountFolders.slice())}
                         className="accent-mail-accent"
                       />
-                      <span className="font-medium">All folders</span>
+                      <span className="font-medium">{t('settings.backup.account.allFolders')}</span>
                     </label>
                     {accountFolders.map(folder => (
                       <label key={folder} className="flex items-center gap-2 text-xs text-mail-text py-0.5 cursor-pointer pl-4">
@@ -282,15 +284,15 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       {/* Status Row */}
       <div className="grid grid-cols-3 gap-4 pt-3 border-t border-mail-border">
         <div>
-          <div className="text-xs text-mail-text-muted">Last backup</div>
+          <div className="text-xs text-mail-text-muted">{t('settings.backup.account.lastBackup')}</div>
           <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.lastBackupTime)}</div>
         </div>
         <div>
-          <div className="text-xs text-mail-text-muted">Backed up</div>
+          <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
           <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
         </div>
         <div>
-          <div className="text-xs text-mail-text-muted">Storage</div>
+          <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
           <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
         </div>
       </div>
@@ -309,7 +311,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
       {/* History Table */}
       <div className="pt-3 border-t border-mail-border">
-        <div className="text-xs text-mail-text-muted mb-2">Recent backups</div>
+        <div className="text-xs text-mail-text-muted mb-2">{t('settings.backup.account.recentBackups')}</div>
         {history.length > 0 ? (
           <div className="space-y-1.5">
             {history.map((entry, i) => (
@@ -319,11 +321,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 <span className="text-mail-text-muted w-20">{formatDuration(entry.durationSecs)}</span>
                 {entry.success && entry.externalCopyOk !== false ? (
                   <span className="text-mail-success flex items-center gap-1">
-                    <CheckCircle2 size={12} /> Success
+                    <CheckCircle2 size={12} /> {t('settings.backup.account.success')}
                   </span>
                 ) : entry.success && entry.externalCopyOk === false ? (
                   <span className="text-mail-warning flex items-center gap-1" title={entry.externalCopyError || 'External copy failed'}>
-                    <AlertCircle size={12} /> Partial
+                    <AlertCircle size={12} /> {t('settings.backup.account.partial')}
                   </span>
                 ) : (
                   <span className="text-mail-danger flex items-center gap-1" title={entry.error || ''}>
@@ -334,7 +336,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             ))}
           </div>
         ) : (
-          <div className="text-mail-text-muted text-xs">No backup history yet</div>
+          <div className="text-mail-text-muted text-xs">{t('settings.backup.account.noBackupHistoryYet')}</div>
         )}
       </div>
 
@@ -381,9 +383,9 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               {backupProgress ? `Backing up ${backupProgress.folder || ''}...` : 'Backing up...'}
             </>
           ) : manualStatus === 'success' ? (
-            <span className="text-mail-success">Done!</span>
+            <span className="text-mail-success">{t('settings.backup.account.done')}</span>
           ) : manualStatus === 'degraded' ? (
-            <span className="text-mail-warning">Partial</span>
+            <span className="text-mail-warning">{t('settings.backup.account.partial')}</span>
           ) : (
             'Back up now'
           )}
@@ -417,7 +419,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div className="flex-1 min-w-0">
             <span className="text-sm font-medium text-mail-text">{account.email}</span>
             {globalEnabled && (
-              <span className="text-xs text-mail-accent-text ml-2">Using global schedule</span>
+              <span className="text-xs text-mail-accent-text ml-2">{t('settings.backup.account.usingGlobalSchedule')}</span>
             )}
           </div>
         </div>
@@ -430,7 +432,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             onClick={onUpgrade}
             className="text-xs px-2.5 py-1 rounded-full border border-mail-border text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
           >
-            Automate
+            {t('settings.backup.account.automate')}
           </button>
         ) : null}
       </div>
@@ -447,9 +449,9 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 <Clock size={20} className="text-mail-accent-text" />
               </div>
               <div>
-                <p className="text-sm font-semibold text-mail-text mb-1">Premium Feature</p>
+                <p className="text-sm font-semibold text-mail-text mb-1">{t('common.premiumFeature')}</p>
                 <p className="text-xs text-mail-text-muted max-w-[280px]">
-                  Schedule automatic backups to keep your emails safe. Set per-account schedules, track backup health, and never worry about losing important emails.
+                  {t('settings.backup.account.scheduleAutomaticBackupsKeepEmails')}
                 </p>
                 {/* MAS builds must not advertise the web subscription — no external
                     purchase price, no path to Stripe checkout. */}
@@ -459,7 +461,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               </div>
               {!IS_APPSTORE_BUILD && onUpgrade && (
                 <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
-                  Upgrade
+                  {t('common.upgrade')}
                 </Button>
               )}
             </div>
@@ -469,19 +471,19 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         <div className="space-y-4">
           <div className="grid grid-cols-4 gap-4 pt-3 border-t border-mail-border">
             <div>
-              <div className="text-xs text-mail-text-muted">Last backup</div>
+              <div className="text-xs text-mail-text-muted">{t('settings.backup.account.lastBackup')}</div>
               <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.lastBackupTime)}</div>
             </div>
             <div>
-              <div className="text-xs text-mail-text-muted">Next run</div>
+              <div className="text-xs text-mail-text-muted">{t('settings.backup.account.nextRun')}</div>
               <div className="text-sm font-semibold text-mail-text">{formatRelativeTime(state.nextRunTime)}</div>
             </div>
             <div>
-              <div className="text-xs text-mail-text-muted">Backed up</div>
+              <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
               <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
             </div>
             <div>
-              <div className="text-xs text-mail-text-muted">Storage</div>
+              <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
               <div className="text-sm font-semibold text-mail-text">{formatSize(storageSize)}</div>
             </div>
           </div>

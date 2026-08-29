@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 function CountCell({ count, serverCount }) {
   if (serverCount === 0) return <span className="text-mail-text-muted">--</span>;
@@ -60,6 +61,7 @@ function FolderRow({ folder, depth = 0, hasExternal, defaultExpanded = false }) 
 }
 
 export default function BackupVerificationTree({ data, onHide }) {
+  const t = useT();
   const { total_server, total_app, total_external, external_available, folders } = data;
   const hasExternal = external_available || total_external > 0;
   const appComplete = total_app >= total_server && total_server > 0;
@@ -69,8 +71,8 @@ export default function BackupVerificationTree({ data, onHide }) {
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-mail-text">Backup Verification</span>
-        <Button variant="ghost" size="xs" className="p-0 text-xs" onClick={onHide}>Hide</Button>
+        <span className="text-xs font-semibold text-mail-text">{t('settings.backup.verify.backupVerification')}</span>
+        <Button variant="ghost" size="xs" className="p-0 text-xs" onClick={onHide}>{t('settings.backup.verify.hide')}</Button>
       </div>
 
       {/* Summary chips */}
@@ -90,7 +92,7 @@ export default function BackupVerificationTree({ data, onHide }) {
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-mail-surface text-mail-text-muted">
-            External: not configured
+            {t('settings.backup.verify.externalNotConfigured')}
           </span>
         )}
       </div>
@@ -109,10 +111,10 @@ export default function BackupVerificationTree({ data, onHide }) {
           <table className="w-full text-xs">
             <thead className="sticky top-0 bg-mail-surface">
               <tr className="border-b border-mail-border text-mail-text-muted">
-                <th className="py-1 pr-2 text-left font-medium">Folder</th>
-                <th className="py-1 px-2 text-right font-medium w-14">Server</th>
-                <th className="py-1 px-2 text-right font-medium w-14">App</th>
-                {hasExternal && <th className="py-1 px-2 text-right font-medium w-14">Ext.</th>}
+                <th className="py-1 pr-2 text-left font-medium">{t('common.folder')}</th>
+                <th className="py-1 px-2 text-right font-medium w-14">{t('settings.backup.verify.server')}</th>
+                <th className="py-1 px-2 text-right font-medium w-14">{t('settings.backup.verify.app')}</th>
+                {hasExternal && <th className="py-1 px-2 text-right font-medium w-14">{t('settings.backup.verify.ext')}</th>}
               </tr>
             </thead>
             <tbody>

@@ -11,10 +11,12 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { useT } from '../../i18n/index.js';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 export default function BackupSchedule({ initialAccountId, onUpgrade }) {
+  const t = useT();
   const cardRefs = useRef({});
   const [highlightedId, setHighlightedId] = useState(null);
 
@@ -55,10 +57,10 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
           <div>
             <h4 className="font-semibold text-mail-text flex items-center gap-2">
               <Clock size={18} className="text-mail-accent-text" />
-              Automatic Backup
+              {t('settings.backup.schedule.automaticBackup')}
             </h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
-              Backups run automatically when the app is idle
+              {t('settings.backup.schedule.backupsRunAutomaticallyWhenApp')}
             </p>
           </div>
           {/* Free: the switch reads off because nothing runs — the per-account
@@ -74,11 +76,11 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
           <div className="space-y-3 pt-3 border-t border-mail-border">
             <div className="bg-mail-bg rounded-lg p-3">
               <p className="text-xs text-mail-text-muted">
-                When you stop using the app for a few minutes, MailVault checks if any accounts need a backup and runs them one at a time in the background. No interruptions, no schedules to configure.
+                {t('settings.backup.schedule.whenStopUsingAppFew')}
               </p>
             </div>
             <div>
-              <label className="text-xs text-mail-text-muted mb-1 block">Backup frequency</label>
+              <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.backupFrequency')}</label>
               <select
                 value={backupGlobalConfig.interval}
                 onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
@@ -129,12 +131,12 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
             {activeBackup?.active ? (
               <>
                 <Loader size={16} className="animate-spin" />
-                Backup in progress...
+                {t('settings.backup.schedule.backupProgress')}
               </>
             ) : (
               <>
                 <HardDrive size={16} />
-                Back up all accounts now
+                {t('settings.backup.schedule.backUpAllAccountsNow')}
               </>
             )}
           </button>
@@ -156,9 +158,9 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
         ))
       ) : (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">
-          <h4 className="font-semibold text-mail-text mb-2">No accounts configured</h4>
+          <h4 className="font-semibold text-mail-text mb-2">{t('common.noAccountsConfigured')}</h4>
           <p className="text-sm text-mail-text-muted">
-            Add an email account first, then configure backup schedules.
+            {t('settings.backup.schedule.addEmailAccountFirstThen')}
           </p>
         </div>
       )}

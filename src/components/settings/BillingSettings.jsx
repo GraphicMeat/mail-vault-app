@@ -32,6 +32,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
@@ -118,6 +119,7 @@ function timeAgo(dateStr) {
 }
 
 export function BillingSettings() {
+  const t = useT();
   const billingEmail = useSettingsStore(s => s.billingEmail);
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const billingLastChecked = useSettingsStore(s => s.billingLastChecked);
@@ -452,12 +454,12 @@ export function BillingSettings() {
       {rateLimitMsg && (
         <div className="p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20 text-xs text-mail-warning">
           {rateLimitMsg}
-          {showingCached && <span className="block mt-1 text-mail-text-muted">Showing last known billing data.</span>}
+          {showingCached && <span className="block mt-1 text-mail-text-muted">{t('settings.billing.showingLastKnownBillingData')}</span>}
         </div>
       )}
       {!rateLimitMsg && showingCached && (
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border text-xs text-mail-text-muted">
-          Showing cached billing data. Will refresh automatically.
+          {t('settings.billing.showingCachedBillingDataWill')}
         </div>
       )}
 
@@ -482,7 +484,7 @@ export function BillingSettings() {
               </p>
             )}
             {billingProfile?.status === 'past_due' && (
-              <p className="text-xs text-mail-warning">Payment past due — please update your payment method.</p>
+              <p className="text-xs text-mail-warning">{t('settings.billing.paymentPastDuePleaseUpdate')}</p>
             )}
           </div>
         </div>
@@ -496,7 +498,7 @@ export function BillingSettings() {
               </div>
               <button onClick={() => refreshSignedIn({ manual: true })} disabled={syncing || cooldownRemaining > 0}
                 className="p-2 text-sm text-mail-text-muted hover:text-mail-accent-text rounded-lg hover:bg-mail-accent/10 transition-colors disabled:opacity-50"
-                title="Refresh subscription status">
+                title={t('settings.billing.refreshSubscriptionStatus')}>
                 {syncing ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               </button>
             </div>
@@ -506,12 +508,12 @@ export function BillingSettings() {
               className="flex items-center gap-1.5 text-xs font-medium text-mail-danger hover:opacity-80 transition-colors disabled:opacity-50"
             >
               <LogOut size={12} />
-              Sign out of Premium on this device
+              {t('settings.billing.signOutPremiumDevice')}
             </button>
           </div>
         ) : accountEmails.length === 0 ? (
           <p className="text-xs text-mail-text-muted">
-            Add an email account first to sign in to Premium.
+            {t('settings.billing.addEmailAccountFirstSign')}
           </p>
         ) : (
           /* Signed out: account dropdown + sign in */
@@ -550,16 +552,16 @@ export function BillingSettings() {
             <h4 className="text-sm font-semibold text-mail-text">Early Bird & Family Pricing</h4>
           </div>
           <p className="text-xs text-mail-text-muted mb-3">
-            MailVault is in early access. Lock in discounted pricing today — your rate stays the same as long as your subscription is active, even after prices increase.
+            {t('settings.billing.mailvaultEarlyAccessLockDiscounted')}
           </p>
           <div className="flex flex-wrap gap-3 text-xs">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <CheckCircle2 size={12} />
-              <span>Early bird rate locked for life</span>
+              <span>{t('settings.billing.earlyBirdRateLockedLife')}</span>
             </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <Monitor size={12} />
-              <span>Up to 5 devices per subscription</span>
+              <span>{t('settings.billing.up5DevicesPerSubscription')}</span>
             </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <Shield size={12} />
@@ -591,9 +593,9 @@ export function BillingSettings() {
             <div className="grid grid-cols-2 gap-4">
               {monthlyPlan && (
                 <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex flex-col">
-                  <h4 className="text-sm font-semibold text-mail-text mb-1">Monthly</h4>
+                  <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.monthly')}</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
-                  <p className="text-xs text-mail-text-muted mb-4 flex-1">Cancel anytime</p>
+                  <p className="text-xs text-mail-text-muted mb-4 flex-1">{t('settings.billing.cancelAnytime')}</p>
                   <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
@@ -612,7 +614,7 @@ export function BillingSettings() {
                       Save {yearlyPlan.savingsPercent}%
                     </span>
                   ) : null}
-                  <h4 className="text-sm font-semibold text-mail-text mb-1">Yearly</h4>
+                  <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.yearly')}</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{yearlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/yr</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">
                     {yearlyPlan.trialEligible && yearlyPlan.trialDays
@@ -632,22 +634,22 @@ export function BillingSettings() {
       })()}
       {!IS_APPSTORE_BUILD && !isPremium && !pricing && pricingLoading && (
         <div className="flex items-center justify-center py-8 text-mail-text-muted text-xs gap-2">
-          <Loader size={14} className="animate-spin" /> Loading plans...
+          <Loader size={14} className="animate-spin" /> {t('settings.billing.loadingPlans')}
         </div>
       )}
       {/* Plans unreachable — never leave the user without a way to subscribe */}
       {!IS_APPSTORE_BUILD && !isPremium && !pricing && !pricingLoading && pricingError && (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-          <h4 className="text-sm font-semibold text-mail-text mb-1">Plans could not be loaded</h4>
+          <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.plansCouldNotLoaded')}</h4>
           <p className="text-xs text-mail-text-muted mb-3">{pricingError}</p>
           <div className="flex gap-2">
             <button onClick={() => loadPricing()}
               className="px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors flex items-center gap-1.5">
-              <RefreshCw size={14} /> Retry
+              <RefreshCw size={14} /> {t('common.retry')}
             </button>
             <button onClick={() => openInBrowser('https://mailvaultapp.com/pricing.html').catch(() => {})}
               className="px-4 py-2 text-sm font-medium border border-mail-border rounded-lg hover:border-mail-accent transition-colors text-mail-text flex items-center gap-1.5">
-              <ExternalLink size={14} /> View plans in browser
+              <ExternalLink size={14} /> {t('settings.billing.viewPlansBrowser')}
             </button>
           </div>
         </div>
@@ -657,9 +659,9 @@ export function BillingSettings() {
           purchase — otherwise the tab is a dead end for an existing subscriber. */}
       {IS_APPSTORE_BUILD && !isPremium && (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-          <h4 className="text-sm font-semibold text-mail-text mb-1">Premium</h4>
+          <h4 className="text-sm font-semibold text-mail-text mb-1">{t('common.premium')}</h4>
           <p className="text-xs text-mail-text-muted">
-            Premium features come with a MailVault subscription. If you already have one, sign in above with the email it was bought under.
+            {t('settings.billing.premiumFeaturesComeMailvaultSubscription')}
           </p>
         </div>
       )}
@@ -684,7 +686,7 @@ export function BillingSettings() {
         <button onClick={handleManageBilling}
           className="w-full py-2.5 text-sm font-medium bg-mail-surface border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors flex items-center justify-center gap-2 text-mail-text">
           <ExternalLink size={14} />
-          Manage Subscription
+          {t('settings.billing.manageSubscription')}
         </button>
       )}
 
@@ -693,7 +695,7 @@ export function BillingSettings() {
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-semibold text-mail-text flex items-center gap-2">
-              <Monitor size={16} /> Devices
+              <Monitor size={16} /> {t('settings.billing.devices')}
             </h4>
             <span className="text-xs text-mail-text-muted">{activeClientCount} / {clientLimit}</span>
           </div>
@@ -727,7 +729,7 @@ export function BillingSettings() {
                     <button onClick={() => handleRemoveClient(client.clientId)}
                       disabled={removingClientId === client.clientId}
                       className="p-1 text-mail-text-muted hover:text-mail-danger rounded transition-colors flex-shrink-0"
-                      title="Remove device">
+                      title={t('settings.billing.removeDevice')}>
                       {removingClientId === client.clientId ? <Loader size={12} className="animate-spin" /> : <X size={12} />}
                     </button>
                   )}
@@ -740,10 +742,10 @@ export function BillingSettings() {
 
       {/* Feature Comparison */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <h4 className="text-sm font-semibold text-mail-text mb-4">What's included</h4>
+        <h4 className="text-sm font-semibold text-mail-text mb-4">{t('settings.billing.whatSIncluded')}</h4>
         <div className="grid grid-cols-2 gap-6">
           <div>
-            <p className="text-xs font-semibold text-mail-text-muted uppercase tracking-wide mb-2">Free</p>
+            <p className="text-xs font-semibold text-mail-text-muted uppercase tracking-wide mb-2">{t('settings.billing.free')}</p>
             <ul className="space-y-2">
               {[[Mail, 'Read, search, compose emails'], [HardDrive, 'Local email caching & archive'],
                 [Shield, 'Manual backup & export'], [CreditCard, 'Templates, notifications, security']].map(([Icon, text]) => (
@@ -754,7 +756,7 @@ export function BillingSettings() {
             </ul>
           </div>
           <div>
-            <p className="text-xs font-semibold text-mail-accent-text uppercase tracking-wide mb-2">Premium</p>
+            <p className="text-xs font-semibold text-mail-accent-text uppercase tracking-wide mb-2">{t('common.premium')}</p>
             <ul className="space-y-2">
               {[[Clock, 'Scheduled automatic backups'], [CheckCircle2, 'Backup health & status management'],
                 [ArrowLeftRight, 'Cross-account mailbox migration'], [Trash2, 'Auto-cleanup rules'],
@@ -776,7 +778,7 @@ export function BillingSettings() {
         isOpen={showLogoutConfirm}
         onClose={() => !logoutLoading && setShowLogoutConfirm(false)}
         onConfirm={handleBillingLogout}
-        title="Sign out of Premium?"
+        title={t('settings.billing.signOutPremium')}
         description="This will release the device seat and lock premium features on this device until you sign in again. Your subscription itself is not affected."
         confirmLabel="Sign Out"
         destructive

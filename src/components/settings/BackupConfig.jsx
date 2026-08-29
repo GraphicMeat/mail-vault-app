@@ -10,10 +10,12 @@ import {
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
+import { useT } from '../../i18n/index.js';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
 export default function BackupConfig() {
+  const t = useT();
   const backupScope = useSettingsStore(s => s.backupScope);
   const setBackupScope = useSettingsStore(s => s.setBackupScope);
   const backupCustomPath = useSettingsStore(s => s.backupCustomPath);
@@ -131,7 +133,7 @@ export default function BackupConfig() {
             <div className="flex-1">
               <h4 className="font-semibold text-mail-text">Cloud Backups (One-time purchase)</h4>
               <p className="text-sm text-mail-text-muted mt-1">
-                Unlock external backup folders to keep a safe copy of your emails outside MailVault's app sandbox — survives uninstalls, syncs with iCloud Drive, Dropbox, or any other location.
+                {t('settings.backup.config.unlockExternalBackupFoldersKeep')}
               </p>
             </div>
           </div>
@@ -163,7 +165,7 @@ export default function BackupConfig() {
               onClick={handleRestore}
               disabled={iapBusy !== null}
               className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-mail-text-muted hover:text-mail-text bg-mail-bg border border-mail-border hover:bg-mail-surface-hover disabled:opacity-50 rounded-lg transition-colors"
-              title="Restore prior purchase from this Apple ID"
+              title={t('settings.backup.config.restorePriorPurchaseAppleId')}
             >
               {iapBusy === 'restore' ? <Loader size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
               Restore
@@ -171,7 +173,7 @@ export default function BackupConfig() {
           </div>
 
           <p className="text-xs text-mail-text-muted">
-            Already purchased on another Mac signed in to the same Apple ID? Click <strong>Restore</strong>.
+            {t('settings.backup.config.alreadyPurchasedAnotherMacSigned')} <strong>{t('settings.backup.config.restore')}</strong>.
           </p>
         </div>
       </div>
@@ -199,13 +201,13 @@ export default function BackupConfig() {
               : 'All emails from selected folders on the mail server will be downloaded and backed up locally. This may use significant disk space.'}
           </p>
           <p className="text-xs text-mail-text-muted mt-1">
-            Backups are incremental — only new emails since the last backup are downloaded. Existing backups are never re-downloaded.
+            {t('settings.backup.config.backupsIncrementalOnlyNewEmails')}
           </p>
         </div>
 
         {/* Scope selector */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">What to back up</label>
+          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.whatBackUp')}</label>
           <select
             value={backupScope}
             onChange={(e) => setBackupScope(e.target.value)}
@@ -218,10 +220,10 @@ export default function BackupConfig() {
 
         {/* External backup location */}
         <div>
-          <label className="text-xs text-mail-text-muted mb-1 block">Second copy — external cold storage</label>
+          <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.secondCopyExternalColdStorage')}</label>
           <p className="text-xs text-mail-text-muted mb-2">
             MailVault always keeps its working copy in the app's own storage — that is what you read,
-            search and open in the app. An external folder adds a <strong>second, independent copy</strong> on
+            search and open in the app. An external folder adds a <strong>{t('settings.backup.config.secondIndependentCopy')}</strong> on
             a drive you control. It is written at the same time as the working copy, never read by the app
             day to day, and kept for the long term: emails deleted on the server or in MailVault stay there.
           </p>
@@ -238,9 +240,9 @@ export default function BackupConfig() {
             {externalBackupLocation && (
               <Button variant="ghost" size="xs" className="text-xs py-2"
                 onClick={handleClearExternal}
-                title="Remove external backup location"
+                title={t('settings.backup.config.removeExternalBackupLocation')}
               >
-                Reset
+                {t('common.reset')}
               </Button>
             )}
           </div>
@@ -251,7 +253,7 @@ export default function BackupConfig() {
               {validatingExternal ? (
                 <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-mail-surface text-mail-text-muted">
                   <Loader size={10} className="animate-spin" />
-                  Verifying...
+                  {t('settings.backup.config.verifying')}
                 </span>
               ) : (
                 <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${
@@ -270,7 +272,7 @@ export default function BackupConfig() {
                 <Button variant="link" size="xs" className="p-0 text-xs"
                   onClick={handleChooseBackupDir}
                 >
-                  Reauthorize
+                  {t('settings.backup.config.reauthorize')}
                 </Button>
               )}
             </div>
@@ -288,7 +290,7 @@ export default function BackupConfig() {
                 app — and untouched if you uninstall MailVault or lose the app's data folder.
               </p>
               <p className="text-xs text-mail-text-muted">
-                Structure: <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234:2,S.eml</code>
+                {t('settings.backup.config.structure')} <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234:2,S.eml</code>
               </p>
               <p className="text-xs text-mail-text-muted">
                 If the drive is disconnected, backups keep running into the app's working copy alone and

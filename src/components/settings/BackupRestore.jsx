@@ -11,8 +11,10 @@ import {
   Upload,
   HardDrive,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export default function BackupRestore() {
+  const t = useT();
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = useAccountStore(s => s.accounts);
@@ -250,7 +252,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Write everything in your vault to a single .zip you can copy anywhere, or read one back in.
+          {t('settings.backup.restore.writeEverythingVaultSingleZip')}
         </p>
 
         <div className="flex gap-3">
@@ -258,14 +260,14 @@ export default function BackupRestore() {
             onClick={handleExportData}
           >
             <Download size={18} />
-            Export Backup
+            {t('settings.backup.restore.exportBackup')}
           </Button>
 
           <Button variant="subtle" className="flex-1 py-3"
             onClick={handleImportData}
           >
             <Upload size={18} />
-            Import Backup
+            {t('settings.backup.restore.importBackup')}
           </Button>
         </div>
       </div>
@@ -278,7 +280,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Write your vault to a standard MBOX file that Thunderbird, Apple Mail and other clients can open, or read an MBOX from another client into your vault.
+          {t('settings.backup.restore.writeVaultStandardMboxFile')}
         </p>
 
         <div className="flex gap-3">
@@ -286,14 +288,14 @@ export default function BackupRestore() {
             onClick={handleExportMbox}
           >
             <Download size={18} />
-            Export MBOX
+            {t('settings.backup.restore.exportMbox')}
           </Button>
 
           <Button variant="subtle" className="flex-1 py-3"
             onClick={handleImportMbox}
           >
             <Upload size={18} />
-            Import MBOX
+            {t('settings.backup.restore.importMbox')}
           </Button>
         </div>
       </div>
@@ -303,7 +305,7 @@ export default function BackupRestore() {
         open={showExportChoice}
         onClose={() => setShowExportChoice(false)}
         size="sm"
-        title="Export Backup"
+        title={t('settings.backup.restore.exportBackup')}
         // This asked "Which emails would you like to export?" and then offered
         // one button and Cancel. A question with a single answer is not a
         // choice — say what the export contains instead.
@@ -312,12 +314,12 @@ export default function BackupRestore() {
         <div className="flex flex-col gap-3">
           <Button variant="primary" size="lg" onClick={() => doExport(true)} fullWidth className="py-3 text-left justify-start">
             <span className="block">
-              Choose a location
-              <span className="block text-xs font-normal opacity-80 mt-0.5">Pick where to write the backup file</span>
+              {t('settings.backup.restore.chooseLocation')}
+              <span className="block text-xs font-normal opacity-80 mt-0.5">{t('settings.backup.restore.pickWhereWriteBackupFile')}</span>
             </span>
           </Button>
           <Button variant="ghost" onClick={() => setShowExportChoice(false)} fullWidth data-autofocus>
-            Cancel
+            {t('common.cancel')}
           </Button>
         </div>
       </Dialog>

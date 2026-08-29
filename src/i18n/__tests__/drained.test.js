@@ -16,6 +16,12 @@ const DONE = [
   'src/components/settings/MigrationSettings.jsx',
   'src/components/settings/BehaviorSettings.jsx',
   'src/components/settings/ShortcutsSettings.jsx',
+  'src/components/settings/BillingSettings.jsx',
+  'src/components/settings/BackupAccountCard.jsx',
+  'src/components/settings/BackupConfig.jsx',
+  'src/components/settings/BackupRestore.jsx',
+  'src/components/settings/BackupSchedule.jsx',
+  'src/components/settings/BackupVerificationTree.jsx',
 ];
 
 function audit(mode, files) {
