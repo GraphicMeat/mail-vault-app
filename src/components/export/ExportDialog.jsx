@@ -70,8 +70,10 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
 
       if (result.partial) {
         const n = result.failures.length;
-        setNotice(t('export.dialog.exportedMessageCouldExported', { n, n2: n === 1 ? '' : 's' })
-          + result.failures.map(f => f.subject || f.uid).join(', '));
+        setNotice(t('export.dialog.exportedSomeFailed', {
+          count: n,
+          failed: result.failures.map(f => f.subject || f.uid).join(', '),
+        }));
       } else {
         onClose?.();
       }
