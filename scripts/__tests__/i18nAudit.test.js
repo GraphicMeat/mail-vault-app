@@ -1,0 +1,67 @@
+import { describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+const AUDIT = resolve(process.cwd(), 'scripts/i18n-audit.mjs');
+
+function run(mode, file) {
+  try { execFileSync('node', [AUDIT, mode, file], { encoding: 'utf8' }); return ''; }
+  catch (e) { return e.stdout || String(e); }
+}
+
+function fixture(body) {
+  const dir = mkdtempSync(join(tmpdir(), 'audit-'));
+  const f = join(dir, 'F.jsx');
+  writeFileSync(f, body);
+  return f;
+}
+
+/**
+ * The gate needs its own gate. `export default function X()` was missing from
+ * the declaration pattern, which silently attributed that component's t() calls
+ * to whatever was declared above it — so a real hook gap read as clean.
+ */
+const FORMS = {
+  'function X': 'function X() {',
+  'export function X': 'export function X() {',
+  'export default function X': 'export default function X() {',
+  'const X =': 'const X = () => {',
+  'export const X =': 'export const X = () => {',
+  'const X = memo(function X': 'const X = memo(function X() {',
+  'export const X = memo(function X': 'export const X = memo(function X() {',
+  'export const X = React.memo(function X': 'export const X = React.memo(function X() {',
+  'export const X = forwardRef(function X': 'export const X = forwardRef(function X() {',
+};
+
+describe('i18n-audit hooks mode', () => {
+  for (const [label, decl] of Object.entries(FORMS)) {
+    it(`reports a missing useT in: ${label}`, () => {
+      const f = fixture(`${decl}\n  return <span>{t('a.b')}</span>;\n}\n`);
+      expect(run('hooks', f)).toMatch(/1 finding/);
+    });
+
+    it(`stays clean when that form has the hook: ${label}`, () => {
+      const f = fixture(`${decl}\n  const t = useT();\n  return <span>{t('a.b')}</span>;\n}\n`);
+      expect(run('hooks', f)).toBe('');
+    });
+  }
+});
+
+describe('i18n-audit strings mode', () => {
+  it('finds a multi-line text node, which no line-based grep can see', () => {
+    const f = fixture('function X() {\n  return (\n    <p>\n      Hello there\n    </p>\n  );\n}\n');
+    expect(run('strings', f)).toMatch(/Hello there/);
+  });
+
+  it('finds a two-character text node', () => {
+    const f = fixture('function X() {\n  return <span>up</span>;\n}\n');
+    expect(run('strings', f)).toMatch(/"up"/);
+  });
+
+  it('is clean once every string is a t() call', () => {
+    const f = fixture("function X() {\n  return <span title={t('a.b')}>{t('c.d')}</span>;\n}\n");
+    expect(run('strings', f)).toBe('');
+  });
+});

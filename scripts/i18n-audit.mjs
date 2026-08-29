@@ -39,13 +39,25 @@ function jsxStrings(src) {
   return out;
 }
 
-/** Top-level component declarations, including `export const X = memo(function X({` */
+/**
+ * Top-level component declarations. The repo uses eleven spellings; all of them
+ * must match, because a declaration this misses silently reassigns its t()
+ * calls to the PREVIOUS component and the gap goes unreported.
+ *
+ *   function X                       const X =
+ *   export function X                export const X =
+ *   export default function X        const X = memo(function X
+ *   export const X = memo(function X export const X = React.memo(function X
+ *   export const X = forwardRef(function X                const X = forwardRef(function X
+ *   const X = React.memo(function X
+ */
+const DECL = /^(?:export\s+)?(?:default\s+)?(?:const\s+([A-Z][A-Za-z0-9_]*)\s*=|(?:async\s+)?function\s+([A-Z][A-Za-z0-9_]*))/;
+
 function declarations(src) {
-  const lines = src.split('\n');
   const d = [];
-  lines.forEach((l, i) => {
-    const m = /^(?:export\s+)?(?:const|function)\s+([A-Z][A-Za-z0-9_]*)/.exec(l);
-    if (m) d.push({ line: i + 1, name: m[1] });
+  src.split('\n').forEach((l, i) => {
+    const m = DECL.exec(l);
+    if (m) d.push({ line: i + 1, name: m[1] || m[2] });
   });
   return d;
 }
