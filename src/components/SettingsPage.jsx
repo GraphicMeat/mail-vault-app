@@ -20,6 +20,7 @@ import {
   ChevronLeft,
   Gauge,
   EyeOff,
+  Languages,
 } from 'lucide-react';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { AccountSettings } from './settings/AccountSettings';
@@ -36,6 +37,7 @@ import { AISettings } from './settings/AISettings';
 import { DaemonSettings } from './settings/DaemonSettings';
 import { TimeCapsuleSettings } from './settings/TimeCapsuleSettings';
 import { CleanupView } from './settings/CleanupSettings';
+import { LanguageSettings } from './settings/LanguageSettings';
 import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { TimeCapsuleView } from './TimeCapsule';
 
@@ -55,6 +57,10 @@ const settingsTabs = [
   { id: 'data-usage', label: 'Data Usage', icon: Gauge },
   { id: 'security', label: 'Security', icon: Shield },
   { id: 'billing', label: 'Billing', icon: CreditCard },
+  // Literal, not t(): this array is module-level and evaluated once at import,
+  // so a t() call here would freeze English at load and never re-translate.
+  // Plan 2 moves these labels to keys resolved at render.
+  { id: 'language', label: 'Language', icon: Languages },
 ];
 
 const systemTabs = [
@@ -250,6 +256,10 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
 
             {activeTab === 'billing' && (
               <BillingSettings />
+            )}
+
+            {activeTab === 'language' && (
+              <LanguageSettings />
             )}
 
             {activeTab === 'security' && (

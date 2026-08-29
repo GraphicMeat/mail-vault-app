@@ -7,5 +7,8 @@
   "test.inlineVar": "Hi {{name}}, see the <0>docs</0> now",
   "errors.connectionFailed": "Connection failed",
   "errors.imapTimeout": "IMAP timeout",
-  "errors.E_UID_GONE": "Message no longer on the server"
+  "errors.E_UID_GONE": "Message no longer on the server",
+  "settings.language.tab": "Language",
+  "settings.language.title": "App language",
+  "settings.language.subtitle": "Translations are machine-made and improving. Errors also show the English original, so a screenshot is always readable."
 }
