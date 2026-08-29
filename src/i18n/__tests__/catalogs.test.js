@@ -24,7 +24,7 @@ const CATEGORIES = {
   ja: ['other'], ko: ['other'], 'zh-Hans': ['other'],
 };
 
-describe.each(LOCALES)('%s catalog', (loc) => {
+for (const loc of LOCALES) describe(`${loc} catalog`, () => {
   const cat = catalogs[loc];
   const shared = Object.keys(en).filter(k => k in cat);
 
