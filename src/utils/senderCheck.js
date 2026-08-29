@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Sender verification: checks for spoofing indicators.
  *
@@ -57,7 +58,7 @@ export function checkSenderVerification(email) {
       if (!domainsRelated) {
         issues.push({
           level: 'danger',
-          text: `Display name shows "${fromName}" but actual sender is ${email.from.address} — likely impersonation`,
+          text: t('util.senderCheck.displayNameShowsButActual', { fromName, email: email.from.address }),
           details: { displayName: fromName, actualAddress: email.from.address, displayDomain: nameDomain, actualDomain: fromDomain },
         });
       }
@@ -71,7 +72,7 @@ export function checkSenderVerification(email) {
       if (!domainsRelated) {
         issues.push({
           level: 'warning',
-          text: `Sender name "${fromName}" impersonates domain that differs from actual sender (${fromDomain})`,
+          text: t('util.senderCheck.senderNameImpersonatesDomainDiffers', { fromName, fromDomain }),
           details: { displayName: fromName, actualDomain: fromDomain },
         });
       }
@@ -89,7 +90,7 @@ export function checkSenderVerification(email) {
     if (replyToDomain && replyToDomain !== fromDomain) {
       issues.push({
         level: 'warning',
-        text: `Reply-To address (${replyToAddr}) differs from sender`,
+        text: t('util.senderCheck.replyAddressDiffersSender', { replyToAddr }),
       });
     }
   }
@@ -99,7 +100,7 @@ export function checkSenderVerification(email) {
     if (returnPathDomain && returnPathDomain !== fromDomain) {
       issues.push({
         level: 'info',
-        text: `Return-Path domain (${returnPathDomain}) differs from sender domain`,
+        text: t('util.senderCheck.returnPathDomainDiffersSender', { returnPathDomain }),
       });
     }
   }
@@ -117,7 +118,7 @@ export function checkSenderVerification(email) {
     if (failures.length > 0) {
       issues.push({
         level: 'danger',
-        text: `Sender authentication failed (${failures.join(', ')}) — this email may be spoofed`,
+        text: t('util.senderCheck.senderAuthenticationFailedEmailMay', { failures: failures.join(', ') }),
       });
     }
   }
@@ -142,7 +143,7 @@ export function checkSenderVerification(email) {
   if (hasAuthHeaders && auth.spf === 'pass' && auth.dkim === 'pass') {
     return {
       status: 'verified',
-      tooltip: 'Sender verified (SPF, DKIM pass)',
+      tooltip: t('util.senderCheck.senderVerifiedSpfDkimPass'),
       issues: [],
     };
   }

@@ -1033,7 +1033,7 @@ function EmailListComponent() {
                 <p>{t('list.noUnreadMessages')}</p>
                 <p className="text-sm mt-2">
                   {sortedEmails.length > 0
-                    ? t('list.loadedAllBeenRead', { sortedEmails: sortedEmails.length.toLocaleString(), sortedEmails2: sortedEmails.length === 1 ? 'message has' : 'messages have' })
+                    ? t('list.loadedAllBeenRead', { sortedEmails: sortedEmails.length.toLocaleString(), sortedEmails2: sortedEmails.length === 1 ? t('list.message') : t('list.messages') })
                     : t('list.folderEmpty')}
                 </p>
                 <button

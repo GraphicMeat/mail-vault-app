@@ -11,7 +11,7 @@ import { vaultClause } from '../utils/custodyCopy';
 import { useMailStore } from '../stores/mailStore';
 import { _selKey } from '../stores/slices/unifiedHelpers';
 import { useExportStore } from '../stores/exportStore';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 export function SelectionActionBar() {
   const t = useT();
@@ -127,16 +127,16 @@ export function SelectionActionBar() {
   // emails selected" off the same selection. Leading with threads made the two
   // disagree on screen ("52 selected (65 emails)") about a run that touches 65.
   const selectionLabel = summary.threads === summary.emails
-    ? `${summary.emails} selected`
-    : `${summary.emails} selected (${summary.threads} conversations)`;
+    ? t('selection.selected', { summary: summary.emails })
+    : t('selection.selectedConversations', { summary: summary.emails, summary2: summary.threads });
 
   // What the confirmation is about to destroy, in the same two units as the
   // label above. A conversation row is one checkbox over several messages, so
   // a bare message count reads as wrong to whoever ticked two boxes — say both
   // numbers whenever they differ.
   const deleteScope = summary.threads === summary.emails
-    ? `${summary.emails} email${summary.emails !== 1 ? 's' : ''}`
-    : `${summary.emails} emails in ${summary.threads} conversation${summary.threads !== 1 ? 's' : ''}`;
+    ? t('selection.email', { summary: summary.emails, summary2: summary.emails !== 1 ? 's' : '' })
+    : t('selection.emailsConversation', { summary: summary.emails, summary2: summary.threads, summary23: summary.threads !== 1 ? 's' : '' });
 
   return (
     <AnimatePresence>
@@ -279,8 +279,8 @@ export function SelectionActionBar() {
                   <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />
                   <p className="text-sm text-mail-text">
                     {deleteMode === 'everywhere'
-                      ? `Delete ${deleteScope} from the server, your vault, and your backup drive? No copy will be left anywhere. This cannot be undone.`
-                      : `Delete ${deleteScope} from the server? ${vaultClause(totalCount, archivedCount)}`}
+                      ? t('selection.deleteServerVaultBackupDrive', { deleteScope })
+                      : t('selection.deleteServer2', { deleteScope, vaultClause: vaultClause(totalCount, archivedCount) })}
                   </p>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -295,7 +295,7 @@ export function SelectionActionBar() {
                     className="px-3 py-1.5 text-xs font-medium bg-mail-danger text-white rounded-lg
                               hover:bg-mail-danger/90 transition-colors"
                   >
-                    {deleteMode === 'everywhere' ? 'Delete everywhere' : 'Delete from server'}
+                    {deleteMode === 'everywhere' ? t('rowMenu.deleteEverywhere') : t('rowMenu.deleteServer')}
                   </button>
                 </div>
               </motion.div>

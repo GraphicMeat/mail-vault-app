@@ -8,7 +8,7 @@ import { TRACKER_PATTERNS } from '../../utils/trackerList';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Button } from '../ui/Button';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 /** The beacon, exactly as senders ship it. Shown verbatim — this is the point. */
 const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
@@ -53,7 +53,7 @@ function SampleMail({ blocked }) {
         blocked ? 'bg-indigo-50 text-indigo-700' : 'bg-amber-50 text-amber-700'
       }`}>
         {blocked ? <EyeOff size={12} /> : <Eye size={12} />}
-        {blocked ? 'After — beacon removed' : 'Before — beacon fires on open'}
+        {blocked ? t('settings.tracking.afterBeaconRemoved') : t('settings.tracking.beforeBeaconFiresOpen')}
       </div>
       <div className="p-3 text-[11px] leading-relaxed text-[#333] bg-white">
         <div className="font-semibold text-[12px] text-[#111]">{t('settings.tracking.weeklyDigest')}</div>
@@ -131,8 +131,8 @@ export function TrackerBlockingView({ onUpgrade }) {
         <div className={`mt-4 text-xs flex items-center gap-1.5 ${active ? 'text-mail-accent-text' : 'text-mail-text-muted'}`}>
           {active ? <ShieldCheck size={13} /> : <Eye size={13} />}
           {active
-            ? 'Blocking is on. Every message you open is cleared before it renders.'
-            : 'Blocking is off. Detection still runs — the glyph on a message tells you it tracked you.'}
+            ? t('settings.tracking.blockingEveryMessageOpenCleared')
+            : t('settings.tracking.blockingOffDetectionStillRuns')}
         </div>
       </div>
 

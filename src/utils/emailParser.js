@@ -127,7 +127,7 @@ export function getSenderName(email) {
   let name = /^".*"$/.test(rawName) ? rawName.slice(1, -1) : rawName;
   name = name.replace(/\\"/g, '"').trim();
   const address = email?.from?.address || '';
-  if (!name && !address) return 'Unknown';
+  if (!name && !address) return t('settings.cleanup.unknown');
   if (!name) return address;
   // If name looks like an email address (contains @), use the local part from the actual address instead
   if (name.includes('@')) return address.split('@')[0] || name;
@@ -1012,10 +1012,10 @@ export function formatRelativeTime(dateStr) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return 'Yesterday';
+  if (diffMins < 1) return t('util.emailParser.justNow');
+  if (diffMins < 60) return t('util.emailParser.mAgo', { diffMins });
+  if (diffHours < 24) return t('util.emailParser.hAgo', { diffHours });
+  if (diffDays === 1) return t('bulk.ops.yesterday');
   if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
 
   return formatDateOnly(date);
@@ -1036,8 +1036,8 @@ export function formatDateSeparator(dateStr) {
   const now = new Date();
   const diffDays = Math.floor((now - date) / 86400000);
 
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
+  if (diffDays === 0) return t('bulk.ops.today');
+  if (diffDays === 1) return t('bulk.ops.yesterday');
 
   return formatDateLong(date);
 }

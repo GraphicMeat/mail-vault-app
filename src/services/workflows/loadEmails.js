@@ -18,6 +18,7 @@ import {
   getLoadEmailsRetried, setLoadEmailsRetried,
   bumpFlagChangeCounter, invalidateChatAndThreadCaches,
 } from '../../stores/slices/messageListSlice';
+import { t } from '../../i18n/index.js';
 
 
 // ── Suspicious empty result detection helper ──
@@ -45,7 +46,7 @@ export async function loadEmails() {
       loading: false,
       loadingMore: false,
       connectionStatus: 'error',
-      connectionError: 'Password not found. Please re-enter your password in Settings.',
+      connectionError: t('svc.loadEmails.passwordFoundPleaseReEnter'),
       connectionErrorType: 'passwordMissing',
     });
     return;
@@ -77,7 +78,7 @@ export async function loadEmails() {
         loadingMore: false,
         ...(!hasEmails ? {
           connectionStatus: 'error',
-          connectionError: 'Loading timed out. Tap refresh to retry.',
+          connectionError: t('svc.activateAccount.loadingTimedOutTapRefresh'),
           connectionErrorType: 'timeout'
         } : {})
       });
@@ -208,7 +209,7 @@ export async function loadEmails() {
       if (!isStale()) useMailStore.setState({
         emails: previousEmails,
         connectionStatus: 'error',
-        connectionError: 'Password not found. Please re-enter your password in Settings.',
+        connectionError: t('svc.loadEmails.passwordFoundPleaseReEnter'),
         connectionErrorType: 'passwordMissing',
         loading: false,
         loadingMore: false
@@ -229,7 +230,7 @@ export async function loadEmails() {
           if (!isStale()) useMailStore.setState({
             emails: previousEmails,
             connectionStatus: 'error',
-            connectionError: 'No internet connection. Showing cached and locally archived emails.',
+            connectionError: t('svc.loadEmails.noInternetConnectionShowingCached'),
             connectionErrorType: 'offline',
             loading: false,
             loadingMore: false
@@ -244,7 +245,7 @@ export async function loadEmails() {
         useMailStore.setState({
           emails: previousEmails,
           connectionStatus: 'error',
-          connectionError: 'Could not check internet connection. Showing cached and locally archived emails.',
+          connectionError: t('svc.loadEmails.couldCheckInternetConnectionShowing'),
           connectionErrorType: 'offline',
           loading: false,
           loadingMore: false
@@ -258,7 +259,7 @@ export async function loadEmails() {
         useMailStore.setState({
           emails: previousEmails,
           connectionStatus: 'error',
-          connectionError: 'No internet connection. Showing cached and locally archived emails.',
+          connectionError: t('svc.loadEmails.noInternetConnectionShowingCached'),
           connectionErrorType: 'offline',
           loading: false,
           loadingMore: false
@@ -546,7 +547,7 @@ export async function loadEmails() {
         suspectEmptyServerData: {
           accountId: activeAccountId,
           type: 'emails',
-          message: 'Server returned empty inbox unexpectedly. Showing cached data while verifying.',
+          message: t('svc.loadEmails.serverReturnedEmptyInboxUnexpectedly'),
           timestamp: Date.now(),
         },
         connectionStatus: 'connected',

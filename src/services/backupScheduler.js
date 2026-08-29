@@ -5,6 +5,7 @@ import { useMailStore } from '../stores/mailStore';
 import { hasValidCredentials, resolveServerAccount } from './authUtils';
 import { createSnapshotFromMaildir } from './snapshotService';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
+import { t } from '../i18n/index.js';
 
 // Re-prompt the share-to-unlock panel at most weekly.
 const SHARE_UNLOCK_COOLDOWN_MS = 7 * 86_400_000;
@@ -22,11 +23,11 @@ const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 export function partialBackupNotice(entry, result = {}) {
   const parts = [];
   if (entry.error) parts.push(entry.error);
-  else if (entry.errors > 0) parts.push(`${entry.errors} message(s) could not be fetched.`);
+  else if (entry.errors > 0) parts.push(t('svc.backupScheduler.messageSCouldFetched', { entry: entry.errors }));
   if (entry.externalCopyOk === false) {
-    parts.push(`${result.external_copy_failed_count || entry.externalCopyFailedCount || 'Some'} failed to copy to external backup.`);
+    parts.push(t('svc.backupScheduler.failedCopyExternalBackup', { result: result.external_copy_failed_count || entry.externalCopyFailedCount || 'Some' }));
   }
-  return `${entry.emailsBackedUp} emails backed up. ${parts.join(' ')}`.trim();
+  return t('svc.backupScheduler.emailsBackedUp', { entry: entry.emailsBackedUp, parts: parts.join(' ') }).trim();
 }
 
 /**
@@ -266,7 +267,7 @@ class BackupCoordinator {
     if (!account) {
       console.warn(`[backup] Account ${accountId} not found — skipping`);
       this._running.set(accountId, false);
-      this._resolveManual(accountId, { status: 'failed', message: 'Account not found' });
+      this._resolveManual(accountId, { status: 'failed', message: t('errors.accountNotFound') });
       return;
     }
     console.log(`[backup] Running backup for ${account.email}`);
@@ -275,7 +276,7 @@ class BackupCoordinator {
     useBackupStore.getState().setActiveBackup({
       accountId,
       accountEmail: account.email,
-      folder: 'Starting...',
+      folder: t('settings.migration.starting'),
       totalFolders: 0,
       completedFolders: 0,
       completedEmails: 0,
@@ -565,7 +566,7 @@ class BackupCoordinator {
       const nextAcc = (useMailStore.getState().accounts || []).find(a => a.id === nextId);
       useBackupStore.getState().setActiveBackup({
         accountId: nextId, accountEmail: nextAcc?.email || nextId,
-        folder: 'Queued...', totalFolders: 0, completedFolders: 0, completedEmails: 0,
+        folder: t('svc.backupScheduler.queued'), totalFolders: 0, completedFolders: 0, completedEmails: 0,
         active: true, queueLength: this._queue.length,
       });
     } else {
@@ -574,7 +575,7 @@ class BackupCoordinator {
       if (current) {
         useBackupStore.getState().setActiveBackup({
           ...current,
-          folder: 'Complete',
+          folder: t('svc.backupScheduler.complete'),
           active: true,
           done: true,
           queueLength: 0,

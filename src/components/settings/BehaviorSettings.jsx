@@ -3,7 +3,7 @@ import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export function BehaviorSettings() {
   const t = useT();
@@ -89,15 +89,15 @@ export function BehaviorSettings() {
                 Last refreshed: {(() => {
                   const diff = Date.now() - lastRefreshTime;
                   const minutes = Math.floor(diff / 60000);
-                  if (minutes < 1) return 'Just now';
+                  if (minutes < 1) return t('util.emailParser.justNow');
                   if (minutes === 1) return '1 minute ago';
-                  if (minutes < 60) return `${minutes} minutes ago`;
+                  if (minutes < 60) return t('settings.behavior.minutesAgo', { minutes });
                   const hours = Math.floor(minutes / 60);
                   if (hours === 1) return '1 hour ago';
-                  if (hours < 24) return `${hours} hours ago`;
+                  if (hours < 24) return t('settings.behavior.hoursAgo', { hours });
                   const days = Math.floor(hours / 24);
                   if (days === 1) return '1 day ago';
-                  return `${days} days ago`;
+                  return t('settings.behavior.daysAgo', { days });
                 })()}
               </span>
             </div>
@@ -176,10 +176,10 @@ export function BehaviorSettings() {
             </select>
             <p className="text-xs text-mail-text-muted mt-1">
               {markAsReadMode === 'delay'
-                ? `Emails are marked as read after ${markAsReadDelay} seconds of viewing`
+                ? t('settings.behavior.emailsMarkedReadAfterSeconds', { markAsReadDelay })
                 : markAsReadMode === 'auto'
-                ? 'Emails are marked as read instantly when you open them'
-                : 'Use the Mark as Read button to mark emails as read'}
+                ? t('settings.behavior.emailsMarkedReadInstantlyWhen')
+                : t('settings.behavior.useMarkReadButtonMark')}
             </p>
           </div>
 

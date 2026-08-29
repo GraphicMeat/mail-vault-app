@@ -16,7 +16,7 @@ import {
   List,
   PenTool,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 // The shell forces the stacked layout below 768px (App.jsx). Without this the
 // three-column card would take a click and change nothing — a control that
@@ -464,10 +464,10 @@ export function AppearanceSettings() {
         </p>
         <div className="grid grid-cols-2 gap-3">
           {[
-            { value: 'smart', label: 'Smart', desc: 'Show once per sender, collapse duplicates' },
-            { value: 'always-show', label: 'Always Show', desc: 'Never collapse signatures' },
-            { value: 'always-hide', label: 'Always Hide', desc: 'Collapse all signatures' },
-            { value: 'collapsed', label: 'Collapsed', desc: 'Collapsed with toggle to expand' },
+            { value: 'smart', label: t('settings.appearance.smart'), desc: t('settings.appearance.showOncePerSenderCollapse') },
+            { value: 'always-show', label: t('settings.appearance.alwaysShow'), desc: t('settings.appearance.neverCollapseSignatures') },
+            { value: 'always-hide', label: t('settings.appearance.alwaysHide'), desc: t('settings.appearance.collapseAllSignatures') },
+            { value: 'collapsed', label: t('settings.appearance.collapsed'), desc: t('settings.appearance.collapsedToggleExpand') },
           ].map(opt => (
             <button
               key={opt.value}

@@ -4,7 +4,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
 import { isGmailAccount, resolveDailyLimitBytes } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 const PERIODS = [
   { id: 'day', label: 'Day' },
@@ -119,7 +119,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
                 <div
                   className={`h-1.5 rounded-full transition-all ${todayStats.down / downLimit.limitBytes >= 0.8 ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-                  style={{ width: `${Math.min(100, Math.round((todayStats.down / downLimit.limitBytes) * 100))}%` }}
+                  style={{ width: t('settings.billing.text', { Math: Math.min(100, Math.round((todayStats.down / downLimit.limitBytes) * 100)) }) }}
                 />
               </div>
             </div>
@@ -136,7 +136,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
                 <div
                   className={`h-1.5 rounded-full transition-all ${todayStats.up / upLimit.limitBytes >= 0.8 ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-                  style={{ width: `${Math.min(100, Math.round((todayStats.up / upLimit.limitBytes) * 100))}%` }}
+                  style={{ width: t('settings.billing.text', { Math: Math.min(100, Math.round((todayStats.up / upLimit.limitBytes) * 100)) }) }}
                 />
               </div>
             </div>
@@ -162,7 +162,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
               onBlur={handleLimitBlur('dailyDownLimitBytes')}
-              placeholder={gmail ? 'Provider default' : 'Unlimited'}
+              placeholder={gmail ? t('settings.dataUsage.account.providerDefault') : t('settings.dataUsage.account.unlimited')}
               className={inputClass}
             />
           </div>
@@ -173,7 +173,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               min="0"
               defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}
               onBlur={handleLimitBlur('dailyUpLimitBytes')}
-              placeholder={gmail ? 'Provider default' : 'Unlimited'}
+              placeholder={gmail ? t('settings.dataUsage.account.providerDefault') : t('settings.dataUsage.account.unlimited')}
               className={inputClass}
             />
           </div>

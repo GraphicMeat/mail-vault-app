@@ -2,6 +2,7 @@ import React, { memo } from 'react';
 import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code, Sun, Moon, ImageDown } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useT, t  } from '../../i18n/index.js';
 
 function ActionButton({ icon: Icon, label, onClick, disabled, isDestructive, compact }) {
   const actionButtonDisplay = useSettingsStore(s => s.actionButtonDisplay);
@@ -49,6 +50,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   moveDropdownOpen,
   moveButtonRef,
 }) {
+  const t = useT();
   const isChat = variant === 'chat';
   const isThread = variant === 'thread';
   const compact = isChat;
@@ -92,7 +94,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {(!isLocalOnly || isArchived) && onArchive && (
         <ActionButton
           icon={Archive}
-          label={isArchived ? 'Unarchive' : 'Archive'}
+          label={isArchived ? t('rowMenu.unarchive') : t('common.archive')}
           onClick={() => onArchive?.(email)}
           disabled={disabled.archive}
           compact={compact}
@@ -126,7 +128,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {!isLocalOnly && onToggleRead && (
         <ActionButton
           icon={isRead ? Mail : MailOpen}
-          label={isRead ? 'Mark unread' : 'Mark read'}
+          label={isRead ? t('emailActionBar.markUnread') : t('emailActionBar.markRead')}
           onClick={() => onToggleRead?.(email)}
           disabled={disabled.toggleRead}
           compact={compact}
@@ -167,7 +169,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onToggleEmailTheme && (
         <ActionButton
           icon={emailThemeDark ? Sun : Moon}
-          label={emailThemeDark ? 'Light' : 'Dark'}
+          label={emailThemeDark ? t('emailActionBar.light') : t('emailActionBar.dark')}
           onClick={() => onToggleEmailTheme?.()}
           compact={compact}
         />

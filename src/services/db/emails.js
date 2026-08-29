@@ -38,7 +38,7 @@ export async function saveEmails(emails, accountId, mailbox) {
       rawSourceBase64: email.rawSource,
       flags: ['archived', 'seen'],
     });
-    results.push({ ...email, localId: `${accountId}-${mailbox}-${email.uid}` });
+    results.push({ ...email, localId: t('svc.emails.text', { accountId, mailbox, email: email.uid }) });
   }
   return results;
 }
@@ -173,7 +173,7 @@ export async function getVerifiedRawSource(accountId, mailbox, uid, headerRow) {
     });
     return {
       b64: null,
-      error: 'The vault file stored under this UID is a different message, so its source is not shown.',
+      error: t('svc.emails.vaultFileStoredUnderUid'),
     };
   }
   return { b64, error: null };
@@ -199,7 +199,7 @@ export async function getLocalEmails(accountId, mailbox) {
       if (results[i]) {
         emails.push({
           ...results[i],
-          localId: `${accountId}-${mailbox}-${uids[i]}`,
+          localId: t('svc.emails.text2', { accountId, mailbox, uids: uids[i] }),
           // Provenance travels with the message. A UID names a message only
           // inside one (account, mailbox); a row that reaches a view without
           // these gets its location guessed from the ACTIVE folder, which is
@@ -422,7 +422,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
   if (sidecarEmails.length > 0) {
     const emails = sidecarEmails.map(e => withCustody({
       ...e,
-      localId: `${accountId}-${mailbox}-${e.uid}`,
+      localId: t('svc.emails.text3', { accountId, mailbox, e: e.uid }),
       isArchived: true
     }));
     console.log('[db] getArchivedEmails: sidecar hit %d/%d UIDs', emails.length, uids.length);
@@ -449,7 +449,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
           if (results[j]) {
             emails.push(withCustody({
               ...results[j],
-              localId: `${accountId}-${mailbox}-${batchUids[j]}`,
+              localId: t('svc.emails.text4', { accountId, mailbox, batchUids: batchUids[j] }),
               isArchived: true
             }));
           }
@@ -470,7 +470,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
     if (cached && cached.length > 0) {
       const emails = cached.map(e => withCustody({
         ...e,
-        localId: `${accountId}-${mailbox}-${e.uid}`,
+        localId: t('svc.emails.text3', { accountId, mailbox, e: e.uid }),
         isArchived: true
       }));
       console.log('[db] getArchivedEmails: archived cache hit, %d emails', emails.length);
@@ -493,7 +493,7 @@ export async function getArchivedEmails(accountId, mailbox, archivedUidSet, onBa
         if (results[j]) {
           allEmails.push(withCustody({
             ...results[j],
-            localId: `${accountId}-${mailbox}-${batchUids[j]}`,
+            localId: t('svc.emails.text4', { accountId, mailbox, batchUids: batchUids[j] }),
             isArchived: true
           }));
         }

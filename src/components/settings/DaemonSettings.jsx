@@ -3,7 +3,7 @@ import { isDaemonAvailable, getDaemonStatus } from '../../services/daemonClient'
 import {
   Server, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export function DaemonSettings() {
   const t = useT();
@@ -46,7 +46,7 @@ export function DaemonSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">
-              {checking ? 'Checking...' : connected ? 'Helper Connected' : connected === false ? 'Helper Not Running' : 'Background Helper'}
+              {checking ? t('settings.daemon.checking') : connected ? t('settings.daemon.helperConnected') : connected === false ? t('settings.daemon.helperRunning') : t('settings.daemon.backgroundHelper')}
             </h3>
             {status && (
               <p className="text-xs text-mail-text-muted">
@@ -67,7 +67,7 @@ export function DaemonSettings() {
           disabled={checking}
           className="text-xs font-medium text-mail-accent-text hover:text-mail-accent/80 disabled:opacity-50 transition-colors"
         >
-          {checking ? 'Checking...' : 'Test Connection'}
+          {checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
         </button>
       </div>
 

@@ -25,6 +25,7 @@ import {
   getLoadMoreTimer, setLoadMoreTimer,
   setLoadEmailsRetried, invalidateChatAndThreadCaches, bumpFlagChangeCounter,
 } from '../../stores/slices/messageListSlice';
+import { t } from '../../i18n/index.js';
 
 // ── AbortController for activateAccount — cancels previous activation on rapid switch ──
 let _activeController = null;
@@ -118,7 +119,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
               suspectEmptyServerData: {
                 accountId,
                 type: 'mailboxes',
-                message: 'Server returned empty folder list unexpectedly. Showing cached folders while verifying.',
+                message: t('svc.activateAccount.serverReturnedEmptyFolderList'),
                 timestamp: Date.now(),
               },
             });
@@ -408,7 +409,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   ) : null;
   if (restored) {
     const isAccountSwitch = !isMailboxSwitch;
-    const label = isAccountSwitch ? 'Account' : 'Mailbox';
+    const label = isAccountSwitch ? t('settings.storage.account') : t('svc.activateAccount.mailbox');
 
     // The descriptor holds a 50-row window, but the complete set for this
     // mailbox is usually still in memory from the last visit — paint that.
@@ -433,7 +434,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
     console.log('[activateAccount] %s restore HIT for %s:%s — rendering %d headers (%s)',
       label, accountId, restored.mailbox, painted.length,
-      memoPainted ? 'in-memory set' : 'first window');
+      memoPainted ? 'in-memory set' : t('svc.activateAccount.firstWindow'));
     invalidateChatAndThreadCaches();
 
     // The descriptor snapshots whatever the store held, so it can carry the
@@ -726,7 +727,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         if (!signal.aborted) {
           useMailStore.setState({
             connectionStatus: 'error',
-            connectionError: 'Your password is not in the keychain. Re-enter it under Settings \u203a Accounts to reconnect.',
+            connectionError: t('svc.activateAccount.passwordKeychainReEnterUnder'),
             connectionErrorType: 'passwordMissing',
             loading: false,
             loadingMore: false,
@@ -928,17 +929,17 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           const isOnline = await invoke('check_network_connectivity');
           if (signal.aborted) return;
           if (isOnline === false) {
-            useMailStore.setState({ connectionStatus: 'error', connectionError: 'No internet connection. Showing what is already on this computer.', connectionErrorType: 'offline', loading: false, loadingMore: false });
+            useMailStore.setState({ connectionStatus: 'error', connectionError: t('svc.activateAccount.noInternetConnectionShowingWhat'), connectionErrorType: 'offline', loading: false, loadingMore: false });
             serverTrace.end('offline');
             return;
           }
         } catch {
-          useMailStore.setState({ connectionStatus: 'error', connectionError: 'Could not tell whether this computer is online. Showing what is already here.', connectionErrorType: 'offline', loading: false, loadingMore: false });
+          useMailStore.setState({ connectionStatus: 'error', connectionError: t('svc.activateAccount.couldTellWhetherComputerOnline'), connectionErrorType: 'offline', loading: false, loadingMore: false });
           serverTrace.end('connectivity-failed');
           return;
         }
       } else if (!navigator.onLine) {
-        useMailStore.setState({ connectionStatus: 'error', connectionError: 'No internet connection.', connectionErrorType: 'offline', loading: false, loadingMore: false });
+        useMailStore.setState({ connectionStatus: 'error', connectionError: t('svc.activateAccount.noInternetConnection'), connectionErrorType: 'offline', loading: false, loadingMore: false });
         serverTrace.end('browser-offline');
         return;
       }
@@ -1224,7 +1225,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         restoring: false,
         ...(!hasEmails ? {
           connectionStatus: 'error',
-          connectionError: 'Loading timed out. Tap refresh to retry.',
+          connectionError: t('svc.activateAccount.loadingTimedOutTapRefresh'),
           connectionErrorType: 'timeout',
         } : {}),
       });
@@ -1301,7 +1302,7 @@ export async function init() {
         console.log('[init] Credentials not available for', firstVisible.email);
         useMailStore.setState({
           loading: false,
-          connectionError: 'Password not found. Click Retry or re-enter in Settings.',
+          connectionError: t('svc.activateAccount.passwordFoundClickRetryRe'),
           connectionErrorType: 'passwordMissing'
         });
         const cachedMailboxEntry = await db.getCachedMailboxEntry(firstVisible.id);

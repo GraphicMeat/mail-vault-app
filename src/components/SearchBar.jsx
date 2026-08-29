@@ -22,7 +22,7 @@ import {
   Trash2,
   TrendingUp
 } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const LOCATION_OPTIONS = [
   { id: 'all', label: 'All', icon: Layers },
@@ -161,10 +161,10 @@ export function SearchBar() {
 
   const getFilterLabel = (filter) => {
     switch (filter.type) {
-      case 'sender': return `From: ${filter.value}`;
-      case 'folder': return `In: ${filter.value}`;
-      case 'dateRange': return `Date: ${filter.value}`;
-      case 'hasAttachments': return 'Has attachments';
+      case 'sender': return t('search.from', { filter: filter.value });
+      case 'folder': return t('search.in', { filter: filter.value });
+      case 'dateRange': return t('search.date', { filter: filter.value });
+      case 'hasAttachments': return t('chat.topics.hasAttachments');
       default: return filter.value;
     }
   };
@@ -322,10 +322,10 @@ export function SearchBar() {
                     {/* Quick presets */}
                     <div className="flex gap-1 mb-2">
                       {[
-                        { label: 'Week', days: 7 },
-                        { label: 'Month', days: 30 },
+                        { label: t('search.week'), days: 7 },
+                        { label: t('search.month'), days: 30 },
                         { label: '3 Months', days: 90 },
-                        { label: 'Year', days: 365 },
+                        { label: t('search.year'), days: 365 },
                       ].map(preset => {
                         const fromDate = new Date();
                         fromDate.setDate(fromDate.getDate() - preset.days);
@@ -542,8 +542,8 @@ export function SearchBar() {
                 <Search size={12} />
               </motion.div>
               {searchProgress
-                ? `Searching server folder ${searchProgress.done} of ${searchProgress.total}...`
-                : 'Searching local cache, archived emails, and server...'}
+                ? t('search.searchingServerFolder', { searchProgress: searchProgress.done, searchProgress2: searchProgress.total })
+                : t('search.searchingLocalCacheArchivedEmails')}
             </span>
           ) : (
             <>

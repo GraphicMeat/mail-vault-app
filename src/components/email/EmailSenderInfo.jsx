@@ -11,7 +11,7 @@ import {
 import { SenderVerificationBadge } from './EmailHeaderComponent';
 import { SenderInfoPopover } from './SenderInfoPopover';
 import { getSenderName } from '../../utils/emailParser';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 /**
  * Shared sender info component with three variants: single, thread, chat.
@@ -163,7 +163,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                 onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
                 className="ml-2 text-mail-accent-text hover:underline"
               >
-                {headerExpanded ? 'Less' : 'More'}
+                {headerExpanded ? t('email.sender.less') : t('email.sender.more')}
               </button>
             </div>
 
@@ -176,7 +176,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                   exit={{ height: 0, opacity: 0 }}
                   className="mt-1 space-y-0.5 overflow-hidden"
                 >
-                  <div>Date: {email.date ? formatDateTime(email.date) : 'Unknown'}</div>
+                  <div>Date: {email.date ? formatDateTime(email.date) : t('settings.cleanup.unknown')}</div>
                   {email.messageId && <div className="break-all">Message-ID: {email.messageId}</div>}
                   {email.replyTo?.length > 0 && (
                     <div>Reply-To: {email.replyTo.map(r => r.address || r).join(', ')}</div>
@@ -195,7 +195,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                     ) : (
                       <Code size={12} />
                     )}
-                    {loadingRaw ? 'Loading...' : showRaw ? 'Rendered' : 'View Source'}
+                    {loadingRaw ? t('chat.bubble.loading') : showRaw ? t('email.sender.rendered') : t('email.sender.viewSource')}
                   </button>
                 </motion.div>
               )}

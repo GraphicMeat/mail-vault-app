@@ -12,7 +12,7 @@ import {
   AppWindow,
   Check,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -189,7 +189,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
       }
     } catch (err) {
       console.error('[Attachment] Failed to download:', err);
-      setError('Failed to download');
+      setError(t('email.attachments.failedDownload'));
       setTimeout(() => setError(null), 3000);
     } finally {
       setDownloading(false);
@@ -210,7 +210,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
 
       const destPath = await save({
         defaultPath: fname,
-        title: 'Save Attachment',
+        title: t('email.attachments.saveAttachment'),
       });
       if (!destPath) return; // user cancelled
 
@@ -227,7 +227,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
       setTimeout(() => setJustDownloaded(false), 3000);
     } catch (err) {
       console.error('[Attachment] Save As failed:', err);
-      setError('Failed to save');
+      setError(t('email.attachments.failedSave'));
       setTimeout(() => setError(null), 3000);
     } finally {
       setDownloading(false);
@@ -278,10 +278,10 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, account,
   };
 
   const formatSize = (bytes) => {
-    if (!bytes) return 'Unknown size';
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (!bytes) return t('email.attachments.unknownSize');
+    if (bytes < 1024) return t('settings.backup.account.b', { bytes });
+    if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
+    return t('settings.backup.account.mb', { bytes: (bytes / (1024 * 1024)).toFixed(1) });
   };
 
   const iconSize = compact ? 14 : 20;

@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 // Use targeted selectors to avoid re-rendering on every store change
 const selectProgress = (s) => s.bulkSaveProgress;
@@ -72,10 +72,10 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   const milestone = Math.floor(percentage / 25) * 25;
   const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
   const announcement = isComplete
-    ? (errors > 0 ? `${config.errorLabel(errors)}. ${of} messages.` : `${config.successLabel}. ${of} messages.`)
+    ? (errors > 0 ? t('bulk.save.messages', { config: config.errorLabel(errors), of }) : t('bulk.save.messages', { config: config.successLabel, of }))
     // activeLabel ends in an ellipsis for the eye; a screen reader would
     // read it out as "dot dot dot".
-    : `${config.activeLabel.replace(/\.\.\.$/, '')} ${milestone}% of ${total.toLocaleString()} messages.`;
+    : t('bulk.save.messages2', { config: config.activeLabel.replace(/\.\.\.$/, ''), milestone, total: total.toLocaleString() });
 
   useEffect(() => {
     if (isComplete && errors === 0) {
@@ -154,7 +154,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
           <div className="h-2 bg-mail-border rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${percentage}%` }}
+              animate={{ width: t('bulk.progress.text', { percentage }) }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
               className={`h-full rounded-full ${
                 isComplete
