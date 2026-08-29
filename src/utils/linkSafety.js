@@ -5,6 +5,7 @@
  */
 
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { t } from '../i18n/index.js';
 
 // Known legitimate URL shorteners — exempt from YELLOW alerts
 const SHORTENER_ALLOWLIST = new Set([
@@ -37,7 +38,7 @@ export function bodyStamp(html) {
   for (let i = 0; i < html.length; i++) {
     h = Math.imul(h ^ html.charCodeAt(i), 0x01000193);
   }
-  return `${html.length}:${(h >>> 0).toString(36)}`;
+  return t('util.linkSafety.text', { html: html.length, h: (h >>> 0).toString(36) });
 }
 
 /**

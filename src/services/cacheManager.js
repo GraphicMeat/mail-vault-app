@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 // ── Lightweight Restore Cache & Graph ID Map ──────────────────────────────
 // Stores compact RestoreDescriptors for instant first-window render on switch.
 // No heavyweight state blobs — store is the sole owner of list data.
@@ -7,7 +8,7 @@ const _descriptorCache = new Map();
 const DESCRIPTOR_CACHE_MAX = 8;
 
 function _descriptorKey(accountId, mailbox, viewMode) {
-  return `${accountId}:${mailbox}:${viewMode}`;
+  return t('svc.cacheManager.text', { accountId, mailbox, viewMode });
 }
 
 export function saveRestoreDescriptor(descriptor) {

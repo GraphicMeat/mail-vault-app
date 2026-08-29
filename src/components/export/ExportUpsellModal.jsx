@@ -7,7 +7,7 @@ import { buildExport, SAMPLE } from '../../services/export/exportService';
 import { saveOneFile, openInDefaultApp } from '../../services/export/exportSaver';
 import { SAMPLE_MESSAGE, SAMPLE_THREAD, SAMPLE_META } from '../../utils/exportSampleData';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
-import { t, useT  } from '../../i18n/index.js';
+import { t as tr, t, useT   } from '../../i18n/index.js';
 
 // Rendered once per session. The samples go through the real pipeline on
 // fixture data — if the renderer breaks, the upsell shows it before a customer
@@ -23,9 +23,9 @@ async function renderSamples() {
     buildExport({ ...common, messages: SAMPLE_THREAD, format: 'html' }),
   ]);
   cached = [
-    { key: 'single', label: 'One message, as an image', kind: 'image', file: single.files[0] },
-    { key: 'thread', label: 'A thread, as one image', kind: 'image', file: thread.files[0] },
-    { key: 'html', label: 'A thread, as one HTML file', kind: 'html', file: html.files[0] },
+    { key: 'single', label: tr('export.upsell.oneMessageImage'), kind: 'image', file: single.files[0] },
+    { key: 'thread', label: tr('export.upsell.threadOneImage'), kind: 'image', file: thread.files[0] },
+    { key: 'html', label: tr('export.upsell.threadOneHtmlFile'), kind: 'html', file: html.files[0] },
   ];
   return cached;
 }

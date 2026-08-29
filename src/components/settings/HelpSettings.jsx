@@ -7,24 +7,24 @@ import {
   RotateCcw,
   ExternalLink,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 // ponytail: same two links as the native Help menu (src-tauri/src/main.rs).
 // Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
-const LINKS = [
+const LINKS = () => ([
   {
     testid: 'settings-link-website',
-    title: 'MailVault Website',
-    subtitle: 'Docs, FAQ and the latest release',
+    title: tr('settings.help.mailvaultWebsite'),
+    subtitle: tr('settings.help.docsFaqLatestRelease'),
     url: 'https://mailvaultapp.com',
   },
   {
     testid: 'settings-link-more-apps',
-    title: 'More Apps by GraphicMeat',
-    subtitle: 'Other products from the maker of MailVault',
+    title: tr('settings.help.moreAppsGraphicmeat'),
+    subtitle: tr('settings.help.otherProductsMakerMailvault'),
     url: 'https://graphicmeat.com',
   },
-];
+]);
 
 export function HelpSettings({ onClose, onReportBug }) {
   const t = useT();
@@ -53,7 +53,7 @@ export function HelpSettings({ onClose, onReportBug }) {
             </Button>
           </div>
 
-          {LINKS.map((link) => (
+          {LINKS().map((link) => (
             <React.Fragment key={link.testid}>
               <div className="border-t border-mail-border" />
               <div className="flex items-center justify-between py-2" data-testid={link.testid}>

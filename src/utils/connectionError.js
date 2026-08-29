@@ -14,7 +14,7 @@ import { t } from '../i18n/index.js';
 // Order matters: auth is checked before the generic network branches because
 // an IMAP refusal often carries both a status word and a socket error.
 
-const RULES = [
+const RULES = () => ([
   {
     match: (s) => s.includes('authenticationfailed') || s.includes('invalid credentials')
       || s.includes('login failed') || (s.includes('auth') && s.includes('fail')),
@@ -45,7 +45,7 @@ const RULES = [
   {
     match: (s) => s.includes('certificate') || s.includes('tls') || s.includes('ssl')
       || s.includes('handshake'),
-    problem: "The server's security certificate could not be verified.",
+    problem: t('errors.conn.serverSSecurityCertificateCould'),
     recoveryKey: 'errors.conn.recovery.checkEncryptionSettingMatchesPort',
   },
   {
@@ -54,7 +54,7 @@ const RULES = [
     problemKey: 'errors.conn.problem.computerOnline',
     recoveryKey: 'errors.conn.recovery.reconnectInternetTryAgain',
   },
-];
+]);
 
 /**
  * @param {unknown} err  whatever the Tauri command or store rejected with
@@ -70,7 +70,7 @@ export function describeConnectionError(err) {
   }
 
   const lower = raw.toLowerCase();
-  const rule = RULES.find(r => r.match(lower));
+  const rule = RULES().find(r => r.match(lower));
   if (rule) {
     return { message: t('errors.conn.problemRecovery', { problem: t(rule.problemKey), recovery: t(rule.recoveryKey) }), detail: raw };
   }

@@ -139,7 +139,7 @@ export async function getClientInfo() {
     webId = 'web-' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
     try { localStorage.setItem(WEB_CLIENT_ID_KEY, webId); } catch { /* ignore */ }
   }
-  _cachedClientInfo = { clientId: webId, appVersion: '0.0.0', platform: 'web', osVersion: '', clientName: 'Browser' };
+  _cachedClientInfo = { clientId: webId, appVersion: '0.0.0', platform: 'web', osVersion: '', clientName: t('svc.billingApi.browser') };
   return _cachedClientInfo;
 }
 

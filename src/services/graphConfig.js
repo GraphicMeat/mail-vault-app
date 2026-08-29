@@ -30,22 +30,22 @@ export function isPersonalMicrosoftEmail(email) {
 }
 
 // Map Graph API folder display names to IMAP-style names used by the app
-export const GRAPH_FOLDER_NAME_MAP = {
+export const GRAPH_FOLDER_NAME_MAP = () => ({
   'Inbox': 'INBOX',
-  'Sent Items': 'Sent',
-  'Drafts': 'Drafts',
-  'Deleted Items': 'Trash',
-  'Junk Email': 'Junk',
-  'Archive': 'Archive',
-};
+  'Sent Items': t('list.sent'),
+  'Drafts': t('sidebar.drafts'),
+  'Deleted Items': t('settings.storage.trash'),
+  'Junk Email': t('svc.graphConfig.junk'),
+  'Archive': t('common.archive'),
+});
 
 // Reverse map: app mailbox name → Graph display name (for folder ID lookup)
 export const APP_TO_GRAPH_FOLDER_MAP = Object.fromEntries(
-  Object.entries(GRAPH_FOLDER_NAME_MAP).map(([k, v]) => [v, k])
+  Object.entries(GRAPH_FOLDER_NAME_MAP()).map(([k, v]) => [v, k])
 );
 
 export function normalizeGraphFolderName(displayName) {
-  return GRAPH_FOLDER_NAME_MAP[displayName] || displayName;
+  return GRAPH_FOLDER_NAME_MAP()[displayName] || displayName;
 }
 
 export function inferSpecialUse(displayName) {

@@ -4,15 +4,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 
-const PHASE_LABELS = {
-  archive: 'Downloading',
-  verify: 'Verifying',
-  delete: 'Deleting',
-  vault: 'Removing from your vault',
-  backup: 'Clearing backup',
-};
+const PHASE_LABELS = () => ({
+  archive: tr('bulk.progress.downloading'),
+  verify: tr('bulk.progress.verifying'),
+  delete: tr('bulk.progress.deleting'),
+  vault: tr('bulk.progress.removingVault'),
+  backup: tr('bulk.progress.clearingBackup'),
+});
 
 const PHASE_ICONS = {
   archive: HardDrive,
@@ -62,7 +62,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const currentPhaseNum = currentPhase === 'delete' && type === 'archive_and_delete' ? 2 : 1;
 
   const PhaseIcon = PHASE_ICONS[currentPhase] || HardDrive;
-  const phaseLabel = PHASE_LABELS[currentPhase] || 'Processing';
+  const phaseLabel = PHASE_LABELS()[currentPhase] || 'Processing';
 
   // Thousands of messages leave the server here, and until now the whole
   // operation was silent to a screen reader — the bar is the only report it

@@ -8,7 +8,7 @@ import { TRACKER_PATTERNS } from '../../utils/trackerList';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Button } from '../ui/Button';
-import { t, useT  } from '../../i18n/index.js';
+import { t as tr, t, useT   } from '../../i18n/index.js';
 
 /** The beacon, exactly as senders ship it. Shown verbatim — this is the point. */
 const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
@@ -20,26 +20,26 @@ const CLEANED_SAMPLE = `<span data-mv-tracker-blocked="Mailchimp" hidden></span>
 
 /** Where the bundled endpoint list comes from — the two upstreams named in
  *  utils/trackerList.js, in the order that file merges them. */
-const SOURCES = [
+const SOURCES = () => ([
   {
-    label: 'Ugly Email',
+    label: tr('settings.tracking.uglyEmail'),
     licence: 'MIT',
     url: 'https://github.com/OneClickLab/ugly-email-trackers',
   },
   {
-    label: 'MailTrackerBlocker',
-    licence: 'BSD-3-Clause',
+    label: tr('settings.tracking.mailtrackerblocker'),
+    licence: tr('settings.tracking.bsd3Clause'),
     url: 'https://github.com/apparition47/MailTrackerBlocker',
   },
-];
+]);
 
 /** What the sender learns when that one pixel loads. */
-const LEAKED = [
+const LEAKED = () => ([
   'That you opened it — and every time you re-open it',
   'The minute you opened it, and your time zone',
   'Your IP address, so roughly where you were',
   'Your device and mail client, from the user agent',
-];
+]);
 
 function SampleMail({ blocked }) {
   const t = useT();
@@ -184,7 +184,7 @@ export function TrackerBlockingView({ onUpgrade }) {
       <div>
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.whatOnePixelTellsSender')}</h4>
         <ul className="space-y-1">
-          {LEAKED.map((line, i) => (
+          {LEAKED().map((line, i) => (
             <li key={i} className="text-xs text-mail-text-muted flex items-start gap-2">
               <span className="text-mail-warning mt-[3px]">•</span>
               {line}
@@ -226,7 +226,7 @@ export function TrackerBlockingView({ onUpgrade }) {
         {/* Named upstreams, linked. A blocklist whose provenance is a sentence
             is a claim; one you can open and read is a citation. */}
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2">
-          {SOURCES.map(source => (
+          {SOURCES().map(source => (
             <button
               key={source.url}
               type="button"

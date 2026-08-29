@@ -15,7 +15,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 
 const ROW_HEIGHT = 56;
 
@@ -68,7 +68,7 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
           <span className="text-sm font-medium text-mail-text truncate">
             {page === 'viewer'
               ? (store.viewerEmail?.subject || 'Email')
-              : `Snapshot — ${formatSnapshotDate(store.activeSnapshot?.timestamp)}`}
+              : tr('timeCapsule.snapshot', { formatSnapshotDate: formatSnapshotDate(store.activeSnapshot?.timestamp) })}
           </span>
           {page === 'browser' && (
             <span className="text-xs text-mail-text-muted shrink-0 ml-1">{t('timeCapsule.readOnly')}</span>

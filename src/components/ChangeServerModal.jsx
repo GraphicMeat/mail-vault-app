@@ -11,7 +11,7 @@ import { resolveEmailSettings, dnsMailHealth } from '../services/api.js';
 import { detectProvider } from './AccountModal.jsx';
 import { deriveSuggestion, classifyVerifyError, nextStepAfterVerify } from './changeServer/helpers.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 const inputClass = 'w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text placeholder-mail-text-muted focus:outline-none focus:border-mail-accent';
 
@@ -93,11 +93,11 @@ export default function ChangeServerModal() {
           smtpHost: detected.smtpHost || f.smtpHost,
           smtpPort: detected.smtpPort || f.smtpPort,
         }));
-        setSuggestionNote({ type: 'info', text: "Detected from your domain's DNS — verify before saving." });
+        setSuggestionNote({ type: 'info', text: tr('changeServer.detectedDomainSDnsVerify') });
       } else if (unchanged) {
         setSuggestionNote({
           type: 'warning',
-          text: "Your domain's DNS still points to this server. If you've already switched providers, enter the new server manually.",
+          text: tr('changeServer.domainSDnsStillPoints'),
         });
       }
     };
@@ -294,7 +294,7 @@ export default function ChangeServerModal() {
                     <Loader2 className="animate-spin" size={14} />
                     Verifying {busyLeg === 'imap' ? 'IMAP' : 'SMTP'}…
                   </span>
-                ) : 'Verify & Save'}
+                ) : tr('changeServer.verifySave')}
               </button>
             </div>
           </div>

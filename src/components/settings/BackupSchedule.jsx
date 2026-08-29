@@ -11,7 +11,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -113,7 +113,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               </div>
               {activeBackup.totalFolders > 0 && (
                 <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} />
+                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: tr('settings.billing.text', { Math: Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100) }) }} />
                 </div>
               )}
             </div>
