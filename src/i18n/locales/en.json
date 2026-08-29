@@ -1485,5 +1485,12 @@
   "util.linkSafety.text": "{{html}}:{{h}}",
   "timeCapsule.snapshot": "Snapshot — {{formatSnapshotDate}}",
   "svc.billingApi.browser": "Browser",
-  "svc.cacheManager.text": "{{accountId}}:{{mailbox}}:{{viewMode}}"
+  "svc.cacheManager.text": "{{accountId}}:{{mailbox}}:{{viewMode}}",
+  "settings.dataUsage.period.day": "Day",
+  "settings.dataUsage.period.week": "Week",
+  "settings.dataUsage.period.month": "Month",
+  "settings.dataUsage.period.year": "Year",
+  "search.location.all": "All",
+  "search.location.server": "Server",
+  "search.location.vault": "Vault"
 }

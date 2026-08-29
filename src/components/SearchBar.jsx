@@ -25,11 +25,11 @@ import {
 import { t, useT  } from '../i18n/index.js';
 
 const LOCATION_OPTIONS = [
-  { id: 'all', label: 'All', icon: Layers },
-  { id: 'server', label: 'Server', icon: Cloud },
+  { id: 'all', labelKey: 'search.location.all', icon: Layers },
+  { id: 'server', labelKey: 'search.location.server', icon: Cloud },
   // Same rename as the sidebar's view filter: the place is called the vault
   // everywhere else in the product, so this control names it too.
-  { id: 'local', label: 'Vault', icon: HardDrive },
+  { id: 'local', labelKey: 'search.location.vault', icon: HardDrive },
 ];
 
 export function SearchBar() {
@@ -220,7 +220,7 @@ export function SearchBar() {
                         focus:outline-none focus:border-mail-accent"
             >
               {LOCATION_OPTIONS.map(opt => (
-                <option key={opt.id} value={opt.id}>{opt.label}</option>
+                <option key={opt.id} value={opt.id}>{t(opt.labelKey)}</option>
               ))}
             </select>
           </div>

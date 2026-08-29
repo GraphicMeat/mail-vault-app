@@ -7,10 +7,10 @@ import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
 const PERIODS = [
-  { id: 'day', label: 'Day' },
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
-  { id: 'year', label: 'Year' },
+  { id: 'day', labelKey: 'settings.dataUsage.period.day' },
+  { id: 'week', labelKey: 'settings.dataUsage.period.week' },
+  { id: 'month', labelKey: 'settings.dataUsage.period.month' },
+  { id: 'year', labelKey: 'settings.dataUsage.period.year' },
 ];
 
 const inputClass = 'w-full px-3 py-1.5 text-xs bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
@@ -86,7 +86,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
               period === p.id ? 'bg-mail-accent-fill text-white' : 'text-mail-text-muted hover:text-mail-text'
             }`}
           >
-            {p.label}
+            {t(p.labelKey)}
           </button>
         ))}
       </div>
