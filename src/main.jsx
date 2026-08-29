@@ -31,11 +31,12 @@ if (import.meta.env.VITE_E2E === '1') {
   // And one layer over again: a search result is the only row guaranteed not
   // to belong to the folder on screen, and the DOM cannot say which mailbox a
   // row claims. `_mailbox` on the result IS the assertion.
-  // The account list gates App's welcome-screen early return, so without a
-  // handle on it a seeded session can never reach the Sidebar or Settings —
-  // which left the Language page unverifiable on screen through two plans.
-  import('./stores/accountStore').then(({ useAccountStore }) => {
-    window.__ACCOUNT_STORE__ = useAccountStore;
+  // Accounts live in mailStore (useAccountStore is a thin wrapper over it), so
+  // __MAIL_STORE__ already seeds the welcome-screen gate. What was missing is a
+  // way to drive the language: switching it must load a catalog, which a plain
+  // store write cannot do. A screenshot run needs exactly this handle.
+  import('./i18n/index.js').then(({ setLocale, getLocale, t }) => {
+    window.__I18N__ = { setLocale, getLocale, t };
   });
   import('./stores/searchStore').then(({ useSearchStore }) => {
     window.__SEARCH_STORE__ = useSearchStore;
