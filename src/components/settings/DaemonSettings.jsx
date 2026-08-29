@@ -3,8 +3,10 @@ import { isDaemonAvailable, getDaemonStatus } from '../../services/daemonClient'
 import {
   Server, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export function DaemonSettings() {
+  const t = useT();
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
   const [connected, setConnected] = useState(null);
@@ -56,7 +58,7 @@ export function DaemonSettings() {
 
         {connected === false && (
           <p className="text-xs text-mail-text-muted mb-3">
-            The background helper is not currently reachable. It starts automatically when the app opens — use Test Connection to retry.
+            {t('settings.daemon.backgroundHelperNotCurrentlyReachable')}
           </p>
         )}
 
@@ -71,8 +73,8 @@ export function DaemonSettings() {
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
-        <p>The background helper is a lightweight process that handles all server communication, local storage, and AI processing.</p>
-        <p>It starts automatically when you open MailVault and stops when you quit.</p>
+        <p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p>
+        <p>{t('settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p>
       </div>
     </div>
   );

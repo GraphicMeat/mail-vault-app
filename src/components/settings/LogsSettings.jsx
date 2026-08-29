@@ -9,8 +9,10 @@ import {
   Copy,
   Loader,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export function LogsSettings() {
+  const t = useT();
   const [logs, setLogs] = useState('');
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [logsCopied, setLogsCopied] = useState(false);
@@ -44,7 +46,7 @@ export function LogsSettings() {
         <div className="flex items-center justify-between mb-4">
           <h4 className="font-semibold text-mail-text flex items-center gap-2">
             <ScrollText size={18} className="text-mail-accent-text" />
-            Application Logs
+            {t('settings.logs.applicationLogs')}
           </h4>
           <div className="flex items-center gap-2">
             <button
@@ -54,7 +56,7 @@ export function LogsSettings() {
                         hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2"
             >
               <RefreshCw size={14} className={loadingLogs ? 'animate-spin' : ''} />
-              Refresh
+              {t('settings.logs.refresh')}
             </button>
             <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={async () => {
@@ -116,7 +118,7 @@ export function LogsSettings() {
               disabled={!logs || loadingLogs}
             >
               <Download size={14} />
-              Export
+              {t('common.export')}
             </Button>
             <button
               onClick={async () => {
@@ -158,13 +160,13 @@ export function LogsSettings() {
                         hover:bg-mail-danger/10 rounded-lg transition-colors flex items-center gap-2"
             >
               <Trash2 size={14} />
-              Clear
+              {t('common.clear')}
             </button>
           </div>
         </div>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          View recent application logs. Last 500 lines are shown.
+          {t('settings.logs.viewRecentApplicationLogsLast')}
         </p>
 
         <div className="flex-1 min-h-0 overflow-hidden">
@@ -174,7 +176,7 @@ export function LogsSettings() {
             </div>
           ) : !invoke ? (
             <div className="flex items-center justify-center h-full text-mail-text-muted">
-              <p>Logs are only available in the desktop app</p>
+              <p>{t('settings.logs.logsOnlyAvailableDesktopApp')}</p>
             </div>
           ) : (
             <pre className="h-full overflow-auto bg-mail-bg p-4 rounded-lg text-xs

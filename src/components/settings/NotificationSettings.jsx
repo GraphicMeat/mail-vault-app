@@ -3,8 +3,10 @@ import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stor
 import { ToggleSwitch } from './ToggleSwitch';
 import { Bell, ChevronUp, ChevronDown, HardDrive, Mail } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { useT } from '../../i18n/index.js';
 
 export function NotificationSettings({ accounts }) {
+  const t = useT();
   const {
     notificationSettings,
     setNotificationEnabled,
@@ -35,19 +37,19 @@ export function NotificationSettings({ accounts }) {
       <div data-testid="settings-notifications" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Bell size={18} className="text-mail-accent-text" />
-          Notifications
+          {t('settings.notifications.notifications')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Get notified when new emails arrive.
+          {t('settings.notifications.getNotifiedWhenNewEmails')}
         </p>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Enable desktop notifications</div>
+              <div className="font-medium text-mail-text">{t('settings.notifications.enableDesktopNotifications')}</div>
               <div className="text-sm text-mail-text-muted">
-                Show desktop notifications for new emails
+                {t('settings.notifications.showDesktopNotificationsNewEmails')}
               </div>
             </div>
             <ToggleSwitch
@@ -60,9 +62,9 @@ export function NotificationSettings({ accounts }) {
             <>
               <div className="flex items-center justify-between py-2">
                 <div>
-                  <div className="font-medium text-mail-text">Show email preview</div>
+                  <div className="font-medium text-mail-text">{t('settings.notifications.showEmailPreview')}</div>
                   <div className="text-sm text-mail-text-muted">
-                    Show sender and subject in notifications
+                    {t('settings.notifications.showSenderSubjectNotifications')}
                   </div>
                 </div>
                 <ToggleSwitch
@@ -73,7 +75,7 @@ export function NotificationSettings({ accounts }) {
 
               {/* Per-account notification settings */}
               <div className="border-t border-mail-border pt-3">
-                <div className="text-sm font-medium text-mail-text mb-3">Per-account settings</div>
+                <div className="text-sm font-medium text-mail-text mb-3">{t('settings.notifications.perAccountSettings')}</div>
                 <div className="space-y-1">
                   {orderedAccounts.filter(a => !isAccountHidden(a.id)).map(account => {
                     const acctConfig = notificationSettings.accounts[account.id] || { enabled: true, folders: ['INBOX'] };
@@ -111,7 +113,7 @@ export function NotificationSettings({ accounts }) {
                                 ...prev,
                                 [account.id]: !prev[account.id]
                               }))}
-                              title="Configure folders"
+                              title={t('settings.notifications.configureFolders')}
                             >
                               {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                             </button>
@@ -127,7 +129,7 @@ export function NotificationSettings({ accounts }) {
                         {/* Expanded folder list */}
                         {acctConfig.enabled && isExpanded && (
                           <div className="px-3 pb-3 pt-1 border-t border-mail-border bg-mail-bg/50">
-                            <div className="text-xs text-mail-text-muted mb-2">Notify for these folders:</div>
+                            <div className="text-xs text-mail-text-muted mb-2">{t('settings.notifications.notifyTheseFolders')}</div>
                             <div className="space-y-1.5">
                               {commonFolders.map(folder => {
                                 const isChecked = acctConfig.folders.includes(folder);
@@ -168,16 +170,16 @@ export function NotificationSettings({ accounts }) {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
-          Backup Notifications
+          {t('settings.notifications.backupNotifications')}
         </h4>
 
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-mail-text">Notify when backup completes</span>
+            <span className="text-sm text-mail-text">{t('settings.notifications.notifyWhenBackupCompletes')}</span>
             <ToggleSwitch active={backupNotifyOnSuccess} onClick={() => setBackupNotifyOnSuccess(!backupNotifyOnSuccess)} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-mail-text">Notify when backup fails</span>
+            <span className="text-sm text-mail-text">{t('settings.notifications.notifyWhenBackupFails')}</span>
             <ToggleSwitch active={backupNotifyOnFailure} onClick={() => setBackupNotifyOnFailure(!backupNotifyOnFailure)} />
           </div>
         </div>
@@ -187,19 +189,19 @@ export function NotificationSettings({ accounts }) {
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Mail size={18} className="text-mail-accent-text" />
-          Badge
+          {t('settings.notifications.badge')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Configure the dock icon badge counter.
+          {t('settings.notifications.configureDockIconBadgeCounter')}
         </p>
 
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Show badge count</div>
+              <div className="font-medium text-mail-text">{t('settings.notifications.showBadgeCount')}</div>
               <div className="text-sm text-mail-text-muted">
-                Display email count on dock icon
+                {t('settings.notifications.displayEmailCountDockIcon')}
               </div>
             </div>
             <ToggleSwitch
@@ -211,7 +213,7 @@ export function NotificationSettings({ accounts }) {
           {badgeEnabled && (
             <div>
               <label className="block text-sm font-medium text-mail-text mb-2">
-                Badge shows
+                {t('settings.notifications.badgeShows')}
               </label>
               <select
                 value={badgeMode}
@@ -220,8 +222,8 @@ export function NotificationSettings({ accounts }) {
                           text-mail-text focus:border-mail-accent transition-all
                           cursor-pointer"
               >
-                <option value="unread">Unread messages</option>
-                <option value="total">Total messages</option>
+                <option value="unread">{t('settings.notifications.unreadMessages')}</option>
+                <option value="total">{t('settings.notifications.totalMessages')}</option>
               </select>
             </div>
           )}

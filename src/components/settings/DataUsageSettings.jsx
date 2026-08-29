@@ -4,10 +4,12 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import DataUsageAccountCard from './DataUsageAccountCard';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useT } from '../../i18n/index.js';
 
 const REFRESH_MS = 30_000;
 
 export default function DataUsageSettings({ initialAccountId }) {
+  const t = useT();
   const cardRefs = useRef({});
   const [highlightedId, setHighlightedId] = useState(null);
   const [stats, setStats] = useState(null); // { [accountId]: { days, today, week, month, year } }
@@ -58,9 +60,9 @@ export default function DataUsageSettings({ initialAccountId }) {
       )}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-mail-text">Show usage on hover</div>
+          <div className="text-sm font-medium text-mail-text">{t('settings.dataUsage.showUsageHover')}</div>
           <div className="text-xs text-mail-text-muted mt-0.5">
-            Hovering an account in the sidebar shows its last seven days of transfer. Turn this off to keep the sidebar quiet — the breakdowns below stay available either way.
+            {t('settings.dataUsage.hoveringAccountSidebarShowsIts')}
           </div>
         </div>
         <ToggleSwitch active={transferHoverEnabled !== false} onClick={() => setTransferHoverEnabled(transferHoverEnabled === false)} />
@@ -79,8 +81,8 @@ export default function DataUsageSettings({ initialAccountId }) {
         ))
       ) : (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">
-          <h4 className="font-semibold text-mail-text mb-2">No accounts configured</h4>
-          <p className="text-sm text-mail-text-muted">Add an email account first to see its data usage.</p>
+          <h4 className="font-semibold text-mail-text mb-2">{t('common.noAccountsConfigured')}</h4>
+          <p className="text-sm text-mail-text-muted">{t('settings.dataUsage.addEmailAccountFirstSee')}</p>
         </div>
       )}
     </div>

@@ -2,8 +2,10 @@ import React from 'react';
 import { Shield } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
+import { useT } from '../../i18n/index.js';
 
 export function SecuritySettings() {
+  const t = useT();
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const setLinkSafetyEnabled = useSettingsStore(s => s.setLinkSafetyEnabled);
@@ -18,9 +20,9 @@ export function SecuritySettings() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium text-mail-text">Link Safety Scanning</div>
+            <div className="text-sm font-medium text-mail-text">{t('settings.security.linkSafetyScanning')}</div>
             <div className="text-xs text-mail-text-muted mt-0.5">
-              Detect suspicious links in emails that don't match their displayed text
+              {t('settings.security.detectSuspiciousLinksEmailsDon')}
             </div>
           </div>
           <ToggleSwitch active={linkSafetyEnabled} onClick={() => setLinkSafetyEnabled(!linkSafetyEnabled)} />
@@ -28,9 +30,9 @@ export function SecuritySettings() {
 
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium text-mail-text">Click Confirmation</div>
+            <div className="text-sm font-medium text-mail-text">{t('settings.security.clickConfirmation')}</div>
             <div className="text-xs text-mail-text-muted mt-0.5">
-              Show a warning modal before opening suspicious links
+              {t('settings.security.showWarningModalBeforeOpening')}
             </div>
           </div>
           <ToggleSwitch active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
@@ -38,11 +40,11 @@ export function SecuritySettings() {
       </div>
 
       <div className="pt-4 border-t border-mail-border">
-        <h4 className="text-sm font-medium text-mail-text mb-2">How it works</h4>
+        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.security.howWorks')}</h4>
         <div className="text-xs text-mail-text-muted space-y-1">
-          <p><span className="text-mail-danger font-medium">Red alerts</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
-          <p><span className="text-mail-warning font-medium">Yellow alerts</span> — Link passes through a tracking redirect to a different domain</p>
-          <p className="mt-2 text-mail-text-muted/70">All scanning is performed locally on your device — no email data is sent to any server.</p>
+          <p><span className="text-mail-danger font-medium">{t('settings.security.redAlerts')}</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
+          <p><span className="text-mail-warning font-medium">{t('settings.security.yellowAlerts')}</span> — Link passes through a tracking redirect to a different domain</p>
+          <p className="mt-2 text-mail-text-muted/70">{t('settings.security.allScanningPerformedLocallyDevice')}</p>
         </div>
       </div>
     </div>

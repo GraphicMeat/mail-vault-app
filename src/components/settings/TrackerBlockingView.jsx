@@ -8,6 +8,7 @@ import { TRACKER_PATTERNS } from '../../utils/trackerList';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Button } from '../ui/Button';
+import { useT } from '../../i18n/index.js';
 
 /** The beacon, exactly as senders ship it. Shown verbatim — this is the point. */
 const TRACKER_SAMPLE = `<img src="https://mailer.example.com/o/open.php`
@@ -41,6 +42,7 @@ const LEAKED = [
 ];
 
 function SampleMail({ blocked }) {
+  const t = useT();
   return (
     <div className="rounded-lg border border-mail-border bg-white overflow-hidden">
       {/* Fixed light colours, not app tokens: the card below is a PICTURE of an
@@ -54,9 +56,9 @@ function SampleMail({ blocked }) {
         {blocked ? 'After — beacon removed' : 'Before — beacon fires on open'}
       </div>
       <div className="p-3 text-[11px] leading-relaxed text-[#333] bg-white">
-        <div className="font-semibold text-[12px] text-[#111]">Your weekly digest</div>
+        <div className="font-semibold text-[12px] text-[#111]">{t('settings.tracking.weeklyDigest')}</div>
         <div className="text-[#666] mb-2">news@mailer.example.com</div>
-        <p className="m-0 mb-2">Hi there — here is what you missed this week.</p>
+        <p className="m-0 mb-2">{t('settings.tracking.hiThereHereWhatMissed')}</p>
         <div className="h-6 rounded bg-[#eef1f6]" />
         {blocked ? (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-700">
@@ -75,6 +77,7 @@ function SampleMail({ blocked }) {
 }
 
 export function TrackerBlockingView({ onUpgrade }) {
+  const t = useT();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const trackerBlockingEnabled = useSettingsStore(s => s.trackerBlockingEnabled);
   const setTrackerBlockingEnabled = useSettingsStore(s => s.setTrackerBlockingEnabled);
@@ -104,7 +107,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           <div className="min-w-0">
             <h4 className="text-sm font-semibold text-mail-text flex items-center gap-2">
               <EyeOff size={16} className="text-mail-accent-text" />
-              Block tracking pixels
+              {t('settings.tracking.blockTrackingPixels')}
             </h4>
             <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
               Marketing mail hides a 1×1 image in the body. Loading it tells the sender you opened
@@ -120,7 +123,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-mail-text-muted shrink-0">
               <Lock size={13} />
-              Premium
+              {t('common.premium')}
             </div>
           )}
         </div>
@@ -136,7 +139,7 @@ export function TrackerBlockingView({ onUpgrade }) {
       {/* The upsell. Free users get the whole demonstration, not a locked box. */}
       {!isPremium && (
         <div className="border border-mail-accent/30 bg-mail-accent/5 rounded-xl p-5" data-testid="tracker-upsell">
-          <h4 className="text-sm font-semibold text-mail-text">Tracker Blocking is a Premium Feature</h4>
+          <h4 className="text-sm font-semibold text-mail-text">{t('settings.tracking.trackerBlockingPremiumFeature')}</h4>
           <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
             Detection is free — you can always see that a message tracked you and which company sent
             the beacon. Premium is what removes it before the request goes out.
@@ -144,7 +147,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           {!IS_APPSTORE_BUILD && <p className="text-xs text-mail-text-muted mt-2">{priceBlurb}</p>}
           {!IS_APPSTORE_BUILD && onUpgrade && (
             <Button variant="primary" size="sm" pill className="mt-3 text-xs" onClick={onUpgrade}>
-              Upgrade
+              {t('common.upgrade')}
             </Button>
           )}
           {/* The one link every premium gate shares — this gate is not an
@@ -155,7 +158,7 @@ export function TrackerBlockingView({ onUpgrade }) {
 
       {/* Before / after */}
       <div>
-        <h4 className="text-sm font-medium text-mail-text mb-2">Before and after</h4>
+        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.beforeAfter')}</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <SampleMail blocked={false} />
           <SampleMail blocked />
@@ -164,14 +167,14 @@ export function TrackerBlockingView({ onUpgrade }) {
 
       {/* The code itself */}
       <div>
-        <h4 className="text-sm font-medium text-mail-text mb-2">What a tracking pixel looks like</h4>
+        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.whatTrackingPixelLooksLike')}</h4>
         <div className="space-y-2">
           <div>
-            <div className="text-xs text-mail-text-muted mb-1">In the email you received:</div>
+            <div className="text-xs text-mail-text-muted mb-1">{t('settings.tracking.emailReceived')}</div>
             <pre className="p-3 rounded-lg bg-mail-surface border border-mail-border text-[11px] font-mono text-mail-text whitespace-pre-wrap break-all overflow-x-auto">{TRACKER_SAMPLE}</pre>
           </div>
           <div>
-            <div className="text-xs text-mail-text-muted mb-1">After MailVault clears it:</div>
+            <div className="text-xs text-mail-text-muted mb-1">{t('settings.tracking.afterMailvaultClears')}</div>
             <pre className="p-3 rounded-lg bg-mail-surface border border-mail-border text-[11px] font-mono text-mail-text whitespace-pre-wrap break-all overflow-x-auto">{CLEANED_SAMPLE}</pre>
           </div>
         </div>
@@ -179,7 +182,7 @@ export function TrackerBlockingView({ onUpgrade }) {
 
       {/* What it costs you to load one */}
       <div>
-        <h4 className="text-sm font-medium text-mail-text mb-2">What that one pixel tells the sender</h4>
+        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.whatOnePixelTellsSender')}</h4>
         <ul className="space-y-1">
           {LEAKED.map((line, i) => (
             <li key={i} className="text-xs text-mail-text-muted flex items-start gap-2">
@@ -192,7 +195,7 @@ export function TrackerBlockingView({ onUpgrade }) {
 
       {/* What this install has actually seen */}
       <div className="pt-4 border-t border-mail-border">
-        <h4 className="text-sm font-medium text-mail-text mb-2">In your mail</h4>
+        <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.tracking.mail')}</h4>
         {stats.messages > 0 ? (
           <>
             <p className="text-xs text-mail-text-muted">

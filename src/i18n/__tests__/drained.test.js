@@ -22,6 +22,17 @@ const DONE = [
   'src/components/settings/BackupRestore.jsx',
   'src/components/settings/BackupSchedule.jsx',
   'src/components/settings/BackupVerificationTree.jsx',
+  'src/components/settings/NotificationSettings.jsx',
+  'src/components/settings/TimeCapsuleSettings.jsx',
+  'src/components/settings/CleanupSettings.jsx',
+  'src/components/settings/TrackerBlockingView.jsx',
+  'src/components/settings/TemplateSettings.jsx',
+  'src/components/settings/SecuritySettings.jsx',
+  'src/components/settings/HelpSettings.jsx',
+  'src/components/settings/DataUsageAccountCard.jsx',
+  'src/components/settings/LogsSettings.jsx',
+  'src/components/settings/DataUsageSettings.jsx',
+  'src/components/settings/DaemonSettings.jsx',
 ];
 
 function audit(mode, files) {

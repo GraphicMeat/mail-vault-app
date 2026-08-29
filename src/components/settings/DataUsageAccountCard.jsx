@@ -4,6 +4,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { formatBytes } from '../../utils/formatBytes';
 import { isGmailAccount, resolveDailyLimitBytes } from '../../utils/transferLimits';
 import { ArrowDown, ArrowUp, Loader } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 const PERIODS = [
   { id: 'day', label: 'Day' },
@@ -19,6 +20,7 @@ function bytesToMbInput(bytes) {
 }
 
 const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, highlighted }, ref) {
+  const t = useT();
   const [period, setPeriod] = useState('day');
   const accountColors = useSettingsStore(s => s.accountColors);
   const transferLimits = useSettingsStore(s => s.transferLimits);
@@ -92,11 +94,11 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       {/* Totals for the selected period */}
       <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border">
         <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> Downloaded</div>
+          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> {t('settings.dataUsage.account.downloaded')}</div>
           <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.down)}</div>
         </div>
         <div>
-          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> Uploaded</div>
+          <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> {t('settings.dataUsage.account.uploaded')}</div>
           <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.up)}</div>
         </div>
       </div>
@@ -104,11 +106,11 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       {/* Progress vs today's daily limit — always today, independent of the period switcher above */}
       {(downLimit.limitBytes != null || upLimit.limitBytes != null) && (
         <div className="space-y-2 pt-3 mt-3 border-t border-mail-border">
-          <div className="text-xs text-mail-text-muted">Today vs daily limit</div>
+          <div className="text-xs text-mail-text-muted">{t('settings.dataUsage.account.todayVsDailyLimit')}</div>
           {downLimit.limitBytes != null && (
             <div>
               <div className="flex items-center justify-between text-[11px] text-mail-text-muted mb-0.5">
-                <span>Download</span>
+                <span>{t('settings.dataUsage.account.download')}</span>
                 <span>
                   {formatBytes(todayStats.down)} / {formatBytes(downLimit.limitBytes)}
                   {downLimit.isProviderDefault ? ' (provider default)' : ''}
@@ -125,7 +127,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
           {upLimit.limitBytes != null && (
             <div>
               <div className="flex items-center justify-between text-[11px] text-mail-text-muted mb-0.5">
-                <span>Upload</span>
+                <span>{t('settings.dataUsage.account.upload')}</span>
                 <span>
                   {formatBytes(todayStats.up)} / {formatBytes(upLimit.limitBytes)}
                   {upLimit.isProviderDefault ? ' (provider default)' : ''}
@@ -145,11 +147,11 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       {/* Toggles + limit inputs */}
       <div className="space-y-3 pt-3 mt-3 border-t border-mail-border">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-mail-text">Warn when nearing daily limit</span>
+          <span className="text-xs text-mail-text">{t('settings.dataUsage.account.warnWhenNearingDailyLimit')}</span>
           <ToggleSwitch active={warnEnabled} onClick={() => setTransferLimit(account.id, { warnEnabled: !warnEnabled })} />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-xs text-mail-text">Pause sync at daily limit</span>
+          <span className="text-xs text-mail-text">{t('settings.dataUsage.account.pauseSyncDailyLimit')}</span>
           <ToggleSwitch active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
         </div>
         <div className="grid grid-cols-2 gap-3 pt-1">

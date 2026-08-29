@@ -2,8 +2,10 @@ import React from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { Clock, Lock, Info } from 'lucide-react';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { useT } from '../../i18n/index.js';
 
 export function TimeCapsuleSettings() {
+  const t = useT();
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
   const snapshotAutoEnabled = useSettingsStore(s => s.snapshotAutoEnabled);
@@ -16,9 +18,9 @@ export function TimeCapsuleSettings() {
       <div className="p-6">
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
-          <h3 className="text-sm font-semibold text-mail-text mb-2">Time Capsule Requires Premium</h3>
+          <h3 className="text-sm font-semibold text-mail-text mb-2">{t('settings.timeCapsule.timeCapsuleRequiresPremium')}</h3>
           <p className="text-xs text-mail-text-muted max-w-md mx-auto">
-            Travel back in time through your mailbox. Time Capsule takes lightweight snapshots of your email so you can browse any folder as it looked on a past date — and restore emails you may have lost.
+            {t('settings.timeCapsule.travelBackTimeThroughMailbox')}
           </p>
           <PremiumFeaturesLink className="mt-4" />
         </div>
@@ -34,13 +36,13 @@ export function TimeCapsuleSettings() {
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Info size={20} className="text-mail-accent-text" />
           </div>
-          <h3 className="text-sm font-semibold text-mail-text">How Time Capsule works</h3>
+          <h3 className="text-sm font-semibold text-mail-text">{t('settings.timeCapsule.howTimeCapsuleWorks')}</h3>
         </div>
         <p className="text-xs text-mail-text-muted mb-2">
-          Time Capsule lets you travel back to any point in your email history. It takes lightweight snapshots of your mailbox — small records of which emails existed and where — so you can browse your inbox, sent mail, or any folder exactly as it looked on that date.
+          {t('settings.timeCapsule.timeCapsuleLetsTravelBack')}
         </p>
         <p className="text-xs text-mail-text-muted">
-          Your actual emails are already stored locally by MailVault. Snapshots just track <em>what was there when</em>, so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it.
+          {t('settings.timeCapsule.actualEmailsAlreadyStoredLocally')} <em>{t('settings.timeCapsule.whatWasThereWhen')}</em>, so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it.
         </p>
       </div>
 
@@ -51,15 +53,15 @@ export function TimeCapsuleSettings() {
             <Clock size={20} className="text-mail-accent-text" />
           </div>
           <div>
-            <h3 className="text-sm font-semibold text-mail-text">Automatic Snapshots</h3>
-            <p className="text-xs text-mail-text-muted">Snapshots are created after successful backups based on your schedule.</p>
+            <h3 className="text-sm font-semibold text-mail-text">{t('settings.timeCapsule.automaticSnapshots')}</h3>
+            <p className="text-xs text-mail-text-muted">{t('settings.timeCapsule.snapshotsCreatedAfterSuccessfulBackups')}</p>
           </div>
         </div>
 
         <label className="flex items-center justify-between p-3 rounded-lg border border-mail-border mb-4 cursor-pointer hover:bg-mail-surface-hover transition-colors">
           <div>
-            <p className="text-sm font-medium text-mail-text">Enable automatic snapshots</p>
-            <p className="text-xs text-mail-text-muted">When disabled, snapshots are only created manually from Time Capsule.</p>
+            <p className="text-sm font-medium text-mail-text">{t('settings.timeCapsule.enableAutomaticSnapshots')}</p>
+            <p className="text-xs text-mail-text-muted">{t('settings.timeCapsule.whenDisabledSnapshotsOnlyCreated')}</p>
           </div>
           <input
             type="checkbox"
@@ -72,7 +74,7 @@ export function TimeCapsuleSettings() {
         {/* Cadence selector */}
         {snapshotAutoEnabled && (
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-mail-text-muted uppercase tracking-wide px-1">Snapshot frequency</p>
+            <p className="text-xs font-semibold text-mail-text-muted uppercase tracking-wide px-1">{t('settings.timeCapsule.snapshotFrequency')}</p>
 
             <label className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
               snapshotCadence === 'after_every_backup' ? 'border-mail-accent bg-mail-accent/5' : 'border-mail-border hover:bg-mail-surface-hover'
@@ -85,8 +87,8 @@ export function TimeCapsuleSettings() {
                 className="mt-0.5 accent-mail-accent"
               />
               <div>
-                <p className="text-sm font-medium text-mail-text">After every backup</p>
-                <p className="text-xs text-mail-text-muted">A snapshot is created every time a backup completes successfully. Most complete history.</p>
+                <p className="text-sm font-medium text-mail-text">{t('settings.timeCapsule.afterEveryBackup')}</p>
+                <p className="text-xs text-mail-text-muted">{t('settings.timeCapsule.snapshotCreatedEveryTimeBackup')}</p>
               </div>
             </label>
 
@@ -101,8 +103,8 @@ export function TimeCapsuleSettings() {
                 className="mt-0.5 accent-mail-accent"
               />
               <div>
-                <p className="text-sm font-medium text-mail-text">Daily</p>
-                <p className="text-xs text-mail-text-muted">At most one snapshot per account per day, even if multiple backups run. Good balance of history and storage.</p>
+                <p className="text-sm font-medium text-mail-text">{t('settings.timeCapsule.daily')}</p>
+                <p className="text-xs text-mail-text-muted">{t('settings.timeCapsule.mostOneSnapshotPerAccount')}</p>
               </div>
             </label>
 
@@ -117,8 +119,8 @@ export function TimeCapsuleSettings() {
                 className="mt-0.5 accent-mail-accent"
               />
               <div>
-                <p className="text-sm font-medium text-mail-text">Weekly</p>
-                <p className="text-xs text-mail-text-muted">At most one snapshot per account per week. Minimal storage, coarser history.</p>
+                <p className="text-sm font-medium text-mail-text">{t('settings.timeCapsule.weekly')}</p>
+                <p className="text-xs text-mail-text-muted">{t('settings.timeCapsule.mostOneSnapshotPerAccount2')}</p>
               </div>
             </label>
           </div>

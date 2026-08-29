@@ -7,6 +7,7 @@ import {
   RotateCcw,
   ExternalLink,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 // ponytail: same two links as the native Help menu (src-tauri/src/main.rs).
 // Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
@@ -26,6 +27,7 @@ const LINKS = [
 ];
 
 export function HelpSettings({ onClose, onReportBug }) {
+  const t = useT();
   const { setOnboardingComplete } = useSettingsStore();
 
   return (
@@ -39,15 +41,15 @@ export function HelpSettings({ onClose, onReportBug }) {
         <div className="space-y-4">
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Report a Bug</div>
+              <div className="font-medium text-mail-text">{t('settings.help.reportBug')}</div>
               <div className="text-sm text-mail-text-muted">
-                Report on GitHub, or email the developer
+                {t('settings.help.reportGithubEmailDeveloper')}
               </div>
             </div>
             <Button variant="primary"
               onClick={() => { onReportBug?.(); onClose(); }}
             >
-              Report Bug
+              {t('settings.help.reportBug2')}
             </Button>
           </div>
 
@@ -64,7 +66,7 @@ export function HelpSettings({ onClose, onReportBug }) {
                   data-url={link.url}
                 >
                   <ExternalLink size={16} />
-                  Open
+                  {t('common.open')}
                 </Button>
               </div>
             </React.Fragment>
@@ -74,9 +76,9 @@ export function HelpSettings({ onClose, onReportBug }) {
 
           <div className="flex items-center justify-between py-2">
             <div>
-              <div className="font-medium text-mail-text">Reset Onboarding</div>
+              <div className="font-medium text-mail-text">{t('settings.help.resetOnboarding')}</div>
               <div className="text-sm text-mail-text-muted">
-                Show the welcome screen again on next launch
+                {t('settings.help.showWelcomeScreenAgainNext')}
               </div>
             </div>
             <Button variant="subtle"
@@ -86,7 +88,7 @@ export function HelpSettings({ onClose, onReportBug }) {
               }}
             >
               <RotateCcw size={16} />
-              Reset
+              {t('common.reset')}
             </Button>
           </div>
         </div>

@@ -32,6 +32,7 @@ import {
   Lock, Loader, Trash2, Archive, Clock, Sparkles, ChevronLeft, Paperclip,
 } from 'lucide-react';
 import { formatEmailDate } from '../../utils/dateFormat';
+import { useT } from '../../i18n/index.js';
 
 const DEFAULT_CATEGORIES = [
   'newsletter', 'promotional', 'notification', 'transactional',
@@ -155,6 +156,7 @@ function senderName(from) {
 // ── HTML Body (auto-resizing iframe) ─────────────────────────────────────
 
 function CleanupHtmlBody({ html }) {
+  const t = useT();
   const ref = useRef(null);
   const [height, setHeight] = useState(400);
 
@@ -191,7 +193,7 @@ function CleanupHtmlBody({ html }) {
       ref={ref}
       sandbox="allow-same-origin"
       style={{ width: '100%', height: `${height}px`, border: 'none' }}
-      title="Email preview"
+      title={t('settings.cleanup.emailPreview')}
     />
   );
 }
@@ -240,6 +242,7 @@ const CleanupRow = React.memo(function CleanupRow({
 // ── Exported Modal ────────────────────────────────────────────────────────
 
 export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   const activeAccountId = accountId || useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
@@ -512,8 +515,8 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     content = (
       <div className="flex flex-col items-center justify-center h-full px-8 text-center">
         <Lock className="w-10 h-10 text-mail-text-muted mb-4" />
-        <h3 className="font-semibold text-lg mb-2">Email Cleanup is a Premium Feature</h3>
-        <p className="text-sm text-mail-text-muted max-w-sm">Automatically classify your emails into categories like newsletters, promotions, and notifications — then clean up in bulk with smart keep, archive, and delete suggestions.</p>
+        <h3 className="font-semibold text-lg mb-2">{t('settings.cleanup.emailCleanupPremiumFeature')}</h3>
+        <p className="text-sm text-mail-text-muted max-w-sm">{t('settings.cleanup.automaticallyClassifyEmailsIntoCategories')}</p>
         {/* MAS builds must not advertise the web subscription — no external
             purchase price, no path to Stripe checkout. */}
         {!IS_APPSTORE_BUILD && (
@@ -521,7 +524,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         )}
         {!IS_APPSTORE_BUILD && onUpgrade && (
           <Button variant="primary" size="sm" pill className="mt-4 text-xs" onClick={onUpgrade}>
-            Upgrade
+            {t('common.upgrade')}
           </Button>
         )}
         <PremiumFeaturesLink className="mt-4" />
@@ -538,7 +541,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     content = (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <Loader className="w-10 h-10 text-mail-accent-text mb-4 animate-spin" />
-        <h3 className="font-semibold text-base mb-2">Classifying Emails...</h3>
+        <h3 className="font-semibold text-base mb-2">{t('settings.cleanup.classifyingEmails')}</h3>
         <p className="text-sm text-mail-text-muted mb-4">
           {classStatus.total > 0 ? `${classStatus.classified} / ${classStatus.total} processed` : 'Preparing...'}
         </p>
@@ -553,9 +556,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     content = (
       <div className="flex flex-col items-center justify-center h-full text-center">
         <Sparkles className="w-10 h-10 text-mail-text-muted mb-4" />
-        <h3 className="font-semibold text-base mb-2">No Classifications Yet</h3>
+        <h3 className="font-semibold text-base mb-2">{t('settings.cleanup.noClassificationsYet')}</h3>
         <p className="text-sm text-mail-text-muted max-w-sm">
-          Emails are automatically classified as they arrive. Starting classification now...
+          {t('settings.cleanup.emailsAutomaticallyClassifiedTheyArrive')}
         </p>
       </div>
     );
@@ -581,9 +584,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         <div className="px-6 py-4 border-b border-mail-border shrink-0">
           <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || previewItem.subject || '(No subject)'}</h3>
           <div className="text-sm text-mail-text-muted space-y-0.5">
-            <p><span className="font-medium w-12 inline-block">From</span> <span className="text-mail-text">{from}</span></p>
-            {to && <p><span className="font-medium w-12 inline-block">To</span> <span className="text-mail-text">{to}</span></p>}
-            <p><span className="font-medium w-12 inline-block">Date</span> <span className="text-mail-text">{email.date || previewItem.date || ''}</span></p>
+            <p><span className="font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
+            {to && <p><span className="font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
+            <p><span className="font-medium w-12 inline-block">{t('settings.cleanup.date')}</span> <span className="text-mail-text">{email.date || previewItem.date || ''}</span></p>
           </div>
           <div className="flex items-center gap-2 mt-3">
             <CategoryDropdown current={c.category} categories={allCategories} onChange={(cat) => handleCorrectCategory(previewItem, cat)} />
@@ -657,7 +660,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         <div className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-mail-surface border border-mail-border text-center">
             <p className="text-2xl font-bold text-mail-text">{mailboxTotal.toLocaleString()}</p>
-            <p className="text-xs text-mail-text-muted mt-1">Classified</p>
+            <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.classified')}</p>
           </div>
           <button
             onClick={() => {
@@ -667,7 +670,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             className="p-4 rounded-xl bg-mail-danger-tint border border-mail-danger/20 text-center hover:bg-mail-danger/20 transition-colors"
           >
             <p className="text-2xl font-bold text-mail-danger">{deletableCount.toLocaleString()}</p>
-            <p className="text-xs text-mail-text-muted mt-1">Can Delete</p>
+            <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.canDelete')}</p>
           </button>
           <button
             onClick={() => {
@@ -677,7 +680,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             className="p-4 rounded-xl bg-mail-accent-tint border border-mail-accent/20 text-center hover:bg-mail-accent/20 transition-colors"
           >
             <p className="text-2xl font-bold text-mail-accent-text">{archivableCount.toLocaleString()}</p>
-            <p className="text-xs text-mail-text-muted mt-1">Can Archive</p>
+            <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.canArchive')}</p>
           </button>
         </div>
 
@@ -740,7 +743,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               >
                 <Archive size={13} /> Archive ({selectedIds.size})
               </button>
-              <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-mail-text-muted hover:text-mail-text">Deselect All</button>
+              <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-mail-text-muted hover:text-mail-text">{t('settings.cleanup.deselectAll')}</button>
             </>
           ) : (
             <button
@@ -856,7 +859,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                 <Button variant="secondary" className="bg-mail-bg"
                   onClick={() => setBulkAction(null)}
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
                 <button
                   onClick={() => handleBulkAction(bulkAction)}

@@ -8,8 +8,10 @@ import {
   PenTool,
   Save,
 } from 'lucide-react';
+import { useT } from '../../i18n/index.js';
 
 export function TemplateSettings() {
+  const t = useT();
   const {
     emailTemplates,
     addEmailTemplate,
@@ -26,11 +28,11 @@ export function TemplateSettings() {
       <div data-testid="settings-templates" className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <FileText size={18} className="text-mail-accent-text" />
-          Email Templates
+          {t('settings.templates.emailTemplates')}
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Create reusable templates for common emails.
+          {t('settings.templates.createReusableTemplatesCommonEmails')}
         </p>
 
         <div className="space-y-3">
@@ -50,14 +52,14 @@ export function TemplateSettings() {
                     setTemplateBody(tpl.body);
                   }}
                   className="p-1.5 text-mail-text-muted hover:text-mail-text hover:bg-mail-border rounded-lg transition-colors"
-                  title="Edit template"
+                  title={t('settings.templates.editTemplate')}
                 >
                   <PenTool size={14} />
                 </button>
                 <button
                   onClick={() => removeEmailTemplate(tpl.id)}
                   className="p-1.5 text-mail-text-muted hover:text-mail-danger hover:bg-mail-border rounded-lg transition-colors"
-                  title="Delete template"
+                  title={t('settings.templates.deleteTemplate')}
                 >
                   <Trash2 size={14} />
                 </button>
@@ -67,7 +69,7 @@ export function TemplateSettings() {
 
           {emailTemplates.length === 0 && !templateForm && (
             <div className="text-sm text-mail-text-muted text-center py-3">
-              No templates yet. Create one to get started.
+              {t('settings.templates.noTemplatesYetCreateOne')}
             </div>
           )}
 
@@ -82,13 +84,13 @@ export function TemplateSettings() {
                 <div className="p-4 bg-mail-bg rounded-lg border border-mail-border space-y-3">
                   <div>
                     <label className="block text-sm font-medium text-mail-text mb-1">
-                      Template name
+                      {t('settings.templates.templateName')}
                     </label>
                     <input
                       type="text"
                       value={templateName}
                       onChange={(e) => setTemplateName(e.target.value)}
-                      placeholder="e.g. Follow-up, Thank you, Meeting request"
+                      placeholder={t('settings.templates.eGFollowUpThank')}
                       className="w-full px-3 py-2 bg-mail-surface border border-mail-border rounded-lg
                                 text-sm text-mail-text placeholder-mail-text-muted
                                 focus:border-mail-accent focus:outline-none transition-colors"
@@ -97,12 +99,12 @@ export function TemplateSettings() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-mail-text mb-1">
-                      Template body
+                      {t('settings.templates.templateBody')}
                     </label>
                     <textarea
                       value={templateBody}
                       onChange={(e) => setTemplateBody(e.target.value)}
-                      placeholder="Write the template content here..."
+                      placeholder={t('settings.templates.writeTemplateContentHere')}
                       rows={5}
                       className="w-full px-3 py-2 bg-mail-surface border border-mail-border rounded-lg
                                 text-sm text-mail-text placeholder-mail-text-muted
@@ -119,7 +121,7 @@ export function TemplateSettings() {
                       className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
                                 hover:bg-mail-border rounded-lg transition-colors"
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </button>
                     <button
                       onClick={() => {
@@ -161,7 +163,7 @@ export function TemplateSettings() {
                         border border-dashed border-mail-border hover:border-mail-accent"
             >
               <Plus size={14} />
-              Add Template
+              {t('settings.templates.addTemplate')}
             </button>
           )}
         </div>
