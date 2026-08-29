@@ -17,6 +17,7 @@ import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { useT } from '../i18n/index.js';
+import { compareNames } from '../utils/collation.js';
 import {
   Inbox,
   Send,
@@ -741,10 +742,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     const sorted = [...mailboxes].sort((a, b) => {
       if (a.path === 'INBOX') return -1;
       if (b.path === 'INBOX') return 1;
-      return a.name.localeCompare(b.name);
+      return compareNames(a.name, b.name);
     });
     return sorted.map(m => m.children?.length > 0
-      ? { ...m, children: [...m.children].sort((a, b) => a.name.localeCompare(b.name)) }
+      ? { ...m, children: [...m.children].sort((a, b) => compareNames(a.name, b.name)) }
       : m
     );
   }, [mailboxes]);
