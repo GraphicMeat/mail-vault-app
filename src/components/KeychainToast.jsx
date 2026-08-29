@@ -3,23 +3,23 @@ import { AnimatePresence } from 'framer-motion';
 import { ToastShell } from './ui/ToastShell';
 import { KeyRound, X, RefreshCw } from 'lucide-react';
 import * as keychainSession from '../services/keychainSession';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 // Each of these states has a different way out, and the toast has the two
 // buttons to take it — the message used to name the failure and stop there.
-const MESSAGES = {
-  denied: 'The keychain refused access to your password.',
-  cancelled: 'The keychain prompt was dismissed.',
-  timed_out: 'The keychain did not answer in time.',
-  unavailable: 'The keychain is unavailable right now.',
-};
+const MESSAGES = () => ({
+  denied: tr('keychain.keychainRefusedAccessPassword'),
+  cancelled: tr('keychain.keychainPromptWasDismissed'),
+  timed_out: tr('keychain.keychainDidAnswerTime'),
+  unavailable: tr('keychain.keychainUnavailableRightNow'),
+});
 
-const RECOVERY = {
-  denied: 'Retry and allow the prompt, or re-enter the password under Accounts.',
-  cancelled: 'Retry to bring the prompt back.',
-  timed_out: 'Retry — this usually clears on a second attempt.',
-  unavailable: 'Retry in a moment, or re-enter the password under Accounts.',
-};
+const RECOVERY = () => ({
+  denied: tr('keychain.retryAllowPromptReEnter'),
+  cancelled: tr('keychain.retryBringPromptBack'),
+  timed_out: tr('keychain.retryUsuallyClearsSecondAttempt'),
+  unavailable: tr('keychain.retryMomentReEnterPassword'),
+});
 
 export function KeychainToast({ onRetry, onOpenAccounts }) {
   const t = useT();
@@ -56,11 +56,11 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
             <KeyRound size={18} className="text-mail-warning flex-shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium text-mail-text">
-                {MESSAGES[status] || 'The keychain refused access to your password.'}
+                {MESSAGES()[status] || 'The keychain refused access to your password.'}
               </div>
               <div className="text-xs text-mail-text-muted mt-1">
                 Everything already in your vault still opens. Reaching the server needs the password.
-                {' '}{RECOVERY[status] || 'Retry, or re-enter the password under Accounts.'}
+                {' '}{RECOVERY()[status] || 'Retry, or re-enter the password under Accounts.'}
               </div>
               <div className="flex items-center gap-2 mt-2.5">
                 <button

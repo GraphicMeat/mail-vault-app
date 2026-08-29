@@ -1366,5 +1366,13 @@
   "chat.topics.text": "{{formatDateOnly}} - {{formatDateOnly2}}",
   "svc.replayPendingDeletes.text": "{{mailbox}}/{{uid}}: {{message}}",
   "svc.accounts.text": "{{MAILDIR}}/{{accountId}}",
-  "svc.backupScheduler.some": "Some"
+  "svc.backupScheduler.some": "Some",
+  "keychain.keychainRefusedAccessPassword": "The keychain refused access to your password.",
+  "keychain.keychainPromptWasDismissed": "The keychain prompt was dismissed.",
+  "keychain.keychainDidAnswerTime": "The keychain did not answer in time.",
+  "keychain.keychainUnavailableRightNow": "The keychain is unavailable right now.",
+  "keychain.retryAllowPromptReEnter": "Retry and allow the prompt, or re-enter the password under Accounts.",
+  "keychain.retryBringPromptBack": "Retry to bring the prompt back.",
+  "keychain.retryUsuallyClearsSecondAttempt": "Retry — this usually clears on a second attempt.",
+  "keychain.retryMomentReEnterPassword": "Retry in a moment, or re-enter the password under Accounts."
 }
