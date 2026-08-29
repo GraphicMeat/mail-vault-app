@@ -10,5 +10,12 @@
   "errors.E_UID_GONE": "Message no longer on the server",
   "settings.language.tab": "Language",
   "settings.language.title": "App language",
-  "settings.language.subtitle": "Translations are machine-made and improving. Errors also show the English original, so a screenshot is always readable."
+  "settings.language.subtitle": "Translations are machine-made and improving. Errors also show the English original, so a screenshot is always readable.",
+  "settings.language.report.title": "Report a translation issue",
+  "settings.language.report.subtitle": "Found wording that is wrong or awkward? Send the phrase and what it should say.",
+  "settings.language.report.language": "Language",
+  "settings.language.report.wrong": "The text as it appears now",
+  "settings.language.report.fix": "What it should say",
+  "settings.language.report.where": "Where you saw it (optional)",
+  "settings.language.report.submit": "Open a report"
 }
