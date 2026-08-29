@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 // Turns a backend connection failure into something a person can act on.
 //
 // The Rust side returns strings like "Connection test failed: AUTHENTICATIONFAILED
@@ -17,41 +18,41 @@ const RULES = [
   {
     match: (s) => s.includes('authenticationfailed') || s.includes('invalid credentials')
       || s.includes('login failed') || (s.includes('auth') && s.includes('fail')),
-    problem: 'The server rejected that email address and password.',
-    recovery: 'Check both for typos. If your provider requires an app password, a normal account password will be refused here.',
+    problemKey: 'errors.conn.problem.serverRejectedEmailAddressPassword',
+    recoveryKey: 'errors.conn.recovery.checkBothTyposIfProvider',
   },
   {
     match: (s) => s.includes('oauth') || (s.includes('token') && (s.includes('expired') || s.includes('invalid'))),
-    problem: 'The sign-in with your provider expired.',
-    recovery: 'Sign in again to reconnect this account.',
+    problemKey: 'errors.conn.problem.signProviderExpired',
+    recoveryKey: 'errors.conn.recovery.signAgainReconnectAccount',
   },
   {
     match: (s) => s.includes('timed out') || s.includes('timeout'),
-    problem: 'The server did not answer in time.',
-    recovery: 'Check the host and port, then try again. A firewall or VPN can also hold the connection open until it expires.',
+    problemKey: 'errors.conn.problem.serverDidAnswerTime',
+    recoveryKey: 'errors.conn.recovery.checkHostPortThenTry',
   },
   {
     match: (s) => s.includes('dns') || s.includes('resolve') || s.includes('lookup')
       || s.includes('not known') || s.includes('nodename'),
-    problem: 'That server name could not be found.',
-    recovery: 'Check the spelling of the IMAP host, or use Auto-detect to fill it in.',
+    problemKey: 'errors.conn.problem.serverNameCouldFound',
+    recoveryKey: 'errors.conn.recovery.checkSpellingImapHostUse',
   },
   {
     match: (s) => s.includes('refused') || s.includes('unreachable') || s.includes('reset by peer'),
-    problem: 'The server refused the connection on that port.',
-    recovery: 'Most servers use 993 for SSL/TLS and 143 for STARTTLS. Check the port and the encryption setting.',
+    problemKey: 'errors.conn.problem.serverRefusedConnectionPort',
+    recoveryKey: 'errors.conn.recovery.mostServersUse993Ssl',
   },
   {
     match: (s) => s.includes('certificate') || s.includes('tls') || s.includes('ssl')
       || s.includes('handshake'),
     problem: "The server's security certificate could not be verified.",
-    recovery: 'Check that the encryption setting matches the port. Self-signed certificates are only accepted for local bridges.',
+    recoveryKey: 'errors.conn.recovery.checkEncryptionSettingMatchesPort',
   },
   {
     match: (s) => s.includes('offline') || s.includes('network is down')
       || s.includes('no route to host'),
-    problem: 'This computer is not online.',
-    recovery: 'Reconnect to the internet and try again.',
+    problemKey: 'errors.conn.problem.computerOnline',
+    recoveryKey: 'errors.conn.recovery.reconnectInternetTryAgain',
   },
 ];
 
@@ -65,19 +66,19 @@ const RULES = [
 export function describeConnectionError(err) {
   const raw = (typeof err === 'string' ? err : err?.message || String(err ?? '')).trim();
   if (!raw) {
-    return { message: 'Could not reach the mail server. Check the settings above and try again.', detail: null };
+    return { message: t('errors.conn.couldReachMailServerCheck'), detail: null };
   }
 
   const lower = raw.toLowerCase();
   const rule = RULES.find(r => r.match(lower));
   if (rule) {
-    return { message: `${rule.problem} ${rule.recovery}`, detail: raw };
+    return { message: t('errors.conn.problemRecovery', { problem: t(rule.problemKey), recovery: t(rule.recoveryKey) }), detail: raw };
   }
 
   // Nothing matched. Still lead with what the user can do, and keep the raw
   // text as the detail rather than dropping information we cannot classify.
   return {
-    message: 'Could not connect to the mail server. Check the host, port and encryption above, then try again.',
+    message: t('errors.conn.couldConnectMailServerCheck'),
     detail: raw,
   };
 }

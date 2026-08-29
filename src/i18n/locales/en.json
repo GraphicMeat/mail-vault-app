@@ -838,5 +838,21 @@
   "settings.section.features": "Features",
   "settings.section.settings": "Settings",
   "settings.section.system": "System",
-  "settingsPage.tabSettings": "{{tab}} Settings"
+  "settingsPage.tabSettings": "{{tab}} Settings",
+  "errors.conn.couldReachMailServerCheck": "Could not reach the mail server. Check the settings above and try again.",
+  "errors.conn.problemRecovery": "{{problem}} {{recovery}}",
+  "errors.conn.couldConnectMailServerCheck": "Could not connect to the mail server. Check the host, port and encryption above, then try again.",
+  "errors.conn.problem.serverRejectedEmailAddressPassword": "The server rejected that email address and password.",
+  "errors.conn.recovery.checkBothTyposIfProvider": "Check both for typos. If your provider requires an app password, a normal account password will be refused here.",
+  "errors.conn.problem.signProviderExpired": "The sign-in with your provider expired.",
+  "errors.conn.recovery.signAgainReconnectAccount": "Sign in again to reconnect this account.",
+  "errors.conn.problem.serverDidAnswerTime": "The server did not answer in time.",
+  "errors.conn.recovery.checkHostPortThenTry": "Check the host and port, then try again. A firewall or VPN can also hold the connection open until it expires.",
+  "errors.conn.problem.serverNameCouldFound": "That server name could not be found.",
+  "errors.conn.recovery.checkSpellingImapHostUse": "Check the spelling of the IMAP host, or use Auto-detect to fill it in.",
+  "errors.conn.problem.serverRefusedConnectionPort": "The server refused the connection on that port.",
+  "errors.conn.recovery.mostServersUse993Ssl": "Most servers use 993 for SSL/TLS and 143 for STARTTLS. Check the port and the encryption setting.",
+  "errors.conn.recovery.checkEncryptionSettingMatchesPort": "Check that the encryption setting matches the port. Self-signed certificates are only accepted for local bridges.",
+  "errors.conn.problem.computerOnline": "This computer is not online.",
+  "errors.conn.recovery.reconnectInternetTryAgain": "Reconnect to the internet and try again."
 }
