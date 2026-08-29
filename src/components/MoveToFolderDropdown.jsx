@@ -4,7 +4,7 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 /**
  * Flatten a mailbox tree into a flat list, skipping noselect folders.
@@ -143,7 +143,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
               disabled={moving}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-mail-text
                         hover:bg-mail-surface-hover transition-colors disabled:opacity-50 text-left"
-              style={{ paddingLeft: `${12 + folder.depth * 16}px` }}
+              style={{ paddingLeft: tr('moveTo.px', { folder: 12 + folder.depth * 16 }) }}
             >
               <FolderSymlink size={14} className="text-mail-text-muted flex-shrink-0" />
               <span className="truncate">{mailboxLabel(folder.name)}</span>

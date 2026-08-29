@@ -16,7 +16,7 @@ import { scanTrackers } from '../../utils/trackerDetect';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -221,13 +221,13 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           <div className="flex gap-2">
             <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.from')}</span>
             <span className="text-mail-text truncate">
-              {email.from?.name ? `${email.from.name} <${email.from.address}>` : email.from?.address}
+              {email.from?.name ? tr('settings.cleanup.text2', { email: email.from.name, email2: email.from.address }) : email.from?.address}
             </span>
           </div>
           <div className="flex gap-2">
             <span className="text-mail-text-muted w-14 flex-shrink-0">{t('email.fullView.to')}</span>
             <span className="text-mail-text truncate">
-              {email.to?.map(t => t.name ? `${t.name} <${t.address}>` : t.address).join(', ')}
+              {email.to?.map(t => t.name ? tr('email.fullView.text', { t: t.name, t2: t.address }) : t.address).join(', ')}
             </span>
           </div>
           <div className="flex gap-2">

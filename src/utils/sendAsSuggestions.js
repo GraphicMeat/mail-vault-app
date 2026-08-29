@@ -16,6 +16,7 @@
 // need to be discoverable.
 
 import { findSentMailboxPath } from './sentFolder';
+import { t } from '../i18n/index.js';
 
 const SENT_HEADERS = 300;
 const MAX_SUGGESTIONS = 8;
@@ -73,7 +74,7 @@ export function composeIdentities(accounts, sendAsAddresses = {}, sentAsByAccoun
       const clean = (address || '').trim();
       if (!clean || seen.has(clean.toLowerCase())) continue;
       seen.add(clean.toLowerCase());
-      out.push({ key: `${account.id} ${clean}`, accountId: account.id, address: clean });
+      out.push({ key: t('util.sendAsSuggestions.text', { account: account.id, clean }), accountId: account.id, address: clean });
     }
   }
 

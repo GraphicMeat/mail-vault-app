@@ -12,6 +12,7 @@ import { createUiSlice } from './slices/uiSlice';
 // Re-exports for external consumers
 export { graphMessageToEmail } from '../services/graphConfig';
 export { getGraphMessageId } from '../services/cacheManager';
+import { t } from '../i18n/index.js';
 
 /**
  * Returns emails for the active account (for cross-account analytics).
@@ -73,6 +74,6 @@ window.addEventListener('offline', () => {
   useMailStore.setState({
     connectionStatus: 'error',
     connectionErrorType: 'offline',
-    connectionError: 'Network offline',
+    connectionError: t('store.mailStore.networkOffline'),
   });
 });

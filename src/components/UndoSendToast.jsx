@@ -4,15 +4,15 @@ import { Button } from './ui/Button';
 import { useComposeStore } from '../stores/composeStore';
 import { AnimatePresence } from 'framer-motion';
 import { Undo2, Check, Mail } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 function formatCountdown(seconds) {
   if (seconds >= 60) {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
-    return `${m}:${String(s).padStart(2, '0')}`;
+    return tr('undoSend.text', { m, String: String(s).padStart(2, '0') });
   }
-  return `${seconds}s`;
+  return tr('undoSend.s', { seconds });
 }
 
 export function UndoSendToast({ onUndo }) {
@@ -76,7 +76,7 @@ export function UndoSendToast({ onUndo }) {
                     <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
                   )}
                   <p className="text-xs text-mail-text-muted">
-                    {recipient ? `To: ${recipient} · ` : ''}Sending in{' '}
+                    {recipient ? tr('undoSend.to', { recipient }) : ''}Sending in{' '}
                     <span className="font-semibold tabular-nums text-mail-text">{formatCountdown(secondsLeft)}</span>
                   </p>
                 </div>

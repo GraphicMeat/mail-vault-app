@@ -8,7 +8,7 @@ import {
   PenTool,
   Save,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 export function TemplateSettings() {
   const t = useT();
@@ -143,7 +143,7 @@ export function TemplateSettings() {
                                 flex items-center gap-1.5"
                     >
                       <Save size={14} />
-                      {templateForm.mode === 'add' ? 'Save' : 'Update'}
+                      {templateForm.mode === 'add' ? tr('common.save') : tr('settings.accounts.update')}
                     </button>
                   </div>
                 </div>

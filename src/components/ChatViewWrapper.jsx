@@ -9,8 +9,10 @@ import { ChatSenderList } from './ChatSenderList';
 import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useT, t  } from '../i18n/index.js';
 
 function ChatViewWrapperComponent({ onComposeReply }) {
+  const t = useT();
   const { accounts, activeAccountId, getChatEmails } = useAccountStore(
     useShallow(s => ({ accounts: s.accounts, activeAccountId: s.activeAccountId, getChatEmails: s.getChatEmails }))
   );
@@ -55,7 +57,7 @@ function ChatViewWrapperComponent({ onComposeReply }) {
   const threadFingerprint = useMemo(() => {
     if (!selectedCorrespondent) return '';
     const emails = selectedCorrespondent.emails;
-    return `${selectedCorrespondentEmail}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}`;
+    return t('chatViewWrapper.text', { selectedCorrespondentEmail, emails: emails.length, emails2: emails[0]?.uid || 0, emails23: emails[emails.length - 1]?.uid || 0 });
   }, [selectedCorrespondent, selectedCorrespondentEmail]);
 
   const [threadsMap, setThreadsMap] = useState(null);

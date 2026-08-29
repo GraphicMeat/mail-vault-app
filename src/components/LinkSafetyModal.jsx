@@ -2,13 +2,13 @@ import React from 'react';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
   const t = useT();
   const isRed = alert?.level === 'red';
   const iconColor = isRed ? 'text-mail-danger' : 'text-mail-warning';
-  const title = isRed ? 'Dangerous Link Detected' : 'Suspicious Link Detected';
+  const title = isRed ? tr('linkSafety.dangerousLinkDetected') : tr('linkSafety.suspiciousLinkDetected');
 
   let textDomain = '';
   let actualDomain = '';

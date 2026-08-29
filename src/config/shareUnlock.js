@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Share-to-unlock reward configuration.
  *
@@ -23,8 +24,8 @@ export const REWARD_DAYS = {
 
 /** Build social post copy that brags the actual milestone (proof-of-value). */
 export function buildShareText(emailsBackedUp = 0) {
-  const count = emailsBackedUp > 0 ? `${emailsBackedUp.toLocaleString()} ` : '';
-  return `Just backed up ${count}emails locally with MailVault — open-source email backup where my mail never touches anyone else's servers. ⭐ ${GITHUB_REPO_URL}`;
+  const count = emailsBackedUp > 0 ? t('shareUnlock.text', { emailsBackedUp: emailsBackedUp.toLocaleString() }) : '';
+  return t('shareUnlock.justBackedUpEmailsLocally', { count, GITHUB_REPO_URL });
 }
 
 export function xIntentUrl(text) {

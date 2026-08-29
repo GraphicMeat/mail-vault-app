@@ -8,6 +8,7 @@
 import { create } from 'zustand';
 import * as snapshotService from '../services/snapshotService.js';
 import { send as transportSend } from '../services/transport.js';
+import { t } from '../i18n/index.js';
 
 const HYDRATE_BATCH = 50;
 
@@ -201,7 +202,7 @@ export const useSnapshotStore = create((set, get) => ({
         set({ viewerEmail: email, loadingViewer: false });
       } catch (e2) {
         console.warn('[snapshotStore] Failed to load email:', e2);
-        set({ loadingViewer: false, error: `Could not load email: ${e2.message || e.message}` });
+        set({ loadingViewer: false, error: t('store.snapshotStore.couldLoadEmail', { e2: e2.message || e.message }) });
       }
     }
   },

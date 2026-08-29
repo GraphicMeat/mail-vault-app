@@ -32,7 +32,7 @@ import {
   X,
   LogOut,
 } from 'lucide-react';
-import { t, useT  } from '../../i18n/index.js';
+import { t as tr, t, useT   } from '../../i18n/index.js';
 
 // Cooldown constants
 const AUTO_REFRESH_COOLDOWN = 60_000;  // 60s for focus/mount
@@ -190,7 +190,7 @@ export function BillingSettings() {
     : cooldownRemaining > 0 ? t('settings.billing.waitS', { cooldownRemaining })
     : t('settings.billing.signPremium');
   const statusLabel = !billingProfile?.hasSubscription ? t('settings.billing.free')
-    : billingProfile.status === 'active' ? t('settings.billing.premium', { billingProfile: billingProfile.interval === 'year' ? 'Yearly' : 'Monthly' })
+    : billingProfile.status === 'active' ? t('settings.billing.premium', { billingProfile: billingProfile.interval === 'year' ? tr('settings.billing.yearly') : tr('settings.billing.monthly') })
     : billingProfile.status === 'trialing' ? t('settings.billing.premiumTrial')
     : billingProfile.status === 'past_due' ? t('settings.billing.premiumPastDue')
     : billingProfile.status === 'canceled' ? t('settings.billing.canceled')

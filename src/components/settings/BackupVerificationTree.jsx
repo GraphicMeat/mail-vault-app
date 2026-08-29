@@ -7,7 +7,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 function CountCell({ count, serverCount }) {
   if (serverCount === 0) return <span className="text-mail-text-muted">--</span>;
@@ -101,7 +101,7 @@ export default function BackupVerificationTree({ data, onHide }) {
       <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
         <div
           className={`h-1.5 rounded-full transition-all ${appComplete ? 'bg-mail-success' : 'bg-mail-warning'}`}
-          style={{ width: `${Math.min(100, appPct)}%` }}
+          style={{ width: tr('settings.billing.text', { Math: Math.min(100, appPct) }) }}
         />
       </div>
 

@@ -5,7 +5,7 @@ import { Button } from './ui/Button';
 import { Download, X, Clock, SkipForward, AlertCircle, RefreshCw } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { version as currentVersion } from '../../package.json';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 /**
  * Render changelog markdown with basic formatting:
@@ -228,7 +228,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                 <div className="h-2 bg-mail-border rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: `${downloadPercent}%` }}
+                    animate={{ width: tr('update.text', { downloadPercent }) }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                     className="h-full bg-mail-accent rounded-full"
                   />
@@ -256,7 +256,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                   <p className="text-sm font-medium text-mail-text">{t('update.failedInstallUpdate')}</p>
                   <p className="text-xs text-mail-text-muted mt-1">
                     {errorMsg.includes('os error 30') || errorMsg.includes('Read-only')
-                      ? 'The app cannot update itself due to file system restrictions. Please download the new version manually.'
+                      ? tr('update.appCannotUpdateItselfDue')
                       : errorMsg}
                   </p>
                 </div>

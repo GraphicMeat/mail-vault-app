@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Premium price copy shown in upsell overlays.
  *
@@ -65,13 +66,13 @@ export function formatAmount(minorUnits, currency) {
       maximumFractionDigits: digits,
     }).format(minorUnits / 100);
   } catch {
-    return `${(minorUnits / 100).toFixed(2)} ${currency.toUpperCase()}`;
+    return t('util.pricing.text', { minorUnits: (minorUnits / 100).toFixed(2), currency: currency.toUpperCase() });
   }
 }
 
 /** The one blurb shape. Amounts are minor units in `currency`. */
 export function blurbFromAmounts(monthly, yearly, currency) {
-  return `${formatAmount(monthly, currency)}/month or ${formatAmount(yearly, currency)}/year`;
+  return t('util.pricing.monthYear', { formatAmount: formatAmount(monthly, currency), formatAmount2: formatAmount(yearly, currency) });
 }
 
 export function priceBlurb(currency = BASE_CURRENCY) {

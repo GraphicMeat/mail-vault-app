@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 /**
  * Returns a <script> block to inject into email iframe srcDoc.
  * Finds quoted content elements and makes them collapsible.
@@ -28,7 +29,7 @@ export function getQuoteFoldingScript() {
       var visible = el.style.display !== 'none';
       el.style.display = visible ? 'none' : '';
       toggle.textContent = visible ? '\\u22EF' : '\\u25BE Hide quoted text';
-      toggle.title = visible ? 'Show quoted text' : 'Hide quoted text';
+      toggle.title = visible ? t('util.iframeQuoteFolding.showQuotedText') : t('util.iframeQuoteFolding.hideQuotedText');
       if (window.parent) {
         window.parent.postMessage({ type: 'iframe-resize', height: document.body.scrollHeight }, '*');
       }

@@ -1,6 +1,7 @@
 // ── retryKeychainAccess workflow — clears the credentials cache and re-activates ──
 
 import * as db from '../db';
+import { t } from '../../i18n/index.js';
 
 
 // ── retryKeychainAccess workflow ──
@@ -21,7 +22,7 @@ export async function retryKeychainAccess() {
     if (freshAccounts.length === 0) {
       console.warn('[mailStore] No accounts found after keychain retry');
       useMailStore.setState({
-        connectionError: 'No accounts found. Please add your account in Settings.',
+        connectionError: t('svc.retryKeychainAccess.noAccountsFoundPleaseAdd'),
         connectionErrorType: 'passwordMissing'
       });
       return false;
@@ -34,7 +35,7 @@ export async function retryKeychainAccess() {
       console.warn('[mailStore] Active account still has no credentials after keychain retry');
       useMailStore.setState({
         accounts: freshAccounts,
-        connectionError: 'Password not found. Please re-enter your password in Settings.',
+        connectionError: t('svc.loadEmails.passwordFoundPleaseReEnter'),
         connectionErrorType: 'passwordMissing'
       });
       return false;
@@ -57,7 +58,7 @@ export async function retryKeychainAccess() {
   } catch (error) {
     console.error('[mailStore] Keychain retry failed:', error);
     useMailStore.setState({
-      connectionError: 'Could not access Keychain. Please re-enter your password in Settings.',
+      connectionError: t('svc.retryKeychainAccess.couldAccessKeychainPleaseRe'),
       connectionErrorType: 'passwordMissing'
     });
     return false;

@@ -10,7 +10,7 @@ import {
   Sparkles, Trash2, AlertCircle, XCircle, Upload, FileDown, Lock,
   Info, Brain, ChevronDown, ChevronRight, Save, Plus,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 export function AISettings() {
   const t = useT();
@@ -159,7 +159,7 @@ export function AISettings() {
               <p className="text-[10px] text-mail-text-muted">{t('settings.ai.corrections')}</p>
             </div>
             <div className="p-2.5 rounded-lg bg-mail-surface-hover text-center">
-              <p className="text-lg font-bold text-mail-text">{stats.accuracyRate ? `${Math.round(stats.accuracyRate * 100)}%` : '--'}</p>
+              <p className="text-lg font-bold text-mail-text">{stats.accuracyRate ? tr('settings.billing.text', { Math: Math.round(stats.accuracyRate * 100) }) : '--'}</p>
               <p className="text-[10px] text-mail-text-muted">{t('settings.ai.accuracy')}</p>
             </div>
           </div>

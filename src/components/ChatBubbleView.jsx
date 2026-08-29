@@ -716,7 +716,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
               className="flex items-center gap-1 text-[10px] text-mail-accent-text hover:underline"
             >
               <Eye size={10} />
-              {isOriginalVisible ? 'Show cleaned' : 'View original'}
+              {isOriginalVisible ? tr('chat.bubble.showCleaned') : tr('chat.bubble.viewOriginal')}
             </button>
           )}
 
@@ -767,4 +767,4 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
 });
 
 export { OriginalEmailModal } from './email/OriginalEmailModal';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';

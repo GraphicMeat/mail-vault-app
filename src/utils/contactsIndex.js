@@ -8,6 +8,7 @@
 
 import { findSentMailboxPath } from './sentFolder';
 import { daemonCall } from '../services/daemonClient';
+import { t as tr } from '../i18n/index.js';
 
 let _cache = null;
 let _fingerprint = '';
@@ -308,5 +309,5 @@ export function formatContact(c) {
   const name = /[",;<>()@:[\]\\]/.test(c.name)
     ? `"${c.name.replace(/([\\"])/g, '\\$1')}"`
     : c.name;
-  return `${name} <${c.address}>`;
+  return tr('util.contactsIndex.text', { name, c: c.address });
 }

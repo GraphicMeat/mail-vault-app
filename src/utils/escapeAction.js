@@ -1,7 +1,8 @@
+import { t } from '../i18n/index.js';
 /**
  * Decide what Escape means, given what is currently on screen.
  *
- * Extracted so this is testable: `App.jsx` has no render tests, and the
+ * Extracted so this is testable: t('util.escapeAction.appJsx') has no render tests, and the
  * ordering here is load-bearing. The global shortcut and the bulk modal's own
  * handler both listen on `window` in the bubble phase, and `App` mounts first —
  * so the global one runs first and must not act on state the modal is about to

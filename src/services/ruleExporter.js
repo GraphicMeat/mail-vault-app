@@ -6,6 +6,7 @@
  */
 
 import { getRules } from './learningService.js';
+import { t } from '../i18n/index.js';
 
 const EXPORT_VERSION = 1;
 
@@ -48,11 +49,11 @@ export function previewImport(jsonString) {
     const data = JSON.parse(jsonString);
 
     if (!data.version || !Array.isArray(data.rules)) {
-      return { valid: false, rules: [], error: 'Invalid format: missing version or rules array' };
+      return { valid: false, rules: [], error: t('svc.ruleExporter.invalidFormatMissingVersionRules') };
     }
 
     if (data.version > EXPORT_VERSION) {
-      return { valid: false, rules: [], error: `Unsupported format version ${data.version} (this app supports v${EXPORT_VERSION})` };
+      return { valid: false, rules: [], error: t('svc.ruleExporter.unsupportedFormatVersionAppSupports', { data: data.version, EXPORT_VERSION }) };
     }
 
     const rules = data.rules
@@ -68,7 +69,7 @@ export function previewImport(jsonString) {
 
     return { valid: true, rules, error: null };
   } catch (e) {
-    return { valid: false, rules: [], error: `Parse error: ${e.message}` };
+    return { valid: false, rules: [], error: t('svc.ruleExporter.parseError', { e: e.message }) };
   }
 }
 

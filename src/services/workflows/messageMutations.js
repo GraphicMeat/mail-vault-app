@@ -93,7 +93,7 @@ export async function saveEmailLocally(uid) {
   } catch (error) {
     // Says what did NOT happen, too: an archive that fails is the moment a
     // user most needs to know their server copy is still there.
-    useMailStore.setState({ error: `Could not copy that email into your vault. Nothing was removed from the server. (${error.message})` });
+    useMailStore.setState({ error: tr('svc.messageMutations.couldCopyEmailIntoVault', { error: error.message }) });
     throw error;
   }
 }
@@ -617,7 +617,7 @@ export async function markEmailReadStatus(uid, read) {
       });
     }
   } catch (error) {
-    useMailStore.setState({ error: `Could not change the read status on the server. (${error.message})` });
+    useMailStore.setState({ error: tr('svc.messageMutations.couldChangeReadStatusServer', { error: error.message }) });
   }
 }
 
@@ -720,7 +720,7 @@ function _resolveKeyContext(key, state, emailMap, sentPath) {
   const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
   const account = ctx?.account || state.accounts.find(a => a.id === accountId);
-  return { uid, accountId, mailbox, account, emailObj, tombstone: `${accountId}|${mailbox}|${uid}` };
+  return { uid, accountId, mailbox, account, emailObj, tombstone: tr('svc.messageMutations.text', { accountId, mailbox, uid }) };
 }
 
 

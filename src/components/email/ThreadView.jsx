@@ -35,7 +35,7 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { AddressText } from './AddressText';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       bodyHtml: renderedBody,
       themeTag: theme,
       extraHead,
-      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
+      extraBody: tr('viewer.text', { getQuoteFoldingScript: getQuoteFoldingScript(), getSignatureFoldingScript: getSignatureFoldingScript(signatureDisplay) }),
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme]);
@@ -586,7 +586,7 @@ export function ThreadView({ thread, onComposeReply }) {
             onMouseLeave={e => e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--mail-local) 10%, transparent)'}
           >
             <Archive size={14} />
-            {saving ? 'Archiving...' : 'Archive All'}
+            {saving ? tr('email.thread.archiving') : tr('email.thread.archiveAll')}
           </button>
         )}
       </div>

@@ -1,7 +1,8 @@
+import { t } from '../i18n/index.js';
 /**
  * IMAP modified UTF-7 (RFC 3501 §5.1.3) — decode for DISPLAY ONLY.
  *
- * Servers put non-ASCII mailbox names on the wire escaped: "Bokelmühle" arrives
+ * Servers put non-ASCII mailbox names on the wire escaped: t('util.imapUtf7.bokelmHle') arrives
  * as "Bokelmu&Awg-hle" when the server stores the name decomposed (u + U+0308).
  * Until this file existed the app printed the escaped form everywhere.
  *

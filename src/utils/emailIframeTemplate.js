@@ -1,3 +1,4 @@
+import { t } from '../i18n/index.js';
 // Shared iframe template for rendering HTML email bodies.
 //
 // Baseline is always LIGHT (white bg, dark text). This gives Dark Reader a
@@ -38,7 +39,7 @@ export function stripInlineColorImportant(html) {
   if (!html || html.indexOf('!important') === -1) return html;
   const dropPriority = (css) => css.replace(
     IMPORTANT_DECL,
-    (decl, sep, pad, prop, value) => (COLOR_PROP.test(prop) ? `${sep}${pad}${prop}${value}` : decl)
+    (decl, sep, pad, prop, value) => (COLOR_PROP.test(prop) ? t('util.emailIframeTemplate.text', { sep, pad, prop, value }) : decl)
   );
   return html
     .replace(/style\s*=\s*"([^"]*)"/gi, (_m, css) => `style="${dropPriority(css)}"`)

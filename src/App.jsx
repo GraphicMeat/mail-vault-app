@@ -52,7 +52,7 @@ import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener } from './utils/mailto';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
-import { useT } from './i18n/index.js';
+import { t as tr, useT  } from './i18n/index.js';
 
 // Surfaces that only exist once the user asks for them. Keeping them in the
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
@@ -466,7 +466,7 @@ function App() {
   const handleReferFriend = useCallback(() => {
     setComposeState({
       initialData: {
-        subject: 'You should try MailVault',
+        subject: tr('app.shouldTryMailvault'),
         body: [
           '<p>I have been using MailVault and thought of you.</p>',
           '<p>It archives your IMAP email to your own computer, so you can clear out a full mailbox on the server and still have every message — searchable, offline, forever.</p>',
@@ -876,9 +876,9 @@ function App() {
           {composeWindows.filter(w => w.minimized).map(w => {
             const subject = w.initialData?.subject || w.replyTo?.subject || '';
             const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
-              ? (subject.startsWith('Re:') ? subject : `Re: ${subject}`)
+              ? (subject.startsWith('Re:') ? subject : tr('app.re', { subject }))
               : w.mode === 'forward'
-              ? (subject.startsWith('Fwd:') ? subject : `Fwd: ${subject}`)
+              ? (subject.startsWith('Fwd:') ? subject : tr('app.fwd', { subject }))
               : subject || 'New Message';
             const recipient = w.initialData?.to || w.replyTo?.from?.address || '';
             return (

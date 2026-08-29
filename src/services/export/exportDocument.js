@@ -1,4 +1,5 @@
 import { sanitizeForExport } from './exportSanitize';
+import { t } from '../../i18n/index.js';
 
 // One width, one scale, used by the rasterizer, the packer and the HTML
 // document alike. A baked iframe height is only honest while the column that
@@ -41,10 +42,10 @@ export function provenanceHtml({ account, mailbox, messages, stats }) {
   const removed = stats?.pixelsRemoved || 0;
   const parts = [];
   if (attempted > 0) {
-    parts.push(`${stats.mirrored} of ${attempted} remote assets mirrored`);
-    if (stats.failed) parts.push(`${stats.failed} unavailable`);
+    parts.push(t('svc.exportDocument.remoteAssetsMirrored', { stats: stats.mirrored, attempted }));
+    if (stats.failed) parts.push(t('svc.exportDocument.unavailable', { stats: stats.failed }));
   }
-  if (removed) parts.push(`${removed} tracking pixels removed`);
+  if (removed) parts.push(t('svc.exportDocument.trackingPixelsRemoved', { removed }));
   const mirrorLine = parts.length ? `<div>${parts.join(' &middot; ')}</div>` : '';
   const ids = messages
     .map(m => `<div class="mv-id">${esc(m.messageId || 'no Message-ID')}${m.custody ? ` &middot; ${esc(m.custody)}` : ''}</div>`)
