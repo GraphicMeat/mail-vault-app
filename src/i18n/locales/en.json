@@ -1361,5 +1361,10 @@
   "util.sendAsSuggestions.text": "{{account}} {{clean}}",
   "util.contactsIndex.text": "{{name}} <{{c}}>",
   "moveTo.px": "{{folder}}px",
-  "chatViewWrapper.text": "{{selectedCorrespondentEmail}}-{{emails}}-{{emails2}}-{{emails23}}"
+  "chatViewWrapper.text": "{{selectedCorrespondentEmail}}-{{emails}}-{{emails2}}-{{emails23}}",
+  "selection.bubble.allInboxes": "All inboxes",
+  "chat.topics.text": "{{formatDateOnly}} - {{formatDateOnly2}}",
+  "svc.replayPendingDeletes.text": "{{mailbox}}/{{uid}}: {{message}}",
+  "svc.accounts.text": "{{MAILDIR}}/{{accountId}}",
+  "svc.backupScheduler.some": "Some"
 }

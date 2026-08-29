@@ -25,7 +25,7 @@ export function partialBackupNotice(entry, result = {}) {
   if (entry.error) parts.push(entry.error);
   else if (entry.errors > 0) parts.push(t('svc.backupScheduler.messageSCouldFetched', { entry: entry.errors }));
   if (entry.externalCopyOk === false) {
-    parts.push(t('svc.backupScheduler.failedCopyExternalBackup', { result: result.external_copy_failed_count || entry.externalCopyFailedCount || 'Some' }));
+    parts.push(t('svc.backupScheduler.failedCopyExternalBackup', { result: result.external_copy_failed_count || entry.externalCopyFailedCount || t('svc.backupScheduler.some') }));
   }
   return t('svc.backupScheduler.emailsBackedUp', { entry: entry.emailsBackedUp, parts: parts.join(' ') }).trim();
 }

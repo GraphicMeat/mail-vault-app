@@ -12,7 +12,7 @@ import { useMailStore } from '../stores/mailStore';
 import { formatDateOnly } from '../utils/dateFormat';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
   const avatarColor = getAvatarColor(correspondent.email);
@@ -82,7 +82,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
     }
 
     // Different days
-    return `${formatDateOnly(start)} - ${formatDateOnly(end)}`;
+    return tr('chat.topics.text', { formatDateOnly: formatDateOnly(start), formatDateOnly2: formatDateOnly(end) });
   }, [topic.dateRange]);
 
   return (

@@ -4,6 +4,7 @@ import { readTextFile, writeTextFile, exists, mkdir, remove, BaseDirectory } fro
 import { send as transportSend } from '../transport.js';
 import { isPersonalMicrosoftEmail } from '../graphConfig.js';
 import { parseKeychainValue, getAccountsFromKeychain, loadKeychain, saveKeychain } from './keychain.js';
+import { t } from '../../i18n/index.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -43,7 +44,7 @@ async function writeAccountsFile(accounts) {
 }
 
 export function accountDir(accountId) {
-  return `${MAILDIR}/${accountId}`;
+  return t('svc.accounts.text', { MAILDIR, accountId });
 }
 
 // --- Init ---

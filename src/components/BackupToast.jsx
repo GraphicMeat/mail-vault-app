@@ -3,8 +3,10 @@ import { ToastShell } from './ui/ToastShell';
 import { HardDrive, Loader2 } from 'lucide-react';
 import { useBackupStore } from '../stores/backupStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT, t  } from '../i18n/index.js';
 
 export function BackupToast({ showSettings, onOpenBackup }) {
+  const t = useT();
   const activeBackup = useBackupStore(s => s.activeBackup);
 
   if (!activeBackup || !activeBackup.active || showSettings) return null;
@@ -34,7 +36,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
         </div>
         {activeBackup.totalFolders > 0 && (
           <div className="h-1 rounded-full bg-mail-border mt-1.5 overflow-hidden">
-            <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
+            <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: t('sidebar.text', { percent }) }} />
           </div>
         )}
       </ToastShell>

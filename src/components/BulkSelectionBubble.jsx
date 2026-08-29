@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListChecks } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 /**
  * Minimized bulk-operations session.
@@ -35,7 +35,7 @@ export function BulkSelectionBubble() {
 
   const visible = !!bulkSession?.active && !bulkModalOpen;
   const email = accounts.find(a => a.id === bulkSession?.accountId)?.email || '';
-  const folder = bulkSession?.mailbox === 'UNIFIED' ? 'All inboxes' : bulkSession?.mailbox;
+  const folder = bulkSession?.mailbox === 'UNIFIED' ? tr('selection.bubble.allInboxes') : bulkSession?.mailbox;
   const count = selectedEmailIds.size;
 
   return (

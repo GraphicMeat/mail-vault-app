@@ -5,6 +5,7 @@ import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { markServerDeleted } from './messageMutations';
+import { t } from '../../i18n/index.js';
 
 /**
  * Relay to the Rust log as well as the console.
@@ -121,7 +122,7 @@ export async function replayPendingDeletes() {
       } catch (e) {
         const message = String(e?.message || e);
         failed++;
-        errors.push(`${mailbox}/${uid}: ${message}`);
+        errors.push(t('svc.replayPendingDeletes.text', { mailbox, uid, message }));
         log(`[replayPendingDeletes] ${account.email} ${mailbox} uid ${uid} failed:`, message);
         if (isCredentialsProblem(message)) kept++;
         else done.push(uid);
