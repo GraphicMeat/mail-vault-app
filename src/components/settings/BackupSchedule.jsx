@@ -113,7 +113,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               </div>
               {activeBackup.totalFolders > 0 && (
                 <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: tr('settings.billing.text', { Math: Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100) }) }} />
+                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} />
                 </div>
               )}
             </div>

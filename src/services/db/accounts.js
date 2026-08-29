@@ -44,7 +44,7 @@ async function writeAccountsFile(accounts) {
 }
 
 export function accountDir(accountId) {
-  return t('svc.accounts.text', { MAILDIR, accountId });
+  return `${MAILDIR}/${accountId}`;
 }
 
 // --- Init ---

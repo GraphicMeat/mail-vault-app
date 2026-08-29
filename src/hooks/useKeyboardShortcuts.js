@@ -110,7 +110,7 @@ export function useKeyboardShortcuts(actionHandlers) {
 
       // Build the candidate sequence string
       const candidate = sequenceRef.current
-        ? t('hook.useKeyboardShortcuts.text', { sequenceRef: sequenceRef.current, keyStr })
+        ? `${sequenceRef.current} ${keyStr}`
         : keyStr;
 
       // Check if candidate is a prefix of a longer sequence

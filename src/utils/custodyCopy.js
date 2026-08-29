@@ -38,7 +38,7 @@ export function describeServerDelete(total, inVault) {
   const lead = total === 1
     ? t('custody.emailLeavesServer')
     : t('custody.theseEmailsLeaveServer', { total: total.toLocaleString() });
-  return t('custody.text', { lead, vaultClause: vaultClause(total, inVault) });
+  return `${lead} ${vaultClause(total, inVault)}`;
 }
 
 /**

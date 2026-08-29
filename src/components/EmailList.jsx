@@ -102,7 +102,7 @@ function getDateRange(emails) {
   if (!oldest || !newest) return null;
   const fmt = (d) => formatDateOnly(d, { alwaysShowYear: true });
   if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
-  return t('list.text', { fmt: fmt(oldest), fmt2: fmt(newest) });
+  return `${fmt(oldest)} – ${fmt(newest)}`;
 }
 
 // purgeEverywhere's four outcome counts aren't mutually exclusive — one run
@@ -584,7 +584,7 @@ function EmailListComponent() {
 
   const isUnified = activeMailbox === 'UNIFIED';
   // In unified mode, selection keys are "accountId:uid" to avoid cross-account UID collisions
-  const selKey = (email) => isUnified && email._accountId ? t('list.text2', { email: email._accountId, email2: email.uid }) : email.uid;
+  const selKey = (email) => isUnified && email._accountId ? `${email._accountId}:${email.uid}` : email.uid;
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;

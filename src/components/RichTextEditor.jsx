@@ -173,7 +173,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
       Underline,
       Link.configure({
         openOnClick: false,
-        HTMLAttributes: { target: '_blank', rel: t('editor.noopenerNoreferrer') },
+        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
       }),
       Placeholder.configure({ placeholder }),
       // allowBase64: compose restores initialData.body HTML after minimize /

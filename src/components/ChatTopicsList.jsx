@@ -82,7 +82,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
     }
 
     // Different days
-    return tr('chat.topics.text', { formatDateOnly: formatDateOnly(start), formatDateOnly2: formatDateOnly(end) });
+    return `${formatDateOnly(start)} - ${formatDateOnly(end)}`;
   }, [topic.dateRange]);
 
   return (

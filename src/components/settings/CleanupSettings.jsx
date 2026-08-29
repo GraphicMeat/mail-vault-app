@@ -547,7 +547,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         </p>
         <div className="w-full max-w-xs h-2 bg-mail-surface-hover rounded-full overflow-hidden">
           {classStatus.total > 0
-            ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: t('settings.cleanup.text', { pct }) }} />
+            ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: `${pct}%` }} />
             : <div className="h-full bg-mail-accent/50 rounded-full animate-pulse" style={{ width: '100%' }} />}
         </div>
       </div>
@@ -567,10 +567,10 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     const c = previewItem.classification || previewItem;
     const email = previewEmail || previewItem;
     const from = typeof email.from === 'object'
-      ? t('settings.cleanup.text2', { email: email.from?.name || '', email2: email.from?.address || '' }).trim()
+      ? `${email.from?.name || ''} <${email.from?.address || ''}>`.trim()
       : (email.from || 'Unknown');
     const to = Array.isArray(email.to)
-      ? email.to.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
+      ? email.to.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
       : '';
     const rawAttachments = Array.isArray(previewEmail?.attachments) ? previewEmail.attachments : [];
     const attachments = _getRealAttachments ? _getRealAttachments(rawAttachments, previewEmail?.html) : [];
@@ -646,11 +646,11 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
             <Loader size={16} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text">
-              Classifying... {classStatus.total > 0 ? t('settings.cleanup.text4', { classStatus: classStatus.classified, classStatus2: classStatus.total }) : t('settings.cleanup.preparing')}
+              Classifying... {classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : t('settings.cleanup.preparing')}
             </span>
             <div className="flex-1 h-1.5 bg-mail-surface-hover rounded-full overflow-hidden">
               {classStatus.total > 0
-                ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: t('settings.cleanup.text5', { classStatus: classStatus.classified / classStatus.total * 100 }) }} />
+                ? <div className="h-full bg-mail-accent rounded-full transition-all duration-300" style={{ width: `${classStatus.classified / classStatus.total * 100}%` }} />
                 : <div className="h-full bg-mail-accent/50 rounded-full animate-pulse" style={{ width: '100%' }} />}
             </div>
           </div>
@@ -717,7 +717,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
             <div className="flex-1 h-1.5 bg-mail-border rounded-full overflow-hidden">
               <div
                 className="h-full bg-mail-accent rounded-full transition-all"
-                style={{ width: t('settings.cleanup.text6', { bulkProgress: bulkProgress.total ? (bulkProgress.completed / bulkProgress.total) * 100 : 0 }) }}
+                style={{ width: `${bulkProgress.total ? (bulkProgress.completed / bulkProgress.total) * 100 : 0}%` }}
               />
             </div>
             <span className="text-xs text-mail-text-muted shrink-0">{bulkProgress.completed}/{bulkProgress.total}</span>

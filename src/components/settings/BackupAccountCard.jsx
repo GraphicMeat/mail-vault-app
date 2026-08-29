@@ -356,7 +356,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
               <div
                 className="h-1.5 rounded-full bg-mail-accent transition-all"
-                style={{ width: tr('settings.backup.account.text', { backupProgress: backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0 }) }}
+                style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }}
               />
             </div>
             {archiveProgress && archiveProgress.total > 0 && (
@@ -366,7 +366,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: tr('settings.billing.text', { Math: Math.round((archiveProgress.completed / archiveProgress.total) * 100) }) }} />
+                  <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: `${Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%` }} />
                 </div>
               </div>
             )}
@@ -496,7 +496,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <span className="text-mail-text-muted">{backupProgress.completed_emails} emails</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: tr('settings.backup.account.text', { backupProgress: backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0 }) }} />
+                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />
                 </div>
               </div>
             )}

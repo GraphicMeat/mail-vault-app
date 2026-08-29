@@ -54,7 +54,7 @@ export const createSelectionSlice = (set, get) => ({
   toggleEmailSelection: (uid, accountId = null) => {
     set(state => {
       const isUnified = state.activeMailbox === 'UNIFIED';
-      const key = isUnified && accountId ? t('svc.selectEmail.text2', { accountId, uid }) : uid;
+      const key = isUnified && accountId ? `${accountId}:${uid}` : uid;
       const newSelection = new Set(state.selectedEmailIds);
       if (newSelection.has(key)) {
         newSelection.delete(key);

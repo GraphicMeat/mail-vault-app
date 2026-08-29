@@ -24,7 +24,7 @@ export const REWARD_DAYS = {
 
 /** Build social post copy that brags the actual milestone (proof-of-value). */
 export function buildShareText(emailsBackedUp = 0) {
-  const count = emailsBackedUp > 0 ? t('shareUnlock.text', { emailsBackedUp: emailsBackedUp.toLocaleString() }) : '';
+  const count = emailsBackedUp > 0 ? `${emailsBackedUp.toLocaleString()} ` : '';
   return t('shareUnlock.justBackedUpEmailsLocally', { count, GITHUB_REPO_URL });
 }
 

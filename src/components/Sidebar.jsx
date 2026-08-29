@@ -228,7 +228,7 @@ function BackupIndicator({ onOpenBackup }) {
         </div>
         {!isDone && activeBackup.totalFolders > 0 && (
           <div className="h-0.5 rounded-full bg-mail-border mt-1 overflow-hidden">
-            <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: t('sidebar.text', { percent }) }} />
+            <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
           </div>
         )}
       </div>
@@ -465,7 +465,7 @@ const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
   return (
     <button
       onClick={onActivate}
-      title={account.name ? t('sidebar.text2', { account: account.name, account2: account.email }) : account.email}
+      title={account.name ? `${account.name} — ${account.email}` : account.email}
       className={`relative inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full text-xs transition-all border max-w-full min-w-0
                  ${isActive && !unifiedInbox
                    ? 'bg-mail-accent-fill text-white border-mail-accent'
@@ -548,7 +548,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
                 >
                   <div
                     className="w-full flex flex-col justify-end rounded-t-sm overflow-hidden"
-                    style={{ height: total > 0 ? t('settings.billing.text', { Math: Math.max(6, (total / peak) * 100) }) : '2px' }}
+                    style={{ height: total > 0 ? `${Math.max(6, (total / peak) * 100)}%` : '2px' }}
                   >
                     {total > 0 ? (
                       <>

@@ -159,7 +159,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // A restored/remembered From may not be minable yet (async) or any more —
   // the row must still show the address the message will actually leave from.
   if (pickedFrom && !identities.some(i => i.accountId === selectedAccountId && i.address.toLowerCase() === pickedFrom.toLowerCase())) {
-    identities = [...identities, { key: t('compose.text', { selectedAccountId, pickedFrom }), accountId: selectedAccountId, address: pickedFrom }];
+    identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom }];
   }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
 
@@ -1172,7 +1172,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       // override set, would show both addresses at once.
                       const named = acc.name && acc.name !== acc.email;
                       if (ids.length === 1) {
-                        const label = named ? t('compose.text2', { acc: acc.name, ids: ids[0].address }) : ids[0].address;
+                        const label = named ? `${acc.name} <${ids[0].address}>` : ids[0].address;
                         return <option key={acc.id} value={ids[0].key}>{label}</option>;
                       }
                       // The native optgroup indents the addresses under the account.

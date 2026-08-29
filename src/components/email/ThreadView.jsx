@@ -97,7 +97,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       bodyHtml: renderedBody,
       themeTag: theme,
       extraHead,
-      extraBody: tr('viewer.text', { getQuoteFoldingScript: getQuoteFoldingScript(), getSignatureFoldingScript: getSignatureFoldingScript(signatureDisplay) }),
+      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme]);

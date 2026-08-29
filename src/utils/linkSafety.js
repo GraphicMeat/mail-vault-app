@@ -38,7 +38,7 @@ export function bodyStamp(html) {
   for (let i = 0; i < html.length; i++) {
     h = Math.imul(h ^ html.charCodeAt(i), 0x01000193);
   }
-  return t('util.linkSafety.text', { html: html.length, h: (h >>> 0).toString(36) });
+  return `${html.length}:${(h >>> 0).toString(36)}`;
 }
 
 /**

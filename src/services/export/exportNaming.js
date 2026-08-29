@@ -30,7 +30,7 @@ function rootSubject(subject) {
 
 export function singleName(message, ext) {
   const d = message.date;
-  return t('svc.exportNaming.text', { day: day(d), time: time(d), senderLabel: senderLabel(message.from), safeSegment: safeSegment(message.subject), ext });
+  return `${day(d)} ${time(d)} - ${senderLabel(message.from)} - ${safeSegment(message.subject)}.${ext}`;
 }
 
 export function threadName(messages, ext) {
@@ -38,12 +38,12 @@ export function threadName(messages, ext) {
   const first = day(sorted[0].date);
   const last = day(sorted[sorted.length - 1].date);
   const range = first === last ? first : t('svc.exportNaming.to', { first, last });
-  return t('svc.exportNaming.text2', { range, rootSubject: rootSubject(sorted[0].subject), ext });
+  return `${range} - ${rootSubject(sorted[0].subject)}.${ext}`;
 }
 
 export function threadMemberName(message, index, ext) {
   const d = message.date;
-  return t('svc.exportNaming.text3', { pad: pad(index + 1), day: day(d), time: time(d), senderLabel: senderLabel(message.from), ext });
+  return `${pad(index + 1)} - ${day(d)} ${time(d)} - ${senderLabel(message.from)}.${ext}`;
 }
 
 export function pageName(baseName, page, total) {

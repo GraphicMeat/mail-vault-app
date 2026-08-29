@@ -218,7 +218,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     const out = [];
     const walk = (boxes, depth = 0) => {
       for (const b of boxes || []) {
-        if (!b.noselect) out.push({ path: b.path, label: t('settings.accounts.text', { u2003: '\u2003'.repeat(depth), b: b.name || b.path }) });
+        if (!b.noselect) out.push({ path: b.path, label: `${'\u2003'.repeat(depth)}${b.name || b.path}` });
         if (b.children?.length) walk(b.children, depth + 1);
       }
     };

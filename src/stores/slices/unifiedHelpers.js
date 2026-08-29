@@ -108,7 +108,7 @@ export function resolveEmailLocation(email, state) {
  */
 export function emailScopeKey(email, state) {
   const loc = email && resolveEmailLocation(email, state);
-  return loc ? t('store.unifiedHelpers.text', { loc: loc.accountId, loc2: loc.mailbox, email: email.uid }) : null;
+  return loc ? `${loc.accountId}-${loc.mailbox}-${email.uid}` : null;
 }
 
 /**
@@ -119,7 +119,7 @@ export function emailScopeKey(email, state) {
 export function emailKey(email) {
   const account = email._accountId || email._srcAccountId || '';
   const mailbox = email._mailbox || (email._fromSentFolder ? 'sent' : '');
-  return t('store.unifiedHelpers.text2', { account, mailbox, email: email.uid });
+  return `${account}|${mailbox}|${email.uid}`;
 }
 
 // A body whose Message-ID contradicts the header's is not this message: the
@@ -134,7 +134,7 @@ export function bodyMatchesHeader(header, body) {
 // ── Unified selection key helpers ──────────────────────────────────────────
 // In unified mode, prefix selection keys with accountId to avoid cross-account UID collisions
 export function _selKey(email) {
-  return email._accountId ? t('list.text2', { email: email._accountId, email2: email.uid }) : t('store.unifiedHelpers.text3', { email: email.uid });
+  return email._accountId ? `${email._accountId}:${email.uid}` : `${email.uid}`;
 }
 
 export function _parseSelKey(key) {

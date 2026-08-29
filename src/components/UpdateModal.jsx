@@ -228,7 +228,7 @@ export function UpdateModal({ updateInfo, onClose }) {
                 <div className="h-2 bg-mail-border rounded-full overflow-hidden">
                   <motion.div
                     initial={{ width: 0 }}
-                    animate={{ width: tr('update.text', { downloadPercent }) }}
+                    animate={{ width: `${downloadPercent}%` }}
                     transition={{ duration: 0.3, ease: 'easeOut' }}
                     className="h-full bg-mail-accent rounded-full"
                   />

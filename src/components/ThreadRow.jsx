@@ -61,7 +61,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         names.push(name);
       }
     }
-    return names.length <= 2 ? names.join(', ') : tr('thread.text', { names: names[0], names2: names[1], names23: names.length - 2 });
+    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
   }, [thread.emails]);
 
   const handleArchiveThread = async (e) => {
@@ -194,7 +194,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
         names.push(name);
       }
     }
-    return names.length <= 2 ? names.join(', ') : tr('thread.text', { names: names[0], names2: names[1], names23: names.length - 2 });
+    return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
   }, [thread.emails]);
 
   const handleArchiveThread = async (e) => {

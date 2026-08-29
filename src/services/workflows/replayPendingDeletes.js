@@ -122,7 +122,7 @@ export async function replayPendingDeletes() {
       } catch (e) {
         const message = String(e?.message || e);
         failed++;
-        errors.push(t('svc.replayPendingDeletes.text', { mailbox, uid, message }));
+        errors.push(`${mailbox}/${uid}: ${message}`);
         log(`[replayPendingDeletes] ${account.email} ${mailbox} uid ${uid} failed:`, message);
         if (isCredentialsProblem(message)) kept++;
         else done.push(uid);

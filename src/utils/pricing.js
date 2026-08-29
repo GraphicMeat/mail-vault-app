@@ -66,7 +66,7 @@ export function formatAmount(minorUnits, currency) {
       maximumFractionDigits: digits,
     }).format(minorUnits / 100);
   } catch {
-    return t('util.pricing.text', { minorUnits: (minorUnits / 100).toFixed(2), currency: currency.toUpperCase() });
+    return `${(minorUnits / 100).toFixed(2)} ${currency.toUpperCase()}`;
   }
 }
 

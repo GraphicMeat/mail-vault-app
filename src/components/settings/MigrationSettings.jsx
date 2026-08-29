@@ -835,7 +835,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
         <div className="h-2 rounded-full bg-mail-border">
           <div
             className="h-2 rounded-full bg-mail-accent transition-all duration-300"
-            style={{ width: t('sidebar.text', { percent }) }}
+            style={{ width: `${percent}%` }}
           />
         </div>
         <div className="flex items-center justify-between mt-1">
@@ -887,10 +887,10 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
                 <span className="flex-1 text-mail-text truncate">{folderName}</span>
                 <span className="text-xs text-mail-text-muted">
                   {folder.status === 'in_progress'
-                    ? t('settings.migration.text', { folder: folder.done || 0, folder2: folder.total || 0 })
+                    ? `${folder.done || 0}/${folder.total || 0}`
                     : folder.status === 'failed'
                       ? t('settings.migration.failed2', { folder: folder.failed || 0 })
-                      : t('settings.migration.text2', { folder: folder.total || folder.email_count || 0 })}
+                      : `${folder.total || folder.email_count || 0}`}
                 </span>
                 {folder.skipped > 0 && (
                   <span className="text-xs text-mail-text-muted">({folder.skipped} duplicates skipped)</span>

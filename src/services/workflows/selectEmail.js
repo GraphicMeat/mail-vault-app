@@ -84,7 +84,7 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
 function _selectionIdFor(uid, state) {
   if (state.activeMailbox !== 'UNIFIED') return uid;
   const row = state.sortedEmails.find(e => e.uid === uid);
-  return t('svc.selectEmail.text', { row: row?._accountId || state.activeAccountId, uid });
+  return `${row?._accountId || state.activeAccountId}:${uid}`;
 }
 
 export async function _prefetchAdjacentEmails(currentUid) {
@@ -185,7 +185,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // guess. Stamp it here, where it is already resolved.
   const withAccount = (e) => (e && !e._accountId ? { ...e, _accountId: accountId } : e);
 
-  const selectedEmailId = isUnified ? t('svc.selectEmail.text2', { accountId, uid }) : uid;
+  const selectedEmailId = isUnified ? `${accountId}:${uid}` : uid;
   useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
 
   try {

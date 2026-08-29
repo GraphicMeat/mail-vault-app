@@ -215,7 +215,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
             <div className={`h-2 rounded-full overflow-hidden ${movesToVault ? 'bg-mail-server-tint' : 'bg-mail-surface-hover'}`}>
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: t('bulk.progress.text', { percentage }) }}
+                animate={{ width: `${percentage}%` }}
                 transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                 className={`h-full rounded-full ${isError ? 'bg-mail-danger' : movesToVault ? 'bg-mail-local' : 'bg-mail-accent'}`}
               />

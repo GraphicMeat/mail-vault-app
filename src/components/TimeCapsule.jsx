@@ -341,13 +341,13 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
   }
 
   const from = typeof email.from === 'object'
-    ? t('settings.cleanup.text2', { email: email.from?.name || '', email2: email.from?.address || '' }).trim()
+    ? `${email.from?.name || ''} <${email.from?.address || ''}>`.trim()
     : (email.from || 'Unknown');
   const to = Array.isArray(email.to)
-    ? email.to.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
+    ? email.to.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
     : (email.to || '');
   const cc = Array.isArray(email.cc)
-    ? email.cc.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
+    ? email.cc.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
     : '';
 
   return (

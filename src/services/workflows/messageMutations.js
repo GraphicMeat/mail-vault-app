@@ -720,7 +720,7 @@ function _resolveKeyContext(key, state, emailMap, sentPath) {
   const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
   const account = ctx?.account || state.accounts.find(a => a.id === accountId);
-  return { uid, accountId, mailbox, account, emailObj, tombstone: tr('svc.messageMutations.text', { accountId, mailbox, uid }) };
+  return { uid, accountId, mailbox, account, emailObj, tombstone: `${accountId}|${mailbox}|${uid}` };
 }
 
 

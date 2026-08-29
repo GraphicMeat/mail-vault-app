@@ -330,7 +330,7 @@ function EmailViewerComponent({ onComposeReply }) {
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
       extraHead,
-      extraBody: t('viewer.text', { getQuoteFoldingScript: getQuoteFoldingScript(), getSignatureFoldingScript: getSignatureFoldingScript(signatureDisplay) }),
+      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, signatureDisplay]);

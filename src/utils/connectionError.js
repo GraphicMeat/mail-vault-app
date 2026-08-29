@@ -72,7 +72,7 @@ export function describeConnectionError(err) {
   const lower = raw.toLowerCase();
   const rule = RULES().find(r => r.match(lower));
   if (rule) {
-    return { message: t('errors.conn.problemRecovery', { problem: t(rule.problemKey), recovery: t(rule.recoveryKey) }), detail: raw };
+    return { message: `${t(rule.problemKey)} ${t(rule.recoveryKey)}`, detail: raw };
   }
 
   // Nothing matched. Still lead with what the user can do, and keep the raw

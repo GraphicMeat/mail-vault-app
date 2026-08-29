@@ -154,7 +154,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
           <div className="h-2 bg-mail-border rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: t('bulk.progress.text', { percentage }) }}
+              animate={{ width: `${percentage}%` }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
               className={`h-full rounded-full ${
                 isComplete

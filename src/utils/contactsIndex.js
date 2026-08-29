@@ -309,5 +309,5 @@ export function formatContact(c) {
   const name = /[",;<>()@:[\]\\]/.test(c.name)
     ? `"${c.name.replace(/([\\"])/g, '\\$1')}"`
     : c.name;
-  return tr('util.contactsIndex.text', { name, c: c.address });
+  return `${name} <${c.address}>`;
 }

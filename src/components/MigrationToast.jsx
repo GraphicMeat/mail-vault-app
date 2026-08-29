@@ -173,7 +173,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-mail-border mt-2 overflow-hidden">
-              <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: t('sidebar.text', { percent }) }} />
+              <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
             </div>
             {rateLimitCountdown > 0 && (
               <p className="text-xs text-mail-warning font-semibold mt-1">Rate limited -- retrying in {rateLimitCountdown}s</p>

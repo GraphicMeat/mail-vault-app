@@ -152,10 +152,10 @@ export default function MailStorageLocation() {
                 : progress?.phase === 'cleaning' ? t('settings.mailLocation.removingOldCopy')
                 : t('settings.mailLocation.copying', { progress: progress?.currentDir || '' })}
             </span>
-            <span>{progress?.total ? t('settings.mailLocation.text', { progress: progress.copied.toLocaleString(), progress2: progress.total.toLocaleString() }) : ''}</span>
+            <span>{progress?.total ? `${progress.copied.toLocaleString()} / ${progress.total.toLocaleString()}` : ''}</span>
           </div>
           <div className="h-1.5 bg-mail-bg rounded-full overflow-hidden">
-            <div className="h-full bg-mail-accent transition-all" style={{ width: t('settings.cleanup.text', { pct }) }} />
+            <div className="h-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />
           </div>
           <p className="text-xs text-mail-text-muted">
             {t('settings.mailLocation.nothingDeletedUntilEveryFile')}

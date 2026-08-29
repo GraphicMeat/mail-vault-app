@@ -57,7 +57,7 @@ function ChatViewWrapperComponent({ onComposeReply }) {
   const threadFingerprint = useMemo(() => {
     if (!selectedCorrespondent) return '';
     const emails = selectedCorrespondent.emails;
-    return t('chatViewWrapper.text', { selectedCorrespondentEmail, emails: emails.length, emails2: emails[0]?.uid || 0, emails23: emails[emails.length - 1]?.uid || 0 });
+    return `${selectedCorrespondentEmail}-${emails.length}-${emails[0]?.uid || 0}-${emails[emails.length - 1]?.uid || 0}`;
   }, [selectedCorrespondent, selectedCorrespondentEmail]);
 
   const [threadsMap, setThreadsMap] = useState(null);

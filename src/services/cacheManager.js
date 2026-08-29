@@ -8,7 +8,7 @@ const _descriptorCache = new Map();
 const DESCRIPTOR_CACHE_MAX = 8;
 
 function _descriptorKey(accountId, mailbox, viewMode) {
-  return t('svc.cacheManager.text', { accountId, mailbox, viewMode });
+  return `${accountId}:${mailbox}:${viewMode}`;
 }
 
 export function saveRestoreDescriptor(descriptor) {

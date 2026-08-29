@@ -702,7 +702,7 @@ export function BillingSettings() {
 
           <div className="w-full h-1.5 bg-mail-border rounded-full mb-3">
             <div className={`h-full rounded-full transition-all ${activeClientCount >= clientLimit ? 'bg-mail-warning' : 'bg-mail-accent'}`}
-              style={{ width: t('settings.billing.text', { Math: Math.min(100, (activeClientCount / clientLimit) * 100) }) }} />
+              style={{ width: `${Math.min(100, (activeClientCount / clientLimit) * 100)}%` }} />
           </div>
 
           {replacedNotice && <p className="text-xs text-mail-warning mb-3">{replacedNotice}</p>}
