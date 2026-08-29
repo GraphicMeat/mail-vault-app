@@ -1,5 +1,6 @@
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { useSettingsStore } from '../stores/settingsStore';
+import { getLocale } from '../i18n/index.js';
 
 const DATE_PRESETS = {
   'MM/dd/yyyy': { withYear: 'MM/dd/yyyy', withoutYear: 'MM/dd' },
@@ -9,14 +10,21 @@ const DATE_PRESETS = {
 };
 
 /**
- * Locale for Intl, or undefined to let the runtime pick its default — which is
- * what we want anyway when there's no browser locale to read.
+ * Locale for Intl, or undefined to let the runtime pick its default.
+ *
+ * The app's chosen language wins: someone reading MailVault in German wants
+ * German dates. It is always one of our nine hardcoded codes, so it needs no
+ * validation. Only the `navigator` fallback — which applies while the language
+ * is still the default `en` — can carry junk.
  *
  * `navigator` is a browser global. Node exposes it from 21 onwards, so touching
  * it directly passed on a new local Node and threw `navigator is not defined`
  * on CI's Node 20.
  */
 const _locale = () => {
+  const chosen = getLocale();
+  if (chosen && chosen !== 'en') return chosen;
+
   const lang = typeof navigator !== 'undefined' ? navigator.language : undefined;
   if (!lang) return undefined;
   // WebKitGTK reports the raw POSIX locale — "C" on systems without LANG set —
