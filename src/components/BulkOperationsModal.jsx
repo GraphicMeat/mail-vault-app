@@ -7,35 +7,35 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 
-const ACTION_STYLES = {
+const ACTION_STYLES = () => ({
   archive: {
     color: 'var(--mail-local)',
     iconColor: 'text-mail-local',
-    confirmLabel: 'Archive',
+    confirmLabel: tr('common.archive'),
   },
   delete: {
     color: 'var(--mail-danger)',
     iconColor: 'text-mail-danger',
-    confirmLabel: 'Delete from server',
+    confirmLabel: tr('rowMenu.deleteServer'),
   },
   archive_and_delete: {
     color: 'var(--mail-local)',
     iconColor: 'text-mail-local',
-    confirmLabel: 'Archive & delete',
+    confirmLabel: tr('bulk.ops.archiveDelete2'),
   },
   unarchive: {
     color: 'var(--mail-warning)',
     iconColor: 'text-mail-warning',
-    confirmLabel: 'Unarchive',
+    confirmLabel: tr('rowMenu.unarchive'),
   },
   delete_everywhere: {
     color: 'var(--mail-danger)',
     iconColor: 'text-mail-danger',
-    confirmLabel: 'Delete everywhere',
+    confirmLabel: tr('rowMenu.deleteEverywhere'),
   },
-};
+});
 
 // The last screen before thousands of messages move. It has to name the
 // action it is about to run, and describe only what that action actually
@@ -44,28 +44,28 @@ const ACTION_STYLES = {
 // Delete and Archive & Delete — so the product's flagship operation, which
 // copies into the vault and verifies each message before the server delete,
 // warned that the mail was about to be destroyed for good.
-const CONFIRM_COPY = {
+const CONFIRM_COPY = () => ({
   delete: {
-    title: 'Delete from server?',
+    title: tr('rowMenu.deleteServer2'),
     lead: (n) => `Remove ${n.toLocaleString()} emails from the server.`,
     detail: (n, inVault) => vaultClause(n, inVault),
-    confirmLabel: 'Delete from server',
+    confirmLabel: tr('rowMenu.deleteServer'),
   },
   archive_and_delete: {
-    title: 'Archive, then delete from server?',
+    title: tr('bulk.ops.archiveThenDeleteServer'),
     lead: (n) => `Copy ${n.toLocaleString()} emails into your vault, then remove them from the server.`,
     // True of the run, not a reassurance: BulkOperationManager archives,
     // verifies, and deletes only the uids that came back verified.
     detail: () => 'Each email is verified in your vault before it leaves the server. Anything that fails to copy stays on the server.',
-    confirmLabel: 'Archive & delete',
+    confirmLabel: tr('bulk.ops.archiveDelete2'),
   },
   delete_everywhere: {
-    title: 'Delete everywhere?',
+    title: tr('rowMenu.deleteEverywhere2'),
     lead: (n) => `Remove ${n.toLocaleString()} emails from the server, your vault, and your backup drive.`,
     detail: () => 'No copy will be left anywhere. This cannot be undone.',
-    confirmLabel: 'Delete everywhere',
+    confirmLabel: tr('rowMenu.deleteEverywhere'),
   },
-};
+});
 
 function actionBg(color, pct) {
   return `color-mix(in srgb, ${color} ${pct}%, transparent)`;
@@ -403,7 +403,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
             <h2 id={titleId} className="text-lg font-semibold text-mail-text">
               {showDeleteConfirm
-                ? CONFIRM_COPY[selectedAction].title
+                ? CONFIRM_COPY()[selectedAction].title
                 : step === 1 ? t('bulk.ops.bulkEmailOperations') : t('bulk.ops.chooseActionEmails', { selectedCount: selectedCount.toLocaleString() })}
             </h2>
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('bulk.ops.minimizeSelectionKept')}>
@@ -418,10 +418,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <AlertTriangle size={20} className="text-mail-danger flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-sm font-medium text-mail-text">
-                    {CONFIRM_COPY[selectedAction].lead(selectedCount)}
+                    {CONFIRM_COPY()[selectedAction].lead(selectedCount)}
                   </p>
                   <p className="text-xs text-mail-text-muted mt-1">
-                    {CONFIRM_COPY[selectedAction].detail(selectedCount, archivedSelectedCount)}
+                    {CONFIRM_COPY()[selectedAction].detail(selectedCount, archivedSelectedCount)}
                   </p>
                 </div>
               </div>
@@ -437,7 +437,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   className="px-4 py-2 text-sm font-medium bg-mail-danger text-white rounded-lg
                             hover:bg-mail-danger/90 transition-colors"
                 >
-                  {CONFIRM_COPY[selectedAction].confirmLabel}
+                  {CONFIRM_COPY()[selectedAction].confirmLabel}
                 </button>
               </div>
             </div>
@@ -630,7 +630,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 ].map(action => {
                   const isActive = selectedAction === action.id;
                   const Icon = action.icon;
-                  const styles = ACTION_STYLES[action.id];
+                  const styles = ACTION_STYLES()[action.id];
                   const isGradient = action.id === 'archive_and_delete';
                   return (
                     <button
@@ -689,10 +689,10 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   style={{
                     background: !selectedAction || selectedAction === 'archive_and_delete'
                       ? 'var(--mail-accent)'
-                      : ACTION_STYLES[selectedAction].color
+                      : ACTION_STYLES()[selectedAction].color
                   }}
                 >
-                  {selectedAction ? ACTION_STYLES[selectedAction].confirmLabel : t('bulk.ops.start')}
+                  {selectedAction ? ACTION_STYLES()[selectedAction].confirmLabel : t('bulk.ops.start')}
                 </button>
               </div>
             </div>

@@ -20,7 +20,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
-import { t, useT  } from '../../i18n/index.js';
+import { t as tr, t, useT   } from '../../i18n/index.js';
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '--';
@@ -199,7 +199,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             className="text-xs text-mail-accent-text hover:text-mail-accent-hover flex items-center gap-1"
           >
             {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
-            {loadingStatus ? 'Checking...' : 'Verify backup coverage'}
+            {loadingStatus ? tr('settings.daemon.checking') : tr('settings.backup.account.verifyBackupCoverage')}
           </button>
           {backupStatusError && (
             <div className="text-xs text-mail-warning">
@@ -229,7 +229,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   onChange={(e) => handleConfigChange('scope', e.target.value || null)}
                   className={selectClass}
                 >
-                  <option value="">Use global setting ({globalScope === 'all' ? 'All emails' : 'Archived only'})</option>
+                  <option value="">Use global setting ({globalScope === 'all' ? tr('settings.storage.allEmails') : tr('settings.backup.account.archivedOnly')})</option>
                   <option value="archived">{t('settings.backup.account.archivedEmailsOnly')}</option>
                   <option value="all">All emails (download from server)</option>
                 </select>
@@ -241,7 +241,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <Button variant="link" size="xs" className="p-0 text-xs"
                     onClick={() => setShowFolderPicker(!showFolderPicker)}
                   >
-                    {showFolderPicker ? 'Hide' : (config.folders ? `${config.folders.length} selected` : 'All folders')}
+                    {showFolderPicker ? tr('settings.backup.verify.hide') : (config.folders ? tr('settings.backup.account.selected', { config: config.folders.length }) : tr('search.allFolders'))}
                   </Button>
                 </div>
                 {showFolderPicker && accountFolders.length > 0 && (
@@ -329,7 +329,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   </span>
                 ) : (
                   <span className="text-mail-danger flex items-center gap-1" title={entry.error || ''}>
-                    <XCircle size={12} /> {entry.error ? entry.error.slice(0, 30) : 'Failed'}
+                    <XCircle size={12} /> {entry.error ? entry.error.slice(0, 30) : tr('settings.migration.failed')}
                   </span>
                 )}
               </div>
@@ -356,7 +356,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
               <div
                 className="h-1.5 rounded-full bg-mail-accent transition-all"
-                style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }}
+                style={{ width: tr('settings.backup.account.text', { backupProgress: backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0 }) }}
               />
             </div>
             {archiveProgress && archiveProgress.total > 0 && (
@@ -366,7 +366,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: `${Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%` }} />
+                  <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: tr('settings.billing.text', { Math: Math.round((archiveProgress.completed / archiveProgress.total) * 100) }) }} />
                 </div>
               </div>
             )}
@@ -380,7 +380,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           {runningManual ? (
             <>
               <Loader size={14} className="animate-spin" />
-              {backupProgress ? `Backing up ${backupProgress.folder || ''}...` : 'Backing up...'}
+              {backupProgress ? tr('settings.backup.account.backingUp', { backupProgress: backupProgress.folder || '' }) : tr('settings.backup.account.backingUp2')}
             </>
           ) : manualStatus === 'success' ? (
             <span className="text-mail-success">{t('settings.backup.account.done')}</span>
@@ -496,7 +496,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   <span className="text-mail-text-muted">{backupProgress.completed_emails} emails</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />
+                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: tr('settings.backup.account.text', { backupProgress: backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0 }) }} />
                 </div>
               </div>
             )}
@@ -505,7 +505,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               disabled={runningManual}
             >
               {runningManual ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
-              {runningManual ? `Backing up ${backupProgress?.folder || ''}...` : manualStatus === 'success' ? 'Done!' : 'Back up now'}
+              {runningManual ? tr('settings.backup.account.backingUp', { backupProgress: backupProgress?.folder || '' }) : manualStatus === 'success' ? tr('settings.backup.account.done') : tr('settings.backup.account.backUpNow')}
             </Button>
             {manualStatus === 'error' && manualError && (
               <div className="text-xs text-mail-warning">{manualError}</div>

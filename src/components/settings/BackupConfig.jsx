@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
-import { useT } from '../../i18n/index.js';
+import { t as tr, useT  } from '../../i18n/index.js';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -70,7 +70,7 @@ export default function BackupConfig() {
   const handleChooseBackupDir = async () => {
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
-      const selected = await open({ directory: true, title: 'Choose external backup directory' });
+      const selected = await open({ directory: true, title: tr('settings.backup.config.chooseExternalBackupDirectory') });
       if (!selected) return;
       const inv = window.__TAURI__?.core?.invoke;
       if (inv) {
@@ -159,7 +159,7 @@ export default function BackupConfig() {
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-white bg-mail-accent-fill hover:bg-mail-accent-hover disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
               {iapBusy === 'purchase' ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
-              {iapBusy === 'purchase' ? 'Contacting App Store…' : 'Unlock Cloud Backups'}
+              {iapBusy === 'purchase' ? tr('settings.backup.config.contactingAppStore') : tr('settings.backup.config.unlockCloudBackups')}
             </button>
             <button
               onClick={handleRestore}
@@ -197,8 +197,8 @@ export default function BackupConfig() {
         <div className="bg-mail-bg rounded-lg p-3">
           <p className="text-xs text-mail-text-muted">
             {backupScope === 'archived'
-              ? 'Only what is already in your vault gets mirrored. To include mail that is still only on the server, switch to "All emails" below.'
-              : 'All emails from selected folders on the mail server will be downloaded and backed up locally. This may use significant disk space.'}
+              ? tr('settings.backup.config.onlyWhatAlreadyVaultGets')
+              : tr('settings.backup.config.allEmailsSelectedFoldersMail')}
           </p>
           <p className="text-xs text-mail-text-muted mt-1">
             {t('settings.backup.config.backupsIncrementalOnlyNewEmails')}
@@ -229,13 +229,13 @@ export default function BackupConfig() {
           </p>
           <div className="flex items-center gap-2">
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
-              {externalBackupLocation?.displayPath || (defaultBackupPath ? `${defaultBackupPath}/Maildir (app only)` : 'Loading...')}
+              {externalBackupLocation?.displayPath || (defaultBackupPath ? tr('settings.backup.config.maildirAppOnly', { defaultBackupPath }) : tr('chat.bubble.loading'))}
             </div>
             <button
               onClick={handleChooseBackupDir}
               className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
             >
-              {externalBackupLocation ? 'Change' : 'Choose Folder'}
+              {externalBackupLocation ? tr('settings.backup.config.change') : tr('settings.backup.config.chooseFolder')}
             </button>
             {externalBackupLocation && (
               <Button variant="ghost" size="xs" className="text-xs py-2"
@@ -261,10 +261,10 @@ export default function BackupConfig() {
                   : externalBackupLocation.status === 'needs_reauth' ? 'bg-mail-warning-tint text-mail-warning'
                   : 'bg-mail-danger-tint text-mail-danger'
                 }`}>
-                  {externalBackupLocation.status === 'ready' ? 'Ready'
-                    : externalBackupLocation.status === 'needs_reauth' ? 'Needs reauthorization'
-                    : externalBackupLocation.status === 'unavailable' ? 'Unavailable'
-                    : externalBackupLocation.status === 'invalid' ? 'Access denied'
+                  {externalBackupLocation.status === 'ready' ? tr('settings.backup.config.ready')
+                    : externalBackupLocation.status === 'needs_reauth' ? tr('settings.backup.config.needsReauthorization')
+                    : externalBackupLocation.status === 'unavailable' ? tr('settings.backup.config.unavailable')
+                    : externalBackupLocation.status === 'invalid' ? tr('settings.backup.config.accessDenied')
                     : externalBackupLocation.status}
                 </span>
               )}

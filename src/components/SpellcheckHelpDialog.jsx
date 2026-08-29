@@ -2,18 +2,18 @@ import React from 'react';
 import { SpellCheck } from 'lucide-react';
 import { Dialog, Button } from './ui';
 import { openInBrowser } from '../services/billingApi';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 export const SPELLCHECK_FAQ_URL = 'https://mailvaultapp.com/faq.html#linux-spellcheck-dictionary';
 
 // One package name per family, all for US English, because the list has to be
 // copyable rather than complete — the line under it says how to swap languages.
-const COMMANDS = [
-  { family: 'Debian, Ubuntu, Mint', command: 'sudo apt install hunspell-en-us' },
-  { family: 'Fedora', command: 'sudo dnf install hunspell-en' },
-  { family: 'Arch, Manjaro', command: 'sudo pacman -S hunspell-en_us' },
-  { family: 'openSUSE', command: 'sudo zypper install myspell-en_US' },
-];
+const COMMANDS = () => ([
+  { family: tr('spellcheck.debianUbuntuMint'), command: tr('spellcheck.sudoAptInstallHunspellEn') },
+  { family: tr('spellcheck.fedora'), command: tr('spellcheck.sudoDnfInstallHunspellEn') },
+  { family: tr('spellcheck.archManjaro'), command: tr('spellcheck.sudoPacmanSHunspellEn') },
+  { family: 'openSUSE', command: tr('spellcheck.sudoZypperInstallMyspellEn') },
+]);
 
 /**
  * What the spellcheck button says on Linux when there is nothing to check
@@ -68,7 +68,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
         ) : (
           <>
             <div className="space-y-2">
-              {COMMANDS.map(({ family, command }) => (
+              {COMMANDS().map(({ family, command }) => (
                 <div key={family}>
                   <div className="text-xs text-mail-text-muted">{family}</div>
                   <code className="block mt-0.5 px-3 py-2 rounded bg-mail-surface border border-mail-border font-mono text-xs break-all">

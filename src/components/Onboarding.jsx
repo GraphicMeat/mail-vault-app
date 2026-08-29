@@ -10,35 +10,35 @@ import {
   HardDrive,
   EyeOff
 } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 // Each card used to state a claim in the title and repeat it in the
 // description ("Secure Password Storage" / "Passwords stored securely in
 // system keychain"), which is one idea said twice and no mechanism named.
 // The product's voice is mechanisms, not reassurance — so each card now says
 // what actually happens, and the title carries the noun the sentence is about.
-const features = [
+const features = () => ([
   {
     icon: Key,
-    title: 'System keychain',
-    description: 'Your password is held by the OS, not by MailVault'
+    title: tr('onboarding.systemKeychain'),
+    description: tr('onboarding.passwordHeldOsMailvault')
   },
   {
     icon: Lock,
-    title: 'Nothing in a plain file',
-    description: 'No password is ever written to disk by this app'
+    title: tr('onboarding.nothingPlainFile'),
+    description: tr('onboarding.noPasswordEverWrittenDisk')
   },
   {
     icon: EyeOff,
-    title: 'No account, no telemetry',
-    description: 'There is no MailVault server to send anything to'
+    title: tr('onboarding.noAccountNoTelemetry'),
+    description: tr('onboarding.thereNoMailvaultServerSend')
   },
   {
     icon: HardDrive,
-    title: 'Your vault',
-    description: 'Each email you archive is a standard .eml file on your disk'
+    title: tr('onboarding.vault2'),
+    description: tr('onboarding.eachEmailArchiveStandardEml')
   }
-];
+]);
 
 export function Onboarding() {
   const t = useT();
@@ -84,7 +84,7 @@ export function Onboarding() {
 
           {/* Feature Cards - 2 columns, compact */}
           <div className="grid grid-cols-2 gap-2 mb-3">
-            {features.map((feature, index) => {
+            {features().map((feature, index) => {
               const Icon = feature.icon;
               return (
                 <div

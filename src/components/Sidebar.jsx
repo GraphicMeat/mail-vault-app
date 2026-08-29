@@ -16,7 +16,7 @@ import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 import { compareNames } from '../utils/collation.js';
 import {
   Inbox,
@@ -68,13 +68,13 @@ function getMailboxIcon(mailbox) {
   return Icon;
 }
 
-const UNIFIED_FOLDERS = [
-  { id: 'INBOX', name: 'Inbox', icon: Inbox },
-  { id: 'Sent', name: 'Sent', icon: Send, specialUse: '\\Sent' },
-  { id: 'Drafts', name: 'Drafts', icon: File, specialUse: '\\Drafts' },
-  { id: 'Trash', name: 'Trash', icon: Trash2, specialUse: '\\Trash' },
-  { id: 'Archive', name: 'Archive', icon: Archive, specialUse: '\\Archive' },
-];
+const UNIFIED_FOLDERS = () => ([
+  { id: 'INBOX', name: tr('sidebar.inbox'), icon: Inbox },
+  { id: tr('list.sent'), name: tr('list.sent'), icon: Send, specialUse: '\\Sent' },
+  { id: tr('sidebar.drafts'), name: tr('sidebar.drafts'), icon: File, specialUse: '\\Drafts' },
+  { id: tr('settings.storage.trash'), name: tr('settings.storage.trash'), icon: Trash2, specialUse: '\\Trash' },
+  { id: tr('common.archive'), name: tr('common.archive'), icon: Archive, specialUse: '\\Archive' },
+]);
 
 function UnifiedFolderList({ tagCloud = false }) {
   const t = useT();
@@ -88,7 +88,7 @@ function UnifiedFolderList({ tagCloud = false }) {
           {t('sidebar.allAccounts')}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {UNIFIED_FOLDERS.map(folder => {
+          {UNIFIED_FOLDERS().map(folder => {
             const isActive = unifiedFolder === folder.id;
             const Icon = folder.icon;
             return (
@@ -116,7 +116,7 @@ function UnifiedFolderList({ tagCloud = false }) {
       <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
         {t('sidebar.allAccounts')}
       </div>
-      {UNIFIED_FOLDERS.map(folder => {
+      {UNIFIED_FOLDERS().map(folder => {
         const isActive = unifiedFolder === folder.id;
         const Icon = folder.icon;
         return (

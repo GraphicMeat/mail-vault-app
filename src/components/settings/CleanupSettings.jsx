@@ -32,24 +32,24 @@ import {
   Lock, Loader, Trash2, Archive, Clock, Sparkles, ChevronLeft, Paperclip,
 } from 'lucide-react';
 import { formatEmailDate } from '../../utils/dateFormat';
-import { t, useT  } from '../../i18n/index.js';
+import { t as tr, t, useT   } from '../../i18n/index.js';
 
 const DEFAULT_CATEGORIES = [
   'newsletter', 'promotional', 'notification', 'transactional',
   'personal', 'work', 'spam-likely',
 ];
 
-const CATEGORY_LABELS = {
-  newsletter: 'Newsletter',
-  promotional: 'Promotional',
-  notification: 'Notification',
-  transactional: 'Transactional',
-  personal: 'Personal',
-  work: 'Work',
-  'spam-likely': 'Spam',
-};
+const CATEGORY_LABELS = () => ({
+  newsletter: tr('settings.cleanup.newsletter'),
+  promotional: tr('settings.cleanup.promotional'),
+  notification: tr('settings.cleanup.notification'),
+  transactional: tr('settings.cleanup.transactional'),
+  personal: tr('settings.cleanup.personal'),
+  work: tr('settings.cleanup.work'),
+  'spam-likely': tr('settings.cleanup.spam'),
+});
 
-const ACTION_LABELS = { keep: 'Keep', archive: 'Archive', 'delete-from-server': 'Delete', review: 'Review' };
+const ACTION_LABELS = () => ({ keep: tr('settings.migration.keep'), archive: tr('common.archive'), 'delete-from-server': tr('common.delete'), review: tr('settings.ai.review') });
 const ACTIONS = ['keep', 'archive', 'delete-from-server', 'review'];
 
 // ── Dropdowns ─────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ function CategoryDropdown({ current, categories, onChange }) {
         onClick={handleOpen}
         className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text transition-colors"
       >
-        {CATEGORY_LABELS[current] || current}
+        {CATEGORY_LABELS()[current] || current}
       </button>
       <Popover open={open} onClose={() => setOpen(false)} role="menu" className="min-w-[140px]" style={{ top: pos.top, left: pos.left }}>
         {categories.map(cat => (
@@ -90,7 +90,7 @@ function CategoryDropdown({ current, categories, onChange }) {
             onClick={(e) => { e.stopPropagation(); onChange(cat); setOpen(false); }}
             className={`py-1.5 text-xs ${cat === current ? 'text-mail-accent-text font-medium' : ''}`}
           >
-            {CATEGORY_LABELS[cat] || cat}
+            {CATEGORY_LABELS()[cat] || cat}
           </MenuItem>
         ))}
       </Popover>
@@ -125,7 +125,7 @@ function ActionDropdown({ current, onChange }) {
         onClick={handleOpen}
         className="text-[11px] px-2 py-0.5 rounded-full bg-mail-surface-hover text-mail-text-muted hover:bg-mail-accent/10 hover:text-mail-accent-text transition-colors"
       >
-        {ACTION_LABELS[current] || current}
+        {ACTION_LABELS()[current] || current}
       </button>
       <Popover open={open} onClose={() => setOpen(false)} role="menu" className="min-w-[120px]" style={{ top: pos.top, left: pos.left }}>
         {ACTIONS.map(act => (
@@ -134,7 +134,7 @@ function ActionDropdown({ current, onChange }) {
             onClick={(e) => { e.stopPropagation(); onChange(act); setOpen(false); }}
             className={`py-1.5 text-xs ${act === current ? 'text-mail-accent-text font-medium' : ''}`}
           >
-            {ACTION_LABELS[act]}
+            {ACTION_LABELS()[act]}
           </MenuItem>
         ))}
       </Popover>
@@ -703,7 +703,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                   activeCategory === cat ? 'bg-mail-accent-fill text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
                 }`}
               >
-                {CATEGORY_LABELS[cat] || cat} ({count})
+                {CATEGORY_LABELS()[cat] || cat} ({count})
               </button>
             );
           })}

@@ -3,7 +3,7 @@ import React, { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
-import { t, useT  } from '../i18n/index.js';
+import { t as tr, t, useT   } from '../i18n/index.js';
 
 // Use targeted selectors to avoid re-rendering on every store change
 const selectProgress = (s) => s.bulkSaveProgress;
@@ -37,26 +37,26 @@ export function BulkSaveProgress() {
   );
 }
 
-const MODE_CONFIG = {
+const MODE_CONFIG = () => ({
   archive: {
     icon: HardDrive,
-    activeLabel: 'Archiving Emails...',
-    successLabel: 'Archived Successfully',
+    activeLabel: tr('bulk.save.archivingEmails'),
+    successLabel: tr('bulk.save.archivedSuccessfully'),
     errorLabel: (n) => `Archived with ${n} error(s)`,
   },
   export: {
     icon: Download,
-    activeLabel: 'Exporting Backup...',
-    successLabel: 'Backup Exported',
+    activeLabel: tr('bulk.save.exportingBackup'),
+    successLabel: tr('bulk.save.backupExported'),
     errorLabel: (n) => `Exported with ${n} error(s)`,
   },
   import: {
     icon: Upload,
-    activeLabel: 'Importing Backup...',
-    successLabel: 'Backup Imported',
+    activeLabel: tr('bulk.save.importingBackup'),
+    successLabel: tr('bulk.save.backupImported'),
     errorLabel: (n) => `Imported with ${n} error(s)`,
   },
-};
+});
 
 function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive' }) {
   const t = useT();
@@ -64,7 +64,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Treat as complete when all emails are processed, even if active flag is stale
   const isComplete = total > 0 && completed + errors >= total;
-  const config = MODE_CONFIG[mode] || MODE_CONFIG.archive;
+  const config = MODE_CONFIG()[mode] || MODE_CONFIG().archive;
   const Icon = config.icon;
 
   // Same reasoning as BulkOperationProgress: quarter milestones and the

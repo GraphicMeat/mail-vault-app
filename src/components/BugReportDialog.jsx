@@ -3,7 +3,7 @@ import { Bug, Github, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
 import logoUrl from '../assets/graphicmeat-logo.webp';
-import { useT } from '../i18n/index.js';
+import { t as tr, useT  } from '../i18n/index.js';
 
 const GH_DISCUSSIONS = 'https://github.com/GraphicMeat/mail-vault-app/discussions';
 const GH_NEW_BUG = `${GH_DISCUSSIONS}/new?category=bug-reports`;
@@ -29,9 +29,9 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     {
       testid: 'bug-option-github',
       icon: Github,
-      title: 'Report on GitHub',
-      subtitle: 'Public thread — searchable, and you get notified on the fix',
-      action: 'Open',
+      title: tr('bugReport.reportGithub'),
+      subtitle: tr('bugReport.publicThreadSearchableGetNotified'),
+      action: tr('common.open'),
       variant: 'primary',
       url: GH_NEW_BUG,
       onClick: openAndClose(GH_NEW_BUG),
@@ -39,9 +39,9 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     {
       testid: 'bug-option-idea',
       icon: Lightbulb,
-      title: 'Suggest a feature',
-      subtitle: 'The thing you wish MailVault did — ask for it here',
-      action: 'Open',
+      title: tr('bugReport.suggestFeature'),
+      subtitle: tr('bugReport.thingWishMailvaultDidAsk'),
+      action: tr('common.open'),
       variant: 'subtle',
       url: GH_NEW_IDEA,
       onClick: openAndClose(GH_NEW_IDEA),
@@ -49,9 +49,9 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     {
       testid: 'bug-option-discussions',
       icon: MessagesSquare,
-      title: 'Browse discussions',
-      subtitle: 'Someone may have reported it — or asked for it — already',
-      action: 'Open',
+      title: tr('bugReport.browseDiscussions'),
+      subtitle: tr('bugReport.someoneMayReportedAskedAlready'),
+      action: tr('common.open'),
       variant: 'subtle',
       url: GH_DISCUSSIONS,
       onClick: openAndClose(GH_DISCUSSIONS),
@@ -59,9 +59,9 @@ export function BugReportDialog({ open, onClose, onEmail }) {
     {
       testid: 'bug-option-email',
       icon: Mail,
-      title: 'Email the developer',
-      subtitle: 'Private, with your app and account details filled in',
-      action: 'Compose',
+      title: tr('bugReport.emailDeveloper'),
+      subtitle: tr('bugReport.privateAppAccountDetailsFilled'),
+      action: tr('sidebar.compose'),
       variant: 'subtle',
       onClick: onEmail,
     },
