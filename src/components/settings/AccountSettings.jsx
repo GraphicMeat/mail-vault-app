@@ -33,7 +33,7 @@ import {
   EyeOff,
   Server,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 function SavedBadge({ visible }) {
   const t = useT();
@@ -218,7 +218,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
     const out = [];
     const walk = (boxes, depth = 0) => {
       for (const b of boxes || []) {
-        if (!b.noselect) out.push({ path: b.path, label: `${'\u2003'.repeat(depth)}${b.name || b.path}` });
+        if (!b.noselect) out.push({ path: b.path, label: t('settings.accounts.text', { u2003: '\u2003'.repeat(depth), b: b.name || b.path }) });
         if (b.children?.length) walk(b.children, depth + 1);
       }
     };
@@ -246,7 +246,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Failed to save Sent folder:', err);
-      alert('Could not save the Sent folder. Reconnect the account and try again.\n\nDetails: ' + (err.message || err));
+      alert(t('settings.accounts.couldSaveSentFolderReconnect') + (err.message || err));
     } finally {
       setSavingSent(false);
     }
@@ -280,7 +280,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
       console.error('Auto-create Sent folder failed:', err);
-      alert('Could not find or create a Sent folder on this server. Pick one from the list instead, or create it in your webmail first.\n\nDetails: ' + (err.message || err));
+      alert(t('settings.accounts.couldFindCreateSentFolder') + (err.message || err));
     } finally {
       setAutoCreatingSent(false);
     }
@@ -331,7 +331,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('OAuth2 reconnect failed:', error);
-      alert('Could not reconnect this account. Check the password and server settings below, then try again.\n\nDetails: ' + (error.message || error));
+      alert(t('settings.accounts.couldReconnectAccountCheckPassword') + (error.message || error));
     } finally {
       setOauthReconnecting(false);
     }
@@ -367,7 +367,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       console.error('Failed to update password:', error);
-      alert('Could not save the new password. The keychain may have refused access — retry, and allow the prompt if one appears.\n\nDetails: ' + error);
+      alert(t('settings.accounts.couldSaveNewPasswordKeychain') + error);
     }
   };
 
@@ -471,7 +471,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
-                    {isFastmailAccount(selectedAccount) ? 'Login Address' : 'Email Address'}
+                    {isFastmailAccount(selectedAccount) ? t('account.loginAddress') : t('account.emailAddress')}
                   </label>
                   <input
                     type="text"
@@ -535,7 +535,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       className="px-4 py-2.5 rounded-lg text-sm border border-mail-border
                                 text-mail-text hover:bg-mail-surface-hover transition-colors
                                 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      title={sendAsIsValid ? 'Send a test message from this address' : 'Enter a valid address first'}
+                      title={sendAsIsValid ? t('settings.accounts.sendTestMessageAddress') : t('settings.accounts.enterValidAddressFirst')}
                     >
                       {t('settings.accounts.verify')}
                     </button>
@@ -611,7 +611,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   )}
                   <div>
                     <div className="font-medium text-mail-text">
-                      {isAccountHidden(selectedAccountId) ? 'Account Hidden' : 'Account Visible'}
+                      {isAccountHidden(selectedAccountId) ? t('settings.accounts.accountHidden') : t('settings.accounts.accountVisible')}
                     </div>
                     <div className="text-sm text-mail-text-muted">
                       {t('settings.accounts.hiddenAccountsRemovedSidebarStop')}
@@ -761,7 +761,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                               text-white rounded-lg transition-colors text-sm font-medium
                               disabled:opacity-50"
                   >
-                    {savingSent ? 'Saving…' : 'Save Sent folder'}
+                    {savingSent ? t('settings.accounts.saving') : t('settings.accounts.saveSentFolder')}
                   </button>
                   <button
                     onClick={handleAutoCreateSent}
@@ -772,7 +772,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     title={t('settings.accounts.askServerAutoDetectCreate')}
                   >
                     {autoCreatingSent ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    {autoCreatingSent ? 'Working…' : 'Auto-detect or create'}
+                    {autoCreatingSent ? t('settings.accounts.working') : t('settings.accounts.autoDetectCreate')}
                   </button>
                 </div>
               </div>
@@ -853,8 +853,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       <div className="font-medium text-mail-text">{selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} Account</div>
                       <div className="text-sm text-mail-text-muted">
                         {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
-                          ? 'Authenticated via OAuth2. Tokens refresh automatically before expiry.'
-                          : 'Token expired. Tokens will refresh automatically on the next email operation, or click Reconnect.'}
+                          ? t('settings.accounts.authenticatedViaOauth2TokensRefresh')
+                          : t('settings.accounts.tokenExpiredTokensRefreshAutomatically')}
                       </div>
                     </div>
                     <button
@@ -869,7 +869,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       ) : (
                         <RefreshCw size={16} />
                       )}
-                      {oauthReconnecting ? 'Reconnecting...' : 'Reconnect'}
+                      {oauthReconnecting ? t('settings.accounts.reconnecting') : t('settings.accounts.reconnect')}
                     </button>
                   </div>
                 </div>
@@ -927,14 +927,14 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       <div>
                         <div className="font-medium text-mail-text">{t('settings.accounts.password')}</div>
                         <div className="text-sm text-mail-text-muted">
-                          {selectedAccount.password ? 'Stored securely in system keychain' : 'Not configured'}
+                          {selectedAccount.password ? t('settings.accounts.storedSecurelySystemKeychain') : t('settings.accounts.configured')}
                         </div>
                       </div>
                       <Button variant="subtle"
                         onClick={() => setEditingPassword(true)}
                       >
                         <Key size={16} />
-                        {selectedAccount.password ? 'Update' : 'Set Password'}
+                        {selectedAccount.password ? t('settings.accounts.update') : t('settings.accounts.setPassword')}
                       </Button>
                     </div>
                   )}
@@ -998,7 +998,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                           className="px-4 py-2 bg-mail-danger hover:bg-mail-danger/80
                                     text-white rounded-lg transition-colors text-sm font-medium"
                         >
-                          {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? 'Remove & Sign Out' : 'Remove'}
+                          {accounts.length === 1 && hasPremiumAccess(useSettingsStore.getState().billingProfile) ? t('settings.accounts.removeSignOut') : t('settings.accounts.remove')}
                         </button>
                         <button
                           onClick={() => setShowRemoveConfirm(false)}

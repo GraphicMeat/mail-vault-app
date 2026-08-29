@@ -49,7 +49,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
@@ -102,7 +102,7 @@ function getDateRange(emails) {
   if (!oldest || !newest) return null;
   const fmt = (d) => formatDateOnly(d, { alwaysShowYear: true });
   if (oldest.toDateString() === newest.toDateString()) return fmt(newest);
-  return `${fmt(oldest)} – ${fmt(newest)}`;
+  return t('list.text', { fmt: fmt(oldest), fmt2: fmt(newest) });
 }
 
 // purgeEverywhere's four outcome counts aren't mutually exclusive — one run
@@ -118,17 +118,17 @@ export function formatPurgeEverywhereOutcome(result) {
 
   const clauses = [`${deleted} removed.`];
   if (failed > 0) {
-    clauses.push(`${failed} could not be deleted from the server and ${failed === 1 ? 'was' : 'were'} left untouched locally.`);
+    clauses.push(t('list.couldDeletedServerLeftUntouched', { failed, failed2: failed === 1 ? 'was' : 'were' }));
   }
   if (queuedBackup > 0) {
-    clauses.push(`${queuedBackup} backup ${queuedBackup === 1 ? 'copy' : 'copies'} will be removed when the backup drive reconnects.`);
+    clauses.push(t('list.backupRemovedWhenBackupDrive', { queuedBackup, queuedBackup2: queuedBackup === 1 ? 'copy' : 'copies' }));
   }
   if (needsResync > 0) {
     // The UID space couldn't be trusted, so these were held back entirely —
     // no server delete, no vault purge, no backup purge. Without this clause
     // a user selecting only stale-UID messages sees "0 removed" and nothing
     // else, with no hint that retrying won't help until the mailbox resyncs.
-    clauses.push(`${needsResync} ${needsResync === 1 ? 'was' : 'were'} skipped because this mailbox needs to resync — resync it, then try again.`);
+    clauses.push(t('list.skippedBecauseMailboxNeedsResync', { needsResync, needsResync2: needsResync === 1 ? 'was' : 'were' }));
   }
   return clauses.join(' ');
 }
@@ -143,12 +143,12 @@ export function formatPurgeEverywhereOutcome(result) {
 export function formatListCount({ shown, loaded, total, unreadOnly }) {
   if (unreadOnly) {
     return loaded < total
-      ? `${shown.toLocaleString()} unread of ${loaded.toLocaleString()} loaded`
-      : `${shown.toLocaleString()} unread`;
+      ? t('list.unreadLoaded', { shown: shown.toLocaleString(), loaded: loaded.toLocaleString() })
+      : t('list.unread', { shown: shown.toLocaleString() });
   }
   return shown < total
-    ? `${shown.toLocaleString()} of ${total.toLocaleString()} emails`
-    : `${total.toLocaleString()} emails`;
+    ? t('list.emails', { shown: shown.toLocaleString(), total: total.toLocaleString() })
+    : t('list.emails2', { total: total.toLocaleString() });
 }
 
 function EmailListComponent() {
@@ -584,7 +584,7 @@ function EmailListComponent() {
 
   const isUnified = activeMailbox === 'UNIFIED';
   // In unified mode, selection keys are "accountId:uid" to avoid cross-account UID collisions
-  const selKey = (email) => isUnified && email._accountId ? `${email._accountId}:${email.uid}` : email.uid;
+  const selKey = (email) => isUnified && email._accountId ? t('list.text2', { email: email._accountId, email2: email.uid }) : email.uid;
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
@@ -889,7 +889,7 @@ function EmailListComponent() {
           ) : (
             <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
-                {activeMailbox === 'UNIFIED' ? 'All Inboxes' : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
+                {activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
                 {/* ponytail: the header used to always show the server total, so a
@@ -936,7 +936,7 @@ function EmailListComponent() {
                 ? 'bg-mail-accent/10 text-mail-accent-text'
                 : 'text-mail-text-muted hover:bg-mail-border'
             }`}
-            title={unreadOnly ? 'Show all messages' : 'Show unread only'}
+            title={unreadOnly ? t('list.showAllMessages') : t('list.showUnreadOnly')}
             aria-pressed={unreadOnly}
           >
             <Mail size={16} />
@@ -951,7 +951,7 @@ function EmailListComponent() {
                 ? 'bg-mail-accent/10 text-mail-accent-text'
                 : 'text-mail-text-muted hover:text-mail-text'
             }`}
-            title={emailListGrouping === 'sender' ? 'Switch to chronological view' : 'Group by sender'}
+            title={emailListGrouping === 'sender' ? t('list.switchChronologicalView') : t('list.groupSender')}
           >
             <Users size={16} />
           </button>
@@ -1033,8 +1033,8 @@ function EmailListComponent() {
                 <p>{t('list.noUnreadMessages')}</p>
                 <p className="text-sm mt-2">
                   {sortedEmails.length > 0
-                    ? `${sortedEmails.length.toLocaleString()} loaded ${sortedEmails.length === 1 ? 'message has' : 'messages have'} all been read`
-                    : 'This folder is empty'}
+                    ? t('list.loadedAllBeenRead', { sortedEmails: sortedEmails.length.toLocaleString(), sortedEmails2: sortedEmails.length === 1 ? 'message has' : 'messages have' })
+                    : t('list.folderEmpty')}
                 </p>
                 <button
                   onClick={toggleUnreadOnly}
@@ -1414,7 +1414,7 @@ function EmailListComponent() {
               console.error('[EmailList] row delete failed:', err);
               // Plain `error`: resolveErrorToastProps defaults an unmatched
               // message to the error-styled toast (utils/errorToast.js).
-              useMailStore.setState({ error: `Delete failed: ${err?.message || err}` });
+              useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
             });
         }}
       />

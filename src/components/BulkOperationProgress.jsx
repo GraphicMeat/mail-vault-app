@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   HardDrive, Trash2, Check, AlertCircle, Minimize2, Maximize2, X, Shield
 } from 'lucide-react';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const PHASE_LABELS = {
   archive: 'Downloading',
@@ -71,10 +71,10 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   const milestone = Math.floor(percentage / 25) * 25;
   const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
   const announcement = isComplete
-    ? (errors > 0 ? `Finished with ${errors.toLocaleString()} failed. ${of} messages.` : `Finished. ${of} messages.`)
-    : isCancelled ? `Cancelled at ${of} messages.`
-    : isError ? `Stopped by an error at ${of} messages.`
-    : `${phaseLabel}, ${milestone}% of ${total.toLocaleString()} messages.`;
+    ? (errors > 0 ? t('bulk.progress.finishedFailedMessages', { errors: errors.toLocaleString(), of }) : t('bulk.progress.finishedMessages', { of }))
+    : isCancelled ? t('bulk.progress.cancelledMessages', { of })
+    : isError ? t('bulk.progress.stoppedErrorMessages', { of })
+    : t('bulk.progress.messages', { phaseLabel, milestone, total: total.toLocaleString() });
   const liveRegion = <p role="status" aria-live="polite" className="sr-only">{announcement}</p>;
 
   if (!isActive && !isComplete && !isCancelled && !isError) return null;
@@ -137,13 +137,13 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
               )}
               <span className="font-medium text-mail-text text-sm">
                 {isComplete
-                  ? 'Operation Complete'
+                  ? t('bulk.progress.operationComplete')
                   : isCancelled
-                    ? 'Operation Cancelled'
+                    ? t('bulk.progress.operationCancelled')
                     : isError
-                      ? 'Operation Failed'
+                      ? t('bulk.progress.operationFailed')
                       : totalPhases > 1
-                        ? `Phase ${currentPhaseNum}/${totalPhases}: ${phaseLabel}`
+                        ? t('bulk.progress.phase', { currentPhaseNum, totalPhases, phaseLabel })
                         : phaseLabel}
               </span>
             </div>
@@ -215,7 +215,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
             <div className={`h-2 rounded-full overflow-hidden ${movesToVault ? 'bg-mail-server-tint' : 'bg-mail-surface-hover'}`}>
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${percentage}%` }}
+                animate={{ width: t('bulk.progress.text', { percentage }) }}
                 transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
                 className={`h-full rounded-full ${isError ? 'bg-mail-danger' : movesToVault ? 'bg-mail-local' : 'bg-mail-accent'}`}
               />

@@ -16,7 +16,7 @@ import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 import { compareNames } from '../utils/collation.js';
 import {
   Inbox,
@@ -136,6 +136,7 @@ function UnifiedFolderList({ tagCloud = false }) {
 }
 
 function BackupStatusIcon({ accountId, onClick }) {
+  const t = useT();
   const backupState = useSettingsStore(s => s.backupState?.[accountId]);
   const backupGlobalEnabled = useSettingsStore(s => s.backupGlobalEnabled);
   const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
@@ -167,11 +168,11 @@ function BackupStatusIcon({ accountId, onClick }) {
     ? <AlertCircle size={12} className="text-mail-warning flex-shrink-0" />
     : <CheckCircle2 size={12} className="text-mail-success flex-shrink-0" />;
 
-  const title = isFailed ? 'Backup failed — click to view'
-    : isDegraded ? 'Backup incomplete — click to view'
-    : neverBackedUp ? 'Never backed up — click to configure'
-    : isOverdue && !isSuccess ? 'Backup overdue — click to view'
-    : 'Backup up to date';
+  const title = isFailed ? t('sidebar.backupFailedClickView')
+    : isDegraded ? t('sidebar.backupIncompleteClickView')
+    : neverBackedUp ? t('sidebar.neverBackedUpClickConfigure')
+    : isOverdue && !isSuccess ? t('sidebar.backupOverdueClickView')
+    : t('sidebar.backupUpDate');
 
   return (
     <button
@@ -222,12 +223,12 @@ function BackupIndicator({ onOpenBackup }) {
       )}
       <div className="flex-1 min-w-0">
         <div className="truncate">
-          {isDone ? 'Backup complete' : `Backing up ${activeBackup.accountEmail}`}
+          {isDone ? t('sidebar.backupComplete') : t('sidebar.backingUp', { activeBackup: activeBackup.accountEmail })}
           {!isDone && activeBackup.queueLength > 0 && <span className="text-mail-text-muted"> +{activeBackup.queueLength}</span>}
         </div>
         {!isDone && activeBackup.totalFolders > 0 && (
           <div className="h-0.5 rounded-full bg-mail-border mt-1 overflow-hidden">
-            <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
+            <div className="h-0.5 rounded-full bg-mail-accent transition-all" style={{ width: t('sidebar.text', { percent }) }} />
           </div>
         )}
       </div>
@@ -240,6 +241,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
   account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
   unreadCount, onActivate, onOpenBackup
 }) {
+  const t = useT();
   return (
     // Same active marker as the expanded rail: the identity spine over a 10%
     // wash of the same colour. A ring here was the last box-shadow in the
@@ -285,7 +287,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
                      ${connectionStatus === 'connected' ? 'bg-mail-success' :
                        connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
           title={
-            connectionStatus === 'connected' ? 'Connected' :
+            connectionStatus === 'connected' ? t('settings.accounts.connected') :
             connectionStatus === 'error' ? (connectionError || 'Connection error — retrying...') :
             'Reconnecting...'
           }
@@ -300,6 +302,7 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
   unreadCount, onActivate, onOpenBackup
 }) {
+  const t = useT();
   // The active account is marked by its own identity colour, not by a generic
   // accent: a 3px spine at the rail edge over a 10% wash of the same colour.
   // color-mix keeps one source of truth (the account colour) instead of a
@@ -339,8 +342,8 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
             className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
                        ${connectionStatus === 'connected' ? 'bg-mail-success' :
                          connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-            title={connectionStatus === 'connected' ? 'Connected' :
-                   connectionStatus === 'error' ? `Offline: ${connectionError}` : 'Connecting...'}
+            title={connectionStatus === 'connected' ? t('settings.accounts.connected') :
+                   connectionStatus === 'error' ? t('sidebar.offline', { connectionError }) : t('sidebar.connecting')}
           />
         )}
       </div>
@@ -458,10 +461,11 @@ const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
   account, isActive, color, initial, unifiedInbox, connectionStatus,
   unreadCount, label, onActivate,
 }) {
+  const t = useT();
   return (
     <button
       onClick={onActivate}
-      title={account.name ? `${account.name} — ${account.email}` : account.email}
+      title={account.name ? t('sidebar.text2', { account: account.name, account2: account.email }) : account.email}
       className={`relative inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full text-xs transition-all border max-w-full min-w-0
                  ${isActive && !unifiedInbox
                    ? 'bg-mail-accent-fill text-white border-mail-accent'
@@ -544,7 +548,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
                 >
                   <div
                     className="w-full flex flex-col justify-end rounded-t-sm overflow-hidden"
-                    style={{ height: total > 0 ? `${Math.max(6, (total / peak) * 100)}%` : '2px' }}
+                    style={{ height: total > 0 ? t('settings.billing.text', { Math: Math.max(6, (total / peak) * 100) }) : '2px' }}
                   >
                     {total > 0 ? (
                       <>
@@ -952,7 +956,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-0.5">
           <Button variant="ghost" icon size="sm"
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
           >
             {theme === 'dark' ? (
               <Sun size={15} className="text-mail-text-muted" />
@@ -990,8 +994,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div
               className="p-2"
               title={cacheFilling
-                ? `${cachedCount.toLocaleString()} / ${totalEmails.toLocaleString()} emails downloaded`
-                : `${totalEmails.toLocaleString()} emails`}
+                ? t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })
+                : t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}
             >
               {(loading || cacheFilling) ? (
                 <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
@@ -1020,7 +1024,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="flex items-center gap-1">
           <Button variant="ghost" icon size="md"
             onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
           >
             {theme === 'dark' ? (
               <Sun size={18} className="text-mail-text-muted" />
@@ -1289,8 +1293,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             // website. "Local" was the one surface still using another word
             // for it. The id stays `local`; only what the user reads changed.
             { id: 'all', icon: Layers, label: 'All' },
-            { id: 'server', icon: Cloud, label: 'Server' },
-            { id: 'local', icon: HardDrive, label: 'Vault' }
+            { id: 'server', icon: Cloud, label: t('settings.backup.verify.server') },
+            { id: 'local', icon: HardDrive, label: t('onboarding.vault') }
           ].map(mode => (
             <button
               key={mode.id}

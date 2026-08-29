@@ -50,7 +50,7 @@ import { AddressText } from './email/AddressText';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
@@ -179,15 +179,15 @@ function EmailViewerComponent({ onComposeReply }) {
   const probeNote = !probeResult || probeResult.state === 'absent' ? null
     : probeResult.state === 'present'
       ? (probeResult.locations?.[0]?.mailbox
-          ? `Still on the server, in ${decodeImapUtf7(probeResult.locations[0].mailbox)}.`
-          : 'Still on the server.')
+          ? t('viewer.stillServer', { decodeImapUtf7: decodeImapUtf7(probeResult.locations[0].mailbox) })
+          : t('viewer.stillServer2'))
       : probeResult.reason === 'incomplete'
-        ? `Couldn't open ${probeResult.failed?.length || 'some'} folder(s) — no verdict.`
-        : probeResult.reason === 'no-message-id' ? 'No Message-ID on this message to look up.'
-        : probeResult.reason === 'graph' ? 'Not available on Microsoft accounts.'
-        : probeResult.reason === 'offline' ? 'Sign in to this account first.'
-        : probeResult.reason === 'not-in-vault' ? 'No vault copy to keep.'
-        : "Couldn't reach the server.";
+        ? t('viewer.couldnTOpenFolderS', { probeResult: probeResult.failed?.length || 'some' })
+        : probeResult.reason === 'no-message-id' ? t('viewer.noMessageIdMessageLook')
+        : probeResult.reason === 'graph' ? t('viewer.availableMicrosoftAccounts')
+        : probeResult.reason === 'offline' ? t('viewer.signAccountFirst')
+        : probeResult.reason === 'not-in-vault' ? t('viewer.noVaultCopyKeep')
+        : t('viewer.couldnTReachServer');
 
   // Reset view states when switching emails
   useEffect(() => {
@@ -253,7 +253,7 @@ function EmailViewerComponent({ onComposeReply }) {
 
       const destPath = await save({
         defaultPath: exported.filename,
-        title: 'Export Email',
+        title: t('viewer.exportEmail'),
       });
       if (!destPath) return; // user cancelled
 
@@ -330,7 +330,7 @@ function EmailViewerComponent({ onComposeReply }) {
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
       extraHead,
-      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
+      extraBody: t('viewer.text', { getQuoteFoldingScript: getQuoteFoldingScript(), getSignatureFoldingScript: getSignatureFoldingScript(signatureDisplay) }),
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, signatureDisplay]);
@@ -423,8 +423,8 @@ function EmailViewerComponent({ onComposeReply }) {
       menu.style.left = e.clientX + 'px';
       menu.style.top = e.clientY + 'px';
       const items = [
-        { label: 'Copy', action: () => doc.execCommand('copy') },
-        { label: 'Select All', action: () => doc.execCommand('selectAll') },
+        { label: t('viewer.copy'), action: () => doc.execCommand('copy') },
+        { label: t('settings.migration.selectAll'), action: () => doc.execCommand('selectAll') },
       ];
       items.forEach(({ label, action }) => {
         const item = doc.createElement('div');
@@ -580,8 +580,8 @@ function EmailViewerComponent({ onComposeReply }) {
             onClick={handleCheckServer}
             className="ml-auto flex-shrink-0 whitespace-nowrap"
           >
-            {probing ? 'Checking every folder…'
-              : custody.tone === 'only-copy' ? 'Check again' : 'Check the server'}
+            {probing ? t('viewer.checkingEveryFolder')
+              : custody.tone === 'only-copy' ? t('viewer.checkAgain') : t('viewer.checkServer')}
           </Button>
         )}
       </div>
@@ -766,8 +766,8 @@ function EmailViewerComponent({ onComposeReply }) {
               <h3 className="text-lg font-semibold text-mail-text mb-2">{t('viewer.deleteEmail')}</h3>
               <p className="text-sm text-mail-text-muted mb-4">
                 {isArchived
-                  ? 'This email is archived locally. Deleting from server will keep the archived copy.'
-                  : 'This email will be permanently deleted from the server.'}
+                  ? t('viewer.emailArchivedLocallyDeletingServer')
+                  : t('viewer.emailPermanentlyDeletedServer')}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="bg-mail-bg"
@@ -804,12 +804,12 @@ function EmailViewerComponent({ onComposeReply }) {
               className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
             >
               <h3 className="text-lg font-semibold text-mail-text mb-2">
-                {isLocalOnly ? 'Delete email?' : 'Unarchive email?'}
+                {isLocalOnly ? t('viewer.deleteEmail') : t('viewer.unarchiveEmail')}
               </h3>
               <p className="text-sm text-mail-text-muted mb-4">
                 {isLocalOnly
-                  ? 'This email only exists in your local archive. Deleting it is permanent and cannot be undone.'
-                  : 'The cached copy will be removed. The email will still be available on the server.'}
+                  ? t('viewer.emailOnlyExistsLocalArchive')
+                  : t('viewer.cachedCopyRemovedEmailStill')}
               </p>
               <div className="flex justify-end gap-2">
                 <Button variant="secondary" className="bg-mail-bg"
@@ -820,7 +820,7 @@ function EmailViewerComponent({ onComposeReply }) {
                 <Button variant="danger"
                   onClick={confirmRemoveLocal}
                 >
-                  {isLocalOnly ? 'Delete' : 'Unarchive'}
+                  {isLocalOnly ? t('common.delete') : t('rowMenu.unarchive')}
                 </Button>
               </div>
             </motion.div>

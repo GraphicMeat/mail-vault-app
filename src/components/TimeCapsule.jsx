@@ -15,7 +15,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 const ROW_HEIGHT = 56;
 
@@ -141,7 +141,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
           <div>
             <h4 className="text-sm font-semibold text-mail-text">{t('timeCapsule.mailboxSnapshots')}</h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
-              {accountEmail ? `Point-in-time records for ${accountEmail}` : 'Select an account to view snapshots'}
+              {accountEmail ? t('timeCapsule.pointTimeRecords', { accountEmail }) : t('timeCapsule.selectAccountViewSnapshots')}
             </p>
           </div>
           <button
@@ -149,7 +149,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 disabled:opacity-50 transition-colors"
           >
             {creating ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
-            {creating ? 'Creating...' : 'Take Snapshot'}
+            {creating ? t('timeCapsule.creating') : t('timeCapsule.takeSnapshot')}
           </button>
         </div>
       </div>
@@ -296,7 +296,7 @@ function SnapshotBrowser({ accountId }) {
                   key={vr.key}
                   style={{
                     position: 'absolute', top: 0, width: '100%',
-                    height: `${vr.size}px`, transform: `translateY(${vr.start}px)`,
+                    height: t('timeCapsule.px', { vr: vr.size }), transform: `translateY(${vr.start}px)`,
                   }}
                 >
                   <button
@@ -309,7 +309,7 @@ function SnapshotBrowser({ accountId }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm truncate flex-1 ${isHydrated ? 'font-medium text-mail-text' : 'text-mail-text-muted italic'}`}>
-                          {email.subject || (isHydrated ? '(No subject)' : `UID ${email.uid}`)}
+                          {email.subject || (isHydrated ? '(No subject)' : t('timeCapsule.uid', { email: email.uid }))}
                         </span>
                         {hasAttach && <Paperclip size={12} className="text-mail-text-muted shrink-0" />}
                         {email.date && <span className="text-[11px] text-mail-text-muted shrink-0">{formatTcEmailDate(email.date)}</span>}
@@ -341,13 +341,13 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
   }
 
   const from = typeof email.from === 'object'
-    ? `${email.from?.name || ''} <${email.from?.address || ''}>`.trim()
+    ? t('settings.cleanup.text2', { email: email.from?.name || '', email2: email.from?.address || '' }).trim()
     : (email.from || 'Unknown');
   const to = Array.isArray(email.to)
-    ? email.to.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
+    ? email.to.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
     : (email.to || '');
   const cc = Array.isArray(email.cc)
-    ? email.cc.map(a => typeof a === 'object' ? `${a.name || ''} <${a.address || ''}>`.trim() : a).join(', ')
+    ? email.cc.map(a => typeof a === 'object' ? t('settings.cleanup.text3', { a: a.name || '', a2: a.address || '' }).trim() : a).join(', ')
     : '';
 
   return (
@@ -441,7 +441,7 @@ function EmailHtmlBody({ html }) {
     <iframe
       ref={iframeRef}
       sandbox="allow-same-origin"
-      style={{ width: '100%', height: `${height}px`, border: 'none' }}
+      style={{ width: '100%', height: t('settings.cleanup.px', { height }), border: 'none' }}
       title={t('timeCapsule.snapshotEmailBody')}
     />
   );
@@ -473,7 +473,7 @@ function formatTcEmailDate(d) {
 
 function formatBytes(b) {
   if (!b) return '';
-  if (b < 1024) return `${b} B`;
-  if (b < 1048576) return `${(b / 1024).toFixed(1)} KB`;
-  return `${(b / 1048576).toFixed(1)} MB`;
+  if (b < 1024) return t('timeCapsule.b', { b });
+  if (b < 1048576) return t('timeCapsule.kb', { b: (b / 1024).toFixed(1) });
+  return t('timeCapsule.mb', { b: (b / 1048576).toFixed(1) });
 }

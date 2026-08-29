@@ -17,15 +17,15 @@ import { formatDateTime } from '../../utils/dateFormat.js';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
   if (secs < 60) return '< 1 min';
-  if (secs < 3600) return `${Math.floor(secs / 60)} min`;
+  if (secs < 3600) return t('settings.migration.min', { Math: Math.floor(secs / 60) });
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return m > 0 ? t('settings.migration.hM', { h, m }) : t('settings.migration.h', { h });
 }
 
 function getTransport(account) {
@@ -75,6 +75,7 @@ function StepIndicator({ step }) {
 }
 
 function AccountRow({ account, selected, disabled, disabledLabel, accountColors, onClick }) {
+  const t = useT();
   const avatarColor = getAccountColor(accountColors, account);
   const avatarInitial = getAccountInitial(account);
   const transport = getTransport(account);
@@ -102,7 +103,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
         <span className="text-xs text-mail-text-muted">{disabledLabel}</span>
       )}
       <span className="text-xs px-1.5 py-0.5 rounded bg-mail-border text-mail-text-muted">
-        {transport === 'graph' ? 'Graph' : 'IMAP'}
+        {transport === 'graph' ? t('settings.migration.graph') : 'IMAP'}
       </span>
     </button>
   );
@@ -161,7 +162,7 @@ export default function MigrationSettings({ onUpgrade }) {
         api.countMigrationFolders(sourceAccount, getTransport(sourceAccount), mappings || []).catch(() => {});
       })
       .catch((err) => {
-        if (!cancelled) setError('Failed to load folders: ' + (err.message || err));
+        if (!cancelled) setError(t('settings.migration.failedLoadFolders') + (err.message || err));
       })
       .finally(() => {
         if (!cancelled) setLoadingFolders(false);
@@ -205,7 +206,7 @@ export default function MigrationSettings({ onUpgrade }) {
       await ensureFreshToken(sourceAccount);
       await ensureFreshToken(destAccount);
     } catch (err) {
-      setError(`Failed to refresh authentication for ${err.account?.email || 'an account'}. Please re-authenticate the account and try again.`);
+      setError(t('settings.migration.failedRefreshAuthenticationPleaseRe', { err: err.account?.email || 'an account' }));
       setStarting(false);
       return;
     }
@@ -217,7 +218,7 @@ export default function MigrationSettings({ onUpgrade }) {
         includeLocalArchive
       );
     } catch (err) {
-      setError('Failed to start migration: ' + (err.message || err));
+      setError(t('settings.migration.failedStartMigration') + (err.message || err));
     } finally {
       setStarting(false);
     }
@@ -238,7 +239,7 @@ export default function MigrationSettings({ onUpgrade }) {
       }, 3000);
     } catch (e) {
       console.error('[migration] Pause failed:', e);
-      setError('Failed to pause migration: ' + (e.message || e));
+      setError(t('settings.migration.failedPauseMigration') + (e.message || e));
     }
   }, []);
 
@@ -252,7 +253,7 @@ export default function MigrationSettings({ onUpgrade }) {
       console.log('[migration] cancelMigration() succeeded');
     } catch (e) {
       console.error('[migration] Cancel failed:', e);
-      setError('Failed to cancel migration: ' + (e.message || e));
+      setError(t('settings.migration.failedCancelMigration') + (e.message || e));
     }
     if (choice === 'remove') {
       setCancelRemoving(true);
@@ -277,13 +278,13 @@ export default function MigrationSettings({ onUpgrade }) {
       await ensureFreshToken(srcAccount);
       await ensureFreshToken(dstAccount);
     } catch (err) {
-      setError(`Failed to refresh authentication. Please re-authenticate and try again.`);
+      setError(t('settings.migration.failedRefreshAuthenticationPleaseRe2'));
       return;
     }
     try {
       await api.resumeMigration(srcAccount, dstAccount, getTransport(srcAccount), getTransport(dstAccount));
     } catch (err) {
-      setError('Failed to resume migration: ' + (err.message || err));
+      setError(t('settings.migration.failedResumeMigration') + (err.message || err));
     }
   }, []);
 
@@ -479,7 +480,7 @@ export default function MigrationSettings({ onUpgrade }) {
                             className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer hover:bg-mail-surface-hover ${
                               isSelected ? 'text-mail-text' : 'text-mail-text-muted'
                             }`}
-                            style={{ paddingLeft: `${8 + depth * 24}px` }}
+                            style={{ paddingLeft: t('settings.migration.px', { depth: 8 + depth * 24 }) }}
                           >
                             <input
                               type="checkbox"
@@ -492,8 +493,8 @@ export default function MigrationSettings({ onUpgrade }) {
                             {folderCounts[mapping.source_path] ? (
                               <span className="text-xs text-mail-text-muted bg-mail-border px-1.5 py-0.5 rounded">
                                 {folderCounts[mapping.source_path].counting
-                                  ? `${folderCounts[mapping.source_path].count}+ (counting...)`
-                                  : `${folderCounts[mapping.source_path].count} emails`
+                                  ? t('settings.migration.counting', { folderCounts: folderCounts[mapping.source_path].count })
+                                  : t('settings.migration.emails2', { folderCounts: folderCounts[mapping.source_path].count })
                                 }
                               </span>
                             ) : mapping.email_count != null ? (
@@ -525,7 +526,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.emails')}</span>
                     <span className="text-mail-text">
-                      {isCounting ? `${totalEmails.toLocaleString()}+ emails (counting...)` : `~${totalEmails.toLocaleString()} emails`}
+                      {isCounting ? t('settings.migration.emailsCounting', { totalEmails: totalEmails.toLocaleString() }) : `~${totalEmails.toLocaleString()} emails`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
@@ -597,7 +598,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <Loader size={14} className="animate-spin" />
                   {t('settings.migration.starting')}
                 </span>
-              ) : step === 4 ? 'Start Migration' : 'Next'}
+              ) : step === 4 ? t('settings.migration.startMigration') : t('bulk.ops.next')}
             </button>
           </div>
         </>
@@ -699,12 +700,13 @@ function SummaryRow({ label, account, accountColors }) {
 }
 
 function StatusBadge({ status }) {
+  const t = useT();
   const styles = {
     completed: 'text-mail-success bg-mail-success/10',
     failed: 'text-mail-danger bg-mail-danger/10',
     cancelled: 'text-mail-text-muted bg-mail-border',
   };
-  const labels = { completed: 'Completed', failed: 'Failed', cancelled: 'Cancelled' };
+  const labels = { completed: t('settings.migration.completed'), failed: t('settings.migration.failed'), cancelled: t('settings.migration.cancelled') };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${styles[status] || styles.cancelled}`}>
       {labels[status] || status}
@@ -833,7 +835,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
         <div className="h-2 rounded-full bg-mail-border">
           <div
             className="h-2 rounded-full bg-mail-accent transition-all duration-300"
-            style={{ width: `${percent}%` }}
+            style={{ width: t('sidebar.text', { percent }) }}
           />
         </div>
         <div className="flex items-center justify-between mt-1">
@@ -885,10 +887,10 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
                 <span className="flex-1 text-mail-text truncate">{folderName}</span>
                 <span className="text-xs text-mail-text-muted">
                   {folder.status === 'in_progress'
-                    ? `${folder.done || 0}/${folder.total || 0}`
+                    ? t('settings.migration.text', { folder: folder.done || 0, folder2: folder.total || 0 })
                     : folder.status === 'failed'
-                      ? `${folder.failed || 0} failed`
-                      : `${folder.total || folder.email_count || 0}`}
+                      ? t('settings.migration.failed2', { folder: folder.failed || 0 })
+                      : t('settings.migration.text2', { folder: folder.total || folder.email_count || 0 })}
                 </span>
                 {folder.skipped > 0 && (
                   <span className="text-xs text-mail-text-muted">({folder.skipped} duplicates skipped)</span>
@@ -973,7 +975,7 @@ function CompletionView({ migration, onDone }) {
         <CheckCircle2 size={48} className="text-mail-success mb-4" />
       )}
       <h4 className="text-base font-semibold text-mail-text mb-2">
-        {isFailed ? 'Migration Failed' : isCancelled ? 'Migration Cancelled' : 'Migration Complete'}
+        {isFailed ? t('settings.migration.migrationFailed') : isCancelled ? t('settings.migration.migrationCancelled') : t('settings.migration.migrationComplete')}
       </h4>
       <p className="text-sm text-mail-text-muted mb-1">
         {migration.migrated_emails} emails migrated across {migration.folders?.length || 0} folders in {formatDuration(migration.elapsed_seconds)}

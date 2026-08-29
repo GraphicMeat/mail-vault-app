@@ -9,7 +9,7 @@ import {
   Copy,
   Loader,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export function LogsSettings() {
   const t = useT();
@@ -71,13 +71,13 @@ export function LogsSettings() {
               disabled={!logs || loadingLogs}
             >
               {logsCopied ? <Check size={14} /> : <Copy size={14} />}
-              {logsCopied ? 'Copied!' : 'Copy'}
+              {logsCopied ? t('settings.logs.copied') : t('viewer.copy')}
             </Button>
             <Button variant="ghost" size="sm" className="hover:bg-mail-border"
               onClick={async () => {
                 console.log('Export button clicked, logs length:', logs?.length);
                 if (!logs || logs.length === 0) {
-                  alert('Nothing to export yet. Refresh the log first.');
+                  alert(t('settings.logs.nothingExportYetRefreshLog'));
                   return;
                 }
                 try {
@@ -87,11 +87,11 @@ export function LogsSettings() {
                     const { writeTextFile } = await import('@tauri-apps/plugin-fs');
                     const filePath = await save({
                       defaultPath: `mailvault-logs-${new Date().toISOString().split('T')[0]}.txt`,
-                      filters: [{ name: 'Text Files', extensions: ['txt'] }]
+                      filters: [{ name: t('settings.logs.textFiles'), extensions: ['txt'] }]
                     });
                     if (filePath) {
                       await writeTextFile(filePath, logs);
-                      alert('Log saved.');
+                      alert(t('settings.logs.logSaved'));
                     }
                   } else {
                     // Fallback to browser download
@@ -112,7 +112,7 @@ export function LogsSettings() {
                   console.log('Logs exported successfully');
                 } catch (error) {
                   console.error('Failed to export logs:', error);
-                  alert('Could not save the log file. Pick a folder you can write to and try again.\n\nDetails: ' + (error.message || error));
+                  alert(t('settings.logs.couldSaveLogFilePick') + (error.message || error));
                 }
               }}
               disabled={!logs || loadingLogs}
@@ -124,18 +124,18 @@ export function LogsSettings() {
               onClick={async () => {
                 console.log('Clear button clicked, invoke available:', !!invoke);
                 if (!invoke) {
-                  alert('Clearing the log is only available in the desktop app.');
+                  alert(t('settings.logs.clearingLogOnlyAvailableDesktop'));
                   return;
                 }
                 try {
                   const { ask } = await import('@tauri-apps/plugin-dialog');
                   const confirmed = await ask(
                     'Deletes the diagnostic log this app keeps on your computer. Your mail and your vault are not touched.',
-                    { title: 'Clear the log?', kind: 'warning', okLabel: 'Clear log', cancelLabel: 'Keep it' },
+                    { title: t('settings.logs.clearLog'), kind: 'warning', okLabel: t('settings.logs.clearLog2'), cancelLabel: t('settings.logs.keep') },
                   );
                   if (!confirmed) return;
                 } catch {
-                  if (!confirm('Delete the diagnostic log this app keeps on your computer? Your mail and your vault are not touched.')) return;
+                  if (!confirm(t('settings.logs.deleteDiagnosticLogAppKeeps'))) return;
                 }
                 try {
                   setLoadingLogs(true);
@@ -148,7 +148,7 @@ export function LogsSettings() {
                 } catch (error) {
                   console.error('Failed to clear logs:', error);
                   const errorMsg = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
-                  alert('Failed to clear logs: ' + errorMsg);
+                  alert(t('settings.logs.failedClearLogs') + errorMsg);
                   // Still try to reload logs
                   await loadLogs();
                 } finally {

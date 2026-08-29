@@ -20,7 +20,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '--';
@@ -28,33 +28,33 @@ function formatRelativeTime(timestamp) {
   const absDiff = Math.abs(diff);
   const isFuture = diff < 0;
 
-  if (absDiff < 60_000) return isFuture ? 'in < 1 min' : 'just now';
+  if (absDiff < 60_000) return isFuture ? 'in < 1 min' : t('settings.billing.justNow');
   if (absDiff < 3600_000) {
     const mins = Math.round(absDiff / 60_000);
-    return isFuture ? `in ${mins} min` : `${mins} min ago`;
+    return isFuture ? `in ${mins} min` : t('settings.backup.account.minAgo', { mins });
   }
   if (absDiff < 86400_000) {
     const hrs = Math.round(absDiff / 3600_000);
-    return isFuture ? `in ${hrs}h` : `${hrs}h ago`;
+    return isFuture ? `in ${hrs}h` : t('settings.billing.hAgo', { hrs });
   }
   const days = Math.round(absDiff / 86400_000);
-  return isFuture ? `in ${days}d` : `${days}d ago`;
+  return isFuture ? `in ${days}d` : t('settings.backup.account.dAgo', { days });
 }
 
 function formatDuration(secs) {
   if (!secs || secs < 1) return '< 1s';
-  if (secs < 60) return `${Math.round(secs)}s`;
+  if (secs < 60) return t('settings.backup.account.s', { Math: Math.round(secs) });
   const m = Math.floor(secs / 60);
   const s = Math.round(secs % 60);
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  return s > 0 ? t('settings.backup.account.mS', { m, s }) : t('settings.backup.account.m', { m });
 }
 
 function formatSize(bytes) {
   if (bytes == null) return '--';
-  if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`;
-  if (bytes >= 1048576) return `${(bytes / 1048576).toFixed(2)} MB`;
-  if (bytes >= 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${bytes} B`;
+  if (bytes >= 1073741824) return t('settings.backup.account.gb', { bytes: (bytes / 1073741824).toFixed(2) });
+  if (bytes >= 1048576) return t('settings.backup.account.mb', { bytes: (bytes / 1048576).toFixed(2) });
+  if (bytes >= 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(0) });
+  return t('settings.backup.account.b', { bytes });
 }
 
 function formatTimestamp(ts) {

@@ -17,7 +17,7 @@ import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
-import { useT } from '../i18n/index.js';
+import { t, useT  } from '../i18n/index.js';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -94,9 +94,9 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
 function AttachmentPreview({ attachment, onRemove }) {
   const t = useT();
   const formatSize = (bytes) => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    if (bytes < 1024) return t('settings.backup.account.b', { bytes });
+    if (bytes < 1024 * 1024) return t('settings.backup.account.kb', { bytes: (bytes / 1024).toFixed(1) });
+    return t('settings.backup.account.mb', { bytes: (bytes / (1024 * 1024)).toFixed(1) });
   };
   
   return (
@@ -159,7 +159,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // A restored/remembered From may not be minable yet (async) or any more —
   // the row must still show the address the message will actually leave from.
   if (pickedFrom && !identities.some(i => i.accountId === selectedAccountId && i.address.toLowerCase() === pickedFrom.toLowerCase())) {
-    identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom }];
+    identities = [...identities, { key: t('compose.text', { selectedAccountId, pickedFrom }), accountId: selectedAccountId, address: pickedFrom }];
   }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
 
@@ -303,7 +303,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         to: recipients.to,
         cc: recipients.cc,
         bcc: '',
-        subject: originalSubject.startsWith('Re:') ? originalSubject : `Re: ${originalSubject}`,
+        subject: originalSubject.startsWith('Re:') ? originalSubject : t('compose.re', { originalSubject }),
         body: replyBody,
         ...buildReplyHeaders(replyTo)
       });
@@ -312,7 +312,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         to: '',
         cc: '',
         bcc: '',
-        subject: originalSubject.startsWith('Fwd:') ? originalSubject : `Fwd: ${originalSubject}`,
+        subject: originalSubject.startsWith('Fwd:') ? originalSubject : t('compose.fwd', { originalSubject }),
         body: signatureHtml + quotedHeaderHtml + quotedBodyHtml,
         inReplyTo: '',
         references: ''
@@ -440,12 +440,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     e.preventDefault();
 
     if (!formData.to.trim()) {
-      setError('Please enter at least one recipient');
+      setError(t('compose.pleaseEnterLeastOneRecipient'));
       return;
     }
 
     if (!selectedAccount) {
-      setError('No account selected');
+      setError(t('compose.noAccountSelected'));
       return;
     }
 
@@ -1046,10 +1046,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
   const getTitle = () => {
     switch (mode) {
-      case 'reply': return 'Reply';
-      case 'replyAll': return 'Reply All';
-      case 'forward': return 'Forward';
-      default: return 'New Message';
+      case 'reply': return t('chat.bubble.reply');
+      case 'replyAll': return t('compose.replyAll');
+      case 'forward': return t('settings.shortcuts.forward');
+      default: return t('compose.newMessage');
     }
   };
 
@@ -1172,7 +1172,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       // override set, would show both addresses at once.
                       const named = acc.name && acc.name !== acc.email;
                       if (ids.length === 1) {
-                        const label = named ? `${acc.name} <${ids[0].address}>` : ids[0].address;
+                        const label = named ? t('compose.text2', { acc: acc.name, ids: ids[0].address }) : ids[0].address;
                         return <option key={acc.id} value={ids[0].key}>{label}</option>;
                       }
                       // The native optgroup indents the addresses under the account.
@@ -1321,7 +1321,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   size={14}
                   className={`transition-transform ${quotedExpanded ? 'rotate-90' : ''}`}
                 />
-                <span>{quotedExpanded ? 'Hide' : 'Show'} original message</span>
+                <span>{quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show')} original message</span>
               </button>
               {quotedExpanded && (
                 <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">

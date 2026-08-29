@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertCircle, FolderOpen, HardDrive, Loader } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 /**
  * Where the working copy of the mail lives. Default is the app's own storage;
@@ -47,11 +47,11 @@ export default function MailStorageLocation() {
 
       const info = await api.vaultInspectFolder(selected);
       if (!info.writable) {
-        setError('MailVault cannot write to that folder. Pick another, or check the drive is not read-only.');
+        setError(t('settings.mailLocation.mailvaultCannotWriteFolderPick'));
         return;
       }
       if (info.kind === 'other_vault' || info.kind === 'unmarked_mail') {
-        setError('That folder already contains mail. Use "Use existing folder" to switch to it instead of moving into it.');
+        setError(t('settings.mailLocation.folderAlreadyContainsMailUse'));
         return;
       }
 
@@ -61,8 +61,8 @@ export default function MailStorageLocation() {
       setVaultStatus(await api.vaultGetStatus());
       setNotice(
         result.sourceRemoved
-          ? `Moved ${result.filesCopied.toLocaleString()} files. The old copy has been removed.`
-          : `Copied ${result.filesCopied.toLocaleString()} files. Some of the old files could not be deleted — remove them by hand once you have checked the new folder.`
+          ? t('settings.mailLocation.movedFilesOldCopyBeen', { result: result.filesCopied.toLocaleString() })
+          : t('settings.mailLocation.copiedFilesSomeOldFiles', { result: result.filesCopied.toLocaleString() })
       );
     } catch (e) {
       setError(typeof e === 'string' ? e : e.message || 'Move failed');
@@ -79,7 +79,7 @@ export default function MailStorageLocation() {
       if (!selected) return;
       setBusy('adopt');
       setVaultStatus(await api.vaultAdopt(selected));
-      setNotice('Now reading mail from that folder.');
+      setNotice(t('settings.mailLocation.nowReadingMailFolder'));
     } catch (e) {
       setError(typeof e === 'string' ? e : e.message || 'Could not use that folder');
     } finally {
@@ -99,12 +99,12 @@ export default function MailStorageLocation() {
         setVaultStatus(await api.vaultGetStatus());
         setNotice(
           result.sourceRemoved
-            ? `Moved ${result.filesCopied.toLocaleString()} files back to the default location. The copy in the old folder has been removed.`
-            : `Copied ${result.filesCopied.toLocaleString()} files back to the default location. Some of the old files could not be deleted — remove them by hand once you have checked.`
+            ? t('settings.mailLocation.movedFilesBackDefaultLocation', { result: result.filesCopied.toLocaleString() })
+            : t('settings.mailLocation.copiedFilesBackDefaultLocation', { result: result.filesCopied.toLocaleString() })
         );
       } else {
         setVaultStatus(await api.vaultReset());
-        setNotice('Back to the default storage location. Mail already moved to the other folder stays there.');
+        setNotice(t('settings.mailLocation.backDefaultStorageLocationMail'));
       }
     } catch (e) {
       setError(typeof e === 'string' ? e : e.message || 'Reset failed');
@@ -140,7 +140,7 @@ export default function MailStorageLocation() {
             : isCustom ? 'bg-mail-accent-tint text-mail-accent-text'
             : 'bg-mail-bg text-mail-text-muted'
         }`}>
-          {missing ? 'Not found' : isCustom ? 'Custom folder' : 'Default'}
+          {missing ? t('settings.mailLocation.found') : isCustom ? t('settings.mailLocation.customFolder') : t('settings.appearance.default')}
         </span>
       </div>
 
@@ -148,14 +148,14 @@ export default function MailStorageLocation() {
         <div className="space-y-1">
           <div className="flex items-center justify-between text-xs text-mail-text-muted">
             <span>
-              {progress?.phase === 'verifying' ? 'Verifying every file arrived…'
-                : progress?.phase === 'cleaning' ? 'Removing the old copy…'
-                : `Copying ${progress?.currentDir || ''}…`}
+              {progress?.phase === 'verifying' ? t('settings.mailLocation.verifyingEveryFileArrived')
+                : progress?.phase === 'cleaning' ? t('settings.mailLocation.removingOldCopy')
+                : t('settings.mailLocation.copying', { progress: progress?.currentDir || '' })}
             </span>
-            <span>{progress?.total ? `${progress.copied.toLocaleString()} / ${progress.total.toLocaleString()}` : ''}</span>
+            <span>{progress?.total ? t('settings.mailLocation.text', { progress: progress.copied.toLocaleString(), progress2: progress.total.toLocaleString() }) : ''}</span>
           </div>
           <div className="h-1.5 bg-mail-bg rounded-full overflow-hidden">
-            <div className="h-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />
+            <div className="h-full bg-mail-accent transition-all" style={{ width: t('settings.cleanup.text', { pct }) }} />
           </div>
           <p className="text-xs text-mail-text-muted">
             {t('settings.mailLocation.nothingDeletedUntilEveryFile')}

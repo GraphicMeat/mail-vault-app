@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { ConfirmDialog } from '../ConfirmDialog';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export function StorageSettings({ accounts, onUpgrade }) {
   const t = useT();
@@ -158,7 +158,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 {t('settings.storage.cacheDuration')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
-                {localCacheDurationMonths === 0 ? 'All emails' :
+                {localCacheDurationMonths === 0 ? t('settings.storage.allEmails') :
                  localCacheDurationMonths === 1 ? '1 month' :
                  localCacheDurationMonths === 12 ? '1 year' :
                  `${localCacheDurationMonths} months`}
@@ -203,10 +203,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 {localStorageUsage ? (
                   <>
                     {(localStorageUsage.totalMB || 0) >= 1024
-                      ? `${((localStorageUsage.totalMB || 0) / 1024).toFixed(2)} GB`
+                      ? t('settings.storage.gb', { localStorageUsage: ((localStorageUsage.totalMB || 0) / 1024).toFixed(2) })
                       : (localStorageUsage.totalMB || 0) >= 1
-                      ? `${(localStorageUsage.totalMB || 0).toFixed(2)} MB`
-                      : `${((localStorageUsage.totalMB || 0) * 1024).toFixed(0)} KB`}
+                      ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
+                      : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
                     {' '}({(localStorageUsage.emailCount || 0).toLocaleString()} emails saved)
                   </>
                 ) : (
@@ -351,7 +351,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   ) : (
                     <Trash2 size={14} />
                   )}
-                  {clearingCache ? 'Clearing...' : 'Confirm'}
+                  {clearingCache ? t('settings.storage.clearing') : t('settings.storage.confirm')}
                 </Button>
               </div>
             )}
@@ -447,7 +447,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
                       <span className="font-medium text-mail-text">{decodeImapUtf7(rule.folder)}</span>
                       <span className="text-mail-text-muted truncate">
-                        {rule.account === 'all' ? 'All accounts' : rule.account}
+                        {rule.account === 'all' ? t('contacts.allAccounts') : rule.account}
                       </span>
                       <span className="text-mail-text-muted whitespace-nowrap">
                         {'>'} {rule.age} {rule.unit}
@@ -457,7 +457,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                           ? 'bg-mail-danger-tint text-mail-danger'
                           : 'bg-mail-accent-tint text-mail-accent-text'
                       }`}>
-                        {rule.action === 'delete' ? 'Delete from server' : 'Archive then delete'}
+                        {rule.action === 'delete' ? t('rowMenu.deleteServer') : t('settings.storage.archiveThenDelete')}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 ml-3 shrink-0">
@@ -522,7 +522,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
             {cleanupForm && (
               <div className="bg-mail-bg border border-mail-border rounded-lg p-4 space-y-3">
                 <h5 className="text-sm font-medium text-mail-text">
-                  {cleanupForm.mode === 'add' ? 'Add Cleanup Rule' : 'Edit Cleanup Rule'}
+                  {cleanupForm.mode === 'add' ? t('settings.storage.addCleanupRule') : t('settings.storage.editCleanupRule')}
                 </h5>
 
                 {/* First-time warning */}
@@ -645,7 +645,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     disabled={cleanupUnit === 'days' && cleanupAge < 7}
                     className="px-3 py-1.5 text-sm font-medium bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {cleanupForm.mode === 'edit' ? 'Save' : 'Add Rule'}
+                    {cleanupForm.mode === 'edit' ? t('common.save') : t('settings.storage.addRule')}
                   </button>
                 </div>
               </div>
@@ -694,7 +694,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium bg-mail-surface-hover text-mail-text rounded-lg hover:bg-mail-border transition-colors disabled:opacity-50"
                   >
                     {cleanupRunning ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
-                    {cleanupRunning ? 'Running...' : 'Run All Now'}
+                    {cleanupRunning ? t('settings.storage.running') : t('settings.storage.runAllNow')}
                   </button>
                 )}
               </div>
@@ -734,7 +734,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                         disabled:opacity-50"
             >
               <FolderOpen size={16} />
-              {movingStorage ? 'Moving...' : 'Browse'}
+              {movingStorage ? t('moveTo.moving') : t('settings.storage.browse')}
             </button>
           </div>
         </div>

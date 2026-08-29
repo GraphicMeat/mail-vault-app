@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export function ShortcutsSettings() {
   const t = useT();
@@ -91,29 +91,29 @@ export function ShortcutsSettings() {
 
   // Shortcut action labels (same as ShortcutsModal)
   const SHORTCUT_ACTION_LABELS = {
-    nextEmail: 'Next email',
-    prevEmail: 'Previous email',
-    goToInbox: 'Go to Inbox',
-    goToSent: 'Go to Sent',
-    goToDrafts: 'Go to Drafts',
-    reply: 'Reply',
-    replyAll: 'Reply all',
-    forward: 'Forward',
-    archive: 'Archive',
-    delete: 'Delete',
-    moveToFolder: 'Move to folder',
-    compose: 'Compose',
-    toggleSelect: 'Select / deselect',
-    escape: 'Clear selection / close',
-    focusSearch: 'Search',
-    showShortcuts: 'Show shortcuts',
-    openSettings: 'Open settings',
+    nextEmail: t('settings.shortcuts.nextEmail'),
+    prevEmail: t('settings.shortcuts.previousEmail'),
+    goToInbox: t('settings.shortcuts.goInbox'),
+    goToSent: t('settings.shortcuts.goSent'),
+    goToDrafts: t('settings.shortcuts.goDrafts'),
+    reply: t('chat.bubble.reply'),
+    replyAll: t('settings.shortcuts.replyAll'),
+    forward: t('settings.shortcuts.forward'),
+    archive: t('common.archive'),
+    delete: t('common.delete'),
+    moveToFolder: t('rowMenu.moveFolder'),
+    compose: t('sidebar.compose'),
+    toggleSelect: t('settings.shortcuts.selectDeselect'),
+    escape: t('settings.shortcuts.clearSelectionClose'),
+    focusSearch: t('search.search'),
+    showShortcuts: t('settings.shortcuts.showShortcuts'),
+    openSettings: t('settings.shortcuts.openSettings'),
   };
 
   const SHORTCUT_CATEGORIES = [
-    { title: 'Navigation', actions: ['nextEmail', 'prevEmail', 'goToInbox', 'goToSent', 'goToDrafts'] },
-    { title: 'Actions', actions: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'moveToFolder', 'compose'] },
-    { title: 'Selection', actions: ['toggleSelect', 'escape'] },
+    { title: t('settings.shortcuts.navigation'), actions: ['nextEmail', 'prevEmail', 'goToInbox', 'goToSent', 'goToDrafts'] },
+    { title: t('settings.shortcuts.actions'), actions: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'moveToFolder', 'compose'] },
+    { title: t('settings.shortcuts.selection'), actions: ['toggleSelect', 'escape'] },
     { title: 'UI', actions: ['focusSearch', 'showShortcuts', 'openSettings'] },
   ];
 
@@ -212,8 +212,8 @@ export function ShortcutsSettings() {
                             >
                               {isRebinding
                                 ? rebindFirstKey
-                                  ? `${rebindFirstKey} + \u2026`
-                                  : 'Press key\u2026'
+                                  ? t('settings.shortcuts.u2026', { rebindFirstKey })
+                                  : t('settings.shortcuts.pressKeyU2026')
                                 : formatKeybindingDisplay(binding)
                               }
                             </button>

@@ -11,7 +11,7 @@ import {
   Upload,
   HardDrive,
 } from 'lucide-react';
-import { useT } from '../../i18n/index.js';
+import { t, useT  } from '../../i18n/index.js';
 
 export default function BackupRestore() {
   const t = useT();
@@ -27,7 +27,7 @@ export default function BackupRestore() {
 
   const handleExportData = () => {
     if (!invoke) {
-      alert('Exporting a backup is only available in the desktop app.');
+      alert(t('settings.backup.restore.exportingBackupOnlyAvailableDesktop'));
       return;
     }
     setShowExportChoice(true);
@@ -39,7 +39,7 @@ export default function BackupRestore() {
       const { save } = await import('@tauri-apps/plugin-dialog');
       const destPath = await save({
         defaultPath: `mailvault-backup-${new Date().toISOString().split('T')[0]}.zip`,
-        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+        filters: [{ name: t('settings.backup.restore.zipArchives'), extensions: ['zip'] }],
       });
       if (!destPath) return;
 
@@ -83,19 +83,19 @@ export default function BackupRestore() {
     } catch (error) {
       console.error('Export error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Could not write the backup file. Pick a folder you can write to, make sure there is room on the disk, and try again.\n\nDetails: ' + (error.message || error));
+      alert(t('settings.backup.restore.couldWriteBackupFilePick') + (error.message || error));
     }
   };
 
   const handleImportData = async () => {
     if (!invoke) {
-      alert('Importing a backup is only available in the desktop app.');
+      alert(t('settings.backup.restore.importingBackupOnlyAvailableDesktop'));
       return;
     }
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const sourcePath = await open({
-        filters: [{ name: 'ZIP Archives', extensions: ['zip'] }],
+        filters: [{ name: t('settings.backup.restore.zipArchives'), extensions: ['zip'] }],
         multiple: false,
       });
       if (!sourcePath) return;
@@ -140,7 +140,7 @@ export default function BackupRestore() {
     } catch (error) {
       console.error('Import error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Could not read that backup file. Pick the .zip MailVault wrote — nothing in your vault was changed.\n\nDetails: ' + (error.message || error));
+      alert(t('settings.backup.restore.couldReadBackupFilePick') + (error.message || error));
     }
   };
 
@@ -148,14 +148,14 @@ export default function BackupRestore() {
 
   const handleExportMbox = async () => {
     if (!invoke) {
-      alert('Exporting MBOX is only available in the desktop app.');
+      alert(t('settings.backup.restore.exportingMboxOnlyAvailableDesktop'));
       return;
     }
     try {
       const { save } = await import('@tauri-apps/plugin-dialog');
       const destPath = await save({
         defaultPath: `mailvault-export-${new Date().toISOString().split('T')[0]}.mbox`,
-        filters: [{ name: 'MBOX Files', extensions: ['mbox'] }],
+        filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
       });
       if (!destPath) return;
 
@@ -179,28 +179,28 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        alert(`MBOX written. ${result.emailCount} email(s) from ${result.accountCount} account(s) are in the file — Thunderbird, Apple Mail and anything else that reads MBOX can open it.`);
+        alert(t('settings.backup.restore.mboxWrittenEmailSAccount', { result: result.emailCount, result2: result.accountCount }));
       }, 1500);
     } catch (error) {
       console.error('MBOX export error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Could not write the MBOX file. Pick a folder you can write to, make sure there is room on the disk, and try again.\n\nDetails: ' + (error.message || error));
+      alert(t('settings.backup.restore.couldWriteMboxFilePick') + (error.message || error));
     }
   };
 
   const handleImportMbox = async () => {
     if (!invoke) {
-      alert('Importing MBOX is only available in the desktop app.');
+      alert(t('settings.backup.restore.importingMboxOnlyAvailableDesktop'));
       return;
     }
     if (!visibleAccounts.length) {
-      alert('Add an email account first — an imported MBOX has to land in one.');
+      alert(t('settings.backup.restore.addEmailAccountFirstImported'));
       return;
     }
     try {
       const { open: openDialog } = await import('@tauri-apps/plugin-dialog');
       const sourcePath = await openDialog({
-        filters: [{ name: 'MBOX Files', extensions: ['mbox'] }],
+        filters: [{ name: t('settings.backup.restore.mboxFiles'), extensions: ['mbox'] }],
         multiple: false,
       });
       if (!sourcePath) return;
@@ -232,13 +232,13 @@ export default function BackupRestore() {
 
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        alert(`MBOX imported. ${result.emailCount} email(s) are now in your vault under ${targetAccount.email || 'your account'} / ${targetMailbox}.\n\nMailVault reloads when you close this.`);
+        alert(t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox }));
         window.location.reload();
       }, 1500);
     } catch (error) {
       console.error('MBOX import error:', error);
       useMailStore.getState().dismissExportProgress();
-      alert('Could not read that MBOX file. Check it is the file you meant — nothing in your vault was changed.\n\nDetails: ' + (error.message || error));
+      alert(t('settings.backup.restore.couldReadMboxFileCheck') + (error.message || error));
     }
   };
 
