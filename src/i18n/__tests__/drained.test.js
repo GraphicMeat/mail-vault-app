@@ -75,6 +75,20 @@ const DONE = [
   'src/components/BackupUpsellModal.jsx',
   'src/components/ShortcutsModal.jsx',
   'src/components/LinkSafetyModal.jsx',
+  'src/components/ReplyToAlertIcon.jsx',
+  'src/components/LinkAlertIcon.jsx',
+  'src/components/TransferLimitBanner.jsx',
+  'src/components/SettingsPage.jsx',
+  'src/components/SenderAlertIcon.jsx',
+  'src/components/UndoSendToast.jsx',
+  'src/components/ChunkErrorBoundary.jsx',
+  'src/components/KeychainToast.jsx',
+  'src/components/RestoreTray.jsx',
+  'src/components/VaultAlertBanner.jsx',
+  'src/components/Toast.jsx',
+  'src/components/PremiumFeaturesLink.jsx',
+  'src/components/ChatTopicsList.jsx',
+  'src/components/TrackerAlertIcon.jsx',
 ];
 
 function audit(mode, files) {

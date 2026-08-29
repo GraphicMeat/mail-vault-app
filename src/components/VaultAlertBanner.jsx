@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AlertTriangle, FolderSearch, Loader } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as api from '../services/api';
+import { useT } from '../i18n/index.js';
 
 /**
  * Shown across the top of the main view when the mail storage folder cannot be
@@ -10,6 +11,7 @@ import * as api from '../services/api';
  * the app data dir instead would silently start a second, divergent archive.
  */
 export function VaultAlertBanner() {
+  const t = useT();
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
   const setVaultStatus = useSettingsStore(s => s.setVaultStatus);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ export function VaultAlertBanner() {
       <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-mail-warning font-medium">
-          Mail storage folder not found — syncing is paused
+          {t('vaultAlert.mailStorageFolderNotFound')}
         </p>
         <p className="text-xs text-mail-text-muted mt-0.5 truncate">
           {vaultStatus.displayPath

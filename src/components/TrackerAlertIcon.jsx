@@ -6,6 +6,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
+import { useT } from '../i18n/index.js';
 
 /**
  * The dialog's contents, split into their own component on purpose:
@@ -14,6 +15,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags';
  * dialog is open keeps that request on the one screen that shows a price.
  */
 function TrackerDialogBody({ info, trackers, blocked, isPremium, onOpenFeaturePage }) {
+  const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
   const count = info.count;
   const vendors = info.vendors || [];
@@ -36,7 +38,7 @@ function TrackerDialogBody({ info, trackers, blocked, isPremium, onOpenFeaturePa
         )) : vendors.map((v, i) => (
           <div key={i} className="p-3 rounded-lg bg-mail-surface border border-mail-border">
             <div className="text-sm font-medium text-mail-text">{v}</div>
-            <div className="text-xs text-mail-text-muted mt-0.5">Open-tracking beacon</div>
+            <div className="text-xs text-mail-text-muted mt-0.5">{t('alert.tracker.openTrackingBeacon')}</div>
           </div>
         ))}
       </div>

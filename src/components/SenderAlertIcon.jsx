@@ -1,8 +1,10 @@
 import React, { useCallback, useState } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
+import { useT } from '../i18n/index.js';
 
 export function SenderAlertIcon({ level, email, size = 14 }) {
+  const t = useT();
   const [showModal, setShowModal] = useState(false);
 
   const closeModal = useCallback(() => setShowModal(false), []);
@@ -47,12 +49,12 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
         </p>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-          <div className="text-xs text-mail-text-muted mb-1">Display name shows:</div>
+          <div className="text-xs text-mail-text-muted mb-1">{t('alert.sender.displayNameShows')}</div>
           <div className="text-sm font-mono text-mail-text break-all">{fromName}</div>
         </div>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-          <div className="text-xs text-mail-text-muted mb-1">Actual sender address:</div>
+          <div className="text-xs text-mail-text-muted mb-1">{t('alert.sender.actualSenderAddress')}</div>
           <div className="text-sm font-mono text-mail-text break-all">{fromAddress}</div>
           {fromAddress.includes('@') && (
             <div className={`text-xs ${isRed ? 'text-mail-danger' : 'text-mail-warning'} mt-0.5`}>

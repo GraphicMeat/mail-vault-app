@@ -4,6 +4,7 @@ import { Button } from './ui/Button';
 import { useComposeStore } from '../stores/composeStore';
 import { AnimatePresence } from 'framer-motion';
 import { Undo2, Check, Mail } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 function formatCountdown(seconds) {
   if (seconds >= 60) {
@@ -15,6 +16,7 @@ function formatCountdown(seconds) {
 }
 
 export function UndoSendToast({ onUndo }) {
+  const t = useT();
   const pendingSend = useComposeStore(s => s.pendingSend);
   const cancelPendingSend = useComposeStore(s => s.cancelPendingSend);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -62,7 +64,7 @@ export function UndoSendToast({ onUndo }) {
             {showSent && !pendingSend ? (
               <>
                 <Check size={18} className="text-mail-success" />
-                <span className="text-sm font-medium text-mail-text">Sent!</span>
+                <span className="text-sm font-medium text-mail-text">{t('undoSend.sent')}</span>
               </>
             ) : (
               <>
@@ -86,7 +88,7 @@ export function UndoSendToast({ onUndo }) {
                   className="font-medium hover:bg-mail-surface-hover flex-shrink-0"
                 >
                   <Undo2 size={14} />
-                  Undo
+                  {t('undoSend.undo')}
                 </Button>
               </>
             )}

@@ -5,6 +5,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as api from '../services/api';
 import { isGmailAccount, resolveDailyLimitBytes } from '../utils/transferLimits';
+import { useT } from '../i18n/index.js';
 
 const DISMISS_KEY = 'mailvault-transfer-warn-dismissed';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -24,6 +25,7 @@ function loadDismissed() {
  * account until the next UTC day.
  */
 export function TransferLimitBanner({ onOpenDataUsage }) {
+  const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const transferLimits = useSettingsStore(s => s.transferLimits);
   const [warnings, setWarnings] = useState([]);
@@ -93,12 +95,12 @@ export function TransferLimitBanner({ onOpenDataUsage }) {
       <Button variant="ghost" size="sm" className="bg-mail-warning/20 text-mail-warning hover:bg-mail-warning/30 font-medium text-xs whitespace-nowrap"
         onClick={() => onOpenDataUsage?.(w.accountId)}
       >
-        View
+        {t('transferLimit.view')}
       </Button>
       <button
         onClick={() => dismiss(w.accountId)}
         className="p-1 hover:bg-mail-warning/20 rounded transition-colors flex-shrink-0"
-        title="Dismiss until tomorrow"
+        title={t('transferLimit.dismissUntilTomorrow')}
       >
         <X size={14} className="text-mail-warning" />
       </button>

@@ -12,6 +12,7 @@ import { useMailStore } from '../stores/mailStore';
 import { formatDateOnly } from '../utils/dateFormat';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
+import { useT } from '../i18n/index.js';
 
 export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
   const avatarColor = getAvatarColor(correspondent.email);
@@ -65,6 +66,7 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
 }
 
 const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
+  const t = useT();
   const unreadCount = topic.emails.filter(e => !e.flags?.includes('\\Seen')).length;
   const hasAttachments = topic.emails.some(e => e.hasAttachments);
 
@@ -128,7 +130,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
           )}
 
           {hasAttachments && (
-            <span className="text-mail-accent-text">Has attachments</span>
+            <span className="text-mail-accent-text">{t('chat.topics.hasAttachments')}</span>
           )}
         </div>
       </div>

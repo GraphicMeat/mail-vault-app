@@ -3,6 +3,10 @@ import { AlertTriangle } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { Z } from './ui/layers';
+// A class component cannot call a hook. `t` is module state, not React
+// state, so it works here — the error boundary just will not re-render on a
+// locale change, which is fine for a terminal surface whose action is reload.
+import { t } from '../i18n/index.js';
 
 /**
  * Catches a failed lazy-chunk load for one overlay.
@@ -53,10 +57,10 @@ export class ChunkErrorBoundary extends React.Component {
         footer={
           <>
             <Button variant="secondary" size="lg" className="flex-1" onClick={() => this.setState({ failed: false })}>
-              Dismiss
+              {t('chunkError.dismiss')}
             </Button>
             <Button variant="primary" size="lg" className="flex-1" data-autofocus onClick={() => window.location.reload()}>
-              Reload
+              {t('chunkError.reload')}
             </Button>
           </>
         }

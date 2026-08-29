@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { ToastShell } from './ui/ToastShell';
 import { KeyRound, X, RefreshCw } from 'lucide-react';
 import * as keychainSession from '../services/keychainSession';
+import { useT } from '../i18n/index.js';
 
 // Each of these states has a different way out, and the toast has the two
 // buttons to take it — the message used to name the failure and stop there.
@@ -21,6 +22,7 @@ const RECOVERY = {
 };
 
 export function KeychainToast({ onRetry, onOpenAccounts }) {
+  const t = useT();
   const [visible, setVisible] = useState(false);
   const [status, setStatus] = useState(null);
 
@@ -66,13 +68,13 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-mail-accent/10 text-mail-accent-text hover:bg-mail-accent/20 rounded-lg transition-colors"
                 >
                   <RefreshCw size={12} />
-                  Retry
+                  {t('common.retry')}
                 </button>
                 <button
                   onClick={() => { setVisible(false); onOpenAccounts?.(); }}
                   className="px-3 py-1.5 text-xs font-medium text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-colors"
                 >
-                  Re-enter password
+                  {t('keychain.reEnterPassword')}
                 </button>
               </div>
             </div>

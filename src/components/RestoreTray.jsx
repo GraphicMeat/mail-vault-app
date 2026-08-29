@@ -3,11 +3,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Loader, Check, AlertTriangle, UploadCloud, X } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore.js';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { useT } from '../i18n/index.js';
 
 // Corner bubble for a minimized change-server restore. Mirrors the OutboxTray
 // bubble style: shows live upload progress while the restore runs in the
 // background; clicking the bubble reopens the Change Server modal on step 2.
 export function RestoreTray() {
+  const t = useT();
   const activeRestore = useSettingsStore((s) => s.activeRestore);
   const changeServerAccountId = useSettingsStore((s) => s.changeServerAccountId);
   const openChangeServer = useSettingsStore((s) => s.openChangeServer);
@@ -61,7 +63,7 @@ export function RestoreTray() {
             <button
               onClick={(e) => { e.stopPropagation(); clearActiveRestore(); }}
               className="text-mail-text-muted hover:text-mail-text flex-shrink-0"
-              aria-label="Dismiss"
+              aria-label={t('restore.tray.dismiss')}
             >
               <X size={14} />
             </button>

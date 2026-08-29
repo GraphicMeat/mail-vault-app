@@ -71,13 +71,13 @@ function jsxStrings(src) {
  *   export const X = forwardRef(function X                const X = forwardRef(function X
  *   const X = React.memo(function X
  */
-const DECL = /^(?:export\s+)?(?:default\s+)?(?:const\s+([A-Z][A-Za-z0-9_]*)\s*=|(?:async\s+)?function\s+([A-Z][A-Za-z0-9_]*))/;
+const DECL = /^(?:export\s+)?(?:default\s+)?(?:class\s+([A-Z][A-Za-z0-9_]*)|const\s+([A-Z][A-Za-z0-9_]*)\s*=|(?:async\s+)?function\s+([A-Z][A-Za-z0-9_]*))/;
 
 function declarations(src) {
   const d = [];
   src.split('\n').forEach((l, i) => {
     const m = DECL.exec(l);
-    if (m) d.push({ line: i + 1, name: m[1] || m[2] });
+    if (m) d.push({ line: i + 1, name: m[1] || m[2] || m[3], isClass: !!m[1] });
   });
   return d;
 }
@@ -85,11 +85,17 @@ function declarations(src) {
 function hookGaps(src) {
   const lines = src.split('\n');
   const decls = declarations(src);
-  const owner = (n) => [...decls].reverse().find(d => d.line <= n)?.name ?? '<module>';
+  const find = (n) => [...decls].reverse().find(d => d.line <= n);
+  const owner = (n) => find(n)?.name ?? '<module>';
+  // A class component cannot call a hook. It uses the module-level `t` instead,
+  // which works because the active catalog is module state — it just will not
+  // re-render on a locale change.
+  const importsT = /import\s*\{[^}]*\bt\b[^}]*\}\s*from\s*['"][^'"]*i18n/.test(src);
+  const isClassAt = (n) => !!find(n)?.isClass;
   const uses = new Set();
   const hooked = new Set();
   lines.forEach((l, i) => {
-    if (/(?<![A-Za-z0-9_.])t\(\s*['"`]/.test(l)) uses.add(owner(i + 1));
+    if (/(?<![A-Za-z0-9_.])t\(\s*['"`]/.test(l) && !(isClassAt(i + 1) && importsT)) uses.add(owner(i + 1));
     if (/\bconst\s+t\s*=\s*useT\(\)/.test(l)) hooked.add(owner(i + 1));
   });
   return [...uses].filter(n => !hooked.has(n));

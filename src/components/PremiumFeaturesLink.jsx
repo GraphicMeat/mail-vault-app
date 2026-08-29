@@ -2,6 +2,7 @@ import React from 'react';
 import { ExternalLink } from 'lucide-react';
 import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { openInBrowser } from '../services/billingApi';
+import { useT } from '../i18n/index.js';
 
 const FEATURES_URL = 'https://mailvaultapp.com/features.html#premium';
 
@@ -15,6 +16,7 @@ const FEATURES_URL = 'https://mailvaultapp.com/features.html#premium';
  * and MAS builds must not advertise one.
  */
 export function PremiumFeaturesLink({ className = '' }) {
+  const t = useT();
   if (IS_APPSTORE_BUILD) return null;
 
   return (
@@ -23,7 +25,7 @@ export function PremiumFeaturesLink({ className = '' }) {
       onClick={() => openInBrowser(FEATURES_URL).catch(() => {})}
       className={`inline-flex items-center gap-1.5 text-xs text-mail-text-muted hover:text-mail-accent-text transition-colors ${className}`}
     >
-      See everything in Premium
+      {t('premiumLink.seeEverythingPremium')}
       <ExternalLink size={12} />
     </button>
   );

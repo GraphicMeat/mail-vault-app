@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from 'react';
 import { AlertTriangle, CornerUpLeft } from 'lucide-react';
 import { Dialog } from './ui/Dialog';
+import { useT } from '../i18n/index.js';
 
 /**
  * Warning icon shown next to a subject when the email's Reply-To address
@@ -22,6 +23,7 @@ export function getThreadReplyToMismatch(emails) {
 }
 
 export function ReplyToAlertIcon({ mismatch, size = 14 }) {
+  const t = useT();
   const [showModal, setShowModal] = useState(false);
 
   const closeModal = useCallback(() => setShowModal(false), []);
@@ -56,16 +58,16 @@ export function ReplyToAlertIcon({ mismatch, size = 14 }) {
         }
       >
         <p className="text-sm text-mail-text-muted">
-          Replies to this message would go to a different domain than the sender. Legitimate senders usually route replies to the same domain they send from — a mismatch is a common phishing indicator.
+          {t('alert.replyTo.repliesMessageWouldGoDifferent')}
         </p>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-          <div className="text-xs text-mail-text-muted mb-1">Sent from domain:</div>
+          <div className="text-xs text-mail-text-muted mb-1">{t('alert.replyTo.sentDomain')}</div>
           <div className="text-sm font-mono text-mail-text break-all">{mismatch.fromDomain}</div>
         </div>
 
         <div className="p-3 rounded-lg bg-mail-surface border border-mail-border">
-          <div className="text-xs text-mail-text-muted mb-1">Replies would go to:</div>
+          <div className="text-xs text-mail-text-muted mb-1">{t('alert.replyTo.repliesWouldGo')}</div>
           <div className="text-sm font-mono text-mail-text break-all">{mismatch.replyToAddress || mismatch.replyToDomain}</div>
           <div className="text-xs text-mail-warning mt-0.5">{mismatch.replyToDomain}</div>
         </div>

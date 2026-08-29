@@ -2,8 +2,10 @@ import React, { useEffect } from 'react';
 import { ToastShell } from './ui/ToastShell';
 import { Button } from './ui/Button';
 import { AlertCircle, X, CheckCircle, Info, AlertTriangle } from 'lucide-react';
+import { useT } from '../i18n/index.js';
 
 export function Toast({ message, type = 'error', duration = 5000, onClose }) {
+  const t = useT();
   useEffect(() => {
     if (duration > 0) {
       const timer = setTimeout(onClose, duration);
@@ -42,7 +44,7 @@ export function Toast({ message, type = 'error', duration = 5000, onClose }) {
         icon
         size="xs"
         onClick={onClose}
-        aria-label="Dismiss"
+        aria-label={t('toast.dismiss')}
         className="hover:bg-white/10 ml-2"
       >
         <X size={14} />

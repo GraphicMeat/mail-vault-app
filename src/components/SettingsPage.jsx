@@ -40,6 +40,7 @@ import { CleanupView } from './settings/CleanupSettings';
 import { LanguageSettings } from './settings/LanguageSettings';
 import { TrackerBlockingView } from './settings/TrackerBlockingView';
 import { TimeCapsuleView } from './TimeCapsule';
+import { useT } from '../i18n/index.js';
 
 const featureTabs = [
   { id: 'cleanup', label: 'Email Cleanup', icon: Sparkles },
@@ -75,6 +76,7 @@ const featureTabIds = new Set(featureTabs.map(t => t.id));
 const accountPillTabIds = new Set(['cleanup', 'time-capsule']);
 
 export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, initialAccountId }) {
+  const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
 
@@ -119,7 +121,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
         {/* Sidebar */}
         <div className="w-44 sm:w-56 flex-shrink-0 bg-mail-surface border-r border-mail-border flex flex-col">
           <div className="px-4 py-4 border-b border-mail-border flex items-center h-[57px]">
-            <h2 id={titleId} className="text-lg font-semibold text-mail-text">Settings</h2>
+            <h2 id={titleId} className="text-lg font-semibold text-mail-text">{t('settingsPage.settings')}</h2>
           </div>
 
           <nav className="flex-1 p-2 overflow-y-auto">
@@ -172,7 +174,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
               {hasConfigSubView && subView !== 'config' && (
                 <Button variant="ghost" icon size="md"
                   onClick={() => setSubView('config')}
-                  title="Settings"
+                  title={t('settingsPage.settings')}
                 >
                   <Settings size={18} className="text-mail-text-muted" />
                 </Button>
