@@ -1477,5 +1477,8 @@
   "errors.E_MAILBOX_EMPTY": "Nenhuma mensagem encontrada nessa pasta",
   "errors.E_VAULT_UNAVAILABLE": "Sua pasta de armazenamento de correio está indisponível",
   "errors.E_IAP_PAYMENT": "Não foi possível iniciar a compra",
-  "errors.E_IAP_RESTORE": "Não foi possível iniciar a restauração"
+  "errors.E_IAP_RESTORE": "Não foi possível iniciar a restauração",
+  "sidebar.viewAll": "Tudo",
+  "sidebar.viewServer": "Servidor",
+  "sidebar.viewVault": "Cofre"
 }

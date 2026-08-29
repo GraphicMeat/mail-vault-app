@@ -1477,5 +1477,8 @@
   "errors.E_MAILBOX_EMPTY": "そのフォルダにメッセージが見つかりません",
   "errors.E_VAULT_UNAVAILABLE": "メールの保存フォルダを利用できません",
   "errors.E_IAP_PAYMENT": "購入を開始できませんでした",
-  "errors.E_IAP_RESTORE": "復元を開始できませんでした"
+  "errors.E_IAP_RESTORE": "復元を開始できませんでした",
+  "sidebar.viewAll": "すべて",
+  "sidebar.viewServer": "サーバー",
+  "sidebar.viewVault": "保管庫"
 }

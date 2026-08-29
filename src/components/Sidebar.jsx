@@ -1292,9 +1292,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             // else — on the row glyph, in every delete confirmation, on the
             // website. "Local" was the one surface still using another word
             // for it. The id stays `local`; only what the user reads changed.
-            { id: 'all', icon: Layers, label: 'All' },
-            { id: 'server', icon: Cloud, label: t('settings.backup.verify.server') },
-            { id: 'local', icon: HardDrive, label: t('onboarding.vault') }
+            { id: 'all', icon: Layers, label: t('sidebar.viewAll') },
+            { id: 'server', icon: Cloud, label: t('sidebar.viewServer') },
+            { id: 'local', icon: HardDrive, label: t('sidebar.viewVault') }
           ].map(mode => (
             <button
               key={mode.id}
