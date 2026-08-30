@@ -328,12 +328,107 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
   background: #0f172a;
 }
 
+/* The menu and language rail share Graphic Meat's actual notched cadence:
+   alternating 10px and 18px rises, carried by one fine lamp-indigo line. */
+nav.glass {
+  border-bottom-color: transparent;
+}
+.dark nav.glass { border-bottom-color: transparent; }
+
+/* Primary links use the same compact, editorial voice as Graphic Meat without
+   pretending MailVault is a retro terminal. Color is the only hover signal. */
+nav.glass .hidden.md\:flex > a {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+}
+
 /* Mobile nav rows are the one place on this site where every item is a target
    for a thumb rather than a cursor. `px-3 py-2` is a 40px row. */
 #mobile-menu a {
   display: flex;
   align-items: center;
   min-height: 44px;
+}
+
+/* Homepage surface handoffs use the same measured, broad chamfer cadence as
+   Graphic Meat's header: a single 2px lamp line, then the incoming surface.
+   It is deliberately quiet—three wide rises rather than a repeated pattern—
+   and exists only where the page changes subject. */
+.home main {
+  --mv-seam-small: 10px;
+  --mv-seam-large: 18px;
+  --mv-edge-1: 7%;
+  --mv-edge-2: 17%;
+  --mv-edge-3: 29%;
+  --mv-edge-4: 41%;
+  --mv-edge-5: 55%;
+  --mv-edge-6: 66%;
+  --mv-edge-7: 80%;
+  --mv-edge-8: 91%;
+  --mv-section-edge: polygon(
+    0 70%, var(--mv-edge-1) 70%, calc(var(--mv-edge-1) + var(--mv-seam-small)) 0,
+    var(--mv-edge-2) 0, calc(var(--mv-edge-2) + var(--mv-seam-large)) 70%,
+    var(--mv-edge-3) 70%, calc(var(--mv-edge-3) + var(--mv-seam-small)) 0,
+    var(--mv-edge-4) 0, calc(var(--mv-edge-4) + var(--mv-seam-large)) 70%,
+    var(--mv-edge-5) 70%, calc(var(--mv-edge-5) + var(--mv-seam-small)) 0,
+    var(--mv-edge-6) 0, calc(var(--mv-edge-6) + var(--mv-seam-large)) 70%,
+    var(--mv-edge-7) 70%, calc(var(--mv-edge-7) + var(--mv-seam-small)) 0,
+    var(--mv-edge-8) 0, calc(var(--mv-edge-8) + var(--mv-seam-large)) 70%,
+    100% 70%, 100% 100%, 0 100%
+  );
+}
+.home main > section:nth-child(3) { --mv-section-edge: polygon(0 0, 18% 0, calc(18% + var(--mv-seam-small)) 70%, 36% 70%, calc(36% + var(--mv-seam-large)) 0, 65% 0, calc(65% + var(--mv-seam-small)) 70%, 79% 70%, calc(79% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(4) { --mv-section-edge: polygon(0 70%, 4% 70%, calc(4% + var(--mv-seam-small)) 0, 12% 0, calc(12% + var(--mv-seam-large)) 70%, 24% 70%, calc(24% + var(--mv-seam-small)) 0, 33% 0, calc(33% + var(--mv-seam-large)) 70%, 43% 70%, calc(43% + var(--mv-seam-small)) 0, 51% 0, calc(51% + var(--mv-seam-large)) 70%, 62% 70%, calc(62% + var(--mv-seam-small)) 0, 70% 0, calc(70% + var(--mv-seam-large)) 70%, 82% 70%, calc(82% + var(--mv-seam-small)) 0, 90% 0, calc(90% + var(--mv-seam-large)) 70%, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(5) { --mv-section-edge: polygon(0 0, 8% 0, calc(8% + var(--mv-seam-small)) 70%, 25% 70%, calc(25% + var(--mv-seam-large)) 0, 41% 0, calc(41% + var(--mv-seam-small)) 70%, 53% 70%, calc(53% + var(--mv-seam-large)) 0, 75% 0, calc(75% + var(--mv-seam-small)) 70%, 88% 70%, calc(88% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(6) { --mv-section-edge: polygon(0 70%, 4% 70%, calc(4% + var(--mv-seam-small)) 0, 11% 0, calc(11% + var(--mv-seam-large)) 70%, 18% 70%, calc(18% + var(--mv-seam-small)) 0, 27% 0, calc(27% + var(--mv-seam-large)) 70%, 37% 70%, calc(37% + var(--mv-seam-small)) 0, 45% 0, calc(45% + var(--mv-seam-large)) 70%, 56% 70%, calc(56% + var(--mv-seam-small)) 0, 65% 0, calc(65% + var(--mv-seam-large)) 70%, 73% 70%, calc(73% + var(--mv-seam-small)) 0, 80% 0, calc(80% + var(--mv-seam-large)) 70%, 88% 70%, calc(88% + var(--mv-seam-small)) 0, 96% 0, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(7) { --mv-section-edge: polygon(0 0, 6% 0, calc(6% + var(--mv-seam-small)) 70%, 32% 70%, calc(32% + var(--mv-seam-large)) 0, 49% 0, calc(49% + var(--mv-seam-small)) 70%, 71% 70%, calc(71% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(8) { --mv-section-edge: polygon(0 70%, 13% 70%, calc(13% + var(--mv-seam-small)) 0, 23% 0, calc(23% + var(--mv-seam-large)) 70%, 31% 70%, calc(31% + var(--mv-seam-small)) 0, 46% 0, calc(46% + var(--mv-seam-large)) 70%, 60% 70%, calc(60% + var(--mv-seam-small)) 0, 68% 0, calc(68% + var(--mv-seam-large)) 70%, 82% 70%, calc(82% + var(--mv-seam-small)) 0, 94% 0, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(9) { --mv-section-edge: polygon(0 70%, 9% 70%, calc(9% + var(--mv-seam-small)) 0, 28% 0, calc(28% + var(--mv-seam-large)) 70%, 54% 70%, calc(54% + var(--mv-seam-small)) 0, 67% 0, calc(67% + var(--mv-seam-large)) 70%, 77% 70%, calc(77% + var(--mv-seam-small)) 0, 89% 0, calc(89% + var(--mv-seam-large)) 70%, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(10) { --mv-section-edge: polygon(0 0, 3% 0, calc(3% + var(--mv-seam-small)) 70%, 14% 70%, calc(14% + var(--mv-seam-large)) 0, 26% 0, calc(26% + var(--mv-seam-small)) 70%, 39% 70%, calc(39% + var(--mv-seam-large)) 0, 51% 0, calc(51% + var(--mv-seam-small)) 70%, 63% 70%, calc(63% + var(--mv-seam-large)) 0, 74% 0, calc(74% + var(--mv-seam-small)) 70%, 86% 70%, calc(86% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(11) { --mv-section-edge: polygon(0 70%, 16% 70%, calc(16% + var(--mv-seam-small)) 0, 39% 0, calc(39% + var(--mv-seam-large)) 70%, 58% 70%, calc(58% + var(--mv-seam-small)) 0, 82% 0, calc(82% + var(--mv-seam-large)) 70%, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(12) { --mv-section-edge: polygon(0 0, 5% 0, calc(5% + var(--mv-seam-small)) 70%, 14% 70%, calc(14% + var(--mv-seam-large)) 0, 22% 0, calc(22% + var(--mv-seam-small)) 70%, 31% 70%, calc(31% + var(--mv-seam-large)) 0, 45% 0, calc(45% + var(--mv-seam-small)) 70%, 53% 70%, calc(53% + var(--mv-seam-large)) 0, 64% 0, calc(64% + var(--mv-seam-small)) 70%, 72% 70%, calc(72% + var(--mv-seam-large)) 0, 83% 0, calc(83% + var(--mv-seam-small)) 70%, 93% 70%, calc(93% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(13) { --mv-section-edge: polygon(0 70%, 11% 70%, calc(11% + var(--mv-seam-small)) 0, 34% 0, calc(34% + var(--mv-seam-large)) 70%, 48% 70%, calc(48% + var(--mv-seam-small)) 0, 61% 0, calc(61% + var(--mv-seam-large)) 70%, 72% 70%, calc(72% + var(--mv-seam-small)) 0, 90% 0, calc(90% + var(--mv-seam-large)) 70%, 100% 70%, 100% 100%, 0 100%); }
+.home main > section:nth-child(14) { --mv-section-edge: polygon(0 0, 6% 0, calc(6% + var(--mv-seam-small)) 70%, 18% 70%, calc(18% + var(--mv-seam-large)) 0, 32% 0, calc(32% + var(--mv-seam-small)) 70%, 49% 70%, calc(49% + var(--mv-seam-large)) 0, 68% 0, calc(68% + var(--mv-seam-small)) 70%, 79% 70%, calc(79% + var(--mv-seam-large)) 0, 88% 0, calc(88% + var(--mv-seam-small)) 70%, 96% 70%, calc(96% + var(--mv-seam-large)) 0, 100% 0, 100% 100%, 0 100%); }
+.home main > section:nth-child(15) { --mv-section-edge: polygon(0 70%, 2% 70%, calc(2% + var(--mv-seam-small)) 0, 24% 0, calc(24% + var(--mv-seam-large)) 70%, 41% 70%, calc(41% + var(--mv-seam-small)) 0, 54% 0, calc(54% + var(--mv-seam-large)) 70%, 69% 70%, calc(69% + var(--mv-seam-small)) 0, 83% 0, calc(83% + var(--mv-seam-large)) 70%, 92% 70%, calc(92% + var(--mv-seam-small)) 0, 98% 0, 100% 70%, 100% 100%, 0 100%); }
+.home main > section {
+  position: relative;
+  isolation: isolate;
+  --mv-section-surface: #f8fafc;
+}
+.dark .home main > section { --mv-section-surface: #0f172a; }
+.home main > section.bg-white { --mv-section-surface: #ffffff; }
+.dark .home main > section.bg-white { --mv-section-surface: #172033; }
+.home main > section.bg-primary-50\/60 { --mv-section-surface: #eef2ff; }
+.dark .home main > section.bg-primary-50\/60 { --mv-section-surface: #13152d; }
+.home main > section + section::after,
+.home main > section + section::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+  clip-path: var(--mv-section-edge);
+}
+.home main > section + section::after {
+  z-index: 1;
+  top: -20px;
+  height: 20px;
+  background: var(--lamp);
+}
+.home main > section + section::before {
+  z-index: 2;
+  top: -18px;
+  height: 18px;
+  background: var(--mv-section-surface);
+}
+
+@media (max-width: 767px) {
+  .home main {
+    --mv-seam-small: 7px;
+    --mv-seam-large: 12px;
+  }
 }
 
 /* A file path or a command in a `pre` scrolls sideways on a phone with no
@@ -355,14 +450,57 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
    Flags sit desaturated until you reach for one: the row is navigation, not
    decoration, and nine saturated flags would outshout the nav above them. */
 .mv-lang {
-  border-top: 1px solid rgb(226 232 240 / 0.7);
+  --mv-nav-surface: #f8fafc;
+  position: relative;
+  padding-top: 20px;
+  /* The first 20px are deliberately transparent: that is the upper header
+     material. The chamfer pseudo fills the incoming language surface inside
+     this band, and the rail continues in that same material below it. */
+  background: linear-gradient(to bottom, transparent 0 20px, var(--mv-nav-surface) 20px);
+  border-top: 0;
   overflow-x: auto;
   scrollbar-width: none;
 }
-.dark .mv-lang { border-top-color: rgb(51 65 85 / 0.7); }
+.dark .mv-lang { --mv-nav-surface: #111827; }
 .mv-lang::-webkit-scrollbar { display: none; }
 
+.mv-lang::after,
+.mv-lang::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+  clip-path: polygon(
+    0 70%, 8% 70%, calc(8% + 10px) 0,
+    18% 0, calc(18% + 18px) 70%,
+    24% 70%, calc(24% + 10px) 0,
+    34% 0, calc(34% + 18px) 70%,
+    42% 70%, calc(42% + 10px) 0,
+    52% 0, calc(52% + 18px) 70%,
+    60% 70%, calc(60% + 10px) 0,
+    70% 0, calc(70% + 18px) 70%,
+    78% 70%, calc(78% + 10px) 0,
+    88% 0, calc(88% + 18px) 70%,
+    100% 70%, 100% 100%, 0 100%
+  );
+}
+.mv-lang::after {
+  z-index: 0;
+  top: 0;
+  height: 20px;
+  background: var(--lamp);
+}
+.mv-lang::before {
+  z-index: 1;
+  top: 2px;
+  height: 18px;
+  background: var(--mv-nav-surface);
+}
+
 .mv-lang ul {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: stretch;
   justify-content: center;
