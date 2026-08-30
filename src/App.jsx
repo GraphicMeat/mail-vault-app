@@ -716,7 +716,7 @@ function App() {
 
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
-    return <Onboarding />;
+    return <Onboarding onOpenBilling={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />;
   }
 
   // Show welcome screen only after full init confirms there are truly no accounts.
