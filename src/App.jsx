@@ -683,7 +683,7 @@ function App() {
   // Full initialization with delay (includes keychain access)
   // Only start after onboarding is complete, quick load is done, and UI has had time to render
   useEffect(() => {
-    if (!initialized && quickLoadDone && onboardingComplete) {
+    if (!initialized && quickLoadDone && accounts.length > 0) {
       // If quick-load found accounts, wait 500ms so the cached UI renders first.
       // If no accounts were found (keychain-only install), skip the delay — the user
       // is staring at a "Loading..." splash and needs the keychain prompt ASAP.
@@ -712,7 +712,7 @@ function App() {
 
       return () => clearTimeout(timer);
     }
-  }, [initialized, quickLoadDone, onboardingComplete]);
+  }, [initialized, quickLoadDone, accounts.length]);
 
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
