@@ -15,8 +15,15 @@ const HERE = import.meta.dirname;
 const SWIFT_SRC = join(HERE, 'windowid.swift');
 const SWIFT_BIN = join(HERE, '.windowid');
 
+/**
+ * English writes `website/screenshots/`; every other locale writes its own
+ * subdirectory beside it, which is exactly where the website generator looks
+ * for a localized shot before falling back to the English file.
+ */
+const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
+
 export const OUT_DIR = process.env.SHOTS_OUT
-  || resolve(HERE, '../../website/screenshots');
+  || resolve(HERE, '../../website/screenshots', LOCALE_DIR === 'en' ? '' : LOCALE_DIR);
 
 /** Compile the window-id helper once per run. */
 function windowIdBinary() {

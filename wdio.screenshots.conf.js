@@ -25,8 +25,15 @@ import {
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 import { demoScenarios } from './scripts/screenshots/demoData.js';
+import { appCode } from './scripts/screenshots/locales.js';
 
-const { DEMO_ACCOUNTS } = demoScenarios('en');
+// SHOTS_LOCALE is a website directory name (`de`, `pt-br`, `zh`). It picks the
+// app language, the demo mailbox and the output directory together — one knob,
+// so the three can never disagree.
+const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
+const APP_LOCALE = appCode(LOCALE_DIR);
+
+const { DEMO_ACCOUNTS } = demoScenarios(APP_LOCALE);
 
 const appBinary = process.env.TAURI_APP_BINARY
   || resolve(import.meta.dirname, 'target/debug/mailvault');
@@ -57,6 +64,10 @@ function seedFrontendSettings() {
         listPaneSize: 470,
         onboardingComplete: true,
         sidebarCollapsed: false,
+        // `src/main.jsx` applies the persisted language before first paint, so
+        // seeding it here IS "run the app in German" — no handle to drive, no
+        // catalog to swap after boot, nothing for the first shot to race.
+        language: APP_LOCALE,
       },
     },
   }, null, 2));
@@ -77,7 +88,7 @@ export const config = {
   connectionRetryCount: 15,
 
   onPrepare: async function () {
-    console.log(`[shots] HOME: ${dataDir}, driver: ${driverBin} on ${driverPort}`);
+    console.log(`[shots] locale: ${LOCALE_DIR} (app ${APP_LOCALE}), HOME: ${dataDir}, driver: ${driverBin} on ${driverPort}`);
     try { execFileSync('pkill', ['-x', driverBin]); } catch { /* none running */ }
 
     buildMockServer();
