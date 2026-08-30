@@ -1530,5 +1530,18 @@
   "premium.list.locked": "Requires Premium",
   "onboarding.splashTrustLine": "Your mail stays on this computer. No account, no telemetry.",
   "common.continue": "Continue",
-  "onboarding.chooseAlwaysAllow": "Choose “Always Allow” the first time, or it asks again on every sync."
+  "onboarding.chooseAlwaysAllow": "Choose “Always Allow” the first time, or it asks again on every sync.",
+  "preview.row1.subject": "Launch campaign, round three",
+  "preview.row1.snippet": "The board is approved. Shooting Thursday if the light holds.",
+  "preview.row2.subject": "Your invoice is ready",
+  "preview.row2.snippet": "Invoice 2043 for August, due in 14 days.",
+  "preview.row3.subject": "Studio swap this weekend?",
+  "preview.row3.snippet": "We can take the big room if you want the corner one.",
+  "preview.row4.subject": "Photos from the coast",
+  "preview.row4.snippet": "Forty of them. The good ones are at the end.",
+  "preview.row5.subject": "Bank statement",
+  "preview.row5.snippet": "Your August statement is available to download.",
+  "preview.row6.subject": "Delivery scheduled",
+  "preview.row6.snippet": "Arriving Tuesday between 9am and noon.",
+  "onboarding.previewCaption": "Preview with sample mail"
 }
