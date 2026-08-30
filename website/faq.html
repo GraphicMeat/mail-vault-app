@@ -27,9 +27,9 @@
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
-  <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=9">
@@ -44,11 +44,10 @@
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .faq-chevron { transition: transform var(--mv-state) var(--mv-ease); }
-    .faq-chevron.open { transform: rotate(180deg); }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <!-- Structured Data: WebPage -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -64,195 +63,22 @@
   }
   </script>
 
-  <!-- Structured Data: FAQPage -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
-    "@type": "FAQPage",
-    "mainEntity": [
+    "@type": "BreadcrumbList",
+    "itemListElement": [
       {
-        "@type": "Question",
-        "name": "What is MailVault?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault is a free, open-source desktop email client for macOS and Linux that stores your emails in a vault on your own disk. It connects to your email accounts via IMAP and saves all messages as standard .eml files (RFC 5322) in Maildir format on your computer, giving you a permanent offline backup with no vendor lock-in."
-        }
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://mailvaultapp.com/"
       },
       {
-        "@type": "Question",
-        "name": "How does MailVault back up emails?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault connects to your email server using the IMAP protocol and downloads each email into your vault as a standard .eml file in Maildir format. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Which email providers does MailVault work with?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault works with any email provider that supports IMAP, including Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (with Bridge), Fastmail, Zoho Mail, and any self-hosted or business email provider with IMAP access."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is MailVault free?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault is free for core features including email reading, composing, search, threading, local archiving, and manual backup. Premium features — scheduled automatic backups, cross-account mailbox migration, and auto-cleanup rules — are available for $4/month or $25/year; the yearly plan includes a 14-day free trial. The source code is available on GitHub."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Where are my emails stored?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you are never locked in to MailVault."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What are .eml files and Maildir? Why does it matter?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": ".eml (RFC 5322) is the internet standard format for email messages. Every email is stored as a single, self-contained text file that can be opened by any email client. Maildir is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there is no single database that can corrupt. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I access my emails offline?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Once your emails are synced, they are stored locally and you can read, search, and browse all of them without an internet connection. You only need internet to sync new emails or send messages."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can MailVault block email tracking pixels?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. Every message MailVault opens is checked for tracking pixels — the hidden 1x1 images marketing mail uses to report back when you open it, how often, from which IP address and on which client. A small eye appears beside the subject on any message that carries one, and clicking it names the tracking company and shows the exact URL the pixel would have called. Detection is free for everyone. MailVault Premium also strips those beacons out of the HTML before the message is rendered, so the request is never made and the sender is told nothing. Nearly 500 known tracking endpoints ship with the app; the list is bundled and updated in releases, never fetched from a server at runtime."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Is my data secure?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain or the Linux Secret Service, never in a plain file. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What happens if I delete emails from the server?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did not archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is Archive & Delete, which copies each message into your vault and verifies it there before removing it from the server."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Does MailVault work with Gmail and Outlook?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2. Personal Outlook.com accounts are currently affected by a known Microsoft server issue."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Why can't I connect my Outlook.com account?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "There is a known Microsoft server-side issue affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with 'User is authenticated but not connected.' Microsoft's IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting. Microsoft 365 Business/Enterprise accounts are not affected. MailVault's OAuth2 implementation is ready and will work once Microsoft resolves the issue."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How do I use MailVault with Proton Mail?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I send from a different address than the one I log in with?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. In Settings \u2192 Accounts, fill in the Send Mail As field for the account, or leave it blank to send from your login address. Only the From address on outgoing mail changes \u2014 your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail, and a Verify button sends a single test message from the address so you can confirm your provider accepts it. The address must be an alias your provider lets that login send from: Fastmail accepts any alias on the account, Gmail requires it under \"Send mail as\" in Gmail settings, and Microsoft 365 requires Send As permission."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What are the system requirements?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault requires macOS 11 (Big Sur) or later, and runs natively on both Intel and Apple Silicon. On Linux it ships as .deb, AppImage, Snap and Flatpak for Ubuntu 22.04+ / Debian 12+. It stays in the menu bar and keeps syncing with the window closed."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How are attachments handled?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can Open, Save As, or Show in Folder any attachment directly from the email viewer."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What happens when I archive an email?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the A (Archived) flag in the filename. Archived emails appear in the Local view mode and are included in backups. The email remains on your server unless you explicitly delete it."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What happens when I archive and delete from server?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Archive & Delete runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server. Afterwards the row shows the only-copy state — your vault is the one place that message still exists, which is also the cue to keep a backup drive attached."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How does backup and restore work?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault exports your emails as a ZIP archive containing all .eml files plus a manifest.json that maps emails to accounts by email address, making backups portable across installations. You can export all emails or archived only. Importing is idempotent — duplicates are skipped. If a backup contains emails for an unrecognized account, MailVault creates it automatically."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What are Gmail's bandwidth limits, and what happens when a backup hits them?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Google caps how much mail data one Gmail or Google Workspace account can move per day. Over IMAP the limits are 2500 MB downloaded per day and 500 MB uploaded per day. POP downloads are capped at 1250 MB per day. The Gmail web client has its own limits: 750 MB per hour and 1250 MB per day down, 300 MB per hour and 1500 MB per day up (uploads include SMTP). All of a user's clients share the same daily budget, so Apple Mail, your phone and MailVault draw from one pool. Exceeding a limit temporarily suspends the account — typically for 1 hour, but up to 24 hours. These limits apply to every Google Workspace edition and Google can change them without notice. A large first backup of a mailbox over 2.5 GB will therefore take more than one day. MailVault detects the limit response, stops the run cleanly instead of hammering the server, and tells you what happened. Run the backup again after the suspension clears and it resumes where it stopped, because messages already saved locally are skipped."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What is the external backup location (second copy)?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so any mail client can read it. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I store my mail somewhere other than the default application folder?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. MailVault can move its mail store — messages, header caches, attachment cache and folder lists — to any folder on any drive, so a large archive can live on an external SSD or a second internal disk instead of your startup volume. Only mail data moves: accounts, settings and logs stay in the app's own folder so the app can always start and tell you if the drive is missing. Moving is done safely: MailVault copies everything to the new folder, verifies every file arrived at the correct size, switches over, and only then deletes the originals. An interrupted move can be run again and picks up where it left off. The new folder is stamped with a marker file so MailVault can recognise it later and refuse a folder belonging to a different store. If the drive is not connected at launch, MailVault reports the folder as missing rather than silently starting a second, divergent archive in the default location — reconnect the drive, or point the app at the folder again. This is separate from the external backup location: the moved folder is the live store, an external backup location is an extra cold copy."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Why is spellcheck not underlining anything on Linux?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Because no spelling dictionary is installed. On macOS and Windows the system provides one; on Linux the dictionary comes from your distribution, and a minimal desktop install often has none. MailVault checks spelling through WebKitGTK, which looks words up via enchant and hunspell, so it can only underline once a hunspell dictionary is present. Install one for your language and restart MailVault: on Debian, Ubuntu or Mint run sudo apt install hunspell-en-us; on Fedora sudo dnf install hunspell-en; on Arch or Manjaro sudo pacman -S hunspell-en_us; on openSUSE sudo zypper install myspell-en_US. Swap the language code for your own — hunspell-de-de, hunspell-fr and so on — and MailVault will pick the dictionary that matches your system language. The spellcheck button in the message toolbar tells you which case you are in: it toggles underlines when a dictionary is present, and opens these instructions when none is. The snap build cannot see dictionaries installed on the host because it is strictly confined, so it carries its own; if it reports none, use the .deb package instead."
-        }
+        "@type": "ListItem",
+        "position": 2,
+        "name": "FAQ",
+        "item": "https://mailvaultapp.com/faq.html"
       }
     ]
   }
@@ -278,7 +104,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         <a href="/" class="flex items-center gap-3">
-          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
         </a>
 
@@ -342,490 +168,150 @@
   </nav>
 
   <!-- Content -->
-  <main class="pt-24 pb-20">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <main class="pt-32 pb-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
       <h1 class="text-4xl font-bold mb-2">Frequently Asked Questions</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">Everything you need to know about MailVault.</p>
 
-      <div class="space-y-3">
+      <div class="grid gap-4 sm:grid-cols-2 mb-14">
 
-        <!-- FAQ 1 -->
-        <div id="what-is-mailvault" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What is MailVault?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/getting-started.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is a free, open-source desktop email client for macOS and Linux that stores your emails in a vault on your own disk. It connects to your email accounts via IMAP and saves all messages as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files (RFC 5322)</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer, giving you a permanent offline backup with no vendor lock-in.
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Getting Started</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">What MailVault is, which email providers it works with, what it runs on, and how it keeps your mail private.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">4 questions</p>
+        </a>
 
-        <!-- FAQ 2 -->
-        <div id="how-does-backup-work" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">How does MailVault back up emails?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/storage-and-vault.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Storage and Your Vault</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">Where MailVault keeps your mail on disk, why it uses .eml and Maildir, and how to move the vault to another drive.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">6 questions</p>
+        </a>
 
-        <!-- FAQ 3 -->
-        <div id="supported-email-providers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Which email providers does MailVault work with?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/providers.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault works with any email provider that supports IMAP, including Gmail, Outlook, Yahoo Mail, iCloud Mail, ProtonMail (with Bridge), Fastmail, Zoho Mail, and any self-hosted or business email provider with IMAP access.
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Email Providers</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">Connecting Gmail, Microsoft 365, Outlook.com and Proton Mail, and sending from an alias.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">4 questions</p>
+        </a>
 
-        <!-- FAQ 4 -->
-        <div id="is-mailvault-free" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Is MailVault free?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/premium.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is free for core features including email reading, composing, search, threading, local archiving, and manual backup. Premium features — scheduled automatic backups, cross-account mailbox migration, and auto-cleanup rules — are available for <span data-mv-price="{monthly}/month or {yearly}/year">$4/month or $25/year</span>; the yearly plan includes a 14-day free trial. The source code is available on <a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a>. See <a href="/pricing.html" class="text-primary-500 hover:underline">full pricing</a> for details.
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Free and Premium</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">What every MailVault user gets for free, and what MailVault Premium adds on top.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">2 questions</p>
+        </a>
 
-        <!-- FAQ 5 -->
-        <div id="where-are-emails-stored" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Where are my emails stored?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/backup-and-restore.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you're never locked in to MailVault.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Directory structure:</p>
-              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
-└── maildir/
-    └── you@example.com/
-        └── INBOX/
-            ├── headers.json          ← cached list for fast loading
-            └── cur/
-                ├── 1234567890.eml    ← auto-cached email
-                └── 1234567891_AS.eml ← archived + seen email</code></pre>
-            </div>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Backup and Restore</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">How MailVault archives mail, what archiving then deleting does to the server copy, and how to export and re-import your vault.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">5 questions</p>
+        </a>
 
-        <!-- FAQ: .eml and Maildir -->
-        <div id="eml-and-maildir" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What are .eml files and Maildir? Why does it matter?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="faq/troubleshooting.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> is the internet standard format for email messages. Every email — headers, body, and attachments — is stored as a single, self-contained text file. Unlike proprietary databases, .eml files can be opened by any email client (Apple Mail, Thunderbird, Outlook) and read with any text editor.</p>
-              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> is a proven directory structure for storing email, used by mail servers for decades. Each email is one file, so there's no single database that can corrupt — if one file is damaged, the rest of your archive is unaffected. Together, .eml + Maildir mean your emails are future-proof, portable, and never locked in to any single application.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Filename flags:</p>
-              <p>MailVault appends flag characters to the .eml filename to track status: <strong>A</strong> = Archived, <strong>S</strong> = Seen, <strong>R</strong> = Replied, <strong>F</strong> = Flagged. For example, <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code> means the email has been archived and seen.</p>
-            </div>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Troubleshooting</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">Fixes for the two problems people hit most: the Gmail daily bandwidth cap, and spellcheck underlining nothing on Linux.</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">2 questions</p>
+        </a>
 
-        <!-- FAQ 6 -->
-        <div id="offline-access" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Can I access my emails offline?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. Once your emails are synced, they are stored locally and you can read, search, and browse all of them without an internet connection. You only need internet to sync new emails or send messages.
-            </p>
-          </div>
-        </div>
+      </div>
 
-        <!-- FAQ 7 -->
-        <div id="data-security" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Is my data secure?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault is designed with privacy first. Your email credentials are stored in the macOS Keychain or the Linux Secret Service, never in a plain file. All data stays on your machine — there is no cloud sync, no tracking, no analytics, and no data mining. The app is open source so you can verify the code yourself.
-            </p>
-          </div>
-        </div>
+      <!-- Search is progressive enhancement over the list below: with scripting
+           off the box stays hidden and every question is still one link away. -->
+      <div id="mv-faq-search" hidden class="mb-8">
+        <input id="mv-faq-q" type="search" autocomplete="off" aria-label="Search the FAQ" placeholder="Search the FAQ" aria-controls="mv-faq-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
 
-        <div id="block-email-trackers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Can MailVault block email tracking pixels?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. Every message MailVault opens is checked for tracking pixels — the hidden 1x1 images marketing mail uses to report back when you open it, how often, from which IP address and on which client. A small eye appears beside the subject on any message that carries one, and clicking it names the tracking company and shows the exact URL the pixel would have called. Detection is free for everyone. MailVault Premium also strips those beacons out of the HTML before the message is rendered, so the request is never made and the sender is told nothing. Nearly 500 known tracking endpoints ship with the app; the list is bundled and updated in releases, never fetched from a server at runtime. <a href="/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">See how it works, before and after</a>.
-            </p>
-          </div>
-        </div>
+      <h2 class="text-2xl font-bold mb-6">All questions</h2>
+      <p id="mv-faq-empty" hidden class="text-slate-500 dark:text-slate-400">No question matches that search.</p>
 
-        <!-- FAQ 8 -->
-        <div id="delete-from-server" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What happens if I delete emails from the server?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong>, which copies each message into your vault and verifies it there before removing it from the server.
-            </p>
-          </div>
-        </div>
+      <div id="mv-faq-index" class="grid gap-8 sm:grid-cols-2">
 
-        <!-- FAQ 9 -->
-        <div id="gmail-and-outlook" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Does MailVault work with Gmail and Outlook?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Yes. MailVault works with Gmail, Outlook, and any other email service that supports IMAP. For Gmail, sign in directly with your Google account using OAuth2 — no manual IMAP settings needed. Microsoft 365 Business and Enterprise accounts can sign in directly with your Microsoft account using OAuth2, and it works seamlessly with two-factor authentication. Personal Outlook.com accounts are currently affected by a <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">known Microsoft server issue</a>.
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/getting-started.html" class="hover:text-primary-500 transition-colors">Getting Started</a></h3>
+            <ul class="space-y-2">
+              <li id="what-is-mailvault" class="mv-faq-q mv-anchor"><a href="faq/getting-started.html#what-is-mailvault" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What is MailVault?</a></li>
+              <li id="supported-email-providers" class="mv-faq-q mv-anchor"><a href="faq/getting-started.html#supported-email-providers" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Which email providers does MailVault work with?</a></li>
+              <li id="system-requirements" class="mv-faq-q mv-anchor"><a href="faq/getting-started.html#system-requirements" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What are the system requirements?</a></li>
+              <li id="data-security" class="mv-faq-q mv-anchor"><a href="faq/getting-started.html#data-security" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Is my data secure?</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Microsoft Outlook OAuth2 -->
-        <div id="microsoft-outlook-oauth2" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Why can't I connect my Outlook.com account?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">There is a <strong>known Microsoft server-side issue</strong> affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with "User is authenticated but not connected." This affects all third-party email clients that use IMAP with OAuth2 — not just MailVault.</p>
-              <p class="mb-4">Microsoft requires OAuth2 for personal accounts. Unfortunately, their IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting to the mailbox.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">What you can do:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Microsoft 365 Business/Enterprise accounts</strong> are not affected — OAuth2 works normally for organizational accounts</li>
-                <li><strong>Monitor the issue</strong> — This is a server-side problem that only Microsoft can fix. The <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A thread</a> tracks the issue</li>
-                <li><strong>Use the Outlook web app</strong> or Microsoft's official apps in the meantime for personal accounts</li>
-                <li><strong>MailVault is ready</strong> — Once Microsoft resolves the issue, MailVault's OAuth2 sign-in will work immediately with no changes needed</li>
-              </ul>
-              <p>For technical details: MailVault uses the same OAuth2 implementation as <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>, following Microsoft's official IMAP OAuth2 documentation with PKCE and XOAUTH2 authentication.</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/storage-and-vault.html" class="hover:text-primary-500 transition-colors">Storage and Your Vault</a></h3>
+            <ul class="space-y-2">
+              <li id="where-are-emails-stored" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#where-are-emails-stored" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Where are my emails stored?</a></li>
+              <li id="eml-and-maildir" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#eml-and-maildir" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What are .eml files and Maildir? Why does it matter?</a></li>
+              <li id="offline-access" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#offline-access" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Can I access my emails offline?</a></li>
+              <li id="attachments" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#attachments" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">How are attachments handled?</a></li>
+              <li id="change-mail-storage-folder" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#change-mail-storage-folder" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Can I store my mail somewhere other than the default application folder?</a></li>
+              <li id="external-backup-location" class="mv-faq-q mv-anchor"><a href="faq/storage-and-vault.html#external-backup-location" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What is the external backup location (second copy)?</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Proton Mail Bridge -->
-        <div id="proton-mail-bridge" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">How do I use MailVault with Proton Mail?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault (or any third-party mail client) requires <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — a desktop app from Proton that runs on your own computer and exposes your encrypted mailbox as standard IMAP/SMTP on <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>. Bridge requires a paid Proton Mail plan; it isn't available on Proton's free tier.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Setup steps:</p>
-              <ol class="list-decimal list-inside space-y-2 mb-4">
-                <li>Install <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> from Proton's website</li>
-                <li>Sign in to Bridge with your Proton account</li>
-                <li>Bridge displays per-account <strong>IMAP/SMTP credentials</strong> — the password shown is a Bridge-generated app password, <strong>not</strong> your regular Proton account password</li>
-                <li>In MailVault, choose <strong>Proton Mail Bridge</strong> in the provider list (or <strong>Custom IMAP</strong> if it isn't listed) and enter:
-                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
-                    <li>Server: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
-                    <li>IMAP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>, Security: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
-                    <li>SMTP Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
-                    <li>Username: your Proton email address</li>
-                    <li>Password: the Bridge-generated password from step 3</li>
-                  </ul>
-                </li>
-              </ol>
-              <p class="mb-4">Proton Mail Bridge must be running in the background whenever MailVault syncs — if Bridge is closed, MailVault can't reach the mailbox. Mail you've already archived stays fully readable and searchable in MailVault even while Bridge is closed, since MailVault is local-first and reads from its own <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> store rather than live from Bridge.</p>
-              <p>Bridge secures its local IMAP/SMTP server with a self-signed TLS certificate. MailVault handles this automatically for local (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) connections, so no manual certificate installation is required.</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/providers.html" class="hover:text-primary-500 transition-colors">Email Providers</a></h3>
+            <ul class="space-y-2">
+              <li id="gmail-and-outlook" class="mv-faq-q mv-anchor"><a href="faq/providers.html#gmail-and-outlook" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Does MailVault work with Gmail and Outlook?</a></li>
+              <li id="microsoft-outlook-oauth2" class="mv-faq-q mv-anchor"><a href="faq/providers.html#microsoft-outlook-oauth2" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Why can't I connect my Outlook.com account?</a></li>
+              <li id="proton-mail-bridge" class="mv-faq-q mv-anchor"><a href="faq/providers.html#proton-mail-bridge" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">How do I use MailVault with Proton Mail?</a></li>
+              <li id="send-from-different-address" class="mv-faq-q mv-anchor"><a href="faq/providers.html#send-from-different-address" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Can I send from a different address than the one I log in with?</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Send from a different address -->
-        <div id="send-from-different-address" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Can I send from a different address than the one I log in with?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Yes. Open <strong>Settings &rarr; Accounts</strong>, pick the account, and fill in <strong>Send Mail As</strong>. Leave it blank to send from your login address. This is common on Fastmail and on any provider where the address you sign in with is not the address you hand out.</p>
-              <p class="mb-4">Only the <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> address on outgoing mail changes. Your username and password stay exactly as they are, MailVault still signs in to IMAP and SMTP as the account you set up, and <strong>no Reply-To header is added</strong> &mdash; replies go to the address you send as.</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Finding and checking the address:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Suggestions</strong> &mdash; MailVault offers addresses it has already seen in your own mail: ones you have sent as before, and ones that mail addressed to you arrives on.</li>
-                <li><strong>Verify</strong> &mdash; sends a single test message from the address, to your own mailbox by default, so you can confirm your provider accepts it before you rely on it.</li>
-                <li><strong>If it is refused</strong> &mdash; the address has to be an alias or identity your provider lets that login send from. Fastmail accepts any alias on the account; Gmail needs the address added under "Send mail as" in Gmail settings, and Microsoft 365 needs Send As permission from an administrator.</li>
-              </ul>
-              <p>Aliases are configured with your email provider, not in MailVault &mdash; MailVault sends as an address your provider has already authorised.</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/premium.html" class="hover:text-primary-500 transition-colors">Free and Premium</a></h3>
+            <ul class="space-y-2">
+              <li id="is-mailvault-free" class="mv-faq-q mv-anchor"><a href="faq/premium.html#is-mailvault-free" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Is MailVault free?</a></li>
+              <li id="block-email-trackers" class="mv-faq-q mv-anchor"><a href="faq/premium.html#block-email-trackers" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Can MailVault block email tracking pixels?</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ 10 -->
-        <div id="system-requirements" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What are the system requirements?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault requires macOS 11 (Big Sur) or later, and runs natively on both Intel and Apple Silicon. On Linux it ships as .deb, AppImage, Snap and Flatpak for Ubuntu 22.04+ / Debian 12+. It stays in the menu bar and keeps syncing with the window closed.
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/backup-and-restore.html" class="hover:text-primary-500 transition-colors">Backup and Restore</a></h3>
+            <ul class="space-y-2">
+              <li id="how-does-backup-work" class="mv-faq-q mv-anchor"><a href="faq/backup-and-restore.html#how-does-backup-work" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">How does MailVault back up emails?</a></li>
+              <li id="archive-email" class="mv-faq-q mv-anchor"><a href="faq/backup-and-restore.html#archive-email" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What happens when I archive an email?</a></li>
+              <li id="archive-and-delete" class="mv-faq-q mv-anchor"><a href="faq/backup-and-restore.html#archive-and-delete" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What happens when I archive and delete from server?</a></li>
+              <li id="delete-from-server" class="mv-faq-q mv-anchor"><a href="faq/backup-and-restore.html#delete-from-server" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What happens if I delete emails from the server?</a></li>
+              <li id="backup-and-restore" class="mv-faq-q mv-anchor"><a href="faq/backup-and-restore.html#backup-and-restore" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">How does backup and restore work?</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Attachments -->
-        <div id="attachments" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">How are attachments handled?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can <strong>Open</strong>, <strong>Save As</strong>, or <strong>Show in Folder</strong> any attachment directly from the email viewer. Extracted attachments are temporarily cached for quick re-access.
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="faq/troubleshooting.html" class="hover:text-primary-500 transition-colors">Troubleshooting</a></h3>
+            <ul class="space-y-2">
+              <li id="gmail-bandwidth-limits" class="mv-faq-q mv-anchor"><a href="faq/troubleshooting.html#gmail-bandwidth-limits" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">What are Gmail's bandwidth limits, and what happens when a backup hits them?</a></li>
+              <li id="linux-spellcheck-dictionary" class="mv-faq-q mv-anchor"><a href="faq/troubleshooting.html#linux-spellcheck-dictionary" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Why is spellcheck not underlining anything on Linux?</a></li>
+            </ul>
           </div>
-        </div>
-
-        <!-- FAQ: Archive -->
-        <div id="archive-email" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What happens when I archive an email?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              Archiving downloads the full email from your server (if not already cached) and stores it as a .eml file on disk with the <strong>A</strong> (Archived) flag in the filename. If the email was already cached locally, MailVault simply renames the file to add the archive flag. Archived emails appear under the <strong>Vault</strong> view and are included in backups. The server copy is untouched until you delete it yourself.
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Archive + Delete -->
-        <div id="archive-and-delete" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What happens when I archive and delete from server?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong> runs three steps in order: it copies the message into your vault as an .eml file, checks that the copy is really there, and only then deletes it from the server. Anything that fails the check stays on the server &mdash; a failed copy never costs you the original. Afterwards the row shows <strong>your only copy</strong>: the vault is the one place that message still exists, which is also the cue to keep a backup drive attached.
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Backup & Restore -->
-        <div id="backup-and-restore" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">How does backup and restore work?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVault exports your emails as a ZIP archive containing all .eml files plus a <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> that maps emails to accounts by email address (not internal IDs), making backups portable across different installations. You can choose to export <strong>all emails</strong> or <strong>archived only</strong>. Importing is idempotent — if an email already exists locally, it won't be duplicated. If a backup contains emails for an account you haven't set up yet, MailVault creates it automatically (you just re-enter the password in Settings).
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Gmail bandwidth limits -->
-        <div id="gmail-bandwidth-limits" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What are Gmail's bandwidth limits, and what happens when a backup hits them?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                Google caps how much mail data a single Gmail or Google Workspace account can move per day. The caps apply to the account, not to the app — Apple Mail, your phone and MailVault all draw from the same daily budget.
-              </p>
-              <div class="scroll-x overflow-x-auto">
-                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <thead class="bg-slate-50 dark:bg-slate-900/50">
-                    <tr>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Access method</th>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Download limit</th>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Upload limit</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> (what MailVault uses)</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / day</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / day</td>
-                    </tr>
-                    <tr>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / day</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
-                    </tr>
-                    <tr>
-                      <td class="px-3 py-2">Gmail web client</td>
-                      <td class="px-3 py-2">750 MB / hour, 1250 MB / day</td>
-                      <td class="px-3 py-2">300 MB / hour, 1500 MB / day</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p>
-                Go over a limit and Google temporarily suspends the account: <strong>usually about 1 hour, but it can last up to 24 hours</strong>. The limits are the same on every Google Workspace edition, and Google can change them without notice — see <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Google's bandwidth limits documentation</a> for the current numbers.
-              </p>
-              <p>
-                <strong>What this means for a first backup.</strong> A mailbox larger than about 2.5 GB cannot be downloaded in one day over IMAP — no client can do it, that is a server-side cap. Expect a large archive to take several days.
-              </p>
-              <p>
-                <strong>What MailVault does.</strong> It recognises the limit response, stops the run cleanly instead of retrying into a longer lockout, and tells you the daily limit was reached. Start the backup again once the suspension clears and it continues where it stopped — messages already saved locally are skipped, so nothing is downloaded twice. Everything already on disk stays readable and searchable while you wait.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: External backup location -->
-        <div id="external-backup-location" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">What is the external backup location (second copy)?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                MailVault always keeps a <strong>working copy</strong> of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a <strong>second, independent copy</strong> on a drive you control: an external SSD, a NAS share, or a synced folder.
-              </p>
-              <ul class="list-disc pl-5 space-y-2">
-                <li><strong>Written alongside the working copy.</strong> During a backup run each message is saved to both places, in the same <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir layout — so the second copy opens in Apple Mail, Thunderbird or any other client without MailVault.</li>
-                <li><strong>Cold storage, not a mirror.</strong> The app never reads it day to day. Emails deleted on the server, or removed inside MailVault, stay in the external copy.</li>
-                <li><strong>Read and write flags survive both directions.</strong> The copies are reconciled before a run, so a message you read stays read.</li>
-                <li><strong>Independent of the app.</strong> If that computer dies or you uninstall MailVault, the external folder is still a complete, self-describing mail archive.</li>
-              </ul>
-              <p>
-                Set it in <strong>Settings → Backup → “Second copy — external cold storage”</strong> and pick any folder. On macOS, MailVault saves a security-scoped bookmark for that folder, so access survives restarts and app updates — a raw path would not. A status badge shows <strong>Ready</strong>, <strong>Needs reauthorization</strong>, <strong>Unavailable</strong> or <strong>Access denied</strong>, and reauthorizing is one click.
-              </p>
-              <p>
-                If the drive is unplugged mid-backup, the working copy still completes and MailVault reports how many messages did not reach the external copy. The next run copies them across — nothing is lost, and the failure is never silent.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: Custom mail storage folder -->
-        <div id="change-mail-storage-folder" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Can I store my mail somewhere other than the default application folder?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                Yes. By default MailVault keeps its mail store inside the app's own Application Support folder on your startup disk. You can move that store to any folder on any drive — an external SSD, a second internal disk — which matters once an archive grows to tens of gigabytes.
-              </p>
-              <p>
-                <strong>Only mail data moves:</strong> the messages, header caches, attachment cache and folder lists. Accounts, settings and logs stay in the app's own folder, so MailVault can always start far enough to tell you a drive is missing and ask for the folder again.
-              </p>
-              <p>
-                <strong>The move is verified before anything is deleted.</strong> MailVault copies everything to the new folder, checks that every file arrived at the correct size, switches over, and only then removes the originals. A move interrupted by a disconnect or a crash leaves the current store intact; run it again and it resumes rather than recopying what is already there.
-              </p>
-              <p>
-                <strong>The folder is stamped and recognised.</strong> A small marker file identifies the store, so if you later reconnect the drive or move the folder by hand you can point MailVault back at it, and MailVault will refuse a folder that belongs to a different store or that holds no mail.
-              </p>
-              <p>
-                <strong>If the drive is not connected</strong>, MailVault reports the mail store as unavailable instead of quietly starting a second archive in the default location and leaving you with two half-complete copies. Reconnect the drive, or select the folder again. You can also switch back to the default location at any time — the mail stays where it is until you move it.
-              </p>
-              <p class="text-sm">
-                <strong>Not the same as a second copy.</strong> This changes where the <em>live</em> store lives. An <a href="#external-backup-location" class="text-primary-500 hover:underline">external backup location</a> adds an extra cold copy on top of it. Using both — mail store on a fast external SSD, cold copy on a NAS — is a reasonable setup.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: Linux spellcheck dictionary -->
-        <div id="linux-spellcheck-dictionary" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Why is spellcheck not underlining anything on Linux?</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                Because there is no spelling dictionary on the machine. macOS and Windows ship one with the system; on Linux the dictionary comes from your distribution, and a minimal desktop install often has none. MailVault checks spelling through WebKitGTK, which looks words up through enchant and hunspell — so it can only underline once a hunspell dictionary is installed.
-              </p>
-              <p>
-                <strong>The button in the message toolbar tells you which case you are in.</strong> With a dictionary present it toggles the underlines on and off, and MailVault remembers the setting. With none, it opens these same instructions instead of pretending to be a switch.
-              </p>
-              <p><strong>Install a dictionary for your language:</strong></p>
-              <div class="space-y-2 font-mono text-sm">
-                <div><span class="text-slate-500 dark:text-slate-500">Debian, Ubuntu, Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">Arch, Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
-              </div>
-              <p>
-                Swap the language code for your own — <code>hunspell-de-de</code>, <code>hunspell-fr</code>, and so on. You can install several; MailVault checks against the one that matches your system language, and against all of them if none matches. <strong>Restart MailVault afterwards</strong> — the checker is set up when the app starts.
-              </p>
-              <p>
-                <strong>The snap build is a special case.</strong> A strictly confined snap cannot see dictionaries installed on the host, so it carries its own copy. If the snap reports no dictionary, install the .deb package instead — it uses the dictionaries already on your system.
-              </p>
-            </div>
-          </div>
-        </div>
 
       </div>
 
@@ -849,7 +335,7 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex flex-col md:flex-row items-center justify-between gap-6">
         <a href="/" class="flex items-center gap-2">
-          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
         </a>
         <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
@@ -909,44 +395,35 @@
       });
     });
 
-    // FAQ Accordion
-    document.querySelectorAll('.faq-toggle').forEach(button => {
-      button.addEventListener('click', () => {
-        const answer = button.nextElementSibling;
-        const chevron = button.querySelector('.faq-chevron');
-        const isOpen = answer.classList.contains('open');
-
-        // Close all others
-        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
-        document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
-        document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-
-        // Toggle current
-        if (!isOpen) {
-          answer.classList.add('open');
-          chevron.classList.add('open');
-          button.setAttribute('aria-expanded', 'true');
-        }
-      });
-    });
-
-    // Auto-expand FAQ section from URL hash (e.g. #proton-mail-bridge)
-    if (window.location.hash) {
-      const target = document.querySelector(window.location.hash);
-      if (target && target.classList.contains('faq-item')) {
-        const button = target.querySelector('.faq-toggle');
-        const answer = target.querySelector('.faq-answer');
-        const chevron = target.querySelector('.faq-chevron');
-        if (button && answer) {
-          answer.classList.add('open');
-          if (chevron) chevron.classList.add('open');
-          button.setAttribute('aria-expanded', 'true');
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }
+    // Deep links minted before the split (the app's Settings -> Help entries
+    // among them) still arrive as /faq.html#question-id. The index below already
+    // knows which topic page owns each id, so forward rather than 404 the anchor.
+    if (location.hash.length > 1) {
+      const owner = document.getElementById('mv-faq-index')
+        .querySelector('#' + CSS.escape(location.hash.slice(1)) + ' a[href]');
+      if (owner) location.replace(owner.href);
     }
+
+    // Filter the index. Plain substring over the question text — 23 rows.
+    const box = document.getElementById('mv-faq-search');
+    const field = document.getElementById('mv-faq-q');
+    const empty = document.getElementById('mv-faq-empty');
+    const rows = [...document.querySelectorAll('#mv-faq-index .mv-faq-q')];
+    box.hidden = false;
+    field.addEventListener('input', () => {
+      const needle = field.value.trim().toLowerCase();
+      let hits = 0;
+      for (const row of rows) {
+        const match = !needle || row.textContent.toLowerCase().includes(needle);
+        row.hidden = !match;
+        if (match) hits++;
+      }
+      for (const group of document.querySelectorAll('#mv-faq-index .mv-faq-group')) {
+        group.hidden = ![...group.querySelectorAll('.mv-faq-q')].some(r => !r.hidden);
+      }
+      empty.hidden = hits > 0;
+    });
   </script>
-  <script defer src="/pricing-localize.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

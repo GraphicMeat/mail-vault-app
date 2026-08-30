@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="it" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Backup e ripristino — MailVault FAQ</title>
+  <meta name="description" content="Come MailVault archivia la posta, che cosa succede alla copia sul server quando archivi e poi elimini, e come esportare e reimportare il tuo vault.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/it/faq/backup-and-restore.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/it/faq/backup-and-restore.html">
+  <meta property="og:title" content="Backup e ripristino — MailVault FAQ">
+  <meta property="og:description" content="Come MailVault archivia la posta, che cosa succede alla copia sul server quando archivi e poi elimini, e come esportare e reimportare il tuo vault.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="it_IT">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Backup e ripristino — MailVault FAQ">
+  <meta name="twitter:description" content="Come MailVault archivia la posta, che cosa succede alla copia sul server quando archivi e poi elimini, e come esportare e reimportare il tuo vault.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Come fa MailVault il backup delle email?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault si collega al tuo server di posta con il protocollo IMAP e scarica ogni email nel tuo vault come un normale file .eml in formato Maildir. Ogni email è un file su disco — leggibile da una persona, portabile e compatibile con qualsiasi client di posta. Una volta che un messaggio è nel tuo vault puoi eliminare la copia sul server per liberare spazio; quella locale non ne risente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Che cosa succede quando archivio un'email?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "L'archiviazione scarica l'email completa dal tuo server (se non è già in cache) e la salva su disco come file .eml con il flag A (Archiviata) nel nome del file. Le email archiviate compaiono nella modalità di visualizzazione Locale e sono incluse nei backup. L'email resta sul tuo server finché non la elimini esplicitamente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Che cosa succede quando archivio ed elimino dal server?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Archivia ed elimina esegue tre passaggi in ordine: copia il messaggio nel tuo vault come file .eml, controlla che la copia sia davvero lì e solo allora lo elimina dal server. Tutto ciò che non supera il controllo resta sul server. Dopo, la riga mostra lo stato di unica copia — il tuo vault è l'unico posto in cui quel messaggio esiste ancora, il che è anche il segnale per tenere collegato un disco di backup."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Che cosa succede se elimino le email dal server?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Tutto quello che hai archiviato prima resta nel tuo vault, intatto qualunque cosa faccia il server dopo — è il senso stesso del prodotto. Tutto quello che non hai archiviato sparisce insieme alla copia sul server, perciò MailVault mostra lo stato di ogni messaggio sulla sua riga prima che tu elimini: sul server, nel tuo vault o in entrambi. La strada sicura è Archivia ed elimina, che copia ogni messaggio nel tuo vault e lo verifica lì prima di rimuoverlo dal server."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Come funzionano il backup e il ripristino?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault esporta le tue email come archivio ZIP che contiene tutti i file .eml più un manifest.json che associa le email agli account tramite l'indirizzo email, rendendo i backup portabili tra installazioni diverse. Puoi esportare tutte le email o solo quelle archiviate. L'importazione è idempotente — i duplicati vengono saltati. Se un backup contiene email di un account non riconosciuto, MailVault lo crea automaticamente."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://mailvaultapp.com/it/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/it/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Backup e ripristino",
+      "item": "https://mailvaultapp.com/it/faq/backup-and-restore.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/it/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/it/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/it/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funzioni</a>
+          <a href="/it/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casi d'uso</a>
+          <a href="/it/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="Scegli una lingua">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/backup-and-restore.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/backup-and-restore.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/backup-and-restore.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/backup-and-restore.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/backup-and-restore.html" aria-current="page"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/backup-and-restore.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/backup-and-restore.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/backup-and-restore.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/backup-and-restore.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="Percorso di navigazione" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/it/" class="hover:text-primary-500 transition-colors">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Backup e ripristino</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Backup e ripristino</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Come MailVault archivia la posta, che cosa succede alla copia sul server quando archivi e poi elimini, e come esportare e reimportare il tuo vault.</p>
+
+      <div class="space-y-4">
+
+        <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come fa MailVault il backup delle email?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault si collega al tuo server di posta con il protocollo IMAP e scarica ogni email come normale <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">file .eml</a>, salvato in formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> sulla tua macchina Mac o Linux. Ogni email è un file su disco — leggibile da una persona, portabile e compatibile con qualsiasi client di posta. Una volta che un messaggio è nel tuo vault puoi eliminare la copia sul server per liberare spazio; quella locale non ne risente.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/it/archive-progress-1440.webp" srcset="/screenshots/it/archive-progress-720.webp 720w, /screenshots/it/archive-progress-1440.webp 1440w, /screenshots/it/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Barra di avanzamento dell'archiviazione di MailVault durante un backup di email in blocco" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Che cosa succede quando archivio un'email?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              L'archiviazione scarica dal tuo server l'email completa (se non è già in cache) e la salva su disco come file .eml, con il contrassegno <strong>A</strong> (archiviata) nel nome del file. Se l'email era già in cache in locale, MailVault si limita a rinominare il file per aggiungere il contrassegno di archiviazione. Le email archiviate compaiono nella vista <strong>Vault</strong> e vengono incluse nei backup. La copia sul server resta intatta finché non la elimini tu.
+            </p>
+        </article>
+
+        <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Che cosa succede quando archivio ed elimino dal server?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archivia ed elimina</strong> esegue tre passaggi in ordine: copia il messaggio nel tuo vault come file .eml, controlla che la copia sia davvero lì e solo allora lo elimina dal server. Tutto ciò che non supera il controllo resta sul server &mdash; una copia fallita non ti costa mai l'originale. Dopo, la riga mostra lo stato di <strong>unica copia</strong>: il tuo vault è l'unico posto in cui quel messaggio esiste ancora, il che è anche il segnale per tenere collegato un disco di backup.
+            </p>
+        </article>
+
+        <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Che cosa succede se elimino le email dal server?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Tutto quello che hai archiviato prima resta nel tuo vault, intatto qualunque cosa faccia il server dopo — è il senso stesso del prodotto. Tutto quello che <em>non</em> hai archiviato sparisce insieme alla copia sul server, perciò MailVault mostra lo stato di ogni messaggio sulla sua riga prima che tu elimini: sul server, nel tuo vault o in entrambi. La strada sicura è <strong>Archivia ed elimina</strong>, che copia ogni messaggio nel tuo vault e lo verifica lì prima di rimuoverlo dal server.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/it/state-icons-1440.webp" srcset="/screenshots/it/state-icons-720.webp 720w, /screenshots/it/state-icons-1440.webp 1440w, /screenshots/it/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Casella di MailVault con le icone di stato per ogni messaggio: solo sul server, archiviato in locale e solo in locale" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Come funzionano il backup e il ripristino?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault esporta le tue email come archivio ZIP che contiene tutti i file .eml più un <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> che associa le email agli account tramite l'indirizzo email (non tramite ID interni), rendendo i backup portabili tra installazioni diverse. Puoi scegliere di esportare <strong>tutte le email</strong> oppure <strong>solo quelle archiviate</strong>. L'importazione è idempotente: se un'email esiste già in locale, non viene duplicata. Se un backup contiene email di un account che non hai ancora configurato, MailVault lo crea automaticamente (ti basta reinserire la password nelle Impostazioni).
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/it/settings-backup-1440.webp" srcset="/screenshots/it/settings-backup-720.webp 720w, /screenshots/it/settings-backup-1440.webp 1440w, /screenshots/it/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Impostazioni di backup e ripristino di MailVault, con esportazione ZIP, importazione ed esportazione MBOX per Thunderbird o Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/it/faq.html" class="text-primary-500 hover:underline">Torna a tutti gli argomenti delle FAQ</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Hai ancora domande?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Chiedi su GitHub
+          </a>
+          <a href="/it/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Contattaci
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/it/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/it/docs.html" class="hover:text-primary-500 transition-colors">Documentazione</a>
+          <a href="/it/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacy</a>
+          <a href="/it/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termini</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Tutti i diritti riservati.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Cucinato su una <span class="text-primary-500 font-semibold">GPU aperta</span> da</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Fatto da Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

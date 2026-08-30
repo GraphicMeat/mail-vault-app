@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>저장소와 볼트 — MailVault FAQ</title>
+  <meta name="description" content="MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
+  <meta property="og:title" content="저장소와 볼트 — MailVault FAQ">
+  <meta property="og:description" content="MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="저장소와 볼트 — MailVault FAQ">
+  <meta name="twitter:description" content="MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "메일은 어디에 저장됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "볼트는 Mac 또는 Linux 컴퓨터에서 Maildir 형식으로 정리된 표준 .eml 파일을 담은 폴더입니다 — 메일 한 통에 파일 하나이고, 데이터베이스는 필요 없습니다. 데이터는 컴퓨터를 떠나지 않으며 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 보편적인 표준이므로 Apple Mail, Thunderbird, Outlook을 비롯한 어떤 메일 클라이언트로도 메일을 열 수 있습니다 — MailVault에 묶이는 일은 없습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": ".eml 파일과 Maildir이란 무엇이며, 왜 중요합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": ".eml(RFC 5322)은 메일 메시지의 인터넷 표준 형식입니다. 모든 메일이 하나의 자족적인 텍스트 파일로 저장되어 어떤 메일 클라이언트로도 열 수 있습니다. Maildir은 메일 서버가 수십 년 동안 써 온, 검증된 메일 저장 디렉터리 구조입니다. 메일 한 통이 파일 하나이므로 통째로 손상될 데이터베이스가 없습니다. .eml과 Maildir을 합치면 메일은 오래 가고, 옮기기 쉽고, 어떤 애플리케이션에도 묶이지 않습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "오프라인에서도 메일을 볼 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "볼 수 있습니다. 메일이 한 번 동기화되면 로컬에 저장되므로 인터넷 연결 없이도 전부 읽고, 검색하고, 살펴볼 수 있습니다. 인터넷은 새 메일을 동기화하거나 메일을 보낼 때만 필요합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "첨부파일은 어떻게 처리됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "첨부파일은 각 .eml 파일 안에 MIME 파트로 들어 있습니다 — 별도의 파일로 저장되지 않습니다. 메일을 열면 MailVault의 Rust 백엔드가 MIME 구조를 해석해 첨부파일을 그 자리에서 꺼냅니다. 메일 뷰어에서 첨부파일을 바로 열거나, 다른 이름으로 저장하거나, 폴더에서 볼 수 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "기본 애플리케이션 폴더가 아닌 다른 곳에 메일을 저장할 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "가능합니다. MailVault는 메일 저장소 — 메시지, 헤더 캐시, 첨부파일 캐시, 폴더 목록 — 를 어떤 드라이브의 어떤 폴더로든 옮길 수 있어, 큰 보관본을 시동 볼륨 대신 외장 SSD나 두 번째 내장 디스크에 둘 수 있습니다. 옮겨지는 것은 메일 데이터뿐입니다. 계정, 설정, 로그는 앱 자체 폴더에 남으므로 앱은 언제나 실행되어 드라이브가 없다는 사실을 알려 줄 수 있습니다. 이동은 안전하게 이루어집니다: MailVault는 새 폴더로 전부 복사하고, 모든 파일이 정확한 크기로 도착했는지 확인하고, 전환한 다음에야 원본을 지웁니다. 중단된 이동은 다시 실행하면 멈춘 지점부터 이어집니다. 새 폴더에는 표식 파일이 남아 MailVault가 나중에 그 폴더를 알아보고, 다른 저장소에 속한 폴더는 거부할 수 있습니다. 시작할 때 드라이브가 연결되어 있지 않으면 MailVault는 기본 위치에 서로 다른 두 번째 보관본을 조용히 만들지 않고 폴더가 없다고 알립니다 — 드라이브를 다시 연결하거나 앱이 그 폴더를 다시 가리키게 하십시오. 이는 외부 백업 위치와는 별개입니다. 옮긴 폴더는 실사용 저장소이고, 외부 백업 위치는 그 위에 얹는 콜드 사본입니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "외부 백업 위치(두 번째 사본)란 무엇입니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault는 언제나 앱 자체 저장소에 메일의 작업 사본을 유지합니다 — 사용자가 읽고, 검색하고, 여는 것이 바로 이 사본입니다. 외부 백업 위치는 사용자가 고른 드라이브에 독립적인 두 번째 사본을 추가합니다: 외장 SSD, NAS 공유 폴더, 또는 동기화 폴더 등입니다. 이 사본은 백업이 실행될 때 작업 사본과 동시에, 같은 .eml 및 Maildir 구조로 기록되므로 어떤 메일 클라이언트로도 읽을 수 있습니다. 앱은 평소에 이 사본을 읽지 않으며, 이것은 콜드 스토리지입니다: 서버에서 지운 메일이나 MailVault 안에서 삭제한 메일도 외부 사본에는 그대로 남습니다. 설정의 백업 항목에서 '두 번째 사본 — 외부 콜드 스토리지'로 지정합니다. macOS에서는 MailVault가 해당 폴더에 대한 보안 범위 북마크를 저장하므로 재시작이나 앱 업데이트 후에도 접근 권한이 유지됩니다. 상태 배지에는 준비됨, 재승인 필요, 사용 불가, 접근 거부됨이 표시되며 재승인은 클릭 한 번이면 됩니다. 백업 도중 드라이브가 분리되어도 작업 사본은 정상적으로 완료되고, MailVault는 외부 사본에 도달하지 못한 메시지가 몇 통인지 알려 줍니다. 다음 실행에서 그 메일들을 옮겨 담습니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "홈",
+      "item": "https://mailvaultapp.com/ko/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ko/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "저장소와 볼트",
+      "item": "https://mailvaultapp.com/ko/faq/storage-and-vault.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="언어 선택">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/storage-and-vault.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/storage-and-vault.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/storage-and-vault.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/storage-and-vault.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/storage-and-vault.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/storage-and-vault.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/storage-and-vault.html" aria-current="page"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/storage-and-vault.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/storage-and-vault.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ko/" class="hover:text-primary-500 transition-colors">홈</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">저장소와 볼트</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">저장소와 볼트</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault가 메일을 디스크 어디에 두는지, 왜 .eml과 Maildir을 쓰는지, 볼트를 다른 드라이브로 옮기는 방법.</p>
+
+      <div class="space-y-4">
+
+        <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">메일은 어디에 저장됩니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">볼트는 Mac이나 Linux 컴퓨터에서 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일</a>을 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식으로 정리해 둔 폴더입니다 &mdash; 메일 하나에 파일 하나이며 데이터베이스는 필요 없습니다. 데이터는 컴퓨터를 벗어나지 않으며 어떤 클라우드 서비스에도 올라가지 않습니다. .eml은 보편적인 표준이므로 메일을 Apple Mail, Thunderbird, Outlook을 비롯한 어떤 메일 클라이언트로도 열 수 있습니다 — MailVault에 묶이는 일은 없습니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">디렉터리 구조:</p>
+              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
+└── maildir/
+    └── you@example.com/
+        └── INBOX/
+            ├── headers.json          ← cached list for fast loading
+            └── cur/
+                ├── 1234567890.eml    ← auto-cached email
+                └── 1234567891_AS.eml ← archived + seen email</code></pre>
+            </div>
+        </article>
+
+        <article id="eml-and-maildir" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">.eml 파일과 Maildir이란 무엇이며, 왜 중요합니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml(RFC 5322)</a>은 메일 메시지의 인터넷 표준 형식입니다. 모든 메일은 — 헤더, 본문, 첨부파일까지 — 그 자체로 완결된 텍스트 파일 하나에 저장됩니다. 독점 데이터베이스와 달리 .eml 파일은 어떤 메일 클라이언트(Apple Mail, Thunderbird, Outlook)로도 열 수 있고 아무 텍스트 편집기로도 읽을 수 있습니다.</p>
+              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>은 메일 서버가 수십 년째 써 온, 검증된 메일 저장용 디렉터리 구조입니다. 메일 하나가 파일 하나이므로 손상될 수 있는 단일 데이터베이스가 없습니다 — 파일 하나가 망가져도 나머지 보관본은 영향을 받지 않습니다. .eml과 Maildir을 함께 쓰면 메일이 앞으로도 열리고, 이식 가능하며, 어떤 앱 하나에도 묶이지 않습니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">파일 이름 플래그:</p>
+              <p>MailVault는 상태를 기록하려고 .eml 파일 이름에 플래그 문자를 덧붙입니다. <strong>A</strong> = Archived(보관됨), <strong>S</strong> = Seen(읽음), <strong>R</strong> = Replied(답장함), <strong>F</strong> = Flagged(깃발). 예를 들어 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code>은 그 메일이 보관되었고 읽혔다는 뜻입니다.</p>
+            </div>
+        </article>
+
+        <article id="offline-access" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">오프라인에서도 메일을 볼 수 있습니까?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              볼 수 있습니다. 메일이 한 번 동기화되면 로컬에 저장되므로 인터넷 연결 없이도 전부 읽고, 검색하고, 살펴볼 수 있습니다. 인터넷은 새 메일을 동기화하거나 메일을 보낼 때만 필요합니다.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/ko/local-vault-1440.webp" srcset="/screenshots/ko/local-vault-720.webp 720w, /screenshots/ko/local-vault-1440.webp 1440w, /screenshots/ko/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에서 삭제한 뒤에도 디스크에 남아 있는 메일을 보여 주는 MailVault 로컬 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="attachments" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">첨부파일은 어떻게 처리됩니까?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              첨부파일은 각 .eml 파일 안에 MIME 파트로 들어 있습니다 — 별도 파일로 저장되지 않습니다. 메일을 열면 MailVault의 Rust 백엔드가 MIME 구조를 해석해 그때그때 첨부파일을 꺼냅니다. 메일 뷰어에서 바로 어떤 첨부파일이든 <strong>Open</strong>, <strong>Save As</strong>, <strong>Show in Folder</strong>할 수 있습니다. 꺼낸 첨부파일은 다시 열 때 빠르도록 잠시 캐시됩니다.
+            </p>
+        </article>
+
+        <article id="change-mail-storage-folder" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">기본 애플리케이션 폴더가 아닌 다른 곳에 메일을 저장할 수 있습니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                가능합니다. 기본적으로 MailVault는 시동 디스크에 있는 앱 전용 Application Support 폴더 안에 메일 저장소를 둡니다. 이 저장소는 어떤 드라이브의 어떤 폴더로든 옮길 수 있습니다 — 외장 SSD든 두 번째 내장 디스크든 상관없습니다. 보관본이 수십 기가바이트로 커지면 중요한 선택지입니다.
+              </p>
+              <p>
+                <strong>메일 데이터만 옮겨집니다:</strong> 메시지, 헤더 캐시, 첨부파일 캐시, 폴더 목록입니다. 계정과 설정, 로그는 앱 자체 폴더에 남으므로, MailVault는 언제나 드라이브가 없다고 알리고 폴더를 다시 물어볼 수 있을 만큼은 시작됩니다.
+              </p>
+              <p>
+                <strong>무엇이든 지우기 전에 이동을 검증합니다.</strong> MailVault는 모든 것을 새 폴더로 복사하고, 파일마다 올바른 크기로 도착했는지 확인하고, 저장소를 전환한 다음, 그때에야 원본을 지웁니다. 연결이 끊기거나 앱이 죽어 중단된 이동은 현재 저장소를 그대로 남겨 둡니다. 다시 실행하면 이미 옮긴 것을 다시 복사하지 않고 이어서 진행합니다.
+              </p>
+              <p>
+                <strong>폴더에는 표식이 찍히고, 그것을 알아봅니다.</strong> 작은 표식 파일이 그 저장소를 식별하므로, 나중에 드라이브를 다시 연결하거나 폴더를 손으로 옮겨도 MailVault를 그쪽으로 다시 가리킬 수 있습니다. 또 MailVault는 다른 저장소에 속하거나 메일이 들어 있지 않은 폴더는 거부합니다.
+              </p>
+              <p>
+                <strong>드라이브가 연결되어 있지 않으면</strong> MailVault는 기본 위치에 조용히 두 번째 보관본을 만들어 반쯤 찬 사본 두 개를 남기는 대신, 메일 저장소를 쓸 수 없다고 알립니다. 드라이브를 다시 연결하거나 폴더를 다시 고르십시오. 언제든 기본 위치로 되돌릴 수도 있습니다 — 메일은 옮기기 전까지 있던 자리에 그대로 있습니다.
+              </p>
+              <p class="text-sm">
+                <strong>두 번째 사본과는 다릅니다.</strong> 이것은 <em>실사용</em> 저장소가 어디에 있는지를 바꿉니다. <a href="#external-backup-location" class="text-primary-500 hover:underline">외부 백업 위치</a>는 그 위에 보관용 사본을 하나 더 얹습니다. 둘을 함께 쓰는 것도 — 메일 저장소는 빠른 외장 SSD에, 보관용 사본은 NAS에 — 합리적인 구성입니다.
+              </p>
+            </div>
+        </article>
+
+        <article id="external-backup-location" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">외부 백업 위치(두 번째 사본)란 무엇입니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                MailVault는 앱 자체 저장소에 언제나 메일의 <strong>작업용 사본</strong>을 둡니다 — 읽고, 검색하고, 여는 대상이 바로 그것입니다. 외부 백업 위치는 사용자가 관리하는 드라이브에 <strong>두 번째 독립 사본</strong>을 더합니다. 외장 SSD, NAS 공유 폴더, 동기화되는 폴더 같은 곳입니다.
+              </p>
+              <ul class="list-disc pl-5 space-y-2">
+                <li><strong>작업용 사본과 나란히 기록됩니다.</strong> 백업이 도는 동안 메시지는 같은 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir 배치로 두 곳 모두에 저장됩니다 — 그래서 두 번째 사본은 MailVault 없이도 Apple Mail이나 Thunderbird, 그 밖의 어떤 클라이언트로도 열립니다.</li>
+                <li><strong>거울이 아니라 보관용입니다.</strong> 앱은 평소에 그것을 읽지 않습니다. 서버에서 지워진 메일이나 MailVault 안에서 없앤 메일도 외부 사본에는 남습니다.</li>
+                <li><strong>읽음과 쓰기 플래그가 양쪽 방향으로 유지됩니다.</strong> 실행 전에 두 사본을 맞추므로, 읽은 메시지는 읽은 상태로 남습니다.</li>
+                <li><strong>앱과 무관합니다.</strong> 그 컴퓨터가 죽거나 MailVault를 지워도 외부 폴더는 그 자체로 완결된 메일 보관본으로 남습니다.</li>
+              </ul>
+              <p>
+                <strong>설정 → 백업 → “두 번째 사본 — 외부 보관 저장소”</strong>에서 지정하고 원하는 폴더를 고르십시오. macOS에서는 MailVault가 그 폴더에 대한 보안 범위 북마크를 저장하므로 재시작이나 앱 업데이트 뒤에도 접근이 유지됩니다 — 단순 경로였다면 그렇지 않습니다. 상태 배지가 <strong>Ready</strong>, <strong>Needs reauthorization</strong>, <strong>Unavailable</strong>, <strong>Access denied</strong> 가운데 하나를 보여 주며, 재승인은 클릭 한 번입니다.
+              </p>
+              <p>
+                백업 도중 드라이브가 분리되어도 작업 사본은 끝까지 완료되며, MailVault는 외부 사본에 도달하지 못한 메시지가 몇 통인지 알려 줍니다. 다음 실행에서 그 메일들을 옮겨 담습니다 — 잃는 것은 없고, 실패가 조용히 넘어가는 일도 없습니다.
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ko/faq.html" class="text-primary-500 hover:underline">모든 FAQ 주제로 돌아가기</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">아직 궁금한 점이 있습니까?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHub에서 질문하기
+          </a>
+          <a href="/ko/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            문의하기
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ko/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>이 앱을 구운 곳은 <span class="text-primary-500 font-semibold">오픈 GPU</span> · 제작:</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Graphic Meat 제작" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

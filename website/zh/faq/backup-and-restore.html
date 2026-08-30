@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>备份与恢复 — MailVault 常见问题</title>
+  <meta name="description" content="MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么，以及如何导出并重新导入你的保险库。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
+  <meta property="og:title" content="备份与恢复 — MailVault 常见问题">
+  <meta property="og:description" content="MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么，以及如何导出并重新导入你的保险库。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="备份与恢复 — MailVault 常见问题">
+  <meta name="twitter:description" content="MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么，以及如何导出并重新导入你的保险库。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault 如何备份邮件？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault 使用 IMAP 协议连接你的邮件服务器，把每封邮件作为标准的 .eml 文件、以 Maildir 格式下载进你的保险库。每封邮件就是磁盘上的一个文件——人类可读、可迁移，任何邮件客户端都能打开。邮件进入保险库之后，你就可以删除服务器上的副本来腾出空间，本地这一份不受影响。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "归档一封邮件时会发生什么？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "归档会从服务器下载完整邮件（如果尚未缓存），并以 .eml 文件保存到磁盘，文件名中带 A（已归档）标记。已归档的邮件会出现在「本地」视图模式中，并纳入备份。除非你明确删除，邮件仍会留在服务器上。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "归档并从服务器删除时会发生什么？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "「归档并删除」会按顺序执行三步：把邮件复制进你的保险库，存为 .eml 文件；确认这份副本确实在那里；只有到这时才从服务器上删除。任何没通过确认的邮件都会留在服务器上。之后这一行会显示「唯一副本」状态——你的保险库是这封邮件仅存的地方，这也提醒你该把备份盘接上。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "如果我从服务器删除邮件会怎样？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "凡是你事先归档过的邮件，都会留在保险库里，之后服务器发生什么都不影响它——这正是这个产品的意义所在。凡是没有事先归档的邮件，都会随服务器副本一起消失，所以 MailVault 在你删除之前，会在每封邮件所在的行上显示它的状态：在服务器上、在保险库里，还是两边都有。稳妥的做法是「归档并删除」，它会先把每封邮件复制进保险库并验证确实存在，然后才从服务器上删除。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "备份和恢复是怎么工作的？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault 会把你的邮件导出为一个 ZIP 归档，里面是所有 .eml 文件，外加一个 manifest.json，它按邮箱地址把邮件映射到账户，因此备份可以在不同的安装之间通用。你可以导出全部邮件，也可以只导出已归档的邮件。导入是幂等的——重复的会被跳过。如果备份里包含无法识别的账户的邮件，MailVault 会自动创建该账户。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "首页",
+      "item": "https://mailvaultapp.com/zh/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "常见问题",
+      "item": "https://mailvaultapp.com/zh/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "备份与恢复",
+      "item": "https://mailvaultapp.com/zh/faq/backup-and-restore.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="选择语言">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/backup-and-restore.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/backup-and-restore.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/backup-and-restore.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/backup-and-restore.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/backup-and-restore.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/backup-and-restore.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/backup-and-restore.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/backup-and-restore.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/backup-and-restore.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/zh/" class="hover:text-primary-500 transition-colors">首页</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">备份与恢复</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">备份与恢复</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault 如何归档邮件、先归档再删除会对服务器上的副本做什么，以及如何导出并重新导入你的保险库。</p>
+
+      <div class="space-y-4">
+
+        <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 如何备份邮件？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault 用 IMAP 协议连接你的邮件服务器，把每封邮件下载成一个标准的 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a>，按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式存在你的 Mac 或 Linux 机器上。每封邮件就是磁盘上的一个文件 —— 人可以直接读、可移植，任何邮件客户端都兼容。邮件进了保险库之后，你就可以删掉服务器上那份来腾空间；本地这份不受影响。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/zh/archive-progress-1440.webp" srcset="/screenshots/zh/archive-progress-720.webp 720w, /screenshots/zh/archive-progress-1440.webp 1440w, /screenshots/zh/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 归档进度条，显示批量邮件备份正在进行" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档一封邮件时会发生什么？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              归档会从你的服务器下载完整邮件（如果尚未缓存），并把它存成磁盘上的一个 .eml 文件，文件名里带 <strong>A</strong>（已归档）标记。如果这封邮件本地已经缓存过，MailVault 只是给文件改个名，加上归档标记。归档过的邮件会出现在<strong>保险库</strong>视图中，并被纳入备份。在你自己动手删除之前，服务器上那份不会被碰。
+            </p>
+        </article>
+
+        <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">归档并从服务器删除时会发生什么？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>归档并删除</strong>按顺序做三件事：把邮件作为 .eml 文件复制进你的保险库，核对这份副本确实在那里，然后才从服务器上删除。任何没通过核对的都会留在服务器上 &mdash; 复制失败绝不会让你搭上原件。做完之后，这一行会显示<strong>你的唯一副本</strong>：保险库是这封邮件仅存的地方，这也提醒你该把备份盘接上。
+            </p>
+        </article>
+
+        <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如果我从服务器删除邮件会怎样？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              凡是你事先归档过的，都留在你的保险库里，之后服务器怎么变都碰不到它 —— 这正是这个产品存在的意义。凡是你<em>没有</em>归档的，会随服务器上那份一起消失，所以在你删除之前，MailVault 会在每封邮件自己的行上标出它的状态：在服务器上、在保险库里，还是两边都有。稳妥的做法是<strong>归档并删除</strong>，它会把每封邮件复制进你的保险库并在那里核验之后，才从服务器上移除。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/zh/state-icons-1440.webp" srcset="/screenshots/zh/state-icons-720.webp 720w, /screenshots/zh/state-icons-1440.webp 1440w, /screenshots/zh/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 收件箱，逐封显示仅在服务器、已归档到本地、仅在本地的状态图标" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">备份和恢复是怎么工作的？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault 把你的邮件导出成一个 ZIP 压缩包，里面是全部 .eml 文件，外加一份 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>，它按邮箱地址（而不是内部 ID）把邮件对应到账户，所以备份在不同的安装之间是可移植的。你可以选择导出<strong>全部邮件</strong>或<strong>仅已归档的</strong>。导入是幂等的——如果某封邮件本地已经有了，就不会重复一份。如果备份里含有你还没设置过的账户的邮件，MailVault 会自动创建这个账户（你只需在设置里重新输入密码）。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/zh/settings-backup-1440.webp" srcset="/screenshots/zh/settings-backup-720.webp 720w, /screenshots/zh/settings-backup-1440.webp 1440w, /screenshots/zh/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 备份与恢复设置，包含 ZIP 导出、导入，以及面向 Thunderbird 或 Apple Mail 的 MBOX 导出" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/zh/faq.html" class="text-primary-500 hover:underline">返回全部常见问题主题</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            在 GitHub 上提问
+          </a>
+          <a href="/zh/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            联系我们
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/zh/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

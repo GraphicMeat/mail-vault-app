@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이메일 제공업체 — MailVault FAQ</title>
+  <meta name="description" content="Gmail, Microsoft 365, Outlook.com, Proton Mail 연결과 별칭 주소로 보내기.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/faq/providers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/faq/providers.html">
+  <meta property="og:title" content="이메일 제공업체 — MailVault FAQ">
+  <meta property="og:description" content="Gmail, Microsoft 365, Outlook.com, Proton Mail 연결과 별칭 주소로 보내기.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="이메일 제공업체 — MailVault FAQ">
+  <meta name="twitter:description" content="Gmail, Microsoft 365, Outlook.com, Proton Mail 연결과 별칭 주소로 보내기.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault는 Gmail과 Outlook에서도 작동합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "작동합니다. MailVault는 Gmail, Outlook을 비롯해 IMAP을 지원하는 모든 메일 서비스와 함께 쓸 수 있습니다. Gmail은 OAuth2로 Google 계정에 바로 로그인하면 되며, IMAP 설정을 직접 입력할 필요가 없습니다. Microsoft 365 비즈니스 및 엔터프라이즈 계정도 OAuth2로 Microsoft 계정에 바로 로그인할 수 있습니다. 개인용 Outlook.com 계정은 현재 알려진 Microsoft 서버 문제의 영향을 받고 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Outlook.com 계정이 왜 연결되지 않습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "2024년 말부터 개인용 Outlook.com, Hotmail, Live.com 계정에 영향을 주는, 알려진 Microsoft 서버 측 문제가 있습니다. Microsoft 계정으로 로그인한 뒤 IMAP 연결이 'User is authenticated but not connected.'라는 메시지와 함께 실패합니다. Microsoft의 IMAP 서비스에 OAuth2로 인증된 세션이 연결되지 못하게 만드는 회귀 버그가 있기 때문입니다. Microsoft 365 비즈니스/엔터프라이즈 계정은 영향을 받지 않습니다. MailVault의 OAuth2 구현은 준비되어 있으며, Microsoft가 문제를 해결하면 바로 작동합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Proton Mail에서 MailVault를 어떻게 사용합니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Proton Mail은 메일을 종단 간 암호화하기 때문에 IMAP을 직접 열어 주지 않습니다. MailVault에 연결하려면 Proton Mail Bridge가 필요합니다. Bridge는 Proton이 제공하는 데스크톱 앱으로, 사용자의 컴퓨터에서 실행되며 암호화된 메일함을 127.0.0.1에서 표준 IMAP/SMTP로 열어 줍니다. Bridge에는 유료 Proton Mail 요금제가 필요합니다. Bridge를 설치하고 Proton 계정으로 로그인한 다음, Bridge가 생성한 IMAP/SMTP 인증 정보를 복사하십시오(Proton 계정 비밀번호가 아닙니다). MailVault에서는 제공업체 목록의 Proton Mail Bridge(또는 Custom IMAP)를 고르고 서버 127.0.0.1, IMAP 포트 1143에 STARTTLS, SMTP 포트 1025, 사용자 이름은 Proton 이메일 주소, 비밀번호는 Bridge 비밀번호를 입력합니다. MailVault가 동기화하려면 Bridge가 실행 중이어야 하지만, 이미 보관된 메일은 Bridge가 꺼져 있어도 MailVault에서 그대로 읽을 수 있습니다. Bridge의 자체 서명 인증서는 로컬 연결에 한해 MailVault가 자동으로 처리합니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "가능합니다. 설정 → 계정에서 해당 계정의 Send Mail As 항목을 채우거나, 비워 두면 로그인 주소로 발송됩니다. 바뀌는 것은 보내는 메일의 From 주소뿐입니다 — 사용자 이름과 비밀번호는 그대로이고, MailVault는 설정한 계정 그대로 IMAP과 SMTP에 로그인하며, Reply-To 헤더는 추가되지 않습니다. MailVault는 사용자의 메일에서 이미 확인한 주소를 제안하고, 확인 버튼을 누르면 그 주소로 테스트 메일을 한 통 보내 제공업체가 받아들이는지 확인할 수 있습니다. 그 주소는 해당 로그인으로 발송이 허용된 별칭이어야 합니다. Fastmail은 계정에 등록된 모든 별칭을 허용하고, Gmail은 Gmail 설정의 \"Send mail as\"에 등록해야 하며, Microsoft 365는 Send As 권한이 필요합니다."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "홈",
+      "item": "https://mailvaultapp.com/ko/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ko/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "이메일 제공업체",
+      "item": "https://mailvaultapp.com/ko/faq/providers.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/providers.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/providers.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/providers.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/providers.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/providers.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/providers.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/providers.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/providers.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/providers.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/providers.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="언어 선택">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/providers.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/providers.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/providers.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/providers.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/providers.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/providers.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/providers.html" aria-current="page"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/providers.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/providers.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ko/" class="hover:text-primary-500 transition-colors">홈</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">이메일 제공업체</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">이메일 제공업체</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail, Microsoft 365, Outlook.com, Proton Mail 연결과 별칭 주소로 보내기.</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault는 Gmail과 Outlook에서도 작동합니까?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              그렇습니다. MailVault는 Gmail, Outlook을 비롯해 IMAP을 지원하는 어떤 메일 서비스와도 함께 작동합니다. Gmail은 OAuth2로 Google 계정에 바로 로그인하면 됩니다 — IMAP 설정을 손으로 넣을 필요가 없습니다. Microsoft 365 Business와 Enterprise 계정도 OAuth2로 Microsoft 계정에 바로 로그인할 수 있고, 2단계 인증과도 매끄럽게 맞물립니다. 개인용 Outlook.com 계정은 현재 <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">알려진 Microsoft 서버 문제</a>의 영향을 받고 있습니다.
+            </p>
+        </article>
+
+        <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Outlook.com 계정이 왜 연결되지 않습니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">2024년 말부터 개인용 Outlook.com, Hotmail, Live.com 계정에 영향을 주는 <strong>알려진 Microsoft 서버 쪽 문제</strong>가 있습니다. Microsoft 계정으로 로그인한 뒤 IMAP 연결이 "User is authenticated but not connected."로 실패합니다. 이는 MailVault만이 아니라 OAuth2로 IMAP을 쓰는 모든 제3자 메일 클라이언트에 해당합니다.</p>
+              <p class="mb-4">Microsoft는 개인 계정에 OAuth2를 요구합니다. 그런데 Microsoft의 IMAP 서비스에는 OAuth2로 인증된 세션이 메일함에 연결되지 못하게 만드는 회귀 버그가 있습니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">할 수 있는 일:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Microsoft 365 Business/Enterprise 계정</strong>은 영향을 받지 않습니다 — 조직 계정에서는 OAuth2가 정상 작동합니다</li>
+                <li><strong>진행 상황 지켜보기</strong> — Microsoft만 고칠 수 있는 서버 쪽 문제입니다. <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A 스레드</a>에서 이 문제를 추적합니다</li>
+                <li>그동안 개인 계정에는 <strong>Outlook 웹 앱</strong>이나 Microsoft의 공식 앱을 쓰십시오</li>
+                <li><strong>MailVault는 준비되어 있습니다</strong> — Microsoft가 문제를 해결하면 MailVault의 OAuth2 로그인은 아무것도 바꾸지 않아도 곧바로 작동합니다</li>
+              </ul>
+              <p>기술적인 내용은 이렇습니다. MailVault는 <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>와 같은 OAuth2 구현을 쓰며, PKCE와 XOAUTH2 인증을 사용하는 Microsoft의 공식 IMAP OAuth2 문서를 따릅니다.</p>
+            </div>
+        </article>
+
+        <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Proton Mail에서 MailVault를 어떻게 사용합니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Proton Mail은 메일을 종단 간 암호화하므로 IMAP을 직접 열어 두지 않습니다. MailVault(또는 다른 제3자 메일 클라이언트)에 연결하려면 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>가 필요합니다 — 사용자 컴퓨터에서 돌면서 암호화된 메일함을 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>의 표준 IMAP/SMTP로 노출해 주는 Proton의 데스크톱 앱입니다. Bridge는 유료 Proton Mail 요금제가 있어야 하며 Proton 무료 등급에서는 쓸 수 없습니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">설정 순서:</p>
+              <ol class="list-decimal list-inside space-y-2 mb-4">
+                <li>Proton 웹사이트에서 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>를 설치하십시오</li>
+                <li>Proton 계정으로 Bridge에 로그인합니다</li>
+                <li>Bridge가 계정별 <strong>IMAP/SMTP 인증 정보</strong>를 보여 줍니다 — 거기 표시되는 비밀번호는 Bridge가 만들어 준 앱 비밀번호이며, 평소 쓰는 Proton 계정 비밀번호가 <strong>아닙니다</strong></li>
+                <li>MailVault에서 제공업체 목록의 <strong>Proton Mail Bridge</strong> 를 선택하고(목록에 없으면 <strong>Custom IMAP</strong> 을 선택), 다음을 입력합니다:
+                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li>서버: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>IMAP 포트: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>, 보안: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                    <li>SMTP 포트: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
+                    <li>사용자 이름: Proton 이메일 주소</li>
+                    <li>비밀번호: 3단계에서 Bridge가 생성한 비밀번호</li>
+                  </ul>
+                </li>
+              </ol>
+              <p class="mb-4">MailVault가 동기화하는 동안에는 Proton Mail Bridge가 배경에서 돌고 있어야 합니다 — Bridge가 닫혀 있으면 MailVault는 메일함에 닿을 수 없습니다. 이미 보관해 둔 메일은 Bridge가 닫혀 있어도 MailVault에서 그대로 읽고 검색할 수 있습니다. MailVault는 로컬 우선이라 Bridge에서 실시간으로 받아 오는 대신 자기 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 저장소에서 읽기 때문입니다.</p>
+              <p>Bridge는 자체 서명 TLS 인증서로 로컬 IMAP/SMTP 서버를 보호합니다. MailVault는 로컬(<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) 연결에 대해 이를 자동으로 처리하므로 인증서를 직접 설치할 필요가 없습니다.</p>
+            </div>
+        </article>
+
+        <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">로그인한 주소와 다른 주소로 메일을 보낼 수 있습니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">가능합니다. <strong>설정 &rarr; 계정</strong>을 열어 계정을 고른 다음 <strong>Send Mail As</strong>를 채우십시오. 비워 두면 로그인 주소로 보냅니다. Fastmail을 비롯해, 로그인하는 주소와 남에게 알려 주는 주소가 다른 제공업체에서 흔한 설정입니다.</p>
+              <p class="mb-4">바뀌는 것은 보내는 메일의 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 주소뿐입니다. 사용자 이름과 비밀번호는 그대로이고, MailVault는 여전히 설정해 둔 계정으로 IMAP과 SMTP에 로그인하며, <strong>Reply-To 헤더는 추가되지 않습니다</strong> &mdash; 답장은 보낼 때 쓴 주소로 갑니다.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">주소를 찾고 확인하는 방법:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>추천</strong> &mdash; MailVault는 이미 사용자 메일에서 본 주소를 제안합니다. 전에 그 주소로 보낸 적이 있는 것, 그리고 사용자에게 온 메일이 도착하는 주소입니다.</li>
+                <li><strong>확인</strong> &mdash; 그 주소로 시험 메일 한 통을 보냅니다. 기본값은 자기 메일함이며, 믿고 쓰기 전에 제공업체가 그 주소를 받아 주는지 확인할 수 있습니다.</li>
+                <li><strong>거부당한다면</strong> &mdash; 그 주소는 제공업체가 그 로그인으로 보낼 수 있게 허용한 별칭이나 신원이어야 합니다. Fastmail은 계정의 어떤 별칭이든 받아 줍니다. Gmail은 Gmail 설정의 "Send mail as"에 주소를 추가해야 하고, Microsoft 365는 관리자가 준 Send As 권한이 필요합니다.</li>
+              </ul>
+              <p>별칭은 MailVault가 아니라 이메일 제공업체 쪽에서 설정합니다 &mdash; MailVault는 제공업체가 이미 승인한 주소로 보낼 뿐입니다.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/ko/compose-email-1440.webp" srcset="/screenshots/ko/compose-email-720.webp 720w, /screenshots/ko/compose-email-1440.webp 1440w, /screenshots/ko/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서식 있는 편집을 갖춘 MailVault 작성·답장 창" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ko/faq.html" class="text-primary-500 hover:underline">모든 FAQ 주제로 돌아가기</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">아직 궁금한 점이 있습니까?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHub에서 질문하기
+          </a>
+          <a href="/ko/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            문의하기
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ko/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>이 앱을 구운 곳은 <span class="text-primary-500 font-semibold">오픈 GPU</span> · 제작:</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Graphic Meat 제작" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

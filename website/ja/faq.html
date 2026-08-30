@@ -44,11 +44,10 @@
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
-    .faq-chevron { transition: transform var(--mv-state) var(--mv-ease); }
-    .faq-chevron.open { transform: rotate(180deg); }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <!-- Structured Data: WebPage -->
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -64,195 +63,22 @@
 }
   </script>
 
-  <!-- Structured Data: FAQPage -->
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
+  "@type": "BreadcrumbList",
+  "itemListElement": [
     {
-      "@type": "Question",
-      "name": "MailVaultとは何ですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultは、macOSとLinux向けの無料でオープンソースのデスクトップメールクライアントで、メールを自分のディスク上の保管庫に保存します。IMAPでメールアカウントに接続し、すべてのメッセージを標準的な.emlファイル（RFC 5322）としてMaildir形式でお使いのコンピューターに保存するため、ベンダーロックインのない恒久的なオフラインバックアップになります。"
-      }
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ホーム",
+      "item": "https://mailvaultapp.com/ja/"
     },
     {
-      "@type": "Question",
-      "name": "MailVaultはどのようにメールをバックアップしますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultはIMAPプロトコルでメールサーバーに接続し、それぞれのメールを標準的な.emlファイルとしてMaildir形式で保管庫にダウンロードします。メール1通がディスク上の1ファイルなので、人間が読める形式で、持ち運びができ、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバー側のコピーを削除して容量を空けられます。ローカルのコピーは影響を受けません。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "MailVaultはどのメールプロバイダーに対応していますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultは、IMAPに対応しているあらゆるメールプロバイダーで使えます。Gmail、Outlook、Yahoo Mail、iCloud Mail、ProtonMail（Bridge経由）、Fastmail、Zoho Mail、そしてIMAPでアクセスできる自前運用や法人向けのメールも含まれます。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "MailVaultは無料ですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultは、メールの閲覧、作成、検索、スレッド表示、ローカルへのアーカイブ、手動バックアップといった中心の機能を無料で使えます。Premiumの機能 — 自動バックアップのスケジュール実行、アカウント間のメールボックス移行、自動クリーンアップのルール — の料金は$4/月または$25/年です。年額プランには14日間の無料トライアルが付きます。ソースコードはGitHubで公開しています。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "メールはどこに保存されますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "保管庫は、標準的な.emlファイルをMaildir形式で整理した、お使いのMacまたはLinuxマシン上のフォルダです。メール1通が1ファイルで、データベースは不要です。データがコンピューターの外に出ることはなく、クラウドサービスにアップロードされることもありません。.emlは汎用的な標準形式なので、メールはApple Mail、Thunderbird、Outlookなど、ほかのどのメールクライアントでも開けます。MailVaultに縛られることはありません。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": ".emlファイルとMaildirとは何ですか？ なぜ重要なのですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": ".eml（RFC 5322）は、メールメッセージのインターネット標準形式です。メールはすべて、単独で完結する1つのテキストファイルとして保存され、どのメールクライアントでも開けます。Maildirは、メールサーバーが何十年も使ってきた実績のあるメール保存用のディレクトリ構成です。メール1通が1ファイルなので、壊れる可能性のある単一のデータベースが存在しません。.emlとMaildirの組み合わせによって、メールは将来も読み続けられ、持ち運びができ、特定のアプリケーションに縛られることがありません。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "オフラインでメールを見られますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "はい。同期が済んだメールはローカルに保存されるので、インターネット接続がなくてもすべて閲覧、検索、参照できます。インターネットが必要なのは、新しいメールを同期するときと、メールを送信するときだけです。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "MailVaultはメールのトラッキングピクセルをブロックできますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "はい。MailVaultで開いたメールはすべて、トラッキングピクセルの有無を検査します。トラッキングピクセルとは、マーケティングメールが仕込む1×1の見えない画像で、いつ開封したか、何回開いたか、どのIPアドレスとどのクライアントから開いたかを送信者に報告します。ピクセルを含むメールには件名の横に小さな目のアイコンが表示され、それをクリックすると、追跡している会社名と、そのピクセルが呼び出すはずだった正確なURLがわかります。検出は誰でも無料で使えます。MailVault Premiumではさらに、メッセージを表示する前にHTMLからそのビーコンを取り除くので、リクエストは一度も送られず、送信者には何も伝わりません。既知のトラッキング用エンドポイントは500件近くがアプリに同梱されており、この一覧はリリースのたびに更新されます。実行時にサーバーから取得することはありません。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "データは安全ですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultはプライバシーを最優先に設計されています。メールの認証情報はmacOSのキーチェーンまたはLinuxのSecret Serviceに保存され、平文のファイルに書き出されることはありません。データはすべてお使いのマシンに残り、クラウド同期も、トラッキングも、分析も、データの二次利用もありません。オープンソースなので、コードはご自身で確認できます。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "サーバーからメールを削除するとどうなりますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません。それがこの製品の目的そのものです。逆に、アーカイブしなかったものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は「アーカイブして削除」です。各メッセージを保管庫にコピーし、そこに確かにあることを確認してから、サーバーから削除します。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "MailVaultはGmailやOutlookで使えますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "はい。MailVaultはGmail、Outlook、そのほかIMAPに対応したあらゆるメールサービスで使えます。GmailはOAuth2でGoogleアカウントに直接サインインできるので、IMAP設定を手で入力する必要はありません。Microsoft 365のBusinessおよびEnterpriseのアカウントも、OAuth2でMicrosoftアカウントに直接サインインできます。個人向けのOutlook.comアカウントは現在、Microsoftの既知のサーバー障害の影響を受けています。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Outlook.comのアカウントに接続できないのはなぜですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "2024年後半以降、個人向けのOutlook.com、Hotmail、Live.comのアカウントに影響するMicrosoftのサーバー側の既知の問題が発生しています。Microsoftアカウントでサインインしたあと、IMAP接続が「User is authenticated but not connected.」というエラーで失敗します。MicrosoftのIMAPサービスには、OAuth2で認証したセッションが接続できないリグレッションがあります。Microsoft 365のBusiness/Enterpriseアカウントは影響を受けません。MailVaultのOAuth2実装は準備できており、Microsoftが問題を解決すればそのまま動作します。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Proton MailでMailVaultを使うにはどうすればよいですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Proton Mailはメールをエンドツーエンドで暗号化するため、IMAPを直接公開していません。MailVaultと接続するにはProton Mail Bridgeが必要です。これはProtonが提供するデスクトップアプリで、ローカルで動作し、暗号化されたメールボックスを標準のIMAP/SMTPとして127.0.0.1に公開します。Bridgeの利用にはProton Mailの有料プランが必要です。Bridgeをインストールし、Protonアカウントでサインインして、Bridgeが生成したIMAP/SMTPの認証情報（Protonアカウントのパスワードではありません）をコピーします。MailVaultではプロバイダーの一覧からProton Mail Bridge（またはCustom IMAP）を選び、サーバーに127.0.0.1、IMAPポートに1143とSTARTTLS、SMTPポートに1025、ユーザー名にProtonのメールアドレス、パスワードにBridgeのパスワードを入力します。MailVaultが同期するにはBridgeが動作している必要がありますが、アーカイブ済みのメールはBridgeが停止していてもMailVault内で閲覧できます。Bridgeの自己署名証明書は、ローカル接続についてMailVaultが自動的に処理します。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "ログインに使うアドレスとは別のアドレスから送信できますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "はい。設定 → アカウントで、そのアカウントのSend Mail Asの欄に入力します。空欄のままにすると、ログインに使うアドレスから送信されます。変わるのは送信するメールのFromアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし、Reply-Toヘッダーも追加されません。MailVaultはあなた自身のメールの中で見かけたアドレスを候補として提示し、検証ボタンを押すとそのアドレスからテストメールを1通送るので、プロバイダーが受け付けるかどうかを確認できます。そのアドレスは、そのログインからの送信をプロバイダーが許可しているエイリアスである必要があります。Fastmailはアカウント上のどのエイリアスでも受け付けます。GmailではGmailの設定の「Send mail as」への追加が必要で、Microsoft 365ではSend As権限が必要です。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "動作環境を教えてください",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultにはmacOS 11（Big Sur）以降が必要で、IntelとApple Siliconの両方でネイティブに動作します。Linuxでは、Ubuntu 22.04以降 / Debian 12以降向けに.deb、AppImage、Snap、Flatpakを提供しています。メニューバーに常駐し、ウィンドウを閉じたままでも同期を続けます。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "添付ファイルはどのように扱われますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "添付ファイルは各.emlファイルの中にMIMEパートとして埋め込まれており、別のファイルとしては保存されません。メールを開くと、MailVaultのRustバックエンドがMIME構造を解析し、添付ファイルをその場で取り出します。メールの表示画面から、添付ファイルを直接「開く」「名前を付けて保存」「フォルダに表示」のいずれも実行できます。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "メールをアーカイブすると何が起きますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "アーカイブすると、（まだキャッシュされていなければ）サーバーからメール全体をダウンロードし、ファイル名にA（アーカイブ済み）のフラグを付けた.emlファイルとしてディスクに保存します。アーカイブしたメールはローカルの表示モードに現れ、バックアップにも含まれます。自分で明示的に削除しない限り、メールはサーバーに残ります。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "アーカイブしてサーバーから削除すると何が起きますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "「アーカイブして削除」は3つの手順を順番に実行します。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが確かにあることを確認し、そのうえでサーバーから削除します。確認に失敗したものはサーバーに残ります。処理のあと、その行には唯一のコピーであることが表示されます。そのメッセージが残っている場所は保管庫だけだという意味であり、バックアップ用のドライブをつないでおく合図でもあります。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "バックアップと復元はどのように動作しますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultは、すべての.emlファイルと、メールとアカウントをメールアドレスで対応付けるmanifest.jsonを含むZIPアーカイブとしてメールを書き出します。そのためバックアップは、別の環境へそのまま持ち運べます。書き出す対象は、すべてのメールかアーカイブ済みのみかを選べます。読み込みは冪等で、重複は読み飛ばされます。認識できないアカウントのメールがバックアップに含まれている場合、MailVaultがそのアカウントを自動的に作成します。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Gmailの帯域制限とは何ですか。バックアップが上限に達するとどうなりますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Googleは、1つのGmailまたはGoogle Workspaceのアカウントが1日に転送できるメールデータの量に上限を設けています。IMAPでは、1日あたりダウンロード2500 MB、アップロード500 MBが上限です。POPのダウンロードは1日あたり1250 MBまでです。Gmailのウェブクライアントには独自の上限があり、ダウンロードは1時間あたり750 MB・1日あたり1250 MB、アップロードは1時間あたり300 MB・1日あたり1500 MBです（アップロードにはSMTPが含まれます）。1人のユーザーのすべてのクライアントが同じ1日分の枠を共有するため、Apple Mail、スマートフォン、MailVaultは同じ枠から使います。上限を超えるとアカウントが一時的に停止され、通常は1時間、長い場合は24時間続きます。この上限はGoogle Workspaceのどのエディションにも適用され、Googleは予告なく変更できます。そのため、2.5 GBを超えるメールボックスの最初のバックアップには1日以上かかります。MailVaultは上限に達した応答を検出し、サーバーに連打せずに実行をきれいに終了して、何が起きたかを知らせます。停止が解除されてからバックアップを再開すると、止まったところから続きます。すでにローカルに保存されたメッセージは読み飛ばされるためです。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "外部バックアップ先（2つ目のコピー）とは何ですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "MailVaultは常に、アプリ自身のストレージにメールの作業用コピーを保持します。閲覧、検索、表示はこのコピーに対して行われます。外部バックアップ先を設定すると、自分で選んだドライブ（外付けSSD、NASの共有、同期フォルダ）に2つ目の独立したコピーが追加されます。このコピーはバックアップの実行中に作業用コピーと同時に、同じ.emlとMaildirの構成で書き込まれるため、どのメールクライアントでも読めます。アプリが日常的にこのコピーを読むことはなく、位置づけはコールドストレージです。サーバー上で削除されたメールや、MailVault内で削除したメールも、外部のコピーには残ります。設定は、設定のバックアップの項目にある「2つ目のコピー — 外部コールドストレージ」で行います。macOSでは、MailVaultはそのフォルダのセキュリティスコープ付きブックマークを保存するため、再起動やアプリの更新をまたいでもアクセスが維持されます。ステータスのバッジには準備完了、再認可が必要、利用できません、アクセスが拒否されましたのいずれかが表示され、再認可はワンクリックで済みます。バックアップの途中でドライブが取り外された場合でも、作業用コピーの処理は成功し、MailVaultは外部のコピーに届かなかったメッセージの数を報告します。次回の実行でそれらがコピーされます。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "既定のアプリケーションフォルダ以外の場所にメールを保存できますか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "はい。MailVaultはメールストア（メッセージ、ヘッダーのキャッシュ、添付ファイルのキャッシュ、フォルダの一覧）を、どのドライブのどのフォルダにも移動できます。そのため、大きなアーカイブを起動ボリュームではなく外付けSSDや2台目の内蔵ディスクに置けます。移動するのはメールのデータだけです。アカウント、設定、ログはアプリ自身のフォルダに残るため、アプリは必ず起動でき、ドライブが見つからないことを伝えられます。移動は安全に行われます。MailVaultはすべてを新しいフォルダにコピーし、各ファイルが正しいサイズで届いたかを検証し、切り替えたうえで、はじめて元のファイルを削除します。中断した移動はもう一度実行でき、止まったところから続きます。新しいフォルダにはマーカーファイルの印が付くので、MailVaultはあとでそれを認識でき、別のストアに属するフォルダは受け付けません。起動時にドライブが接続されていない場合、MailVaultは既定の場所で黙って2つ目の食い違ったアーカイブを作り始めるのではなく、フォルダが見つからないと報告します。ドライブをつなぎ直すか、アプリにそのフォルダを指定し直してください。これは外部バックアップ先とは別のものです。移動したフォルダは実際に使うストアであり、外部バックアップ先はそれに追加されるコールドコピーです。"
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Linuxでスペルチェックの下線が表示されないのはなぜですか？",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "スペル辞書がインストールされていないからです。macOSとWindowsではシステムが辞書を提供しますが、Linuxでは辞書はディストリビューションから提供され、最小構成のデスクトップにはないことがよくあります。MailVaultはWebKitGTKを通じてスペルチェックを行い、WebKitGTKはenchantとhunspellを使って単語を調べるため、hunspellの辞書が入ってはじめて下線を引けます。お使いの言語の辞書をインストールしてMailVaultを再起動してください。Debian、Ubuntu、Mintでは sudo apt install hunspell-en-us、Fedoraでは sudo dnf install hunspell-en、ArchやManjaroでは sudo pacman -S hunspell-en_us、openSUSEでは sudo zypper install myspell-en_US を実行します。言語コードはご自身のものに置き換えてください（hunspell-de-de、hunspell-fr など）。MailVaultはシステムの言語に一致する辞書を選びます。メッセージのツールバーにあるスペルチェックのボタンが、どちらの状態かを示します。辞書があるときは下線の表示を切り替え、ないときはこの手順を開きます。snap版は厳格に隔離されているためホストにインストールされた辞書を参照できず、独自の辞書を同梱しています。辞書なしと報告される場合は、代わりに.debパッケージを使ってください。"
-      }
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ja/faq.html"
     }
   ]
 }
@@ -342,490 +168,150 @@
   </nav>
 
   <!-- Content -->
-  <main class="pt-24 pb-20">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <main class="pt-32 pb-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
       <h1 class="text-4xl font-bold mb-2">よくある質問</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultについて知っておきたいことのすべて。</p>
 
-      <div class="space-y-3">
+      <div class="grid gap-4 sm:grid-cols-2 mb-14">
 
-        <!-- FAQ 1 -->
-        <div id="what-is-mailvault" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultとは何ですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/getting-started.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultは、macOSとLinux向けの無料・オープンソースのデスクトップメールクライアントで、メールを自分のディスク上の保管庫に保存します。IMAPでメールアカウントに接続し、すべてのメッセージを標準的な<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.emlファイル（RFC 5322）</a>として、コンピューター上に<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>形式で保存するため、ベンダーロックインのない恒久的なオフラインバックアップになります。
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">はじめに</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">MailVaultとは何か、どのメールプロバイダに対応し、どの環境で動き、メールのプライバシーをどう守るのか。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問4件</p>
+        </a>
 
-        <!-- FAQ 2 -->
-        <div id="how-does-backup-work" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultはどのようにメールをバックアップしますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/storage-and-vault.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultはIMAPプロトコルでメールサーバーに接続し、それぞれのメールを標準的な<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.emlファイル</a>として、MacまたはLinuxマシン上に<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>形式でダウンロードします。メール1通がディスク上の1ファイル — 人が読めて、持ち運べて、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバー側のコピーを削除して容量を空けられます。ローカルのコピーは影響を受けません。
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">保存場所と保管庫</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">MailVaultがメールをディスクのどこに置くのか、なぜ.emlとMaildirを使うのか、保管庫を別のドライブへ移す方法。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問6件</p>
+        </a>
 
-        <!-- FAQ 3 -->
-        <div id="supported-email-providers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultはどのメールプロバイダーに対応していますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/providers.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultは、IMAPに対応しているあらゆるメールプロバイダーで使えます。Gmail、Outlook、Yahoo Mail、iCloud Mail、ProtonMail（Bridge経由）、Fastmail、Zoho Mail、そしてIMAPでアクセスできる自前運用や法人向けのメールも含まれます。
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">メールプロバイダ</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">Gmail、Microsoft 365、Outlook.com、Proton Mailの接続と、エイリアスからの送信について。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問4件</p>
+        </a>
 
-        <!-- FAQ 4 -->
-        <div id="is-mailvault-free" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultは無料ですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/premium.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultは、メールの閲覧、作成、検索、スレッド表示、ローカルへのアーカイブ、手動バックアップといった中心の機能が無料です。Premiumの機能 — 自動バックアップのスケジュール実行、アカウント間のメールボックス移行、自動クリーンアップのルール — は<span data-mv-price="{monthly}/月 または {yearly}/年">$4/月 または $25/年</span>でご利用いただけます。年額プランには14日間の無料トライアルが付きます。ソースコードは<a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a>で公開しています。詳しくは<a href="/ja/pricing.html" class="text-primary-500 hover:underline">料金の詳細</a>をご覧ください。
-            </p>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">無料版とPremium</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">MailVaultを使う人が無料で使える範囲と、MailVault Premiumで増える機能。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問2件</p>
+        </a>
 
-        <!-- FAQ 5 -->
-        <div id="where-are-emails-stored" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">メールはどこに保存されますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/backup-and-restore.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">保管庫は、MacまたはLinuxマシン上で標準的な<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.emlファイル</a>を<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>形式に整理したフォルダです &mdash; メール1通が1ファイルで、データベースは不要です。データがコンピューターの外に出ることはなく、クラウドサービスにアップロードされることもありません。.emlは汎用的な標準形式なので、メールはApple Mail、Thunderbird、Outlookなど、ほかのどのメールクライアントでも開けます — MailVaultに縛られることはありません。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">ディレクトリ構成:</p>
-              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
-└── maildir/
-    └── you@example.com/
-        └── INBOX/
-            ├── headers.json          ← cached list for fast loading
-            └── cur/
-                ├── 1234567890.eml    ← auto-cached email
-                └── 1234567891_AS.eml ← archived + seen email</code></pre>
-            </div>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">バックアップと復元</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、保管庫を書き出して読み戻す方法。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問5件</p>
+        </a>
 
-        <!-- FAQ: .eml and Maildir -->
-        <div id="eml-and-maildir" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">.emlファイルとMaildirとは何ですか？ なぜ重要なのですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        <a href="/ja/faq/troubleshooting.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
             </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a>は、メールのメッセージのためのインターネット標準の形式です。メールは — ヘッダーも、本文も、添付ファイルも — 1つの、それ自体で完結したテキストファイルに収まります。独自形式のデータベースと違い、.emlファイルはどのメールクライアント（Apple Mail、Thunderbird、Outlook）でも開けますし、どのテキストエディタでも読めます。</p>
-              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>は、メールサーバーが何十年も使ってきた、実績のあるメール保存のディレクトリ構造です。メール1通が1ファイルなので、壊れうる単一のデータベースがありません — 1つのファイルが傷んでも、アーカイブの残りは影響を受けません。.emlとMaildirを合わせることで、メールは将来にわたって読め、持ち運べ、どの単一のアプリケーションにも縛られません。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">ファイル名のフラグ:</p>
-              <p>MailVaultは、状態を追うために.emlのファイル名にフラグの文字を付け足します。<strong>A</strong> = Archived、<strong>S</strong> = Seen、<strong>R</strong> = Replied、<strong>F</strong> = Flaggedです。たとえば<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code>は、そのメールがアーカイブ済みで既読であることを表します。</p>
-            </div>
           </div>
-        </div>
+          <h2 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">トラブルシューティング</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 mb-3">よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。</p>
+          <p class="text-xs font-medium text-slate-500 dark:text-slate-400">質問2件</p>
+        </a>
 
-        <!-- FAQ 6 -->
-        <div id="offline-access" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">オフラインでメールを見られますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。同期が済んだメールはローカルに保存されるので、インターネット接続がなくてもすべて閲覧、検索、参照できます。インターネットが必要なのは、新しいメールを同期するときと、メールを送信するときだけです。
-            </p>
-          </div>
-        </div>
+      </div>
 
-        <!-- FAQ 7 -->
-        <div id="data-security" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">データは安全ですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultはプライバシーを最優先に設計されています。メールの認証情報はmacOSのキーチェーンまたはLinuxのSecret Serviceに保存され、平文のファイルに書き出されることはありません。データはすべてお使いのマシンに残り、クラウド同期も、トラッキングも、分析も、データの二次利用もありません。オープンソースなので、コードはご自身で確認できます。
-            </p>
-          </div>
-        </div>
+      <!-- Search is progressive enhancement over the list below: with scripting
+           off the box stays hidden and every question is still one link away. -->
+      <div id="mv-faq-search" hidden class="mb-8">
+        <input id="mv-faq-q" type="search" autocomplete="off" aria-label="FAQを検索" placeholder="FAQを検索" aria-controls="mv-faq-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
 
-        <div id="block-email-trackers" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultはメールのトラッキングピクセルをブロックできますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。MailVaultが開くすべてのメッセージは、トラッキングピクセルの有無を調べられます — 宣伝メールが、開封したこと、その回数、IPアドレス、使っているクライアントを知らせるために使う、隠れた1x1の画像です。それを持つメッセージには件名の横に小さな目のしるしが現れ、クリックすると追跡している会社の名前と、そのピクセルが呼び出すはずだった正確なURLが表示されます。検出はどなたも無料です。MailVault Premiumはさらに、メッセージが描画される前にそのビーコンをHTMLから取り除くので、要求そのものが行われず、送信者には何も伝わりません。500近い既知の追跡エンドポイントがアプリに同梱されており、この一覧はリリースのたびに更新されます。実行時にサーバーから取得することは決してありません。<a href="/ja/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">仕組みと前後の違いをご覧ください</a>。
-            </p>
-          </div>
-        </div>
+      <h2 class="text-2xl font-bold mb-6">すべての質問</h2>
+      <p id="mv-faq-empty" hidden class="text-slate-500 dark:text-slate-400">その検索に一致する質問はありません。</p>
 
-        <!-- FAQ 8 -->
-        <div id="delete-from-server" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">サーバーからメールを削除するとどうなりますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません — それがこの製品の目的そのものです。アーカイブし<em>なかった</em>ものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は<strong>Archive &amp; Delete</strong>です。各メッセージを保管庫にコピーし、そこに確かにあることを確かめてから、サーバーから削除します。
-            </p>
-          </div>
-        </div>
+      <div id="mv-faq-index" class="grid gap-8 sm:grid-cols-2">
 
-        <!-- FAQ 9 -->
-        <div id="gmail-and-outlook" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">MailVaultはGmailやOutlookで使えますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              はい。MailVaultはGmail、Outlook、そのほかIMAPに対応するどのメールサービスでも使えます。Gmailの場合はOAuth2でGoogleのアカウントに直接サインインできます — IMAPの設定を手で入れる必要はありません。Microsoft 365のBusinessとEnterpriseのアカウントも、OAuth2でMicrosoftのアカウントに直接サインインでき、二要素認証とも問題なく組み合わせられます。個人のOutlook.comのアカウントは現在、<a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">既知のMicrosoftのサーバーの問題</a>の影響を受けています。
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/getting-started.html" class="hover:text-primary-500 transition-colors">はじめに</a></h3>
+            <ul class="space-y-2">
+              <li id="what-is-mailvault" class="mv-faq-q mv-anchor"><a href="/ja/faq/getting-started.html#what-is-mailvault" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultとは何ですか？</a></li>
+              <li id="supported-email-providers" class="mv-faq-q mv-anchor"><a href="/ja/faq/getting-started.html#supported-email-providers" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultはどのメールプロバイダーに対応していますか？</a></li>
+              <li id="system-requirements" class="mv-faq-q mv-anchor"><a href="/ja/faq/getting-started.html#system-requirements" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">動作環境を教えてください</a></li>
+              <li id="data-security" class="mv-faq-q mv-anchor"><a href="/ja/faq/getting-started.html#data-security" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">データは安全ですか？</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Microsoft Outlook OAuth2 -->
-        <div id="microsoft-outlook-oauth2" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Outlook.comのアカウントに接続できないのはなぜですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">2024年後半以降、個人のOutlook.com、Hotmail、Live.comのアカウントに影響する<strong>既知のMicrosoftのサーバー側の問題</strong>があります。Microsoftのアカウントでサインインしたあと、IMAPの接続が「User is authenticated but not connected.」で失敗します。これはMailVaultだけでなく、OAuth2でIMAPを使うすべての第三者のメールクライアントに影響します。</p>
-              <p class="mb-4">Microsoftは個人アカウントにOAuth2を必須としています。しかし同社のIMAPサービスには、OAuth2で認証したセッションがメールボックスに接続できないリグレッションがあります。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">できること:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>Microsoft 365のBusiness／Enterpriseのアカウント</strong>は影響を受けません — 組織のアカウントではOAuth2は通常どおり動きます</li>
-                <li><strong>問題の推移を見守る</strong> — これはMicrosoftにしか直せないサーバー側の問題です。<a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A のスレッド</a>で追跡されています</li>
-                <li>個人のアカウントでは当面、<strong>Outlookのウェブ版</strong>やMicrosoftの公式アプリをお使いください</li>
-                <li><strong>MailVaultの準備はできています</strong> — Microsoftが問題を解決すれば、MailVaultのOAuth2のサインインは何も変えずにすぐ動きます</li>
-              </ul>
-              <p>技術的な詳細: MailVaultは<a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a>と同じOAuth2の実装を使い、PKCEとXOAUTH2の認証について、MicrosoftのIMAP OAuth2の公式ドキュメントに従っています。</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/storage-and-vault.html" class="hover:text-primary-500 transition-colors">保存場所と保管庫</a></h3>
+            <ul class="space-y-2">
+              <li id="where-are-emails-stored" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#where-are-emails-stored" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">メールはどこに保存されますか？</a></li>
+              <li id="eml-and-maildir" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#eml-and-maildir" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">.emlファイルとMaildirとは何ですか？ なぜ重要なのですか？</a></li>
+              <li id="offline-access" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#offline-access" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">オフラインでメールを見られますか？</a></li>
+              <li id="attachments" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#attachments" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">添付ファイルはどのように扱われますか？</a></li>
+              <li id="change-mail-storage-folder" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#change-mail-storage-folder" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">既定のアプリケーションフォルダ以外の場所にメールを保存できますか？</a></li>
+              <li id="external-backup-location" class="mv-faq-q mv-anchor"><a href="/ja/faq/storage-and-vault.html#external-backup-location" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">外部バックアップ先（2つ目のコピー）とは何ですか？</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Proton Mail Bridge -->
-        <div id="proton-mail-bridge" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Proton MailでMailVaultを使うにはどうすればよいですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">Proton Mailはメールを端から端まで暗号化するため、IMAPを直接には公開していません。MailVault（やほかの第三者のメールクライアント）につなぐには<a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>が必要です — Protonが提供するデスクトップアプリで、自分のコンピューター上で動き、暗号化されたメールボックスを<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>の標準的なIMAPとSMTPとして見せます。Bridgeには有料のProton Mailのプランが必要で、Protonの無料の枠では使えません。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">設定の手順:</p>
-              <ol class="list-decimal list-inside space-y-2 mb-4">
-                <li>Protonのウェブサイトから<a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a>をインストールします</li>
-                <li>Protonアカウントで Bridge にサインインします</li>
-                <li>Bridgeはアカウントごとの<strong>IMAP／SMTPの認証情報</strong>を表示します — 表示されるパスワードはBridgeが生成したアプリパスワードで、いつものProtonのアカウントのパスワードでは<strong>ありません</strong></li>
-                <li>MailVaultで、プロバイダーの一覧から <strong>Proton Mail Bridge</strong> を選びます（一覧にない場合は <strong>Custom IMAP</strong> ）。そして次を入力します:
-                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
-                    <li>サーバー: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
-                    <li>IMAPのポート: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>、セキュリティ: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
-                    <li>SMTPポート: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
-                    <li>ユーザー名: Protonのメールアドレス</li>
-                    <li>パスワード: 手順3でBridgeが生成したパスワード</li>
-                  </ul>
-                </li>
-              </ol>
-              <p class="mb-4">MailVaultが同期するあいだ、Proton Mail Bridgeは背後で動いている必要があります — Bridgeが閉じていると、MailVaultはメールボックスに届きません。すでにアーカイブしたメールは、Bridgeが閉じていてもMailVaultの中でそのまま読め、検索できます。MailVaultはローカルを主とし、Bridgeから直接ではなく自身の<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>の保存領域から読むからです。</p>
-              <p>Bridgeは、自身のローカルのIMAPとSMTPのサーバーを自己署名のTLS証明書で保護します。MailVaultはローカル（<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>）の接続についてこれを自動で扱うので、証明書を手でインストールする必要はありません。</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/providers.html" class="hover:text-primary-500 transition-colors">メールプロバイダ</a></h3>
+            <ul class="space-y-2">
+              <li id="gmail-and-outlook" class="mv-faq-q mv-anchor"><a href="/ja/faq/providers.html#gmail-and-outlook" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultはGmailやOutlookで使えますか？</a></li>
+              <li id="microsoft-outlook-oauth2" class="mv-faq-q mv-anchor"><a href="/ja/faq/providers.html#microsoft-outlook-oauth2" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Outlook.comのアカウントに接続できないのはなぜですか？</a></li>
+              <li id="proton-mail-bridge" class="mv-faq-q mv-anchor"><a href="/ja/faq/providers.html#proton-mail-bridge" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Proton MailでMailVaultを使うにはどうすればよいですか？</a></li>
+              <li id="send-from-different-address" class="mv-faq-q mv-anchor"><a href="/ja/faq/providers.html#send-from-different-address" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">ログインに使うアドレスとは別のアドレスから送信できますか？</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Send from a different address -->
-        <div id="send-from-different-address" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">ログインに使うアドレスとは別のアドレスから送信できますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">はい。<strong>設定 &rarr; アカウント</strong>を開き、アカウントを選んで、<strong>Send Mail As</strong>を入力します。空のままにすると、ログインに使うアドレスから送信します。Fastmailや、サインインに使うアドレスと人に伝えるアドレスが違う提供元では、よくあることです。</p>
-              <p class="mb-4">変わるのは、送信するメールの<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>のアドレスだけです。ユーザー名とパスワードはそのままで、MailVaultは設定したアカウントとしてIMAPとSMTPにサインインし続けます。また、<strong>Reply-Toのヘッダーは追加されません</strong> &mdash; 返信は、送信に使ったアドレスへ届きます。</p>
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">アドレスの見つけ方と確認方法:</p>
-              <ul class="list-disc list-inside space-y-2 mb-4">
-                <li><strong>候補の表示</strong> &mdash; MailVaultは、自分のメールの中ですでに見かけたアドレスを提示します。以前そのアドレスで送ったもの、そして自分宛てのメールが届いているアドレスです。</li>
-                <li><strong>検証</strong> &mdash; そのアドレスからテストのメッセージを1通、既定では自分のメールボックス宛てに送るので、頼りにする前に提供元が受け付けるかを確かめられます。</li>
-                <li><strong>拒否された場合</strong> &mdash; そのアドレスは、そのログインでの送信を提供元が認めているエイリアスか差出人である必要があります。Fastmailはアカウント上のどのエイリアスでも受け付けます。GmailではGmailの設定の「Send mail as」にアドレスを追加する必要があり、Microsoft 365では管理者からSend Asの権限をもらう必要があります。</li>
-              </ul>
-              <p>エイリアスはMailVaultではなく、メールプロバイダー側で設定します &mdash; MailVaultは、プロバイダーがすでに許可しているアドレスとして送信するだけです。</p>
-            </div>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/premium.html" class="hover:text-primary-500 transition-colors">無料版とPremium</a></h3>
+            <ul class="space-y-2">
+              <li id="is-mailvault-free" class="mv-faq-q mv-anchor"><a href="/ja/faq/premium.html#is-mailvault-free" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultは無料ですか？</a></li>
+              <li id="block-email-trackers" class="mv-faq-q mv-anchor"><a href="/ja/faq/premium.html#block-email-trackers" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultはメールのトラッキングピクセルをブロックできますか？</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ 10 -->
-        <div id="system-requirements" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">動作環境を教えてください</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultにはmacOS 11（Big Sur）以降が必要で、IntelとApple Siliconの両方でネイティブに動作します。Linuxでは、Ubuntu 22.04以降 / Debian 12以降向けに.deb、AppImage、Snap、Flatpakを提供しています。メニューバーに常駐し、ウィンドウを閉じたままでも同期を続けます。
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/backup-and-restore.html" class="hover:text-primary-500 transition-colors">バックアップと復元</a></h3>
+            <ul class="space-y-2">
+              <li id="how-does-backup-work" class="mv-faq-q mv-anchor"><a href="/ja/faq/backup-and-restore.html#how-does-backup-work" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">MailVaultはどのようにメールをバックアップしますか？</a></li>
+              <li id="archive-email" class="mv-faq-q mv-anchor"><a href="/ja/faq/backup-and-restore.html#archive-email" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">メールをアーカイブすると何が起きますか？</a></li>
+              <li id="archive-and-delete" class="mv-faq-q mv-anchor"><a href="/ja/faq/backup-and-restore.html#archive-and-delete" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">アーカイブしてサーバーから削除すると何が起きますか？</a></li>
+              <li id="delete-from-server" class="mv-faq-q mv-anchor"><a href="/ja/faq/backup-and-restore.html#delete-from-server" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">サーバーからメールを削除するとどうなりますか？</a></li>
+              <li id="backup-and-restore" class="mv-faq-q mv-anchor"><a href="/ja/faq/backup-and-restore.html#backup-and-restore" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">バックアップと復元はどのように動作しますか？</a></li>
+            </ul>
           </div>
-        </div>
 
-        <!-- FAQ: Attachments -->
-        <div id="attachments" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">添付ファイルはどのように扱われますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              添付ファイルは、それぞれの.emlファイルの中にMIMEのパートとして埋め込まれています — 別々のファイルとして保存されるのではありません。メールを開くと、MailVaultのRustのバックエンドがMIMEの構造を解析し、その場で添付ファイルを取り出します。メールの表示から直接、どの添付ファイルでも<strong>Open</strong>、<strong>Save As</strong>、<strong>Show in Folder</strong>ができます。取り出した添付ファイルは、すぐに開き直せるよう一時的にキャッシュされます。
-            </p>
+          <div class="mv-faq-group">
+            <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3"><a href="/ja/faq/troubleshooting.html" class="hover:text-primary-500 transition-colors">トラブルシューティング</a></h3>
+            <ul class="space-y-2">
+              <li id="gmail-bandwidth-limits" class="mv-faq-q mv-anchor"><a href="/ja/faq/troubleshooting.html#gmail-bandwidth-limits" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Gmailの帯域制限とは何ですか。バックアップが上限に達するとどうなりますか？</a></li>
+              <li id="linux-spellcheck-dictionary" class="mv-faq-q mv-anchor"><a href="/ja/faq/troubleshooting.html#linux-spellcheck-dictionary" class="text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">Linuxでスペルチェックの下線が表示されないのはなぜですか？</a></li>
+            </ul>
           </div>
-        </div>
-
-        <!-- FAQ: Archive -->
-        <div id="archive-email" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">メールをアーカイブすると何が起きますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              アーカイブすると、（まだキャッシュされていなければ）サーバーからメールの全体をダウンロードし、ファイル名に<strong>A</strong>（Archived）のフラグを付けた.emlファイルとしてディスクに保存します。すでにローカルにキャッシュされていた場合、MailVaultはファイル名を変えてアーカイブのフラグを足すだけです。アーカイブしたメールは<strong>Vault</strong>の表示に現れ、バックアップにも含まれます。サーバー側のコピーは、自分で削除するまで手つかずのままです。
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Archive + Delete -->
-        <div id="archive-and-delete" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">アーカイブしてサーバーから削除すると何が起きますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <strong>Archive &amp; Delete</strong>は3つの手順を順に行います。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが本当にあることを確かめ、そのあとで初めてサーバーから削除します。確認に通らなかったものはサーバーに残ります &mdash; コピーに失敗しても、元を失うことはありません。そのあと行には<strong>唯一のコピー</strong>と表示されます。そのメッセージが残っている場所は保管庫だけだということで、バックアップ用のドライブをつないでおく合図でもあります。
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Backup & Restore -->
-        <div id="backup-and-restore" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">バックアップと復元はどのように動作しますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              MailVaultは、すべての.emlファイルと、内部のIDではなくメールアドレスでメールをアカウントに対応付ける<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>を含んだZIPアーカイブとして、メールを書き出します。これにより、バックアップは別の環境へ持ち運べます。書き出す対象は<strong>すべてのメール</strong>か<strong>アーカイブ済みのみ</strong>かを選べます。取り込みは冪等です — 同じメールがすでにローカルにあれば、重複しません。まだ設定していないアカウントのメールがバックアップに含まれていれば、MailVaultが自動でそのアカウントを作ります（設定でパスワードを入れ直すだけです）。
-            </p>
-          </div>
-        </div>
-
-        <!-- FAQ: Gmail bandwidth limits -->
-        <div id="gmail-bandwidth-limits" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Gmailの帯域制限とは何ですか。バックアップが上限に達するとどうなりますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                Googleは、1つのGmailまたはGoogle Workspaceのアカウントが1日に転送できるメールデータの量に上限を設けています。上限はアプリではなくアカウントに対するものなので、Apple Mail、スマートフォン、MailVaultはすべて同じ1日分の枠を使います。
-              </p>
-              <div class="scroll-x overflow-x-auto">
-                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
-                  <thead class="bg-slate-50 dark:bg-slate-900/50">
-                    <tr>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">アクセス方法</th>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">ダウンロードの上限</th>
-                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">アップロードの上限</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> （MailVaultが使用）</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / 日</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / 日</td>
-                    </tr>
-                    <tr>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / 日</td>
-                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
-                    </tr>
-                    <tr>
-                      <td class="px-3 py-2">Gmailのウェブクライアント</td>
-                      <td class="px-3 py-2">750 MB / 時、1250 MB / 日</td>
-                      <td class="px-3 py-2">300 MB / 時、1500 MB / 日</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              <p>
-                上限を超えるとGoogleはアカウントを一時的に停止します。<strong>通常は1時間ほどですが、24時間続くこともあります</strong>。上限はどのGoogle Workspaceのエディションでも同じで、Googleは予告なく変更できます — 現在の数値は<a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Googleの帯域制限のドキュメント</a>をご覧ください。
-              </p>
-              <p>
-                <strong>最初のバックアップにとって、これが何を意味するか。</strong>およそ2.5 GBを超えるメールボックスは、IMAPで1日のうちにダウンロードしきれません — どのクライアントでも無理で、これはサーバー側の上限です。大きなアーカイブには数日かかると見込んでください。
-              </p>
-              <p>
-                <strong>MailVaultの振る舞い。</strong>上限に達した応答を認識し、より長い締め出しを招く再試行はせずに実行をきれいに停止して、1日の上限に達したことをお知らせします。停止が解けてからバックアップを始め直せば、止まったところから続きます — すでにローカルに保存されたメッセージは飛ばされるので、二度ダウンロードされることはありません。待っている間も、ディスクにあるものはすべて読めますし、検索もできます。
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: External backup location -->
-        <div id="external-backup-location" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">外部バックアップ先（2つ目のコピー）とは何ですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                MailVaultは常に、アプリ自身の保存領域にメールの<strong>作業用のコピー</strong>を保ちます — 読み、検索し、開いているのはこれです。外部バックアップ先は、自分が管理するドライブ上に<strong>2つ目の独立したコピー</strong>を加えます。外付けSSD、NASの共有、同期されたフォルダなどです。
-              </p>
-              <ul class="list-disc pl-5 space-y-2">
-                <li><strong>作業用のコピーと並べて書き込まれます。</strong>バックアップの実行中、それぞれのメッセージは同じ<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>とMaildirの構成で両方の場所に保存されます — そのため2つ目のコピーは、MailVaultがなくてもApple MailやThunderbirdなど、ほかのメールクライアントで開けます。</li>
-                <li><strong>ミラーではなく、コールドストレージです。</strong>アプリが日常的にそこを読むことはありません。サーバー上で削除したメールも、MailVaultの中で消したメールも、外部のコピーには残ります。</li>
-                <li><strong>既読と未読のフラグは双方向で保たれます。</strong>実行の前に両方のコピーが突き合わされるので、読んだメッセージは読んだままです。</li>
-                <li><strong>アプリから独立しています。</strong>そのコンピューターが壊れても、MailVaultをアンインストールしても、外部のフォルダはそれ自体で完結した、内容を語れるメールのアーカイブのままです。</li>
-              </ul>
-              <p>
-                <strong>設定 → バックアップ → 「2つ目のコピー — 外部のコールドストレージ」</strong>で設定し、任意のフォルダを選びます。macOSではMailVaultがそのフォルダのセキュリティスコープ付きブックマークを保存するため、再起動やアプリの更新をまたいでもアクセスが続きます — 生のパスではそうはいきません。状態のバッジには<strong>準備完了</strong>、<strong>再認証が必要</strong>、<strong>利用できません</strong>、<strong>アクセスが拒否されました</strong>のいずれかが表示され、再認証はクリック1回です。
-              </p>
-              <p>
-                バックアップの途中でドライブが取り外された場合でも、作業用コピーの処理は最後まで完了し、MailVaultは外部のコピーに届かなかったメッセージの数を報告します。次回の実行でそれらがコピーされるので、失われるものはなく、失敗が黙って見過ごされることもありません。
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: Custom mail storage folder -->
-        <div id="change-mail-storage-folder" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">既定のアプリケーションフォルダ以外の場所にメールを保存できますか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                はい。既定では、MailVaultは起動ディスク上のアプリ専用のApplication Supportフォルダの中にメールストアを置きます。このストアは、外付けSSDや2台目の内蔵ディスクなど、どのドライブのどのフォルダにも移動できます。アーカイブが数十ギガバイトに育つと、これが効いてきます。
-              </p>
-              <p>
-                <strong>移動するのはメールのデータだけです:</strong> メッセージ、ヘッダーのキャッシュ、添付ファイルのキャッシュ、フォルダの一覧です。アカウント、設定、ログはアプリ自身のフォルダに残るので、ドライブが見つからないことを伝えてフォルダを尋ね直せるところまでは、MailVaultは必ず起動できます。
-              </p>
-              <p>
-                <strong>移動は、何かを削除する前に検証されます。</strong>MailVaultはすべてを新しいフォルダにコピーし、どのファイルも正しいサイズで届いたことを確かめ、切り替えてから、そのあとで初めて元のファイルを削除します。切断やクラッシュで移動が中断されても、現在の保存領域はそのまま残ります。もう一度実行すれば、すでにあるものをコピーし直すのではなく、続きから再開します。
-              </p>
-              <p>
-                <strong>フォルダには印が付き、認識されます。</strong>小さな目印のファイルが保存領域を識別するので、あとでドライブをつなぎ直したり、フォルダを手で移動したりしても、MailVaultをそこへ向け直せます。また、別の保存領域に属するフォルダや、メールの入っていないフォルダは、MailVaultが受け付けません。
-              </p>
-              <p>
-                <strong>ドライブがつながっていない場合</strong>、MailVaultはメールの保存領域が利用できないと伝えます。黙って既定の場所に2つ目のアーカイブを作り始め、中途半端なコピーを2つ抱えさせるようなことはしません。ドライブをつなぎ直すか、フォルダをもう一度選んでください。既定の場所にはいつでも戻せます — 移動するまで、メールはその場所に留まります。
-              </p>
-              <p class="text-sm">
-                <strong>2つ目のコピーとは別のものです。</strong>これは<em>実際に使う</em>保存領域の場所を変えるものです。<a href="#external-backup-location" class="text-primary-500 hover:underline">外部バックアップ先</a>は、その上にさらに冷たいコピーを1つ足します。両方を使うこと — メールの保存領域は高速な外付けSSDに、冷たいコピーはNASに — も、理にかなった構成です。
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- FAQ: Linux spellcheck dictionary -->
-        <div id="linux-spellcheck-dictionary" class="faq-item rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
-          <button class="faq-toggle w-full flex items-center justify-between px-6 py-5 text-left" aria-expanded="false">
-            <span class="text-lg font-semibold pr-4">Linuxでスペルチェックの下線が表示されないのはなぜですか？</span>
-            <svg class="faq-chevron w-5 h-5 text-slate-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-            </svg>
-          </button>
-          <div class="faq-answer">
-            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
-              <p>
-                そのマシンにスペル辞書がないからです。macOSとWindowsはシステムに辞書が同梱されていますが、Linuxでは辞書はディストリビューションから提供され、最小構成のデスクトップにはないことがよくあります。MailVaultはWebKitGTKを通じてスペルチェックを行い、WebKitGTKはenchantとhunspellを使って単語を調べます。そのため、hunspellの辞書が入っていないと下線を引けません。
-              </p>
-              <p>
-                <strong>どちらの状態にいるかは、メッセージのツールバーのボタンが教えてくれます。</strong>辞書があれば、下線の表示をオンとオフに切り替え、その設定をMailVaultが覚えます。辞書がなければ、スイッチのふりをする代わりに、この説明そのものを開きます。
-              </p>
-              <p><strong>お使いの言語の辞書をインストールしてください:</strong></p>
-              <div class="space-y-2 font-mono text-sm">
-                <div><span class="text-slate-500 dark:text-slate-500">Debian、Ubuntu、Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">Arch、Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
-                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
-              </div>
-              <p>
-                言語のコードはご自分のものに置き換えてください — <code>hunspell-de-de</code>、<code>hunspell-fr</code>などです。複数を入れてもかまいません。MailVaultはシステムの言語に合うものを使って確認し、合うものがなければすべてを使って確認します。<strong>そのあとMailVaultを再起動してください</strong> — スペルチェックはアプリの起動時に設定されます。
-              </p>
-              <p>
-                <strong>snapのビルドは特別な場合です。</strong>厳密に閉じ込められたsnapはホストに入れた辞書を見られないため、自前のコピーを持っています。snapが辞書なしと伝えてきたら、代わりに.debパッケージを入れてください — こちらはシステムにすでにある辞書を使います。
-              </p>
-            </div>
-          </div>
-        </div>
 
       </div>
 
@@ -909,44 +395,35 @@
       });
     });
 
-    // FAQ Accordion
-    document.querySelectorAll('.faq-toggle').forEach(button => {
-      button.addEventListener('click', () => {
-        const answer = button.nextElementSibling;
-        const chevron = button.querySelector('.faq-chevron');
-        const isOpen = answer.classList.contains('open');
-
-        // Close all others
-        document.querySelectorAll('.faq-answer.open').forEach(a => a.classList.remove('open'));
-        document.querySelectorAll('.faq-chevron.open').forEach(c => c.classList.remove('open'));
-        document.querySelectorAll('.faq-toggle[aria-expanded="true"]').forEach(b => b.setAttribute('aria-expanded', 'false'));
-
-        // Toggle current
-        if (!isOpen) {
-          answer.classList.add('open');
-          chevron.classList.add('open');
-          button.setAttribute('aria-expanded', 'true');
-        }
-      });
-    });
-
-    // Auto-expand FAQ section from URL hash (e.g. #proton-mail-bridge)
-    if (window.location.hash) {
-      const target = document.querySelector(window.location.hash);
-      if (target && target.classList.contains('faq-item')) {
-        const button = target.querySelector('.faq-toggle');
-        const answer = target.querySelector('.faq-answer');
-        const chevron = target.querySelector('.faq-chevron');
-        if (button && answer) {
-          answer.classList.add('open');
-          if (chevron) chevron.classList.add('open');
-          button.setAttribute('aria-expanded', 'true');
-          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }
+    // Deep links minted before the split (the app's Settings -> Help entries
+    // among them) still arrive as /faq.html#question-id. The index below already
+    // knows which topic page owns each id, so forward rather than 404 the anchor.
+    if (location.hash.length > 1) {
+      const owner = document.getElementById('mv-faq-index')
+        .querySelector('#' + CSS.escape(location.hash.slice(1)) + ' a[href]');
+      if (owner) location.replace(owner.href);
     }
+
+    // Filter the index. Plain substring over the question text — 23 rows.
+    const box = document.getElementById('mv-faq-search');
+    const field = document.getElementById('mv-faq-q');
+    const empty = document.getElementById('mv-faq-empty');
+    const rows = [...document.querySelectorAll('#mv-faq-index .mv-faq-q')];
+    box.hidden = false;
+    field.addEventListener('input', () => {
+      const needle = field.value.trim().toLowerCase();
+      let hits = 0;
+      for (const row of rows) {
+        const match = !needle || row.textContent.toLowerCase().includes(needle);
+        row.hidden = !match;
+        if (match) hits++;
+      }
+      for (const group of document.querySelectorAll('#mv-faq-index .mv-faq-group')) {
+        group.hidden = ![...group.querySelectorAll('.mv-faq-q')].some(r => !r.hidden);
+      }
+      empty.hidden = hits > 0;
+    });
   </script>
-  <script defer src="/pricing-localize.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

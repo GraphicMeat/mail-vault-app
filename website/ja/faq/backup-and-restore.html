@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>バックアップと復元 — MailVault FAQ</title>
+  <meta name="description" content="MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、保管庫を書き出して読み戻す方法。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/faq/backup-and-restore.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/faq/backup-and-restore.html">
+  <meta property="og:title" content="バックアップと復元 — MailVault FAQ">
+  <meta property="og:description" content="MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、保管庫を書き出して読み戻す方法。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="バックアップと復元 — MailVault FAQ">
+  <meta name="twitter:description" content="MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、保管庫を書き出して読み戻す方法。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVaultはどのようにメールをバックアップしますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVaultはIMAPプロトコルでメールサーバーに接続し、それぞれのメールを標準的な.emlファイルとしてMaildir形式で保管庫にダウンロードします。メール1通がディスク上の1ファイルなので、人間が読める形式で、持ち運びができ、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバー側のコピーを削除して容量を空けられます。ローカルのコピーは影響を受けません。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メールをアーカイブすると何が起きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "アーカイブすると、（まだキャッシュされていなければ）サーバーからメール全体をダウンロードし、ファイル名にA（アーカイブ済み）のフラグを付けた.emlファイルとしてディスクに保存します。アーカイブしたメールはローカルの表示モードに現れ、バックアップにも含まれます。自分で明示的に削除しない限り、メールはサーバーに残ります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "アーカイブしてサーバーから削除すると何が起きますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "「アーカイブして削除」は3つの手順を順番に実行します。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが確かにあることを確認し、そのうえでサーバーから削除します。確認に失敗したものはサーバーに残ります。処理のあと、その行には唯一のコピーであることが表示されます。そのメッセージが残っている場所は保管庫だけだという意味であり、バックアップ用のドライブをつないでおく合図でもあります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "サーバーからメールを削除するとどうなりますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません。それがこの製品の目的そのものです。逆に、アーカイブしなかったものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は「アーカイブして削除」です。各メッセージを保管庫にコピーし、そこに確かにあることを確認してから、サーバーから削除します。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "バックアップと復元はどのように動作しますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVaultは、すべての.emlファイルと、メールとアカウントをメールアドレスで対応付けるmanifest.jsonを含むZIPアーカイブとしてメールを書き出します。そのためバックアップは、別の環境へそのまま持ち運べます。書き出す対象は、すべてのメールかアーカイブ済みのみかを選べます。読み込みは冪等で、重複は読み飛ばされます。認識できないアカウントのメールがバックアップに含まれている場合、MailVaultがそのアカウントを自動的に作成します。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ホーム",
+      "item": "https://mailvaultapp.com/ja/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ja/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "バックアップと復元",
+      "item": "https://mailvaultapp.com/ja/faq/backup-and-restore.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ja/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="言語を選ぶ">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/backup-and-restore.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/backup-and-restore.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/backup-and-restore.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/backup-and-restore.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/backup-and-restore.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/backup-and-restore.html" aria-current="page"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/backup-and-restore.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/backup-and-restore.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/backup-and-restore.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ja/" class="hover:text-primary-500 transition-colors">ホーム</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">バックアップと復元</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">バックアップと復元</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultがメールをどうアーカイブするのか、アーカイブしてから削除するとサーバー側のコピーはどうなるのか、保管庫を書き出して読み戻す方法。</p>
+
+      <div class="space-y-4">
+
+        <article id="how-does-backup-work" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVaultはどのようにメールをバックアップしますか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVaultはIMAPプロトコルでメールサーバーに接続し、それぞれのメールを標準的な<a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.emlファイル</a>として、MacまたはLinuxマシン上に<a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>形式でダウンロードします。メール1通がディスク上の1ファイル — 人が読めて、持ち運べて、どのメールクライアントとも互換性があります。メッセージが保管庫に入れば、サーバー側のコピーを削除して容量を空けられます。ローカルのコピーは影響を受けません。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/ja/archive-progress-1440.webp" srcset="/screenshots/ja/archive-progress-720.webp 720w, /screenshots/ja/archive-progress-1440.webp 1440w, /screenshots/ja/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="一括バックアップの進行を示すMailVaultのアーカイブ進捗バー" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="archive-email" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メールをアーカイブすると何が起きますか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              アーカイブすると、（まだキャッシュされていなければ）サーバーからメールの全体をダウンロードし、ファイル名に<strong>A</strong>（Archived）のフラグを付けた.emlファイルとしてディスクに保存します。すでにローカルにキャッシュされていた場合、MailVaultはファイル名を変えてアーカイブのフラグを足すだけです。アーカイブしたメールは<strong>Vault</strong>の表示に現れ、バックアップにも含まれます。サーバー側のコピーは、自分で削除するまで手つかずのままです。
+            </p>
+        </article>
+
+        <article id="archive-and-delete" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">アーカイブしてサーバーから削除すると何が起きますか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <strong>Archive &amp; Delete</strong>は3つの手順を順に行います。メッセージを.emlファイルとして保管庫にコピーし、そのコピーが本当にあることを確かめ、そのあとで初めてサーバーから削除します。確認に通らなかったものはサーバーに残ります &mdash; コピーに失敗しても、元を失うことはありません。そのあと行には<strong>唯一のコピー</strong>と表示されます。そのメッセージが残っている場所は保管庫だけだということで、バックアップ用のドライブをつないでおく合図でもあります。
+            </p>
+        </article>
+
+        <article id="delete-from-server" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">サーバーからメールを削除するとどうなりますか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              先にアーカイブしたものは保管庫に残り、その後サーバーで何が起きても影響を受けません — それがこの製品の目的そのものです。アーカイブし<em>なかった</em>ものは、サーバー側のコピーと一緒に失われます。そのためMailVaultは、削除する前に各メッセージの状態を行ごとに表示します。サーバー上にあるのか、保管庫にあるのか、その両方か。安全な手順は<strong>Archive &amp; Delete</strong>です。各メッセージを保管庫にコピーし、そこに確かにあることを確かめてから、サーバーから削除します。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/ja/state-icons-1440.webp" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="backup-and-restore" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">バックアップと復元はどのように動作しますか？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVaultは、すべての.emlファイルと、内部のIDではなくメールアドレスでメールをアカウントに対応付ける<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>を含んだZIPアーカイブとして、メールを書き出します。これにより、バックアップは別の環境へ持ち運べます。書き出す対象は<strong>すべてのメール</strong>か<strong>アーカイブ済みのみ</strong>かを選べます。取り込みは冪等です — 同じメールがすでにローカルにあれば、重複しません。まだ設定していないアカウントのメールがバックアップに含まれていれば、MailVaultが自動でそのアカウントを作ります（設定でパスワードを入れ直すだけです）。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/ja/settings-backup-1440.webp" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIPの書き出し、読み込み、ThunderbirdやApple Mail向けのMBOX書き出しを備えたMailVaultのバックアップと復元の設定" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ja/faq.html" class="text-primary-500 hover:underline">FAQのすべてのトピックに戻る</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">まだ疑問がありますか</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHubで質問する
+          </a>
+          <a href="/ja/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            お問い合わせ
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ja/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>調理は <span class="text-primary-500 font-semibold">オープンGPUの直火</span> で、作り手は</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="制作: Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

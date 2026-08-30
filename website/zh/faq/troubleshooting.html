@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>疑难解答 — MailVault 常见问题</title>
+  <meta name="description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <meta property="og:title" content="疑难解答 — MailVault 常见问题">
+  <meta property="og:description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="疑难解答 — MailVault 常见问题">
+  <meta name="twitter:description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Gmail 的带宽限制是多少？备份触发限制时会怎样？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Google 限制单个 Gmail 或 Google Workspace 账户每天可以传输多少邮件数据。通过 IMAP，限制是每天下载 2500 MB、上传 500 MB。POP 下载上限为每天 1250 MB。Gmail 网页客户端有自己的限制：下行每小时 750 MB、每天 1250 MB，上行每小时 300 MB、每天 1500 MB（上传包含 SMTP）。同一用户的所有客户端共用一份每日额度，所以 Apple Mail、你的手机和 MailVault 都从同一个池子里取。超过限制会临时暂停该账户——通常 1 小时，但也可能长达 24 小时。这些限制适用于所有 Google Workspace 版本，而且 Google 可以不经通知就更改。因此，超过 2.5 GB 的邮箱第一次完整备份必然要花上不止一天。MailVault 会识别出限制响应，干净地停止本次运行，而不是死磕服务器，并告诉你发生了什么。等暂停解除后重新开始备份，它会从停下的地方继续，因为已经保存到本地的邮件会被跳过。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "为什么 Linux 上的拼写检查不给任何单词加下划线？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "因为没有安装拼写词典。在 macOS 和 Windows 上，系统会自带一个；在 Linux 上，词典来自你的发行版，而最小化的桌面安装往往一个都没有。MailVault 通过 WebKitGTK 做拼写检查，后者经由 enchant 和 hunspell 查词，所以只有装了 hunspell 词典才能画出下划线。为你的语言装一个，然后重启 MailVault：Debian、Ubuntu 或 Mint 上运行 sudo apt install hunspell-en-us；Fedora 上 sudo dnf install hunspell-en；Arch 或 Manjaro 上 sudo pacman -S hunspell-en_us；openSUSE 上 sudo zypper install myspell-en_US。把语言代码换成你自己的——hunspell-de-de、hunspell-fr 等等——MailVault 会挑选与你系统语言匹配的词典。邮件工具栏上的拼写检查按钮会告诉你属于哪种情况：有词典时它切换下划线，没有词典时它打开这份说明。snap 版本受严格限制，看不到宿主系统上安装的词典，所以它自带一份；如果它报告没有词典，请改用 .deb 包。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "首页",
+      "item": "https://mailvaultapp.com/zh/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "常见问题",
+      "item": "https://mailvaultapp.com/zh/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "疑难解答",
+      "item": "https://mailvaultapp.com/zh/faq/troubleshooting.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="选择语言">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/troubleshooting.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/troubleshooting.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/troubleshooting.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/troubleshooting.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/troubleshooting.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/troubleshooting.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/troubleshooting.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/troubleshooting.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/troubleshooting.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/zh/" class="hover:text-primary-500 transition-colors">首页</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">疑难解答</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">疑难解答</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Gmail 的带宽限制是多少？备份触发限制时会怎样？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Google 限制单个 Gmail 或 Google Workspace 账户每天可以传输多少邮件数据。限制针对账户，而不是应用——Apple Mail、你的手机和 MailVault 共用同一份每日额度。
+              </p>
+              <div class="scroll-x overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">访问方式</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">下载限额</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">上传限额</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> （MailVault 使用）</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / 天</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / 天</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / 天</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmail 网页客户端</td>
+                      <td class="px-3 py-2">750 MB / 小时，1250 MB / 天</td>
+                      <td class="px-3 py-2">300 MB / 小时，1500 MB / 天</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                一旦超出限额，Google 会临时暂停该账户：<strong>通常在 1 小时左右，但也可能持续到 24 小时</strong>。所有 Google Workspace 版本的限额都一样，而且 Google 可以不经通知就修改——当前的具体数字见 <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Google 的带宽限额文档</a>。
+              </p>
+              <p>
+                <strong>这对第一次备份意味着什么。</strong>超过大约 2.5 GB 的邮箱没法在一天之内通过 IMAP 下载完——没有哪个客户端做得到，这是服务器端的硬性上限。大的归档要做好花上几天的准备。
+              </p>
+              <p>
+                <strong>MailVault 的做法。</strong>它会识别出限额响应，干净地停下这一轮，而不是不断重试把封禁拖得更久，并告诉你已经触到当天的限额。等暂停解除后再启动备份，它会从停下的地方继续——本地已经存好的邮件会被跳过，不会下载两遍。等待期间，磁盘上已有的一切照样能读、能搜。
+              </p>
+            </div>
+        </article>
+
+        <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">为什么 Linux 上的拼写检查不给任何单词加下划线？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                因为机器上没有拼写词典。macOS 和 Windows 随系统自带词典；Linux 上的词典来自你的发行版，而最小化的桌面安装往往一个都没有。MailVault 通过 WebKitGTK 做拼写检查，后者经由 enchant 和 hunspell 查词——所以只有装了 hunspell 词典才能画出下划线。
+              </p>
+              <p>
+                <strong>邮件工具栏上的那个按钮会告诉你处在哪种情况。</strong>装了词典时，它用来开关拼写下划线，MailVault 会记住这个设置。一个词典都没有时，它会打开这份说明，而不是假装自己是个开关。
+              </p>
+              <p><strong>为你的语言安装词典：</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian、Ubuntu、Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch、Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                把语言代码换成你自己的——<code>hunspell-de-de</code>、<code>hunspell-fr</code> 等等。你可以装好几个；MailVault 会用与系统语言匹配的那个来检查，如果都不匹配，就拿全部一起检查。<strong>装完后重启 MailVault</strong>——拼写检查器是在应用启动时初始化的。
+              </p>
+              <p>
+                <strong>snap 版是个特例。</strong>严格受限的 snap 看不到装在宿主系统上的词典，所以它自带一份。如果 snap 报告没有词典，改装 .deb 包——它会用你系统上已有的词典。
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/zh/faq.html" class="text-primary-500 hover:underline">返回全部常见问题主题</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            在 GitHub 上提问
+          </a>
+          <a href="/zh/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            联系我们
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/zh/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

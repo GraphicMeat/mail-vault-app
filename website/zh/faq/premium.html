@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>免费版与 Premium — MailVault 常见问题</title>
+  <meta name="description" content="每位 MailVault 用户免费拥有的功能，以及 MailVault Premium 额外提供的部分。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/faq/premium.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/faq/premium.html">
+  <meta property="og:title" content="免费版与 Premium — MailVault 常见问题">
+  <meta property="og:description" content="每位 MailVault 用户免费拥有的功能，以及 MailVault Premium 额外提供的部分。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="免费版与 Premium — MailVault 常见问题">
+  <meta name="twitter:description" content="每位 MailVault 用户免费拥有的功能，以及 MailVault Premium 额外提供的部分。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault 是免费的吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault 的核心功能是免费的，包括邮件阅读、撰写、搜索、会话归并、本地归档和手动备份。Premium 功能 —— 定时自动备份、跨账户邮箱迁移和自动清理规则 —— 需要付费。各方案分别包含什么，见定价页面。源代码在 GitHub 上。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault 能拦截邮件跟踪像素吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "能。MailVault 打开的每一封邮件都会检查跟踪像素——就是营销邮件用来回报你何时打开、打开多少次、来自哪个 IP、使用哪个客户端的隐藏 1x1 图片。带有跟踪像素的邮件，主题旁边会出现一个小眼睛图标；点击它会显示跟踪公司的名称，以及该像素原本会请求的完整 URL。检测功能对所有人免费。MailVault Premium 还会在邮件渲染之前，把这些信标从 HTML 中剥离，请求根本不会发出，发件人也就什么都得不到。应用内置了将近 500 个已知的跟踪端点；这份列表随版本发布更新，运行时绝不会从服务器抓取。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "首页",
+      "item": "https://mailvaultapp.com/zh/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "常见问题",
+      "item": "https://mailvaultapp.com/zh/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "免费版与 Premium",
+      "item": "https://mailvaultapp.com/zh/faq/premium.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/premium.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/premium.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/premium.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/premium.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/premium.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/premium.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/premium.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/premium.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/premium.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/premium.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="选择语言">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/premium.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/premium.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/premium.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/premium.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/premium.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/premium.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/premium.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/premium.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/premium.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/zh/" class="hover:text-primary-500 transition-colors">首页</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">免费版与 Premium</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">免费版与 Premium</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">每位 MailVault 用户免费拥有的功能，以及 MailVault Premium 额外提供的部分。</p>
+
+      <div class="space-y-4">
+
+        <article id="is-mailvault-free" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 是免费的吗？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              MailVault 的核心功能是免费的，包括邮件阅读、撰写、搜索、会话归并、本地归档和手动备份。Premium 功能 —— 定时自动备份、跨账户邮箱迁移和自动清理规则 —— 需要付费。各方案分别包含什么，见<a href="/zh/pricing.html" class="text-primary-500 hover:underline">定价页面</a>。源代码在 <a href="https://github.com/GraphicMeat/mail-vault-app" class="text-primary-500 hover:underline" target="_blank">GitHub</a> 上。
+            </p>
+        </article>
+
+        <article id="block-email-trackers" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 能拦截邮件跟踪像素吗？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              会的。MailVault 打开的每一封邮件都会被检查有没有跟踪像素 —— 就是营销邮件用来回报你何时打开、打开几次、来自哪个 IP、用的哪个客户端的隐藏 1x1 图片。带有跟踪像素的邮件，主题旁边会出现一只小眼睛，点开它会说明是哪家跟踪公司，并显示这个像素本来要请求的确切 URL。检测对所有人免费。MailVault Premium 还会在邮件渲染之前把这些信标从 HTML 里剥掉，于是请求根本不会发出，发件人什么也得不到。应用自带将近 500 个已知的跟踪端点；这份列表随应用分发、随版本更新，从不在运行时去服务器拉取。<a href="/zh/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">看看它如何工作，处理前后对比</a>。
+            </p>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/zh/faq.html" class="text-primary-500 hover:underline">返回全部常见问题主题</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            在 GitHub 上提问
+          </a>
+          <a href="/zh/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            联系我们
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/zh/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

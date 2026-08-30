@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>邮件服务商 — MailVault 常见问题</title>
+  <meta name="description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/faq/providers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/faq/providers.html">
+  <meta property="og:title" content="邮件服务商 — MailVault 常见问题">
+  <meta property="og:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="邮件服务商 — MailVault 常见问题">
+  <meta name="twitter:description" content="连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "MailVault 支持 Gmail 和 Outlook 吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "支持。MailVault 可用于 Gmail、Outlook，以及任何支持 IMAP 的邮件服务。Gmail 可以用 OAuth2 直接以你的 Google 账户登录——不需要手动填写 IMAP 设置。Microsoft 365 商业版和企业版账户可以用 OAuth2 直接以 Microsoft 账户登录。个人 Outlook.com 账户目前受到一个已知的 Microsoft 服务器问题影响。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "为什么我的 Outlook.com 账户连不上？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "存在一个已知的 Microsoft 服务器端问题，自 2024 年底起影响个人 Outlook.com、Hotmail 和 Live.com 账户。用 Microsoft 账户登录后，IMAP 连接会失败并提示「User is authenticated but not connected.」。Microsoft 的 IMAP 服务存在一个回归缺陷，导致通过 OAuth2 认证的会话无法连接。Microsoft 365 商业版/企业版账户不受影响。MailVault 的 OAuth2 实现已经就绪，Microsoft 一旦解决问题即可使用。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "如何用 MailVault 收发 Proton Mail？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Proton Mail 对邮件做端到端加密，因此不直接提供 IMAP。要把它接入 MailVault，需要 Proton Mail Bridge：这是 Proton 提供的一个桌面应用，运行在本地，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 127.0.0.1 上。Bridge 需要付费的 Proton Mail 套餐。安装 Bridge，用你的 Proton 账户登录，然后复制 Bridge 生成的 IMAP/SMTP 凭据（不是你的 Proton 账户密码）。在 MailVault 中，从服务商列表里选择 Proton Mail Bridge（或自定义 IMAP），服务器填 127.0.0.1，IMAP 端口 1143 并使用 STARTTLS，SMTP 端口 1025，用户名填你的 Proton 邮箱地址，密码填 Bridge 的密码。MailVault 同步时 Bridge 必须在运行，不过即使 Bridge 关着，已归档的邮件在 MailVault 里依然可读。对本地连接，Bridge 的自签名证书由 MailVault 自动处理。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我可以用与登录地址不同的地址发信吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。在 设置 → 账户 中为该账户填写「以此地址发信」字段，留空则使用你的登录地址发信。只有外发邮件的 From 地址会变——你的用户名和密码保持不变，MailVault 仍然以你设置的账户登录 IMAP 和 SMTP，而且不会添加 Reply-To 头。MailVault 会给出它在你自己的邮件里见过的地址，「验证」按钮会从该地址发出一封测试邮件，让你确认服务商接受它。该地址必须是你的服务商允许这个登录身份发信的别名：Fastmail 接受账户下的任意别名，Gmail 需要在 Gmail 设置的「Send mail as」中添加，Microsoft 365 需要 Send As 权限。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "首页",
+      "item": "https://mailvaultapp.com/zh/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "常见问题",
+      "item": "https://mailvaultapp.com/zh/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "邮件服务商",
+      "item": "https://mailvaultapp.com/zh/faq/providers.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/providers.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/providers.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/providers.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/providers.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/providers.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/providers.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/providers.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/providers.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/providers.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/providers.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="选择语言">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/providers.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/providers.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/providers.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/providers.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/providers.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/providers.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/providers.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/providers.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/providers.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/zh/" class="hover:text-primary-500 transition-colors">首页</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">邮件服务商</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">邮件服务商</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">连接 Gmail、Microsoft 365、Outlook.com 和 Proton Mail，以及用别名地址发信。</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault 支持 Gmail 和 Outlook 吗？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              可以。MailVault 支持 Gmail、Outlook，以及任何其他支持 IMAP 的邮件服务。对 Gmail，用 OAuth2 直接以你的 Google 账户登录即可 —— 不需要手动填 IMAP 设置。Microsoft 365 商业版和企业版账户可以用 OAuth2 直接以你的 Microsoft 账户登录，并且与双重验证配合无碍。个人 Outlook.com 账户目前受一个 <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">Microsoft 已知的服务器问题</a>影响。
+            </p>
+        </article>
+
+        <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">为什么我的 Outlook.com 账户连不上？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">有一个自 2024 年底以来影响个人 Outlook.com、Hotmail 和 Live.com 账户的 <strong>Microsoft 服务器端已知问题</strong>。用 Microsoft 账户登录之后，IMAP 连接会失败并报“User is authenticated but not connected.”。所有用 IMAP + OAuth2 的第三方邮件客户端都受影响 —— 不只是 MailVault。</p>
+              <p class="mb-4">Microsoft 要求个人账户使用 OAuth2。遗憾的是，他们的 IMAP 服务存在一个回归缺陷，导致通过 OAuth2 认证的会话无法连接到邮箱。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">你可以这么做：</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Microsoft 365 商业版/企业版账户</strong>不受影响 —— 组织账户的 OAuth2 一切正常</li>
+                <li><strong>关注这个问题</strong> —— 这是只有 Microsoft 才能修的服务器端问题。<a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft Q&A 讨论帖</a>在跟踪进展</li>
+                <li>个人账户在此期间<strong>先用 Outlook 网页版</strong>或 Microsoft 官方应用</li>
+                <li><strong>MailVault 这边已经就绪</strong> —— Microsoft 一旦修好，MailVault 的 OAuth2 登录立刻就能用，不需要做任何改动</li>
+              </ul>
+              <p>技术细节：MailVault 用的 OAuth2 实现与 <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> 相同，遵循 Microsoft 官方的 IMAP OAuth2 文档，采用 PKCE 和 XOAUTH2 认证。</p>
+            </div>
+        </article>
+
+        <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">如何用 MailVault 收发 Proton Mail？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Proton Mail 对邮件做端到端加密，所以不直接开放 IMAP。要把它接到 MailVault（或任何第三方邮件客户端），需要 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> —— 这是 Proton 提供的桌面应用，跑在你自己的电脑上，把你加密的邮箱以标准 IMAP/SMTP 的形式暴露在 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code> 上。Bridge 需要付费的 Proton Mail 套餐；免费版用不了。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">设置步骤：</p>
+              <ol class="list-decimal list-inside space-y-2 mb-4">
+                <li>从 Proton 官网安装 <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a></li>
+                <li>用你的 Proton 账户登录 Bridge</li>
+                <li>Bridge 会为每个账户显示一组 <strong>IMAP/SMTP 凭据</strong> —— 显示出来的那个密码是 Bridge 生成的应用密码，<strong>不是</strong>你平常的 Proton 账户密码</li>
+                <li>在 MailVault 中，从服务商列表里选择 <strong>Proton Mail Bridge</strong> （如果列表里没有，就选 <strong>自定义 IMAP</strong> ），然后填写：
+                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li>服务器： <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>IMAP 端口：<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>，安全方式：<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                    <li>SMTP 端口： <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
+                    <li>用户名：你的 Proton 邮箱地址</li>
+                    <li>密码：第 3 步中 Bridge 生成的密码</li>
+                  </ul>
+                </li>
+              </ol>
+              <p class="mb-4">MailVault 同步的时候，Proton Mail Bridge 必须在后台运行 —— Bridge 关了，MailVault 就够不到邮箱。不过就算 Bridge 关着，你已经归档的邮件在 MailVault 里照样能完整地阅读和搜索，因为 MailVault 是本地优先的，它读的是自己的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> 存储，而不是实时向 Bridge 要。</p>
+              <p>Bridge 用一张自签名 TLS 证书来保护它本地的 IMAP/SMTP 服务。对本地（<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>）连接，MailVault 会自动处理这一点，不需要你手动安装证书。</p>
+            </div>
+        </article>
+
+        <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以用与登录地址不同的地址发信吗？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">可以。打开<strong>设置 &rarr; 账户</strong>，选中账户，填写<strong>发件身份</strong>。留空就用你的登录地址发信。在 Fastmail 上，以及任何“登录用的地址不是你对外给的地址”的服务商那里，这都很常见。</p>
+              <p class="mb-4">变的只有外发邮件的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code> 地址。你的用户名和密码原封不动，MailVault 仍然以你设置的那个账户登录 IMAP 和 SMTP，而且<strong>不会添加 Reply-To 头</strong> &mdash; 回信会寄到你用来发信的那个地址。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">查找并验证地址：</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>建议</strong> &mdash; MailVault 会给出它在你自己的邮件里见过的地址：你以前用来发过信的，以及别人寄给你的邮件所落到的那些地址。</li>
+                <li><strong>验证</strong> &mdash; 用这个地址发一封测试邮件，默认寄到你自己的邮箱，这样你在真正依赖它之前就能确认服务商接受它。</li>
+                <li><strong>如果被拒绝</strong> &mdash; 这个地址必须是你的服务商允许该登录身份用来发信的别名或身份。Fastmail 接受账户上的任何别名；Gmail 需要先在 Gmail 设置的“以此地址发送邮件”里添加该地址；Microsoft 365 则需要管理员授予 Send As 权限。</li>
+              </ul>
+              <p>别名是在你的邮件服务商那里配置的，不在 MailVault 里 &mdash; MailVault 只会以服务商已经授权的地址发信。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/zh/compose-email-1440.webp" srcset="/screenshots/zh/compose-email-720.webp 720w, /screenshots/zh/compose-email-1440.webp 1440w, /screenshots/zh/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 撰写与回复窗口，支持富文本编辑" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/zh/faq.html" class="text-primary-500 hover:underline">返回全部常见问题主题</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            在 GitHub 上提问
+          </a>
+          <a href="/zh/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            联系我们
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/zh/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

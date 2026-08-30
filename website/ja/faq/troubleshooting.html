@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>トラブルシューティング — MailVault FAQ</title>
+  <meta name="description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <meta property="og:title" content="トラブルシューティング — MailVault FAQ">
+  <meta property="og:description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="トラブルシューティング — MailVault FAQ">
+  <meta name="twitter:description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Gmailの帯域制限とは何ですか。バックアップが上限に達するとどうなりますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Googleは、1つのGmailまたはGoogle Workspaceのアカウントが1日に転送できるメールデータの量に上限を設けています。IMAPでは、1日あたりダウンロード2500 MB、アップロード500 MBが上限です。POPのダウンロードは1日あたり1250 MBまでです。Gmailのウェブクライアントには独自の上限があり、ダウンロードは1時間あたり750 MB・1日あたり1250 MB、アップロードは1時間あたり300 MB・1日あたり1500 MBです（アップロードにはSMTPが含まれます）。1人のユーザーのすべてのクライアントが同じ1日分の枠を共有するため、Apple Mail、スマートフォン、MailVaultは同じ枠から使います。上限を超えるとアカウントが一時的に停止され、通常は1時間、長い場合は24時間続きます。この上限はGoogle Workspaceのどのエディションにも適用され、Googleは予告なく変更できます。そのため、2.5 GBを超えるメールボックスの最初のバックアップには1日以上かかります。MailVaultは上限に達した応答を検出し、サーバーに連打せずに実行をきれいに終了して、何が起きたかを知らせます。停止が解除されてからバックアップを再開すると、止まったところから続きます。すでにローカルに保存されたメッセージは読み飛ばされるためです。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Linuxでスペルチェックの下線が表示されないのはなぜですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "スペル辞書がインストールされていないからです。macOSとWindowsではシステムが辞書を提供しますが、Linuxでは辞書はディストリビューションから提供され、最小構成のデスクトップにはないことがよくあります。MailVaultはWebKitGTKを通じてスペルチェックを行い、WebKitGTKはenchantとhunspellを使って単語を調べるため、hunspellの辞書が入ってはじめて下線を引けます。お使いの言語の辞書をインストールしてMailVaultを再起動してください。Debian、Ubuntu、Mintでは sudo apt install hunspell-en-us、Fedoraでは sudo dnf install hunspell-en、ArchやManjaroでは sudo pacman -S hunspell-en_us、openSUSEでは sudo zypper install myspell-en_US を実行します。言語コードはご自身のものに置き換えてください（hunspell-de-de、hunspell-fr など）。MailVaultはシステムの言語に一致する辞書を選びます。メッセージのツールバーにあるスペルチェックのボタンが、どちらの状態かを示します。辞書があるときは下線の表示を切り替え、ないときはこの手順を開きます。snap版は厳格に隔離されているためホストにインストールされた辞書を参照できず、独自の辞書を同梱しています。辞書なしと報告される場合は、代わりに.debパッケージを使ってください。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ホーム",
+      "item": "https://mailvaultapp.com/ja/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ja/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "トラブルシューティング",
+      "item": "https://mailvaultapp.com/ja/faq/troubleshooting.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ja/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ja/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            ダウンロード
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ja/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">機能</a>
+          <a href="/ja/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">活用例</a>
+          <a href="/ja/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">ダウンロード</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="言語を選ぶ">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/troubleshooting.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/troubleshooting.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/troubleshooting.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/troubleshooting.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/troubleshooting.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/troubleshooting.html" aria-current="page"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/troubleshooting.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/troubleshooting.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/troubleshooting.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ja/" class="hover:text-primary-500 transition-colors">ホーム</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">トラブルシューティング</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">トラブルシューティング</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Gmailの帯域制限とは何ですか。バックアップが上限に達するとどうなりますか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Googleは、1つのGmailまたはGoogle Workspaceのアカウントが1日に転送できるメールデータの量に上限を設けています。上限はアプリではなくアカウントに対するものなので、Apple Mail、スマートフォン、MailVaultはすべて同じ1日分の枠を使います。
+              </p>
+              <div class="scroll-x overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">アクセス方法</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">ダウンロードの上限</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">アップロードの上限</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> （MailVaultが使用）</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / 日</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / 日</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / 日</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmailのウェブクライアント</td>
+                      <td class="px-3 py-2">750 MB / 時、1250 MB / 日</td>
+                      <td class="px-3 py-2">300 MB / 時、1500 MB / 日</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                上限を超えるとGoogleはアカウントを一時的に停止します。<strong>通常は1時間ほどですが、24時間続くこともあります</strong>。上限はどのGoogle Workspaceのエディションでも同じで、Googleは予告なく変更できます — 現在の数値は<a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Googleの帯域制限のドキュメント</a>をご覧ください。
+              </p>
+              <p>
+                <strong>最初のバックアップにとって、これが何を意味するか。</strong>およそ2.5 GBを超えるメールボックスは、IMAPで1日のうちにダウンロードしきれません — どのクライアントでも無理で、これはサーバー側の上限です。大きなアーカイブには数日かかると見込んでください。
+              </p>
+              <p>
+                <strong>MailVaultの振る舞い。</strong>上限に達した応答を認識し、より長い締め出しを招く再試行はせずに実行をきれいに停止して、1日の上限に達したことをお知らせします。停止が解けてからバックアップを始め直せば、止まったところから続きます — すでにローカルに保存されたメッセージは飛ばされるので、二度ダウンロードされることはありません。待っている間も、ディスクにあるものはすべて読めますし、検索もできます。
+              </p>
+            </div>
+        </article>
+
+        <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Linuxでスペルチェックの下線が表示されないのはなぜですか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                そのマシンにスペル辞書がないからです。macOSとWindowsはシステムに辞書が同梱されていますが、Linuxでは辞書はディストリビューションから提供され、最小構成のデスクトップにはないことがよくあります。MailVaultはWebKitGTKを通じてスペルチェックを行い、WebKitGTKはenchantとhunspellを使って単語を調べます。そのため、hunspellの辞書が入っていないと下線を引けません。
+              </p>
+              <p>
+                <strong>どちらの状態にいるかは、メッセージのツールバーのボタンが教えてくれます。</strong>辞書があれば、下線の表示をオンとオフに切り替え、その設定をMailVaultが覚えます。辞書がなければ、スイッチのふりをする代わりに、この説明そのものを開きます。
+              </p>
+              <p><strong>お使いの言語の辞書をインストールしてください:</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian、Ubuntu、Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch、Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                言語のコードはご自分のものに置き換えてください — <code>hunspell-de-de</code>、<code>hunspell-fr</code>などです。複数を入れてもかまいません。MailVaultはシステムの言語に合うものを使って確認し、合うものがなければすべてを使って確認します。<strong>そのあとMailVaultを再起動してください</strong> — スペルチェックはアプリの起動時に設定されます。
+              </p>
+              <p>
+                <strong>snapのビルドは特別な場合です。</strong>厳密に閉じ込められたsnapはホストに入れた辞書を見られないため、自前のコピーを持っています。snapが辞書なしと伝えてきたら、代わりに.debパッケージを入れてください — こちらはシステムにすでにある辞書を使います。
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ja/faq.html" class="text-primary-500 hover:underline">FAQのすべてのトピックに戻る</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">まだ疑問がありますか</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHubで質問する
+          </a>
+          <a href="/ja/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            お問い合わせ
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ja/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
+          <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">プライバシー</a>
+          <a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">変更履歴</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">利用規約</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 無断転載を禁じます。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>調理は <span class="text-primary-500 font-semibold">オープンGPUの直火</span> で、作り手は</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="制作: Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

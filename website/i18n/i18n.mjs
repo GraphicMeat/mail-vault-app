@@ -55,7 +55,7 @@ const EXCLUDE = new Set([
   'oauth/yahoo/callback.html',
 ]);
 
-const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features'];
+const PAGE_DIRS = ['', 'blog', 'guides', 'compare', 'features', 'faq'];
 
 export function sourcePages() {
   const out = [];

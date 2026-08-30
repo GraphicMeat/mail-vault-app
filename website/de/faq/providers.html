@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="de" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E-Mail-Anbieter — MailVault FAQ</title>
+  <meta name="description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/de/faq/providers.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/de/faq/providers.html">
+  <meta property="og:title" content="E-Mail-Anbieter — MailVault FAQ">
+  <meta property="og:description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="de_DE">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="E-Mail-Anbieter — MailVault FAQ">
+  <meta name="twitter:description" content="Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Funktioniert MailVault mit Gmail und Outlook?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja. MailVault funktioniert mit Gmail, Outlook und jedem anderen E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich direkt mit deinem Google-Konto per OAuth2 an — keine IMAP-Einstellungen von Hand. Microsoft 365 Business und Enterprise können sich direkt mit dem Microsoft-Konto per OAuth2 anmelden. Private Outlook.com-Konten leiden derzeit unter einem bekannten Serverproblem bei Microsoft."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Warum kann ich mein Outlook.com-Konto nicht verbinden?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Es gibt ein bekanntes serverseitiges Problem bei Microsoft, das seit Ende 2024 private Outlook.com-, Hotmail- und Live.com-Konten betrifft. Nach der Anmeldung mit deinem Microsoft-Konto schlägt die IMAP-Verbindung fehl mit 'User is authenticated but not connected.' Der IMAP-Dienst von Microsoft hat eine Regression, die verhindert, dass OAuth2-authentifizierte Sitzungen eine Verbindung herstellen. Microsoft 365 Business/Enterprise-Konten sind nicht betroffen. Die OAuth2-Implementierung von MailVault ist bereit und wird sofort funktionieren, sobald Microsoft das Problem behebt."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Wie nutze ich MailVault mit Proton Mail?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Proton Mail verschlüsselt deine Post Ende zu Ende und stellt IMAP deshalb nicht direkt bereit. Um es mit MailVault zu verbinden, brauchst du Proton Mail Bridge, eine Desktop-App von Proton, die lokal läuft und dein verschlüsseltes Postfach als normales IMAP/SMTP unter 127.0.0.1 bereitstellt. Bridge setzt einen kostenpflichtigen Proton Mail-Tarif voraus. Installiere Bridge, melde dich mit deinem Proton-Konto an und kopiere dann die von Bridge erzeugten IMAP/SMTP-Zugangsdaten (nicht dein Proton-Kontopasswort). Wähle in MailVault Proton Mail Bridge in der Anbieterliste (oder Custom IMAP), mit Server 127.0.0.1, IMAP-Port 1143 mit STARTTLS, SMTP-Port 1025, deiner Proton-E-Mail-Adresse als Benutzername und dem Bridge-Passwort. Bridge muss laufen, damit MailVault synchronisieren kann; archivierte Post bleibt in MailVault aber auch dann lesbar, wenn Bridge aus ist. Das selbstsignierte Zertifikat von Bridge behandelt MailVault bei lokalen Verbindungen automatisch."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja. Fülle unter Einstellungen → Konten das Feld „Mail senden als“ für das Konto aus, oder lass es leer, um von deiner Anmeldeadresse zu senden. Nur die From-Adresse in ausgehenden Nachrichten ändert sich — Benutzername und Passwort bleiben gleich, MailVault meldet sich bei IMAP und SMTP weiterhin als das eingerichtete Konto an, und es wird kein Reply-To-Header hinzugefügt. MailVault schlägt Adressen vor, die es in deiner eigenen Post gesehen hat, und ein Prüfen-Button sendet eine einzelne Testnachricht von der Adresse, damit du bestätigen kannst, dass dein Anbieter sie akzeptiert. Die Adresse muss ein Alias sein, für den dein Anbieter dieser Anmeldung das Senden erlaubt: Fastmail akzeptiert jeden Alias des Kontos, Gmail verlangt sie unter „Senden als“ in den Gmail-Einstellungen, und Microsoft 365 verlangt die Berechtigung „Senden als“."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Start",
+      "item": "https://mailvaultapp.com/de/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/de/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "E-Mail-Anbieter",
+      "item": "https://mailvaultapp.com/de/faq/providers.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/providers.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/providers.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/providers.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/providers.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/providers.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/providers.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/providers.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/providers.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/providers.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/providers.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/de/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault-Logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/de/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Funktionen</a>
+          <a href="/de/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Anwendungsfälle</a>
+          <a href="/de/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Doku</a>
+          <a href="/de/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/de/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Funktionen</a>
+          <a href="/de/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Anwendungsfälle</a>
+          <a href="/de/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Doku</a>
+          <a href="/de/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="Sprache wählen">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/providers.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/providers.html" aria-current="page"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/providers.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/providers.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/providers.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/providers.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/providers.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/providers.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/providers.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="Brotkrümelnavigation" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/de/" class="hover:text-primary-500 transition-colors">Start</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/de/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">E-Mail-Anbieter</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">E-Mail-Anbieter</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Gmail, Microsoft 365, Outlook.com und Proton Mail verbinden — und von einer Alias-Adresse senden.</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-and-outlook" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Funktioniert MailVault mit Gmail und Outlook?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Ja. MailVault arbeitet mit Gmail, Outlook und jedem anderen E-Mail-Dienst, der IMAP unterstützt. Bei Gmail meldest du dich per OAuth2 direkt mit deinem Google-Konto an — keine manuellen IMAP-Einstellungen nötig. Microsoft-365-Konten für Business und Enterprise können sich per OAuth2 direkt mit dem Microsoft-Konto anmelden, und das funktioniert reibungslos mit Zwei-Faktor-Authentifizierung. Persönliche Outlook.com-Konten sind derzeit von einem <a href="#microsoft-outlook-oauth2" class="text-primary-500 hover:underline">bekannten Serverproblem bei Microsoft</a> betroffen.
+            </p>
+        </article>
+
+        <article id="microsoft-outlook-oauth2" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Warum kann ich mein Outlook.com-Konto nicht verbinden?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Es gibt ein <strong>bekanntes serverseitiges Problem bei Microsoft</strong>, das persönliche Konten bei Outlook.com, Hotmail und Live.com seit Ende 2024 betrifft. Nach der Anmeldung mit dem Microsoft-Konto schlägt die IMAP-Verbindung mit „User is authenticated but not connected.“ fehl. Das betrifft alle Mailclients von Drittanbietern, die IMAP mit OAuth2 nutzen — nicht nur MailVault.</p>
+              <p class="mb-4">Microsoft verlangt OAuth2 für private Konten. Leider hat der IMAP-Dienst eine Regression, die verhindert, dass OAuth2-authentifizierte Sitzungen das Postfach erreichen.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Was du tun kannst:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Microsoft-365-Konten für Business/Enterprise</strong> sind nicht betroffen — bei Organisationskonten funktioniert OAuth2 normal</li>
+                <li><strong>Das Problem verfolgen</strong> — Das ist ein serverseitiges Problem, das nur Microsoft beheben kann. Der <a href="https://learn.microsoft.com/en-us/answers/questions/5673167/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Microsoft-Q&A-Thread</a> verfolgt es</li>
+                <li><strong>Nutze die Outlook-Web-App</strong> oder Microsofts offizielle Apps in der Zwischenzeit für persönliche Konten</li>
+                <li><strong>MailVault ist bereit</strong> — Sobald Microsoft das Problem behebt, funktioniert die OAuth2-Anmeldung von MailVault sofort, ohne dass etwas geändert werden muss</li>
+              </ul>
+              <p>Technische Einzelheiten: MailVault nutzt dieselbe OAuth2-Implementierung wie <a href="https://www.thunderbird.net/" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Mozilla Thunderbird</a> und folgt Microsofts offizieller Dokumentation zu IMAP mit OAuth2, mit PKCE- und XOAUTH2-Authentifizierung.</p>
+            </div>
+        </article>
+
+        <article id="proton-mail-bridge" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Wie nutze ich MailVault mit Proton Mail?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Proton Mail verschlüsselt deine Post Ende-zu-Ende und stellt IMAP deshalb nicht direkt bereit. Um es mit MailVault (oder einem beliebigen Mailclient eines Drittanbieters) zu verbinden, brauchst du <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> — eine Desktop-App von Proton, die auf deinem eigenen Rechner läuft und dein verschlüsseltes Postfach als gewöhnliches IMAP/SMTP auf <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code> bereitstellt. Bridge setzt einen kostenpflichtigen Proton-Mail-Tarif voraus; im kostenlosen Tarif von Proton gibt es sie nicht.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Einrichtungsschritte:</p>
+              <ol class="list-decimal list-inside space-y-2 mb-4">
+                <li>Installiere <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Proton Mail Bridge</a> von Protons Website</li>
+                <li>Melde dich in Bridge mit deinem Proton-Konto an</li>
+                <li>Bridge zeigt je Konto <strong>IMAP-/SMTP-Zugangsdaten</strong> an — das angezeigte Passwort ist ein von Bridge erzeugtes App-Passwort, <strong>nicht</strong> dein gewöhnliches Proton-Kontopasswort</li>
+                <li>Wähle in MailVault <strong>Proton Mail Bridge</strong> in der Anbieterliste (oder <strong>Custom IMAP</strong> falls es nicht aufgeführt ist) und gib ein:
+                  <ul class="list-disc list-inside ml-4 mt-2 space-y-1">
+                    <li>Server: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code></li>
+                    <li>IMAP-Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1143</code>, Sicherheit: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">STARTTLS</code></li>
+                    <li>SMTP-Port: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1025</code></li>
+                    <li>Benutzername: deine Proton-E-Mail-Adresse</li>
+                    <li>Passwort: das von Bridge erzeugte Passwort aus Schritt 3</li>
+                  </ul>
+                </li>
+              </ol>
+              <p class="mb-4">Proton Mail Bridge muss im Hintergrund laufen, wann immer MailVault abgleicht — ist Bridge geschlossen, erreicht MailVault das Postfach nicht. Post, die du schon archiviert hast, bleibt in MailVault auch bei geschlossenem Bridge vollständig lesbar und durchsuchbar, denn MailVault arbeitet lokal zuerst und liest aus seinem eigenen <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code>-Bestand statt live aus Bridge.</p>
+              <p>Bridge sichert seinen lokalen IMAP-/SMTP-Server mit einem selbstsignierten TLS-Zertifikat. MailVault handhabt das bei lokalen Verbindungen (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">127.0.0.1</code>) automatisch, eine Zertifikatsinstallation von Hand ist also nicht nötig.</p>
+            </div>
+        </article>
+
+        <article id="send-from-different-address" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Kann ich von einer anderen Adresse senden als der, mit der ich mich anmelde?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">Ja. Öffne <strong>Einstellungen &rarr; Konten</strong>, wähle das Konto aus und trage <strong>Mail senden als</strong> ein. Lass das Feld leer, um von deiner Anmeldeadresse zu senden. Das ist bei Fastmail üblich und bei jedem Anbieter, bei dem die Adresse, mit der du dich anmeldest, nicht die Adresse ist, die du herausgibst.</p>
+              <p class="mb-4">Es ändert sich nur die <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">From</code>-Adresse ausgehender Post. Benutzername und Passwort bleiben genau, wie sie sind, MailVault meldet sich bei IMAP und SMTP weiterhin als das eingerichtete Konto an, und <strong>es wird keine Reply-To-Kopfzeile hinzugefügt</strong> &mdash; Antworten gehen an die Adresse, von der du sendest.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Die Adresse finden und prüfen:</p>
+              <ul class="list-disc list-inside space-y-2 mb-4">
+                <li><strong>Vorschläge</strong> &mdash; MailVault bietet dir Adressen an, die es in deiner eigenen Post schon gesehen hat: solche, von denen du früher gesendet hast, und solche, auf denen Post an dich eintrifft.</li>
+                <li><strong>Prüfen</strong> &mdash; schickt eine einzelne Testnachricht von der Adresse, standardmäßig an dein eigenes Postfach, damit du bestätigen kannst, dass dein Anbieter sie akzeptiert, bevor du dich darauf verlässt.</li>
+                <li><strong>Wird sie abgelehnt</strong> &mdash; dann muss die Adresse ein Alias oder eine Identität sein, von der dein Anbieter diese Anmeldung senden lässt. Fastmail akzeptiert jeden Alias des Kontos; bei Gmail muss die Adresse in den Gmail-Einstellungen unter „Senden als“ hinterlegt sein, und bei Microsoft 365 braucht es die Berechtigung „Senden als“ von einem Administrator.</li>
+              </ul>
+              <p>Aliase richtest du bei deinem E-Mail-Anbieter ein, nicht in MailVault &mdash; MailVault sendet unter einer Adresse, die dein Anbieter bereits freigegeben hat.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/de/compose-email-1440.webp" srcset="/screenshots/de/compose-email-720.webp 720w, /screenshots/de/compose-email-1440.webp 1440w, /screenshots/de/compose-email-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Verfassen- und Antworten-Fenster mit Textformatierung" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/de/faq.html" class="text-primary-500 hover:underline">Zurück zu allen FAQ-Themen</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Noch Fragen?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Auf GitHub fragen
+          </a>
+          <a href="/de/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Kontakt
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/de/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault-Logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/de/docs.html" class="hover:text-primary-500 transition-colors">Doku</a>
+          <a href="/de/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Datenschutz</a>
+          <a href="/de/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">AGB</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Alle Rechte vorbehalten.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Gegrillt über einer <span class="text-primary-500 font-semibold">offenen GPU</span> von</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Von Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

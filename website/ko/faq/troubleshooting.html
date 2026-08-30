@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>문제 해결 — MailVault FAQ</title>
+  <meta name="description" content="가장 자주 겪는 두 가지 문제의 해결책. Gmail의 하루 데이터 한도와, Linux에서 맞춤법 검사가 아무 것도 표시하지 않는 문제.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <meta property="og:title" content="문제 해결 — MailVault FAQ">
+  <meta property="og:description" content="가장 자주 겪는 두 가지 문제의 해결책. Gmail의 하루 데이터 한도와, Linux에서 맞춤법 검사가 아무 것도 표시하지 않는 문제.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="문제 해결 — MailVault FAQ">
+  <meta name="twitter:description" content="가장 자주 겪는 두 가지 문제의 해결책. Gmail의 하루 데이터 한도와, Linux에서 맞춤법 검사가 아무 것도 표시하지 않는 문제.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Google은 Gmail 또는 Google Workspace 계정 하나가 하루에 옮길 수 있는 메일 데이터 양을 제한합니다. IMAP에서는 하루 다운로드 2500 MB, 업로드 500 MB가 한도입니다. POP 다운로드는 하루 1250 MB로 제한됩니다. Gmail 웹 클라이언트에는 별도의 한도가 있어 다운로드는 시간당 750 MB에 하루 1250 MB, 업로드는 시간당 300 MB에 하루 1500 MB입니다(업로드에는 SMTP가 포함됩니다). 한 사용자의 모든 클라이언트가 같은 하루치 한도를 나눠 쓰므로 Apple Mail, 휴대폰, MailVault가 한 몫을 함께 씁니다. 한도를 넘기면 계정이 일시적으로 정지되며 — 보통 1시간이지만 최대 24시간까지 갈 수 있습니다. 이 한도는 모든 Google Workspace 에디션에 적용되고 Google이 예고 없이 바꿀 수 있습니다. 따라서 2.5 GB가 넘는 메일함의 첫 백업은 하루 이상 걸립니다. MailVault는 한도 응답을 알아채고 서버를 계속 두드리는 대신 실행을 깔끔하게 멈춘 뒤 무슨 일이 있었는지 알려 줍니다. 정지가 풀린 뒤 백업을 다시 실행하면 이미 로컬에 저장된 메일은 건너뛰므로 멈춘 지점부터 이어집니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "맞춤법 사전이 설치되어 있지 않기 때문입니다. macOS와 Windows는 시스템이 사전을 제공하지만, Linux에서는 사전이 배포판에서 오며 최소 구성으로 설치한 데스크톱에는 사전이 없는 경우가 많습니다. MailVault는 WebKitGTK를 통해 맞춤법을 검사하고 WebKitGTK는 enchant와 hunspell로 단어를 찾으므로, hunspell 사전이 있어야만 밑줄을 칠 수 있습니다. 사용하는 언어의 사전을 설치하고 MailVault를 다시 시작하십시오. Debian, Ubuntu, Mint에서는 sudo apt install hunspell-en-us, Fedora에서는 sudo dnf install hunspell-en, Arch나 Manjaro에서는 sudo pacman -S hunspell-en_us, openSUSE에서는 sudo zypper install myspell-en_US를 실행합니다. 언어 코드는 사용하는 언어에 맞게 바꾸면 됩니다 — hunspell-de-de, hunspell-fr 등 — 그러면 MailVault가 시스템 언어에 맞는 사전을 고릅니다. 메시지 도구 모음의 맞춤법 검사 버튼이 어느 쪽 상황인지 알려 줍니다: 사전이 있으면 밑줄 표시를 켜고 끄며, 없으면 이 안내를 엽니다. snap 빌드는 엄격하게 격리되어 호스트에 설치된 사전을 볼 수 없으므로 자체 사전을 담고 있습니다. snap에서 사전이 없다고 나오면 .deb 패키지를 대신 사용하십시오."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "홈",
+      "item": "https://mailvaultapp.com/ko/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ko/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "문제 해결",
+      "item": "https://mailvaultapp.com/ko/faq/troubleshooting.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/ko/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            다운로드
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
+          <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
+          <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="언어 선택">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/troubleshooting.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/troubleshooting.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/troubleshooting.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/troubleshooting.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/troubleshooting.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/troubleshooting.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/troubleshooting.html" aria-current="page"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/troubleshooting.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/troubleshooting.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ko/" class="hover:text-primary-500 transition-colors">홈</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">문제 해결</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">문제 해결</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">가장 자주 겪는 두 가지 문제의 해결책. Gmail의 하루 데이터 한도와, Linux에서 맞춤법 검사가 아무 것도 표시하지 않는 문제.</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Gmail의 대역폭 제한은 무엇이며, 백업이 그 한도에 걸리면 어떻게 됩니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Google은 Gmail 또는 Google Workspace 계정 하나가 하루에 옮길 수 있는 메일 데이터 양을 제한합니다. 이 제한은 앱이 아니라 계정에 적용됩니다 — Apple Mail, 휴대폰, MailVault가 모두 같은 하루치 한도를 나눠 씁니다.
+              </p>
+              <div class="scroll-x overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">접속 방식</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">다운로드 한도</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">업로드 한도</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> (MailVault가 사용하는 방식)</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / 일</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / 일</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / 일</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmail 웹 클라이언트</td>
+                      <td class="px-3 py-2">750 MB / 시간, 1250 MB / 일</td>
+                      <td class="px-3 py-2">300 MB / 시간, 1500 MB / 일</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                한도를 넘기면 Google은 계정을 일시적으로 정지시킵니다. <strong>보통 1시간 정도지만 최대 24시간까지 갈 수 있습니다</strong>. 이 한도는 모든 Google Workspace 등급에서 같고, Google이 예고 없이 바꿀 수 있습니다 — 현재 수치는 <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Google의 대역폭 한도 문서</a>를 보십시오.
+              </p>
+              <p>
+                <strong>첫 백업에서 이것이 뜻하는 것.</strong> 약 2.5 GB가 넘는 메일함은 IMAP으로 하루 만에 내려받을 수 없습니다 — 어떤 클라이언트도 할 수 없는 서버 쪽 상한입니다. 큰 보관본은 며칠이 걸린다고 보십시오.
+              </p>
+              <p>
+                <strong>MailVault가 하는 일.</strong> 한도 응답을 알아보고, 더 긴 정지로 이어질 재시도 대신 실행을 깔끔하게 멈춘 다음, 일일 한도에 닿았다고 알려 줍니다. 정지가 풀린 뒤 백업을 다시 시작하면 멈춘 자리에서 이어집니다 — 로컬에 이미 저장된 메시지는 건너뛰므로 두 번 내려받지 않습니다. 기다리는 동안에도 디스크에 이미 있는 것은 그대로 읽고 검색할 수 있습니다.
+              </p>
+            </div>
+        </article>
+
+        <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Linux에서 맞춤법 검사가 왜 아무것도 밑줄 치지 않습니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                컴퓨터에 맞춤법 사전이 없기 때문입니다. macOS와 Windows는 시스템과 함께 사전을 제공하지만, Linux에서는 사전이 배포판에서 오며 최소 구성으로 설치한 데스크톱에는 사전이 없는 경우가 많습니다. MailVault는 WebKitGTK를 통해 맞춤법을 검사하고, WebKitGTK는 enchant와 hunspell로 단어를 찾습니다 — 그래서 hunspell 사전이 설치되어 있어야만 밑줄을 칠 수 있습니다.
+              </p>
+              <p>
+                <strong>메시지 도구 모음의 버튼이 지금 어느 경우인지 알려 줍니다.</strong> 사전이 있으면 밑줄을 켜고 끄며, MailVault가 그 설정을 기억합니다. 사전이 없으면 스위치인 척하는 대신 바로 이 안내를 엽니다.
+              </p>
+              <p><strong>사용하는 언어의 사전을 설치하십시오:</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian, Ubuntu, Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch, Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                언어 코드를 자기 것으로 바꾸십시오 &mdash; <code>hunspell-de-de</code>, <code>hunspell-fr</code> 같은 식입니다. 여러 개를 설치해도 됩니다. MailVault는 시스템 언어와 맞는 사전으로 검사하고, 맞는 것이 없으면 설치된 전부로 검사합니다. <strong>그다음 MailVault를 다시 시작하십시오</strong> &mdash; 검사기는 앱이 시작할 때 준비됩니다.
+              </p>
+              <p>
+                <strong>snap 빌드는 특별한 경우입니다.</strong> 엄격하게 격리된 snap은 호스트에 설치된 사전을 볼 수 없어 자체 사본을 안고 다닙니다. snap이 사전이 없다고 알린다면 대신 .deb 패키지를 설치하십시오 &mdash; 그쪽은 시스템에 이미 있는 사전을 씁니다.
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ko/faq.html" class="text-primary-500 hover:underline">모든 FAQ 주제로 돌아가기</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">아직 궁금한 점이 있습니까?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHub에서 질문하기
+          </a>
+          <a href="/ko/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            문의하기
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ko/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
+          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
+          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 모든 권리 보유.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>이 앱을 구운 곳은 <span class="text-primary-500 font-semibold">오픈 GPU</span> · 제작:</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Graphic Meat 제작" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

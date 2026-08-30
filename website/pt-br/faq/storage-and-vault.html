@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Armazenamento e seu cofre — MailVault FAQ</title>
+  <meta name="description" content="Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
+  <meta property="og:title" content="Armazenamento e seu cofre — MailVault FAQ">
+  <meta property="og:description" content="Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Armazenamento e seu cofre — MailVault FAQ">
+  <meta name="twitter:description" content="Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Onde meus e-mails ficam guardados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Seu cofre é uma pasta de arquivos .eml padrão organizados no formato Maildir — no seu Mac ou na sua máquina Linux — um arquivo por e-mail, sem necessidade de banco de dados. Seus dados nunca saem do seu computador e nunca são enviados para nenhum serviço na nuvem. Como .eml é um padrão universal, seus e-mails podem ser abertos pelo Apple Mail, Thunderbird, Outlook ou qualquer outro cliente de e-mail — você nunca fica preso ao MailVault."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que são arquivos .eml e Maildir? Por que isso importa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": ".eml (RFC 5322) é o formato padrão da internet para mensagens de e-mail. Cada e-mail é guardado como um único arquivo de texto autocontido que pode ser aberto por qualquer cliente de e-mail. Maildir é uma estrutura de diretórios comprovada para guardar e-mails, usada por servidores de e-mail há décadas. Cada e-mail é um arquivo, então não existe um banco de dados único que possa corromper. Juntos, .eml + Maildir fazem com que seus e-mails sejam à prova do futuro, portáteis e nunca presos a um único aplicativo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso acessar meus e-mails offline?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Depois que seus e-mails são sincronizados, eles ficam guardados localmente e você pode ler, buscar e navegar por todos eles sem conexão com a internet. Você só precisa de internet para sincronizar e-mails novos ou enviar mensagens."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como os anexos são tratados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Os anexos ficam embutidos dentro de cada arquivo .eml como partes MIME — eles não são guardados como arquivos separados. Quando você abre um e-mail, o backend em Rust do MailVault interpreta a estrutura MIME e extrai os anexos na hora. Você pode Abrir, Salvar como ou Mostrar na pasta qualquer anexo direto do visualizador de e-mail."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso guardar minhas mensagens em outro lugar que não a pasta padrão do aplicativo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. O MailVault pode mover seu armazenamento de mensagens — mensagens, caches de cabeçalho, cache de anexos e listas de pastas — para qualquer pasta em qualquer drive, para que um arquivo grande possa ficar em um SSD externo ou em um segundo disco interno, em vez de no disco de inicialização. Só os dados de e-mail se movem: contas, configurações e logs continuam na pasta do próprio aplicativo, para que o aplicativo sempre consiga iniciar e avisar se o drive estiver faltando. A mudança é feita com segurança: o MailVault copia tudo para a nova pasta, verifica se cada arquivo chegou com o tamanho correto, faz a troca e só então apaga os originais. Uma mudança interrompida pode ser executada de novo e continua de onde parou. A nova pasta é marcada com um arquivo marcador, para que o MailVault possa reconhecê-la depois e recusar uma pasta que pertença a outro armazenamento. Se o drive não estiver conectado quando o aplicativo iniciar, o MailVault informa que a pasta está faltando, em vez de começar em silêncio um segundo arquivo divergente no local padrão — reconecte o drive ou aponte o aplicativo para a pasta de novo. Isso é diferente do local de backup externo: a pasta movida é o armazenamento ativo, e um local de backup externo é uma cópia fria extra."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que é o local de backup externo (segunda cópia)?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O MailVault sempre mantém uma cópia de trabalho das suas mensagens no armazenamento do próprio aplicativo — é ela que você lê, busca e abre. Um local de backup externo acrescenta uma segunda cópia, independente, em um drive que você escolhe: um SSD externo, um compartilhamento NAS ou uma pasta sincronizada. Ela é gravada durante as execuções de backup, ao mesmo tempo que a cópia de trabalho, no mesmo layout .eml e Maildir, então qualquer cliente de e-mail consegue lê-la. O aplicativo nunca lê essa cópia no dia a dia, e ela é armazenamento frio: e-mails apagados no servidor, ou removidos dentro do MailVault, continuam na cópia externa. Configure em Configurações, na seção Backup, em 'Segunda cópia — armazenamento frio externo'. No macOS, o MailVault guarda um marcador com escopo de segurança para a pasta, então o acesso sobrevive a reinicializações e a atualizações do aplicativo; o selo de status mostra Pronto, Precisa de nova autorização, Indisponível ou Acesso negado, e reautorizar é um único clique. Se o drive for desconectado durante um backup, a cópia de trabalho ainda é concluída e o MailVault informa quantas mensagens não chegaram à cópia externa; a execução seguinte copia essas mensagens."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Início",
+      "item": "https://mailvaultapp.com/pt-br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/pt-br/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Armazenamento e seu cofre",
+      "item": "https://mailvaultapp.com/pt-br/faq/storage-and-vault.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="Escolha um idioma">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/storage-and-vault.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/storage-and-vault.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/storage-and-vault.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/storage-and-vault.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/storage-and-vault.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/storage-and-vault.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/storage-and-vault.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/storage-and-vault.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/storage-and-vault.html" aria-current="page"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/pt-br/" class="hover:text-primary-500 transition-colors">Início</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Armazenamento e seu cofre</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Armazenamento e seu cofre</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Onde o MailVault guarda sua correspondência no disco, por que ele usa .eml e Maildir, e como mover o cofre para outra unidade.</p>
+
+      <div class="space-y-4">
+
+        <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Onde meus e-mails ficam guardados?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">O seu cofre é uma pasta de <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivos .eml</a> padrão, organizados em formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> na sua máquina Mac ou Linux &mdash; um arquivo por e-mail, sem precisar de banco de dados. Os seus dados nunca saem do seu computador e nunca são enviados para nenhum serviço na nuvem. Como o .eml é um padrão universal, os seus e-mails podem ser abertos pelo Apple Mail, pelo Thunderbird, pelo Outlook ou por qualquer outro cliente — você nunca fica preso ao MailVault.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Estrutura de diretórios:</p>
+              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
+└── maildir/
+    └── you@example.com/
+        └── INBOX/
+            ├── headers.json          ← cached list for fast loading
+            └── cur/
+                ├── 1234567890.eml    ← auto-cached email
+                └── 1234567891_AS.eml ← archived + seen email</code></pre>
+            </div>
+        </article>
+
+        <article id="eml-and-maildir" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O que são arquivos .eml e Maildir? Por que isso importa?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml (RFC 5322)</a> é o formato padrão da internet para mensagens de e-mail. Cada e-mail — cabeçalhos, corpo e anexos — é guardado como um único arquivo de texto autocontido. Diferente dos bancos de dados proprietários, os arquivos .eml podem ser abertos por qualquer cliente de e-mail (Apple Mail, Thunderbird, Outlook) e lidos em qualquer editor de texto.</p>
+              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> é uma estrutura de diretórios comprovada para guardar e-mails, usada por servidores de e-mail há décadas. Cada e-mail é um arquivo, então não há um banco de dados único que possa corromper — se um arquivo for danificado, o resto do seu arquivo permanente fica intacto. Juntos, .eml + Maildir fazem com que os seus e-mails resistam ao tempo, sejam portáteis e nunca fiquem presos a um único aplicativo.</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Sinalizadores no nome do arquivo:</p>
+              <p>O MailVault acrescenta letras de estado ao nome do arquivo .eml para marcar a situação: <strong>A</strong> = Arquivado, <strong>S</strong> = Lido, <strong>R</strong> = Respondido, <strong>F</strong> = Sinalizado. Por exemplo, <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code> quer dizer que o e-mail foi arquivado e lido.</p>
+            </div>
+        </article>
+
+        <article id="offline-access" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso acessar meus e-mails offline?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sim. Depois que seus e-mails são sincronizados, eles ficam guardados localmente e você pode ler, buscar e navegar por todos eles sem conexão com a internet. Você só precisa de internet para sincronizar e-mails novos ou enviar mensagens.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/pt-br/local-vault-1440.webp" srcset="/screenshots/pt-br/local-vault-720.webp 720w, /screenshots/pt-br/local-vault-1440.webp 1440w, /screenshots/pt-br/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Visão local do MailVault mostrando e-mails guardados no disco depois de apagados do servidor" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="attachments" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Como os anexos são tratados?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Os anexos ficam embutidos dentro de cada arquivo .eml como partes MIME — eles não são guardados como arquivos separados. Quando você abre um e-mail, o backend em Rust do MailVault interpreta a estrutura MIME e extrai os anexos na hora. Você pode <strong>Abrir</strong>, <strong>Salvar como</strong> ou <strong>Mostrar na pasta</strong> qualquer anexo direto do visualizador de e-mail. Os anexos extraídos ficam temporariamente em cache para você acessá-los de novo rapidamente.
+            </p>
+        </article>
+
+        <article id="change-mail-storage-folder" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso guardar minhas mensagens em outro lugar que não a pasta padrão do aplicativo?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Sim. Por padrão, o MailVault mantém seu armazenamento de mensagens dentro da própria pasta Application Support do aplicativo, no disco de inicialização. Você pode mover esse armazenamento para qualquer pasta em qualquer drive — um SSD externo, um segundo disco interno — o que passa a importar quando um arquivo chega a dezenas de gigabytes.
+              </p>
+              <p>
+                <strong>Só os dados de e-mail mudam de lugar:</strong> as mensagens, os caches de cabeçalho, o cache de anexos e as listas de pastas. As contas, as configurações e os logs ficam na pasta do próprio aplicativo, então o MailVault sempre consegue iniciar o suficiente para avisar que falta um disco e pedir a pasta de novo.
+              </p>
+              <p>
+                <strong>A mudança é verificada antes de qualquer coisa ser apagada.</strong> O MailVault copia tudo para a pasta nova, confere se cada arquivo chegou com o tamanho certo, faz a troca e só então remove os originais. Uma mudança interrompida por uma desconexão ou por uma falha deixa o armazenamento atual intacto; rode de novo e ela retoma, em vez de recopiar o que já está lá.
+              </p>
+              <p>
+                <strong>A pasta é marcada e reconhecida.</strong> Um pequeno arquivo marcador identifica o armazenamento, então, se mais tarde você reconectar o disco ou mover a pasta na mão, dá para apontar o MailVault de volta para ela — e o MailVault recusa uma pasta que pertença a outro armazenamento ou que não tenha mensagem nenhuma.
+              </p>
+              <p>
+                <strong>Se o disco não estiver conectado</strong>, o MailVault informa que o armazenamento de e-mails está indisponível, em vez de começar caladamente um segundo arquivo no local padrão e deixar você com duas cópias pela metade. Reconecte o disco ou selecione a pasta de novo. Você também pode voltar ao local padrão quando quiser — as mensagens ficam onde estão até que você as mova.
+              </p>
+              <p class="text-sm">
+                <strong>Não é a mesma coisa que uma segunda cópia.</strong> Isso muda onde fica o armazenamento <em>ativo</em>. Um <a href="#external-backup-location" class="text-primary-500 hover:underline">local de backup externo</a> acrescenta uma cópia fria por cima dele. Usar os dois — o armazenamento de e-mails em um SSD externo rápido e a cópia fria em um NAS — é um arranjo razoável.
+              </p>
+            </div>
+        </article>
+
+        <article id="external-backup-location" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">O que é o local de backup externo (segunda cópia)?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                O MailVault sempre mantém uma <strong>cópia de trabalho</strong> das suas mensagens no armazenamento do próprio aplicativo — é ela que você lê, busca e abre. Um local de backup externo acrescenta uma <strong>segunda cópia, independente</strong>, em um disco que você controla: um SSD externo, um compartilhamento em NAS ou uma pasta sincronizada.
+              </p>
+              <ul class="list-disc pl-5 space-y-2">
+                <li><strong>Gravada junto com a cópia de trabalho.</strong> Durante uma execução de backup, cada mensagem é salva nos dois lugares, no mesmo formato <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir — então a segunda cópia abre no Apple Mail, no Thunderbird ou em qualquer outro cliente, sem o MailVault.</li>
+                <li><strong>Armazenamento frio, não um espelho.</strong> O aplicativo nunca o lê no dia a dia. E-mails apagados no servidor, ou removidos dentro do MailVault, permanecem na cópia externa.</li>
+                <li><strong>As marcas de lido e escrito sobrevivem nos dois sentidos.</strong> As cópias são reconciliadas antes de uma execução, então uma mensagem que você leu continua lida.</li>
+                <li><strong>Independente do aplicativo.</strong> Se aquele computador morrer ou você desinstalar o MailVault, a pasta externa continua sendo um arquivo de e-mails completo e autodescritivo.</li>
+              </ul>
+              <p>
+                Defina isso em <strong>Configurações → Backup → “Segunda cópia — armazenamento frio externo”</strong> e escolha qualquer pasta. No macOS, o MailVault salva um marcador com escopo de segurança para essa pasta, de modo que o acesso sobrevive a reinicializações e a atualizações do aplicativo — um caminho puro não sobreviveria. Um selo de estado mostra <strong>Pronto</strong>, <strong>Precisa reautorizar</strong>, <strong>Indisponível</strong> ou <strong>Acesso negado</strong>, e reautorizar é um clique.
+              </p>
+              <p>
+                Se o drive for desconectado no meio do backup, a cópia de trabalho ainda é concluída e o MailVault informa quantas mensagens não chegaram à cópia externa. A execução seguinte copia essas mensagens — nada é perdido, e a falha nunca é silenciosa.
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/pt-br/faq.html" class="text-primary-500 hover:underline">Voltar para todos os temas das perguntas frequentes</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Ainda tem dúvidas?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Pergunte no GitHub
+          </a>
+          <a href="/pt-br/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Fale conosco
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/pt-br/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Preparado em uma <span class="text-primary-500 font-semibold">GPU aberta</span> por</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Feito pela Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

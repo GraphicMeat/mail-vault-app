@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Solução de problemas — MailVault FAQ</title>
+  <meta name="description" content="Soluções para os dois problemas mais comuns: o limite diário de dados do Gmail e o corretor ortográfico que não sublinha nada no Linux.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <meta property="og:title" content="Solução de problemas — MailVault FAQ">
+  <meta property="og:description" content="Soluções para os dois problemas mais comuns: o limite diário de dados do Gmail e o corretor ortográfico que não sublinha nada no Linux.">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="pt_BR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Solução de problemas — MailVault FAQ">
+  <meta name="twitter:description" content="Soluções para os dois problemas mais comuns: o limite diário de dados do Gmail e o corretor ortográfico que não sublinha nada no Linux.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O Google limita quanto de dados de e-mail uma conta Gmail ou Google Workspace pode movimentar por dia. Por IMAP os limites são 2500 MB baixados por dia e 500 MB enviados por dia. Os downloads por POP são limitados a 1250 MB por dia. O Gmail na web tem os próprios limites: 750 MB por hora e 1250 MB por dia para baixar, 300 MB por hora e 1500 MB por dia para enviar (os envios incluem SMTP). Todos os clientes de um usuário dividem o mesmo orçamento diário, então Apple Mail, seu celular e o MailVault consomem do mesmo pote. Ultrapassar um limite suspende a conta temporariamente — normalmente por 1 hora, mas pode chegar a 24 horas. Esses limites valem para todas as edições do Google Workspace e o Google pode mudá-los sem aviso. Um primeiro backup grande, de uma caixa postal com mais de 2.5 GB, vai portanto levar mais de um dia. O MailVault detecta a resposta de limite, encerra a execução de forma limpa em vez de martelar o servidor, e conta o que aconteceu. Rode o backup de novo depois que a suspensão passar e ele retoma de onde parou, porque as mensagens já salvas localmente são puladas."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que o corretor ortográfico não sublinha nada no Linux?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Porque não há nenhum dicionário de ortografia instalado. No macOS e no Windows o sistema fornece um; no Linux o dicionário vem da sua distribuição, e uma instalação de desktop mínima muitas vezes não tem nenhum. O MailVault verifica a ortografia pelo WebKitGTK, que consulta as palavras através do enchant e do hunspell, então ele só consegue sublinhar quando um dicionário do hunspell está presente. Instale um para o seu idioma e reinicie o MailVault: no Debian, Ubuntu ou Mint rode sudo apt install hunspell-en-us; no Fedora sudo dnf install hunspell-en; no Arch ou Manjaro sudo pacman -S hunspell-en_us; no openSUSE sudo zypper install myspell-en_US. Troque o código de idioma pelo seu — hunspell-de-de, hunspell-fr e assim por diante — e o MailVault vai escolher o dicionário que corresponde ao idioma do sistema. O botão de corretor ortográfico na barra de ferramentas da mensagem diz em qual caso você está: ele liga e desliga os sublinhados quando há um dicionário, e abre estas instruções quando não há. A versão em snap não enxerga os dicionários instalados no sistema porque tem confinamento estrito, então carrega os próprios; se ela informar que não há nenhum, use o pacote .deb."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Início",
+      "item": "https://mailvaultapp.com/pt-br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/pt-br/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Solução de problemas",
+      "item": "https://mailvaultapp.com/pt-br/faq/troubleshooting.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/troubleshooting.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/troubleshooting.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/pt-br/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/pt-br/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            Download
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/pt-br/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Recursos</a>
+          <a href="/pt-br/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Casos de uso</a>
+          <a href="/pt-br/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="Escolha um idioma">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/troubleshooting.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/troubleshooting.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/troubleshooting.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/troubleshooting.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/troubleshooting.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/troubleshooting.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/troubleshooting.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/troubleshooting.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/troubleshooting.html" aria-current="page"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/pt-br/" class="hover:text-primary-500 transition-colors">Início</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Solução de problemas</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Solução de problemas</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Soluções para os dois problemas mais comuns: o limite diário de dados do Gmail e o corretor ortográfico que não sublinha nada no Linux.</p>
+
+      <div class="space-y-4">
+
+        <article id="gmail-bandwidth-limits" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Quais são os limites de banda do Gmail e o que acontece quando um backup os atinge?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                O Google limita quanto de dados de e-mail uma única conta Gmail ou Google Workspace pode movimentar por dia. Os limites valem para a conta, não para o aplicativo — Apple Mail, seu celular e o MailVault consomem do mesmo orçamento diário.
+              </p>
+              <div class="scroll-x overflow-x-auto">
+                <table class="w-full text-sm border border-slate-200 dark:border-slate-700 rounded-lg">
+                  <thead class="bg-slate-50 dark:bg-slate-900/50">
+                    <tr>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Método de acesso</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Limite de download</th>
+                      <th class="text-left font-semibold px-3 py-2 border-b border-slate-200 dark:border-slate-700">Limite de upload</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50"><strong>IMAP</strong> (o que o MailVault usa)</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">2500 MB / dia</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">500 MB / dia</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">POP</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">1250 MB / dia</td>
+                      <td class="px-3 py-2 border-b border-slate-100 dark:border-slate-700/50">—</td>
+                    </tr>
+                    <tr>
+                      <td class="px-3 py-2">Gmail na web</td>
+                      <td class="px-3 py-2">750 MB / hora, 1250 MB / dia</td>
+                      <td class="px-3 py-2">300 MB / hora, 1500 MB / dia</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p>
+                Passe de um limite e o Google suspende a conta temporariamente: <strong>em geral cerca de 1 hora, mas pode durar até 24 horas</strong>. Os limites são os mesmos em todas as edições do Google Workspace, e o Google pode mudá-los sem aviso — veja a <a href="https://knowledge.workspace.google.com/admin/gmail/gmail-bandwidth-limits" target="_blank" rel="noopener" class="text-primary-500 hover:underline">documentação do Google sobre limites de banda</a> para os números atuais.
+              </p>
+              <p>
+                <strong>O que isso significa para um primeiro backup.</strong> Uma caixa postal com mais de uns 2,5 GB não pode ser baixada em um único dia por IMAP — nenhum cliente consegue, é um teto do lado do servidor. Espere que um arquivo permanente grande leve vários dias.
+              </p>
+              <p>
+                <strong>O que o MailVault faz.</strong> Ele reconhece a resposta de limite, encerra a execução de forma limpa em vez de insistir e provocar um bloqueio mais longo, e avisa que o limite diário foi atingido. Comece o backup de novo quando a suspensão passar e ele continua de onde parou — as mensagens já salvas localmente são puladas, então nada é baixado duas vezes. Tudo o que já está no disco continua legível e pesquisável enquanto você espera.
+              </p>
+            </div>
+        </article>
+
+        <article id="linux-spellcheck-dictionary" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Por que o corretor ortográfico não sublinha nada no Linux?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                Porque não há dicionário de ortografia na máquina. O macOS e o Windows já vêm com um; no Linux o dicionário vem da sua distribuição, e uma instalação de desktop mínima muitas vezes não tem nenhum. O MailVault verifica a ortografia pelo WebKitGTK, que consulta as palavras através do enchant e do hunspell — então ele só consegue sublinhar depois que um dicionário do hunspell estiver instalado.
+              </p>
+              <p>
+                <strong>O botão na barra de ferramentas da mensagem diz em qual dos casos você está.</strong> Com um dicionário presente, ele liga e desliga os sublinhados, e o MailVault lembra da escolha. Sem nenhum, ele abre estas mesmas instruções, em vez de fingir que é um interruptor.
+              </p>
+              <p><strong>Instale um dicionário para o seu idioma:</strong></p>
+              <div class="space-y-2 font-mono text-sm">
+                <div><span class="text-slate-500 dark:text-slate-500">Debian, Ubuntu, Mint</span><br><code>sudo apt install hunspell-en-us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Fedora</span><br><code>sudo dnf install hunspell-en</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">Arch, Manjaro</span><br><code>sudo pacman -S hunspell-en_us</code></div>
+                <div><span class="text-slate-500 dark:text-slate-500">openSUSE</span><br><code>sudo zypper install myspell-en_US</code></div>
+              </div>
+              <p>
+                Troque o código de idioma pelo seu — <code>hunspell-de-de</code>, <code>hunspell-fr</code> e assim por diante. Dá para instalar vários; o MailVault verifica com o que corresponde ao idioma do seu sistema e com todos eles se nenhum corresponder. <strong>Reinicie o MailVault depois</strong> — o corretor é configurado quando o aplicativo inicia.
+              </p>
+              <p>
+                <strong>O pacote snap é um caso à parte.</strong> Um snap com confinamento estrito não enxerga os dicionários instalados no sistema anfitrião, então ele carrega uma cópia própria. Se o snap disser que não há dicionário, instale o pacote .deb — ele usa os dicionários que já estão no seu sistema.
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/pt-br/faq.html" class="text-primary-500 hover:underline">Voltar para todos os temas das perguntas frequentes</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Ainda tem dúvidas?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Pergunte no GitHub
+          </a>
+          <a href="/pt-br/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Fale conosco
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/pt-br/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="Logo do MailVault" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/pt-br/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/pt-br/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">Privacidade</a>
+          <a href="/pt-br/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">Changelog</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">Termos</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. Todos os direitos reservados.
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>Preparado em uma <span class="text-primary-500 font-semibold">GPU aberta</span> por</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="Feito pela Graphic Meat" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>

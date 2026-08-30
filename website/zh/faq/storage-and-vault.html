@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-Hans" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>存储与你的保险库 — MailVault 常见问题</title>
+  <meta name="description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
+  <meta property="og:title" content="存储与你的保险库 — MailVault 常见问题">
+  <meta property="og:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="zh_CN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="存储与你的保险库 — MailVault 常见问题">
+  <meta name="twitter:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "我的邮件存在哪里？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "你的保险库就是一个装着标准 .eml 文件的文件夹，按 Maildir 格式组织，存放在你的 Mac 或 Linux 机器上——一封邮件一个文件，不需要数据库。你的数据永远不会离开你的电脑，也不会上传到任何云服务。因为 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开——你永远不会被 MailVault 锁定。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": ".eml 文件和 Maildir 是什么？为什么重要？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": ".eml（RFC 5322）是邮件消息的互联网标准格式。每一封邮件都保存为一个独立、自包含的文本文件，任何邮件客户端都能打开。Maildir 是一种经过验证的邮件存储目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在会整体损坏的单一数据库。.eml 和 Maildir 结合在一起，意味着你的邮件面向未来、可迁移，永远不会被任何单一应用锁定。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我可以离线查看邮件吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。邮件同步之后就保存在本地，你不联网也能阅读、搜索和浏览全部邮件。只有同步新邮件或发送邮件时才需要联网。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "附件是怎么处理的？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "附件以 MIME 部件的形式内嵌在每个 .eml 文件里——不会另存为独立文件。打开邮件时，MailVault 的 Rust 后端会解析 MIME 结构并即时提取附件。你可以直接在邮件查看器里对任意附件执行「打开」「另存为」或「在文件夹中显示」。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "我可以把邮件存到默认的应用文件夹以外吗？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "可以。MailVault 能把它的邮件存储——邮件本身、邮件头缓存、附件缓存和文件夹列表——移到任意磁盘上的任意文件夹，这样大型归档就可以放在外接 SSD 或第二块内置硬盘上，而不必占用启动卷。只有邮件数据会搬走：账户、设置和日志仍留在应用自己的文件夹里，这样应用总能启动，并在磁盘缺失时告诉你。搬移过程是安全的：MailVault 会把全部内容复制到新文件夹，校验每个文件都以正确的大小到达，切换过去，然后才删除原件。被打断的搬移可以再运行一次，并从上次停下的地方继续。新文件夹会被打上一个标记文件，MailVault 之后可以据此识别它，并拒绝属于另一个存储的文件夹。如果启动时磁盘没有连接，MailVault 会报告文件夹缺失，而不是悄悄在默认位置另起一份互相分叉的归档——重新接上磁盘，或者再指一次文件夹。这与外部备份位置是两回事：搬移后的文件夹是实时存储，外部备份位置是额外的冷副本。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "什么是外部备份位置（第二份副本）？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault 始终在应用自己的存储里保留一份工作副本——你读的、搜的、打开的都是它。外部备份位置会在你选定的磁盘上再加一份独立的第二副本：外接 SSD、NAS 共享目录，或者一个同步文件夹。它在备份运行时与工作副本同时写入，使用相同的 .eml 和 Maildir 布局，所以任何邮件客户端都能读它。应用平时不会读取它，它是冷存储：在服务器上删掉的邮件，或在 MailVault 里移除的邮件，都仍然留在这份外部副本里。在 设置 的「备份」里，通过「第二份副本 — 外部冷存储」设置它。在 macOS 上，MailVault 会为该文件夹保存一个安全作用域书签，这样重启和应用更新之后访问权限依然有效；状态标记会显示「就绪」「需要重新授权」「不可用」或「访问被拒绝」，重新授权只需点一下。如果备份过程中拔掉了磁盘，工作副本仍会成功，MailVault 会报告有多少封邮件没有写入外部副本；下一次运行会把它们补上。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "首页",
+      "item": "https://mailvaultapp.com/zh/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "常见问题",
+      "item": "https://mailvaultapp.com/zh/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "存储与你的保险库",
+      "item": "https://mailvaultapp.com/zh/faq/storage-and-vault.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
+  <!-- /i18n:alternates -->
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+
+  <!-- Navigation -->
+  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <a href="/zh/" class="flex items-center gap-3">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+
+        <div class="hidden md:flex items-center gap-8">
+          <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <button id="theme-toggle" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
+            </svg>
+            <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+              <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+            </svg>
+          </button>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
+            下载
+          </a>
+          <!-- Mobile menu button -->
+          <button id="mobile-menu-btn" class="md:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+              <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile menu -->
+      <div id="mobile-menu" class="hidden md:hidden pb-4">
+        <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+          <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
+          <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
+          <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
+        </div>
+      </div>
+    </div>
+      <!-- i18n:switcher -->
+      <div class="mv-lang" role="navigation" aria-label="选择语言">
+        <ul>
+        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/storage-and-vault.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/storage-and-vault.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/storage-and-vault.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/storage-and-vault.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/storage-and-vault.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/storage-and-vault.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/storage-and-vault.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/storage-and-vault.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
+        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/storage-and-vault.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
+        </ul>
+      </div>
+      <!-- /i18n:switcher -->
+  </nav>
+
+  <!-- Content -->
+  <main class="pt-32 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+
+      <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/zh/" class="hover:text-primary-500 transition-colors">首页</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">存储与你的保险库</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">存储与你的保险库</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。</p>
+
+      <div class="space-y-4">
+
+        <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我的邮件存在哪里？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4">你的保险库就是你 Mac 或 Linux 机器上的一个文件夹，里面是按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式组织的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a> &mdash; 一封邮件一个文件，不需要数据库。你的数据从不离开你的电脑，也从不上传到任何云服务。因为 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 —— 你永远不会被 MailVault 锁住。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">目录结构：</p>
+              <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>~/Library/Application Support/com.mailvault.app/
+└── maildir/
+    └── you@example.com/
+        └── INBOX/
+            ├── headers.json          ← cached list for fast loading
+            └── cur/
+                ├── 1234567890.eml    ← auto-cached email
+                └── 1234567891_AS.eml ← archived + seen email</code></pre>
+            </div>
+        </article>
+
+        <article id="eml-and-maildir" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">.eml 文件和 Maildir 是什么？为什么重要？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml（RFC 5322）</a>是邮件消息的互联网标准格式。每封邮件 —— 邮件头、正文和附件 —— 都存成一个自包含的文本文件。与专有数据库不同，.eml 文件能被任何邮件客户端（Apple Mail、Thunderbird、Outlook）打开，也能用任何文本编辑器阅读。</p>
+              <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 是一种久经考验的邮件存放目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在一个会整体损坏的数据库 —— 一个文件坏了，归档的其余部分毫发无损。.eml + Maildir 合在一起，意味着你的邮件面向未来、可移植，永远不会被任何单一应用锁住。</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">文件名标记：</p>
+              <p>MailVault 在 .eml 文件名后面追加标记字符来记录状态：<strong>A</strong> = 已归档，<strong>S</strong> = 已读，<strong>R</strong> = 已回复，<strong>F</strong> = 已加标记。例如 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">1234567890_AS.eml</code> 表示这封邮件已归档且已读。</p>
+            </div>
+        </article>
+
+        <article id="offline-access" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以离线查看邮件吗？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              可以。邮件同步之后就保存在本地，你不联网也能阅读、搜索和浏览全部邮件。只有同步新邮件或发送邮件时才需要联网。
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/zh/local-vault-1440.webp" srcset="/screenshots/zh/local-vault-720.webp 720w, /screenshots/zh/local-vault-1440.webp 1440w, /screenshots/zh/local-vault-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 本地视图，显示从服务器删除之后仍留在磁盘上的邮件" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="attachments" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">附件是怎么处理的？</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              附件以 MIME 部件的形式嵌在每个 .eml 文件里 —— 它们不是单独存放的文件。你打开一封邮件时，MailVault 的 Rust 后端会解析 MIME 结构并即时取出附件。你可以直接在邮件查看器里对任何附件执行<strong>打开</strong>、<strong>另存为</strong>或<strong>在文件夹中显示</strong>。取出来的附件会临时缓存，方便再次快速访问。
+            </p>
+        </article>
+
+        <article id="change-mail-storage-folder" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我可以把邮件存到默认的应用文件夹以外吗？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                可以。默认情况下，MailVault 把邮件存储放在启动磁盘上应用自己的 Application Support 文件夹里。你可以把这个存储移到任意磁盘上的任意文件夹——外接 SSD、第二块内置硬盘——当归档增长到几十 GB 时，这一点就很重要。
+              </p>
+              <p>
+                <strong>只有邮件数据会搬走：</strong>邮件本身、邮件头缓存、附件缓存和文件夹列表。账户、设置和日志留在应用自己的文件夹里，这样 MailVault 总能启动到足以告诉你某块磁盘不见了，并再次向你要那个文件夹。
+              </p>
+              <p>
+                <strong>删除任何东西之前，搬迁会先经过校验。</strong>MailVault 把所有内容复制到新文件夹，核对每个文件都以正确的大小到位，切换过去，然后才删掉原件。搬迁途中断开连接或崩溃，当前的存储不会受损；再跑一次，它会接着来，而不是把已经复制好的重来一遍。
+              </p>
+              <p>
+                <strong>文件夹带有标记，可被识别。</strong>一个小小的标记文件标识着这份存储，所以你之后重新接上磁盘、或者手动挪动了文件夹，都可以把 MailVault 重新指向它；而如果一个文件夹属于另一份存储、或者里面根本没有邮件，MailVault 会拒绝它。
+              </p>
+              <p>
+                <strong>如果磁盘没有连接</strong>，MailVault 会报告邮件存储不可用，而不是悄悄在默认位置另起一份归档，最后留给你两份各半的副本。重新接上磁盘，或者再选一次文件夹。你也可以随时切回默认位置——在你动手搬之前，邮件一直待在原处。
+              </p>
+              <p class="text-sm">
+                <strong>这和第二副本不是一回事。</strong>它改的是<em>当前</em>存储所在的位置。<a href="#external-backup-location" class="text-primary-500 hover:underline">外部备份位置</a>是在它之上再加一份冷副本。两者一起用——邮件存储放在快速的外接 SSD 上，冷副本放在 NAS 上——是个合理的配置。
+              </p>
+            </div>
+        </article>
+
+        <article id="external-backup-location" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">什么是外部备份位置（第二份副本）？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                MailVault 始终在应用自己的存储里保留一份邮件的<strong>工作副本</strong>——你读的、搜的、打开的就是它。外部备份位置则在你掌控的磁盘上再加一份<strong>独立的第二副本</strong>：一块外接 SSD、一个 NAS 共享目录，或者一个同步文件夹。
+              </p>
+              <ul class="list-disc pl-5 space-y-2">
+                <li><strong>与工作副本同时写入。</strong>备份运行时，每封邮件都会同时存到两个位置，用的是同样的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">.eml</code> + Maildir 布局——所以没有 MailVault，第二份副本也能用 Apple Mail、Thunderbird 或任何其他客户端打开。</li>
+                <li><strong>是冷存储，不是镜像。</strong>应用日常不会去读它。在服务器上删掉的、或者在 MailVault 里移除的邮件，仍然留在这份外部副本里。</li>
+                <li><strong>已读和未读标记双向保留。</strong>每次运行前两份副本会先对账，所以你读过的邮件仍然是已读。</li>
+                <li><strong>独立于应用之外。</strong>就算那台电脑坏了，或者你卸载了 MailVault，那个外部文件夹依然是一份完整的、自我描述的邮件归档。</li>
+              </ul>
+              <p>
+                在<strong>设置 → 备份 →“第二副本——外部冷存储”</strong>里设置，任选一个文件夹。在 macOS 上，MailVault 会为该文件夹保存一个安全作用域书签，这样重启和应用更新之后访问权限依然有效——单纯记一个路径做不到这点。状态标记会显示<strong>就绪</strong>、<strong>需要重新授权</strong>、<strong>不可用</strong>或<strong>访问被拒绝</strong>，重新授权只需点一下。
+              </p>
+              <p>
+                如果备份过程中拔掉了磁盘，工作副本仍会正常完成，MailVault 会报告有多少封邮件没有写入外部副本。下一次运行会把它们补上——不会丢东西，失败也绝不会悄无声息。
+              </p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/zh/faq.html" class="text-primary-500 hover:underline">返回全部常见问题主题</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">还有其他问题？</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            在 GitHub 上提问
+          </a>
+          <a href="/zh/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            联系我们
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/zh/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
+          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
+        </a>
+        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
+          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
+          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
+          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
+          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
+          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
+          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
+          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
+          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
+        </div>
+
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          &copy; 2026 MailVault. 保留所有权利。
+        </p>
+      </div>
+    </div>
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
+            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
+        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
+          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
+        </a>
+      </div>
+    </div>
+
+  </footer>
+
+  <script>
+    // Theme Toggle
+    const themeToggle = document.getElementById('theme-toggle');
+    const html = document.documentElement;
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      html.classList.add('dark');
+    }
+    themeToggle.addEventListener('click', () => {
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
+    });
+
+    // Mobile Menu
+    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const menuIconOpen = document.getElementById('menu-icon-open');
+    const menuIconClose = document.getElementById('menu-icon-close');
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+      menuIconOpen.classList.toggle('hidden');
+      menuIconClose.classList.toggle('hidden');
+    });
+    document.querySelectorAll('#mobile-menu a').forEach(link => {
+      link.addEventListener('click', () => {
+        mobileMenu.classList.add('hidden');
+        menuIconOpen.classList.remove('hidden');
+        menuIconClose.classList.add('hidden');
+      });
+    });
+  </script>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+</body>
+</html>
