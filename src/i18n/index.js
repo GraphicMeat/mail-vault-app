@@ -95,7 +95,15 @@ export async function setLocale(code) {
     _catalog = mod.default;
     _locale = code;
   }
-  useSettingsStore.setState({ language: _locale });
+  // The epoch, not the code, is what repaints. Persist hydrates asynchronously
+  // (safeStorage reads through Tauri), so the restored language can already be
+  // in the store by the time the catalog for it finishes loading — and writing
+  // an identical `language` back would notify nobody, leaving the UI in English
+  // under a settings page that says German.
+  useSettingsStore.setState((s) => ({
+    language: _locale,
+    localeEpoch: (s.localeEpoch || 0) + 1,
+  }));
   _pushMenuLabels();
 }
 
@@ -105,7 +113,7 @@ export async function setLocale(code) {
  * component with no props still repaints, because the hook lives inside it.
  */
 export function useT() {
-  useSettingsStore(s => s.language);
+  useSettingsStore(s => s.localeEpoch);
   return t;
 }
 

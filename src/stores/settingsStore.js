@@ -155,6 +155,10 @@ export const useSettingsStore = create(
       customDateFormat: '', // Only used when dateFormat === 'custom'
       timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
       language: 'en', // UI language — one of i18n LOCALES codes. Never sniffed from the OS.
+      // Bumped by every setLocale once the catalog is in place; `useT`
+      // subscribes to it rather than to `language`, so re-applying the locale
+      // the store already holds still repaints. Not meaningful across restarts.
+      localeEpoch: 0,
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
       actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering

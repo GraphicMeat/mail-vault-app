@@ -9,7 +9,18 @@ import './styles/index.css';
 
 // Apply the persisted language before first paint, so the UI and the native
 // menu come up in the chosen locale rather than flashing English.
-setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
+//
+// This call alone is not enough. Settings persist through Tauri
+// (`src/stores/safeStorage.js`), so `getItem` returns a Promise and zustand
+// hydrates *after* this module runs — the read below always sees the default
+// `en`. The restored language then lands in the store on its own, repainting
+// every subscriber against a catalog that is still English. So apply it again
+// when hydration finishes.
+const applyPersistedLocale = () =>
+  setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
+
+applyPersistedLocale();
+useSettingsStore.persist?.onFinishHydration?.(applyPersistedLocale);
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
 
 // A row can vanish at four layers — the sidecar cache, `emails`, the filters
