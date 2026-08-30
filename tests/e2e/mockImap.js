@@ -679,6 +679,21 @@ export function vanishedMessage(uid) {
   ];
 }
 
+/**
+ * One message whose body fetch ALWAYS dies with the socket — the retry on a
+ * fresh connection cannot save it, so the viewer has to name the failure.
+ *
+ * Permanent on purpose. An ordinal fault ("dies once, then works") is global to
+ * the whole run — one mock server per account, alive across every spec file —
+ * and is spent by whoever fetches first: AccountPipeline caches every body in an
+ * opened mailbox and re-queues failures on a 3s backoff, and any spec that
+ * sweeps the account (archive, backup) drains the rest. Only a permanent fault
+ * is observable from a spec.
+ */
+export function bodyFetchDropsAlways(uid) {
+  return [{ trigger: bodyFetchOfUid(uid), action: 'DropConnection' }];
+}
+
 /** Stall one message's body fetch by `ms`, then fail it with a tagged NO. */
 export function unreadableBody(uid, ms) {
   return [

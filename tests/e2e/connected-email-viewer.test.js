@@ -5,6 +5,9 @@
  * Requires emails to be loaded in the inbox.
  */
 
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import {
   HTML_QUOTED_SUBJECT,
@@ -511,5 +514,122 @@ describe('Email Viewer — one body per message', function () {
     expect(viewer.frameText).toContain(HTML_COLLISION_MARKER);
     expect(viewer.hasCollisionBody).toBe(true);
     expect(viewer.hasQuotedProbe).toBe(false);
+  });
+});
+
+/**
+ * A body fetch whose connection dies under it.
+ *
+ * A pooled IMAP connection the peer closed while it sat idle (laptop sleep, NAT
+ * timeout, server restart) accepts nothing and answers the first command with
+ * `connection lost`. 2026-08-30, in the viewer: "Failed to fetch email: Server
+ * refused UID FETCH 204: connection lost" — and Try again worked on the FIRST
+ * press, because press two got a new connection. No health check closes that
+ * window: the pool skips the NOOP for the first 60s of a session's life, and the
+ * socket can die between the NOOP and the FETCH.
+ *
+ * `ImapPool::run_read` presses the button before the user sees it — once, on a
+ * connection guaranteed to be new. luke's uid 9301 loses the socket on EVERY
+ * body fetch (wdio.conf.js), which is the half a spec can observe: the retry
+ * happens (the app's own log says so) and, when it cannot help, the viewer names
+ * the connection instead of blaming a message sitting right there in the list.
+ *
+ * The retry COUNT is pinned in `src-core/tests/imap_session.rs`, not here — a
+ * "dies once, then works" fault is spent by whoever fetches first, and in a full
+ * suite that is never the click.
+ */
+describe('Email Viewer — a body fetch whose connection dies', function () {
+  this.timeout(90_000);
+
+  const LUKE = 'luke@mock.test';
+  const DIES = 'Flaky message 9301';
+  const LOADS = 'Flaky message 9302';
+
+  // The app's own log, on the runner's disk under the spec's HOME.
+  const appLog = () => {
+    const dir = join(browser.testDataDir, 'Library/Logs/com.mailvault.app');
+    if (!existsSync(dir)) return '';
+    return readdirSync(dir)
+      .map((f) => readFileSync(join(dir, f), 'utf-8'))
+      .join('\n');
+  };
+
+  const clickRow = (subject) => browser.execute((needle) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find((r) => (r.innerText || '').includes(needle));
+    if (!row || row.offsetHeight === 0) return false;
+    row.click();
+    return true;
+  }, subject);
+
+  const bodyErrorText = () => browser.execute(() => {
+    const el = document.querySelector('[data-testid="email-body-error"]');
+    return el ? el.innerText : null;
+  });
+
+  const bodyText = () => browser.execute(() => {
+    const el = document.querySelector('.email-content');
+    return el ? el.innerText : null;
+  });
+
+  before(async function () {
+    await waitForApp();
+    await waitForEmails();
+    await switchToFolder(LUKE, 'Flaky');
+    await browser.waitUntil(async () => await browser.execute((needle) => {
+      return [...document.querySelectorAll('[data-testid="email-row"]')]
+        .some((r) => (r.innerText || '').includes(needle));
+    }, DIES), {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: `luke's Flaky folder never listed "${DIES}"`,
+    });
+  });
+
+  it('answers a dead socket by reconnecting, not by failing', async function () {
+    // The whole fix, and the vacuity guard for everything below: the fault fired
+    // (the socket really died) and the app went back for a NEW connection rather
+    // than handing the failure to the viewer.
+    await browser.waitUntil(
+      async () => appLog().includes('UID FETCH 9301: connection lost — retrying once on a new connection'),
+      {
+        timeout: 30_000,
+        interval: 500,
+        timeoutMsg: 'The app never logged a retry for a body fetch whose connection died',
+      },
+    );
+    expect(appLog()).toContain('Creating new IMAP connection for luke@mock.test (retry)');
+  });
+
+  it('names the connection when the retry loses the socket too', async function () {
+    expect(await clickRow(DIES)).toBe(true);
+
+    await browser.waitUntil(async () => (await bodyErrorText()) !== null, {
+      timeout: 60_000,
+      interval: 300,
+      timeoutMsg: 'Viewer never rendered the body-failure state for a message whose every fetch died',
+    });
+
+    const lower = (await bodyErrorText()).toLowerCase();
+    // The message is sitting right there in the list: the connection failed, not
+    // the message. "Server refused UID FETCH 9301" read as the opposite.
+    expect(lower).toContain('connection');
+    expect(lower).not.toContain('refused');
+    expect(lower).not.toContain('not found');
+    expect(lower).not.toContain('no longer in');
+  });
+
+  it('leaves the rest of the folder alone', async function () {
+    // Same folder, same account, same connection pool: the failure above has to
+    // be a property of that one message. A dead socket that took the folder with
+    // it would show up here.
+    expect(await clickRow(LOADS)).toBe(true);
+
+    await browser.waitUntil(async () => (await bodyText() || '').includes('Body of flaky message 9302'), {
+      timeout: 30_000,
+      interval: 300,
+      timeoutMsg: 'The unfaulted message in the same folder never rendered',
+    });
+    expect(await bodyErrorText()).toBe(null);
   });
 });

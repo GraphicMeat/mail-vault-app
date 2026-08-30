@@ -8,6 +8,7 @@ import {
   scenario,
   slowCommand,
   unreadableBody,
+  bodyFetchDropsAlways,
   unreachableMessage,
   vanishedMessage,
   mockAccount,
@@ -59,6 +60,24 @@ const MOCK_ACCOUNTS = [
     // spec reads luke's Archive folder before repurposing it this way.
     archiveCount: 4,
     archiveSubjectPrefix: 'Luke archive',
+    // A folder nothing else opens, carrying the one message whose body fetch
+    // always dies with the socket — the 2026-08-30 report: "Server refused UID
+    // FETCH 204: connection lost", where Try again worked on the FIRST press
+    // because press two got a new connection (ImapPool::run_read).
+    //
+    // Permanent, not "dies once then works", and that is not a simplification:
+    // an ordinal fault is global to the RUN (one mock server per account, alive
+    // across all 58 spec files) and is spent by whoever fetches first —
+    // AccountPipeline caches every body in an opened mailbox with a 3s retry
+    // queue, and connected-archive-flow sweeps the whole account seven minutes
+    // before this spec runs. The exact retry COUNT is pinned in Rust instead
+    // (src-core/tests/imap_session.rs), where the server is the test's alone.
+    //
+    // 9302 is left unfaulted on purpose: same folder, same account, and it must
+    // render — which is what makes 9301's failure a property of the message and
+    // not of the folder.
+    extraMailbox: { name: 'Flaky', count: 2, subjectPrefix: 'Flaky message', uidStart: 9301 },
+    faults: bodyFetchDropsAlways(9301),
   },
   {
     id: '22222222-2222-4222-8222-222222222222',
