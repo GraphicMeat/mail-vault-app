@@ -589,6 +589,12 @@ describe('MailVault marketing screenshots', function () {
       await browser.pause(500);
       await clickByText(L('settings.tab.backup'));
       await browser.pause(400);
+      // The gated schedule/verification UI lives one level deeper, in the
+      // Backup tab's own "Backup Schedule" sub-tab (BackupSettings.jsx:10) —
+      // the top-level tab opens on the ungated "Backup Settings" sub-tab
+      // first, which is why the wait below never used to see it.
+      if (!(await clickByText(L('settings.backup.backupSchedule')))) throw new Error('backup schedule sub-tab not found');
+      await browser.pause(400);
       // The frequency picker only renders once the global switch is on
       // (seeded backupGlobalEnabled) — the free state shows a disabled toggle
       // and nothing below it.
@@ -600,6 +606,12 @@ describe('MailVault marketing screenshots', function () {
       await openSettings();
       await browser.pause(500);
       await clickByText(L('settings.tab.backup'));
+      await browser.pause(400);
+      // The gated schedule/verification UI lives one level deeper, in the
+      // Backup tab's own "Backup Schedule" sub-tab (BackupSettings.jsx:10) —
+      // the top-level tab opens on the ungated "Backup Settings" sub-tab
+      // first, which is why the wait below never used to see it.
+      if (!(await clickByText(L('settings.backup.backupSchedule')))) throw new Error('backup schedule sub-tab not found');
       await browser.pause(400);
       if (!(await clickByText(L('settings.backup.account.verifyBackupCoverage')))) {
         throw new Error('verify backup coverage control not found');
