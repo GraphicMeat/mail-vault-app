@@ -1543,5 +1543,14 @@
   "preview.row5.snippet": "Your August statement is available to download.",
   "preview.row6.subject": "Delivery scheduled",
   "preview.row6.snippet": "Arriving Tuesday between 9am and noon.",
-  "onboarding.previewCaption": "Preview with sample mail"
+  "onboarding.previewCaption": "Preview with sample mail",
+  "onboarding.appearanceTitle": "Make it yours",
+  "onboarding.appearanceSubtitle": "Change any of this later in Settings. The preview uses sample mail.",
+  "onboarding.density": "Row density",
+  "onboarding.densityCompact": "Compact",
+  "onboarding.densityDefault": "Default",
+  "onboarding.densityComfortable": "Roomy",
+  "onboarding.moreInAppearance": "Date format, signatures and more live in Settings → Appearance.",
+  "settings.appearance.tagcloud": "Tag Cloud",
+  "settings.appearance.chat": "Chat View"
 }
