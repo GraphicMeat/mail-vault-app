@@ -1529,5 +1529,6 @@
   "premium.list.included": "Included",
   "premium.list.locked": "Requires Premium",
   "onboarding.splashTrustLine": "Your mail stays on this computer. No account, no telemetry.",
-  "common.continue": "Continue"
+  "common.continue": "Continue",
+  "onboarding.chooseAlwaysAllow": "Choose “Always Allow” the first time, or it asks again on every sync."
 }

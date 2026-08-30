@@ -3,6 +3,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
 import { onboardingSteps } from './onboarding/steps.js';
 import { Splash } from './onboarding/Splash';
+import { AccountStep } from './onboarding/AccountStep';
 
 export function Onboarding({ onOpenBilling }) {
   // Accounts live in useAccountStore, not useSettingsStore — App.jsx:122 reads
@@ -22,7 +23,7 @@ export function Onboarding({ onOpenBilling }) {
   return (
     <div className="h-screen bg-mail-bg flex items-center justify-center p-4 pt-8" data-testid={`onboarding-${step}`}>
       {step === 'splash' && <Splash onContinue={next} />}
-      {step === 'account' && <div>account<button onClick={next}>continue</button></div>}
+      {step === 'account' && <AccountStep onAdded={next} />}
       {step === 'appearance' && <div>appearance<button onClick={next}>continue</button></div>}
       {step === 'free' && <div>free<button onClick={next}>continue</button></div>}
       {step === 'premium' && <div>premium<button onClick={next}>continue</button></div>}

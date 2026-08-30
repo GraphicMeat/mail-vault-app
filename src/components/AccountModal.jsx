@@ -137,7 +137,7 @@ function guessServerSettings(email) {
   };
 }
 
-export function AccountModal({ onClose }) {
+export function AccountModal({ onClose, onSuccess }) {
   const t = useT();
   const titleId = useId();
   const { addAccount } = useAccountStore();
@@ -496,7 +496,10 @@ export function AccountModal({ onClose }) {
       console.log('[AccountModal] addAccount completed successfully');
       setSuccess(true);
       setTimeout(() => {
-        onClose();
+        // A caller that wants to know the account actually landed passes
+        // onSuccess; everyone else keeps the old close-only behaviour.
+        if (onSuccess) onSuccess();
+        else onClose();
       }, 1500);
     } catch (err) {
       console.error('[AccountModal] addAccount failed:', err);
