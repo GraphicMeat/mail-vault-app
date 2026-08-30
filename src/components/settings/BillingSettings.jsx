@@ -11,6 +11,7 @@ import {
 import { sendNotification } from '../../services/api';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
+import { PremiumFeatureList } from './PremiumFeatureList';
 import { Toast } from '../Toast';
 import { formatDateLong, formatTime } from '../../utils/dateFormat';
 import { pricingRecord } from '../../utils/pricing';
@@ -118,7 +119,7 @@ function timeAgo(dateStr) {
   return t('settings.billing.dAgo', { Math: Math.floor(hrs / 24) });
 }
 
-export function BillingSettings() {
+export function BillingSettings({ onNavigate }) {
   const t = useT();
   const billingEmail = useSettingsStore(s => s.billingEmail);
   const billingProfile = useSettingsStore(s => s.billingProfile);
@@ -543,6 +544,8 @@ export function BillingSettings() {
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
         {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {formatTime(billingLastChecked)}</p>}
       </div>
+
+      <PremiumFeatureList isPremium={isPremium} onNavigate={onNavigate} />
 
       {/* Early Bird Pricing — non-MAS only, it pitches the web subscription */}
       {!IS_APPSTORE_BUILD && !isPremium && (

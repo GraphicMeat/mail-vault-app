@@ -257,7 +257,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
             )}
 
             {activeTab === 'billing' && (
-              <BillingSettings />
+              <BillingSettings onNavigate={handleTabChange} />
             )}
 
             {activeTab === 'language' && (

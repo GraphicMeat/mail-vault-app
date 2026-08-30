@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi } from 'vitest';
-import React from 'react';
 
-vi.mock('lucide-react', () => new Proxy({}, {
-  get: (_t, name) => (props) => React.createElement('span', { 'data-icon': String(name), ...props }),
-}));
+// lucide-react is deliberately NOT mocked here (see billingPremiumDrop.test.jsx
+// for the same call): BillingSettings now renders PremiumFeatureList, which
+// evaluates PREMIUM_FEATURES -- and its icon imports -- at module load. A
+// Proxy-based icon mock with no real export keys throws the moment that eager
+// read happens, even though this file never renders a single icon itself.
 
 // The component now reaches the OS notification bridge when premium drops.
 // Stub it: importing services/api drags in the daemon transport, which has no
