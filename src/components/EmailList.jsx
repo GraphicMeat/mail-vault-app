@@ -51,6 +51,19 @@ import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t as tr, t, useT   } from '../i18n/index.js';
 
+/**
+ * `viewMode` is a store value (`all` / `server` / `local`) and used to be
+ * rendered straight into the header under `capitalize`, which turned it into a
+ * label no catalog ever saw. The sidebar's filter already has keys for these
+ * three; use them so the two agree in every language.
+ */
+const VIEW_MODE_LABELS = {
+  all: 'sidebar.viewAll',
+  server: 'sidebar.viewServer',
+  local: 'sidebar.viewVault',
+};
+
+
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
 
@@ -904,7 +917,7 @@ function EmailListComponent() {
                   })}
                 </span>
                 <span>·</span>
-                <span className="capitalize">{viewMode}</span>
+                <span>{VIEW_MODE_LABELS[viewMode] ? t(VIEW_MODE_LABELS[viewMode]) : viewMode}</span>
                 {dateRange && (
                   <>
                     <span>·</span>

@@ -1471,9 +1471,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <div className="flex items-center gap-1 px-2 mt-1 text-xs text-mail-text-muted">
             <span className="w-3.5 flex justify-center"><HardDrive size={12} /></span>
             {cacheFilling ? (
-              <span>{cachedCount.toLocaleString()} / {totalEmails.toLocaleString()} emails</span>
+              <span>{t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })}</span>
             ) : (
-              <span>{totalEmails.toLocaleString()} emails</span>
+              <span>{t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}</span>
             )}
             {(loading || cacheFilling) && (
               <RefreshCw size={10} className="animate-spin text-mail-accent-text" />

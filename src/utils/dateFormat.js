@@ -1,6 +1,6 @@
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
 import { useSettingsStore } from '../stores/settingsStore';
-import { getLocale } from '../i18n/index.js';
+import { getLocale, t as tr } from '../i18n/index.js';
 
 const DATE_PRESETS = {
   'MM/dd/yyyy': { withYear: 'MM/dd/yyyy', withoutYear: 'MM/dd' },
@@ -148,8 +148,10 @@ export function formatEmailDate(dateStr) {
   const { dateFormat, customDateFormat } = useSettingsStore.getState();
 
   if (isToday(date)) return formatTime(date);
-  if (isYesterday(date)) return 'Yesterday';
-  if (isThisWeek(date)) return format(date, 'EEEE');
+  if (isYesterday(date)) return tr('bulk.ops.yesterday');
+  // This used the date-fns day-name pattern with no locale argument, which is
+  // always English — an English weekday in the middle of a translated list.
+  if (isThisWeek(date)) return new Intl.DateTimeFormat(_locale(), { weekday: 'long' }).format(date);
 
   const isPreviousYear = date.getFullYear() !== new Date().getFullYear();
 
