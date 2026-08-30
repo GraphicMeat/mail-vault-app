@@ -536,7 +536,7 @@ describe('MailVault marketing screenshots', function () {
 
     await step('settings-backup', async () => {
       if (!(await clickByText(L('settings.tab.backup')))) throw new Error('backup tab not found');
-      await expectState((s) => s.settings && s.text.includes(L('settings.backup.config.whatBackUp')), 'backup tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.backup.backupSettings')), 'backup tab not on screen');
       await browser.pause(900);
     });
 
@@ -554,7 +554,12 @@ describe('MailVault marketing screenshots', function () {
 
     await step('settings-time-capsule', async () => {
       if (!(await clickByText(L('settings.tab.timeCapsule')))) throw new Error('time capsule tab not found');
-      await expectState((s) => s.settings && s.text.includes(L('settings.timeCapsule.automaticSnapshots')), 'time capsule tab not on screen');
+      // The demo accounts are not premium, so this panel shows its upsell rather
+      // than the snapshot list. Accept either.
+      await expectState((s) => s.settings && [
+        L('settings.timeCapsule.timeCapsuleRequiresPremium'),
+        L('settings.timeCapsule.howTimeCapsuleWorks'),
+      ].some((phrase) => s.text.includes(phrase)), 'time capsule tab not on screen');
       await browser.pause(900);
     });
 

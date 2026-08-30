@@ -41,7 +41,9 @@ for loc in "${LOCALES[@]}"; do
   if SHOTS_LOCALE="$loc" SHOTS_DATA_DIR="$data" \
      npx wdio run wdio.screenshots.conf.js >"$log" 2>&1; then
     skipped=$(grep -c 'SKIPPED' "$log" || true)
-    shots=$(grep -c '^\[shot\] ' "$log" || true)
+    # wdio prefixes every worker line with "[0-0] ", so an anchored match here
+    # counted zero on a run that captured 26.
+    shots=$(grep -c '\[shot\] /' "$log" || true)
     REPORT+=("$loc: $shots captured, $skipped skipped  ($log)")
     if [ "$skipped" -ne 0 ]; then failed=1; grep 'SKIPPED' "$log" >&2; fi
     if [ "$loc" = "en" ]; then
