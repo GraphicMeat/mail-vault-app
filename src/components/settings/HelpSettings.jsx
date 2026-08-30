@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useId } from 'react';
 import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -38,6 +38,7 @@ export function HelpSettings({ onClose, onReportBug }) {
   const { setOnboardingComplete } = useSettingsStore();
   const language = useSettingsStore(s => s.language) || 'en';
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const galleryTitleId = useId();
 
   return (
     <>
@@ -138,8 +139,9 @@ export function HelpSettings({ onClose, onReportBug }) {
     </div>
 
     <Dialog open={galleryOpen} onClose={() => setGalleryOpen(false)} z={Z.alert} portal size="lg"
+            aria-labelledby={galleryTitleId}
             panelBg="bg-mail-surface">
-      <h2 className="text-lg font-semibold text-mail-text mb-3">{t('onboarding.premiumTitle')}</h2>
+      <h2 id={galleryTitleId} className="text-lg font-semibold text-mail-text mb-3">{t('onboarding.premiumTitle')}</h2>
       <PremiumGallery />
     </Dialog>
     </>

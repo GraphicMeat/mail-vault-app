@@ -8,7 +8,9 @@ import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 const openInBrowser = vi.fn(() => Promise.resolve(true));
 vi.mock('../../../services/billingApi', () => ({ openInBrowser: (url) => openInBrowser(url) }));
 vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: () => ({ setOnboardingComplete: vi.fn() }),
+  useSettingsStore: (sel) => (typeof sel === 'function'
+    ? sel({ setOnboardingComplete: vi.fn(), language: 'en', localeEpoch: 0 })
+    : { setOnboardingComplete: vi.fn() }),
 }));
 
 import { HelpSettings } from '../HelpSettings';
