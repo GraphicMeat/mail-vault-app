@@ -158,9 +158,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {localCacheDurationMonths === 0 ? t('settings.storage.allEmails') :
-                 localCacheDurationMonths === 1 ? '1 month' :
-                 localCacheDurationMonths === 12 ? '1 year' :
-                 `${localCacheDurationMonths} months`}
+                 localCacheDurationMonths === 12 ? t('settings.storage.yearDuration') :
+                 t('settings.storage.monthsDuration', { count: localCacheDurationMonths })}
               </span>
             </div>
 
@@ -185,10 +184,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
               {/* Tick marks */}
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">1 mo</span>
-                <span className="text-[10px] text-mail-text-muted">3 mo</span>
-                <span className="text-[10px] text-mail-text-muted">6 mo</span>
-                <span className="text-[10px] text-mail-text-muted">1 year</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick1mo')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick3mo')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick6mo')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick1yr')}</span>
                 <span className="text-[10px] text-mail-text-muted">{t('settings.storage.all')}</span>
               </div>
             </div>
@@ -206,10 +205,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       : (localStorageUsage.totalMB || 0) >= 1
                       ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
                       : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
-                    {' '}({(localStorageUsage.emailCount || 0).toLocaleString()} emails saved)
+                    {' '}{t('settings.storage.emailsSavedCount', { count: localStorageUsage.emailCount || 0 })}
                   </>
                 ) : (
-                  'Calculating...'
+                  t('settings.storage.calculating')
                 )}
               </div>
             </div>
@@ -228,8 +227,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <div className="text-sm text-mail-text">{t('settings.storage.messagesPreviousServer')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {t('settings.storage.savedOrphans', { count: orphanStats.count })}
-                  {' '}({(orphanStats.bytes / (1024 * 1024)).toFixed(1)} MB) that this server no longer has.
-                  {' '}They are kept in the vault and are not shown in your mailboxes. Deleting them is permanent.
+                  {' '}{t('settings.storage.orphansDetail', { mb: (orphanStats.bytes / (1024 * 1024)).toFixed(1) })}
                 </div>
               </div>
               {!purgeOrphansConfirm ? (
@@ -269,7 +267,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     disabled={purgingOrphans}
                   >
                     {purgingOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    Delete permanently
+                    {t('settings.storage.deletePermanently')}
                   </Button>
                 </div>
               )}
@@ -357,9 +355,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
           </div>
           {clearCacheResult && (
             <div className="text-xs text-mail-success px-1">
-              Cleared {clearCacheResult.deletedCount.toLocaleString()} cached emails
-              {clearCacheResult.skippedArchived > 0 && `, ${clearCacheResult.skippedArchived.toLocaleString()} archived emails preserved`}.
-              Re-sync started.
+              {t('settings.storage.clearedCachedEmails', { count: clearCacheResult.deletedCount })}
+              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedEmailsPreservedSuffix', { count: clearCacheResult.skippedArchived })}
+              . {t('settings.storage.resyncStarted')}
             </div>
           )}
         </div>
@@ -369,7 +367,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div data-testid="settings-auto-cleanup" className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Clock size={18} className="text-mail-accent-text" />
-          Auto-Cleanup
+          {t('settings.storage.autoCleanupHeading')}
           {!isPaidUser && (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
               {t('common.premium')}
@@ -678,12 +676,12 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       try {
                         const result = await runCleanupRules();
                         if (result.archived > 0 || result.deleted > 0) {
-                          setCleanupResult(`${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
+                          setCleanupResult({ text: `${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${t('settings.storage.archivedCount', { count: result.archived })})` : ''}`, isError: false });
                         } else {
-                          setCleanupResult('No emails matched cleanup criteria');
+                          setCleanupResult({ text: t('settings.storage.noEmailsMatchedCriteria'), isError: false });
                         }
                       } catch (e) {
-                        setCleanupResult(`Cleanup failed: ${e.message}`);
+                        setCleanupResult({ text: t('settings.storage.cleanupFailed', { err: e.message }), isError: true });
                       } finally {
                         setCleanupRunning(false);
                         setTimeout(() => setCleanupResult(null), 5000);
@@ -698,8 +696,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 )}
               </div>
               {cleanupResult && (
-                <p className={`text-xs mt-2 ${cleanupResult.startsWith('Cleanup failed') ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
-                  {cleanupResult}
+                <p className={`text-xs mt-2 ${cleanupResult.isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
+                  {cleanupResult.text}
                 </p>
               )}
             </>)}
@@ -722,7 +720,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
             <div className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                           text-mail-text min-h-[42px] flex items-center">
               {localStoragePath || (
-                <span className="text-mail-text-muted">Browser storage (default)</span>
+                <span className="text-mail-text-muted">{t('settings.storage.browserStorageDefault')}</span>
               )}
             </div>
             <button
@@ -765,8 +763,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          Empties your vault on this computer and forgets every account and setting.
-          Mail still on the server is untouched; anything the server no longer has is gone for good.
+          {t('settings.storage.emptiesVaultExplanation')}
         </p>
         <Button variant="dangerTint"
           onClick={() => setShowClearConfirm(true)}
@@ -780,8 +777,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
         isOpen={showClearConfirm}
         onClose={() => !clearing && setShowClearConfirm(false)}
         title={t('settings.storage.emptyVaultComputer')}
-        description="Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone."
-        confirmLabel="Empty the vault"
+        description={t('settings.storage.emptyVaultConfirmDescription')}
+        confirmLabel={t('settings.storage.emptyTheVault')}
         destructive
         loading={clearing}
         onConfirm={async () => {

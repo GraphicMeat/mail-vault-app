@@ -81,14 +81,14 @@ export default function BackupVerificationTree({ data, onHide }) {
           appComplete ? 'bg-mail-local-tint text-mail-local' : 'bg-mail-warning-tint text-mail-warning'
         }`}>
           {appComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
-          App: {appPct}%
+          {t('settings.backup.verify.appPercent', { pct: appPct })}
         </span>
         {hasExternal ? (
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
             extComplete ? 'bg-mail-local-tint text-mail-local' : 'bg-mail-warning-tint text-mail-warning'
           }`}>
             {extComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
-            External: {total_server > 0 ? Math.round((total_external / total_server) * 100) : 0}%
+            {t('settings.backup.verify.externalPercent', { pct: total_server > 0 ? Math.round((total_external / total_server) * 100) : 0 })}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-mail-surface text-mail-text-muted">
@@ -128,7 +128,10 @@ export default function BackupVerificationTree({ data, onHide }) {
 
       {/* Totals */}
       <div className="flex items-center justify-between text-xs text-mail-text-muted pt-1">
-        <span>Total: {total_app}/{total_server} in app{hasExternal && `, ${total_external}/${total_server} external`}</span>
+        <span>
+          {t('settings.backup.verify.totalInApp', { app: total_app, server: total_server })}
+          {hasExternal && t('settings.backup.verify.totalExternalSuffix', { external: total_external, server: total_server })}
+        </span>
       </div>
     </div>
   );

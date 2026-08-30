@@ -183,7 +183,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
                   className="px-3 py-1 text-xs bg-mail-surface border border-mail-border rounded-lg
                             hover:bg-mail-surface-hover transition-colors text-mail-text"
                 >
-                  {t('bulk.progress.continue')}
+                  {t('common.continue')}
                 </button>
                 <button
                   onClick={() => { setShowCancelConfirm(false); onCancel(); }}

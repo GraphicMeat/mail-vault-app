@@ -170,7 +170,7 @@ export default function ChangeServerModal() {
       setFolders(gathered);
       setStep(nextStepAfterVerify(gathered));
     } catch (err) {
-      const message = typeof err === 'string' ? err : err?.message || 'Verification failed';
+      const message = typeof err === 'string' ? err : err?.message || tr('changeServer.verificationFailed');
       setVerifyError(classifyVerifyError(message));
     } finally {
       setBusyLeg(null);
@@ -210,7 +210,7 @@ export default function ChangeServerModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <Server size={18} /> Change server — {account.email}
+            <Server size={18} /> {t('changeServer.changeServerFor', { email: account.email })}
           </h2>
           {step === 2 && activeRestore && (
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>
@@ -292,7 +292,7 @@ export default function ChangeServerModal() {
                 {busyLeg ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin" size={14} />
-                    Verifying {busyLeg === 'imap' ? 'IMAP' : 'SMTP'}…
+                    {t('changeServer.verifyingLeg', { leg: busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
                   </span>
                 ) : tr('changeServer.verifySave')}
               </button>
@@ -305,7 +305,7 @@ export default function ChangeServerModal() {
             {!activeRestore && !restoreFinished && (
               <>
                 <p className="text-mail-text-muted mb-3">
-                  Upload {localTotal} emails to the new server?
+                  {t('changeServer.uploadEmailsToNewServer', { count: localTotal })}
                 </p>
                 <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
                   {folders.map((f) => (
@@ -323,7 +323,7 @@ export default function ChangeServerModal() {
                   <Button variant="primary"
                     onClick={handleStartRestore}
                   >
-                    <UploadCloud size={14} /> Restore {localTotal}
+                    <UploadCloud size={14} /> {t('changeServer.restoreCount', { count: localTotal })}
                   </Button>
                 </div>
               </>
@@ -333,10 +333,10 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>Uploading{activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : ''}…</span>
+                  <span>{t('changeServer.uploadingProgress', { folder: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
                 </div>
                 <div className="text-mail-text-muted">
-                  {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed
+                  {t('changeServer.restoreTally', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
@@ -361,17 +361,17 @@ export default function ChangeServerModal() {
                     ? <CheckCircle2 size={16} className="text-mail-success" />
                     : <AlertTriangle size={16} className="text-mail-warning" />}
                   <span>
-                    {activeRestore.status === 'completed' && 'Restore complete — '}
-                    {activeRestore.status === 'cancelled' && 'Restore cancelled — '}
-                    {activeRestore.status === 'failed' && 'Restore failed — '}
-                    {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed
+                    {activeRestore.status === 'completed' && t('changeServer.restoreCompletePrefix')}
+                    {activeRestore.status === 'cancelled' && t('changeServer.restoreCancelledPrefix')}
+                    {activeRestore.status === 'failed' && t('changeServer.restoreFailedPrefix')}
+                    {t('changeServer.restoreTally', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   </span>
                 </div>
                 <div className="flex justify-end mt-4">
                   <Button variant="primary"
                     onClick={handleRestoreContinue}
                   >
-                    {t('changeServer.continue')}
+                    {t('common.continue')}
                   </Button>
                 </div>
               </div>
@@ -383,7 +383,7 @@ export default function ChangeServerModal() {
           <div className="text-sm">
             {dnsHealth.loading && (
               <div className="flex items-center gap-2 text-mail-text-muted mb-4">
-                <Loader2 className="animate-spin" size={16} /> Checking DNS records…
+                <Loader2 className="animate-spin" size={16} /> {t('changeServer.checkingDnsRecords')}
               </div>
             )}
             {!dnsHealth.loading && dnsHealth.failed && (

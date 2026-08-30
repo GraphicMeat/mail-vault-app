@@ -86,9 +86,9 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                 onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
                 className={selectClass}
               >
-                <option value="hourly">Every hour (when idle)</option>
-                <option value="daily">Once a day (when idle)</option>
-                <option value="weekly">Once a week (when idle)</option>
+                <option value="hourly">{t('settings.backup.schedule.everyHourIdle')}</option>
+                <option value="daily">{t('settings.backup.schedule.onceDayIdle')}</option>
+                <option value="weekly">{t('settings.backup.schedule.onceWeekIdle')}</option>
               </select>
             </div>
           </div>

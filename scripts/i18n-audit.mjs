@@ -22,11 +22,63 @@
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const TEXT = /(>)(\s*)([A-Za-z][A-Za-z0-9 \n\r\t,.'!?:%\-—’]*?)(\s*)(<)/g;
+// Deny-list, not allow-list: a JSX text node is whatever sits between `>` and
+// `<` that isn't itself markup or a JS expression. The old allow-list class
+// hid every node with one character outside its set — "1×1" (U+00D7),
+// "(when idle)", "…" — while reporting a single brand-name false positive for
+// the whole app. `<>{}` are the non-negotiable markup/expression boundaries;
+// `[]=`` and `\` are additional denies for a different false-positive this
+// class change opens up: a `>`/`<` that is really a JS comparison operator or
+// an arrow (`=>`), which then runs on to the NEXT real tag and swallows the
+// JS between them as "text". Confirmed by grep against every .jsx in this
+// repo: no real UI copy uses `[`, `]`, a bare `=`, a backtick or a backslash
+// (HTML entities like `&rsquo;` and literal `&` DO appear in real copy, so
+// `&` and `;` stay allowed — denying them would hide exactly what STEP 1 is
+// meant to surface). It still can't tell a comparison `>`/`<` from a tag
+// boundary on sight — `count > 0 && (<Foo/>)` opens a match on the operator,
+// same as a real tag would — so the IGNORE step below carries that one
+// specific, extremely common React idiom; anything odder-shaped than that
+// is left as noise a human skims past, same tradeoff the `hooks` mode makes.
+// literalRanges/inLiteral still exempts string-literal content.
+const TEXT = /(>)(\s*)([^<>{}[\]=`\\]*?)(\s*)(<)/g;
 const PROP = /\b(?:title|aria-label|placeholder|alt)="([A-Za-z][^"]{1,})"/g;
 
 // JSX text that is markup or code, not prose for a human.
-const IGNORE = /^(https?|www\.|[A-Za-z]+\(|\d+$)/;
+//   - `\d+$`            a bare number: never worth a translator's time.
+//   - `[^A-Za-z0-9]*$`  a run with no letter or digit at all — "(", ":",
+//                       ") : (", a lone "•" or "⚠". This is the other shape
+//                       `=>`/`?`/`:` leave behind: an arrow's `>`, or a
+//                       ternary's own `) : (` between its two JSX branches,
+//                       opens a match on a non-tag `>`/`<` that runs to the
+//                       next real tag, but the JS syntax it swallows has no
+//                       alphanumeric in it. A real string always has one.
+//   - `&&`/`||` + `(`   the `cond && (<Tag/>)` conditional-render idiom —
+//                       same false-match cause, one digit short of the rule
+//                       above (`"0 && ("` has a "0" in it).
+//   - `) : (`           the same ternary boundary, unanchored, for when a
+//                       `/* comment */` sits right after it on the false
+//                       branch — the comment's own words give the run an
+//                       alnum, so the rule above doesn't fire, but ") : ("
+//                       is still in there and no prose sentence contains it.
+//   - `\breturn\s*\(?$` a store-selector line (`useX(s => s.y)`) or an early
+//                       `if (…) return <Icon/>;` opens a match on its own
+//                       `>` (an arrow, or a self-closing tag swallowed by the
+//                       next rule down) that runs to the component's next
+//                       `return` — same false-match cause, longer run. Always
+//                       lowercase and lands at the very end, so it can't
+//                       collide with a real "Return" button label.
+//   - `\d+\s*\?\s*\(?$` the `cond ? (<Tag/>) : (<Tag/>)` idiom's OTHER
+//                       opening, `? (` instead of `) : (` — same shape as the
+//                       `&&`/`||` rule, one operator over.
+//   - `^\).*\?\(?$`     a CHAINED ternary's middle branch: `a ? (<A/>) : b ?
+//                       (<B/>) : (<C/>)`. No real sentence starts with a bare
+//                       ")" immediately followed by ":", so anchoring on that
+//                       is enough regardless of what the condition expression
+//                       between the ":" and the "?" looks like.
+// None of these are TEXT character-class denies, because none of them are a
+// character prose can never use — `(`, `:`, digits and `&`/`|` all appear in
+// real copy. They're only code here as a *shape*, which is what IGNORE is for.
+const IGNORE = /^(https?|www\.|[A-Za-z]+\(|\d+$|[^A-Za-z0-9]*$)|(?:&&|\|\|)\s*\(|\)\s*:\s*\(|\breturn\s*\(?$|\d+\s*\?\s*\(?$|^\)[\s\S]*\?\s*\(?$/;
 
 // `T.jsx` documents the `<0>…</0>` slot syntax in its own comments and JSDoc,
 // which reads as a text node to the pattern above. Excluding the file is

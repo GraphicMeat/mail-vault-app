@@ -35,10 +35,10 @@ const SOURCES = () => ([
 
 /** What the sender learns when that one pixel loads. */
 const LEAKED = () => ([
-  'That you opened it — and every time you re-open it',
-  'The minute you opened it, and your time zone',
-  'Your IP address, so roughly where you were',
-  'Your device and mail client, from the user agent',
+  tr('settings.tracking.leakedOpened'),
+  tr('settings.tracking.leakedTime'),
+  tr('settings.tracking.leakedIp'),
+  tr('settings.tracking.leakedDevice'),
 ]);
 
 function SampleMail({ blocked }) {
@@ -63,12 +63,12 @@ function SampleMail({ blocked }) {
         {blocked ? (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-700">
             <ShieldCheck size={11} />
-            1 tracking pixel removed before render
+            {t('settings.tracking.pixelRemovedCaption')}
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-600">
             <span className="inline-block w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
-            1×1 pixel loading from mailer.example.com
+            {t('settings.tracking.pixelLoadingCaption')}
           </div>
         )}
       </div>
@@ -110,9 +110,7 @@ export function TrackerBlockingView({ onUpgrade }) {
               {t('settings.tracking.blockTrackingPixels')}
             </h4>
             <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
-              Marketing mail hides a 1×1 image in the body. Loading it tells the sender you opened
-              the message. MailVault strips those beacons out of the HTML before the message is
-              rendered, so nothing is ever requested.
+              {t('settings.tracking.explainer')}
             </p>
           </div>
           {isPremium ? (

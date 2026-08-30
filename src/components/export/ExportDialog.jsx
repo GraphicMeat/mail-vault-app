@@ -65,8 +65,8 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           : t('export.dialog.messageCouldExported'));
         return;
       }
-      if (result.files.length === 1) await saveOneFile(result.files[0], 'Export');
-      else await saveFilesToDirectory(result.files, 'Export');
+      if (result.files.length === 1) await saveOneFile(result.files[0], t('common.export'));
+      else await saveFilesToDirectory(result.files, t('common.export'));
 
       if (result.partial) {
         const n = result.failures.length;
@@ -86,7 +86,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
 
   return (
     <Dialog open={open} onClose={onClose} z={Z.dialog} portal size="md"
-      title={`Export ${isThread ? `${messages.length} messages` : 'message'}`}
+      title={isThread ? t('export.dialog.exportMessagesTitle', { count: messages.length }) : t('export.dialog.exportMessageTitle')}
       panelBg="bg-mail-surface">
       {!isPremium ? (
         <>
@@ -103,17 +103,17 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
         <>
           <div className="grid grid-cols-2 gap-2">
             <Choice name="mv-export-format" value="image" checked={format === 'image'} onChange={setFormat}
-              icon={ImageDown} label="Image" hint="PNG, exactly as it reads" />
+              icon={ImageDown} label={t('export.dialog.formatImageLabel')} hint={t('export.dialog.formatImageHint')} />
             <Choice name="mv-export-format" value="html" checked={format === 'html'} onChange={setFormat}
-              icon={FileCode2} label="HTML" hint="One file, folds by date" />
+              icon={FileCode2} label="HTML" hint={t('export.dialog.formatHtmlHint')} />
           </div>
 
           {showLayout && (
             <div className="grid grid-cols-2 gap-2">
               <Choice name="mv-export-layout" value="single" checked={layout === 'single'} onChange={setLayout}
-                label="One tall image" hint="Split into pages if very long" />
+                label={t('export.dialog.layoutSingleLabel')} hint={t('export.dialog.layoutSingleHint')} />
               <Choice name="mv-export-layout" value="separate" checked={layout === 'separate'} onChange={setLayout}
-                label="Separate images" hint="One file per message" />
+                label={t('export.dialog.layoutSeparateLabel')} hint={t('export.dialog.layoutSeparateHint')} />
             </div>
           )}
 
