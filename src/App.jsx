@@ -45,6 +45,7 @@ import * as bulkApi from './services/api';
 import { bulkOperationManager } from './services/BulkOperationManager';
 import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction } from './utils/escapeAction';
+import { shouldStartFullInit } from './utils/shouldStartFullInit';
 import { filterUnread } from './utils/emailParser';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
@@ -681,9 +682,14 @@ function App() {
   }, []);
 
   // Full initialization with delay (includes keychain access)
-  // Only start after onboarding is complete, quick load is done, and UI has had time to render
+  // Gated on shouldStartFullInit(): fires once quick load has run and either
+  // an account is already known, or onboarding is complete — never on
+  // accounts.length alone. Quick load only sees accounts.json, so a
+  // keychain-only install reads 0 accounts here until init() itself runs
+  // the keychain-inclusive lookup; requiring accounts.length > 0 would wait
+  // forever on a count only init() can raise. See shouldStartFullInit.js.
   useEffect(() => {
-    if (!initialized && quickLoadDone && accounts.length > 0) {
+    if (shouldStartFullInit({ initialized, quickLoadDone, accountCount: accounts.length, onboardingComplete })) {
       // If quick-load found accounts, wait 500ms so the cached UI renders first.
       // If no accounts were found (keychain-only install), skip the delay — the user
       // is staring at a "Loading..." splash and needs the keychain prompt ASAP.
@@ -712,7 +718,7 @@ function App() {
 
       return () => clearTimeout(timer);
     }
-  }, [initialized, quickLoadDone, accounts.length]);
+  }, [initialized, quickLoadDone, accounts.length, onboardingComplete]);
 
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
