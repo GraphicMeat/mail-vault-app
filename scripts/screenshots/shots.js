@@ -38,6 +38,18 @@ const { MARKERS } = demoScenarios(APP_LOCALE);
 // stable needle in a subject whose other words all move.
 const THREAD_NEEDLE = 'Rack & Rind';
 
+// `{{selectedCount}} emails selected` — only the part outside the placeholder
+// is on screen verbatim, and it is what changes per language.
+const SELECTED_COUNT = L('bulk.ops.emailsSelected').replace(/\{\{.*?\}\}/g, '').trim();
+
+/** The phase words the bulk progress bubble shows while it is still working. */
+const IN_FLIGHT = [
+  L('bulk.progress.downloading'),
+  L('bulk.progress.verifying'),
+  L('bulk.progress.deleting'),
+  L('bulk.progress.removingVault'),
+];
+
 
 const SETTLE = 900;
 
@@ -111,6 +123,9 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
     rows: document.querySelectorAll('[data-testid="email-row"]').length,
     senderRows: document.querySelectorAll('[data-testid="sender-group-row"]').length,
     grouped: !!document.querySelector(`button[title="${chronological}"]`),
+    // "Start Archive" appears in no catalog, so its text cannot be asserted in
+    // any language but English. The testid can.
+    bulkConfirm: !!document.querySelector('[data-testid="bulk-step2-confirm"]'),
     viewerEmpty: text.includes(selectEmailRead),
     iframes: document.querySelectorAll('iframe').length,
     // Full text, not a slice: assertions match against content far below the
@@ -342,7 +357,11 @@ describe('MailVault marketing screenshots', function () {
         return true;
       });
       if (!clicked) throw new Error('no link inside the rendered body');
-      await expectState((s) => /suspicious|actually goes|link text/i.test(s.text),
+      await expectState((s) => [
+        L('linkSafety.suspiciousLinkDetected'),
+        L('linkSafety.dangerousLinkDetected'),
+        L('linkSafety.linkTextSays'),
+      ].some((phrase) => s.text.includes(phrase)),
         'link safety modal did not open');
     });
 
@@ -357,7 +376,7 @@ describe('MailVault marketing screenshots', function () {
       await clickRow(MARKERS.replyTo);
       await browser.pause(700);
       if (!(await clickTestId('sender-insights-toggle'))) throw new Error('sender details toggle not found');
-      await expectState((s) => s.insights || /reply-to/i.test(s.text), 'sender details did not open');
+      await expectState((s) => s.insights, 'sender details did not open');
     });
 
     // ── Compose ───────────────────────────────────────────────────────────
@@ -392,9 +411,9 @@ describe('MailVault marketing screenshots', function () {
       await resetToInbox();
       await browser.pause(600);
       if (!(await openBulkModal())) throw new Error('bulk modal did not open');
-      await expectState(hasText('Bulk Email Operations'), 'bulk modal step 1 not on screen');
+      await expectState(hasText(L('bulk.ops.bulkEmailOperations')), 'bulk modal step 1 not on screen');
       await clickByText(L('bulk.ops.last90Days'));
-      await expectState(hasText('emails selected'), 'range selection produced no count');
+      await expectState(hasText(SELECTED_COUNT), 'range selection produced no count');
       await browser.pause(900);
     });
 
@@ -402,19 +421,23 @@ describe('MailVault marketing screenshots', function () {
       await clickByText(L('bulk.ops.next'));
       await browser.pause(800);
       if (!(await clickTestId('bulk-action-archive'))) throw new Error('archive action not offered');
-      await expectState(hasText('Start Archive'), 'archive confirm not on screen');
+      await expectState((s) => s.bulkConfirm, 'archive confirm not on screen');
     });
 
     await step('archive-progress', async () => {
       if (!(await clickTestId('bulk-step2-confirm'))) throw new Error('confirm not clickable');
       // "Operation" also matches "Operation Complete" — the shot then shows a
       // finished bar every time, which is what archive-success is for.
-      await expectState((s) => /Phase \d|Archiving|Saving|of 66 emails/i.test(s.text)
-        && !/Operation Complete/i.test(s.text), 'no in-flight progress UI', 30000);
+      //
+      // The old assertion also matched a literal `of 66 emails`; the mailbox is
+      // date-relative, so that count expired and the shot spun for 30s while
+      // the real operation finished without it.
+      await expectState((s) => IN_FLIGHT.some((phase) => s.text.includes(phase))
+        && !s.text.includes(L('bulk.progress.operationComplete')), 'no in-flight progress UI', 30000);
     }, 150);
 
     await step('archive-success', async () => {
-      await expectState((s) => /Operation Complete/i.test(s.text), 'archive never completed', 180000);
+      await expectState((s) => s.text.includes(L('bulk.progress.operationComplete')), 'archive never completed', 180000);
     });
 
     // ── Vault ─────────────────────────────────────────────────────────────
@@ -492,7 +515,7 @@ describe('MailVault marketing screenshots', function () {
       await setAppearance(L('settings.appearance.listView'));
       await browser.pause(800);
       if (!(await clickTestId('all-inboxes-btn'))) throw new Error('All Inboxes button not found');
-      await expectState((s) => s.rows > 0 && /all inboxes/i.test(s.text), 'unified inbox did not load', 30000);
+      await expectState((s) => s.rows > 0 && s.text.includes(L('sidebar.allInboxes')), 'unified inbox did not load', 30000);
       await browser.pause(1500);
       // An empty reading pane reads as a dead app in a screenshot.
       await clickRow('Theo Lomas');
@@ -502,36 +525,36 @@ describe('MailVault marketing screenshots', function () {
     // ── Settings ──────────────────────────────────────────────────────────
     await step('settings-appearance', async () => {
       await openAppearance();
-      await expectState((s) => s.settings && /layout/i.test(s.text), 'appearance tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.appearance.theme')), 'appearance tab not on screen');
     });
 
     await step('settings-storage', async () => {
       if (!(await clickByText(L('settings.tab.storage')))) throw new Error('storage tab not found');
-      await expectState((s) => s.settings && /storage/i.test(s.text), 'storage tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.storage.storageStatus')), 'storage tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-backup', async () => {
       if (!(await clickByText(L('settings.tab.backup')))) throw new Error('backup tab not found');
-      await expectState((s) => s.settings && /backup/i.test(s.text), 'backup tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.backup.config.whatBackUp')), 'backup tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-backup-schedule', async () => {
       if (!(await clickByText(L('settings.backup.backupSchedule')))) throw new Error('backup schedule tab not found');
-      await expectState((s) => s.settings && /schedule/i.test(s.text), 'backup schedule not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.backup.backupSchedule')), 'backup schedule not on screen');
       await browser.pause(900);
     });
 
     await step('settings-security', async () => {
       if (!(await clickByText(L('settings.tab.security')))) throw new Error('security tab not found');
-      await expectState((s) => s.settings && /security/i.test(s.text), 'security tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.security.linkSafetyScanning')), 'security tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-time-capsule', async () => {
       if (!(await clickByText(L('settings.tab.timeCapsule')))) throw new Error('time capsule tab not found');
-      await expectState((s) => s.settings && /time capsule/i.test(s.text), 'time capsule tab not on screen');
+      await expectState((s) => s.settings && s.text.includes(L('settings.timeCapsule.automaticSnapshots')), 'time capsule tab not on screen');
       await browser.pause(900);
     });
 

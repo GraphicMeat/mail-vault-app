@@ -39,6 +39,34 @@ function pageClosures(src) {
   return found;
 }
 
+/**
+ * Assertions are the half that got missed. Every *click* was converted to a
+ * catalog label, and the run still lost nine shots per locale — because the
+ * checks that follow the clicks still matched English on screen:
+ * `hasText('Bulk Email Operations')`, `/Operation Complete/i.test(s.text)`,
+ * `/storage/i.test(s.text)`. A finder that misses is loud; an assertion that
+ * misses is a SKIPPED line blaming the screen.
+ */
+function englishAssertions(src) {
+  const found = [];
+  for (const m of src.matchAll(/hasText\(\s*'([^']+)'/g)) found.push(`hasText('${m[1]}')`);
+  for (const m of src.matchAll(/\/([^/\n]{3,})\/i\.test\(\s*s\.text\s*\)/g)) found.push(`/${m[1]}/i.test(s.text)`);
+  return found;
+}
+
+describe('shots.js assertions', () => {
+  it('asserts on catalog strings, never on English text', () => {
+    expect(englishAssertions(SRC)).toEqual([]);
+  });
+
+  it('recognises both offending shapes', () => {
+    expect(englishAssertions("await expectState(hasText('Bulk Email Operations'), 'x');"))
+      .toEqual(["hasText('Bulk Email Operations')"]);
+    expect(englishAssertions('if (/Operation Complete/i.test(s.text)) {}'))
+      .toEqual(['/Operation Complete/i.test(s.text)']);
+  });
+});
+
 describe('shots.js page callbacks', () => {
   it('never reaches for a host-side value inside a browser.execute body', () => {
     expect(pageClosures(SRC)).toEqual([]);
