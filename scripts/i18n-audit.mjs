@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 /**
- * The gate for the string extraction. Two checks, both mechanical, because the
+ * The gate for the string extraction.
+ *
+ * 2026-08-30: the text class had no `\n`, so a JSX text node that WRAPPED
+ * across lines was invisible to it — the whole-file `\s*` only ever covered
+ * whitespace around the node, never inside it. ExportUpsellModal's intro
+ * paragraph sat hardcoded through the entire drain that way. Two checks, both mechanical, because the
  * hand-written key list is what went wrong last time:
  *
  *   strings — user-facing literals still hardcoded in JSX. The text regex is
@@ -17,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
-const TEXT = /(>)(\s*)([A-Za-z][A-Za-z0-9 ,.'!?:%\-—’]*?)(\s*)(<)/g;
+const TEXT = /(>)(\s*)([A-Za-z][A-Za-z0-9 \n\r\t,.'!?:%\-—’]*?)(\s*)(<)/g;
 const PROP = /\b(?:title|aria-label|placeholder|alt)="([A-Za-z][^"]{1,})"/g;
 
 // JSX text that is markup or code, not prose for a human.

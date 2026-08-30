@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import * as db from '../services/db';
 import { vaultClause } from '../utils/custodyCopy';
 import { t as tr, t, useT   } from '../i18n/index.js';
+import { T } from '../i18n/T.jsx';
 
 const ACTION_STYLES = () => ({
   archive: {
@@ -589,9 +590,8 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-mail-warning/10 border border-mail-warning/30">
                   <AlertTriangle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text">
-                    Your vault already holds some of these emails, so deleting them from the server is safe.
-                    Unarchiving is the risky one: it deletes the vault copy, and anything already gone
-                    from the server is then <strong>{t('bulk.ops.lostGood')}</strong>.
+                    <T k="bulk.ops.vaultHoldsSomeUnarchiveIsRisky"
+                       parts={[(s) => <strong>{s}</strong>]} />
                   </p>
                 </div>
               )}

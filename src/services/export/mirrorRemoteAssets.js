@@ -1,3 +1,5 @@
+import { t } from '../../i18n/index.js';
+
 // Turns a body into a static mirror: every remote reference becomes a data:
 // URI so the exported file renders with the network unplugged, forever.
 //
@@ -69,7 +71,7 @@ function placeholder(doc, el, url) {
   box.setAttribute('style', 'display:inline-block;padding:6px 10px;border:1px dashed #b0b0b0;color:#6b6b6b;font:12px -apple-system,sans-serif;border-radius:4px');
   let host = url;
   try { host = new URL(url).host; } catch (_) {}
-  box.textContent = `Image not mirrored (${host})`;
+  box.textContent = t('export.imageNotMirrored', { host });
   el.replaceWith(box);
 }
 

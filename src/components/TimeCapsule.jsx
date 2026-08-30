@@ -111,8 +111,7 @@ function PremiumGate({ onUpgrade }) {
       <Lock size={40} className="text-mail-text-muted mb-4" />
       <h3 className="text-base font-semibold text-mail-text mb-2">{t('timeCapsule.timeCapsulePremiumFeature')}</h3>
       <p className="text-sm text-mail-text-muted max-w-md">
-        Browse your mailbox as it was at any point in time. Restore deleted emails with one click.
-        Snapshots are created automatically after each backup.
+        {t('timeCapsule.browseMailboxAtAnyPointInTime')}
       </p>
       {/* MAS builds must not advertise the web subscription — no external
           purchase price, no path to Stripe checkout. */}

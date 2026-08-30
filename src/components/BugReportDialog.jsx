@@ -95,9 +95,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       </div>
 
       <p className="text-xs text-mail-text-muted leading-relaxed" data-testid="bug-privacy-note">
-        A GitHub thread is public. Keep sensitive data out of it, and never upload
-        logs there — logs carry email addresses. If a log would help, send it over
-        email instead.
+        {t('bugReport.githubThreadIsPublic')}
       </p>
 
       <div className="pt-3 border-t border-mail-border flex flex-col items-center gap-3">

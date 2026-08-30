@@ -59,8 +59,7 @@ export function LinkAlertIcon({ level, size = 14, alerts }) {
           </div>
         ) : (
           <p className="text-sm text-mail-text-muted">
-            This email contains links where the displayed text doesn't match the actual destination.
-            Open the email to see the specific links flagged.
+            {t('alert.link.emailContainsMismatchedLinks')}
           </p>
         )}
       </Dialog>

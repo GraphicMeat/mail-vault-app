@@ -950,9 +950,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               </h4>
 
               <p className="text-sm text-mail-text-muted mb-4">
-                This removes the account from MailVault. Everything of its in your vault,
-                attachments, and settings for this account will be permanently deleted
-                and cannot be recovered.
+                {t('settings.accounts.removingDeletesEverythingLocal')}
               </p>
               <Button variant="dangerTint"
                 onClick={() => setShowRemoveConfirm(true)}

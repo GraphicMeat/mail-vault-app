@@ -11,6 +11,7 @@ import {
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { T } from '../../i18n/T.jsx';
 
 const selectClass = 'w-full px-4 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent';
 
@@ -222,10 +223,8 @@ export default function BackupConfig() {
         <div>
           <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.secondCopyExternalColdStorage')}</label>
           <p className="text-xs text-mail-text-muted mb-2">
-            MailVault always keeps its working copy in the app's own storage — that is what you read,
-            search and open in the app. An external folder adds a <strong>{t('settings.backup.config.secondIndependentCopy')}</strong> on
-            a drive you control. It is written at the same time as the working copy, never read by the app
-            day to day, and kept for the long term: emails deleted on the server or in MailVault stay there.
+            <T k="settings.backup.config.workingCopyPlusExternalCopy"
+               parts={[(s) => <strong>{s}</strong>]} />
           </p>
           <div className="flex items-center gap-2">
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
@@ -286,24 +285,20 @@ export default function BackupConfig() {
           {externalBackupLocation?.status === 'ready' ? (
             <div className="mt-2 space-y-1">
               <p className="text-xs text-mail-success">
-                Second copy active. Plain .eml files, organized by account and folder, readable by any mail
-                app — and untouched if you uninstall MailVault or lose the app's data folder.
+                {t('settings.backup.config.secondCopyActivePlainEml')}
               </p>
               <p className="text-xs text-mail-text-muted">
                 {t('settings.backup.config.structure')} <code className="text-mail-text">{externalBackupLocation.displayPath}/email@address/INBOX/cur/1234:2,S.eml</code>
               </p>
               <p className="text-xs text-mail-text-muted">
-                If the drive is disconnected, backups keep running into the app's working copy alone and
-                the second copy catches up — in both directions — the next time the drive is back.
+                {t('settings.backup.config.driveDisconnectedCatchesUp')}
               </p>
             </div>
           ) : !externalBackupLocation ? (
             <div className="mt-2 flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
               <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
               <p className="text-xs text-mail-warning">
-                One copy only. Everything lives in the app's data folder — uninstall MailVault, clear app
-                data or lose this Mac and the archive goes with it. Choose an external folder to add a
-                second copy on a drive you control.
+                {t('settings.backup.config.oneCopyOnlyChooseExternal')}
               </p>
             </div>
           ) : null}

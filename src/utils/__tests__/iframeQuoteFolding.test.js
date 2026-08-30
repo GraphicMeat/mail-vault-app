@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect } from 'vitest';
-import { getQuoteFoldingScript } from '../iframeQuoteFolding';
+import { getQuoteFoldingScript, getSignatureFoldingScript } from '../iframeQuoteFolding';
+import { setLocale } from '../../i18n/index.js';
 
 /** Run the injected fold script against `html` the way the iframe does. */
 function render(html) {
@@ -50,6 +51,26 @@ describe('getQuoteFoldingScript', () => {
     expect(shown).toContain('Two more things');
     expect(shown).toContain('From: Ben');
     expect(shown).not.toContain('Good morning!');
+  });
+
+  // The script text is evaluated inside the IFRAME, which has no bundler, no
+  // imports and therefore no `t`. A t() call left in the template body threw
+  // ReferenceError on the first click and killed the resize message with it.
+  it('emits no t() call into the iframe — the strings are already interpolated', () => {
+    for (const js of [getQuoteFoldingScript(), getSignatureFoldingScript('collapsed')]) {
+      expect(js).not.toMatch(/\bt\(['"`]/);
+    }
+  });
+
+  it('carries the active catalog into the toggle labels', async () => {
+    await setLocale('de');
+    try {
+      expect(getQuoteFoldingScript()).toContain('Zitierten Text anzeigen');
+      expect(getSignatureFoldingScript('collapsed')).toContain('Signatur anzeigen');
+    } finally {
+      await setLocale('en');
+    }
+    expect(getQuoteFoldingScript()).toContain('Show quoted text');
   });
 
   it('reveals the flat quote when the toggle is clicked', () => {

@@ -91,8 +91,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
       {!isPremium ? (
         <>
           <p className="text-sm text-mail-text-muted">
-            Save a message or a whole thread as an image, or as a single HTML file that keeps working offline.
-            Exporting is a Premium feature.
+            {t('export.dialog.saveMessageOrThreadOffline')}
           </p>
           <div className="flex flex-col gap-2">
             <Button variant="primary" size="lg" fullWidth onClick={() => onUpgrade?.()}>{t('common.upgrade')}</Button>

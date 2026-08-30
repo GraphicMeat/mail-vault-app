@@ -126,9 +126,7 @@ export default function MailStorageLocation() {
       </h4>
 
       <p className="text-xs text-mail-text-muted">
-        This is the working copy — the mail MailVault reads, searches and syncs. By default it lives in
-        the app's own storage. Move it to an external drive or any folder you prefer, and everything
-        follows: messages, headers and attachments.
+        {t('settings.mailLocation.thisIsTheWorkingCopy')}
       </p>
 
       <div className="flex items-center gap-2">
@@ -198,8 +196,7 @@ export default function MailStorageLocation() {
             {t('settings.mailLocation.bringMailBackDefaultLocation')}
           </p>
           <p className="text-xs text-mail-text-muted">
-            Leaving it there means MailVault reads whatever is in its own storage — usually nothing —
-            and re-downloads your mail. The folder you leave behind is not touched.
+            {t('settings.mailLocation.leavingItThereRedownloads')}
           </p>
           <div className="flex flex-wrap items-center gap-2 pt-1">
             <button

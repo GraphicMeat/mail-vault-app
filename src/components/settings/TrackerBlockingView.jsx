@@ -141,8 +141,7 @@ export function TrackerBlockingView({ onUpgrade }) {
         <div className="border border-mail-accent/30 bg-mail-accent/5 rounded-xl p-5" data-testid="tracker-upsell">
           <h4 className="text-sm font-semibold text-mail-text">{t('settings.tracking.trackerBlockingPremiumFeature')}</h4>
           <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
-            Detection is free — you can always see that a message tracked you and which company sent
-            the beacon. Premium is what removes it before the request goes out.
+            {t('settings.tracking.detectionIsFreeBlockingIsPremium')}
           </p>
           {!IS_APPSTORE_BUILD && <p className="text-xs text-mail-text-muted mt-2">{priceBlurb}</p>}
           {!IS_APPSTORE_BUILD && onUpgrade && (
@@ -214,8 +213,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           </>
         ) : (
           <p className="text-xs text-mail-text-muted">
-            Nothing found yet. Messages are scanned as you open them — scanning runs entirely on this
-            device, and no part of an email is sent anywhere.
+            {t('settings.tracking.nothingFoundYetScanIsLocal')}
           </p>
         )}
         <p className="text-[11px] text-mail-text-muted/70 mt-3">

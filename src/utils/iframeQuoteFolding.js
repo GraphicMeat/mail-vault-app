@@ -4,6 +4,11 @@ import { t } from '../i18n/index.js';
  * Finds quoted content elements and makes them collapsible.
  */
 export function getQuoteFoldingScript() {
+  // Interpolated here, not called inside the template: the script runs in the
+  // iframe, which has no `t` — a bare t() call in the body is a ReferenceError
+  // the moment the toggle is clicked. JSON.stringify quotes and escapes it.
+  const SHOW = JSON.stringify(t('util.iframeQuoteFolding.showQuotedText'));
+  const HIDE = JSON.stringify(t('util.iframeQuoteFolding.hideQuotedText'));
   return `
 <script>
 (function() {
@@ -14,7 +19,7 @@ export function getQuoteFoldingScript() {
     var toggle = document.createElement('div');
     toggle.dataset.quoteToggle = 'true';
     toggle.textContent = '\\u22EF';
-    toggle.title = 'Show quoted text';
+    toggle.title = ${SHOW};
     toggle.style.cssText = 'cursor:pointer;color:#6b7280;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:4px;padding:2px 10px;margin:6px 0;display:inline-block;font-size:13px;user-select:none;';
     if (document.body) {
       var bg = getComputedStyle(document.body).backgroundColor;
@@ -28,8 +33,8 @@ export function getQuoteFoldingScript() {
     toggle.addEventListener('click', function() {
       var visible = el.style.display !== 'none';
       el.style.display = visible ? 'none' : '';
-      toggle.textContent = visible ? '\\u22EF' : '\\u25BE Hide quoted text';
-      toggle.title = visible ? t('util.iframeQuoteFolding.showQuotedText') : t('util.iframeQuoteFolding.hideQuotedText');
+      toggle.textContent = visible ? '\\u22EF' : '\\u25BE ' + ${HIDE};
+      toggle.title = visible ? ${SHOW} : ${HIDE};
       if (window.parent) {
         window.parent.postMessage({ type: 'iframe-resize', height: document.body.scrollHeight }, '*');
       }
@@ -122,6 +127,8 @@ export function getSignatureFoldingScript(mode) {
   // Validate mode to prevent script injection
   const VALID_MODES = ['smart', 'always-hide', 'collapsed'];
   const safeMode = VALID_MODES.includes(mode) ? mode : 'collapsed';
+  const SHOW_SIG = JSON.stringify(t('util.iframeQuoteFolding.showSignature'));
+  const HIDE_SIG = JSON.stringify(t('util.iframeQuoteFolding.hideSignature'));
 
   return `
 <script>
@@ -144,12 +151,12 @@ export function getSignatureFoldingScript(mode) {
     }
     el.style.display = 'none';
     var toggle = document.createElement('div');
-    toggle.textContent = '\\u2014 Show signature';
+    toggle.textContent = '\\u2014 ' + ${SHOW_SIG};
     toggle.style.cssText = 'cursor:pointer;color:#9ca3af;font-size:12px;margin:4px 0;user-select:none;';
     toggle.addEventListener('click', function() {
       var visible = el.style.display !== 'none';
       el.style.display = visible ? 'none' : '';
-      toggle.textContent = visible ? '\\u2014 Show signature' : '\\u25BE Hide signature';
+      toggle.textContent = visible ? '\\u2014 ' + ${SHOW_SIG} : '\\u25BE ' + ${HIDE_SIG};
       if (window.parent) {
         window.parent.postMessage({ type: 'iframe-resize', height: document.body.scrollHeight }, '*');
       }

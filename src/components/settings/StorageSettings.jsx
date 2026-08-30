@@ -139,8 +139,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </div>
 
         <p className="text-sm text-mail-text-muted">
-          Your vault, its attachments, and your settings live on this disk as ordinary files.
-          Nothing is uploaded, and they stay put between sessions.
+          {t('settings.storage.ordinaryFilesNothingUploaded')}
         </p>
       </div>
 

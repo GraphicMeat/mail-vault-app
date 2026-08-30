@@ -199,8 +199,7 @@ export function AppearanceSettings() {
 
         {windowIsNarrow && (
           <p className="text-sm text-mail-text-muted mb-4 border-l border-mail-border pl-3">
-            This window is too narrow for three columns, so the list and the message
-            are stacked until you widen it. Your choice is remembered.
+            {t('settings.appearance.windowTooNarrowForThreeColumns')}
           </p>
         )}
 

@@ -53,9 +53,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
     >
       <div className="space-y-4 text-sm text-mail-text">
         <p className="text-mail-text-muted">
-          On Linux the spelling dictionary comes from your system, not from MailVault,
-          and this machine has none installed. Until one is there, the spellcheck
-          button has nothing to underline.
+          {t('spellcheck.linuxDictionaryComesFromSystem')}
         </p>
 
         {confined ? (
@@ -86,8 +84,7 @@ export function SpellcheckHelpDialog({ open, onClose, confined = false }) {
         )}
 
         <p className="text-mail-text-muted">
-          Restart MailVault once the dictionary is installed — the checker is set up
-          when the app starts.
+          {t('spellcheck.restartOnceDictionaryInstalled')}
         </p>
       </div>
     </Dialog>
