@@ -974,6 +974,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
           <Button variant="ghost" icon size="sm"
             onClick={onOpenSettings}
+            data-testid="open-settings"
             title={t('sidebar.settings')}
           >
             <Settings size={15} className="text-mail-text-muted" />
@@ -1447,6 +1448,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       <div className="p-3 border-t border-mail-border space-y-0.5">
         <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onOpenSettings}
+          data-testid="open-settings"
         >
           <Settings size={14} />
           {t('sidebar.settings')}

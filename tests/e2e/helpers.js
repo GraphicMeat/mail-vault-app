@@ -239,6 +239,13 @@ export async function openSettings() {
 
   if (!(await isOpen())) {
     const settingsBtn = await browser.execute(() => {
+      // Prefer the testid: the fallback below matches the English word
+      // "settings" in a label, which is absent the moment the app runs in any
+      // other language — and a helper that silently fails to open Settings
+      // takes every downstream step with it.
+      for (const btn of document.querySelectorAll('[data-testid="open-settings"]')) {
+        if (btn.offsetHeight > 0) { btn.click(); return true; }
+      }
       // The sidebar renders both collapsed and expanded button sets — only the
       // visible one may be clicked.
       for (const btn of document.querySelectorAll('button, a')) {
