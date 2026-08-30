@@ -83,8 +83,11 @@ export function HelpSettings({ onClose, onReportBug }) {
             </div>
             <Button variant="subtle"
               onClick={() => {
+                // No reload: `safeStorage` debounces the disk write 500ms, so a
+                // reload here throws it away and the reset silently does nothing.
+                // App.jsx already re-renders into <Onboarding/> on this flag.
                 setOnboardingComplete(false);
-                window.location.reload();
+                onClose();
               }}
             >
               <RotateCcw size={16} />
