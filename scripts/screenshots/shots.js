@@ -87,8 +87,15 @@ async function clickRow(needle) {
   await browser.pause(600);
 }
 
-/** Everything a shot might need to assert, in one round trip. */
-const probe = () => browser.execute(() => {
+/**
+ * Everything a shot might need to assert, in one round trip.
+ *
+ * The callback runs in the PAGE, so every translated string it needs has to
+ * arrive as an argument — `L` lives in this process and referencing it inside
+ * the body fails with "Can't find variable: L", ten seconds at a time, until
+ * the whole run times out.
+ */
+const probe = () => browser.execute((selectEmailRead, chronological) => {
   const vis = (sel) => {
     const el = document.querySelector(sel);
     return !!el && el.offsetHeight > 0;
@@ -103,15 +110,15 @@ const probe = () => browser.execute(() => {
     threadHeaders: document.querySelectorAll('[data-testid="thread-email-header"]').length,
     rows: document.querySelectorAll('[data-testid="email-row"]').length,
     senderRows: document.querySelectorAll('[data-testid="sender-group-row"]').length,
-    grouped: !!document.querySelector('button[title="Switch to chronological view"]'),
-    viewerEmpty: text.includes(L('viewer.selectEmailRead')),
+    grouped: !!document.querySelector(`button[title="${chronological}"]`),
+    viewerEmpty: text.includes(selectEmailRead),
     iframes: document.querySelectorAll('iframe').length,
     // Full text, not a slice: assertions match against content far below the
     // fold (an attachment chip, a settings heading). Truncation happens where
     // it belongs — in the log line and the failure message.
     text: text.replace(/\s+/g, ' '),
   };
-});
+}, L('viewer.selectEmailRead'), L('list.switchChronologicalView'));
 
 /** Wait until `pred(state)` holds, or fail the shot with what was on screen. */
 async function expectState(pred, description, timeout = 12000) {
