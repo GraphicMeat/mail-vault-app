@@ -72,7 +72,7 @@ export function AppearanceStep({ onContinue }) {
             <div className="text-xs font-medium text-mail-text mb-1">{t('settings.appearance.sidebarStyle')}</div>
             <div className="flex gap-1.5">
               <Choice id="appearance-sidebar-list" active={sidebarStyle} value="list" onPick={setSidebarStyle}>{t('settings.appearance.list')}</Choice>
-              <Choice id="appearance-sidebar-tagcloud" active={sidebarStyle} value="tagcloud" onPick={setSidebarStyle}>{t('settings.appearance.tagcloud')}</Choice>
+              <Choice id="appearance-sidebar-tagcloud" active={sidebarStyle} value="tagcloud" onPick={setSidebarStyle}>{t('settings.appearance.tagCloud')}</Choice>
             </div>
           </div>
 
@@ -80,7 +80,7 @@ export function AppearanceStep({ onContinue }) {
             <div className="text-xs font-medium text-mail-text mb-1">{t('settings.appearance.viewStyle')}</div>
             <div className="flex gap-1.5">
               <Choice id="appearance-view-list" active={viewStyle} value="list" onPick={setViewStyle}>{t('settings.appearance.list')}</Choice>
-              <Choice id="appearance-view-chat" active={viewStyle} value="chat" onPick={setViewStyle}>{t('settings.appearance.chat')}</Choice>
+              <Choice id="appearance-view-chat" active={viewStyle} value="chat" onPick={setViewStyle}>{t('settings.appearance.chatView')}</Choice>
             </div>
           </div>
 

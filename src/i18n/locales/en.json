@@ -1550,7 +1550,5 @@
   "onboarding.densityCompact": "Compact",
   "onboarding.densityDefault": "Default",
   "onboarding.densityComfortable": "Roomy",
-  "onboarding.moreInAppearance": "Date format, signatures and more live in Settings → Appearance.",
-  "settings.appearance.tagcloud": "Tag Cloud",
-  "settings.appearance.chat": "Chat View"
+  "onboarding.moreInAppearance": "Date format, signatures and more live in Settings → Appearance."
 }
