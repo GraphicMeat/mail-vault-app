@@ -377,8 +377,11 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
 
 .mv-lang li a {
   position: relative;
-  display: grid;
-  place-items: center;
+  /* flex, not grid: the endonym text after the flag would be a second grid item
+     and get its own row, pushing the flag off centre. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 34px;
   height: 34px;
   padding: 0 6px;
@@ -408,8 +411,11 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
 .mv-lang li a[aria-current="page"] span {
   filter: saturate(1);
   opacity: 1;
-  transform: translateY(-1px);
 }
+/* The lift is interaction feedback only — on the current page it would sit
+   permanently off-centre, and the underline already says which one is live. */
+.mv-lang li a:hover span,
+.mv-lang li a:focus-visible span { transform: translateY(-1px); }
 .mv-lang li a:hover::after,
 .mv-lang li a:focus-visible::after,
 .mv-lang li a[aria-current="page"]::after { transform: scaleX(1); }
@@ -425,6 +431,5 @@ nav.glass:has(#mobile-menu:not(.hidden)) {
   .mv-lang li a span,
   .mv-lang li a::after { transition: none; }
   .mv-lang li a:hover span,
-  .mv-lang li a:focus-visible span,
-  .mv-lang li a[aria-current="page"] span { transform: none; }
+  .mv-lang li a:focus-visible span { transform: none; }
 }
