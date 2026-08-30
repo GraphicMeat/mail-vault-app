@@ -7,20 +7,19 @@ import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
 import './styles/index.css';
 
-// Apply the persisted language before first paint, so the UI and the native
-// menu come up in the chosen locale rather than flashing English.
+// Apply the persisted language once the store has hydrated — and NOT before.
 //
-// This call alone is not enough. Settings persist through Tauri
-// (`src/stores/safeStorage.js`), so `getItem` returns a Promise and zustand
-// hydrates *after* this module runs — the read below always sees the default
-// `en`. The restored language then lands in the store on its own, repainting
-// every subscriber against a catalog that is still English. So apply it again
-// when hydration finishes.
-const applyPersistedLocale = () =>
+// Settings persist through Tauri (`src/stores/safeStorage.js`), so `getItem`
+// returns a Promise and hydration finishes after this module runs. Reading the
+// language here would see the default `en`; worse, *publishing* it would call
+// `setState`, and persist writes that through to `safeStorage` immediately.
+// `ensureLoaded` then finds the key already cached and skips the disk copy
+// entirely — dropping not just the language but every setting the user saved.
+// An eager call here cost the seeded `listPaneSize` in a screenshot run before
+// anyone noticed it was costing real users their whole settings file.
+useSettingsStore.persist?.onFinishHydration?.(() => {
   setLocale(useSettingsStore.getState().language || 'en').catch(() => {});
-
-applyPersistedLocale();
-useSettingsStore.persist?.onFinishHydration?.(applyPersistedLocale);
+});
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
 
 // A row can vanish at four layers — the sidecar cache, `emails`, the filters
@@ -49,6 +48,10 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./i18n/index.js').then(({ setLocale, getLocale, t }) => {
     window.__I18N__ = { setLocale, getLocale, t };
   });
+  // The language is a *persisted* setting read through async storage, so a run
+  // that wants to know why the UI is English needs to see hydration itself —
+  // not just the locale it ended up with.
+  window.__SETTINGS_STORE__ = useSettingsStore;
   import('./stores/searchStore').then(({ useSearchStore }) => {
     window.__SEARCH_STORE__ = useSearchStore;
   });
