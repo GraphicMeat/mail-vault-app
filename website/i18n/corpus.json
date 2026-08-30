@@ -488,6 +488,7 @@
     "5cf7b1d660e7": "There is a known Microsoft server-side issue affecting personal Outlook.com, Hotmail, and Live.com accounts since late 2024. After signing in with your Microsoft account, the IMAP connection fails with 'User is authenticated but not connected.' Microsoft's IMAP service has a regression that prevents OAuth2-authenticated sessions from connecting. Microsoft 365 Business/Enterprise accounts are not affected. MailVault's OAuth2 implementation is ready and will work once Microsoft resolves the issue."
   },
   "02": {
+    "a0d9bbad5f93": "Pricing",
     "d4488842e423": "Proton Mail encrypts your mail end-to-end, so it doesn't expose IMAP directly. Connecting it to MailVault requires Proton Mail Bridge, a desktop app from Proton that runs locally and exposes your encrypted mailbox as standard IMAP/SMTP on 127.0.0.1. Bridge requires a paid Proton Mail plan. Install Bridge, sign in with your Proton account, then copy the Bridge-generated IMAP/SMTP credentials (not your Proton account password). In MailVault, choose Proton Mail Bridge in the provider list (or Custom IMAP) with server 127.0.0.1, IMAP port 1143 with STARTTLS, SMTP port 1025, your Proton email as the username, and the Bridge password. Bridge must be running for MailVault to sync, though archived mail stays readable in MailVault even when Bridge is off. Bridge's self-signed certificate is handled automatically by MailVault for local connections.",
     "2867d6dccb6a": "Yes. In Settings → Accounts, fill in the Send Mail As field for the account, or leave it blank to send from your login address. Only the From address on outgoing mail changes — your username and password stay the same, MailVault still signs in to IMAP and SMTP as the account you set up, and no Reply-To header is added. MailVault suggests addresses it has seen in your own mail, and a Verify button sends a single test message from the address so you can confirm your provider accepts it. The address must be an alias your provider lets that login send from: Fastmail accepts any alias on the account, Gmail requires it under \"Send mail as\" in Gmail settings, and Microsoft 365 requires Send As permission.",
     "a73c5a3fc246": "Attachments are embedded inside each .eml file as MIME parts — they are not stored as separate files. When you open an email, MailVault's Rust backend parses the MIME structure and extracts attachments on the fly. You can Open, Save As, or Show in Folder any attachment directly from the email viewer.",
@@ -644,7 +645,6 @@
     "3baec7f6b0bc": "Explore every MailVault feature: email management, threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more.",
     "70f8bb9a8a53": "Home",
     "2dcfbd50f79f": "MailVault — Archive IMAP Emails Locally | Free Up Server Storage on Mac &amp; Linux",
-    "a0d9bbad5f93": "Pricing",
     "2bea083b5be7": "Now available for macOS &amp; Linux",
     "531a1ec08967": "Download Free",
     "06e3cc249c26": "All platforms &amp; formats &darr;",
