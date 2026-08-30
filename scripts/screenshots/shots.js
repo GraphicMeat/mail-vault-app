@@ -17,8 +17,27 @@
 import { waitForApp, waitForEmails, openSettings, closeSettings, pressKey } from '../../tests/e2e/helpers.js';
 import { capture } from './capture.js';
 import { demoScenarios } from './demoData.js';
+import { makeLabels } from './labels.js';
+import { appCode } from './locales.js';
 
-const { MARKERS } = demoScenarios('en');
+// One env var picks the language, the mailbox and the output directory.
+const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
+const APP_LOCALE = appCode(LOCALE_DIR);
+
+/**
+ * Every UI string this file clicks or asserts on comes from the app's own
+ * catalog. Hardcoded English breaks the moment the chrome is German — and
+ * breaks silently, because a finder that matches nothing leaves the previous
+ * screen up and the shot is taken anyway.
+ */
+const L = makeLabels(APP_LOCALE);
+const { MARKERS } = demoScenarios(APP_LOCALE);
+
+// The chat view groups by topic, and the topic row shows the thread subject.
+// `Rack & Rind` is a brand and identical in every locale, so it is the one
+// stable needle in a subject whose other words all move.
+const THREAD_NEEDLE = 'Rack & Rind';
+
 
 const SETTLE = 900;
 
@@ -85,7 +104,7 @@ const probe = () => browser.execute(() => {
     rows: document.querySelectorAll('[data-testid="email-row"]').length,
     senderRows: document.querySelectorAll('[data-testid="sender-group-row"]').length,
     grouped: !!document.querySelector('button[title="Switch to chronological view"]'),
-    viewerEmpty: text.includes('Select an email to read'),
+    viewerEmpty: text.includes(L('viewer.selectEmailRead')),
     iframes: document.querySelectorAll('iframe').length,
     // Full text, not a slice: assertions match against content far below the
     // fold (an attachment chip, a settings heading). Truncation happens where
@@ -158,9 +177,9 @@ async function step(name, fn, settle) {
 async function openAppearance() {
   await openSettings();
   await browser.pause(500);
-  await clickByText('General');
+  await clickByText(L('settings.tab.general'));
   await browser.pause(400);
-  await clickByText('Appearance');
+  await clickByText(L('settings.appearance.appearance'));
   await browser.pause(500);
 }
 
@@ -188,45 +207,48 @@ const openBulkModal = () => browser.execute(() => {
 async function resetToInbox() {
   // Compose closes through its own Close button — Escape only minimises it into
   // the outbox tray, where it kept photobombing the next four shots.
-  await browser.execute(() => {
-    document.querySelector('[data-testid="compose-modal"] button[title="Close"]')?.click();
-  });
+  await browser.execute((close) => {
+    document.querySelector(`[data-testid="compose-modal"] button[title="${close}"]`)?.click();
+  }, L('common.close'));
   await browser.pause(500);
-  await browser.execute(() => {
+  await browser.execute((label) => {
     for (const b of document.querySelectorAll('button')) {
-      if (b.offsetHeight > 0 && /^discard$/i.test((b.textContent || '').trim())) b.click();
+      if (b.offsetHeight > 0 && (b.textContent || '').trim().toLowerCase() === label.toLowerCase()) b.click();
     }
-  });
+  }, L('common.discard'));
   await browser.pause(400);
-  await browser.execute(() => {
+  await browser.execute((cancel, clear, close) => {
     // Any open modal keeps its own X; leaving one up photobombs later shots.
     for (const b of document.querySelectorAll('button')) {
       if (b.offsetHeight === 0) continue;
       const text = (b.textContent || '').trim();
-      if (text === 'Cancel' || /^(close|dismiss)$/i.test(b.getAttribute('title') || '')) b.click();
+      const title = (b.getAttribute('title') || '').toLowerCase();
+      if (text === cancel || title === close.toLowerCase() || /^(close|dismiss)$/.test(title)) b.click();
     }
     // Search: clear the query, then collapse the bar.
     for (const b of document.querySelectorAll('button')) {
-      if (b.offsetHeight > 0 && (b.textContent || '').trim() === 'Clear') b.click();
+      if (b.offsetHeight > 0 && (b.textContent || '').trim() === clear) b.click();
     }
     // The insights panel is a toggle: it only closes by clicking the same
     // control again, and it stayed open across four shots when it did not.
     const panel = document.querySelector('[data-testid="sender-insights-panel"]');
     if (panel && panel.offsetHeight > 0) document.querySelector('[data-testid="sender-insights-toggle"]')?.click();
     document.body.click(); // popovers and dropdowns close on an outside click
-  });
+  }, L('common.cancel'), L('common.clear'), L('common.close'));
   await browser.pause(400);
-  await browser.execute(() => {
-    const search = document.querySelector('input[placeholder*="Search"], input[placeholder*="search"]');
-    if (search && search.offsetHeight > 0) document.querySelector('button[title="Search emails"]')?.click();
-  });
+  await browser.execute((searchEmails) => {
+    const search = document.querySelector(`input[placeholder="${searchEmails}"]`)
+      || document.querySelector('input[type="search"], input[placeholder]');
+    if (search && search.offsetHeight > 0) document.querySelector(`button[title="${searchEmails}"]`)?.click();
+  }, L('list.searchEmails'));
   await pressKey('Escape');
   await browser.pause(400);
-  await browser.execute(() => {
+  await browser.execute((clearSel, cancel) => {
     for (const b of document.querySelectorAll('button')) {
-      if (b.offsetHeight > 0 && /^(clear selection|cancel)$/i.test((b.textContent || '').trim())) b.click();
+      const t = (b.textContent || '').trim().toLowerCase();
+      if (b.offsetHeight > 0 && (t === clearSel.toLowerCase() || t === cancel.toLowerCase())) b.click();
     }
-  });
+  }, L('selection.clearSelection'), L('common.cancel'));
   await browser.pause(500);
 }
 
@@ -255,7 +277,7 @@ describe('MailVault marketing screenshots', function () {
       await clickRow(MARKERS.newsletter);
       // An HTML body renders inside an iframe, and iframe text never reaches
       // body.innerText — assert on the frame and the header instead.
-      await expectState((s) => !s.viewerEmpty && s.iframes > 0 && s.text.includes('MeatPad 0.9'),
+      await expectState((s) => !s.viewerEmpty && s.iframes > 0 && s.text.includes(MARKERS.newsletter.slice(0, 12)),
         'newsletter body did not render');
     });
 
@@ -272,33 +294,34 @@ describe('MailVault marketing screenshots', function () {
     // ── Search ────────────────────────────────────────────────────────────
     await step('search-results', async () => {
       await resetToInbox();
-      if (!(await clickByTitle('Search emails'))) throw new Error('search toggle not found');
+      if (!(await clickByTitle(L('list.searchEmails')))) throw new Error('search toggle not found');
       await browser.pause(500);
-      await browser.execute(() => {
-        const input = document.querySelector('input[placeholder*="Search"], input[placeholder*="search"]');
+      await browser.execute((searchEmails) => {
+        const input = document.querySelector(`input[placeholder="${searchEmails}"]`)
+          || document.querySelector('input[type="search"], input[placeholder]');
         if (!input) return;
         input.focus();
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
         setter.call(input, 'Rack & Rind');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-      });
+      }, L('list.searchEmails'));
       await browser.pause(900);
-      if (!(await clickByText('Search'))) await browser.keys(['Enter']);
-      await expectState((s) => s.text.includes('Search Results') || s.text.includes('found'),
+      if (!(await clickByText(L('search.search')))) await browser.keys(['Enter']);
+      await expectState((s) => s.text.includes(L('list.searchResults')) || s.text.includes(L('search.found')),
         'search results header missing', 20000);
       await browser.pause(800);
     });
 
     // ── Security ──────────────────────────────────────────────────────────
     await step('link-safety', async () => {
-      await browser.execute(() => {
+      await browser.execute((clear) => {
         for (const b of document.querySelectorAll('button')) {
-          if (b.offsetHeight > 0 && (b.textContent || '').trim() === 'Clear') b.click();
+          if (b.offsetHeight > 0 && (b.textContent || '').trim() === clear) b.click();
         }
-      });
+      }, L('common.clear'));
       await browser.pause(800);
       await clickRow(MARKERS.phishing);
-      await expectState((s) => !s.viewerEmpty && s.text.includes('Action required'),
+      await expectState((s) => !s.viewerEmpty && s.text.includes(MARKERS.phishing.slice(0, 12)),
         'phishing message did not open');
     });
 
@@ -317,11 +340,11 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('reply-to-mismatch', async () => {
-      await browser.execute(() => {
+      await browser.execute((clear) => {
         for (const b of document.querySelectorAll('button')) {
-          if (b.offsetHeight > 0 && (b.textContent || '').trim() === 'Cancel') b.click();
+          if (b.offsetHeight > 0 && (b.textContent || '').trim() === clear) b.click();
         }
-      });
+      }, L('common.clear'));
       await browser.pause(500);
       await resetToInbox();
       await clickRow(MARKERS.replyTo);
@@ -334,7 +357,7 @@ describe('MailVault marketing screenshots', function () {
     await step('compose-email', async () => {
       await resetToInbox();
       // The keyboard shortcut needs focus in the list; the button never misses.
-      if (!(await clickByText('Compose'))) await pressKey('c');
+      if (!(await clickByText(L('sidebar.compose')))) await pressKey('c');
       await expectState((s) => s.compose, 'compose did not open');
       await browser.execute(() => {
         const set = (el, value) => {
@@ -363,13 +386,13 @@ describe('MailVault marketing screenshots', function () {
       await browser.pause(600);
       if (!(await openBulkModal())) throw new Error('bulk modal did not open');
       await expectState(hasText('Bulk Email Operations'), 'bulk modal step 1 not on screen');
-      await clickByText('Last 90 Days');
+      await clickByText(L('bulk.ops.last90Days'));
       await expectState(hasText('emails selected'), 'range selection produced no count');
       await browser.pause(900);
     });
 
     await step('selection-dialog-archive', async () => {
-      await clickByText('Next');
+      await clickByText(L('bulk.ops.next'));
       await browser.pause(800);
       if (!(await clickTestId('bulk-action-archive'))) throw new Error('archive action not offered');
       await expectState(hasText('Start Archive'), 'archive confirm not on screen');
@@ -391,18 +414,18 @@ describe('MailVault marketing screenshots', function () {
     await step('local-vault', async () => {
       await resetToInbox();
       await browser.pause(600);
-      if (!(await clickByText('Local'))) throw new Error('Local view mode not found');
+      if (!(await clickByText(L('sidebar.viewVault')))) throw new Error('vault view mode not found');
       await expectState((s) => s.rows > 0, 'local view has no rows');
     });
 
     await step('state-icons', async () => {
-      if (!(await clickByText('All'))) throw new Error('All view mode not found');
+      if (!(await clickByText(L('sidebar.viewAll')))) throw new Error('all view mode not found');
       await expectState((s) => s.rows > 0, 'all view has no rows');
     });
 
     // ── Grouping ──────────────────────────────────────────────────────────
     await step('sender-grouped-view', async () => {
-      if (!(await clickByTitle('Group by sender'))) throw new Error('grouping toggle not found');
+      if (!(await clickByTitle(L('list.groupSender')))) throw new Error('grouping toggle not found');
       await expectState((s) => s.grouped && s.senderRows > 0, 'sender groups did not render');
     });
 
@@ -417,9 +440,9 @@ describe('MailVault marketing screenshots', function () {
 
     // ── Chat view ─────────────────────────────────────────────────────────
     await step('chat-view', async () => {
-      await clickByTitle('Switch to chronological view');
+      await clickByTitle(L('list.switchChronologicalView'));
       await browser.pause(600);
-      await setAppearance('Chat View');
+      await setAppearance(L('settings.appearance.chatView'));
       await expectState((s) => s.chat, 'chat view did not render');
     });
 
@@ -441,25 +464,25 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('chat-view-thread', async () => {
-      const opened = await browser.execute(() => {
+      const opened = await browser.execute((needle) => {
         const target = [...document.querySelectorAll('[data-testid="chat-view"] *')]
-          .filter((el) => el.offsetHeight > 30 && (el.innerText || '').includes('Rack & Rind'))
+          .filter((el) => el.offsetHeight > 30 && (el.innerText || '').includes(needle))
           .sort((a, b) => (a.innerText || '').length - (b.innerText || '').length)[0];
         if (!target) return false;
         target.click();
         return true;
-      });
+      }, THREAD_NEEDLE);
       if (!opened) throw new Error('no topic to open in chat view');
       // The bubble view is identified by its reply footer; bodies stream in one
       // fetch at a time behind it, so waiting on body text is a race.
-      await expectState((s) => s.chat && s.text.includes('Reply'),
+      await expectState((s) => s.chat && s.text.includes(L('chat.bubble.reply')),
         'conversation bubbles did not render', 20000);
       await browser.pause(2500); // let every bubble body land before the shutter
     });
 
     // ── Multi-account ─────────────────────────────────────────────────────
     await step('unified-inbox', async () => {
-      await setAppearance('List View');
+      await setAppearance(L('settings.appearance.listView'));
       await browser.pause(800);
       if (!(await clickTestId('all-inboxes-btn'))) throw new Error('All Inboxes button not found');
       await expectState((s) => s.rows > 0 && /all inboxes/i.test(s.text), 'unified inbox did not load', 30000);
@@ -476,31 +499,31 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('settings-storage', async () => {
-      if (!(await clickByText('Storage'))) throw new Error('storage tab not found');
+      if (!(await clickByText(L('settings.tab.storage')))) throw new Error('storage tab not found');
       await expectState((s) => s.settings && /storage/i.test(s.text), 'storage tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-backup', async () => {
-      if (!(await clickByText('Backup & Restore'))) throw new Error('backup tab not found');
+      if (!(await clickByText(L('settings.tab.backup')))) throw new Error('backup tab not found');
       await expectState((s) => s.settings && /backup/i.test(s.text), 'backup tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-backup-schedule', async () => {
-      if (!(await clickByText('Backup Schedule'))) throw new Error('backup schedule tab not found');
+      if (!(await clickByText(L('settings.backup.backupSchedule')))) throw new Error('backup schedule tab not found');
       await expectState((s) => s.settings && /schedule/i.test(s.text), 'backup schedule not on screen');
       await browser.pause(900);
     });
 
     await step('settings-security', async () => {
-      if (!(await clickByText('Security'))) throw new Error('security tab not found');
+      if (!(await clickByText(L('settings.tab.security')))) throw new Error('security tab not found');
       await expectState((s) => s.settings && /security/i.test(s.text), 'security tab not on screen');
       await browser.pause(900);
     });
 
     await step('settings-time-capsule', async () => {
-      if (!(await clickByText('Time Capsule'))) throw new Error('time capsule tab not found');
+      if (!(await clickByText(L('settings.tab.timeCapsule')))) throw new Error('time capsule tab not found');
       await expectState((s) => s.settings && /time capsule/i.test(s.text), 'time capsule tab not on screen');
       await browser.pause(900);
     });
