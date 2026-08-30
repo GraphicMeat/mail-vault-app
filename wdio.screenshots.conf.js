@@ -26,6 +26,7 @@ import {
 } from './tests/e2e/mockImap.js';
 import { demoScenarios } from './scripts/screenshots/demoData.js';
 import { appCode } from './scripts/screenshots/locales.js';
+import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
 
 // SHOTS_LOCALE is a website directory name (`de`, `pt-br`, `zh`). It picks the
 // app language, the demo mailbox and the output directory together — one knob,
@@ -75,7 +76,7 @@ function seedFrontendSettings(accounts) {
         // Without this the run photographs the upsell card instead of the
         // feature: hasPremiumAccess() reads the persisted profile, and a
         // packaged build cannot use the dev override.
-        billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' },
+        billingProfile: PREMIUM_BILLING_PROFILE,
         // An unlocked premium screen is usually an empty one — seed what each
         // screen needs to look like a working feature instead of a blank panel.
         //

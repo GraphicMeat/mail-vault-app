@@ -607,6 +607,14 @@ describe('MailVault marketing screenshots', function () {
       // A real check against the mock IMAP server and the local maildir —
       // reachable at all only because the account card is unlocked.
       await $('[data-testid="backup-verification-tree"]').waitForExist({ timeout: 15000 });
+      // BackupAccountCard does not omit the locked UI, it BLURS a live copy of
+      // it (opacity/blur + pointer-events-none, with an upsell on top) — and
+      // pointer-events-none does not stop the el.click() clickByText uses, so
+      // the button above is reachable and the tree still mounts even locked.
+      // Only this overlay's absence actually proves the seed unlocked it.
+      if (await $('[data-testid="backup-schedule-locked"]').isExisting()) {
+        throw new Error('backup card is still behind the locked overlay — entitlement not applied');
+      }
       await browser.pause(400);
     });
 
@@ -664,6 +672,13 @@ describe('MailVault marketing screenshots', function () {
       // real progress and a folder checklist — "progress you can watch" —
       // instead of step 1 of an empty wizard.
       await $('[data-testid="migration-progress"]').waitForExist({ timeout: 8000 });
+      // MigrationSettings does not omit mainContent when locked, it BLURS the
+      // same live tree (opacity/blur + pointer-events-none) under an upsell —
+      // so migration-progress mounts either way once activeMigration is
+      // seeded. Only this overlay's absence actually proves it is unlocked.
+      if (await $('[data-testid="migration-locked"]').isExisting()) {
+        throw new Error('migration panel is still behind the locked overlay — entitlement not applied');
+      }
       await browser.pause(400);
     });
 

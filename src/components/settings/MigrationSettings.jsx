@@ -648,7 +648,7 @@ export default function MigrationSettings({ onUpgrade }) {
           <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
             {mainContent}
           </div>
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
+          <div data-testid="migration-locked" className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-6">
               <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
                 <ArrowLeftRight size={20} className="text-mail-accent-text" />

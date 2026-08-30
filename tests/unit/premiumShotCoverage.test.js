@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { PREMIUM_FEATURES } from '../../src/data/premiumFeatures.js';
+import { PREMIUM_BILLING_PROFILE } from '../../scripts/screenshots/premiumSeed.js';
+import { hasPremiumAccess } from '../../src/stores/settingsStore.js';
 
 const shots = readFileSync('scripts/screenshots/shots.js', 'utf8');
 const conf = readFileSync('wdio.screenshots.conf.js', 'utf8');
@@ -14,10 +16,15 @@ describe('premium screenshot coverage', () => {
   });
 
   // Without a seeded profile the run photographs the upsell card, which is how
-  // the website ended up with no usable premium screenshot at all.
+  // the website ended up with no usable premium screenshot at all. A text
+  // match on the seed's shape (e.g. `premiumAccess: true` appearing ANYWHERE
+  // in the file) would still pass next to a stray `clientAccessGranted: false`
+  // — that field outranks the subscription in hasPremiumAccess's own
+  // precedence order — so this checks the wiring AND feeds the real seeded
+  // object through the app's own gate function instead of guessing at its shape.
   it('seeds an entitled profile so the real UI renders', () => {
-    expect(conf).toMatch(/billingProfile:\s*\{[^}]*hasSubscription:\s*true/s);
-    expect(conf).toMatch(/premiumAccess:\s*true/);
+    expect(conf).toContain('billingProfile: PREMIUM_BILLING_PROFILE');
+    expect(hasPremiumAccess(PREMIUM_BILLING_PROFILE)).toBe(true);
   });
 
   // An assertion that matches the gate copy passes forever and can never notice
