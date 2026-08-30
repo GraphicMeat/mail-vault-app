@@ -567,13 +567,129 @@ describe('MailVault marketing screenshots', function () {
 
     await step('settings-time-capsule', async () => {
       if (!(await clickByText(L('settings.tab.timeCapsule')))) throw new Error('time capsule tab not found');
-      // The demo accounts are not premium, so this panel shows its upsell rather
-      // than the snapshot list. Accept either.
-      await expectState((s) => s.settings && [
-        L('settings.timeCapsule.timeCapsuleRequiresPremium'),
-        L('settings.timeCapsule.howTimeCapsuleWorks'),
-      ].some((phrase) => s.text.includes(phrase)), 'time capsule tab not on screen');
+      // With billingProfile seeded the real panel renders for every locale —
+      // wait for the create-snapshot control, which exists only once the
+      // feature is unlocked. Matching the gate copy here would have passed
+      // forever and never noticed entitlement working.
+      await expectState((s) => s.settings && s.text.includes(L('timeCapsule.takeSnapshot')),
+        'time capsule tab not on screen');
       await browser.pause(900);
+    });
+
+    // ── Premium features ─────────────────────────────────────────────────
+    //
+    // billingProfile is seeded premium (wdio.screenshots.conf.js), so every
+    // one of these renders the real feature, not the blur overlay or the
+    // upsell card. Each step opens Settings itself rather than assuming it is
+    // still open from the previous one, so SHOTS_ONLY can capture any single
+    // one of these standalone.
+
+    await step('premium-backup-schedule', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.backup'));
+      await browser.pause(400);
+      // The frequency picker only renders once the global switch is on
+      // (seeded backupGlobalEnabled) — the free state shows a disabled toggle
+      // and nothing below it.
+      await expectState(hasText(L('settings.backup.schedule.backupFrequency')),
+        'backup frequency picker not on screen');
+    });
+
+    await step('premium-backup-health', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.backup'));
+      await browser.pause(400);
+      if (!(await clickByText(L('settings.backup.account.verifyBackupCoverage')))) {
+        throw new Error('verify backup coverage control not found');
+      }
+      // A real check against the mock IMAP server and the local maildir —
+      // reachable at all only because the account card is unlocked.
+      await $('[data-testid="backup-verification-tree"]').waitForExist({ timeout: 15000 });
+      await browser.pause(400);
+    });
+
+    await step('premium-cleanup', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.cleanup'));
+      // The classifier auto-runs against the demo mailbox the moment this
+      // view mounts unlocked; the summary cards exist only once premium AND
+      // real results have landed, never for the free lock screen.
+      await $('[data-testid="cleanup-summary"]').waitForExist({ timeout: 45000 });
+    }, 1200);
+
+    await step('premium-auto-cleanup', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.storage'));
+      await browser.pause(600);
+      // Two seeded rules (wdio.screenshots.conf.js) so this shows configured
+      // rules rather than "no rules yet".
+      const row = await $('[data-testid="cleanup-rule-row"]');
+      await row.waitForExist({ timeout: 8000 });
+      await row.scrollIntoView({ block: 'center' });
+    });
+
+    await step('premium-time-capsule', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.timeCapsule'));
+      await browser.pause(400);
+      // Snapshots live on disk, not in seeded settings — take a real one from
+      // the already-synced demo mailbox so the list shows an actual entry
+      // instead of "no snapshots yet".
+      if (!(await clickByText(L('timeCapsule.takeSnapshot')))) throw new Error('take snapshot control not found');
+      await $('[data-testid="snapshot-row"]').waitForExist({ timeout: 20000 });
+    }, 1000);
+
+    // Tracker removal: the switch and the stripped-beacon sample, not the upsell
+    // card — with billingProfile seeded the real view renders for everyone.
+    await step('premium-tracker-blocking', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.tracking'));
+      await browser.pause(400);
+      // Wait for a control that exists only when the feature is unlocked. Waiting
+      // on the gate copy would pass forever and prove nothing.
+      await $('[data-testid="tracker-blocking-toggle"]').waitForExist({ timeout: 5000 });
+    });
+
+    await step('premium-migration', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.migration'));
+      // A seeded in-flight job (wdio.screenshots.conf.js) so the shot shows
+      // real progress and a folder checklist — "progress you can watch" —
+      // instead of step 1 of an empty wizard.
+      await $('[data-testid="migration-progress"]').waitForExist({ timeout: 8000 });
+      await browser.pause(400);
+    });
+
+    await step('premium-server-change', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.accounts'));
+      await browser.pause(500);
+      // Unlike the rest of this section, Change Server has no entitlement gate
+      // today — the modal opens for every user. This shot proves the guided
+      // flow renders; it is not evidence of an unlock.
+      if (!(await clickByText(L('settings.accounts.changeServer')))) throw new Error('change server control not found');
+      await expectState(hasText(L('changeServer.imapHost')), 'change server dialog not on screen');
+    });
+
+    await step('premium-export-image', async () => {
+      await closeSettings();
+      await browser.pause(500);
+      await resetToInbox();
+      await clickRow(MARKERS.newsletter);
+      await browser.pause(500);
+      // "Export" is hardcoded English in EmailActionBar itself (a pre-existing
+      // gap, not a catalog key) — the literal is stable across every locale
+      // because the app never translates it, not because this file assumes so.
+      if (!(await clickByTitle('Export'))) throw new Error('export control not found');
+      await expectState(hasText(L('export.dialog.mirrorRemoteContent')), 'export dialog not on screen');
     });
 
     await step('shortcuts-modal', async () => {

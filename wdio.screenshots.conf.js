@@ -54,8 +54,12 @@ let mockServers = [];
  * (src/stores/safeStorage.js — WKWebView's localStorage throws under the App
  * Sandbox). Seeding it is the only way to start a run with a mailbox that
  * photographs well: a 350px list pane truncates every subject to "Invoic…".
+ *
+ * `accounts` (the mock accounts this run already created) lets the migration
+ * fixture below point at real, resolvable email addresses instead of a made
+ * up pair `MigrationSettings` could never look up.
  */
-function seedFrontendSettings() {
+function seedFrontendSettings(accounts) {
   const path = join(appDataDir(dataDir), 'frontend-settings.json');
   writeFileSync(path, JSON.stringify({
     'mailvault-settings': {
@@ -68,6 +72,44 @@ function seedFrontendSettings() {
         // seeding it here IS "run the app in German" — no handle to drive, no
         // catalog to swap after boot, nothing for the first shot to race.
         language: APP_LOCALE,
+        // Without this the run photographs the upsell card instead of the
+        // feature: hasPremiumAccess() reads the persisted profile, and a
+        // packaged build cannot use the dev override.
+        billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' },
+        // An unlocked premium screen is usually an empty one — seed what each
+        // screen needs to look like a working feature instead of a blank panel.
+        //
+        // Auto-cleanup rules (Storage tab). Real shape per StorageSettings.jsx
+        // (account/folder/age/unit/action, NOT the accountEmail/olderThan shape
+        // cleanupEngine.js reads internally — that mismatch means a real rule
+        // never actually fires today, so `enabled: true` here is safe: nothing
+        // will archive or delete real demo mail in the background).
+        cleanupRules: [
+          { id: '11111111-1111-4111-8111-111111111111', account: 'all', folder: 'INBOX', age: 30, unit: 'days', action: 'archive-then-delete', enabled: true },
+          { id: '22222222-2222-4222-8222-222222222222', account: 'all', folder: 'Trash', age: 90, unit: 'days', action: 'delete', enabled: true },
+        ],
+        // Automatic Backup Schedule (Backup tab): turns on the frequency
+        // picker BackupSchedule.jsx only renders once this is true.
+        backupGlobalEnabled: true,
+        // Migration (Migration tab): a job already in flight, so the shot
+        // shows real progress and a folder checklist instead of step 1 of an
+        // empty wizard. Source/dest are two of this run's own mock accounts —
+        // MigrationSettings.jsx resolves them by email to draw the avatars.
+        activeMigration: {
+          status: 'running',
+          source_email: accounts[0].email,
+          dest_email: accounts[1].email,
+          migrated_emails: 128,
+          total_emails: 240,
+          skipped_emails: 4,
+          failed_emails: 0,
+          elapsed_seconds: 96,
+          current_folder: 'INBOX',
+          folders: [
+            { source_path: 'INBOX', status: 'completed', total: 80, done: 80 },
+            { source_path: 'Archive', status: 'in_progress', total: 160, done: 48 },
+          ],
+        },
       },
     },
   }, null, 2));
@@ -97,7 +139,7 @@ export const config = {
       id: a.id, email: a.email, name: a.name, port: mockServers[i].port,
     }));
     const credentialsPath = seedAccounts(dataDir, accounts);
-    seedFrontendSettings();
+    seedFrontendSettings(accounts);
 
     process.env.SHOTS_ACCOUNTS = JSON.stringify(accounts);
     process.env.SHOTS_DATA_DIR = dataDir;

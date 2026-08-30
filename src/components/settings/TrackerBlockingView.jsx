@@ -119,6 +119,7 @@ export function TrackerBlockingView({ onUpgrade }) {
             <ToggleSwitch
               active={trackerBlockingEnabled}
               onClick={() => setTrackerBlockingEnabled(!trackerBlockingEnabled)}
+              testId="tracker-blocking-toggle"
             />
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-mail-text-muted shrink-0">

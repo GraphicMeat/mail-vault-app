@@ -801,7 +801,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
     : null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="migration-progress">
       {/* Header: source -> dest */}
       <div className="flex items-center gap-3">
         {srcAccount && (

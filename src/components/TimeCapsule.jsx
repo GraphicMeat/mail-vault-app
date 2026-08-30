@@ -174,6 +174,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
           {snapshots.map(snap => (
             <div
               key={snap.filename}
+              data-testid="snapshot-row"
               className="group bg-mail-surface border border-mail-border rounded-xl p-4 flex items-center justify-between hover:border-mail-accent/40 cursor-pointer transition-all"
               onClick={() => onOpen(snap.filename)}
             >

@@ -69,7 +69,7 @@ export default function BackupVerificationTree({ data, onHide }) {
   const appPct = total_server > 0 ? Math.round((total_app / total_server) * 100) : 0;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" data-testid="backup-verification-tree">
       <div className="flex items-center justify-between">
         <span className="text-xs font-semibold text-mail-text">{t('settings.backup.verify.backupVerification')}</span>
         <Button variant="ghost" size="xs" className="p-0 text-xs" onClick={onHide}>{t('settings.backup.verify.hide')}</Button>

@@ -656,8 +656,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           </div>
         )}
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Summary Cards — only reachable once premium AND classification has
+            produced results; a stable hook for the marketing shot. */}
+        <div className="grid grid-cols-3 gap-4" data-testid="cleanup-summary">
           <div className="p-4 rounded-xl bg-mail-surface border border-mail-border text-center">
             <p className="text-2xl font-bold text-mail-text">{mailboxTotal.toLocaleString()}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.classified')}</p>

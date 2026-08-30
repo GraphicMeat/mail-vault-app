@@ -442,7 +442,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
             {cleanupRules.length > 0 && (
               <div className="space-y-2">
                 {cleanupRules.map((rule) => (
-                  <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
+                  <div key={rule.id} data-testid="cleanup-rule-row" className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
                     <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
                       <span className="font-medium text-mail-text">{decodeImapUtf7(rule.folder)}</span>
                       <span className="text-mail-text-muted truncate">
