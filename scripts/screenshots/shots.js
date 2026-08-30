@@ -193,6 +193,13 @@ async function shot(name, settle = SETTLE) {
   await browser.pause(settle);
   const state = await probe();
   console.log(`[state] ${name}`, JSON.stringify({ ...state, text: state.text.slice(0, 120) }));
+  // Clicking through the sidebar/list leaves a focus ring on whatever was
+  // clicked last, and it rides along into the capture. Guarded: some shots
+  // deliberately show a focused field with a caret (compose, search).
+  await browser.execute(() => {
+    const el = document.activeElement;
+    if (el && el !== document.body && !/^(INPUT|TEXTAREA)$/.test(el.tagName) && !el.isContentEditable) el.blur();
+  });
   capture(name);
 }
 
