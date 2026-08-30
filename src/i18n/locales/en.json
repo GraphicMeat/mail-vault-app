@@ -1527,5 +1527,7 @@
   "premium.devices.blurb": "One subscription covers up to five installations, managed automatically.",
   "premium.list.title": "What Premium includes",
   "premium.list.included": "Included",
-  "premium.list.locked": "Requires Premium"
+  "premium.list.locked": "Requires Premium",
+  "onboarding.splashTrustLine": "Your mail stays on this computer. No account, no telemetry.",
+  "common.continue": "Continue"
 }
