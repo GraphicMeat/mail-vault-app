@@ -7,32 +7,39 @@ import { buildExport, SAMPLE } from '../../services/export/exportService';
 import { saveOneFile, openInDefaultApp } from '../../services/export/exportSaver';
 import { SAMPLE_MESSAGE, SAMPLE_THREAD, SAMPLE_META } from '../../utils/exportSampleData';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
-import { t as tr, t, useT   } from '../../i18n/index.js';
+import { t as tr, t, useT, getLocale } from '../../i18n/index.js';
 
 // Rendered once per session. The samples go through the real pipeline on
 // fixture data — if the renderer breaks, the upsell shows it before a customer
 // finds out. Never mirrored: a sample must not reach the network.
-let cached = null;
+// Keyed by locale: the fixtures are translated, so one cache entry would pin
+// the samples to whichever language rendered them first.
+const cached = new Map();
 
-async function renderSamples() {
-  if (cached) return cached;
+async function renderSamples(locale) {
+  if (cached.has(locale)) return cached.get(locale);
   const common = { ...SAMPLE_META, mirror: false, gate: SAMPLE, layout: 'single' };
+  // SAMPLE_MESSAGE / SAMPLE_THREAD are factories, not values — they read t()
+  // when called. Passing the function itself hands buildExport a message with
+  // no `html`, which fails the whole render and blanks every sample.
   const [single, thread, html] = await Promise.all([
-    buildExport({ ...common, messages: [SAMPLE_MESSAGE], format: 'image' }),
-    buildExport({ ...common, messages: SAMPLE_THREAD, format: 'image' }),
-    buildExport({ ...common, messages: SAMPLE_THREAD, format: 'html' }),
+    buildExport({ ...common, messages: [SAMPLE_MESSAGE()], format: 'image' }),
+    buildExport({ ...common, messages: SAMPLE_THREAD(), format: 'image' }),
+    buildExport({ ...common, messages: SAMPLE_THREAD(), format: 'html' }),
   ]);
-  cached = [
+  const built = [
     { key: 'single', label: tr('export.upsell.oneMessageImage'), kind: 'image', file: single.files[0] },
     { key: 'thread', label: tr('export.upsell.threadOneImage'), kind: 'image', file: thread.files[0] },
     { key: 'html', label: tr('export.upsell.threadOneHtmlFile'), kind: 'html', file: html.files[0] },
   ];
-  return cached;
+  cached.set(locale, built);
+  return built;
 }
 
 export function ExportUpsellModal({ open, onClose, onUpgrade }) {
   const t = useT();
-  const [samples, setSamples] = useState(cached);
+  const locale = getLocale();
+  const [samples, setSamples] = useState(() => cached.get(getLocale()) || null);
   const [failed, setFailed] = useState(false);
   // A dead Open button with a swallowed error is indistinguishable from one
   // that was never wired up: the shell plugin refused the file path and the
@@ -40,21 +47,23 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
   const [notice, setNotice] = useState(null);
 
   useEffect(() => {
-    if (!open || samples) return;
+    if (!open) return;
+    const ready = cached.get(locale);
+    if (ready) { setSamples(ready); return; }
     let cancelled = false;
-    renderSamples()
+    setSamples(null);
+    renderSamples(locale)
       .then(result => { if (!cancelled) setSamples(result); })
       .catch(() => { if (!cancelled) setFailed(true); });
     return () => { cancelled = true; };
-  }, [open, samples]);
+  }, [open, locale]);
 
   return (
     <Dialog open={open} onClose={onClose} z={Z.alert} portal size="xl"
       title={t('export.upsell.exportAnyMessageThread')}
       panelBg="bg-mail-surface">
       <p className="text-sm text-mail-text-muted">
-        Save mail as a dated image, or as a single HTML file that folds a thread into a list you can
-        expand — remote images mirrored in, so it still reads with the network unplugged.
+        {t('export.upsell.saveMailAsDatedImage')}
       </p>
 
       {failed && (
@@ -86,7 +95,7 @@ export function ExportUpsellModal({ open, onClose, onUpgrade }) {
                 <Button variant="secondary" size="sm" fullWidth
                   onClick={() => { setNotice(null); openInDefaultApp(sample.file).catch(e => setNotice(t('export.upsell.couldOpenSample', { e: e?.message || e }))); }}>{t('common.open')}</Button>
                 <Button variant="secondary" size="sm" fullWidth
-                  onClick={() => { setNotice(null); saveOneFile(sample.file, 'Save sample').catch(e => setNotice(t('export.upsell.couldSaveSample', { e: e?.message || e }))); }}>{t('common.save')}</Button>
+                  onClick={() => { setNotice(null); saveOneFile(sample.file, t('export.upsell.saveSample')).catch(e => setNotice(t('export.upsell.couldSaveSample', { e: e?.message || e }))); }}>{t('common.save')}</Button>
               </div>
             </div>
           ))}
