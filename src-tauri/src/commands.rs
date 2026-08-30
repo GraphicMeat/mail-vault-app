@@ -64,6 +64,22 @@ where
     }
 }
 
+/// The retry on a fresh connection already happened and the socket died again —
+/// the network is down, not the message. Say that instead of the protocol text
+/// ("Server refused UID FETCH 204: connection lost"), which reads as the server
+/// rejecting a message that is sitting right there. The raw error stays in the
+/// log; the code makes the sentence translatable.
+fn conn_lost_message(err: &str, account: &ImapConfig, uid: u32) -> String {
+    if imap::pool::is_connection_lost(err) {
+        format!(
+            "E_CONN_LOST: The connection to {} dropped while loading message {}",
+            account.host, uid
+        )
+    } else {
+        err.to_string()
+    }
+}
+
 // ── Test connection ─────────────────────────────────────────────────────────
 
 #[tauri::command]
@@ -310,11 +326,14 @@ pub async fn imap_get_email(
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let mb_name = mailbox.clone();
 
-    let email = with_priority(&pool, &account, |mut session| async move {
-        let result = imap::fetch_email_by_uid(&mut session, &mailbox, uid).await
-            .map_err(|e| format!("Failed to fetch email: {}", e))?;
-        Ok((result, session, Some(mailbox)))
-    }).await?;
+    let email = pool.run_read(&account, true, |mut session| {
+        let mailbox = mailbox.clone();
+        async move {
+            let result = imap::fetch_email_by_uid(&mut session, &mailbox, uid).await
+                .map_err(|e| format!("Failed to fetch email: {}", e))?;
+            Ok((result, session, Some(mailbox)))
+        }
+    }).await.map_err(|e| conn_lost_message(&e, &account, uid))?;
 
     match email {
         Some(e) => Ok(serde_json::json!({
@@ -358,23 +377,14 @@ pub async fn imap_get_email_light(
     let use_background = background.unwrap_or(false);
     let started = std::time::Instant::now();
 
-    let fetch = async {
-        if use_background {
-            let mb = mailbox.clone();
-            with_background(&pool, &account, move |mut session| async move {
-                let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await
-                    .map_err(|e| format!("Failed to fetch email: {}", e))?;
-                Ok((result, session, Some(mb)))
-            }).await
-        } else {
-            let mb = mailbox.clone();
-            with_priority(&pool, &account, move |mut session| async move {
-                let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await
-                    .map_err(|e| format!("Failed to fetch email: {}", e))?;
-                Ok((result, session, Some(mb)))
-            }).await
+    let fetch = pool.run_read(&account, !use_background, |mut session| {
+        let mb = mailbox.clone();
+        async move {
+            let result = imap::fetch_email_by_uid_light(&mut session, &mb, uid).await
+                .map_err(|e| format!("Failed to fetch email: {}", e))?;
+            Ok((result, session, Some(mb)))
         }
-    };
+    });
 
     let email = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
         Ok(Ok(email)) => email,
@@ -383,7 +393,7 @@ pub async fn imap_get_email_light(
                 "[CMD] imap_get_email_light: FAILED uid={} mailbox={} background={} after {}ms: {}",
                 uid, mb_clone, use_background, started.elapsed().as_millis(), e
             );
-            return Err(e);
+            return Err(conn_lost_message(&e, &account, uid));
         }
         Err(_) => {
             let msg = format!(

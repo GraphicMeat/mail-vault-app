@@ -7,9 +7,9 @@
 
 mod common;
 
-use common::{config_for, pool, session};
+use common::{config_for, eml, pool, session};
 use mailvault_core::imap::*;
-use mock_imap::state::synthetic_mailbox;
+use mock_imap::state::{synthetic_mailbox, Mailbox};
 use mock_imap::{Action, MockImap, Scenario, Trigger};
 
 #[async_std::test]
@@ -201,4 +201,93 @@ async fn the_pool_caps_concurrent_sessions_per_account() {
         "returned sessions must be reused rather than reconnected"
     );
     pool.return_background(&config, g).await;
+}
+
+/// A pooled socket the peer closed while it sat idle answers the first command
+/// with nothing and dies. The user saw that as "Couldn't load this message" and
+/// a Try again button that worked on the first press — because the second press
+/// got a new connection. `run_read` presses it for them.
+#[async_std::test]
+async fn a_read_whose_socket_dies_retries_once_on_a_new_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            // Only the first body fetch dies; the replacement connection works.
+            .fault(Trigger::nth("FETCH", 1), Action::DropConnection),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let email = pool
+        .run_read(&config, true, |mut session| async move {
+            let r = fetch_email_by_uid_light(&mut session, "INBOX", 1).await?;
+            Ok((r, session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect("the retry must deliver the message the first attempt lost");
+
+    assert!(email.is_some(), "uid 1 is in this mailbox");
+    assert_eq!(
+        server.connection_count(),
+        2,
+        "the retry must open a NEW connection, not reuse the dead one"
+    );
+}
+
+/// Negative control for the test above: with every fetch dying, the retry
+/// cannot succeed — so the green above is the retry working, not the fault
+/// failing to fire. And the retry happens once: two connections, not a loop.
+#[async_std::test]
+async fn a_read_that_keeps_losing_the_socket_fails_after_exactly_one_retry() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(Trigger::on("FETCH"), Action::DropConnection),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let err = pool
+        .run_read(&config, true, |mut session| async move {
+            let r = fetch_email_by_uid_light(&mut session, "INBOX", 1).await?;
+            Ok((r, session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect_err("a server that never answers must still surface an error");
+
+    assert!(
+        mailvault_core::imap::pool::is_connection_lost(&err),
+        "the error that drives the retry must be recognisable as one: {err}"
+    );
+    assert_eq!(server.connection_count(), 2, "one attempt, one retry, no loop");
+}
+
+/// A `NO` is the server's answer, not a broken pipe: repeating it changes
+/// nothing, so it must not cost a second connection.
+#[async_std::test]
+async fn a_refusal_is_not_retried() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(
+                Trigger::on("FETCH"),
+                Action::Respond("NO".into(), "Bandwidth limit exceeded".into()),
+            ),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let _err = pool
+        .run_read(&config, true, |mut session| async move {
+            let r = fetch_email_by_uid_light(&mut session, "INBOX", 1).await?;
+            Ok((r, session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect_err("a refused fetch is an error");
+
+    assert_eq!(
+        server.connection_count(),
+        1,
+        "the server answered — asking again on a new connection is pure cost"
+    );
 }

@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "La cartella di archiviazione della posta non è disponibile",
   "errors.E_IAP_PAYMENT": "Non è stato possibile avviare l'acquisto",
   "errors.E_IAP_RESTORE": "Non è stato possibile avviare il ripristino",
+  "errors.E_CONN_LOST": "La connessione al server di posta è caduta",
   "sidebar.viewAll": "Tutto",
   "sidebar.viewServer": "Server",
   "sidebar.viewVault": "Cassaforte",

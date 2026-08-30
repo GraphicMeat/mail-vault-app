@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "Dein Mail-Speicherordner ist nicht verfügbar",
   "errors.E_IAP_PAYMENT": "Der Kauf konnte nicht gestartet werden",
   "errors.E_IAP_RESTORE": "Die Wiederherstellung konnte nicht gestartet werden",
+  "errors.E_CONN_LOST": "Die Verbindung zum Mailserver wurde unterbrochen",
   "sidebar.viewAll": "Alle",
   "sidebar.viewServer": "Server",
   "sidebar.viewVault": "Tresor",

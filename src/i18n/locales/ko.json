@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "메일 저장 폴더를 사용할 수 없습니다",
   "errors.E_IAP_PAYMENT": "구매를 시작하지 못했습니다",
   "errors.E_IAP_RESTORE": "복원을 시작하지 못했습니다",
+  "errors.E_CONN_LOST": "메일 서버와의 연결이 끊어졌습니다",
   "sidebar.viewAll": "전체",
   "sidebar.viewServer": "서버",
   "sidebar.viewVault": "보관함",

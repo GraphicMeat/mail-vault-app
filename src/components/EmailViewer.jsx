@@ -50,7 +50,7 @@ import { AddressText } from './email/AddressText';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
-import { t, useT  } from '../i18n/index.js';
+import { t, tErr, useT  } from '../i18n/index.js';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
@@ -696,7 +696,7 @@ function EmailViewerComponent({ onComposeReply }) {
               <div>
                 <p className="text-sm font-medium text-mail-text">{t('viewer.couldnTLoadMessage')}</p>
                 <p className="text-xs text-mail-text-muted mt-1 max-w-md break-words">
-                  {selectedEmail._bodyError}
+                  {tErr(selectedEmail._bodyError)}
                 </p>
               </div>
               <button

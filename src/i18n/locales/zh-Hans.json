@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "你的邮件存储文件夹不可用",
   "errors.E_IAP_PAYMENT": "无法开始购买",
   "errors.E_IAP_RESTORE": "无法开始恢复",
+  "errors.E_CONN_LOST": "与邮件服务器的连接已断开",
   "sidebar.viewAll": "全部",
   "sidebar.viewServer": "服务器",
   "sidebar.viewVault": "保险库",

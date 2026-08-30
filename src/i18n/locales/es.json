@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "Tu carpeta de almacenamiento de correo no está disponible",
   "errors.E_IAP_PAYMENT": "No se pudo iniciar la compra",
   "errors.E_IAP_RESTORE": "No se pudo iniciar la restauración",
+  "errors.E_CONN_LOST": "Se perdió la conexión con el servidor de correo",
   "sidebar.viewAll": "Todo",
   "sidebar.viewServer": "Servidor",
   "sidebar.viewVault": "Bóveda",

@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "Your mail storage folder is unavailable",
   "errors.E_IAP_PAYMENT": "The purchase could not be started",
   "errors.E_IAP_RESTORE": "The restore could not be started",
+  "errors.E_CONN_LOST": "The connection to the mail server dropped",
   "sidebar.viewAll": "All",
   "sidebar.viewServer": "Server",
   "sidebar.viewVault": "Vault",

@@ -1481,6 +1481,7 @@
   "errors.E_VAULT_UNAVAILABLE": "Sua pasta de armazenamento de correio está indisponível",
   "errors.E_IAP_PAYMENT": "Não foi possível iniciar a compra",
   "errors.E_IAP_RESTORE": "Não foi possível iniciar a restauração",
+  "errors.E_CONN_LOST": "A conexão com o servidor de e-mail caiu",
   "sidebar.viewAll": "Tudo",
   "sidebar.viewServer": "Servidor",
   "sidebar.viewVault": "Cofre",

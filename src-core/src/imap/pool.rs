@@ -49,6 +49,23 @@ fn conn_key(config: &ImapConfig) -> String {
     format!("{}-{}:{}", config.email, config.host, config.effective_port())
 }
 
+/// True when the error text says the *connection* died rather than the server
+/// answering. A pooled socket the peer closed while it sat idle produces this
+/// on first use and nothing else, so it is the one failure worth trying again;
+/// a tagged `NO`/`BAD` is the server's answer and repeating it changes nothing.
+pub fn is_connection_lost(err: &str) -> bool {
+    const NEEDLES: [&str; 6] = [
+        "connection lost", // async_imap::error::Error::ConnectionLost
+        "connection reset",
+        "connection aborted",
+        "broken pipe",
+        "unexpected end of file",
+        "not connected",
+    ];
+    let lowered = err.to_ascii_lowercase();
+    NEEDLES.iter().any(|n| lowered.contains(n))
+}
+
 /// A session checked out from the pool, guarded by a semaphore permit.
 /// The permit is released when this guard is dropped (after return_to_pool stores
 /// the session or the guard is dropped on error). This prevents connection
@@ -117,23 +134,98 @@ impl ImapPool {
     /// Get or create a background connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent background sessions per account — excess callers queue.
     pub async fn get_background(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
-        let key = conn_key(config);
-        let sem = get_or_create_sem(&self.background_sem, &key).await;
-        let permit = sem.acquire_owned().await
-            .map_err(|_| "IMAP background pool semaphore closed".to_string())?;
-        let (session, last_selected) = self.get_from_pool(&self.background, config).await?;
-        Ok(PooledSessionGuard { session, last_selected, _permit: permit })
+        self.checkout(config, false, false).await
     }
 
     /// Get or create a priority connection, guarded by a per-account semaphore.
     /// At most MAX_POOL_SIZE concurrent priority sessions per account — excess callers queue.
     pub async fn get_priority(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        self.checkout(config, true, false).await
+    }
+
+    /// Check out a session, optionally skipping the pool entirely.
+    ///
+    /// `fresh` is for the retry after a pooled socket turned out to be dead:
+    /// popping another pooled session would likely hand back one killed by the
+    /// same event (laptop sleep, NAT timeout, server restart), and its NOOP
+    /// check is skipped for the first NOOP_SKIP_SECS of its life.
+    async fn checkout(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        fresh: bool,
+    ) -> Result<PooledSessionGuard, String> {
         let key = conn_key(config);
-        let sem = get_or_create_sem(&self.priority_sem, &key).await;
+        let sem_map = if priority { &self.priority_sem } else { &self.background_sem };
+        let sem = get_or_create_sem(sem_map, &key).await;
         let permit = sem.acquire_owned().await
-            .map_err(|_| "IMAP priority pool semaphore closed".to_string())?;
-        let (session, last_selected) = self.get_from_pool(&self.priority, config).await?;
+            .map_err(|_| "IMAP pool semaphore closed".to_string())?;
+
+        let (session, last_selected) = if fresh {
+            info!("Creating new IMAP connection for {} (retry)", config.email);
+            (create_imap_session(config, self).await?, None)
+        } else {
+            let pool = if priority { &self.priority } else { &self.background };
+            self.get_from_pool(pool, config).await?
+        };
         Ok(PooledSessionGuard { session, last_selected, _permit: permit })
+    }
+
+    /// Run a **read-only** IMAP operation on a pooled session, once more on a
+    /// brand-new connection if the first attempt died with the socket.
+    ///
+    /// A pooled connection the peer closed while it sat idle accepts nothing
+    /// and answers the first command with `connection lost`. No health check
+    /// closes that window — the socket can die between the NOOP and the FETCH —
+    /// so the only real fix is to ask again on a connection known to be new.
+    /// The user used to see the raw failure and a Try again button; this is that
+    /// button, pressed before they ever see it.
+    ///
+    /// Read-only callers ONLY. The retry re-sends the command, which is free for
+    /// FETCH/SEARCH/LIST and wrong for APPEND/STORE/COPY: a mutation whose reply
+    /// was lost may well have been applied, and sending it twice applies it twice.
+    pub async fn run_read<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        match self.attempt(config, priority, false, &f).await {
+            Err(e) if is_connection_lost(&e) => {
+                warn!("[IMAP pool] {} — retrying once on a new connection", e);
+                self.attempt(config, priority, true, &f).await
+            }
+            other => other,
+        }
+    }
+
+    /// One `run_read` attempt: check out, run, pool the session on success.
+    /// On failure the guard is dropped — never re-pooled, see `discard`.
+    async fn attempt<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        fresh: bool,
+        f: &F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        let PooledSessionGuard { session, last_selected: _, _permit } =
+            self.checkout(config, priority, fresh).await?;
+        let (result, session, selected) = f(session).await?;
+        let guard = PooledSessionGuard { session, last_selected: selected, _permit };
+        if priority {
+            self.return_priority(config, guard).await;
+        } else {
+            self.return_background(config, guard).await;
+        }
+        Ok(result)
     }
 
     /// Return a background session to the pool. The semaphore permit is released
