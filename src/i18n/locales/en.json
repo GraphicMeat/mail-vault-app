@@ -1550,5 +1550,15 @@
   "onboarding.densityCompact": "Compact",
   "onboarding.densityDefault": "Default",
   "onboarding.densityComfortable": "Roomy",
-  "onboarding.moreInAppearance": "Date format, signatures and more live in Settings → Appearance."
+  "onboarding.moreInAppearance": "Date format, signatures and more live in Settings → Appearance.",
+  "onboarding.freeTitle": "Yours from today",
+  "onboarding.freeSubtitle": "All of this is free, forever, on every device.",
+  "free.vault.title": "A vault on your disk",
+  "free.vault.blurb": "Every message is an .eml file in a Maildir you own. Delete it from the server and the copy stays.",
+  "free.chat.title": "Read by sender",
+  "free.chat.blurb": "Group a whole correspondence into one thread, or read it as a conversation.",
+  "free.search.title": "Search that works offline",
+  "free.search.blurb": "Your archive is local, so search does not wait on a server.",
+  "free.linkSafety.title": "Link and sender warnings",
+  "free.linkSafety.blurb": "A mismatched reply-to, a disguised link or a tracking pixel is flagged before you click."
 }

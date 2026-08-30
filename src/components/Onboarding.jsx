@@ -5,6 +5,7 @@ import { onboardingSteps } from './onboarding/steps.js';
 import { Splash } from './onboarding/Splash';
 import { AccountStep } from './onboarding/AccountStep';
 import { AppearanceStep } from './onboarding/AppearanceStep';
+import { FreeFeatures } from './onboarding/FreeFeatures';
 
 export function Onboarding({ onOpenBilling }) {
   // Accounts live in useAccountStore, not useSettingsStore — App.jsx:122 reads
@@ -26,7 +27,7 @@ export function Onboarding({ onOpenBilling }) {
       {step === 'splash' && <Splash onContinue={next} />}
       {step === 'account' && <AccountStep onAdded={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
-      {step === 'free' && <div>free<button onClick={next}>continue</button></div>}
+      {step === 'free' && <FreeFeatures onContinue={next} />}
       {step === 'premium' && <div>premium<button onClick={next}>continue</button></div>}
       {step === 'cta' && (
         <div>
