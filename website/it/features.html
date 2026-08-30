@@ -1071,14 +1071,25 @@
         img.src = '';
       }
 
+      // A thumbnail's srcset serves the variant that fits its slot (720w for the
+      // narrow cards), which is far too small once the lightbox blows it up.
+      // Always open the widest candidate instead.
+      function hiRes(el) {
+        var best = (el.getAttribute('srcset') || '').split(',').reduce(function(a, c) {
+          var p = c.trim().split(/\s+/), w = parseInt(p[1], 10);
+          return p[0] && w > a.w ? { url: p[0], w: w } : a;
+        }, { url: '', w: 0 });
+        return best.url || el.currentSrc || el.src;
+      }
+
       document.querySelectorAll('[data-expandable-image]').forEach(function(el) {
         el.style.cursor = 'zoom-in';
         el.setAttribute('tabindex', '0');
         el.setAttribute('role', 'button');
         el.setAttribute('aria-label', 'Expand screenshot: ' + (el.alt || ''));
-        el.addEventListener('click', function() { open(el.currentSrc || el.src, el.alt); });
+        el.addEventListener('click', function() { open(hiRes(el), el.alt); });
         el.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.currentSrc || el.src, el.alt); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(hiRes(el), el.alt); }
         });
       });
 
