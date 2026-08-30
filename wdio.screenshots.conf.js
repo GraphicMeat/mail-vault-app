@@ -24,7 +24,9 @@ import {
   appDataDir,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
-import { DEMO_ACCOUNTS } from './scripts/screenshots/demoData.js';
+import { demoScenarios } from './scripts/screenshots/demoData.js';
+
+const { DEMO_ACCOUNTS } = demoScenarios('en');
 
 const appBinary = process.env.TAURI_APP_BINARY
   || resolve(import.meta.dirname, 'target/debug/mailvault');

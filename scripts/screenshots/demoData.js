@@ -10,6 +10,53 @@
  * (`tests/e2e/mockImap.js` → `src-mock-imap`).
  */
 
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+
+const DEMO_DIR = join(import.meta.dirname, 'demo');
+
+/**
+ * Active demo catalog. Set by `demoScenarios()` before it builds anything.
+ * Nothing here may live at module scope: a module-scope constant is computed at
+ * import time, when no locale is known yet, and would freeze the English copy
+ * no matter what the harness asked for.
+ */
+let DICT = {};
+
+/** Set while the extractor runs, so `S` can report what it was asked for. */
+let RECORD = null;
+
+function loadDict(code) {
+  if (!code || code === 'en') return {};
+  const file = join(DEMO_DIR, `${code}.json`);
+  if (!existsSync(file)) {
+    console.warn(`[demo] no catalog for ${code} — falling back to English`);
+    return {};
+  }
+  return JSON.parse(readFileSync(file, 'utf-8'));
+}
+
+/**
+ * Translate one demo string. The key IS the English text (the `corpus.json`
+ * convention), so a miss falls back to English rather than leaving a hole.
+ *
+ * Every translatable string in this file passes through one of five choke
+ * points — `headers`, `textMessage`, `htmlMessage`, `messageWithAttachment`,
+ * `newsletterHtml` — so this is the only place translation happens and nothing
+ * can be forgotten at a call site.
+ *
+ * One rule holds it together: **the choke point translates the final string,
+ * and nothing composes translated parts.** Translating `Re: ` and a subject
+ * separately, then handing the result to `headers`, puts both the pieces and
+ * the whole in the catalog — 27 near-duplicate `Re: X` keys beside the `Re: `
+ * they were built from, each able to drift from the other.
+ */
+function S(english) {
+  if (typeof english !== 'string' || !english) return english;
+  if (RECORD) RECORD.add(english);
+  return DICT[english] || english;
+}
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -65,7 +112,7 @@ function headers({ from, to, subject, date, messageId, extra = [] }) {
   return [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
+    `Subject: ${S(subject)}`,
     `Date: ${date}`,
     `Message-ID: <${messageId}>`,
     ...extra,
@@ -84,7 +131,7 @@ function textMessage({ uid, daysAgo, hour, minute, from, to, subject, body, seen
       ...headers({ from, to, subject, date: header, messageId: messageId || `demo-${uid}@primecut.studio`, extra }),
       'Content-Type: text/plain; charset=UTF-8',
       '',
-      body,
+      S(body),
       '',
     ].join('\n'),
   };
@@ -105,7 +152,7 @@ function htmlMessage({ uid, daysAgo, hour, minute, from, to, subject, text, html
       `--${boundary}`,
       'Content-Type: text/plain; charset=UTF-8',
       '',
-      text,
+      S(text),
       '',
       `--${boundary}`,
       'Content-Type: text/html; charset=UTF-8',
@@ -141,7 +188,7 @@ function messageWithAttachment({ uid, daysAgo, hour, from, to, subject, body, fi
       `--${boundary}`,
       'Content-Type: text/plain; charset=UTF-8',
       '',
-      body,
+      S(body),
       '',
       `--${boundary}`,
       'Content-Type: application/pdf',
@@ -164,11 +211,11 @@ function newsletterHtml({ brand, accent, kicker, title, paragraphs, cta }) {
   return [
     '<div style="font-family:-apple-system,Segoe UI,Helvetica,Arial,sans-serif;max-width:560px;color:#1c1917;line-height:1.6;">',
     `<p style="margin:0 0 4px;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:${accent};font-weight:700;">${brand}</p>`,
-    `<p style="margin:0 0 18px;font-size:13px;color:#78716c;">${kicker}</p>`,
-    `<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;font-weight:700;">${title}</h1>`,
-    ...paragraphs.map((p) => `<p style="margin:0 0 14px;font-size:15px;">${p}</p>`),
+    `<p style="margin:0 0 18px;font-size:13px;color:#78716c;">${S(kicker)}</p>`,
+    `<h1 style="margin:0 0 16px;font-size:24px;line-height:1.25;font-weight:700;">${S(title)}</h1>`,
+    ...paragraphs.map((p) => `<p style="margin:0 0 14px;font-size:15px;">${S(p)}</p>`),
     cta
-      ? `<p style="margin:22px 0 0;"><a href="${cta.href}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px;">${cta.label}</a></p>`
+      ? `<p style="margin:22px 0 0;"><a href="${cta.href}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:10px 18px;border-radius:8px;font-weight:600;font-size:14px;">${S(cta.label)}</a></p>`
       : '',
     '</div>',
   ].join('');
@@ -731,33 +778,68 @@ export function billingScenario() {
   };
 }
 
-/** Accounts in sidebar order. Ids must be 36-char UUIDs (see wdio.conf.js). */
-export const DEMO_ACCOUNTS = [
-  {
-    id: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
-    email: 'rowan@primecut.studio',
-    name: 'Prime Cut Studio',
-    scenario: studioScenario,
-  },
-  {
-    id: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
-    email: 'rowan.marsh@gmail.com',
-    name: 'Rowan Marsh',
-    scenario: personalScenario,
-  },
-  {
-    id: 'cccccccc-3333-4333-8333-cccccccccccc',
-    email: 'accounts@primecut.studio',
-    name: 'Studio Accounts',
-    scenario: billingScenario,
-  },
-];
+/**
+ * Build the demo mailbox in one locale.
+ *
+ * `code` is an app locale code (`de`, `pt-BR`, `zh-Hans`), not a website
+ * directory — go through `appCode()` in `locales.js`. Everything is constructed
+ * inside this call, and each `scenario` re-sets the catalog before it builds,
+ * because the harness invokes them later, after another `demoScenarios()` call
+ * may have moved `DICT`.
+ */
+export function demoScenarios(code = 'en') {
+  DICT = loadDict(code);
+  const scoped = (build) => () => { DICT = loadDict(code); return build(); };
 
-/** Subjects the capture script needs to find specific rows. */
-export const MARKERS = {
-  thread: THREAD_SUBJECT,
-  phishing: 'Action required: your August payment could not be processed',
-  replyTo: 'Refund for order #4417 — confirm your bank details',
-  newsletter: 'MeatPad 0.9 — code folding, themes, and no cloud',
-  invoice: 'Invoice CC-2026-0413 — paid, no strings',
-};
+  /** Ids must be 36-char UUIDs (see wdio.conf.js). */
+  const DEMO_ACCOUNTS = [
+    {
+      id: 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa',
+      email: 'rowan@primecut.studio',
+      name: 'Prime Cut Studio',
+      scenario: scoped(studioScenario),
+    },
+    {
+      id: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
+      email: 'rowan.marsh@gmail.com',
+      name: 'Rowan Marsh',
+      scenario: scoped(personalScenario),
+    },
+    {
+      id: 'cccccccc-3333-4333-8333-cccccccccccc',
+      email: 'accounts@primecut.studio',
+      name: 'Studio Accounts',
+      scenario: scoped(billingScenario),
+    },
+  ];
+
+  /** Subjects the capture script needs to find specific rows. */
+  const MARKERS = {
+    thread: S(THREAD_SUBJECT),
+    phishing: S('Action required: your August payment could not be processed'),
+    replyTo: S('Refund for order #4417 — confirm your bank details'),
+    newsletter: S('MeatPad 0.9 — code folding, themes, and no cloud'),
+    invoice: S('Invoice CC-2026-0413 — paid, no strings'),
+  };
+
+  return { DEMO_ACCOUNTS, MARKERS };
+}
+
+/**
+ * Every string the demo mailbox would ask a catalog for, in one pass.
+ *
+ * It records what `S` is actually called with rather than parsing the source,
+ * so a string assembled at runtime cannot hide from it and a string that is
+ * never shown cannot pad the catalog.
+ */
+export function collectStrings() {
+  RECORD = new Set();
+  try {
+    const { DEMO_ACCOUNTS } = demoScenarios('en');
+    for (const account of DEMO_ACCOUNTS) account.scenario();
+    demoScenarios('en');
+    return [...RECORD].sort();
+  } finally {
+    RECORD = null;
+  }
+}

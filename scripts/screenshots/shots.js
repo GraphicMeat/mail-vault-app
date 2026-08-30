@@ -16,7 +16,9 @@
 
 import { waitForApp, waitForEmails, openSettings, closeSettings, pressKey } from '../../tests/e2e/helpers.js';
 import { capture } from './capture.js';
-import { MARKERS } from './demoData.js';
+import { demoScenarios } from './demoData.js';
+
+const { MARKERS } = demoScenarios('en');
 
 const SETTLE = 900;
 
