@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -6,8 +7,14 @@ import {
   Mail,
   RotateCcw,
   ExternalLink,
+  Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { Dialog } from '../ui/Dialog';
+import { Z } from '../ui/layers';
+import { PremiumGallery } from '../onboarding/PremiumGallery';
+import { faqUrl } from '../../services/faqUrl';
 
 // ponytail: same two links as the native Help menu (src-tauri/src/main.rs).
 // Kept here too because the menu bar is invisible on Windows/Linux and unclickable in e2e.
@@ -29,8 +36,11 @@ const LINKS = () => ([
 export function HelpSettings({ onClose, onReportBug }) {
   const t = useT();
   const { setOnboardingComplete } = useSettingsStore();
+  const language = useSettingsStore(s => s.language) || 'en';
+  const [galleryOpen, setGalleryOpen] = useState(false);
 
   return (
+    <>
     <div className="p-6 space-y-6">
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
@@ -74,7 +84,36 @@ export function HelpSettings({ onClose, onReportBug }) {
 
           <div className="border-t border-mail-border" />
 
+          <div className="flex items-center justify-between py-2" data-testid="settings-link-faq">
+            <div>
+              <div className="font-medium text-mail-text">{t('settings.help.faq')}</div>
+              <div className="text-sm text-mail-text-muted">{t('settings.help.faqSubtitle')}</div>
+            </div>
+            <Button variant="subtle"
+              onClick={() => openInBrowser(faqUrl(language)).catch(() => {})}
+              data-url={faqUrl(language)}
+            >
+              <HelpCircle size={16} />
+              {t('common.open')}
+            </Button>
+          </div>
+
+          <div className="border-t border-mail-border" />
+
           <div className="flex items-center justify-between py-2">
+            <div>
+              <div className="font-medium text-mail-text">{t('settings.help.whatsInPremium')}</div>
+              <div className="text-sm text-mail-text-muted">{t('settings.help.whatsInPremiumSubtitle')}</div>
+            </div>
+            <Button variant="subtle" onClick={() => setGalleryOpen(true)} data-testid="settings-open-premium-gallery">
+              <Sparkles size={16} />
+              {t('common.open')}
+            </Button>
+          </div>
+
+          <div className="border-t border-mail-border" />
+
+          <div className="flex items-center justify-between py-2" data-testid="settings-reset-onboarding">
             <div>
               <div className="font-medium text-mail-text">{t('settings.help.resetOnboarding')}</div>
               <div className="text-sm text-mail-text-muted">
@@ -97,5 +136,12 @@ export function HelpSettings({ onClose, onReportBug }) {
         </div>
       </div>
     </div>
+
+    <Dialog open={galleryOpen} onClose={() => setGalleryOpen(false)} z={Z.alert} portal size="lg"
+            panelBg="bg-mail-surface">
+      <h2 className="text-lg font-semibold text-mail-text mb-3">{t('onboarding.premiumTitle')}</h2>
+      <PremiumGallery />
+    </Dialog>
+    </>
   );
 }

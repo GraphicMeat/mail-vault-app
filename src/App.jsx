@@ -51,6 +51,8 @@ import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener } from './utils/mailto';
+import { openInBrowser } from './services/billingApi';
+import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
 import { decodeImapUtf7 } from './utils/imapUtf7';
 import { tErr, t as tr, useT  } from './i18n/index.js';
@@ -139,6 +141,7 @@ function App() {
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const setSidebarCollapsed = useSettingsStore(s => s.setSidebarCollapsed);
   const onboardingComplete = useSettingsStore(s => s.onboardingComplete);
+  const language = useSettingsStore(s => s.language);
   const [showAccountModal, setShowAccountModal] = useState(false);
 
   // ── Responsive layout adaptation ─────────────────────────────────────────
@@ -722,7 +725,12 @@ function App() {
 
   // Show onboarding if user hasn't dismissed it
   if (!onboardingComplete) {
-    return <Onboarding onOpenBilling={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />;
+    return (
+      <Onboarding
+        onOpenBilling={() => { setSettingsInitialTab('billing'); setShowSettings(true); }}
+        onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
+      />
+    );
   }
 
   // Show welcome screen only after full init confirms there are truly no accounts.

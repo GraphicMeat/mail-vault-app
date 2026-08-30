@@ -1566,5 +1566,9 @@
   "onboarding.ctaSubtitle": "Fourteen days free. Nothing to cancel if you walk away.",
   "onboarding.ctaPrimary": "See Premium",
   "onboarding.ctaSkip": "Maybe later",
-  "onboarding.ctaFaq": "Questions? Read the FAQ"
+  "onboarding.ctaFaq": "Questions? Read the FAQ",
+  "settings.help.faq": "FAQ",
+  "settings.help.faqSubtitle": "Answers about setup, storage, providers and premium",
+  "settings.help.whatsInPremium": "What’s in Premium",
+  "settings.help.whatsInPremiumSubtitle": "Every premium feature, with screenshots"
 }
