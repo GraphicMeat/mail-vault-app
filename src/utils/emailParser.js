@@ -4,6 +4,11 @@
  */
 
 import { formatTime, formatDateOnly, formatDateLong } from './dateFormat.js';
+// `t` was used below without ever being imported. A free identifier is a global
+// to the bundler, so the build stayed silent and it only surfaced at runtime as
+// `ReferenceError: Can't find variable: t` — inside render, which the error
+// boundary turned into "Something went wrong. Please restart the app."
+import { t as tr } from '../i18n/index.js';
 
 /**
  * Normalize the caller's identity argument to a lowercase Set.
@@ -127,7 +132,7 @@ export function getSenderName(email) {
   let name = /^".*"$/.test(rawName) ? rawName.slice(1, -1) : rawName;
   name = name.replace(/\\"/g, '"').trim();
   const address = email?.from?.address || '';
-  if (!name && !address) return t('settings.cleanup.unknown');
+  if (!name && !address) return tr('settings.cleanup.unknown');
   if (!name) return address;
   // If name looks like an email address (contains @), use the local part from the actual address instead
   if (name.includes('@')) return address.split('@')[0] || name;
@@ -1012,10 +1017,10 @@ export function formatRelativeTime(dateStr) {
   const diffHours = Math.floor(diffMs / 3600000);
   const diffDays = Math.floor(diffMs / 86400000);
 
-  if (diffMins < 1) return t('util.emailParser.justNow');
-  if (diffMins < 60) return t('util.emailParser.mAgo', { diffMins });
-  if (diffHours < 24) return t('util.emailParser.hAgo', { diffHours });
-  if (diffDays === 1) return t('bulk.ops.yesterday');
+  if (diffMins < 1) return tr('util.emailParser.justNow');
+  if (diffMins < 60) return tr('util.emailParser.mAgo', { diffMins });
+  if (diffHours < 24) return tr('util.emailParser.hAgo', { diffHours });
+  if (diffDays === 1) return tr('bulk.ops.yesterday');
   if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
 
   return formatDateOnly(date);
@@ -1036,8 +1041,8 @@ export function formatDateSeparator(dateStr) {
   const now = new Date();
   const diffDays = Math.floor((now - date) / 86400000);
 
-  if (diffDays === 0) return t('bulk.ops.today');
-  if (diffDays === 1) return t('bulk.ops.yesterday');
+  if (diffDays === 0) return tr('bulk.ops.today');
+  if (diffDays === 1) return tr('bulk.ops.yesterday');
 
   return formatDateLong(date);
 }
