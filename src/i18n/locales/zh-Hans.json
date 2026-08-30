@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "如果磁盘断开，备份会只写入应用的工作副本；磁盘再次接上时，第二份副本会双向补齐。",
   "settings.backup.config.oneCopyOnlyChooseExternal": "只有一份副本。所有内容都在应用数据文件夹中——卸载 MailVault、清除应用数据或丢失这台 Mac，存档也会随之消失。选择一个外部文件夹，即可在你自己掌控的磁盘上再存一份。",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault 始终把工作副本放在应用自己的存储中——你读取、搜索和打开的就是它。指定外部文件夹后，会在你掌控的磁盘上再加一份<0>独立的第二副本</0>。它与工作副本同时写入，日常不会被应用读取，并长期保留：在服务器或 MailVault 中删除的邮件仍会留在那里。",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "保险库中已经有其中一部分邮件，因此从服务器删除是安全的。有风险的是取消归档：它会删除保险库中的副本，而服务器上已经消失的内容将<0>彻底丢失</0>。"
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "保险库中已经有其中一部分邮件，因此从服务器删除是安全的。有风险的是取消归档：它会删除保险库中的副本，而服务器上已经消失的内容将<0>彻底丢失</0>。",
+  "list.vaultShare": "已存入保险库：{{inVault}} / {{loaded}}",
+  "list.vaultShareLoaded": "已存入保险库：{{inVault}} / {{loaded}} 已加载"
 }

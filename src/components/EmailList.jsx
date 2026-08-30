@@ -931,7 +931,10 @@ function EmailListComponent() {
                     <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
                   </span>
                   <span data-testid="email-list-vault-share" className="text-[11px] text-mail-text-muted whitespace-nowrap">
-                    In your vault: {vaultShare.inVault.toLocaleString()} of {vaultShare.loaded.toLocaleString()}{windowIsPartial ? ' loaded' : ''}
+                    {t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
+                      inVault: vaultShare.inVault.toLocaleString(),
+                      loaded: vaultShare.loaded.toLocaleString(),
+                    })}
                   </span>
                 </div>
               )}

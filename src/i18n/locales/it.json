@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "Se il disco è scollegato, i backup continuano solo nella copia di lavoro dell'app e la seconda copia si allinea — in entrambe le direzioni — la volta successiva che il disco torna disponibile.",
   "settings.backup.config.oneCopyOnlyChooseExternal": "Una sola copia. Tutto vive nella cartella dati dell'app: disinstalla MailVault, cancella i dati dell'app o perdi questo Mac e l'archivio se ne va con essi. Scegli una cartella esterna per aggiungere una seconda copia su un disco che controlli tu.",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault tiene sempre la sua copia di lavoro nell'archivio dell'app: è quello che leggi, cerchi e apri. Una cartella esterna aggiunge una <0>seconda copia indipendente</0> su un disco che controlli tu. Viene scritta insieme alla copia di lavoro, non è mai letta dall'app nell'uso quotidiano ed è conservata a lungo termine: le e-mail eliminate dal server o da MailVault restano lì.",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Il tuo caveau contiene già alcune di queste e-mail, quindi eliminarle dal server è sicuro. Il rischio è nel disarchiviare: elimina la copia nel caveau, e tutto ciò che è già sparito dal server è poi <0>perso per sempre</0>."
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Il tuo caveau contiene già alcune di queste e-mail, quindi eliminarle dal server è sicuro. Il rischio è nel disarchiviare: elimina la copia nel caveau, e tutto ciò che è già sparito dal server è poi <0>perso per sempre</0>.",
+  "list.vaultShare": "Nella tua cassaforte: {{inVault}} su {{loaded}}",
+  "list.vaultShareLoaded": "Nella tua cassaforte: {{inVault}} su {{loaded}} caricate"
 }

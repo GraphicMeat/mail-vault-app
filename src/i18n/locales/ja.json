@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "ドライブが外れている間、バックアップはアプリの作業用コピーだけに書き込まれ、ドライブが戻った時点で第二のコピーが双方向で追いつきます。",
   "settings.backup.config.oneCopyOnlyChooseExternal": "コピーは1つだけです。すべてがアプリのデータフォルダーにあります。MailVault をアンインストールしたり、アプリのデータを消したり、この Mac を失えば、アーカイブも一緒に失われます。自分で管理するドライブに第二のコピーを追加するには、外部フォルダーを選んでください。",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault は作業用のコピーを常にアプリ専用の保存領域に置きます。あなたが読み、検索し、開くのはこれです。外部フォルダーを指定すると、自分で管理するドライブに<0>独立した第二のコピー</0>が追加されます。作業用コピーと同時に書き込まれ、日常的にアプリから読まれることはなく、長期保存されます。サーバーや MailVault で削除したメールもそこに残ります。",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "これらのメールの一部はすでに保管庫にあるため、サーバーから削除しても安全です。危険なのはアーカイブ解除です。保管庫のコピーが削除され、サーバーからすでに消えているものは<0>完全に失われます</0>。"
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "これらのメールの一部はすでに保管庫にあるため、サーバーから削除しても安全です。危険なのはアーカイブ解除です。保管庫のコピーが削除され、サーバーからすでに消えているものは<0>完全に失われます</0>。",
+  "list.vaultShare": "保管庫に {{inVault}} / {{loaded}}",
+  "list.vaultShareLoaded": "保管庫に {{inVault}} / {{loaded}} 読み込み済み"
 }

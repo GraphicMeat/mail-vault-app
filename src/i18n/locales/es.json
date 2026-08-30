@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "Si el disco está desconectado, las copias siguen entrando solo en la copia de trabajo de la app, y la segunda copia se pone al día —en ambos sentidos— la próxima vez que el disco esté disponible.",
   "settings.backup.config.oneCopyOnlyChooseExternal": "Una sola copia. Todo vive en la carpeta de datos de la app: desinstala MailVault, borra los datos de la app o pierde este Mac y el archivo se va con ello. Elige una carpeta externa para añadir una segunda copia en un disco que controles.",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault siempre mantiene su copia de trabajo en el almacenamiento propio de la app: eso es lo que lees, buscas y abres. Una carpeta externa añade una <0>segunda copia independiente</0> en un disco que controlas. Se escribe al mismo tiempo que la copia de trabajo, la app no la lee en el día a día y se conserva a largo plazo: los correos borrados en el servidor o en MailVault siguen ahí.",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Tu bóveda ya guarda algunos de estos correos, así que borrarlos del servidor es seguro. Lo arriesgado es desarchivar: borra la copia de la bóveda, y todo lo que ya no esté en el servidor queda <0>perdido para siempre</0>."
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Tu bóveda ya guarda algunos de estos correos, así que borrarlos del servidor es seguro. Lo arriesgado es desarchivar: borra la copia de la bóveda, y todo lo que ya no esté en el servidor queda <0>perdido para siempre</0>.",
+  "list.vaultShare": "En tu bóveda: {{inVault}} de {{loaded}}",
+  "list.vaultShareLoaded": "En tu bóveda: {{inVault}} de {{loaded}} cargados"
 }

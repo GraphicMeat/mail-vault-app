@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "If the drive is disconnected, backups keep running into the app's working copy alone and the second copy catches up — in both directions — the next time the drive is back.",
   "settings.backup.config.oneCopyOnlyChooseExternal": "One copy only. Everything lives in the app's data folder — uninstall MailVault, clear app data or lose this Mac and the archive goes with it. Choose an external folder to add a second copy on a drive you control.",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault always keeps its working copy in the app's own storage — that is what you read, search and open in the app. An external folder adds a <0>second, independent copy</0> on a drive you control. It is written at the same time as the working copy, never read by the app day to day, and kept for the long term: emails deleted on the server or in MailVault stay there.",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Your vault already holds some of these emails, so deleting them from the server is safe. Unarchiving is the risky one: it deletes the vault copy, and anything already gone from the server is then <0>lost for good</0>."
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Your vault already holds some of these emails, so deleting them from the server is safe. Unarchiving is the risky one: it deletes the vault copy, and anything already gone from the server is then <0>lost for good</0>.",
+  "list.vaultShare": "In your vault: {{inVault}} of {{loaded}}",
+  "list.vaultShareLoaded": "In your vault: {{inVault}} of {{loaded}} loaded"
 }

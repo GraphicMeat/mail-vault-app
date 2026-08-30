@@ -1502,5 +1502,7 @@
   "settings.backup.config.driveDisconnectedCatchesUp": "Ist die Festplatte getrennt, laufen die Sicherungen allein in die Arbeitskopie der App, und die Zweitkopie holt — in beide Richtungen — auf, sobald die Festplatte wieder da ist.",
   "settings.backup.config.oneCopyOnlyChooseExternal": "Nur eine Kopie. Alles liegt im Datenordner der App — deinstallieren Sie MailVault, löschen Sie die App-Daten oder verlieren Sie diesen Mac, und das Archiv ist mit weg. Wählen Sie einen externen Ordner für eine zweite Kopie auf einer Festplatte, die Sie kontrollieren.",
   "settings.backup.config.workingCopyPlusExternalCopy": "MailVault behält seine Arbeitskopie immer im eigenen Speicher der App — das ist, was Sie lesen, durchsuchen und öffnen. Ein externer Ordner fügt eine <0>zweite, unabhängige Kopie</0> auf einer Festplatte hinzu, die Sie kontrollieren. Sie wird zugleich mit der Arbeitskopie geschrieben, im Alltag nie von der App gelesen und langfristig aufbewahrt: E-Mails, die auf dem Server oder in MailVault gelöscht wurden, bleiben dort.",
-  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Ihr Vault enthält bereits einige dieser E-Mails, das Löschen auf dem Server ist also sicher. Riskant ist das Entarchivieren: Es löscht die Vault-Kopie, und alles, was auf dem Server schon weg ist, ist dann <0>endgültig verloren</0>."
+  "bulk.ops.vaultHoldsSomeUnarchiveIsRisky": "Ihr Vault enthält bereits einige dieser E-Mails, das Löschen auf dem Server ist also sicher. Riskant ist das Entarchivieren: Es löscht die Vault-Kopie, und alles, was auf dem Server schon weg ist, ist dann <0>endgültig verloren</0>.",
+  "list.vaultShare": "In deinem Tresor: {{inVault}} von {{loaded}}",
+  "list.vaultShareLoaded": "In deinem Tresor: {{inVault}} von {{loaded}} geladen"
 }
