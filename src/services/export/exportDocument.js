@@ -1,5 +1,6 @@
 import { sanitizeForExport } from './exportSanitize';
 import { t } from '../../i18n/index.js';
+import { formatDateTime } from '../../utils/dateFormat.js';
 
 // One width, one scale, used by the rasterizer, the packer and the HTML
 // document alike. A baked iframe height is only honest while the column that
@@ -11,12 +12,15 @@ const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
-const DATE_FMT = new Intl.DateTimeFormat('en-GB', {
-  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
-});
-
+/**
+ * The stamp on an exported document. This was pinned to `en-GB` and built once
+ * at module load, so a German export carried "05 Jan 2026" and a language
+ * switch never reached it. `formatDateTime` is the app's own formatter: it
+ * follows the chosen language AND the reader's date/time preference, and it is
+ * re-read on every call.
+ */
 export function formatStamp(date) {
-  return DATE_FMT.format(date);
+  return formatDateTime(date);
 }
 
 export function headerCardHtml(message) {
@@ -24,12 +28,12 @@ export function headerCardHtml(message) {
     ? `<tr><td class="mv-l">${esc(label)}</td><td class="mv-v">${esc(value)}</td></tr>`
     : '';
   return `<header class="mv-head">
-  <h1 class="mv-subject">${esc(message.subject || '(no subject)')}</h1>
+  <h1 class="mv-subject">${esc(message.subject || t('svc.exportDocument.noSubject'))}</h1>
   <table class="mv-meta">
-    ${row('From', message.from)}
-    ${row('To', message.to)}
-    ${row('Cc', message.cc)}
-    ${row('Date', formatStamp(message.date))}
+    ${row(t('common.from'), message.from)}
+    ${row(t('common.to'), message.to)}
+    ${row(t('svc.exportDocument.cc'), message.cc)}
+    ${row(t('svc.exportDocument.date'), formatStamp(message.date))}
   </table>
 </header>`;
 }
@@ -48,13 +52,13 @@ export function provenanceHtml({ account, mailbox, messages, stats }) {
   if (removed) parts.push(t('svc.exportDocument.trackingPixelsRemoved', { removed }));
   const mirrorLine = parts.length ? `<div>${parts.join(' &middot; ')}</div>` : '';
   const ids = messages
-    .map(m => `<div class="mv-id">${esc(m.messageId || 'no Message-ID')}${m.custody ? ` &middot; ${esc(m.custody)}` : ''}</div>`)
+    .map(m => `<div class="mv-id">${esc(m.messageId || t('svc.exportDocument.noMessageId'))}${m.custody ? ` &middot; ${esc(m.custody)}` : ''}</div>`)
     .join('');
   return `<footer class="mv-prov">
-  <div>${esc(account)} &middot; ${esc(mailbox)} &middot; ${messages.length} message${messages.length === 1 ? '' : 's'}</div>
+  <div>${esc(account)} &middot; ${esc(mailbox)} &middot; ${esc(t('common.messageCount', { count: messages.length }))}</div>
   ${ids}
   ${mirrorLine}
-  <div class="mv-mark">Exported from MailVault</div>
+  <div class="mv-mark">${esc(t('svc.exportDocument.exportedFromMailvault'))}</div>
 </footer>`;
 }
 

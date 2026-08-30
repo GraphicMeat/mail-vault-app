@@ -447,7 +447,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
             <div className="p-5">
               {loadingPool && (
                 <div className="flex items-start gap-2 p-3 bg-mail-surface border border-mail-border rounded-lg mb-4">
-                  <p className="text-xs text-mail-text-muted">Reading all {totalEmails.toLocaleString()} emails…</p>
+                  <p className="text-xs text-mail-text-muted">{t('bulk.ops.readingAllEmails', { count: totalEmails.toLocaleString() })}</p>
                 </div>
               )}
 
@@ -455,7 +455,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning/20 rounded-lg mb-4">
                   <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-mail-text-muted">
-                    {emailPool.length.toLocaleString()} of {totalEmails.toLocaleString()} total emails are available locally. Only those will be selected.
+                    {t('bulk.ops.availableLocallyOnlyThoseSelected', { pool: emailPool.length.toLocaleString(), total: totalEmails.toLocaleString() })}
                   </p>
                 </div>
               )}
@@ -580,9 +580,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   walking the mirror on modal open, i.e. spinning up a drive for
                   a number nobody asked for. */}
               <div className="flex items-center gap-2 mb-3 text-xs text-mail-text-muted">
-                <span>{selectedCount.toLocaleString()} on server</span>
+                <span>{t('bulk.ops.onServerCount', { count: selectedCount.toLocaleString() })}</span>
                 <span>·</span>
-                <span>{archivedSelectedCount.toLocaleString()} archived here</span>
+                <span>{t('bulk.ops.archivedHereCount', { count: archivedSelectedCount.toLocaleString() })}</span>
                 {hasBackupConfigured && (<><span>·</span><span>{t('bulk.ops.backupConfigured')}</span></>)}
               </div>
               {/* Warning for locally-stored emails */}

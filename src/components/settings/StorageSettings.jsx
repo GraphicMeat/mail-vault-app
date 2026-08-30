@@ -158,9 +158,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {localCacheDurationMonths === 0 ? t('settings.storage.allEmails') :
-                 localCacheDurationMonths === 1 ? '1 month' :
-                 localCacheDurationMonths === 12 ? '1 year' :
-                 `${localCacheDurationMonths} months`}
+                 localCacheDurationMonths === 1 ? t('settings.storage.month1') :
+                 localCacheDurationMonths === 12 ? t('settings.storage.year1') :
+                 t('settings.storage.monthsCount', { count: localCacheDurationMonths })}
               </span>
             </div>
 
@@ -185,10 +185,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
               {/* Tick marks */}
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">1 mo</span>
-                <span className="text-[10px] text-mail-text-muted">3 mo</span>
-                <span className="text-[10px] text-mail-text-muted">6 mo</span>
-                <span className="text-[10px] text-mail-text-muted">1 year</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo1')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo3')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo6')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.year1')}</span>
                 <span className="text-[10px] text-mail-text-muted">{t('settings.storage.all')}</span>
               </div>
             </div>
@@ -206,7 +206,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       : (localStorageUsage.totalMB || 0) >= 1
                       ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
                       : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
-                    {' '}({(localStorageUsage.emailCount || 0).toLocaleString()} emails saved)
+                    {' '}{t('settings.storage.emailsSavedParen', { count: (localStorageUsage.emailCount || 0).toLocaleString() })}
                   </>
                 ) : (
                   'Calculating...'
@@ -228,8 +228,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <div className="text-sm text-mail-text">{t('settings.storage.messagesPreviousServer')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {t('settings.storage.savedOrphans', { count: orphanStats.count })}
-                  {' '}({(orphanStats.bytes / (1024 * 1024)).toFixed(1)} MB) that this server no longer has.
-                  {' '}They are kept in the vault and are not shown in your mailboxes. Deleting them is permanent.
+                  {' '}{t('settings.storage.orphanBytesKeptInVault', { mb: (orphanStats.bytes / (1024 * 1024)).toFixed(1) })}
                 </div>
               </div>
               {!purgeOrphansConfirm ? (
@@ -269,7 +268,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     disabled={purgingOrphans}
                   >
                     {purgingOrphans ? <Loader size={14} className="animate-spin" /> : <Trash2 size={14} />}
-                    Delete permanently
+                    {t('settings.storage.deletePermanently')}
                   </Button>
                 </div>
               )}
@@ -357,9 +356,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
           </div>
           {clearCacheResult && (
             <div className="text-xs text-mail-success px-1">
-              Cleared {clearCacheResult.deletedCount.toLocaleString()} cached emails
-              {clearCacheResult.skippedArchived > 0 && `, ${clearCacheResult.skippedArchived.toLocaleString()} archived emails preserved`}.
-              Re-sync started.
+              {t('settings.storage.clearedCachedEmails', { count: clearCacheResult.deletedCount.toLocaleString() })}
+              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedPreservedSuffix', { count: clearCacheResult.skippedArchived.toLocaleString() })}
+              {t('settings.storage.resyncStarted')}
             </div>
           )}
         </div>
@@ -722,7 +721,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
             <div className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                           text-mail-text min-h-[42px] flex items-center">
               {localStoragePath || (
-                <span className="text-mail-text-muted">Browser storage (default)</span>
+                <span className="text-mail-text-muted">{t('settings.storage.browserStorageDefault')}</span>
               )}
             </div>
             <button

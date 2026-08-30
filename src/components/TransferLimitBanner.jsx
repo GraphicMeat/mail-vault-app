@@ -89,7 +89,7 @@ export function TransferLimitBanner({ onOpenDataUsage }) {
       <AlertTriangle size={16} className="text-mail-warning flex-shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-sm text-mail-warning font-medium truncate">
-          {w.email} has used {Math.round(w.pct * 100)}% of its daily {w.direction} limit
+          {t(w.direction === 'download' ? 'transferLimit.usedOfDailyDownload' : 'transferLimit.usedOfDailyUpload', { email: w.email, pct: Math.round(w.pct * 100) })}
         </p>
       </div>
       <Button variant="ghost" size="sm" className="bg-mail-warning/20 text-mail-warning hover:bg-mail-warning/30 font-medium text-xs whitespace-nowrap"

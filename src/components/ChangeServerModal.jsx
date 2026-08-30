@@ -248,7 +248,7 @@ export default function ChangeServerModal() {
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.security')}</label>
                 <select className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
-                  <option value="ssl">SSL/TLS</option>
+                  <option value="ssl">{t('changeServer.sslTls')}</option>
                   <option value="starttls">{t('changeServer.starttls')}</option>
                   <option value="none">{t('changeServer.none')}</option>
                 </select>
@@ -292,7 +292,7 @@ export default function ChangeServerModal() {
                 {busyLeg ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin" size={14} />
-                    Verifying {busyLeg === 'imap' ? 'IMAP' : 'SMTP'}…
+                    {tr('changeServer.verifyingLeg', { leg: busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
                   </span>
                 ) : tr('changeServer.verifySave')}
               </button>
@@ -305,7 +305,7 @@ export default function ChangeServerModal() {
             {!activeRestore && !restoreFinished && (
               <>
                 <p className="text-mail-text-muted mb-3">
-                  Upload {localTotal} emails to the new server?
+                  {tr('changeServer.uploadEmailsNewServer', { localTotal })}
                 </p>
                 <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
                   {folders.map((f) => (
@@ -333,10 +333,10 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>Uploading{activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : ''}…</span>
+                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
                 </div>
                 <div className="text-mail-text-muted">
-                  {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed
+                  {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
@@ -362,9 +362,9 @@ export default function ChangeServerModal() {
                     : <AlertTriangle size={16} className="text-mail-warning" />}
                   <span>
                     {activeRestore.status === 'completed' && 'Restore complete — '}
-                    {activeRestore.status === 'cancelled' && 'Restore cancelled — '}
-                    {activeRestore.status === 'failed' && 'Restore failed — '}
-                    {activeRestore.uploaded_emails} uploaded · {activeRestore.skipped_emails} skipped · {activeRestore.failed_emails} failed
+                    {activeRestore.status === 'cancelled' && tr('changeServer.restoreCancelledDash')}
+                    {activeRestore.status === 'failed' && tr('changeServer.restoreFailedDash')}
+                    {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   </span>
                 </div>
                 <div className="flex justify-end mt-4">

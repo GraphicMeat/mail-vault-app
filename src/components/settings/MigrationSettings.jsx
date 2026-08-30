@@ -333,7 +333,7 @@ export default function MigrationSettings({ onUpgrade }) {
             <AlertCircle size={20} className="text-mail-warning mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm text-mail-text mb-3">
-                An incomplete migration was found. {incompleteMigration.completed_folders || 0} of {incompleteMigration.total_folders || 0} folders completed.
+                {t('settings.migration.incompleteFoldersCompleted', { completed: incompleteMigration.completed_folders || 0, total: incompleteMigration.total_folders || 0 })}
               </p>
               {showDiscardConfirm ? (
                 <div className="bg-mail-surface rounded-lg p-3">
@@ -405,7 +405,7 @@ export default function MigrationSettings({ onUpgrade }) {
           {step === 1 && (
             <div className="bg-mail-surface/50 border border-mail-border rounded-lg p-3 mb-2">
               <p className="text-xs text-mail-text-muted">
-                Migration copies emails between mail servers (IMAP/Graph). Emails are transferred directly from one server to another — nothing passes through your vault on the way.
+                {t('settings.migration.copiesEmailsBetweenServers')}
               </p>
             </div>
           )}
@@ -468,7 +468,7 @@ export default function MigrationSettings({ onUpgrade }) {
                         className="w-4 h-4 rounded border-mail-border accent-[var(--mail-accent)]"
                       />
                       <span className="text-sm text-mail-text">{t('settings.migration.selectAll')}</span>
-                      <span className="text-xs text-mail-text-muted ml-auto">{folderMappings.length} folders</span>
+                      <span className="text-xs text-mail-text-muted ml-auto">{t('common.folderCount', { count: folderMappings.length })}</span>
                     </div>
                     <div className="max-h-80 overflow-y-auto space-y-1">
                       {folderMappings.map((mapping, i) => {
@@ -521,7 +521,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <SummaryRow label="Destination" account={destAccount} accountColors={accountColors} />
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.folders')}</span>
-                    <span className="text-mail-text">{selectedMappings.length} folders</span>
+                    <span className="text-mail-text">{t('common.folderCount', { count: selectedMappings.length })}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.emails')}</span>
@@ -531,7 +531,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.estimatedTime')}</span>
-                    <span className="text-mail-text">~{etaMinutes} min</span>
+                    <span className="text-mail-text">{t('settings.migration.approxMinutes', { etaMinutes })}</span>
                   </div>
                 </div>
 
@@ -622,7 +622,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-sm font-semibold text-mail-text">{entry.migratedEmails} emails</div>
+                  <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: entry.migratedEmails })}</div>
                   <div className="text-xs text-mail-text-muted">{formatDuration(entry.duration)}</div>
                 </div>
                 <StatusBadge status={entry.status} />
@@ -738,7 +738,7 @@ function LiveLogSection() {
     <div className="border border-mail-border rounded-lg">
       <button onClick={() => setExpanded(!expanded)} className="w-full p-2 text-sm text-mail-text-muted flex items-center gap-1">
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        Live Log
+        {t('settings.migration.liveLog')}
       </button>
       {expanded && (
         <div ref={containerRef} onScroll={handleScroll} className="max-h-48 overflow-y-auto font-mono text-xs p-2 space-y-1">
@@ -764,6 +764,7 @@ function LiveLogSection() {
 }
 
 function RateLimitCountdown({ initialSeconds }) {
+  const t = useT();
   const [seconds, setSeconds] = useState(initialSeconds);
   useEffect(() => { setSeconds(initialSeconds); }, [initialSeconds]);
   useEffect(() => {
@@ -772,7 +773,7 @@ function RateLimitCountdown({ initialSeconds }) {
     return () => clearTimeout(timer);
   }, [seconds]);
   if (seconds <= 0) return null;
-  return <p className="text-xs text-mail-warning font-semibold">Rate limited -- retrying in {seconds}s</p>;
+  return <p className="text-xs text-mail-warning font-semibold">{t('settings.migration.rateLimitedRetryingIn', { seconds })}</p>;
 }
 
 function ProgressView({ migration, accounts, accountColors, onPause, onResume, onCancel, showCancelConfirm, onConfirmCancel, onCancelCancel, cancelRemoving, cancelRemoveError }) {
@@ -840,11 +841,11 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-xs text-mail-text-muted">
-            {migration.migrated_emails}/{totalTarget} emails ({percent}%)
+            {t('settings.migration.emailsProgressPercent', { migrated: migration.migrated_emails, totalTarget, percent })}
           </span>
           {etaMinutes != null && (
             <span className="text-xs text-mail-text-muted">
-              ETA: ~{etaMinutes} min
+              {t('settings.migration.etaMinutes', { etaMinutes })}
             </span>
           )}
         </div>
@@ -858,7 +859,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
       {/* Current folder */}
       {migration.current_folder && (
         <div>
-          <p className="text-sm text-mail-text">Current folder: {decodeImapUtf7(migration.current_folder)}</p>
+          <p className="text-sm text-mail-text">{t('settings.migration.currentFolder', { folder: decodeImapUtf7(migration.current_folder) })}</p>
         </div>
       )}
 
@@ -893,7 +894,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
                       : `${folder.total || folder.email_count || 0}`}
                 </span>
                 {folder.skipped > 0 && (
-                  <span className="text-xs text-mail-text-muted">({folder.skipped} duplicates skipped)</span>
+                  <span className="text-xs text-mail-text-muted">{t('settings.migration.duplicatesSkippedParen', { count: folder.skipped })}</span>
                 )}
               </div>
             );
@@ -978,13 +979,13 @@ function CompletionView({ migration, onDone }) {
         {isFailed ? t('settings.migration.migrationFailed') : isCancelled ? t('settings.migration.migrationCancelled') : t('settings.migration.migrationComplete')}
       </h4>
       <p className="text-sm text-mail-text-muted mb-1">
-        {migration.migrated_emails} emails migrated across {migration.folders?.length || 0} folders in {formatDuration(migration.elapsed_seconds)}
+        {t('settings.migration.emailsMigratedAcrossFolders', { emails: migration.migrated_emails, folders: migration.folders?.length || 0, duration: formatDuration(migration.elapsed_seconds) })}
       </p>
       {migration.skipped_emails > 0 && (
-        <p className="text-xs text-mail-text-muted">{migration.skipped_emails} duplicates skipped</p>
+        <p className="text-xs text-mail-text-muted">{t('settings.migration.duplicatesSkipped', { count: migration.skipped_emails })}</p>
       )}
       {migration.failed_emails > 0 && (
-        <p className="text-xs text-mail-danger">{migration.failed_emails} emails failed</p>
+        <p className="text-xs text-mail-danger">{t('settings.migration.emailsFailed', { count: migration.failed_emails })}</p>
       )}
       <button
         onClick={onDone}

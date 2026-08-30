@@ -165,10 +165,10 @@ export function UpdateModal({ updateInfo, onClose }) {
             <div>
               <h2 id={titleId} className="text-lg font-semibold text-mail-text flex items-center gap-2">
                 <Download size={20} className="text-mail-accent-text" />
-                MailVault v{newVersion} Available
+                {t('update.mailvaultVersionAvailable', { newVersion })}
               </h2>
               <p className="text-xs text-mail-text-muted mt-0.5">
-                You're on v{currentVersion}
+                {t('update.youreOnVersion', { currentVersion })}
               </p>
             </div>
             {state === 'idle' && (
@@ -223,7 +223,7 @@ export function UpdateModal({ updateInfo, onClose }) {
           {state === 'downloading' && (
             <div className="px-5 py-8 flex flex-col items-center gap-3">
               <Download size={24} className="text-mail-accent-text" />
-              <p className="text-sm text-mail-text">Downloading v{newVersion}...</p>
+              <p className="text-sm text-mail-text">{t('update.downloadingVersion', { newVersion })}</p>
               <div className="w-full max-w-xs">
                 <div className="h-2 bg-mail-border rounded-full overflow-hidden">
                   <motion.div

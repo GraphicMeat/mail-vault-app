@@ -167,7 +167,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Calendar size={32} className="text-mail-text-muted mx-auto mb-3" />
           <p className="text-sm font-medium text-mail-text mb-1">{t('timeCapsule.noSnapshotsYet')}</p>
-          <p className="text-xs text-mail-text-muted">Snapshots are created automatically after each backup, or click "Take Snapshot" above.</p>
+          <p className="text-xs text-mail-text-muted">{t('timeCapsule.snapshotsCreatedAutomatically')}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -184,7 +184,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-mail-text truncate">{formatSnapshotDate(snap.timestamp)}</p>
                   <p className="text-xs text-mail-text-muted">
-                    {snap.total_emails.toLocaleString()} emails &middot; {snap.mailbox_count} folders &middot; {formatBytes(snap.size_bytes)}
+                    {t('timeCapsule.emailsFoldersSize', { emails: snap.total_emails.toLocaleString(), folders: snap.mailbox_count, size: formatBytes(snap.size_bytes) })}
                   </p>
                 </div>
               </div>
@@ -381,7 +381,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       {/* Attachments — using real AttachmentItem for download support */}
       {email.attachments && email.attachments.length > 0 && (
         <div className="px-6 py-3 border-t border-mail-border shrink-0">
-          <p className="text-xs text-mail-text-muted mb-2">{email.attachments.length} attachment{email.attachments.length > 1 ? 's' : ''}</p>
+          <p className="text-xs text-mail-text-muted mb-2">{tr('common.attachmentCount', { count: email.attachments.length })}</p>
           <div className="flex flex-wrap gap-2">
             {email.attachments.map((att, i) => (
               <AttachmentItem

@@ -207,10 +207,10 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
           </div>
 
           <div className="text-sm text-mail-text-muted">
-            To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
+            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
             {email.cc?.length > 0 && (
               <span className="ml-2">
-                CC: {email.cc.map(c => c.name || c.address).join(', ')}
+                {t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}
               </span>
             )}
           </div>
@@ -223,10 +223,10 @@ export function EmailHeader({ email, expanded, onToggle, showRaw, onToggleRaw, l
                 exit={{ height: 0, opacity: 0 }}
                 className="mt-2 text-xs text-mail-text-muted space-y-1 overflow-hidden"
               >
-                <div>Date: {formatDateTime(email.date)}</div>
-                {email.messageId && <div>Message-ID: {email.messageId}</div>}
+                <div>{t('email.header.date', { date: formatDateTime(email.date) })}</div>
+                {email.messageId && <div>{t('email.header.messageId', { messageId: email.messageId })}</div>}
                 {email.replyTo?.length > 0 && (
-                  <div>Reply-To: {email.replyTo.map(r => r.address).join(', ')}</div>
+                  <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => r.address).join(', ') })}</div>
                 )}
                 <button
                   onClick={(e) => { e.stopPropagation(); onToggleRaw(); }}

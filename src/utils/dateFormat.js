@@ -1,6 +1,17 @@
 import { format, isToday, isYesterday, isThisWeek } from 'date-fns';
+import { es, fr, it as itIT, de, ptBR, ja, ko, zhCN } from 'date-fns/locale';
 import { useSettingsStore } from '../stores/settingsStore';
 import { getLocale, t as tr } from '../i18n/index.js';
+
+/**
+ * date-fns writes month names and AM/PM in English unless it is handed a locale
+ * object. The `EEEE` weekday branch below was moved to Intl, but `MMM`, `MMMM`
+ * and the `a` of `h:mm a` still came out English from every preset and from any
+ * custom pattern the user typed. `undefined` is the right value for `en`:
+ * date-fns falls back to its own en-US default.
+ */
+const DFNS = { es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhCN };
+const _fmt = (date, pattern) => format(date, pattern, { locale: DFNS[getLocale()] });
 
 const DATE_PRESETS = {
   'MM/dd/yyyy': { withYear: 'MM/dd/yyyy', withoutYear: 'MM/dd' },
@@ -59,8 +70,8 @@ export function formatTime(dateInput) {
   const { timeFormat } = useSettingsStore.getState();
 
   // date-fns path for explicit 12h/24h (avoids locale ambiguity)
-  if (timeFormat === '24h') return format(date, 'HH:mm');
-  if (timeFormat === '12h') return format(date, 'h:mm a');
+  if (timeFormat === '24h') return _fmt(date, 'HH:mm');
+  if (timeFormat === '12h') return _fmt(date, 'h:mm a');
 
   // 'auto' — use Intl with the browser locale
   return new Intl.DateTimeFormat(_locale(), {
@@ -81,9 +92,9 @@ export function formatDateTime(dateInput) {
 
   let datePart;
   if (dateFormat === 'custom' && customDateFormat) {
-    try { datePart = format(date, customDateFormat); } catch { datePart = format(date, 'MMM d, yyyy'); }
+    try { datePart = _fmt(date, customDateFormat); } catch { datePart = _fmt(date, 'MMM d, yyyy'); }
   } else if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
-    datePart = format(date, DATE_PRESETS[dateFormat].withYear);
+    datePart = _fmt(date, DATE_PRESETS[dateFormat].withYear);
   } else {
     datePart = new Intl.DateTimeFormat(_locale(), { year: 'numeric', month: 'short', day: 'numeric' }).format(date);
   }
@@ -106,11 +117,11 @@ export function formatDateOnly(dateInput, { alwaysShowYear = false } = {}) {
   const showYear = alwaysShowYear || isPreviousYear;
 
   if (dateFormat === 'custom' && customDateFormat) {
-    try { return format(date, customDateFormat); } catch { return format(date, 'MMM d, yyyy'); }
+    try { return _fmt(date, customDateFormat); } catch { return _fmt(date, 'MMM d, yyyy'); }
   }
 
   if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
-    return format(date, showYear ? DATE_PRESETS[dateFormat].withYear : DATE_PRESETS[dateFormat].withoutYear);
+    return _fmt(date, showYear ? DATE_PRESETS[dateFormat].withYear : DATE_PRESETS[dateFormat].withoutYear);
   }
 
   // 'auto' — locale default
@@ -131,11 +142,11 @@ export function formatDateLong(dateInput) {
   const { dateFormat, customDateFormat } = useSettingsStore.getState();
 
   if (dateFormat === 'custom' && customDateFormat) {
-    try { return format(date, customDateFormat); } catch { return format(date, 'MMMM d, yyyy'); }
+    try { return _fmt(date, customDateFormat); } catch { return _fmt(date, 'MMMM d, yyyy'); }
   }
 
   if (dateFormat !== 'auto' && DATE_PRESETS[dateFormat]) {
-    return format(date, DATE_PRESETS[dateFormat].withYear);
+    return _fmt(date, DATE_PRESETS[dateFormat].withYear);
   }
 
   return new Intl.DateTimeFormat(_locale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(date);
@@ -164,18 +175,29 @@ export function formatEmailDate(dateStr) {
 
   if (dateFormat === 'custom' && customDateFormat) {
     try {
-      return format(date, customDateFormat);
+      return _fmt(date, customDateFormat);
     } catch {
-      return format(date, 'MMM d, yyyy');
+      return _fmt(date, 'MMM d, yyyy');
     }
   }
 
   // Preset formats
   const preset = DATE_PRESETS[dateFormat];
   if (preset) {
-    return format(date, isPreviousYear ? preset.withYear : preset.withoutYear);
+    return _fmt(date, isPreviousYear ? preset.withYear : preset.withoutYear);
   }
 
   // Unknown format — fallback
-  return format(date, isPreviousYear ? 'MMM d, yyyy' : 'MMM d');
+  return _fmt(date, isPreviousYear ? 'MMM d, yyyy' : 'MMM d');
+}
+
+/**
+ * Short weekday name in the app's language. The chat list asked
+ * `toLocaleDateString(undefined, …)` for this, which is the OPERATING SYSTEM's
+ * language — so an app set to German still said "Mon" on a US Mac.
+ */
+export function formatWeekdayShort(dateInput) {
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(_locale(), { weekday: 'short' }).format(date);
 }

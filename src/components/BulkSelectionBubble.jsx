@@ -66,7 +66,7 @@ export function BulkSelectionBubble() {
                 <span className="text-mail-text-muted mx-1.5">·</span>
                 <span className="text-mail-text-muted">{decodeImapUtf7(folder)}</span>
                 <span className="text-mail-text-muted mx-1.5">·</span>
-                <span className="font-medium">{count.toLocaleString()} selected</span>
+                <span className="font-medium">{t('common.selectedCount', { count, n: count.toLocaleString() })}</span>
               </span>
             </button>
             <Button variant="ghost" icon size="sm"

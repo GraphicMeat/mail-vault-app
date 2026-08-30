@@ -646,7 +646,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
             <Loader size={16} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text">
-              Classifying... {classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : t('settings.cleanup.preparing')}
+              {t('settings.cleanup.classifying', { progress: classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : t('settings.cleanup.preparing') })}
             </span>
             <div className="flex-1 h-1.5 bg-mail-surface-hover rounded-full overflow-hidden">
               {classStatus.total > 0
@@ -692,7 +692,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               activeCategory === 'all' ? 'bg-mail-accent-fill text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
             }`}
           >
-            All ({mailboxTotal})
+            {t('settings.cleanup.allCount', { mailboxTotal })}
           </button>
           {allCategories.map(cat => {
             const count = mailboxByCategory[cat] || 0;
@@ -728,7 +728,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
           {selectedIds.size > 0 ? (
             <>
-              <span className="text-sm text-mail-text font-medium">{selectedIds.size} selected</span>
+              <span className="text-sm text-mail-text font-medium">{t('common.selectedCount', { count: selectedIds.size, n: selectedIds.size })}</span>
               <button
                 onClick={() => setBulkAction('delete')}
                 disabled={bulkRunning}
@@ -750,7 +750,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               onClick={() => setSelectedIds(new Set(filteredResults.map(r => r.messageId)))}
               className="text-xs text-mail-text-muted hover:text-mail-text transition-colors"
             >
-              Select All ({filteredResults.length})
+              {t('settings.cleanup.selectAllCount', { count: filteredResults.length })}
             </button>
           )}
         </div>

@@ -473,7 +473,7 @@ export function BillingSettings() {
             <h3 className="text-sm font-semibold text-mail-text">{statusLabel}</h3>
             {billingProfile?.status === 'trialing' && billingProfile?.currentPeriodEnd && (
               <p className="text-xs text-mail-accent-text">
-                Free trial ends {formatDate(billingProfile.currentPeriodEnd)} — yearly billing begins after.
+                {t('settings.billing.freeTrialEndsYearlyBilling', { date: formatDate(billingProfile.currentPeriodEnd) })}
               </p>
             )}
             {isPremium && billingProfile?.status !== 'trialing' && billingProfile?.currentPeriodEnd && (
@@ -537,11 +537,11 @@ export function BillingSettings() {
         {signInNotice && !isSignedIn && (
           <div className="mt-3 p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20">
             <p className="text-xs font-medium text-mail-warning">{signInNotice}</p>
-            {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">Checked: {selectedEmail}</p>}
+            {selectedEmail && <p className="text-[11px] text-mail-text-muted mt-1">{t('settings.billing.checkedEmail', { email: selectedEmail })}</p>}
           </div>
         )}
         {syncError && <p className="text-xs text-mail-danger mt-2">{syncError}</p>}
-        {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">Last synced: {formatTime(billingLastChecked)}</p>}
+        {billingLastChecked && isSignedIn && <p className="text-xs text-mail-text-muted mt-1">{t('settings.billing.lastSynced', { time: formatTime(billingLastChecked) })}</p>}
       </div>
 
       {/* Early Bird Pricing — non-MAS only, it pitches the web subscription */}
@@ -549,7 +549,7 @@ export function BillingSettings() {
         <div className="bg-mail-accent-tint border border-mail-accent/20 rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-lg">🐣</span>
-            <h4 className="text-sm font-semibold text-mail-text">Early Bird & Family Pricing</h4>
+            <h4 className="text-sm font-semibold text-mail-text">{t('settings.billing.earlyBirdFamilyPricing')}</h4>
           </div>
           <p className="text-xs text-mail-text-muted mb-3">
             {t('settings.billing.mailvaultEarlyAccessLockDiscounted')}
@@ -565,7 +565,7 @@ export function BillingSettings() {
             </div>
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-mail-accent/10 text-mail-accent-text">
               <Shield size={12} />
-              <span>14-day free trial, cancel anytime</span>
+              <span>{t('settings.billing.fourteenDayFreeTrial')}</span>
             </div>
           </div>
         </div>
@@ -599,7 +599,7 @@ export function BillingSettings() {
                   <button onClick={() => handleCheckout(monthlyPlan.planId)} disabled={checkoutLoading || !selectedEmail}
                     className="w-full py-2 text-sm font-semibold bg-mail-accent-fill text-white rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5">
                     {checkoutLoading === 'monthly' ? <Loader size={14} className="animate-spin" /> : <ExternalLink size={14} />}
-                    Upgrade
+                    {t('common.upgrade')}
                   </button>
                 </div>
               )}
@@ -611,7 +611,7 @@ export function BillingSettings() {
                     </span>
                   ) : yearlyPlan.savingsPercent > 0 ? (
                     <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent-fill text-white rounded-full">
-                      Save {yearlyPlan.savingsPercent}%
+                      {t('settings.billing.savePercent', { percent: yearlyPlan.savingsPercent })}
                     </span>
                   ) : null}
                   <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.yearly')}</h4>

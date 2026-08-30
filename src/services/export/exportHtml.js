@@ -1,4 +1,5 @@
 import { sanitizeForExport } from './exportSanitize';
+import { t as tr } from '../../i18n/index.js';
 import { EXPORT_CSS, EXPORT_WIDTH_PX, headerCardHtml, provenanceHtml, formatStamp } from './exportDocument';
 
 // The exported thread runs on almost nothing: <details> does the folding,
@@ -17,7 +18,7 @@ const esc = (s) => String(s ?? '')
 
 const senderName = (from) => {
   const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from || '');
-  return match ? (match[1] || match[2]) : (from || 'Unknown sender');
+  return match ? (match[1] || match[2]) : (from || tr('svc.exportDocument.unknownSender'));
 };
 
 const rootSubject = (s) => String(s || '').replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '').trim();
@@ -165,7 +166,7 @@ ${items}
 export function buildThreadDocument({ messages, bodies, heights, account, mailbox, stats }) {
   const ordered = messages.map((m, i) => ({ message: m, body: bodies[i], height: heights[i] }))
     .sort((a, b) => a.message.date - b.message.date);
-  const threadSubject = rootSubject(ordered[0]?.message.subject) || '(no subject)';
+  const threadSubject = rootSubject(ordered[0]?.message.subject) || tr('svc.exportDocument.noSubject');
   const single = ordered.length === 1;
   const first = formatStamp(ordered[0].message.date);
   const last = formatStamp(ordered[ordered.length - 1].message.date);

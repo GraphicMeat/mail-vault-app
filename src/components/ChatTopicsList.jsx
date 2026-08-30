@@ -15,6 +15,7 @@ import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { t as tr, useT  } from '../i18n/index.js';
 
 export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic }) {
+  const t = useT();
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
 
@@ -45,8 +46,8 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
         </div>
 
         <div className="text-right text-[11px] text-mail-text-muted">
-          <p>{correspondent.emails.length} messages</p>
-          <p>{topics.length} topics</p>
+          <p>{t('common.messageCount', { count: correspondent.emails.length })}</p>
+          <p>{t('chat.topicsCount', { count: topics.length })}</p>
         </div>
       </div>
 

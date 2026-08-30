@@ -69,7 +69,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
   // makes. Announce phase changes, quarter milestones and the outcome; not
   // every percent, which would talk over the user for the whole run.
   const milestone = Math.floor(percentage / 25) * 25;
-  const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
+  const of = t('bulk.progress.completedOfTotal', { completed: completed.toLocaleString(), total: total.toLocaleString() });
   const announcement = isComplete
     ? (errors > 0 ? t('bulk.progress.finishedFailedMessages', { errors: errors.toLocaleString(), of }) : t('bulk.progress.finishedMessages', { of }))
     : isCancelled ? t('bulk.progress.cancelledMessages', { of })
@@ -200,7 +200,7 @@ export function BulkOperationProgress({ operation, onCancel, onDismiss }) {
           <div className="px-4 py-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-mail-text-muted">
-                {completed.toLocaleString()} of {total.toLocaleString()} emails
+                {t('bulk.progress.completedOfTotalEmails', { completed: completed.toLocaleString(), total: total.toLocaleString() })}
               </span>
               <span className="text-sm font-medium text-mail-accent-text">
                 {percentage}%

@@ -57,13 +57,13 @@ function SampleMail({ blocked }) {
       </div>
       <div className="p-3 text-[11px] leading-relaxed text-[#333] bg-white">
         <div className="font-semibold text-[12px] text-[#111]">{t('settings.tracking.weeklyDigest')}</div>
-        <div className="text-[#666] mb-2">news@mailer.example.com</div>
+        <div className="text-[#666] mb-2">{t('settings.tracking.newsMailerExampleCom')}</div>
         <p className="m-0 mb-2">{t('settings.tracking.hiThereHereWhatMissed')}</p>
         <div className="h-6 rounded bg-[#eef1f6]" />
         {blocked ? (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-700">
             <ShieldCheck size={11} />
-            1 tracking pixel removed before render
+            {t('settings.tracking.onePixelRemovedBeforeRender')}
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-600">
@@ -110,9 +110,7 @@ export function TrackerBlockingView({ onUpgrade }) {
               {t('settings.tracking.blockTrackingPixels')}
             </h4>
             <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
-              Marketing mail hides a 1×1 image in the body. Loading it tells the sender you opened
-              the message. MailVault strips those beacons out of the HTML before the message is
-              rendered, so nothing is ever requested.
+              {t('settings.tracking.marketingMailHidesPixel')}
             </p>
           </div>
           {isPremium ? (
@@ -217,9 +215,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           </p>
         )}
         <p className="text-[11px] text-mail-text-muted/70 mt-3">
-          {TRACKER_PATTERNS.length} known open-tracking endpoints are bundled with the app, merged
-          from the MailTrackerBlocker and Ugly Email lists. The list ships in the app and is updated
-          with each release — MailVault never fetches one at runtime.
+          {t('settings.tracking.knownEndpointsBundled', { count: TRACKER_PATTERNS.length })}
         </p>
         {/* Named upstreams, linked. A blocklist whose provenance is a sentence
             is a claim; one you can open and read is a citation. */}

@@ -86,9 +86,9 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                 onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
                 className={selectClass}
               >
-                <option value="hourly">Every hour (when idle)</option>
-                <option value="daily">Once a day (when idle)</option>
-                <option value="weekly">Once a week (when idle)</option>
+                <option value="hourly">{t('settings.backup.schedule.everyHourIdle')}</option>
+                <option value="daily">{t('settings.backup.schedule.onceADayIdle')}</option>
+                <option value="weekly">{t('settings.backup.schedule.onceAWeekIdle')}</option>
               </select>
             </div>
           </div>
@@ -101,10 +101,10 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               <div className="flex items-center gap-2">
                 <Loader size={14} className="text-mail-accent-text animate-spin flex-shrink-0" />
                 <span className="text-xs font-semibold text-mail-text truncate">
-                  Backing up {activeBackup.accountEmail}
+                  {t('settings.backup.schedule.backingUpAccount', { email: activeBackup.accountEmail })}
                 </span>
                 {activeBackup.queueLength > 0 && (
-                  <span className="text-xs text-mail-text-muted">+{activeBackup.queueLength} queued</span>
+                  <span className="text-xs text-mail-text-muted">{t('settings.backup.schedule.plusQueued', { count: activeBackup.queueLength })}</span>
                 )}
               </div>
               <div className="flex items-center justify-between text-xs text-mail-text-muted">

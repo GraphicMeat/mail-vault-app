@@ -1248,7 +1248,7 @@ function EmailListComponent() {
                               {item.email.date ? formatEmailDate(new Date(item.email.date)) : ''}
                             </span>
                             <span className={`text-xs ${!item.email.flags?.includes('\\Seen') ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-                              {item.email._fromSentFolder ? 'You' : getSenderName(item.email)}
+                              {item.email._fromSentFolder ? t('list.you') : getSenderName(item.email)}
                             </span>
                             {item.email._fromSentFolder && (
                               <span className="text-[10px] px-1 py-0.5 rounded bg-mail-accent/10 text-mail-accent-text font-medium">{t('list.sent')}</span>
@@ -1268,7 +1268,7 @@ function EmailListComponent() {
                     {item.type === 'email-body' && (
                       <div className="pl-16 pr-4 py-3 border-t border-mail-border bg-mail-surface h-full overflow-auto">
                         <div className="text-xs text-mail-text-muted mb-2">
-                          From: {getSenderName(item.email)} · To: {item.email.to?.[0]?.address || ''}
+                          {t('list.fromToLine', { from: getSenderName(item.email), to: item.email.to?.[0]?.address || '' })}
                         </div>
                         <div className="text-sm text-mail-text whitespace-pre-wrap">
                           {item.email.text || item.email.textBody || item.email.snippet || item.email.subject || 'No content available'}
