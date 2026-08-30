@@ -359,6 +359,47 @@ function absolutize(url, pageRel) {
   return { abs, suffix };
 }
 
+/**
+ * A screenshot that exists in the locale's own directory wins; everything else
+ * stays English. The listing is read once per locale — a build touches ~40
+ * pages and would otherwise stat the same 500 paths on every one of them.
+ */
+const SHOT_INDEX = new Map();
+function shotsFor(dir) {
+  if (!SHOT_INDEX.has(dir)) {
+    const at = path.join(ROOT, 'screenshots', dir);
+    SHOT_INDEX.set(dir, new Set(fs.existsSync(at) ? fs.readdirSync(at) : []));
+  }
+  return SHOT_INDEX.get(dir);
+}
+
+export function localizeShot(abs, loc) {
+  const m = /^\/screenshots\/([^/]+)$/.exec(abs);
+  if (!m) return abs;
+  return shotsFor(loc.dir).has(m[1]) ? `/screenshots/${loc.dir}/${m[1]}` : abs;
+}
+
+/**
+ * `srcset` is a comma-separated list of "<url> <descriptor>", and it was never
+ * in the URL loop below — so every localized page shipped an absolute `src`
+ * beside relative candidates that resolve under /<dir>/ and 404. A browser that
+ * picks a srcset candidate does not fall back to `src`, which made those broken
+ * images rather than silent downgrades.
+ */
+export function rewriteSrcset(value, pageRel, loc) {
+  return value.split(',').map((part) => {
+    const t = part.trim();
+    if (!t) return null;
+    const sp = t.search(/\s/);
+    const url = sp === -1 ? t : t.slice(0, sp);
+    const descriptor = sp === -1 ? '' : t.slice(sp);
+    const r = absolutize(url, pageRel);
+    if (!r) return t;
+    const abs = localizePath(r.abs, loc) || localizeShot(r.abs, loc);
+    return abs + r.suffix + descriptor;
+  }).filter(Boolean).join(', ');
+}
+
 export function localizePath(abs, loc) {
   if (abs === '/index.html') abs = '/';
   if (!LOCALIZABLE.has(abs)) return null;
@@ -466,7 +507,11 @@ export function render(html, pageRel, loc, dict) {
         const r = absolutize(at.value, pageRel);
         if (!r) continue;
         const localized = localizePath(r.abs, loc);
-        const next = (localized || r.abs) + r.suffix;
+        const next = (localized || localizeShot(r.abs, loc)) + r.suffix;
+        if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
+      }
+      if ((name === 'srcset' || name === 'imagesrcset') && !('data-i18n-abs' in a)) {
+        const next = rewriteSrcset(at.value, pageRel, loc);
         if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
       }
     }
@@ -490,7 +535,13 @@ export function rewriteUrls(fragment, pageRel, loc) {
       if (!at || at.vs < 0) continue;
       const r = absolutize(at.value, pageRel);
       if (!r) continue;
-      const next = (localizePath(r.abs, loc) || r.abs) + r.suffix;
+      const next = (localizePath(r.abs, loc) || localizeShot(r.abs, loc)) + r.suffix;
+      if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
+    }
+    for (const name of ['srcset', 'imagesrcset']) {
+      const at = tag.attrs[name];
+      if (!at || at.vs < 0) continue;
+      const next = rewriteSrcset(at.value, pageRel, loc);
       if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
     }
   }
@@ -860,7 +911,7 @@ export function verify() {
   const tagBag = (h) => (strip(h).match(/<\s*\/?\s*[a-zA-Z][\w:-]*/g) || [])
     .map((t) => t.replace(/\s+/g, '').toLowerCase()).sort().join(',');
   const problems = [];
-  let pages = 0, links = 0;
+  let pages = 0, links = 0, images = 0;
 
   for (const rel of sourcePages()) {
     const en = tagBag(fs.readFileSync(path.join(ROOT, rel), 'utf8'));
@@ -887,12 +938,34 @@ export function verify() {
             problems.push(`${loc.dir}/${rel}: dead link ${v}`);
           }
         }
+        // srcset was never checked, and the loop above skips relative values —
+        // which is exactly how every localized page came to ship candidates
+        // resolving under /<dir>/screenshots and 404ing. A browser that picks a
+        // srcset candidate does not fall back to src, so those were broken
+        // images, and nothing in this function could see them.
+        for (const name of ['srcset', 'imagesrcset']) {
+          const at = tag.attrs[name];
+          if (!at || at.vs < 0) continue;
+          for (const part of at.value.split(',')) {
+            const url = part.trim().split(/\s/)[0];
+            if (!url) continue;
+            if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith('//')) continue;
+            images++;
+            if (!url.startsWith('/')) {
+              problems.push(`${loc.dir}/${rel}: relative srcset candidate ${url}`);
+              continue;
+            }
+            if (!fs.existsSync(path.join(ROOT, url.split(/[?#]/)[0].slice(1)))) {
+              problems.push(`${loc.dir}/${rel}: missing image ${url}`);
+            }
+          }
+        }
       }
     }
   }
 
   const uniq = [...new Set(problems)];
-  console.log(`verify: ${pages} pages, ${links} internal links`);
+  console.log(`verify: ${pages} pages, ${links} internal links, ${images} srcset candidates`);
   if (!uniq.length) { console.log('verify: ok'); return; }
   uniq.slice(0, 15).forEach((x) => console.log(`  ${x}`));
   if (uniq.length > 15) console.log(`  … ${uniq.length - 15} more`);
