@@ -1560,5 +1560,11 @@
   "free.search.title": "Search that works offline",
   "free.search.blurb": "Your archive is local, so search does not wait on a server.",
   "free.linkSafety.title": "Link and sender warnings",
-  "free.linkSafety.blurb": "A mismatched reply-to, a disguised link or a tracking pixel is flagged before you click."
+  "free.linkSafety.blurb": "A mismatched reply-to, a disguised link or a tracking pixel is flagged before it can do anything.",
+  "onboarding.premiumTitle": "What Premium adds",
+  "onboarding.ctaTitle": "Try Premium",
+  "onboarding.ctaSubtitle": "Fourteen days free. Nothing to cancel if you walk away.",
+  "onboarding.ctaPrimary": "See Premium",
+  "onboarding.ctaSkip": "Maybe later",
+  "onboarding.ctaFaq": "Questions? Read the FAQ"
 }
