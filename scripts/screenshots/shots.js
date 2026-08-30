@@ -38,9 +38,22 @@ const { MARKERS } = demoScenarios(APP_LOCALE);
 // stable needle in a subject whose other words all move.
 const THREAD_NEEDLE = 'Rack & Rind';
 
-// `{{selectedCount}} emails selected` — only the part outside the placeholder
-// is on screen verbatim, and it is what changes per language.
-const SELECTED_COUNT = L('bulk.ops.emailsSelected').replace(/\{\{.*?\}\}/g, '').trim();
+/**
+ * The longest literal run of a format string — the part that is on screen
+ * verbatim, whatever the placeholder interpolates to.
+ *
+ * Deleting the placeholders and keeping the rest only works when they sit at
+ * the edges. Chinese puts this one in the middle:
+ * `已选择 {{selectedCount}} 封邮件` collapses to `已选择  封邮件`, with a double
+ * space where the number belongs — a string the DOM can never contain.
+ */
+const literalRun = (key) => L(key)
+  .split(/\{\{.*?\}\}/)
+  .map((part) => part.trim())
+  .filter(Boolean)
+  .sort((a, b) => b.length - a.length)[0];
+
+const SELECTED_COUNT = literalRun('bulk.ops.emailsSelected');
 
 /** The phase words the bulk progress bubble shows while it is still working. */
 const IN_FLIGHT = [

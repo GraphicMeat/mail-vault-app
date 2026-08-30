@@ -59,6 +59,13 @@ describe('shots.js assertions', () => {
     expect(englishAssertions(SRC)).toEqual([]);
   });
 
+  it('never derives an on-screen string by deleting placeholders', () => {
+    // `{{n}} emails selected` survives that trick; `已选择 {{n}} 封邮件` does
+    // not — it collapses to a double space where the number belongs. Take the
+    // longest literal run between placeholders instead.
+    expect(SRC).not.toMatch(/replace\(\/\\\{\\\{[^)]*\)\s*\.trim\(\)/);
+  });
+
   it('recognises both offending shapes', () => {
     expect(englishAssertions("await expectState(hasText('Bulk Email Operations'), 'x');"))
       .toEqual(["hasText('Bulk Email Operations')"]);
