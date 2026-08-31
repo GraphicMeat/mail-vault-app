@@ -1857,6 +1857,5 @@
   "common.previous": "Previous",
   "premium.viewLarger": "View larger",
   "safety.link.dangerous.blurb": "Link text shows one URL but the link actually goes to a different domain — a common phishing indicator.",
-  "safety.link.suspicious.blurb": "The link passes through a tracking redirect on its way to a different domain.",
-  "alert.replyTo.domainMismatch": "Reply-To domain mismatch"
+  "safety.link.suspicious.blurb": "The link passes through a tracking redirect on its way to a different domain."
 }

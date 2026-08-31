@@ -1857,6 +1857,5 @@
   "common.previous": "Vorherige",
   "premium.viewLarger": "Vergrößern",
   "safety.link.dangerous.blurb": "Der Linktext zeigt eine URL, der Link führt aber zu einer anderen Domain — ein häufiges Phishing-Anzeichen.",
-  "safety.link.suspicious.blurb": "Der Link läuft über eine Tracking-Weiterleitung zu einer anderen Domain.",
-  "alert.replyTo.domainMismatch": "Reply-To-Domain weicht ab"
+  "safety.link.suspicious.blurb": "Der Link läuft über eine Tracking-Weiterleitung zu einer anderen Domain."
 }

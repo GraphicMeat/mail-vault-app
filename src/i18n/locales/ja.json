@@ -1857,6 +1857,5 @@
   "common.previous": "前へ",
   "premium.viewLarger": "拡大表示",
   "safety.link.dangerous.blurb": "リンクのテキストと実際のリンク先のドメインが異なります。フィッシングによく見られる兆候です。",
-  "safety.link.suspicious.blurb": "このリンクはトラッキング用のリダイレクトを経由して別のドメインへ移動します。",
-  "alert.replyTo.domainMismatch": "Reply-To ドメインの不一致"
+  "safety.link.suspicious.blurb": "このリンクはトラッキング用のリダイレクトを経由して別のドメインへ移動します。"
 }

@@ -1857,6 +1857,5 @@
   "common.previous": "이전",
   "premium.viewLarger": "크게 보기",
   "safety.link.dangerous.blurb": "링크 텍스트에 표시된 주소와 실제 연결되는 도메인이 다릅니다. 피싱에서 흔히 나타나는 신호입니다.",
-  "safety.link.suspicious.blurb": "이 링크는 추적용 리디렉션을 거쳐 다른 도메인으로 이동합니다.",
-  "alert.replyTo.domainMismatch": "Reply-To 도메인 불일치"
+  "safety.link.suspicious.blurb": "이 링크는 추적용 리디렉션을 거쳐 다른 도메인으로 이동합니다."
 }

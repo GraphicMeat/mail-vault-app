@@ -1857,6 +1857,5 @@
   "common.previous": "上一步",
   "premium.viewLarger": "查看大图",
   "safety.link.dangerous.blurb": "链接文字显示的网址与实际跳转的域名不一致 —— 这是常见的钓鱼特征。",
-  "safety.link.suspicious.blurb": "该链接会经过一个追踪跳转，再前往另一个域名。",
-  "alert.replyTo.domainMismatch": "Reply-To 域名不匹配"
+  "safety.link.suspicious.blurb": "该链接会经过一个追踪跳转，再前往另一个域名。"
 }
