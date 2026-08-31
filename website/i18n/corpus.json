@@ -286,7 +286,10 @@
     "c4b31bd7d791": "Storage and Your Vault — MailVault FAQ",
     "877fcbac8464": "Troubleshooting — MailVault FAQ",
     "af4e42c0ed12": "Download limit",
-    "0fa5edab65b1": "Upload limit"
+    "0fa5edab65b1": "Upload limit",
+    "0b2f4950a151": "MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control",
+    "7e28f4edb996": "MailVault Time Capsule showing a point-in-time snapshot of a mailbox",
+    "fe81d78bb9d1": "MailVault email tracker blocking showing tracking pixels stripped from a message before it renders"
   },
   "01": {
     "331635bfad03": "AI Email Cleanup — Local AI-Powered Email Classification | MailVault",
