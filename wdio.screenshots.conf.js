@@ -34,6 +34,11 @@ import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
 const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
 const APP_LOCALE = appCode(LOCALE_DIR);
 
+// SHOTS_ONBOARDING=1 photographs the first-run tour instead of the app: no
+// mailbox is seeded and `onboardingComplete` stays false, so the tour renders
+// all six steps rather than the shortened replay someone with an account gets.
+const ONBOARDING = process.env.SHOTS_ONBOARDING === '1';
+
 const { DEMO_ACCOUNTS } = demoScenarios(APP_LOCALE);
 
 const appBinary = process.env.TAURI_APP_BINARY
@@ -67,7 +72,7 @@ function seedFrontendSettings(accounts) {
       version: 5,
       state: {
         listPaneSize: 470,
-        onboardingComplete: true,
+        onboardingComplete: !ONBOARDING,
         sidebarCollapsed: false,
         // `src/main.jsx` applies the persisted language before first paint, so
         // seeding it here IS "run the app in German" — no handle to drive, no
@@ -106,7 +111,7 @@ function seedFrontendSettings(accounts) {
         // shows real progress and a folder checklist instead of step 1 of an
         // empty wizard. Source/dest are two of this run's own mock accounts —
         // MigrationSettings.jsx resolves them by email to draw the avatars.
-        activeMigration: {
+        ...(ONBOARDING ? {} : { activeMigration: {
           status: 'running',
           source_email: accounts[0].email,
           dest_email: accounts[1].email,
@@ -120,7 +125,7 @@ function seedFrontendSettings(accounts) {
             { source_path: 'INBOX', status: 'completed', total: 80, done: 80 },
             { source_path: 'Archive', status: 'in_progress', total: 160, done: 48 },
           ],
-        },
+        } }),
       },
     },
   }, null, 2));
@@ -129,12 +134,20 @@ function seedFrontendSettings(accounts) {
 
 export const config = {
   runner: 'local',
-  specs: ['./scripts/screenshots/shots.js'],
+  specs: [ONBOARDING ? './scripts/screenshots/onboarding-shots.js' : './scripts/screenshots/shots.js'],
   maxInstances: 1,
   capabilities: [{
     browserName: 'wry',
     'tauri:options': { application: appBinary },
   }],
+  // webdriver 9.24 sets `Content-Length` by hand on every request that carries a
+  // body, and the undici it bundles (6.28) rejects that pairing outright:
+  // POST /session fails with UND_ERR_INVALID_ARG before it reaches the driver,
+  // so the run dies without ever launching the app. Node's own newer undici
+  // accepts it, which is why this only bites on some machines. Dropping the
+  // header costs nothing — fetch computes the length itself.
+  transformRequest: (req) => { req.headers?.delete?.('content-length'); return req; },
+
   framework: 'mocha',
   reporters: ['spec'],
   mochaOpts: { ui: 'bdd', timeout: 300000 },
@@ -144,11 +157,14 @@ export const config = {
     console.log(`[shots] locale: ${LOCALE_DIR} (app ${APP_LOCALE}), HOME: ${dataDir}, driver: ${driverBin} on ${driverPort}`);
     try { execFileSync('pkill', ['-x', driverBin]); } catch { /* none running */ }
 
-    buildMockServer();
-    mockServers = await Promise.all(DEMO_ACCOUNTS.map((a) => startMockImap(a.scenario())));
-    const accounts = DEMO_ACCOUNTS.map((a, i) => mockAccount({
-      id: a.id, email: a.email, name: a.name, port: mockServers[i].port,
-    }));
+    let accounts = [];
+    if (!ONBOARDING) {
+      buildMockServer();
+      mockServers = await Promise.all(DEMO_ACCOUNTS.map((a) => startMockImap(a.scenario())));
+      accounts = DEMO_ACCOUNTS.map((a, i) => mockAccount({
+        id: a.id, email: a.email, name: a.name, port: mockServers[i].port,
+      }));
+    }
     const credentialsPath = seedAccounts(dataDir, accounts);
     seedFrontendSettings(accounts);
 
