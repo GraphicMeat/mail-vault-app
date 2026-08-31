@@ -30,11 +30,12 @@ export function ReplyToAlertIcon({ mismatch, size = 14 }) {
 
   if (!mismatch) return null;
 
-  const title = 'Reply-To domain mismatch';
+  const title = t('alert.replyTo.domainMismatch');
 
   return (
     <>
       <button
+        data-testid="reply-to-alert-icon"
         onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
         className="flex-shrink-0 text-mail-warning hover:opacity-80 transition-opacity"
         aria-label={title}

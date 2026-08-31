@@ -2,10 +2,15 @@ import React from 'react';
 import { Shield } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
-import { useT } from '../../i18n/index.js';
+import { useT, getLocale } from '../../i18n/index.js';
+import { SafetyAlertLegend } from '../SafetyAlertLegend.jsx';
 
 export function SecuritySettings() {
   const t = useT();
+  // Subscribe to the epoch so a language switch re-resolves the screenshots too
+  // — the same reason PremiumGallery reads it.
+  useSettingsStore(s => s.localeEpoch);
+  const locale = getLocale();
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const setLinkSafetyEnabled = useSettingsStore(s => s.setLinkSafetyEnabled);
@@ -39,13 +44,17 @@ export function SecuritySettings() {
         </div>
       </div>
 
+      {/* Every mark the app can put on a message, with the screenshot of the
+          alert it opens. This used to be two lines covering only the LINK
+          levels, and their explanations were hardcoded English — so eight
+          locales read a half-translated paragraph, and nothing here mentioned
+          sender impersonation, Reply-To mismatch or the tracker glyphs at all. */}
       <div className="pt-4 border-t border-mail-border">
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.security.howWorks')}</h4>
-        <div className="text-xs text-mail-text-muted space-y-1">
-          <p><span className="text-mail-danger font-medium">{t('settings.security.redAlerts')}</span> — Link text shows one URL but actually goes to a different domain (phishing indicator)</p>
-          <p><span className="text-mail-warning font-medium">{t('settings.security.yellowAlerts')}</span> — Link passes through a tracking redirect to a different domain</p>
-          <p className="mt-2 text-mail-text-muted/70">{t('settings.security.allScanningPerformedLocallyDevice')}</p>
-        </div>
+        <SafetyAlertLegend locale={locale} showShots />
+        <p className="mt-3 text-xs text-mail-text-muted/70">
+          {t('settings.security.allScanningPerformedLocallyDevice')}
+        </p>
       </div>
     </div>
   );

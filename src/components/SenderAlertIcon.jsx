@@ -20,6 +20,7 @@ export function SenderAlertIcon({ level, email, size = 14 }) {
   return (
     <>
       <button
+        data-testid="sender-alert-icon"
         onClick={(e) => { e.stopPropagation(); setShowModal(true); }}
         className={`flex-shrink-0 ${isRed ? 'text-mail-danger' : 'text-mail-warning'} hover:opacity-80 transition-opacity`}
         aria-label={title}

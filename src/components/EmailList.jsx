@@ -22,11 +22,11 @@ import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
+import { LEGEND_ENTRIES } from './email/stateLegend.jsx';
 import {
   RefreshCw,
   HardDrive,
   Cloud,
-  CloudOff,
   ServerOff,
   Paperclip,
   CheckSquare,
@@ -49,7 +49,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
-import { t as tr, t, useT   } from '../i18n/index.js';
+import { t, useT } from '../i18n/index.js';
 
 /**
  * `viewMode` is a store value (`all` / `server` / `local`) and used to be
@@ -66,41 +66,6 @@ const VIEW_MODE_LABELS = {
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
-
-// View-mode legend entries — three glyphs and one modifier. Cloud/HardDrive
-// here are the same lucide icons the empty-state illustrations and
-// ConnectedStateIcon use; the legend is static (no email to describe), so it
-// renders them directly instead of going through describeMessageState.
-const LEGEND_ENTRIES = () => ([
-  {
-    id: 'legend-server',
-    glyph: <Cloud size={12} className="text-mail-server" />,
-    text: tr('list.serverOnly'),
-    label: tr('email.state.server'),
-    detail: tr('list.savedVaultYetIfAccount'),
-  },
-  {
-    id: 'legend-archived',
-    glyph: <HardDrive size={12} className="text-mail-local" />,
-    text: tr('list.vault'),
-    label: tr('email.state.savedVault'),
-    detail: tr('list.copyDiskAlsoShownWhen'),
-  },
-  {
-    id: 'legend-local-only',
-    glyph: <CloudOff size={12} className="text-mail-only-copy" />,
-    text: tr('list.onlyCopy'),
-    label: tr('email.state.onlyCopy'),
-    detail: tr('list.confirmedGoneServerNothingElse'),
-  },
-  {
-    id: 'legend-backed-up',
-    glyph: <span className="w-[6px] h-[6px] rounded-full border bg-mail-text border-mail-text" />,
-    text: tr('list.backupDrive'),
-    label: tr('list.backupDrive2'),
-    detail: tr('list.filledMeansBackupDriveToo'),
-  },
-]);
 
 function getDateRange(emails) {
   if (!emails || emails.length === 0) return null;
