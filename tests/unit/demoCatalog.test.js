@@ -20,11 +20,12 @@ describe('demoScenarios', () => {
     ]);
   });
 
-  it('exposes the five markers the capture script looks rows up by', () => {
+  it('exposes the six markers the capture script looks rows up by', () => {
     const { MARKERS } = demoScenarios('en');
     expect(Object.keys(MARKERS).sort())
-      .toEqual(['invoice', 'newsletter', 'phishing', 'replyTo', 'thread']);
+      .toEqual(['impersonation', 'invoice', 'newsletter', 'phishing', 'replyTo', 'thread']);
     expect(MARKERS.phishing).toMatch(/Action required/);
+    expect(MARKERS.impersonation).toMatch(/card was declined/);
   });
 
   it('builds a fresh mailbox per call, so one locale cannot leak into the next', () => {

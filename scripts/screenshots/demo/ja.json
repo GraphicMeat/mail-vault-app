@@ -135,5 +135,7 @@
   "Your payment could not be processed. Confirm your details to avoid interruption.": "お支払いを処理できませんでした。中断を避けるため、登録情報をご確認ください。",
   "Your subscription resumes Monday": "購読は月曜に再開します",
   "Your table is confirmed for the 4th": "4日のお席が確定しました",
-  "Your workshop place is confirmed": "ワークショップのお席が確定しました"
+  "Your workshop place is confirmed": "ワークショップのお席が確定しました",
+  "Your card was declined — update payment to keep your order": "カードが承認されませんでした — 注文を維持するにはお支払い情報を更新してください",
+  "We could not take payment for your most recent order.\n\nUpdate your card details today to stop the order being cancelled.\n\nMarbled Coffee Co. Billing": "直近のご注文のお支払いを処理できませんでした。\n\nご注文がキャンセルされないよう、本日中にカード情報を更新してください。\n\nMarbled Coffee Co. 請求担当"
 }

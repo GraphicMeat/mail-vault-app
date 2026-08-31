@@ -135,5 +135,7 @@
   "Your payment could not be processed. Confirm your details to avoid interruption.": "Não foi possível processar seu pagamento. Confirme seus dados para evitar interrupção.",
   "Your subscription resumes Monday": "Sua assinatura volta na segunda",
   "Your table is confirmed for the 4th": "Sua mesa está confirmada para o dia 4",
-  "Your workshop place is confirmed": "Sua vaga no workshop está confirmada"
+  "Your workshop place is confirmed": "Sua vaga no workshop está confirmada",
+  "Your card was declined — update payment to keep your order": "Seu cartão foi recusado — atualize o pagamento para manter seu pedido",
+  "We could not take payment for your most recent order.\n\nUpdate your card details today to stop the order being cancelled.\n\nMarbled Coffee Co. Billing": "Não conseguimos processar o pagamento do seu último pedido.\n\nAtualize os dados do cartão hoje para o pedido não ser cancelado.\n\nMarbled Coffee Co. Faturamento"
 }

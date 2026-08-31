@@ -399,6 +399,44 @@ describe('MailVault marketing screenshots', function () {
       await expectState((s) => s.insights, 'sender details did not open');
     });
 
+    /**
+     * The dialog, not just the glyph.
+     *
+     * `reply-to-mismatch` above shows the warning MARK on the row and in the
+     * sender panel — useful, but it never opens the explanation. Settings →
+     * Security lists "Reply-To domain mismatch" and needs the picture of what
+     * that alert actually says, so this shoots the open dialog.
+     *
+     * Clicked by testid, not by aria-label: the label is translated, so a
+     * capture keyed on it would find nothing in eight of nine locales.
+     */
+    await step('safety-reply-to-modal', async () => {
+      if (!(await clickTestId('reply-to-alert-icon'))) throw new Error('reply-to warning glyph not found');
+      await expectState((s) => s.text.includes(L('alert.replyTo.repliesWouldGo'))
+                            || s.text.includes(L('alert.replyTo.sentDomain')),
+        'reply-to dialog did not open');
+    });
+
+    await step('safety-sender-impersonation', async () => {
+      // Close the reply-to dialog the previous step left open. resetToInbox()
+      // presses Escape too, but its first pass clicks buttons BY TEXT and a
+      // Dialog's close control is an icon with no text, so the explicit press
+      // is what actually shuts it.
+      await pressKey('Escape');
+      await browser.pause(300);
+      await resetToInbox();
+      await clickRow(MARKERS.impersonation);
+      await browser.pause(700);
+      if (!(await clickTestId('sender-alert-icon'))) throw new Error('sender warning glyph not found');
+      // Assert on the BODY copy, not the title: the title differs by severity
+      // ('impersonation detected' vs 'suspicious sender name') and this fixture
+      // must hit the red one — a yellow result means the fixture stopped
+      // triggering Layer 0 and the shot would quietly show the wrong alert.
+      await expectState((s) => s.text.includes(L('alert.sender.displayNameShows'))
+                            && s.text.includes(L('alert.sender.senderImpersonationDetected')),
+        'sender impersonation dialog did not open');
+    });
+
     // ── Compose ───────────────────────────────────────────────────────────
     await step('compose-email', async () => {
       await resetToInbox();
@@ -438,7 +476,7 @@ describe('MailVault marketing screenshots', function () {
     });
 
     await step('selection-dialog-archive', async () => {
-      await clickByText(L('bulk.ops.next'));
+      await clickByText(L('common.next'));
       await browser.pause(800);
       if (!(await clickTestId('bulk-action-archive'))) throw new Error('archive action not offered');
       await expectState((s) => s.bulkConfirm, 'archive confirm not on screen');
@@ -719,10 +757,13 @@ describe('MailVault marketing screenshots', function () {
       await resetToInbox();
       await clickRow(MARKERS.newsletter);
       await browser.pause(500);
-      // "Export" is hardcoded English in EmailActionBar itself (a pre-existing
-      // gap, not a catalog key) — the literal is stable across every locale
-      // because the app never translates it, not because this file assumes so.
-      if (!(await clickByTitle('Export'))) throw new Error('export control not found');
+      // Was `clickByTitle('Export')` with a comment explaining that the action
+      // bar hardcoded English. `77fd5ca7` localized EmailActionBar, so the
+      // literal stopped matching and this step skipped in all eight non-English
+      // locales — English kept passing, which is why it went unnoticed. The
+      // stale premium-export-image captures from the previous sweep survived,
+      // so the run looked like it had produced them.
+      if (!(await clickByTitle(L('common.export')))) throw new Error('export control not found');
       await expectState(hasText(L('export.dialog.mirrorRemoteContent')), 'export dialog not on screen');
     });
 

@@ -642,6 +642,34 @@ function replyToMismatchMessage(uid) {
   });
 }
 
+/**
+ * Display-name impersonation: the name IS an email address, on a domain
+ * unrelated to the real sender. `checkSenderVerification` (senderCheck.js
+ * "Layer 0") raises `level: 'danger'` for exactly this shape, which is what
+ * `SenderAlertIcon` renders as "Sender impersonation detected".
+ *
+ * The lookalike domain is a hyphenated near-miss of the real one — the same
+ * trick `phishingMessage` uses — so the fixture reads as a plausible attack
+ * rather than an obviously fake one. Both domains are fictional.
+ */
+function impersonationMessage(uid) {
+  return textMessage({
+    uid,
+    daysAgo: 1, hour: 9, minute: 41,
+    from: '"orders@marbledcoffee.co" <dispatch@marbledcoffee-orders.help>',
+    to: OWNER,
+    seen: false,
+    subject: 'Your card was declined — update payment to keep your order',
+    body: [
+      'We could not take payment for your most recent order.',
+      '',
+      'Update your card details today to stop the order being cancelled.',
+      '',
+      'Marbled Coffee Co. Billing',
+    ].join('\n'),
+  });
+}
+
 // ── Mailboxes ───────────────────────────────────────────────────────────────
 
 function box(name, messages, attrs = ['\\HasNoChildren']) {
@@ -661,7 +689,8 @@ export function studioScenario() {
   const hero = heroMessages(200);
   const heroTop = hero.reduce((max, m) => Math.max(max, m.uid), 0);
   const thread = threadInbox(heroTop + 1);
-  const security = [phishingMessage(heroTop + 10), replyToMismatchMessage(heroTop + 11)];
+  const security = [phishingMessage(heroTop + 10), replyToMismatchMessage(heroTop + 11),
+                    impersonationMessage(heroTop + 12)];
   const filler = fillerMessages(100, 64, 9);
 
   return {
@@ -818,6 +847,7 @@ export function demoScenarios(code = 'en') {
     thread: S(THREAD_SUBJECT),
     phishing: S('Action required: your August payment could not be processed'),
     replyTo: S('Refund for order #4417 — confirm your bank details'),
+    impersonation: S('Your card was declined — update payment to keep your order'),
     newsletter: S('MeatPad 0.9 — code folding, themes, and no cloud'),
     invoice: S('Invoice CC-2026-0413 — paid, no strings'),
   };

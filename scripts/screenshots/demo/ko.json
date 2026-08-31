@@ -135,5 +135,7 @@
   "Your payment could not be processed. Confirm your details to avoid interruption.": "결제를 처리하지 못했습니다. 중단을 피하려면 정보를 확인해 주세요.",
   "Your subscription resumes Monday": "구독이 월요일에 재개됩니다",
   "Your table is confirmed for the 4th": "4일 자리가 확정되었습니다",
-  "Your workshop place is confirmed": "워크숍 자리가 확정되었습니다"
+  "Your workshop place is confirmed": "워크숍 자리가 확정되었습니다",
+  "Your card was declined — update payment to keep your order": "카드가 거절되었습니다 — 주문을 유지하려면 결제 정보를 업데이트하세요",
+  "We could not take payment for your most recent order.\n\nUpdate your card details today to stop the order being cancelled.\n\nMarbled Coffee Co. Billing": "최근 주문의 결제를 처리하지 못했습니다.\n\n주문이 취소되지 않도록 오늘 카드 정보를 업데이트해 주세요.\n\nMarbled Coffee Co. 청구팀"
 }

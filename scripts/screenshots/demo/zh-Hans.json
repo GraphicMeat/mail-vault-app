@@ -135,5 +135,7 @@
   "Your payment could not be processed. Confirm your details to avoid interruption.": "你的付款未能完成。请确认信息，以免服务中断。",
   "Your subscription resumes Monday": "你的订阅将于周一恢复",
   "Your table is confirmed for the 4th": "你 4 号的位置已确认",
-  "Your workshop place is confirmed": "你的工作坊名额已确认"
+  "Your workshop place is confirmed": "你的工作坊名额已确认",
+  "Your card was declined — update payment to keep your order": "您的银行卡被拒付 —— 请更新付款方式以保留订单",
+  "We could not take payment for your most recent order.\n\nUpdate your card details today to stop the order being cancelled.\n\nMarbled Coffee Co. Billing": "我们无法为您最近的订单完成扣款。\n\n请今天更新您的银行卡信息，以免订单被取消。\n\nMarbled Coffee Co. 账务部"
 }
