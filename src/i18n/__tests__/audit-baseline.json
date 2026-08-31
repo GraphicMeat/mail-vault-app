@@ -1,0 +1,351 @@
+{
+  "_comment": [
+    "KNOWN, PRE-EXISTING i18n debt — not a target, a ceiling.",
+    "",
+    "Before 2026-08-30 scripts/i18n-audit.mjs ran a blind allow-list regex that hid",
+    "any string containing a parenthesis, ellipsis, or similar punctuation, so the",
+    "audit reported one finding for the whole app and src/i18n/__tests__/drained.test.js",
+    "asserted the audit was completely empty. Repairing the regex to a deny-list",
+    "surfaced these findings for real, in components this branch has not localized yet.",
+    "",
+    "drained.test.js checks that the CURRENT audit output is a SUBSET of this file, not",
+    "equal to it. Localizing one of these strings and deleting its entry here is a pure",
+    "improvement and never breaks that test — the list is expected to shrink over time",
+    "as more components get localized, but nothing forces it to shrink on any schedule.",
+    "",
+    "Adding an entry here is a deliberate, reviewed exception (e.g. a string that is",
+    "genuinely not translatable yet), not a way to silence a red test. If you're adding",
+    "one, say why in the pull request — a hardcoded string that is simply new should be",
+    "wrapped in t() instead."
+  ],
+  "findings": [
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "Some people prefer a dark app but like reading emails in light mode. Set the default theme for email content here — the per-email Light/Dark button always overrides."
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "MM/DD/YYYY (US)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "DD/MM/YYYY (Europe)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "YYYY-MM-DD (ISO)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "DD MMM YYYY (e.g., 25 Feb 2024)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "12-hour (2:30 PM)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "24-hour (14:30)"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "Sidebar | List | Content"
+    },
+    {
+      "file": "src/components/settings/AppearanceSettings.jsx",
+      "string": "Sender + subject on two lines"
+    },
+    {
+      "file": "src/components/settings/TimeCapsuleSettings.jsx",
+      "string": ", so they take up very little space (a few hundred KB each). If you ever accidentally delete or lose an email, you can open a past snapshot, find it, and restore it."
+    },
+    {
+      "file": "src/components/settings/TimeCapsuleSettings.jsx",
+      "string": "You can always take a manual snapshot from the Time Capsule panel regardless of these settings. Snapshots are lightweight (a few hundred KB each) and stored locally."
+    },
+    {
+      "file": "src/components/settings/TrackerBlockingView.jsx",
+      "string": "news@mailer.example.com"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "15 seconds"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "30 seconds"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "1 minute"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "2 minutes"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "3 minutes"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "4 minutes"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "5 minutes"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "1s"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "5s"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "10s"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "1 month"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "6 months"
+    },
+    {
+      "file": "src/components/settings/BehaviorSettings.jsx",
+      "string": "1 year"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "Early Bird & Family Pricing"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "14-day free trial, cancel anytime"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "/mo"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "/yr"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "Or unlock premium free — star &amp; share MailVault"
+    },
+    {
+      "file": "src/components/settings/BillingSettings.jsx",
+      "string": "(this device)"
+    },
+    {
+      "file": "src/components/settings/AccountSettings.jsx",
+      "string": "Name shown in the \"From\" field when sending emails"
+    },
+    {
+      "file": "src/components/settings/AccountSettings.jsx",
+      "string": ". Your login and\n                    password are unchanged — the address must be an alias your provider lets this\n                    account send from."
+    },
+    {
+      "file": "src/components/settings/AccountSettings.jsx",
+      "string": "Changed hosting or email provider but kept the same address? Update the IMAP/SMTP servers here. Your vault stays exactly as it is — if the new server is empty, MailVault offers to upload it back."
+    },
+    {
+      "file": "src/components/settings/AccountSettings.jsx",
+      "string": "Date.now() ? ("
+    },
+    {
+      "file": "src/components/settings/BackupRestore.jsx",
+      "string": "Backup & Restore"
+    },
+    {
+      "file": "src/components/settings/BackupRestore.jsx",
+      "string": "MBOX Import / Export"
+    },
+    {
+      "file": "src/components/settings/SecuritySettings.jsx",
+      "string": "— Link text shows one URL but actually goes to a different domain (phishing indicator)"
+    },
+    {
+      "file": "src/components/settings/SecuritySettings.jsx",
+      "string": "— Link passes through a tracking redirect to a different domain"
+    },
+    {
+      "file": "src/components/settings/HelpSettings.jsx",
+      "string": "Help & Support"
+    },
+    {
+      "file": "src/components/settings/DataUsageAccountCard.jsx",
+      "string": "Daily download limit (MB)"
+    },
+    {
+      "file": "src/components/settings/DataUsageAccountCard.jsx",
+      "string": "Daily upload limit (MB)"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "Cloud Backups (One-time purchase)"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "• Save .eml files to any folder you choose"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "• Incremental backups — new mail only"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "• Works offline; no MailVault account required"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "• One-time payment, no subscription"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "Backup Scope & Storage"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "Archived emails only (locally saved)"
+    },
+    {
+      "file": "src/components/settings/BackupConfig.jsx",
+      "string": "All emails (download from server)"
+    },
+    {
+      "file": "src/components/EmailList.jsx",
+      "string": "Can&rsquo;t reach the server"
+    },
+    {
+      "file": "src/components/ChangeServerModal.jsx",
+      "string": "SSL/TLS"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "/Maildir/"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "15s delay"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "30s delay"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "1m delay"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "2m delay"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "3m delay"
+    },
+    {
+      "file": "src/components/ComposeModal.jsx",
+      "string": "5m delay"
+    },
+    {
+      "file": "src/components/EmailViewer.jsx",
+      "string": "Loading message…"
+    },
+    {
+      "file": "src/components/EmailViewer.jsx",
+      "string": ") : selectedEmail.html ? (\n            // Outer wrapper matches app theme so DR-inverted iframe content\n            // blends seamlessly. In light mode, white wrapper + white iframe."
+    },
+    {
+      "file": "src/components/EmailViewer.jsx",
+      "string": ") : selectedEmail._bodyError ? (\n            // The body never arrived. Saying so — with the reason and a retry —\n            // is the whole point: the silent version of this state rendered the\n            // subject line as the body and read as a successfully loaded email."
+    },
+    {
+      "file": "src/components/Sidebar.jsx",
+      "string": "0 &&"
+    },
+    {
+      "file": "src/components/Sidebar.jsx",
+      "string": "d.down + d.up));\n\n  return createPortal("
+    },
+    {
+      "file": "src/components/Sidebar.jsx",
+      "string": "Click to see more →"
+    },
+    {
+      "file": "src/components/Sidebar.jsx",
+      "string": "0 && cachedCount"
+    },
+    {
+      "file": "src/components/SettingsPage.jsx",
+      "string": "0 &&"
+    },
+    {
+      "file": "src/components/RowActionMenuItems.jsx",
+      "string": "Export…"
+    },
+    {
+      "file": "src/components/ShareUnlockModal.jsx",
+      "string": "Star us and share MailVault — unlock Cloud Backups & Time Capsule free.\n              Each one adds time. They stack."
+    },
+    {
+      "file": "src/components/ShareUnlockModal.jsx",
+      "string": "Prefer not to share? Subscribe instead →"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "Other / Custom"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "Email Address *"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "Advanced (Corporate)"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "Display Name (optional)"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "Password *"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "IMAP Host *"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "SSL/TLS"
+    },
+    {
+      "file": "src/components/AccountModal.jsx",
+      "string": "SMTP Host *"
+    },
+    {
+      "file": "src/components/SpellcheckHelpDialog.jsx",
+      "string": "This is the snap build. A snap cannot see dictionaries installed on the\n            host, so it carries its own — and if you are reading this, that copy is\n            missing. The .deb package from mailvaultapp.com uses your system's\n            dictionaries instead; the guide below has the details."
+    },
+    {
+      "file": "src/components/SpellcheckHelpDialog.jsx",
+      "string": ", and so on. MailVault\n              picks the dictionary that matches your system language."
+    },
+    {
+      "file": "src/components/SearchBar.jsx",
+      "string": "From (sender)"
+    },
+    {
+      "file": "src/components/email/AddressText.jsx",
+      "string": "seg.address ? ("
+    }
+  ]
+}
