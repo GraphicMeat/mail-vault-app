@@ -14,7 +14,7 @@ export function LanguageSettings() {
   const active = useSettingsStore(s => s.language);
 
   return (
-    <div className="space-y-8">
+    <div className="p-6 space-y-6">
       <div>
         <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.language.title')}</h4>
         <p className="text-xs text-mail-text-muted mb-4">{t('settings.language.subtitle')}</p>
