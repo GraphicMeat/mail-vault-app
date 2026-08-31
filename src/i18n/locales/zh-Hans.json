@@ -51,6 +51,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "回复此邮件会发送到与发件人不同的域名。正规发件人通常将回复导向同一域名，不一致是常见的钓鱼迹象。",
   "alert.replyTo.repliesWouldGo": "回复将发往：",
   "alert.replyTo.sentDomain": "发送域名：",
+  "alert.replyTo.domainMismatch": "Reply-To 域名不一致",
   "alert.sender.actualSenderAddress": "实际发件人地址：",
   "alert.sender.displayNameShows": "显示名称为：",
   "alert.sender.senderImpersonationDetected": "检测到发件人伪装",

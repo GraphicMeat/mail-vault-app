@@ -51,6 +51,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "このメッセージへの返信は、送信者とは別のドメインに送られます。正規の送信者は通常、送信元と同じドメインに返信を集めます。不一致はフィッシングの典型的な兆候です。",
   "alert.replyTo.repliesWouldGo": "返信先:",
   "alert.replyTo.sentDomain": "送信元ドメイン:",
+  "alert.replyTo.domainMismatch": "Reply-To ドメインの不一致",
   "alert.sender.actualSenderAddress": "実際の送信者アドレス:",
   "alert.sender.displayNameShows": "表示名:",
   "alert.sender.senderImpersonationDetected": "送信者のなりすましを検出",

@@ -51,6 +51,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "Les réponses à ce message iraient vers un domaine différent de celui de l'expéditeur. Les expéditeurs légitimes dirigent en général les réponses vers le même domaine ; un écart est un indice courant d'hameçonnage.",
   "alert.replyTo.repliesWouldGo": "Les réponses iraient à :",
   "alert.replyTo.sentDomain": "Envoyé depuis le domaine :",
+  "alert.replyTo.domainMismatch": "Domaine Reply-To incohérent",
   "alert.sender.actualSenderAddress": "Adresse réelle de l'expéditeur :",
   "alert.sender.displayNameShows": "Le nom affiché indique :",
   "alert.sender.senderImpersonationDetected": "Usurpation d'expéditeur détectée",

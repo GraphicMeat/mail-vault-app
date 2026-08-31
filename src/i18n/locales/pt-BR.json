@@ -51,6 +51,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "As respostas a esta mensagem iriam para um domínio diferente do remetente. Remetentes legítimos costumam direcionar respostas ao mesmo domínio de envio; uma divergência é um indício comum de phishing.",
   "alert.replyTo.repliesWouldGo": "As respostas iriam para:",
   "alert.replyTo.sentDomain": "Enviado do domínio:",
+  "alert.replyTo.domainMismatch": "Domínio de Reply-To divergente",
   "alert.sender.actualSenderAddress": "Endereço real do remetente:",
   "alert.sender.displayNameShows": "O nome exibido mostra:",
   "alert.sender.senderImpersonationDetected": "Falsificação de remetente detectada",

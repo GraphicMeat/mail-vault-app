@@ -8,5 +8,9 @@
     <true/>
     <key>SUPublicEDKey</key>
     <string>9OobPkT0p5WGp0wf2aSbADivVllEKZaz0gKhElMocU0=</string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
 </dict>
 </plist>

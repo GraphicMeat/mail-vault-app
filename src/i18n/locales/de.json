@@ -54,6 +54,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "Antworten auf diese Nachricht gingen an eine andere Domain als die des Absenders. Seriöse Absender leiten Antworten meist an dieselbe Domain — eine Abweichung ist ein häufiges Phishing-Merkmal.",
   "alert.replyTo.repliesWouldGo": "Antworten gingen an:",
   "alert.replyTo.sentDomain": "Gesendet von Domain:",
+  "alert.replyTo.domainMismatch": "Reply-To-Domain stimmt nicht überein",
   "alert.sender.actualSenderAddress": "Tatsächliche Absenderadresse:",
   "alert.sender.displayNameShows": "Anzeigename zeigt:",
   "alert.sender.senderImpersonationDetected": "Absender-Fälschung erkannt",
