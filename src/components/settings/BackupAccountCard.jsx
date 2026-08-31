@@ -289,7 +289,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         </div>
         <div>
           <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
-          <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
+          <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
         </div>
         <div>
           <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
@@ -305,7 +305,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       {state.lastStatus === 'degraded' && (
         <div className="flex items-start gap-2 text-xs text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-          <span>{state.lastError || 'Backed up locally, but external backup failed for some emails.'}</span>
+          <span>{state.lastError || t('settings.backup.account.backedUpLocallyExternalFailed')}</span>
         </div>
       )}
 
@@ -317,7 +317,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             {history.map((entry, i) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 bg-mail-bg rounded-lg">
                 <span className="text-mail-text-muted w-36">{formatTimestamp(entry.timestamp)}</span>
-                <span className="text-mail-text w-24">{entry.emailsBackedUp} emails</span>
+                <span className="text-mail-text w-24">{t('common.emailCount', { count: entry.emailsBackedUp })}</span>
                 <span className="text-mail-text-muted w-20">{formatDuration(entry.durationSecs)}</span>
                 {entry.success && entry.externalCopyOk !== false ? (
                   <span className="text-mail-success flex items-center gap-1">
@@ -480,7 +480,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
-              <div className="text-sm font-semibold text-mail-text">{state.emailsBackedUp || 0} emails</div>
+              <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
@@ -493,7 +493,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-mail-text">{decodeImapUtf7(backupProgress.folder)} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
-                  <span className="text-mail-text-muted">{backupProgress.completed_emails} emails</span>
+                  <span className="text-mail-text-muted">{t('common.emailCount', { count: backupProgress.completed_emails })}</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
                   <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />
