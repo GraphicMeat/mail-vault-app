@@ -1,7 +1,9 @@
 import React from 'react';
-import { Bug, Github, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
+import { Bug, Github, HelpCircle, Lightbulb, Mail, MessagesSquare } from 'lucide-react';
 import { Dialog, Button, XLogo } from './ui';
 import { openInBrowser } from '../services/billingApi';
+import { faqUrl } from '../services/faqUrl';
+import { useSettingsStore } from '../stores/settingsStore';
 import logoUrl from '../assets/graphicmeat-logo.webp';
 import { t as tr, useT  } from '../i18n/index.js';
 
@@ -12,39 +14,34 @@ const X_PROFILE = 'https://x.com/GraphicMeat';
 const MAKER_SITE = 'https://graphicmeat.com';
 
 /**
- * Where a bug report goes. GitHub first: a public thread is searchable by the
- * next person who hits the same thing, and email is a dead end for everyone
- * but the sender — so email sits last, as the private fallback for anything
- * that should not be posted in the open.
+ * Where a bug report goes, ordered as a deflection ladder: the FAQ answers it
+ * outright, an existing discussion answers it second-hand, and only then does
+ * a new thread get filed. A public thread is searchable by the next person who
+ * hits the same thing; email is a dead end for everyone but the sender, so it
+ * sits below the GitHub rows as the private fallback for anything that should
+ * not be posted in the open.
  *
- * The dialog also takes feature requests. Someone who has just hit something
- * wrong is the same person who knows what the app should have done instead,
- * and this is the only moment MailVault has their attention on the subject.
+ * The dialog also takes feature requests — last, because it is not a bug.
+ * Someone who has just hit something wrong is the same person who knows what
+ * the app should have done instead, and this is the only moment MailVault has
+ * their attention on the subject.
  */
 export function BugReportDialog({ open, onClose, onEmail }) {
   const t = useT();
+  const language = useSettingsStore(s => s.language) || 'en';
   const openAndClose = (url) => () => { openInBrowser(url).catch(() => {}); onClose(); };
+  const FAQ = faqUrl(language);
 
   const options = [
     {
-      testid: 'bug-option-github',
-      icon: Github,
-      title: tr('bugReport.reportGithub'),
-      subtitle: tr('bugReport.publicThreadSearchableGetNotified'),
-      action: tr('common.open'),
-      variant: 'primary',
-      url: GH_NEW_BUG,
-      onClick: openAndClose(GH_NEW_BUG),
-    },
-    {
-      testid: 'bug-option-idea',
-      icon: Lightbulb,
-      title: tr('bugReport.suggestFeature'),
-      subtitle: tr('bugReport.thingWishMailvaultDidAsk'),
+      testid: 'bug-option-faq',
+      icon: HelpCircle,
+      title: tr('settings.help.faq'),
+      subtitle: tr('settings.help.faqSubtitle'),
       action: tr('common.open'),
       variant: 'subtle',
-      url: GH_NEW_IDEA,
-      onClick: openAndClose(GH_NEW_IDEA),
+      url: FAQ,
+      onClick: openAndClose(FAQ),
     },
     {
       testid: 'bug-option-discussions',
@@ -57,6 +54,16 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       onClick: openAndClose(GH_DISCUSSIONS),
     },
     {
+      testid: 'bug-option-github',
+      icon: Github,
+      title: tr('bugReport.reportGithub'),
+      subtitle: tr('bugReport.publicThreadSearchableGetNotified'),
+      action: tr('common.open'),
+      variant: 'primary',
+      url: GH_NEW_BUG,
+      onClick: openAndClose(GH_NEW_BUG),
+    },
+    {
       testid: 'bug-option-email',
       icon: Mail,
       title: tr('bugReport.emailDeveloper'),
@@ -64,6 +71,16 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       action: tr('sidebar.compose'),
       variant: 'subtle',
       onClick: onEmail,
+    },
+    {
+      testid: 'bug-option-idea',
+      icon: Lightbulb,
+      title: tr('bugReport.suggestFeature'),
+      subtitle: tr('bugReport.thingWishMailvaultDidAsk'),
+      action: tr('common.open'),
+      variant: 'subtle',
+      url: GH_NEW_IDEA,
+      onClick: openAndClose(GH_NEW_IDEA),
     },
   ];
 

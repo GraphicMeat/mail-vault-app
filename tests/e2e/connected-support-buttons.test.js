@@ -2,13 +2,14 @@
  * E2E: the sidebar's support footer.
  *
  * "Report a bug" used to open a compose window addressed to one inbox nobody
- * else could read. It now opens a dialog that offers GitHub Discussions first
- * — so what matters here is that the button reaches the dialog, that the two
- * GitHub rows carry the live URLs (a webview cannot follow an external open,
- * so the URL is asserted at the control), that email sits last as the private
- * fallback and still lands in compose with the bug template, and that the
- * footer's warning and Graphic Meat logo render. "Refer a friend" is the second new
- * button: compose with the pitch and the website link, and no recipient.
+ * else could read. It now opens a dialog that reads as a deflection ladder —
+ * the FAQ, then existing discussions, then a new report — so what matters here
+ * is that the button reaches the dialog, that the FAQ and the two GitHub rows
+ * carry the live URLs (a webview cannot follow an external open, so the URL is
+ * asserted at the control), that email still lands in compose with the bug
+ * template, and that the footer's warning and Graphic Meat logo render.
+ * "Refer a friend" is the second new button: compose with the pitch and the
+ * website link, and no recipient.
  */
 
 import { waitForApp } from './helpers.js';
@@ -64,7 +65,7 @@ describe('Sidebar support buttons', function () {
     expect(labels).toContain('Refer a friend');
   });
 
-  it('routes a bug report to GitHub Discussions first, email second', async function () {
+  it('routes a bug report to the FAQ and GitHub Discussions before a new thread', async function () {
     expect(await clickFooter('Report a bug')).toBe(true);
     await $(DIALOG).waitForExist({ timeout: 10_000 });
 
@@ -73,19 +74,23 @@ describe('Sidebar support buttons', function () {
       const url = (testid) => dialog
         .querySelector(`[data-testid="${testid}"] button`)?.getAttribute('data-url') || null;
       return {
+        faq: url('bug-option-faq'),
         report: url('bug-option-github'),
         browse: url('bug-option-discussions'),
         email: url('bug-option-email'),
       };
     }, DIALOG);
 
+    // The suite runs in English, so the FAQ sits at the site root — a locale
+    // directory here would mean the app code leaked into the URL.
+    expect(urls.faq).toBe('https://mailvaultapp.com/faq.html');
     expect(urls.report).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=bug-reports');
     expect(urls.browse).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions');
     // The email row is not a link — it hands off to compose in-app.
     expect(urls.email).toBe(null);
   });
 
-  it('takes feature requests too, puts email last, warns about logs, and paints the maker logo', async function () {
+  it('takes feature requests too, keeps the ladder order, warns about logs, and paints the maker logo', async function () {
     const footer = await browser.execute((sel) => {
       const dialog = document.querySelector(sel);
       const img = dialog.querySelector('[data-testid="bug-maker-logo"] img');
@@ -101,7 +106,8 @@ describe('Sidebar support buttons', function () {
     }, DIALOG);
 
     expect(footer.order).toEqual([
-      'bug-option-github', 'bug-option-idea', 'bug-option-discussions', 'bug-option-email',
+      'bug-option-faq', 'bug-option-discussions', 'bug-option-github',
+      'bug-option-email', 'bug-option-idea',
     ]);
     expect(footer.idea).toBe('https://github.com/GraphicMeat/mail-vault-app/discussions/new?category=ideas');
     expect(footer.note).toContain('logs');

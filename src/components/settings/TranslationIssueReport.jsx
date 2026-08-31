@@ -12,7 +12,7 @@ const CATEGORY = 'bug-reports';
 /**
  * A public thread beats an email: it is searchable by the next person who trips
  * over the same wording, and it lands where the fix gets made. Same reasoning
- * BugReportDialog already documents for putting email last.
+ * BugReportDialog already documents for ranking a public thread above email.
  */
 export function TranslationIssueReport() {
   const t = useT();

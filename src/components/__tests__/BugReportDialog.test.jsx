@@ -2,10 +2,11 @@
 //
 // The bug button used to go straight to an email nobody else could read. The
 // dialog exists so a report can land in a public thread instead — so what this
-// guards is the routing: four channels, the three GitHub ones on the live
-// discussion URLs (bug reports and ideas land in DIFFERENT categories), email
-// last as the private fallback, and the warning that stops a log full of email
-// addresses being pasted into a public thread.
+// guards is the routing: five channels ordered as a deflection ladder (FAQ,
+// then existing discussions, then a new report), the three GitHub ones on the
+// live discussion URLs (bug reports and ideas land in DIFFERENT categories),
+// the FAQ row on the SITE DIRECTORY of the running language, and the warning
+// that stops a log full of email addresses being pasted into a public thread.
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
@@ -13,6 +14,13 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 
 const openInBrowser = vi.fn(() => Promise.resolve(true));
 vi.mock('../../services/billingApi', () => ({ openInBrowser: (url) => openInBrowser(url) }));
+// The dialog reads the language to pick the FAQ directory; `useT` reads
+// localeEpoch off the same store, so the selector has to be honoured.
+vi.mock('../../stores/settingsStore', () => ({
+  useSettingsStore: (sel) => (typeof sel === 'function'
+    ? sel({ language: 'de', localeEpoch: 0 })
+    : { language: 'de', localeEpoch: 0 }),
+}));
 
 import { BugReportDialog } from '../BugReportDialog';
 
@@ -50,13 +58,25 @@ describe('BugReportDialog', () => {
     expect(openInBrowser).not.toHaveBeenCalled();
   });
 
-  it('offers email last — the public thread is the first thing read', () => {
+  it('orders the channels as a deflection ladder — FAQ first, feature request last', () => {
     render(<BugReportDialog open onClose={() => {}} onEmail={() => {}} />);
     const order = [...screen.getByTestId('bug-report-dialog').querySelectorAll('[data-testid^="bug-option-"]')]
       .map(el => el.dataset.testid);
     expect(order).toEqual([
-      'bug-option-github', 'bug-option-idea', 'bug-option-discussions', 'bug-option-email',
+      'bug-option-faq', 'bug-option-discussions', 'bug-option-github',
+      'bug-option-email', 'bug-option-idea',
     ]);
+  });
+
+  // `pt-BR`/`zh-Hans` are app codes; the site serves `pt-br`/`zh`. Passing the
+  // app code straight through 404s, which is why this asserts the built URL
+  // rather than that some FAQ link exists.
+  it('opens the FAQ in the running language, not the English one', () => {
+    const onClose = vi.fn();
+    render(<BugReportDialog open onClose={onClose} onEmail={() => {}} />);
+    click('bug-option-faq');
+    expect(openInBrowser).toHaveBeenCalledWith('https://mailvaultapp.com/de/faq.html');
+    expect(onClose).toHaveBeenCalled();
   });
 
   it('files a feature request in Ideas, not in the bug category', () => {
