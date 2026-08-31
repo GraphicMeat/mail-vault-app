@@ -167,35 +167,6 @@
   transform: scale(0.97);
 }
 
-/* --- State -------------------------------------------------------------- */
-
-/* The FAQ answer opens on a grid row instead of a max-height guess. A shared
-   `max-height: 3000px` gives every answer a different real speed, clips any
-   answer taller than the guess, and leaves a long one still growing after its
-   transition has ended. 0fr -> 1fr animates the answer's own height. */
-.faq-answer {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--mv-state) var(--mv-ease);
-}
-.faq-answer.open {
-  grid-template-rows: 1fr;
-}
-/* The grid track's automatic minimum is floored by the child's own padding —
-   `pb-5` on the answer paragraph left every closed answer 20px tall, leaking a
-   line of its text. Collapse that padding on the same curve as the row, so the
-   closed state is genuinely zero and the open one keeps its spacing. */
-.faq-answer > * {
-  overflow: hidden;
-  min-height: 0;
-  transition: padding-top var(--mv-state) var(--mv-ease),
-              padding-bottom var(--mv-state) var(--mv-ease);
-}
-.faq-answer:not(.open) > * {
-  padding-top: 0;
-  padding-bottom: 0;
-}
-
 /* ============================================================================
    DIRECTION CONTRACT — mailvaultapp.com colour system, "Custody Field"
 
