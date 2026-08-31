@@ -45,6 +45,41 @@
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
   </style>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "CollectionPage",
+  "name": "ドキュメント - MailVault",
+  "description": "MailVaultのドキュメント、セットアップガイド、アーカイブの手順。",
+  "url": "https://mailvaultapp.com/ja/docs.html",
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "MailVault",
+    "url": "https://mailvaultapp.com/ja/"
+  }
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ホーム",
+      "item": "https://mailvaultapp.com/ja/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "ドキュメント",
+      "item": "https://mailvaultapp.com/ja/docs.html"
+    }
+  ]
+}
+  </script>
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/docs.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/docs.html">
@@ -133,142 +168,197 @@
       <!-- /i18n:switcher -->
   </nav>
 
-  <main class="pt-24 pb-20">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <main class="pt-32 pb-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <h1 class="text-4xl font-bold mb-2">ドキュメント</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-12">MailVaultを使いこなすためのガイド、手順、そして答え。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">MailVaultを使いこなすためのガイド、手順、そして答え。</p>
 
-      <!-- Guides -->
-      <h2 class="text-2xl font-bold mb-4">ガイド</h2>
-      <div class="space-y-4 mb-12">
-
-        <a href="/ja/guides/archive-imap-emails-locally.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">IMAPのメールをローカルにアーカイブする方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">macOSとLinuxで、IMAPのメールをダウンロードしてローカルストレージにアーカイブする方法を解説します。</p>
-        </a>
-
-        <a href="/ja/guides/free-up-email-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">メールの保存容量を空ける方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">メールボックスがいっぱいですか。メールをローカルにアーカイブしてから、サーバーから安全に削除して容量を取り戻しましょう。</p>
-        </a>
-
-        <a href="/ja/guides/keep-emails-after-server-deletion.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">サーバーから削除してもメールを残す方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">メールを失わずにサーバーから削除する方法。先にローカルへアーカイブすれば、ずっと手元に残ります。</p>
-        </a>
-
-        <a href="/ja/guides/mailstore-alternative-mac.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Mac向けの最良のMailStore代替</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">MacでMailStoreの代わりを探していますか。MailVaultと比べてみてください &mdash; 無料、オープンソース、macOSネイティブ。</p>
-        </a>
-
-        <a href="/ja/guides/gmail-storage-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Gmailの容量がいっぱい？ 解決する方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Gmailの容量を実際に空けられる方法を、手間の少ない順に &mdash; そして、同じ問題を繰り返さないために。</p>
-        </a>
-
-        <a href="/ja/guides/download-all-gmail-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Gmailのメールをすべてダウンロードする方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google TakeoutとIMAPアーカイブの比較 &mdash; それぞれの仕組みと、実際に必要なのはどちらか。</p>
-        </a>
-
-        <a href="/ja/guides/backup-email-before-closing-account.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">アカウントを閉じる前にメールをバックアップする</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">アカウントを完全に閉じる前に、すべてのフォルダをバックアップするための手順チェックリスト。</p>
-        </a>
-
-        <a href="/ja/guides/yahoo-mail-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Yahoo Mailをバックアップする方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Yahooはアプリパスワードに対応していません &mdash; 実際に使える接続手順を解説します。</p>
-        </a>
-
-        <a href="/ja/guides/leave-gmail-keep-your-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">メールを失わずにGmailから移行する方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">プロバイダーを乗り換えますか。まずGmailの履歴をアーカイブして、自分のペースで移行しましょう。</p>
-        </a>
-
-        <a href="/ja/guides/imap-backup-tool-checklist.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">IMAPバックアップツール: 何を見るべきか</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">メールバックアップツールを見極めるための率直なチェックリスト &mdash; ファイル形式、認証、データの所有権。</p>
-        </a>
-
-        <a href="/ja/guides/outlook-hotmail-mailbox-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Outlook.com / Hotmailのメールボックスがいっぱいですか</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">何が容量を使っているかを調べ、追加料金を払う前に古いメールをアーカイブする方法。</p>
-        </a>
-
-        <a href="/ja/guides/export-icloud-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">iCloud Mailをパソコンに書き出す方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">iCloudには書き出しボタンがありません &mdash; 実際に使えるIMAPとアプリ用パスワードの設定を解説します。</p>
-        </a>
-
-        <a href="/ja/guides/delete-thousands-of-old-emails-safely.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">数千通の古いメールを安全に削除する方法</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">後で必要になるものを失わずに、古いメールを一括削除するための安全な手順。</p>
-        </a>
-
-        <a href="/ja/guides/email-archiving-for-freelancers.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">フリーランスと小規模事業者のためのメールアーカイブ</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">クライアントとのメールは、作業範囲や承認を示す唯一の記録であることが少なくありません &mdash; それを永久に残す方法。</p>
-        </a>
-
-      </div>
-
-      <!-- Compare -->
-      <h2 class="text-2xl font-bold mb-4">比較</h2>
-      <div class="space-y-4 mb-12">
-
-        <a href="/ja/compare/mailvault-vs-apple-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">ローカルへのメールバックアップにおいて、MailVaultの専用のアーカイブ機能とApple Mailを比較します。</p>
-        </a>
-
-        <a href="/ja/compare/mailvault-vs-thunderbird.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">アーカイブの手順、保存形式、そしてメールの保管にどちらが向いているかを比較します。</p>
-        </a>
-
-        <a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs 容量の追加購入</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">メールの追加容量に払い続けるのはやめましょう。ローカルにアーカイブして、プランを下げられます。</p>
-        </a>
-
-      </div>
-
-      <!-- Reference -->
+      <!-- Reference — the three destinations people arrive looking for. -->
       <h2 class="text-2xl font-bold mb-4">リファレンス</h2>
-      <div class="space-y-4">
+      <div class="grid gap-4 sm:grid-cols-3 mb-14">
 
-        <a href="/ja/faq.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">FAQ</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">MailVault、メールの形式、保存、セキュリティ、プロバイダーについてのよくある質問。</p>
+        <a href="/ja/faq.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">FAQ</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">MailVault、メールの形式、保存、セキュリティ、プロバイダーについてのよくある質問。</p>
         </a>
 
-        <a href="/ja/features.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">すべての機能</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">メール管理、セキュリティ、パフォーマンスなどの詳細を含む、機能の一覧。</p>
+        <a href="/ja/features.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">すべての機能</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">メール管理、セキュリティ、パフォーマンスなどの詳細を含む、機能の一覧。</p>
         </a>
 
-        <a href="/changelog.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">変更履歴</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">リリースの履歴と、各バージョンの新機能。</p>
+        <a href="/changelog.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">変更履歴</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">リリースの履歴と、各バージョンの新機能。</p>
         </a>
 
+      </div>
+
+      <!-- Search is progressive enhancement over the index below: with scripting
+           off the box stays hidden and every guide is still one link away. -->
+      <div id="mv-docs-search" hidden class="mb-8">
+        <input id="mv-docs-q" type="search" autocomplete="off" aria-label="ドキュメントを検索" placeholder="ドキュメントを検索" aria-controls="mv-docs-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
+
+      <h2 class="text-2xl font-bold mb-6">ガイド</h2>
+      <p id="mv-docs-empty" hidden class="text-slate-500 dark:text-slate-400">その検索に一致するガイドはありません。</p>
+
+      <div id="mv-docs-index" class="space-y-8">
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">容量を空ける</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/ja/guides/free-up-email-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">メールの保存容量を空ける方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">メールボックスがいっぱいですか。メールをローカルにアーカイブしてから、サーバーから安全に削除して容量を取り戻しましょう。</p>
+            </a>
+
+            <a href="/ja/guides/gmail-storage-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Gmailの容量がいっぱい？ 解決する方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Gmailの容量を実際に空けられる方法を、手間の少ない順に &mdash; そして、同じ問題を繰り返さないために。</p>
+            </a>
+
+            <a href="/ja/guides/outlook-hotmail-mailbox-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Outlook.com / Hotmailのメールボックスがいっぱいですか</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">何が容量を使っているかを調べ、追加料金を払う前に古いメールをアーカイブする方法。</p>
+            </a>
+
+            <a href="/ja/guides/delete-thousands-of-old-emails-safely.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">数千通の古いメールを安全に削除する方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">後で必要になるものを失わずに、古いメールを一括削除するための安全な手順。</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">アーカイブとバックアップ</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/ja/guides/archive-imap-emails-locally.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">IMAPのメールをローカルにアーカイブする方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">macOSとLinuxで、IMAPのメールをダウンロードしてローカルストレージにアーカイブする方法を解説します。</p>
+            </a>
+
+            <a href="/ja/guides/keep-emails-after-server-deletion.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">サーバーから削除してもメールを残す方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">メールを失わずにサーバーから削除する方法。先にローカルへアーカイブすれば、ずっと手元に残ります。</p>
+            </a>
+
+            <a href="/ja/guides/backup-email-before-closing-account.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">アカウントを閉じる前にメールをバックアップする</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">アカウントを完全に閉じる前に、すべてのフォルダをバックアップするための手順チェックリスト。</p>
+            </a>
+
+            <a href="/ja/guides/email-archiving-for-freelancers.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">フリーランスと小規模事業者のためのメールアーカイブ</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">クライアントとのメールは、作業範囲や承認を示す唯一の記録であることが少なくありません &mdash; それを永久に残す方法。</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">プロバイダー別ガイド</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/ja/guides/download-all-gmail-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Gmailのメールをすべてダウンロードする方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Google TakeoutとIMAPアーカイブの比較 &mdash; それぞれの仕組みと、実際に必要なのはどちらか。</p>
+            </a>
+
+            <a href="/ja/guides/leave-gmail-keep-your-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">メールを失わずにGmailから移行する方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">プロバイダーを乗り換えますか。まずGmailの履歴をアーカイブして、自分のペースで移行しましょう。</p>
+            </a>
+
+            <a href="/ja/guides/yahoo-mail-backup.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Yahoo Mailをバックアップする方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Yahooはアプリパスワードに対応していません &mdash; 実際に使える接続手順を解説します。</p>
+            </a>
+
+            <a href="/ja/guides/export-icloud-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">iCloud Mailをパソコンに書き出す方法</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">iCloudには書き出しボタンがありません &mdash; 実際に使えるIMAPとアプリ用パスワードの設定を解説します。</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">比較</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/ja/compare/mailvault-vs-apple-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">ローカルへのメールバックアップにおいて、MailVaultの専用のアーカイブ機能とApple Mailを比較します。</p>
+            </a>
+
+            <a href="/ja/compare/mailvault-vs-thunderbird.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">アーカイブの手順、保存形式、そしてメールの保管にどちらが向いているかを比較します。</p>
+            </a>
+
+            <a href="/ja/compare/mailvault-vs-paying-for-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs 容量の追加購入</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">メールの追加容量に払い続けるのはやめましょう。ローカルにアーカイブして、プランを下げられます。</p>
+            </a>
+
+            <a href="/ja/guides/mailstore-alternative-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Mac向けの最良のMailStore代替</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">MacでMailStoreの代わりを探していますか。MailVaultと比べてみてください &mdash; 無料、オープンソース、macOSネイティブ。</p>
+            </a>
+
+            <a href="/ja/guides/imap-backup-tool-checklist.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">IMAPバックアップツール: 何を見るべきか</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">メールバックアップツールを見極めるための率直なチェックリスト &mdash; ファイル形式、認証、データの所有権。</p>
+            </a>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">まだ疑問がありますか</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHubで質問する
+          </a>
+          <a href="/ja/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            お問い合わせ
+          </a>
+        </div>
       </div>
 
     </div>
   </main>
-
   <!-- Footer -->
-  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/ja/" class="flex items-center gap-2">
           <img src="/icon-128.webp" alt="MailVaultのロゴ" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
-        </div>
-
+        </a>
         <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/ja/docs.html" class="hover:text-primary-500 transition-colors">ドキュメント</a>
           <a href="/ja/blog.html" class="hover:text-primary-500 transition-colors">ブログ</a>
@@ -297,27 +387,15 @@
   </footer>
 
   <script>
-    // Theme toggle
+    // Theme Toggle
     const themeToggle = document.getElementById('theme-toggle');
-    const sunIcon = document.getElementById('sun-icon');
-    const moonIcon = document.getElementById('moon-icon');
-
-    function updateThemeIcons() {
-      const isDark = document.documentElement.classList.contains('dark');
-      sunIcon.classList.toggle('hidden', !isDark);
-      moonIcon.classList.toggle('hidden', isDark);
-    }
-
-    // Initialize theme
+    const html = document.documentElement;
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
+      html.classList.add('dark');
     }
-    updateThemeIcons();
-
     themeToggle.addEventListener('click', () => {
-      document.documentElement.classList.toggle('dark');
-      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      updateThemeIcons();
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     });
 
     // Mobile Menu
@@ -325,13 +403,11 @@
     const mobileMenu = document.getElementById('mobile-menu');
     const menuIconOpen = document.getElementById('menu-icon-open');
     const menuIconClose = document.getElementById('menu-icon-close');
-
     mobileMenuBtn.addEventListener('click', () => {
       mobileMenu.classList.toggle('hidden');
       menuIconOpen.classList.toggle('hidden');
       menuIconClose.classList.toggle('hidden');
     });
-
     document.querySelectorAll('#mobile-menu a').forEach(link => {
       link.addEventListener('click', () => {
         mobileMenu.classList.add('hidden');
@@ -339,8 +415,27 @@
         menuIconClose.classList.add('hidden');
       });
     });
-  </script>
 
+    // Filter the index. Plain substring over title and summary — 17 cards.
+    const box = document.getElementById('mv-docs-search');
+    const field = document.getElementById('mv-docs-q');
+    const empty = document.getElementById('mv-docs-empty');
+    const cards = [...document.querySelectorAll('#mv-docs-index .mv-doc')];
+    box.hidden = false;
+    field.addEventListener('input', () => {
+      const needle = field.value.trim().toLowerCase();
+      let hits = 0;
+      for (const card of cards) {
+        const match = !needle || card.textContent.toLowerCase().includes(needle);
+        card.hidden = !match;
+        if (match) hits++;
+      }
+      for (const group of document.querySelectorAll('#mv-docs-index .mv-docs-group')) {
+        group.hidden = ![...group.querySelectorAll('.mv-doc')].some(c => !c.hidden);
+      }
+      empty.hidden = hits > 0;
+    });
+  </script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

@@ -45,6 +45,41 @@
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
   </style>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    "name": "Documentation - MailVault",
+    "description": "MailVault documentation, setup guides, and archiving workflows.",
+    "url": "https://mailvaultapp.com/docs.html",
+    "isPartOf": {
+      "@type": "WebSite",
+      "name": "MailVault",
+      "url": "https://mailvaultapp.com/"
+    }
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://mailvaultapp.com/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Docs",
+        "item": "https://mailvaultapp.com/docs.html"
+      }
+    ]
+  }
+  </script>
   <!-- i18n:alternates -->
   <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/docs.html">
   <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/docs.html">
@@ -133,142 +168,197 @@
       <!-- /i18n:switcher -->
   </nav>
 
-  <main class="pt-24 pb-20">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+  <main class="pt-32 pb-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <h1 class="text-4xl font-bold mb-2">Documentation</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-12">Guides, workflows, and answers for getting the most out of MailVault.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Guides, workflows, and answers for getting the most out of MailVault.</p>
 
-      <!-- Guides -->
-      <h2 class="text-2xl font-bold mb-4">Guides</h2>
-      <div class="space-y-4 mb-12">
-
-        <a href="/guides/archive-imap-emails-locally.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Archive IMAP Emails Locally</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Learn how to download and archive your IMAP emails to local storage on macOS and Linux.</p>
-        </a>
-
-        <a href="/guides/free-up-email-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Free Up Email Storage</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Mailbox full? Archive emails locally, then safely delete from the server to reclaim space.</p>
-        </a>
-
-        <a href="/guides/keep-emails-after-server-deletion.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Keep Emails After Server Deletion</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Delete emails from your server without losing them. Archive locally first, keep forever.</p>
-        </a>
-
-        <a href="/guides/mailstore-alternative-mac.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Best MailStore Alternative for Mac</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Looking for a MailStore alternative on Mac? Compare MailVault &mdash; free, open source, native macOS.</p>
-        </a>
-
-        <a href="/guides/gmail-storage-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Gmail Storage Full? Here's How to Fix It</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">What actually frees up Gmail space, in order of effort &mdash; and how to stop the problem from coming back.</p>
-        </a>
-
-        <a href="/guides/download-all-gmail-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Download All Your Gmail Emails</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Google Takeout vs an IMAP archive &mdash; how each works and which one you actually want.</p>
-        </a>
-
-        <a href="/guides/backup-email-before-closing-account.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Back Up Email Before Closing an Account</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">A step-by-step checklist for backing up every folder before an account is closed for good.</p>
-        </a>
-
-        <a href="/guides/yahoo-mail-backup.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Back Up Yahoo Mail</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Yahoo doesn't support app passwords &mdash; here's the connection flow that actually works.</p>
-        </a>
-
-        <a href="/guides/leave-gmail-keep-your-emails.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Leave Gmail Without Losing Your Emails</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Switching providers? Archive your Gmail history first, then migrate on your own terms.</p>
-        </a>
-
-        <a href="/guides/imap-backup-tool-checklist.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">IMAP Backup Tool: What to Look For</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">An honest checklist for evaluating any email backup tool &mdash; file format, auth, and data ownership.</p>
-        </a>
-
-        <a href="/guides/outlook-hotmail-mailbox-full.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Outlook.com / Hotmail Mailbox Full?</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How to check what's using your storage and archive old email before paying for more.</p>
-        </a>
-
-        <a href="/guides/export-icloud-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Export iCloud Mail to Your Computer</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">iCloud has no built-in export button &mdash; here's the IMAP and app-specific password setup that works.</p>
-        </a>
-
-        <a href="/guides/delete-thousands-of-old-emails-safely.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">How to Delete Thousands of Old Emails Safely</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">A safe process for bulk-deleting old mail without losing anything you might need later.</p>
-        </a>
-
-        <a href="/guides/email-archiving-for-freelancers.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Email Archiving for Freelancers &amp; Small Business</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Client email is often your only record of scope and approvals &mdash; how to keep it forever.</p>
-        </a>
-
-      </div>
-
-      <!-- Compare -->
-      <h2 class="text-2xl font-bold mb-4">Compare</h2>
-      <div class="space-y-4 mb-12">
-
-        <a href="/compare/mailvault-vs-apple-mail.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">How MailVault's dedicated archiving compares to Apple Mail for local email backup.</p>
-        </a>
-
-        <a href="/compare/mailvault-vs-thunderbird.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Compare archiving workflows, storage formats, and which is better for email retention.</p>
-        </a>
-
-        <a href="/compare/mailvault-vs-paying-for-storage.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Paying for More Storage</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Stop paying for more email storage. Archive locally and downgrade your plan.</p>
-        </a>
-
-      </div>
-
-      <!-- Reference -->
+      <!-- Reference — the three destinations people arrive looking for. -->
       <h2 class="text-2xl font-bold mb-4">Reference</h2>
-      <div class="space-y-4">
+      <div class="grid gap-4 sm:grid-cols-3 mb-14">
 
-        <a href="/faq.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">FAQ</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Common questions about MailVault, email formats, storage, security, and providers.</p>
+        <a href="/faq.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">FAQ</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">Common questions about MailVault, email formats, storage, security, and providers.</p>
         </a>
 
-        <a href="/features.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">All Features</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Complete feature list with details on email management, security, performance, and more.</p>
+        <a href="/features.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">All Features</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">Complete feature list with details on email management, security, performance, and more.</p>
         </a>
 
-        <a href="/changelog.html" class="block group p-6 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary-500 dark:hover:border-primary-500 transition-all hover:shadow-lg">
-          <h3 class="text-lg font-bold mb-1 group-hover:text-primary-500 transition-colors">Changelog</h3>
-          <p class="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">Release history and what's new in each version.</p>
+        <a href="/changelog.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-xl lamp-bg mb-4">
+            <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/>
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold mb-2 group-hover:text-primary-500 transition-colors">Changelog</h3>
+          <p class="text-sm text-slate-600 dark:text-slate-400">Release history and what's new in each version.</p>
         </a>
 
+      </div>
+
+      <!-- Search is progressive enhancement over the index below: with scripting
+           off the box stays hidden and every guide is still one link away. -->
+      <div id="mv-docs-search" hidden class="mb-8">
+        <input id="mv-docs-q" type="search" autocomplete="off" aria-label="Search the docs" placeholder="Search the docs" aria-controls="mv-docs-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
+
+      <h2 class="text-2xl font-bold mb-6">Guides</h2>
+      <p id="mv-docs-empty" hidden class="text-slate-500 dark:text-slate-400">No guide matches that search.</p>
+
+      <div id="mv-docs-index" class="space-y-8">
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">Free up space</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/guides/free-up-email-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Free Up Email Storage</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Mailbox full? Archive emails locally, then safely delete from the server to reclaim space.</p>
+            </a>
+
+            <a href="/guides/gmail-storage-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Gmail Storage Full? Here's How to Fix It</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">What actually frees up Gmail space, in order of effort &mdash; and how to stop the problem from coming back.</p>
+            </a>
+
+            <a href="/guides/outlook-hotmail-mailbox-full.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Outlook.com / Hotmail Mailbox Full?</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">How to check what's using your storage and archive old email before paying for more.</p>
+            </a>
+
+            <a href="/guides/delete-thousands-of-old-emails-safely.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Delete Thousands of Old Emails Safely</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">A safe process for bulk-deleting old mail without losing anything you might need later.</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">Archive and back up</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/guides/archive-imap-emails-locally.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Archive IMAP Emails Locally</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Learn how to download and archive your IMAP emails to local storage on macOS and Linux.</p>
+            </a>
+
+            <a href="/guides/keep-emails-after-server-deletion.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Keep Emails After Server Deletion</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Delete emails from your server without losing them. Archive locally first, keep forever.</p>
+            </a>
+
+            <a href="/guides/backup-email-before-closing-account.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Back Up Email Before Closing an Account</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">A step-by-step checklist for backing up every folder before an account is closed for good.</p>
+            </a>
+
+            <a href="/guides/email-archiving-for-freelancers.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Email Archiving for Freelancers &amp; Small Business</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Client email is often your only record of scope and approvals &mdash; how to keep it forever.</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">Provider guides</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/guides/download-all-gmail-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Download All Your Gmail Emails</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Google Takeout vs an IMAP archive &mdash; how each works and which one you actually want.</p>
+            </a>
+
+            <a href="/guides/leave-gmail-keep-your-emails.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Leave Gmail Without Losing Your Emails</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Switching providers? Archive your Gmail history first, then migrate on your own terms.</p>
+            </a>
+
+            <a href="/guides/yahoo-mail-backup.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Back Up Yahoo Mail</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Yahoo doesn't support app passwords &mdash; here's the connection flow that actually works.</p>
+            </a>
+
+            <a href="/guides/export-icloud-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">How to Export iCloud Mail to Your Computer</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">iCloud has no built-in export button &mdash; here's the IMAP and app-specific password setup that works.</p>
+            </a>
+
+          </div>
+        </div>
+
+        <div class="mv-docs-group">
+          <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 mb-3">Compare</h3>
+          <div class="grid gap-4 sm:grid-cols-2">
+
+            <a href="/compare/mailvault-vs-apple-mail.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Apple Mail</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">How MailVault's dedicated archiving compares to Apple Mail for local email backup.</p>
+            </a>
+
+            <a href="/compare/mailvault-vs-thunderbird.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Thunderbird</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Compare archiving workflows, storage formats, and which is better for email retention.</p>
+            </a>
+
+            <a href="/compare/mailvault-vs-paying-for-storage.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">MailVault vs Paying for More Storage</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Stop paying for more email storage. Archive locally and downgrade your plan.</p>
+            </a>
+
+            <a href="/guides/mailstore-alternative-mac.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">Best MailStore Alternative for Mac</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">Looking for a MailStore alternative on Mac? Compare MailVault &mdash; free, open source, native macOS.</p>
+            </a>
+
+            <a href="/guides/imap-backup-tool-checklist.html" class="mv-doc group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
+              <h4 class="font-semibold mb-1 group-hover:text-primary-500 transition-colors">IMAP Backup Tool: What to Look For</h4>
+              <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">An honest checklist for evaluating any email backup tool &mdash; file format, auth, and data ownership.</p>
+            </a>
+
+          </div>
+        </div>
+
+      </div>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Still have questions?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Ask on GitHub
+          </a>
+          <a href="/#contact" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Contact Us
+          </a>
+        </div>
       </div>
 
     </div>
   </main>
-
   <!-- Footer -->
-  <footer class="border-t border-slate-200 dark:border-slate-800 py-8">
+  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-          <img src="icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
+      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
+        <a href="/" class="flex items-center gap-2">
+          <img src="/icon-128.webp" alt="MailVault logo" class="w-8 h-8 rounded-lg" width="32" height="32">
           <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
-        </div>
-
+        </a>
         <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
           <a href="/docs.html" class="hover:text-primary-500 transition-colors">Docs</a>
           <a href="/blog.html" class="hover:text-primary-500 transition-colors">Blog</a>
@@ -297,27 +387,15 @@
   </footer>
 
   <script>
-    // Theme toggle
+    // Theme Toggle
     const themeToggle = document.getElementById('theme-toggle');
-    const sunIcon = document.getElementById('sun-icon');
-    const moonIcon = document.getElementById('moon-icon');
-
-    function updateThemeIcons() {
-      const isDark = document.documentElement.classList.contains('dark');
-      sunIcon.classList.toggle('hidden', !isDark);
-      moonIcon.classList.toggle('hidden', isDark);
-    }
-
-    // Initialize theme
+    const html = document.documentElement;
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      document.documentElement.classList.add('dark');
+      html.classList.add('dark');
     }
-    updateThemeIcons();
-
     themeToggle.addEventListener('click', () => {
-      document.documentElement.classList.toggle('dark');
-      localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      updateThemeIcons();
+      html.classList.toggle('dark');
+      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
     });
 
     // Mobile Menu
@@ -325,13 +403,11 @@
     const mobileMenu = document.getElementById('mobile-menu');
     const menuIconOpen = document.getElementById('menu-icon-open');
     const menuIconClose = document.getElementById('menu-icon-close');
-
     mobileMenuBtn.addEventListener('click', () => {
       mobileMenu.classList.toggle('hidden');
       menuIconOpen.classList.toggle('hidden');
       menuIconClose.classList.toggle('hidden');
     });
-
     document.querySelectorAll('#mobile-menu a').forEach(link => {
       link.addEventListener('click', () => {
         mobileMenu.classList.add('hidden');
@@ -339,8 +415,27 @@
         menuIconClose.classList.add('hidden');
       });
     });
-  </script>
 
+    // Filter the index. Plain substring over title and summary — 17 cards.
+    const box = document.getElementById('mv-docs-search');
+    const field = document.getElementById('mv-docs-q');
+    const empty = document.getElementById('mv-docs-empty');
+    const cards = [...document.querySelectorAll('#mv-docs-index .mv-doc')];
+    box.hidden = false;
+    field.addEventListener('input', () => {
+      const needle = field.value.trim().toLowerCase();
+      let hits = 0;
+      for (const card of cards) {
+        const match = !needle || card.textContent.toLowerCase().includes(needle);
+        card.hidden = !match;
+        if (match) hits++;
+      }
+      for (const group of document.querySelectorAll('#mv-docs-index .mv-docs-group')) {
+        group.hidden = ![...group.querySelectorAll('.mv-doc')].some(c => !c.hidden);
+      }
+      empty.hidden = hits > 0;
+    });
+  </script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>
