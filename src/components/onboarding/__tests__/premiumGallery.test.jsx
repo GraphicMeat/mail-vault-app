@@ -18,6 +18,17 @@ describe('premium gallery', () => {
     }
   });
 
+  // The list was capped at 340px and scrolled, so the last two features were
+  // only reachable by discovering a scrollbar. Every tile stays on screen.
+  it('never puts the feature list behind a scrollbar', () => {
+    render(<PremiumGallery />);
+    const list = screen.getByTestId(`premium-tile-${PREMIUM_FEATURES[0].id}`).parentElement;
+    for (const f of PREMIUM_FEATURES) {
+      expect(screen.getByTestId(`premium-tile-${f.id}`).parentElement).toBe(list);
+    }
+    expect(list.className).not.toMatch(/overflow-|max-h-/);
+  });
+
   it('selects a feature and shows its detail', () => {
     render(<PremiumGallery />);
     fireEvent.click(screen.getByTestId('premium-tile-time-capsule'));

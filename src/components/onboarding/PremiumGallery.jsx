@@ -46,7 +46,11 @@ export function PremiumGallery() {
 
   return (
     <div className="grid md:grid-cols-[200px_minmax(0,1fr)] gap-4 items-start">
-      <div className="space-y-1 max-h-[340px] overflow-y-auto pr-1">
+      {/* No cap and no scroller: a capped list hid the last two features
+          behind a scrollbar nobody looked for — "Five devices" went unnoticed
+          entirely. Ten tiles are shorter than the detail column beside them, so
+          showing all of them costs no height. */}
+      <div className="space-y-1">
         {PREMIUM_FEATURES.map((f, i) => {
           const TileIcon = f.icon;
           const active = i === index;
