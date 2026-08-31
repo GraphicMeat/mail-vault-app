@@ -21,6 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, useT  } from '../../i18n/index.js';
 
@@ -579,7 +580,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       onChange={(e) => setCleanupFolder(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                     >
-                      {['INBOX', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'].map(f => (
+                      {CLEANUP_FOLDERS.map(f => (
                         <option key={f} value={f}>{decodeImapUtf7(f)}</option>
                       ))}
                     </select>

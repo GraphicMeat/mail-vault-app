@@ -7,6 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { ensureFreshToken } from './authUtils';
 import * as api from './api';
 import * as db from './db';
+import { PROTECTED_FOLDERS } from '../utils/cleanupFolders';
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -39,9 +40,6 @@ function thresholdToMs(rule) {
   if (!unitMs || !Number.isFinite(age) || age <= 0) return 0;
   return age * unitMs;
 }
-
-/** Safety: folders that must never be cleaned. */
-const PROTECTED_FOLDERS = new Set(['Drafts']);
 
 function isProtectedFolder(folder) {
   return PROTECTED_FOLDERS.has(folder);
