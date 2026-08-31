@@ -117,7 +117,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 <Button variant="secondary" size="xs" className="text-xs" onClick={handleDiscardKeep}>{t('migration.toast.keepEmails')}</Button>
                 <Button variant="danger" size="xs" className="text-xs" onClick={handleDiscardRemove} disabled={removing}>
                   {removing && <Loader2 size={10} className="animate-spin" />}
-                  Remove emails
+                  {t('migration.toast.removeEmails')}
                 </Button>
                 <button onClick={(e) => { e.stopPropagation(); setShowDiscardDialog(false); }} className="text-xs text-mail-text-muted">{t('migration.toast.goBack')}</button>
               </div>
@@ -128,7 +128,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
                 <AlertTriangle size={16} className="text-mail-warning flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-mail-text">{t('migration.toast.incompleteMigrationFound')}</p>
-                  <p className="text-xs text-mail-text-muted">{currentFolder}: {migrated_emails}/{total_emails} emails migrated</p>
+                  <p className="text-xs text-mail-text-muted">{t('migration.toast.emailsMigrated', { currentFolder, migrated_emails, total_emails })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-2">
@@ -176,7 +176,7 @@ export function MigrationToast({ showSettings, onOpenSettings }) {
               <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${percent}%` }} />
             </div>
             {rateLimitCountdown > 0 && (
-              <p className="text-xs text-mail-warning font-semibold mt-1">Rate limited -- retrying in {rateLimitCountdown}s</p>
+              <p className="text-xs text-mail-warning font-semibold mt-1">{t('migration.toast.rateLimitedRetryingIn', { rateLimitCountdown })}</p>
             )}
           </>
         )}

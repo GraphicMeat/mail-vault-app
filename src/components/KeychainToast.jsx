@@ -59,8 +59,8 @@ export function KeychainToast({ onRetry, onOpenAccounts }) {
                 {MESSAGES()[status] || 'The keychain refused access to your password.'}
               </div>
               <div className="text-xs text-mail-text-muted mt-1">
-                Everything already in your vault still opens. Reaching the server needs the password.
-                {' '}{RECOVERY()[status] || 'Retry, or re-enter the password under Accounts.'}
+                {t('keychain.vaultStillOpensServerNeedsPassword')}
+                {' '}{RECOVERY()[status] || tr('keychain.retryOrReEnterUnderAccounts')}
               </div>
               <div className="flex items-center gap-2 mt-2.5">
                 <button

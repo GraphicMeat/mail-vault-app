@@ -3,7 +3,5 @@
   "7e28f4edb996": "MailVault 的 Time Capsule 显示某个邮箱在某一时间点的快照",
   "fe81d78bb9d1": "MailVault 邮件跟踪拦截功能，在邮件渲染之前剥掉其中的跟踪像素",
   "2dda3c18c3bd": "切换深色模式",
-  "57f5f5efbc59": "菜单",
-  "42adf4e738a4": "MailVault 发件人仿冒警告：并排显示显示名称与实际发件人地址",
-  "1a18fad10a0b": "MailVault Reply-To 域名不匹配警告：显示发送域名与回复将发往的地址"
+  "57f5f5efbc59": "菜单"
 }

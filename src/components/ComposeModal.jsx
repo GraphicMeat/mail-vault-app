@@ -126,6 +126,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const t = useT();
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
+  // Which mailbox the user is reading, which is who a fresh compose is from.
+  // In the unified inbox every account's mail is on screen at once, so the
+  // account of the last message opened is the only honest answer there.
+  const readingAccountId = useAccountStore(s =>
+    s.activeMailbox === 'UNIFIED' ? s.lastSelectedAccountId : s.activeAccountId);
   const getSignature = useSettingsStore(s => s.getSignature);
   const getDisplayName = useSettingsStore(s => s.getDisplayName);
   // Subscribed (not read through the getter) so the From row re-renders when
@@ -138,14 +143,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = getOrderedAccounts(rawAccounts);
   // Replies and forwards leave from the mailbox the message is in (falling back
-  // to the one being read); a restored draft keeps its saved identity; only a
-  // fresh compose defaults to whoever sent the last message.
+  // to the one being read); a restored draft keeps its saved identity; a fresh
+  // compose defaults to the account being read, not to whoever sent last.
   const initialIdentity = resolveInitialComposeIdentity({
     replyTo,
     initialData,
     lastIdentity: useSettingsStore.getState().lastComposeIdentity,
     accounts,
     activeAccountId,
+    selectedAccountId: readingAccountId,
   });
   const [selectedAccountId, setSelectedAccountId] = useState(initialIdentity.accountId);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId) || accounts[0];
@@ -1321,7 +1327,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   size={14}
                   className={`transition-transform ${quotedExpanded ? 'rotate-90' : ''}`}
                 />
-                <span>{quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show')} original message</span>
+                <span>{t('compose.showHideOriginalMessage', { action: quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show') })}</span>
               </button>
               {quotedExpanded && (
                 <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
@@ -1455,12 +1461,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 title={t('compose.sendDelay')}
               >
                 <option value={0}>{t('compose.sendNow')}</option>
-                <option value={15}>15s delay</option>
-                <option value={30}>30s delay</option>
-                <option value={60}>1m delay</option>
-                <option value={120}>2m delay</option>
-                <option value={180}>3m delay</option>
-                <option value={300}>5m delay</option>
+                <option value={15}>{t('compose.delay15s')}</option>
+                <option value={30}>{t('compose.delay30s')}</option>
+                <option value={60}>{t('compose.delay1m')}</option>
+                <option value={120}>{t('compose.delay2m')}</option>
+                <option value={180}>{t('compose.delay3m')}</option>
+                <option value={300}>{t('compose.delay5m')}</option>
               </select>
               <button
                 type="submit"

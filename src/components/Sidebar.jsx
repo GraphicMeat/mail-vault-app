@@ -503,11 +503,12 @@ const HOVER_CLOSE_MS = 220;
 const HOVER_BUBBLE_HEIGHT = 230; // approximate, only used to keep the bubble on screen
 
 function StatRow({ label, bucket }) {
+  const t = useT();
   return (
     <div className="flex items-center justify-between">
       <span className="text-mail-text-muted">{label}</span>
       <span className="text-mail-text font-medium">
-        {formatBytes(bucket?.down)} down / {formatBytes(bucket?.up)} up
+        {t('sidebar.downUpBytes', { down: formatBytes(bucket?.down), up: formatBytes(bucket?.up) })}
       </span>
     </div>
   );
@@ -544,7 +545,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
                 <div
                   key={d.key}
                   className="flex-1 h-full flex flex-col justify-end"
-                  title={`${d.key}: ${formatBytes(d.down)} down / ${formatBytes(d.up)} up`}
+                  title={`${d.key}: ${tr('sidebar.downUpBytes', { down: formatBytes(d.down), up: formatBytes(d.up) })}`}
                 >
                   <div
                     className="w-full flex flex-col justify-end rounded-t-sm overflow-hidden"
@@ -574,7 +575,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
           </div>
 
           <div className="mt-2 pt-2 border-t border-mail-border text-mail-accent-text">
-            Click to see more →
+            {t('sidebar.clickToSeeMore')}
           </div>
         </>
       ) : (
@@ -1481,7 +1482,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </div>
         )}
         <div className="text-xs text-mail-text-muted text-center mt-2">
-          MailVault v{version}
+          {t('sidebar.mailvaultVersion', { version })}
         </div>
       </div>
 

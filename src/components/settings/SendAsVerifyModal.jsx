@@ -5,6 +5,7 @@ import { Button } from '../ui/Button';
 import * as api from '../../services/api';
 import { ensureFreshToken } from '../../services/authUtils';
 import { t, useT  } from '../../i18n/index.js';
+import { T } from '../../i18n/T.jsx';
 
 /**
  * Verify a send-as address by actually sending a test message from it.
@@ -59,9 +60,10 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
       title={t('settings.sendAs.verifySendAddress')}
       description={
         <>
-          {t('settings.sendAs.sendsOneTestMessage')} <span className="font-mono text-mail-text">{sendAsAddress}</span>{' '}
-          so you can see whether your server accepts it. Signed in as{' '}
-          <span className="font-mono">{account?.email}</span>.
+          <T k="settings.sendAs.sendsTestMessageSignedInAs"
+             vars={{ address: sendAsAddress, email: account?.email }}
+             parts={[(s) => <span className="font-mono text-mail-text">{s}</span>,
+                     (s) => <span className="font-mono">{s}</span>]} />
         </>
       }
       footer={

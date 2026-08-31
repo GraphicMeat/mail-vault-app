@@ -96,7 +96,7 @@ export function AppearanceSettings() {
           <div className="pt-4 border-t border-mail-border">
             <div className="font-medium text-mail-text mb-1">{t('settings.appearance.emailViewerTheme')}</div>
             <div className="text-sm text-mail-text-muted mb-3">
-              Some people prefer a dark app but like reading emails in light mode. Set the default theme for email content here — the per-email Light/Dark button always overrides.
+              {t('settings.appearance.somePeoplePreferDarkApp')}
             </div>
             <select
               value={emailViewerTheme}
@@ -120,11 +120,11 @@ export function AppearanceSettings() {
               onChange={(e) => setDateFormat(e.target.value)}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
-              <option value="auto">System Default ({navigator.language})</option>
-              <option value="MM/dd/yyyy">MM/DD/YYYY (US)</option>
-              <option value="dd/MM/yyyy">DD/MM/YYYY (Europe)</option>
-              <option value="yyyy-MM-dd">YYYY-MM-DD (ISO)</option>
-              <option value="dd MMM yyyy">DD MMM YYYY (e.g., 25 Feb 2024)</option>
+              <option value="auto">{t('settings.appearance.systemDefault', { lang: navigator.language })}</option>
+              <option value="MM/dd/yyyy">{t('settings.appearance.mmDdYyyyUs')}</option>
+              <option value="dd/MM/yyyy">{t('settings.appearance.ddMmYyyyEurope')}</option>
+              <option value="yyyy-MM-dd">{t('settings.appearance.yyyyMmDdIso')}</option>
+              <option value="dd MMM yyyy">{t('settings.appearance.ddMmmYyyyExample')}</option>
               <option value="custom">{t('settings.appearance.custom')}</option>
             </select>
             {dateFormat === 'custom' && (
@@ -137,7 +137,7 @@ export function AppearanceSettings() {
                   className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all"
                 />
                 <p className="text-xs text-mail-text-muted mt-1">
-                  Uses date-fns tokens: yyyy=year, MM=month, dd=day, HH=hour, mm=minute
+                  {t('settings.appearance.usesDateFnsTokens')}
                 </p>
               </div>
             )}
@@ -158,9 +158,9 @@ export function AppearanceSettings() {
               onChange={(e) => setTimeFormat(e.target.value)}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
-              <option value="auto">System Default ({navigator.language})</option>
-              <option value="12h">12-hour (2:30 PM)</option>
-              <option value="24h">24-hour (14:30)</option>
+              <option value="auto">{t('settings.appearance.systemDefault', { lang: navigator.language })}</option>
+              <option value="12h">{t('settings.appearance.twelveHour')}</option>
+              <option value="24h">{t('settings.appearance.twentyFourHour')}</option>
             </select>
             <div className="mt-2 text-xs text-mail-text-muted">
               {t('settings.appearance.now')} <span className="text-mail-text">{formatEmailDate(new Date().toISOString())}</span>
@@ -221,7 +221,7 @@ export function AppearanceSettings() {
               {t('settings.appearance.threeColumns')}
             </div>
             <span className="text-xs text-mail-text-muted">
-              Sidebar | List | Content
+              {t('settings.appearance.sidebarListContent')}
             </span>
           </button>
 
@@ -412,7 +412,7 @@ export function AppearanceSettings() {
               <div className="h-2 bg-mail-border rounded w-3/4" />
             </div>
             <span className="text-sm font-medium text-mail-text">{t('settings.appearance.compact')}</span>
-            <span className="text-xs text-mail-text-muted">Sender + subject on two lines</span>
+            <span className="text-xs text-mail-text-muted">{t('settings.appearance.senderSubjectTwoLines')}</span>
           </button>
         </div>
       </div>

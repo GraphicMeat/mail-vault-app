@@ -3,7 +3,7 @@
  * Provides functions for grouping, parsing, and cleaning email content
  */
 
-import { formatTime, formatDateOnly, formatDateLong } from './dateFormat.js';
+import { formatTime, formatDateOnly, formatDateLong, formatWeekdayShort } from './dateFormat.js';
 // `t` was used below without ever being imported. A free identifier is a global
 // to the bundler, so the build stayed silent and it only surfaced at runtime as
 // `ReferenceError: Can't find variable: t` — inside render, which the error
@@ -1021,7 +1021,7 @@ export function formatRelativeTime(dateStr) {
   if (diffMins < 60) return tr('util.emailParser.mAgo', { diffMins });
   if (diffHours < 24) return tr('util.emailParser.hAgo', { diffHours });
   if (diffDays === 1) return tr('bulk.ops.yesterday');
-  if (diffDays < 7) return date.toLocaleDateString(undefined, { weekday: 'short' });
+  if (diffDays < 7) return formatWeekdayShort(date);
 
   return formatDateOnly(date);
 }

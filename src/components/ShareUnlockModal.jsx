@@ -14,6 +14,7 @@ import {
   linkedinShareUrl,
 } from '../config/shareUnlock';
 import { t, useT  } from '../i18n/index.js';
+import { formatDateOnly } from '../utils/dateFormat.js';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -50,7 +51,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
   const titleId = useId();
 
   const claimDate = shareGrant?.expiresAt
-    ? new Date(shareGrant.expiresAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    ? formatDateOnly(new Date(shareGrant.expiresAt), { alwaysShowYear: true })
     : null;
 
   // ── GitHub verified flow ──────────────────────────────────────────────────
@@ -159,8 +160,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
               </Button>
             </div>
             <p className="text-sm text-mail-text-muted mt-3">
-              Star us and share MailVault — unlock Cloud Backups & Time Capsule free.
-              Each one adds time. They stack.
+              {t('shareUnlock.starUsAndShareUnlock')}
             </p>
           </div>
 
@@ -200,7 +200,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
                 onClick={() => { close(); onSubscribe(); }}
                 className="w-full text-center text-xs text-mail-text-muted hover:text-mail-accent-text py-1"
               >
-                Prefer not to share? Subscribe instead →
+                {t('shareUnlock.preferNotToShareSubscribe')}
               </button>
             </div>
           )}
@@ -209,7 +209,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
           <div className="px-5 py-4 border-t border-mail-border flex items-center justify-between">
             <div className="text-xs">
               {claimDate ? (
-                <span className="text-mail-accent-text font-medium">Premium unlocked until {claimDate}</span>
+                <span className="text-mail-accent-text font-medium">{t('shareUnlock.premiumUnlockedUntil', { claimDate })}</span>
               ) : (
                 <span className="text-mail-text-muted">{t('shareUnlock.pickAnyActionStart')}</span>
               )}

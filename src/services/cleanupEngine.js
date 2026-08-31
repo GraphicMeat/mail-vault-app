@@ -7,6 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { ensureFreshToken } from './authUtils';
 import * as api from './api';
 import * as db from './db';
+import { PROTECTED_FOLDERS } from '../utils/cleanupFolders';
 
 // ── Module-level state ────────────────────────────────────────────────────────
 
@@ -15,17 +16,30 @@ const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Convert olderThan config to milliseconds. */
-function thresholdToMs(olderThan) {
-  if (!olderThan || !olderThan.value) return 0;
-  const { value, unit } = olderThan;
-  if (unit === 'months') return value * 30 * 24 * 60 * 60 * 1000;
-  // default: days
-  return value * 24 * 60 * 60 * 1000;
-}
+// A rule is stored in exactly one shape — the one the add/edit form in
+// StorageSettings.jsx writes:
+//   { id, account: 'all' | 'email@…', folder, age: number, unit, action, enabled }
+// The engine used to read a different, never-written spec (`accountEmail`,
+// `olderThan: { value, unit }`, `'archive-delete'`), so every rule a user ever
+// saved matched nothing. See the v4 → v5 migration in settingsStore.js.
+const DAY_MS = 24 * 60 * 60 * 1000;
+const UNIT_MS = { days: DAY_MS, months: 30 * DAY_MS };
 
-/** Safety: folders that must never be cleaned. */
-const PROTECTED_FOLDERS = new Set(['Drafts']);
+/** Actions the form can produce. An unrecognised one is refused, never guessed. */
+const ALLOWED_ACTIONS = new Set(['delete', 'archive-then-delete']);
+
+// The form enforces a 7-day floor (1 month). The engine enforces it again:
+// a threshold that fails to parse must refuse to run, because the alternative
+// — falling through to 0 — means "every message is stale".
+const MIN_THRESHOLD_MS = 7 * DAY_MS;
+
+/** Convert a rule's age + unit to milliseconds. 0 when it does not parse. */
+function thresholdToMs(rule) {
+  const unitMs = UNIT_MS[rule?.unit];
+  const age = Number(rule?.age);
+  if (!unitMs || !Number.isFinite(age) || age <= 0) return 0;
+  return age * unitMs;
+}
 
 function isProtectedFolder(folder) {
   return PROTECTED_FOLDERS.has(folder);
@@ -65,14 +79,21 @@ async function executeRule(rule, { dryRun = false } = {}) {
     return { archived: 0, deleted: 0 };
   }
 
-  const thresholdMs = thresholdToMs(rule.olderThan);
-  if (thresholdMs <= 0) return { archived: 0, deleted: 0 };
+  const thresholdMs = thresholdToMs(rule);
+  if (thresholdMs < MIN_THRESHOLD_MS) {
+    console.warn(`[CleanupEngine] Skipping rule ${rule.id} — threshold "${rule.age} ${rule.unit}" is unusable or below the 7-day floor`);
+    return { archived: 0, deleted: 0 };
+  }
+  if (!ALLOWED_ACTIONS.has(rule.action)) {
+    console.warn(`[CleanupEngine] Skipping rule ${rule.id} — unknown action "${rule.action}"`);
+    return { archived: 0, deleted: 0 };
+  }
   const cutoff = Date.now() - thresholdMs;
 
-  // Determine target accounts
-  const accounts = rule.accountEmail === '*'
+  // Determine target accounts ('all' is the form's every-account sentinel)
+  const accounts = rule.account === 'all'
     ? getVisibleAccounts()
-    : getVisibleAccounts().filter(a => a.email === rule.accountEmail);
+    : getVisibleAccounts().filter(a => a.email === rule.account);
 
   let totalArchived = 0;
   let totalDeleted = 0;
@@ -99,7 +120,7 @@ async function executeRule(rule, { dryRun = false } = {}) {
       // Refresh token before IMAP operations
       const freshAccount = await ensureFreshToken(account);
 
-      if (rule.action === 'archive-delete') {
+      if (rule.action === 'archive-then-delete') {
         // Archive first, then delete
         const uids = staleEmails.map(e => e.uid);
         try {

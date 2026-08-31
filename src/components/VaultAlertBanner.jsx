@@ -68,7 +68,7 @@ export function VaultAlertBanner() {
           {vaultStatus.displayPath
             ? t('vaultAlert.mailvaultStoresMailWhichAvailable', { vaultStatus: vaultStatus.displayPath })
             : t('vaultAlert.folderHoldingMailAvailableRight')}
-          {' '}Reconnect the drive, or point MailVault at the folder if it moved.
+          {' '}{t('vaultAlert.reconnectDriveOrPointAtFolder')}
         </p>
         {error && <p className="text-xs text-mail-danger mt-1">{error}</p>}
       </div>
@@ -78,7 +78,7 @@ export function VaultAlertBanner() {
         className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-mail-warning/20 text-mail-warning hover:bg-mail-warning/30 disabled:opacity-50 transition-colors whitespace-nowrap"
       >
         {busy ? <Loader size={13} className="animate-spin" /> : <FolderSearch size={13} />}
-        Choose folder
+        {t('vaultAlert.chooseFolder')}
       </button>
     </div>
   );

@@ -186,7 +186,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const withAccount = (e) => (e && !e._accountId ? { ...e, _accountId: accountId } : e);
 
   const selectedEmailId = isUnified ? `${accountId}:${uid}` : uid;
-  useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source });
+  useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source, lastSelectedAccountId: accountId });
 
   try {
     let email;

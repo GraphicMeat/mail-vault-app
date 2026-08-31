@@ -228,7 +228,7 @@ const CleanupRow = React.memo(function CleanupRow({
             <span className="text-[11px] text-mail-text-muted shrink-0">{formatEmailDate(item.date)}</span>
           )}
         </div>
-        <p className="text-xs text-mail-text-muted truncate">{item.subject || tr('common.noSubject')}</p>
+        <p className="text-xs text-mail-text-muted truncate">{item.subject || '(No subject)'}</p>
       </div>
       <CategoryDropdown current={c.category} categories={allCategories} onChange={(cat) => onCorrectCategory(item, cat)} />
       <ActionDropdown current={c.action} onChange={(act) => onCorrectAction(item, act)} />
@@ -582,7 +582,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
       <div className="flex flex-col h-full overflow-hidden">
         {/* Email header */}
         <div className="px-6 py-4 border-b border-mail-border shrink-0">
-          <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || previewItem.subject || t('common.noSubject')}</h3>
+          <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || previewItem.subject || '(No subject)'}</h3>
           <div className="text-sm text-mail-text-muted space-y-0.5">
             <p><span className="font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
             {to && <p><span className="font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
@@ -591,7 +591,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="flex items-center gap-2 mt-3">
             <CategoryDropdown current={c.category} categories={allCategories} onChange={(cat) => handleCorrectCategory(previewItem, cat)} />
             <ActionDropdown current={c.action} onChange={(act) => handleCorrectAction(previewItem, act)} />
-            <span className="text-[11px] text-mail-text-muted">{t('settings.cleanup.percentConfidence', { pct: Math.round((c.confidence || 0) * 100) })}</span>
+            <span className="text-[11px] text-mail-text-muted">{Math.round((c.confidence || 0) * 100)}% confidence</span>
           </div>
         </div>
 
@@ -629,7 +629,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
                     compact
                   />
                 ) : (
-                  <span key={i} className="text-xs text-mail-text-muted">{att.filename || t('settings.cleanup.attachmentFallback')}</span>
+                  <span key={i} className="text-xs text-mail-text-muted">{att.filename || 'attachment'}</span>
                 );
               })}
             </div>
@@ -646,7 +646,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-accent/5 border border-mail-accent/20">
             <Loader size={16} className="animate-spin text-mail-accent-text shrink-0" />
             <span className="text-sm text-mail-text">
-              {t('settings.cleanup.classifyingEllipsis')} {classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : t('settings.cleanup.preparing')}
+              {t('settings.cleanup.classifying', { progress: classStatus.total > 0 ? `${classStatus.classified}/${classStatus.total}` : t('settings.cleanup.preparing') })}
             </span>
             <div className="flex-1 h-1.5 bg-mail-surface-hover rounded-full overflow-hidden">
               {classStatus.total > 0
@@ -656,9 +656,8 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           </div>
         )}
 
-        {/* Summary Cards — only reachable once premium AND classification has
-            produced results; a stable hook for the marketing shot. */}
-        <div className="grid grid-cols-3 gap-4" data-testid="cleanup-summary">
+        {/* Summary Cards */}
+        <div className="grid grid-cols-3 gap-4">
           <div className="p-4 rounded-xl bg-mail-surface border border-mail-border text-center">
             <p className="text-2xl font-bold text-mail-text">{mailboxTotal.toLocaleString()}</p>
             <p className="text-xs text-mail-text-muted mt-1">{t('settings.cleanup.classified')}</p>
@@ -693,7 +692,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
               activeCategory === 'all' ? 'bg-mail-accent-fill text-white border-mail-accent' : 'border-mail-border text-mail-text-muted hover:border-mail-accent'
             }`}
           >
-            {t('settings.cleanup.allCount', { count: mailboxTotal })}
+            {t('settings.cleanup.allCount', { mailboxTotal })}
           </button>
           {allCategories.map(cat => {
             const count = mailboxByCategory[cat] || 0;
@@ -729,20 +728,20 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         <div className="flex items-center gap-3 p-3 rounded-lg bg-mail-surface border border-mail-border">
           {selectedIds.size > 0 ? (
             <>
-              <span className="text-sm text-mail-text font-medium">{t('settings.cleanup.selectedCount', { count: selectedIds.size })}</span>
+              <span className="text-sm text-mail-text font-medium">{t('common.selectedCount', { count: selectedIds.size, n: selectedIds.size })}</span>
               <button
                 onClick={() => setBulkAction('delete')}
                 disabled={bulkRunning}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-danger-tint text-mail-danger hover:bg-mail-danger/20 transition-colors disabled:opacity-50"
               >
-                <Trash2 size={13} /> {t('settings.cleanup.deleteCount', { count: selectedIds.size })}
+                <Trash2 size={13} /> Delete ({selectedIds.size})
               </button>
               <button
                 onClick={() => setBulkAction('archive')}
                 disabled={bulkRunning}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-mail-accent-tint text-mail-accent-text hover:bg-mail-accent/20 transition-colors disabled:opacity-50"
               >
-                <Archive size={13} /> {t('settings.cleanup.archiveCount', { count: selectedIds.size })}
+                <Archive size={13} /> Archive ({selectedIds.size})
               </button>
               <button onClick={() => setSelectedIds(new Set())} className="ml-auto text-xs text-mail-text-muted hover:text-mail-text">{t('settings.cleanup.deselectAll')}</button>
             </>
@@ -822,7 +821,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
           <Button variant="ghost" icon size="sm" onClick={() => closePreview()}>
             <ChevronLeft size={18} className="text-mail-text-muted" />
           </Button>
-          <span className="text-sm font-medium text-mail-text truncate">{previewItem.subject || t('settings.cleanup.emailFallback')}</span>
+          <span className="text-sm font-medium text-mail-text truncate">{previewItem.subject || 'Email'}</span>
         </div>
       )}
 

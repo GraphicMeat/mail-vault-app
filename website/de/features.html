@@ -34,7 +34,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
 
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="/assets/tailwind.css?v=9">
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
 
   <style>
     .glass {
@@ -417,10 +417,6 @@
           <div class="flex gap-3 justify-center">
             <img src="/screenshots/de/link-safety-1440.webp" srcset="/screenshots/de/link-safety-720.webp 720w, /screenshots/de/link-safety-1440.webp 1440w, /screenshots/de/link-safety-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault Link-Sicherheit erkennt Phishing-Links in Spam-E-Mails, mit Warnsymbolen neben verdächtigen Betreffzeilen" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
             <img src="/screenshots/de/link-safety-modal-1440.webp" srcset="/screenshots/de/link-safety-modal-720.webp 720w, /screenshots/de/link-safety-modal-1440.webp 1440w, /screenshots/de/link-safety-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault Fenster für verdächtige Links, mit Linktext gegenüber dem tatsächlichen Weiterleitungsziel" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
-          </div>
-          <div class="flex gap-3 justify-center">
-            <img src="/screenshots/de/safety-sender-impersonation-1440.webp" srcset="/screenshots/de/safety-sender-impersonation-720.webp 720w, /screenshots/de/safety-sender-impersonation-1440.webp 1440w, /screenshots/de/safety-sender-impersonation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault-Warnung vor Absender-Identitätsdiebstahl: Anzeigename und tatsächliche Absenderadresse nebeneinander" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
-            <img src="/screenshots/de/safety-reply-to-modal-1440.webp" srcset="/screenshots/de/safety-reply-to-modal-720.webp 720w, /screenshots/de/safety-reply-to-modal-1440.webp 1440w, /screenshots/de/safety-reply-to-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault-Warnung vor abweichender Reply-To-Domain: sendende Domain und die Adresse, an die Antworten gingen" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
           </div>
           <div class="flex justify-center">
             <img src="/screenshots/de/reply-to-mismatch-1440.webp" srcset="/screenshots/de/reply-to-mismatch-720.webp 720w, /screenshots/de/reply-to-mismatch-1440.webp 1440w, /screenshots/de/reply-to-mismatch-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px" alt="MailVault Absenderdetails zeigen, dass die Reply-To-Adresse vom Absender abweicht — Phishing-Erkennung" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 max-w-[540px] w-full" data-expandable-image width="1440" height="928" decoding="async">
@@ -1085,14 +1081,25 @@
         img.src = '';
       }
 
+      // A thumbnail's srcset serves the variant that fits its slot (720w for the
+      // narrow cards), which is far too small once the lightbox blows it up.
+      // Always open the widest candidate instead.
+      function hiRes(el) {
+        var best = (el.getAttribute('srcset') || '').split(',').reduce(function(a, c) {
+          var p = c.trim().split(/\s+/), w = parseInt(p[1], 10);
+          return p[0] && w > a.w ? { url: p[0], w: w } : a;
+        }, { url: '', w: 0 });
+        return best.url || el.currentSrc || el.src;
+      }
+
       document.querySelectorAll('[data-expandable-image]').forEach(function(el) {
         el.style.cursor = 'zoom-in';
         el.setAttribute('tabindex', '0');
         el.setAttribute('role', 'button');
         el.setAttribute('aria-label', 'Expand screenshot: ' + (el.alt || ''));
-        el.addEventListener('click', function() { open(el.currentSrc || el.src, el.alt); });
+        el.addEventListener('click', function() { open(hiRes(el), el.alt); });
         el.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(el.currentSrc || el.src, el.alt); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(hiRes(el), el.alt); }
         });
       });
 

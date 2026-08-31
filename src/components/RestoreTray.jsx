@@ -49,14 +49,14 @@ export function RestoreTray() {
             <p className="text-[11px] mt-0.5 text-mail-text-muted truncate">
               {running && (
                 <>
-                  {activeRestore.uploaded_emails} uploaded
+                  {t('restore.uploadedCount', { count: activeRestore.uploaded_emails })}
                   {activeRestore.current_folder ? ` · ${decodeImapUtf7(activeRestore.current_folder)}` : ''}
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </>
               )}
-              {completed && `Complete — ${activeRestore.uploaded_emails} uploaded · ${activeRestore.skipped_emails} skipped`}
-              {activeRestore.status === 'cancelled' && 'Cancelled'}
-              {activeRestore.status === 'failed' && `Failed — ${activeRestore.uploaded_emails} uploaded`}
+              {completed && t('restore.completeUploadedSkipped', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails })}
+              {activeRestore.status === 'cancelled' && t('restore.cancelled')}
+              {activeRestore.status === 'failed' && t('restore.failedUploaded', { count: activeRestore.uploaded_emails })}
             </p>
           </div>
           {!running && (

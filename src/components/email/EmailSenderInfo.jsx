@@ -123,7 +123,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             {/* "via" mailing list indicator */}
             {listName && (
               <span className="text-[10px] text-mail-text-muted italic flex-shrink-0">
-                via {listName}
+                {t('email.viaList', { listName })}
               </span>
             )}
 
@@ -155,9 +155,9 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
         {expanded && (
           <div className="text-xs text-mail-text-muted mt-1">
             <div>
-              To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
+              {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
               {email.cc?.length > 0 && (
-                <span className="ml-2">CC: {email.cc.map(c => c.name || c.address).join(', ')}</span>
+                <span className="ml-2">{t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}</span>
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
@@ -176,10 +176,10 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
                   exit={{ height: 0, opacity: 0 }}
                   className="mt-1 space-y-0.5 overflow-hidden"
                 >
-                  <div>Date: {email.date ? formatDateTime(email.date) : t('settings.cleanup.unknown')}</div>
-                  {email.messageId && <div className="break-all">Message-ID: {email.messageId}</div>}
+                  <div>{t('email.header.date', { date: email.date ? formatDateTime(email.date) : t('settings.cleanup.unknown') })}</div>
+                  {email.messageId && <div className="break-all">{t('email.header.messageId', { messageId: email.messageId })}</div>}
                   {email.replyTo?.length > 0 && (
-                    <div>Reply-To: {email.replyTo.map(r => r.address || r).join(', ')}</div>
+                    <div>{t('email.header.replyTo', { replyTo: email.replyTo.map(r => r.address || r).join(', ') })}</div>
                   )}
                   <button
                     onClick={(e) => { e.stopPropagation(); onToggleRaw?.(); }}

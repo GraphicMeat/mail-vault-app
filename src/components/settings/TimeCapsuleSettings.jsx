@@ -129,7 +129,7 @@ export function TimeCapsuleSettings() {
 
       {/* Info note */}
       <p className="text-xs text-mail-text-muted">
-        You can always take a manual snapshot from the Time Capsule panel regardless of these settings. Snapshots are lightweight (a few hundred KB each) and stored locally.
+        {t('settings.timeCapsule.canAlwaysTakeManualSnapshot')}
       </p>
     </div>
   );

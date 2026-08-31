@@ -167,14 +167,13 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Calendar size={32} className="text-mail-text-muted mx-auto mb-3" />
           <p className="text-sm font-medium text-mail-text mb-1">{t('timeCapsule.noSnapshotsYet')}</p>
-          <p className="text-xs text-mail-text-muted">{t('timeCapsule.snapshotsAutoCreatedHint')}</p>
+          <p className="text-xs text-mail-text-muted">{t('timeCapsule.snapshotsCreatedAutomatically')}</p>
         </div>
       ) : (
         <div className="space-y-2">
           {snapshots.map(snap => (
             <div
               key={snap.filename}
-              data-testid="snapshot-row"
               className="group bg-mail-surface border border-mail-border rounded-xl p-4 flex items-center justify-between hover:border-mail-accent/40 cursor-pointer transition-all"
               onClick={() => onOpen(snap.filename)}
             >
@@ -185,7 +184,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-mail-text truncate">{formatSnapshotDate(snap.timestamp)}</p>
                   <p className="text-xs text-mail-text-muted">
-                    {snap.total_emails.toLocaleString()} emails &middot; {snap.mailbox_count} folders &middot; {formatBytes(snap.size_bytes)}
+                    {t('timeCapsule.emailsFoldersSize', { emails: snap.total_emails.toLocaleString(), folders: snap.mailbox_count, size: formatBytes(snap.size_bytes) })}
                   </p>
                 </div>
               </div>
@@ -309,7 +308,7 @@ function SnapshotBrowser({ accountId }) {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm truncate flex-1 ${isHydrated ? 'font-medium text-mail-text' : 'text-mail-text-muted italic'}`}>
-                          {email.subject || (isHydrated ? t('common.noSubject') : t('timeCapsule.uid', { email: email.uid }))}
+                          {email.subject || (isHydrated ? '(No subject)' : t('timeCapsule.uid', { email: email.uid }))}
                         </span>
                         {hasAttach && <Paperclip size={12} className="text-mail-text-muted shrink-0" />}
                         {email.date && <span className="text-[11px] text-mail-text-muted shrink-0">{formatTcEmailDate(email.date)}</span>}
@@ -359,7 +358,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
 
       {/* Email header */}
       <div className="px-6 py-4 border-b border-mail-border shrink-0">
-        <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || t('common.noSubject')}</h3>
+        <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || '(No subject)'}</h3>
         <div className="text-sm text-mail-text-muted space-y-0.5">
           <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
           {to && <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.to')}</span> <span className="text-mail-text">{to}</span></p>}
@@ -382,7 +381,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       {/* Attachments — using real AttachmentItem for download support */}
       {email.attachments && email.attachments.length > 0 && (
         <div className="px-6 py-3 border-t border-mail-border shrink-0">
-          <p className="text-xs text-mail-text-muted mb-2">{t('common.attachmentCount', { count: email.attachments.length })}</p>
+          <p className="text-xs text-mail-text-muted mb-2">{tr('common.attachmentCount', { count: email.attachments.length })}</p>
           <div className="flex flex-wrap gap-2">
             {email.attachments.map((att, i) => (
               <AttachmentItem

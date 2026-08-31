@@ -34,6 +34,7 @@ import {
   Server,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { T } from '../../i18n/T.jsx';
 
 function SavedBadge({ visible }) {
   const t = useT();
@@ -487,7 +488,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     {t('settings.accounts.displayName')}
                   </label>
                   <p className="text-sm text-mail-text-muted mb-2">
-                    Name shown in the "From" field when sending emails
+                    {t('settings.accounts.nameShownFromFieldSending')}
                   </p>
                   <input
                     type="text"
@@ -506,10 +507,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     {t('settings.accounts.sendMail')}
                   </label>
                   <p className="text-sm text-mail-text-muted mb-2">
-                    Address used in the "From" header when sending. Leave blank to send from{' '}
-                    <span className="font-mono">{selectedAccount.email}</span>. Your login and
-                    password are unchanged — the address must be an alias your provider lets this
-                    account send from.
+                    <T k="settings.accounts.addressUsedFromHeaderSending"
+                       vars={{ email: selectedAccount.email }}
+                       parts={[(s) => <span className="font-mono">{s}</span>]} />
                   </p>
                   <div className="flex items-center gap-2">
                     <input
@@ -740,7 +740,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                               text-mail-text focus:border-mail-accent transition-all"
                   >
                     <option value="">
-                      Auto-detect{autoDetectedSentPath ? ` — currently "${autoDetectedSentPath}"` : ' — no match yet'}
+                      {autoDetectedSentPath ? t('settings.accounts.autoDetectCurrently', { path: autoDetectedSentPath }) : t('settings.accounts.autoDetectNoMatchYet')}
                     </option>
                     {flattenedMailboxes.map(m => (
                       <option key={m.path} value={m.path}>{m.label}</option>
@@ -787,7 +787,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 </h4>
 
                 <p className="text-sm text-mail-text-muted mb-4">
-                  Changed hosting or email provider but kept the same address? Update the IMAP/SMTP servers here. Your vault stays exactly as it is — if the new server is empty, MailVault offers to upload it back.
+                  {t('settings.accounts.changedHostingKeptSameAddress')}
                 </p>
 
                 <div className="flex items-center justify-between">
@@ -826,7 +826,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     ? 'bg-mail-accent-tint text-mail-accent-text border border-mail-accent/20'
                     : 'bg-mail-accent/10 text-mail-accent-text border border-mail-accent/20'}`}>
                   {selectedAccount.authType === 'oauth2' ? (
-                    <><Shield size={12} /> {selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} OAuth2</>
+                    <><Shield size={12} /> {t('settings.accounts.providerOauth2', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</>
                   ) : (
                     <><Key size={12} /> {t('settings.accounts.password')}</>
                   )}
@@ -850,7 +850,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="font-medium text-mail-text">{selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft'} Account</div>
+                      <div className="font-medium text-mail-text">{t('settings.accounts.providerAccount', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</div>
                       <div className="text-sm text-mail-text-muted">
                         {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
                           ? t('settings.accounts.authenticatedViaOauth2TokensRefresh')
@@ -969,7 +969,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   >
                     <div className="bg-mail-danger/5 border border-mail-danger/30 rounded-lg p-4">
                       <p className="text-sm text-mail-text mb-1 font-medium">
-                        Are you sure you want to remove {selectedAccount.email}?
+                        {t('settings.accounts.sureRemoveAccount', { email: selectedAccount.email })}
                       </p>
                       <p className="text-sm text-mail-text-muted mb-2">
                         Deletes this account\u2019s emails, attachments and settings from your vault. Mail still on the server is untouched; anything the server no longer has is gone for good.

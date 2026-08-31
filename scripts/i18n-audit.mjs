@@ -22,63 +22,40 @@
 import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 
-// Deny-list, not allow-list: a JSX text node is whatever sits between `>` and
-// `<` that isn't itself markup or a JS expression. The old allow-list class
-// hid every node with one character outside its set — "1×1" (U+00D7),
-// "(when idle)", "…" — while reporting a single brand-name false positive for
-// the whole app. `<>{}` are the non-negotiable markup/expression boundaries;
-// `[]=`` and `\` are additional denies for a different false-positive this
-// class change opens up: a `>`/`<` that is really a JS comparison operator or
-// an arrow (`=>`), which then runs on to the NEXT real tag and swallows the
-// JS between them as "text". Confirmed by grep against every .jsx in this
-// repo: no real UI copy uses `[`, `]`, a bare `=`, a backtick or a backslash
-// (HTML entities like `&rsquo;` and literal `&` DO appear in real copy, so
-// `&` and `;` stay allowed — denying them would hide exactly what STEP 1 is
-// meant to surface). It still can't tell a comparison `>`/`<` from a tag
-// boundary on sight — `count > 0 && (<Foo/>)` opens a match on the operator,
-// same as a real tag would — so the IGNORE step below carries that one
-// specific, extremely common React idiom; anything odder-shaped than that
-// is left as noise a human skims past, same tradeoff the `hooks` mode makes.
-// literalRanges/inLiteral still exempts string-literal content.
-const TEXT = /(>)(\s*)([^<>{}[\]=`\\]*?)(\s*)(<)/g;
+/**
+ * 2026-08-30, second pass: the class was an ALLOW-list of characters, so every
+ * string carrying one it did not name was invisible — an ellipsis ("Loading
+ * message…"), a slash ("Verifying IMAP/SMTP…"), parentheses ("Every hour (when
+ * idle)"), an entity ("Can&rsquo;t reach the server"), a quote. Eight live
+ * strings hid behind that list while the gate reported clean. It is now a
+ * DENY-list: any run of text between a tag and the next `<` or `{`, minus the
+ * shapes IGNORE names as code. A node that ends at `{` is text too —
+ * "System Default ({navigator.language})" never reached a `<` at all.
+ */
+const TEXT = /(?<![=!\-|&+*/])([>}])(\s*)([A-Za-z0-9][^<>{};=]*?)(\s*)([<{])/g;
 const PROP = /\b(?:title|aria-label|placeholder|alt)="([A-Za-z][^"]{1,})"/g;
 
-// JSX text that is markup or code, not prose for a human.
-//   - `\d+$`            a bare number: never worth a translator's time.
-//   - `[^A-Za-z0-9]*$`  a run with no letter or digit at all — "(", ":",
-//                       ") : (", a lone "•" or "⚠". This is the other shape
-//                       `=>`/`?`/`:` leave behind: an arrow's `>`, or a
-//                       ternary's own `) : (` between its two JSX branches,
-//                       opens a match on a non-tag `>`/`<` that runs to the
-//                       next real tag, but the JS syntax it swallows has no
-//                       alphanumeric in it. A real string always has one.
-//   - `&&`/`||` + `(`   the `cond && (<Tag/>)` conditional-render idiom —
-//                       same false-match cause, one digit short of the rule
-//                       above (`"0 && ("` has a "0" in it).
-//   - `) : (`           the same ternary boundary, unanchored, for when a
-//                       `/* comment */` sits right after it on the false
-//                       branch — the comment's own words give the run an
-//                       alnum, so the rule above doesn't fire, but ") : ("
-//                       is still in there and no prose sentence contains it.
-//   - `\breturn\s*\(?$` a store-selector line (`useX(s => s.y)`) or an early
-//                       `if (…) return <Icon/>;` opens a match on its own
-//                       `>` (an arrow, or a self-closing tag swallowed by the
-//                       next rule down) that runs to the component's next
-//                       `return` — same false-match cause, longer run. Always
-//                       lowercase and lands at the very end, so it can't
-//                       collide with a real "Return" button label.
-//   - `\d+\s*\?\s*\(?$` the `cond ? (<Tag/>) : (<Tag/>)` idiom's OTHER
-//                       opening, `? (` instead of `) : (` — same shape as the
-//                       `&&`/`||` rule, one operator over.
-//   - `^\).*\?\(?$`     a CHAINED ternary's middle branch: `a ? (<A/>) : b ?
-//                       (<B/>) : (<C/>)`. No real sentence starts with a bare
-//                       ")" immediately followed by ":", so anchoring on that
-//                       is enough regardless of what the condition expression
-//                       between the ":" and the "?" looks like.
-// None of these are TEXT character-class denies, because none of them are a
-// character prose can never use — `(`, `:`, digits and `&`/`|` all appear in
-// real copy. They're only code here as a *shape*, which is what IGNORE is for.
-const IGNORE = /^(https?|www\.|[A-Za-z]+\(|\d+$|[^A-Za-z0-9]*$)|(?:&&|\|\|)\s*\(|\)\s*:\s*\(|\breturn\s*\(?$|\d+\s*\?\s*\(?$|^\)[\s\S]*\?\s*\(?$/;
+/**
+ * A capitalized literal in a ternary that a JSX expression renders — the shape
+ * of `{x ? 'You' : getSenderName(e)}`. LITERAL below excludes every quoted
+ * string on purpose; this narrow re-admission is the one that is safely
+ * extractable, because the literal IS the whole rendered value. The leading
+ * `{` is what keeps it off `const mbox = a === 'UNIFIED' ? 'INBOX' : a` and
+ * off a console.log argument — neither is rendered.
+ */
+const TERNARY = /\{[^{}\n]*\?\s*'([A-Z][A-Za-z0-9 ,.!?%\-—’]*)'\s*:/g;
+
+// JSX text that is markup or code, not prose for a human. The deny-list class
+// above lets far more through, so this carries the weight the class used to:
+// a JS keyword, an operator, a call, a numeric comparison. It ends with the
+// proper nouns that are the same word in all nine languages — the alternative
+// is nine catalog entries reading "IMAP".
+//
+// Deliberately NOT here: a bare one-word node. `^\w+$` would be a tempting
+// filter, and it silently swallowed "emails", "folders", "selected" and 35
+// other real fragments that sit after a `{count}` — the audit's own fixture
+// (`<span>up</span>`) is the guard against re-adding it.
+const IGNORE = /^(https?|www\.|[A-Za-z][\w.]*\(|\d+$)|&&|\|\||\?\.|^[A-Za-z_$][\w$.]*[)\]]|^(?:else|return|try|catch|finally|do|while|if|for|const|let|var|export|function|class|static|await|switch|case|new|typeof|async|import)\b|^\d+\s*[?)\]},]|^(?:Google|Microsoft|Yahoo|MailVault|IMAP|SMTP|OAuth2)$/;
 
 // `T.jsx` documents the `<0>…</0>` slot syntax in its own comments and JSDoc,
 // which reads as a text node to the pattern above. Excluding the file is
@@ -104,15 +81,44 @@ function literalRanges(src) {
   return [...src.matchAll(LITERAL)].map(m => [m.index, m.index + m[0].length]);
 }
 
-function jsxStrings(src) {
-  const ranges = literalRanges(src);
+/**
+ * Comments, blanked in place so every index still lines up. A JSDoc block that
+ * names a component reads as a text node to a pattern that only knows the
+ * angle brackets around it, and the widened
+ * class above admits far more of them than the old one did. The prose in a
+ * comment is not shipped, so it is not a finding.
+ */
+function stripComments(src, ranges) {
+  const inLit = (i) => ranges.some(([a, b]) => i >= a && i < b);
+  let out = src.split('');
+  for (let i = 0; i < src.length - 1; i++) {
+    if (src[i] !== '/' || inLit(i)) continue;
+    if (src[i + 1] === '/') {
+      for (let j = i; j < src.length && src[j] !== '\n'; j++) out[j] = ' ';
+    } else if (src[i + 1] === '*') {
+      const end = src.indexOf('*/', i + 2);
+      const stop = end === -1 ? src.length : end + 2;
+      for (let j = i; j < stop; j++) if (src[j] !== '\n') out[j] = ' ';
+      i = stop;
+    }
+  }
+  return out.join('');
+}
+
+function jsxStrings(rawSrc) {
+  const ranges = literalRanges(rawSrc);
+  const src = stripComments(rawSrc, ranges);
+  // The line number is what makes a finding actionable — the value alone can
+  // appear four times in one file.
+  const lineAt = (i) => rawSrc.slice(0, i).split('\n').length;
   const inLiteral = (i) => ranges.some(([a, b]) => i >= a && i < b);
   const out = [];
   for (const m of src.matchAll(TEXT)) {
     const v = m[3].trim();
-    if (v && !IGNORE.test(v) && !inLiteral(m.index)) out.push(v);
+    if (v && !IGNORE.test(v) && !inLiteral(m.index)) out.push({ line: lineAt(m.index), v });
   }
-  for (const m of src.matchAll(PROP)) if (!inLiteral(m.index)) out.push(m[1]);
+  for (const m of src.matchAll(PROP)) if (!inLiteral(m.index)) out.push({ line: lineAt(m.index), v: m[1] });
+  for (const m of src.matchAll(TERNARY)) if (!IGNORE.test(m[1])) out.push({ line: lineAt(m.index), v: m[1] });
   return out;
 }
 
@@ -190,7 +196,7 @@ for (const f of files) {
   if (found.length) {
     bad += found.length;
     console.log(`${f}  (${found.length})`);
-    for (const x of found) console.log('   ', JSON.stringify(x));
+    for (const x of found) console.log('   ', x.line ? `${x.line}` : '', JSON.stringify(x.v ?? x));
   }
 }
 console.log(bad ? `\n${mode}: ${bad} finding(s)` : `${mode}: clean`);

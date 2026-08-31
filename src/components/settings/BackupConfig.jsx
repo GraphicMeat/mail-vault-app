@@ -132,7 +132,7 @@ export default function BackupConfig() {
               <Lock size={20} className="text-mail-accent-text" />
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-mail-text">Cloud Backups (One-time purchase)</h4>
+              <h4 className="font-semibold text-mail-text">{t('settings.backup.config.cloudBackupsOneTimePurchase')}</h4>
               <p className="text-sm text-mail-text-muted mt-1">
                 {t('settings.backup.config.unlockExternalBackupFoldersKeep')}
               </p>
@@ -169,7 +169,7 @@ export default function BackupConfig() {
               title={t('settings.backup.config.restorePriorPurchaseAppleId')}
             >
               {iapBusy === 'restore' ? <Loader size={14} className="animate-spin" /> : <RefreshCcw size={14} />}
-              Restore
+              {t('settings.backup.config.restore')}
             </button>
           </div>
 
@@ -214,8 +214,8 @@ export default function BackupConfig() {
             onChange={(e) => setBackupScope(e.target.value)}
             className={selectClass}
           >
-            <option value="archived">Archived emails only (locally saved)</option>
-            <option value="all">All emails (download from server)</option>
+            <option value="archived">{t('settings.backup.config.archivedEmailsOnlyLocallySaved')}</option>
+            <option value="all">{t('settings.backup.config.allEmailsDownloadFromServer')}</option>
           </select>
         </div>
 

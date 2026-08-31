@@ -150,8 +150,6 @@
     "4b0c84387704": "Fixes for the two problems people hit most: the Gmail daily bandwidth cap, and spellcheck underlining nothing on Linux.",
     "7f9d3f755e6b": "All questions",
     "7e03a91dfe9f": "No question matches that search.",
-    "c0780dac1621": "Still have questions?",
-    "abc17fc06a38": "Ask on GitHub",
     "cf6c5f436fa9": "Search the FAQ",
     "0b2f4950a151": "MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control",
     "7e28f4edb996": "MailVault Time Capsule showing a point-in-time snapshot of a mailbox",
@@ -291,9 +289,7 @@
     "c4b31bd7d791": "Storage and Your Vault — MailVault FAQ",
     "877fcbac8464": "Troubleshooting — MailVault FAQ",
     "af4e42c0ed12": "Download limit",
-    "0fa5edab65b1": "Upload limit",
-    "42adf4e738a4": "MailVault sender impersonation warning showing the display name and the actual sender address side by side",
-    "1a18fad10a0b": "MailVault Reply-To domain mismatch warning showing the sending domain and the address replies would go to"
+    "0fa5edab65b1": "Upload limit"
   },
   "01": {
     "331635bfad03": "AI Email Cleanup — Local AI-Powered Email Classification | MailVault",
@@ -469,6 +465,8 @@
     "9b226740fa09": "How does backup and restore work?",
     "7affcb1ebdfb": "What are Gmail's bandwidth limits, and what happens when a backup hits them?",
     "c51a991e04d8": "Why is spellcheck not underlining anything on Linux?",
+    "c0780dac1621": "Still have questions?",
+    "abc17fc06a38": "Ask on GitHub",
     "9ad0ccff7c60": "Contact Us",
     "a2dd7988e261": "Frequently asked questions about MailVault. Learn how MailVault backs up your IMAP emails locally on macOS, supported providers, security, and more.",
     "e5768534ec25": "FAQ - MailVault",

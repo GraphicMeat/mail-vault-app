@@ -76,7 +76,7 @@ export function UndoSendToast({ onUndo }) {
                     <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
                   )}
                   <p className="text-xs text-mail-text-muted">
-                    {recipient ? tr('undoSend.to', { recipient }) : ''}Sending in{' '}
+                    {recipient ? tr('undoSend.to', { recipient }) : ''}{tr('undoSend.sendingIn')}{' '}
                     <span className="font-semibold tabular-nums text-mail-text">{formatCountdown(secondsLeft)}</span>
                   </p>
                 </div>

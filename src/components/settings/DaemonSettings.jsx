@@ -50,7 +50,7 @@ export function DaemonSettings() {
             </h3>
             {status && (
               <p className="text-xs text-mail-text-muted">
-                v{status.version} &middot; {status.data_dir}
+                {t('settings.daemon.versionAndDataDir', { version: status.version, dataDir: status.data_dir })}
               </p>
             )}
           </div>

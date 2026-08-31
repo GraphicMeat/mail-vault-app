@@ -2,8 +2,12 @@
  * E2E: Reporter round 3 — four compose fixes, asserted at the layer each one
  * actually broke in:
  *
- * 1. A new message opens from the identity that sent last
- *    (`settingsStore.lastComposeIdentity`). The harness has no SMTP, so the
+ * 1. A new message opens from the account being READ — the mailbox on screen,
+ *    or in All Inboxes the account of the last message opened. The identity
+ *    that sent last (`settingsStore.lastComposeIdentity`) is an address, not an
+ *    account: it is kept only when the account being read is the one that sent
+ *    as it (it used to outrank the account outright, which wrote from the
+ *    account you had just switched away from). The harness has no SMTP, so the
  *    write side (recorded after `smtp_ok`) can't fire here — these cases seed
  *    the store method directly and assert the READ side: the From row, and the
  *    staged `.eml` that a send with that default produces. Replies must ignore
@@ -133,22 +137,25 @@ describe('Connected Compose Round 3', function () {
 
   // ── 1. last-used identity ────────────────────────────────────────────────
 
-  it('defaults a new message to the identity that sent last', async function () {
+  it('defaults a new message to the account being read, not the one that sent last', async function () {
     await settingsCall('setLastComposeIdentity', vader.id, vader.email);
     await openComposeFresh();
-    expect(await fieldValue('compose-from')).toBe(`${vader.id} ${vader.email}`);
+    // luke's INBOX is what is on screen. A remembered identity belonging to
+    // another account must not drag the account across with it.
+    expect(await fieldValue('compose-from')).toBe(`${luke.id} ${luke.email}`);
   });
 
   it('lists a remembered alias in the From row and stages the send under it', async function () {
     // The alias is neither a login nor an override nor minable here — the row
     // must still show it, or the UI reads one identity while the wire gets
-    // another.
-    await settingsCall('setLastComposeIdentity', vader.id, ALIAS);
+    // another. Remembered on luke because that is the account being read: an
+    // address is remembered per account and survives on that account alone.
+    await settingsCall('setLastComposeIdentity', luke.id, ALIAS);
     await openComposeFresh();
-    expect(await fieldValue('compose-from')).toBe(`${vader.id} ${ALIAS}`);
+    expect(await fieldValue('compose-from')).toBe(`${luke.id} ${ALIAS}`);
 
     const subject = 'Round three remembered alias';
-    const before = new Set(listSent(vader.id));
+    const before = new Set(listSent(luke.id));
     await setField('compose-to', 'someone@example.com');
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
@@ -157,7 +164,7 @@ describe('Connected Compose Round 3', function () {
     const formError = await testidText('compose-error');
     if (formError) throw new Error(`Send was rejected by the compose form: "${formError}"`);
 
-    const raw = flatten(await readStagedEml(vader.id, before, subject));
+    const raw = flatten(await readStagedEml(luke.id, before, subject));
     expect(headerLine(raw, 'From')).toContain(`<${ALIAS}>`);
     await waitForOutboxError(subject);
   });

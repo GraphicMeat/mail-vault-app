@@ -310,7 +310,7 @@ ${articles}
     });
   </script>
   <!-- ?v=N is the Cloudflare cache bust; keep it in step with website/index.html -->
-  <script defer src="/version-gate.js?v=4"></script>
+  <script defer src="/version-gate.js?v=5"></script>
 </body>
 </html>
 `;

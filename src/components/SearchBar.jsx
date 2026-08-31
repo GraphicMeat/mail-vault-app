@@ -23,6 +23,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { t, useT  } from '../i18n/index.js';
+import { T } from '../i18n/T.jsx';
 
 const LOCATION_OPTIONS = [
   { id: 'all', labelKey: 'search.location.all', icon: Layers },
@@ -268,7 +269,7 @@ export function SearchBar() {
                       className="w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-sm text-mail-text focus:border-mail-accent focus:outline-none"
                     >
-                      <option value="current">Current folder ({decodeImapUtf7(activeMailbox)})</option>
+                      <option value="current">{t('search.currentFolderNamed', { folder: decodeImapUtf7(activeMailbox) })}</option>
                       <option value="all">{t('search.allFolders')}</option>
                       {/* Flattened: a nested folder is a search target like any
                           other, and the top-level list left 50 of bson73's 59
@@ -547,13 +548,13 @@ export function SearchBar() {
             </span>
           ) : (
             <>
-              {t('search.found')} <span className="font-medium text-mail-text">{searchResults.length}</span> results
-              {searchFilters.folder === 'current' && ` in ${decodeImapUtf7(activeMailbox)}`}
-              {searchFilters.folder === 'all' && ' in all folders'}
+              <T k="search.foundResults" vars={{ count: searchResults.length }}
+                 parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
+              {searchFilters.folder === 'current' && t('search.inFolder', { folder: decodeImapUtf7(activeMailbox) })}
+              {searchFilters.folder === 'all' && t('search.inAllFolders')}
               {searchResults.length > 0 && (
                 <span className="ml-2 text-[10px]">
-                  ({searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length} local,
-                  {' '}{searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length} server)
+                  {t('search.localServerCounts', { local: searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length, server: searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length })}
                 </span>
               )}
             </>

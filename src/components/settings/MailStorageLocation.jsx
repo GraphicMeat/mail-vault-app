@@ -168,7 +168,7 @@ export default function MailStorageLocation() {
           className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 transition-colors"
         >
           {busy === 'move' ? <Loader size={13} className="animate-spin" /> : <FolderOpen size={13} />}
-          Move mail to another folder
+          {t('settings.storage.moveMailAnotherFolder')}
         </button>
         <button
           onClick={handleAdopt}
@@ -224,8 +224,7 @@ export default function MailStorageLocation() {
         <div className="flex items-start gap-2 bg-mail-warning/10 border border-mail-warning/30 rounded-lg p-2">
           <AlertCircle size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
           <p className="text-xs text-mail-warning">
-            {vaultStatus?.lastError || 'The folder is not available.'} Syncing stays paused until it is
-            back or you pick the folder again — MailVault will not start a second copy in the app's storage.
+            {t('settings.storage.syncingStaysPausedUntilBack', { error: vaultStatus?.lastError || t('settings.storage.folderNotAvailable') })}
           </p>
         </div>
       )}

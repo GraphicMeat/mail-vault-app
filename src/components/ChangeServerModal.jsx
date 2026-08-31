@@ -170,7 +170,7 @@ export default function ChangeServerModal() {
       setFolders(gathered);
       setStep(nextStepAfterVerify(gathered));
     } catch (err) {
-      const message = typeof err === 'string' ? err : err?.message || tr('changeServer.verificationFailed');
+      const message = typeof err === 'string' ? err : err?.message || 'Verification failed';
       setVerifyError(classifyVerifyError(message));
     } finally {
       setBusyLeg(null);
@@ -210,7 +210,7 @@ export default function ChangeServerModal() {
     >
         <div className="flex items-center justify-between mb-3">
           <h2 id={titleId} className="flex items-center gap-2 text-lg font-semibold text-mail-text">
-            <Server size={18} /> {t('changeServer.changeServerFor', { email: account.email })}
+            <Server size={18} /> Change server — {account.email}
           </h2>
           {step === 2 && activeRestore && (
             <Button variant="ghost" icon size="xs" onClick={handleMinimize} aria-label={t('common.minimize')} title={t('changeServer.minimizeRestoreContinuesBackground')}>
@@ -248,7 +248,7 @@ export default function ChangeServerModal() {
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.security')}</label>
                 <select className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
-                  <option value="ssl">SSL/TLS</option>
+                  <option value="ssl">{t('changeServer.sslTls')}</option>
                   <option value="starttls">{t('changeServer.starttls')}</option>
                   <option value="none">{t('changeServer.none')}</option>
                 </select>
@@ -292,7 +292,7 @@ export default function ChangeServerModal() {
                 {busyLeg ? (
                   <span className="flex items-center gap-2">
                     <Loader2 className="animate-spin" size={14} />
-                    {t('changeServer.verifyingLeg', { leg: busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
+                    {tr('changeServer.verifyingLeg', { leg: busyLeg === 'imap' ? 'IMAP' : 'SMTP' })}
                   </span>
                 ) : tr('changeServer.verifySave')}
               </button>
@@ -305,7 +305,7 @@ export default function ChangeServerModal() {
             {!activeRestore && !restoreFinished && (
               <>
                 <p className="text-mail-text-muted mb-3">
-                  {t('changeServer.uploadEmailsToNewServer', { count: localTotal })}
+                  {tr('changeServer.uploadEmailsNewServer', { localTotal })}
                 </p>
                 <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
                   {folders.map((f) => (
@@ -323,7 +323,7 @@ export default function ChangeServerModal() {
                   <Button variant="primary"
                     onClick={handleStartRestore}
                   >
-                    <UploadCloud size={14} /> {t('changeServer.restoreCount', { count: localTotal })}
+                    <UploadCloud size={14} /> Restore {localTotal}
                   </Button>
                 </div>
               </>
@@ -333,10 +333,10 @@ export default function ChangeServerModal() {
               <div>
                 <div className="flex items-center gap-2 mb-2 text-mail-text">
                   <Loader2 className="animate-spin" size={16} />
-                  <span>{t('changeServer.uploadingProgress', { folder: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
+                  <span>{tr('restore.uploadingFolder', { suffix: activeRestore.current_folder ? ` — ${decodeImapUtf7(activeRestore.current_folder)}` : '' })}</span>
                 </div>
                 <div className="text-mail-text-muted">
-                  {t('changeServer.restoreTally', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
+                  {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   {activeRestore.folder_progress ? ` · ${activeRestore.folder_progress}` : ''}
                 </div>
                 <div className="flex justify-end gap-2 mt-4">
@@ -361,10 +361,10 @@ export default function ChangeServerModal() {
                     ? <CheckCircle2 size={16} className="text-mail-success" />
                     : <AlertTriangle size={16} className="text-mail-warning" />}
                   <span>
-                    {activeRestore.status === 'completed' && t('changeServer.restoreCompletePrefix')}
-                    {activeRestore.status === 'cancelled' && t('changeServer.restoreCancelledPrefix')}
-                    {activeRestore.status === 'failed' && t('changeServer.restoreFailedPrefix')}
-                    {t('changeServer.restoreTally', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
+                    {activeRestore.status === 'completed' && tr('changeServer.restoreCompletePrefix')}
+                    {activeRestore.status === 'cancelled' && tr('changeServer.restoreCancelledDash')}
+                    {activeRestore.status === 'failed' && tr('changeServer.restoreFailedDash')}
+                    {tr('restore.uploadedSkippedFailed', { uploaded: activeRestore.uploaded_emails, skipped: activeRestore.skipped_emails, failed: activeRestore.failed_emails })}
                   </span>
                 </div>
                 <div className="flex justify-end mt-4">
@@ -383,7 +383,7 @@ export default function ChangeServerModal() {
           <div className="text-sm">
             {dnsHealth.loading && (
               <div className="flex items-center gap-2 text-mail-text-muted mb-4">
-                <Loader2 className="animate-spin" size={16} /> {t('changeServer.checkingDnsRecords')}
+                <Loader2 className="animate-spin" size={16} /> Checking DNS records…
               </div>
             )}
             {!dnsHealth.loading && dnsHealth.failed && (

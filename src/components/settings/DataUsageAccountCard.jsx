@@ -156,7 +156,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
         </div>
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div>
-            <label className="text-[11px] text-mail-text-muted mb-1 block">Daily download limit (MB)</label>
+            <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyDownloadLimitMb')}</label>
             <input
               type="number"
               min="0"
@@ -167,7 +167,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
             />
           </div>
           <div>
-            <label className="text-[11px] text-mail-text-muted mb-1 block">Daily upload limit (MB)</label>
+            <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyUploadLimitMb')}</label>
             <input
               type="number"
               min="0"
