@@ -480,6 +480,7 @@
   "onboarding.allComputerBeforeAddAccount": "一切都在这台电脑上，早在你添加账户之前",
   "onboarding.eachEmailArchiveStandardEml": "你归档的每封邮件都是磁盘上的标准 .eml 文件",
   "onboarding.getStarted": "开始使用",
+  "onboarding.skipAccount": "我稍后再做",
   "onboarding.keychainWillAskPermission": "钥匙串会请求授权",
   "onboarding.noAccountNoTelemetry": "无需账户，无遥测",
   "onboarding.noPasswordEverWrittenDisk": "本应用绝不会把你的密码写入磁盘",

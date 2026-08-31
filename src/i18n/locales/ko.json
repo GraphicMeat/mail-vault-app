@@ -480,6 +480,7 @@
   "onboarding.allComputerBeforeAddAccount": "계정을 추가하기 전부터 모두 이 컴퓨터에",
   "onboarding.eachEmailArchiveStandardEml": "보관한 메일은 디스크에 저장되는 표준 .eml 파일입니다",
   "onboarding.getStarted": "시작하기",
+  "onboarding.skipAccount": "나중에 할게요",
   "onboarding.keychainWillAskPermission": "키체인이 권한을 요청합니다",
   "onboarding.noAccountNoTelemetry": "계정 없음, 원격 수집 없음",
   "onboarding.noPasswordEverWrittenDisk": "이 앱은 비밀번호를 디스크에 절대 기록하지 않습니다",

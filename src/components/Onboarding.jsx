@@ -30,7 +30,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   return (
     <div className="h-screen bg-mail-bg flex items-center justify-center p-4 pt-8" data-testid={`onboarding-${step}`}>
       {step === 'splash' && <Splash onContinue={next} />}
-      {step === 'account' && <AccountStep onAdded={next} />}
+      {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
       {step === 'free' && <FreeFeatures onContinue={next} />}
       {step === 'premium' && (

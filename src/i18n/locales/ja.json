@@ -480,6 +480,7 @@
   "onboarding.allComputerBeforeAddAccount": "アカウントを追加する前から、すべてこのコンピューター上に",
   "onboarding.eachEmailArchiveStandardEml": "アーカイブしたメールは、ディスク上の標準的な .eml ファイルです",
   "onboarding.getStarted": "はじめる",
+  "onboarding.skipAccount": "後で設定します",
   "onboarding.keychainWillAskPermission": "キーチェーンが許可を求めます",
   "onboarding.noAccountNoTelemetry": "アカウント不要、テレメトリなし",
   "onboarding.noPasswordEverWrittenDisk": "このアプリがパスワードをディスクに書き込むことはありません",

@@ -24,5 +24,5 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'migration',        icon: ArrowLeftRight, titleKey: 'premium.migration.title',       blurbKey: 'premium.migration.blurb',       shot: 'premium-migration',        tab: 'migration' },
   { id: 'server-change',    icon: Server,         titleKey: 'premium.serverChange.title',    blurbKey: 'premium.serverChange.blurb',    shot: 'premium-server-change',    tab: 'accounts' },
   { id: 'export-image',     icon: Image,          titleKey: 'premium.exportImage.title',     blurbKey: 'premium.exportImage.blurb',     shot: 'premium-export-image',     tab: null },
-  { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: 'billing' },
+  { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
 ]);

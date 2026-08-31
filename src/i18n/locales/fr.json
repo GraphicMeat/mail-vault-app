@@ -480,6 +480,7 @@
   "onboarding.allComputerBeforeAddAccount": "Tout sur cet ordinateur, avant même d'ajouter un compte",
   "onboarding.eachEmailArchiveStandardEml": "Chaque e-mail archivé est un fichier .eml standard sur votre disque",
   "onboarding.getStarted": "Commencer",
+  "onboarding.skipAccount": "Je ferai ça plus tard",
   "onboarding.keychainWillAskPermission": "Votre trousseau demandera l'autorisation",
   "onboarding.noAccountNoTelemetry": "Pas de compte, pas de télémétrie",
   "onboarding.noPasswordEverWrittenDisk": "Cette app n'écrit jamais votre mot de passe sur le disque",

@@ -47,6 +47,16 @@ describe('onboarding account step', () => {
     expect(onAdded).toHaveBeenCalled();
   });
 
+  // Regression: someone with no working credentials to hand was trapped on
+  // this step — Add Mailbox was the only control, and it only advances on a
+  // successful IMAP login. This is the escape hatch, so prove it exists.
+  it('advances when the account step is skipped', () => {
+    const onSkip = vi.fn();
+    render(<AccountStep onAdded={() => {}} onSkip={onSkip} />);
+    fireEvent.click(screen.getByTestId('onboarding-skip-account'));
+    expect(onSkip).toHaveBeenCalled();
+  });
+
   // The hook has to fire on success, not on close — a cancelled modal must not
   // walk the tour forward past a mailbox that was never added.
   it('wires onSuccess, not onClose, into the modal', () => {

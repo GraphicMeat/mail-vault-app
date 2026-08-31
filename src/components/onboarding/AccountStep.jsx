@@ -24,7 +24,7 @@ const MECHANISMS = () => ([
  * success just unmounts it and returns here; only a real success advances
  * the tour.
  */
-export function AccountStep({ onAdded }) {
+export function AccountStep({ onAdded, onSkip }) {
   const t = useT();
   const [showModal, setShowModal] = useState(false);
 
@@ -60,11 +60,16 @@ export function AccountStep({ onAdded }) {
         </div>
       </div>
 
-      <Button variant="primary" size="lg" fullWidth
-              data-testid="onboarding-add-mailbox"
-              onClick={() => setShowModal(true)}>
-        {t('app.addFirstAccount')}
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button variant="primary" size="lg" fullWidth
+                data-testid="onboarding-add-mailbox"
+                onClick={() => setShowModal(true)}>
+          {t('app.addFirstAccount')}
+        </Button>
+        <Button variant="ghost" size="sm" fullWidth onClick={onSkip} data-testid="onboarding-skip-account">
+          {t('onboarding.skipAccount')}
+        </Button>
+      </div>
 
       {showModal && (
         <AccountModal onClose={() => setShowModal(false)} onSuccess={onAdded} />

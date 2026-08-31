@@ -726,6 +726,7 @@
   "onboarding.allComputerBeforeAddAccount": "All of it on this computer, before you add an account",
   "onboarding.keychainWillAskPermission": "Your keychain will ask for permission",
   "onboarding.getStarted": "Get Started",
+  "onboarding.skipAccount": "I'll do this later",
   "bugReport.reportBugSuggestFeature": "Report a bug or suggest a feature",
   "bugReport.graphicMeat": "Graphic Meat",
   "bugReport.followX": "Follow on X",
