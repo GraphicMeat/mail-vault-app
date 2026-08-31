@@ -25,7 +25,7 @@ export function Splash({ onContinue }) {
     <div className="max-w-lg w-full text-center">
       <motion.img
         src={logoUrl}
-        alt="Graphic Meat"
+        alt={t('onboarding.graphicMeat')}
         data-testid="onboarding-logo"
         width={128}
         height={128}
