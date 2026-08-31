@@ -64,7 +64,7 @@ function seedFrontendSettings(accounts) {
   const path = join(appDataDir(dataDir), 'frontend-settings.json');
   writeFileSync(path, JSON.stringify({
     'mailvault-settings': {
-      version: 4,
+      version: 5,
       state: {
         listPaneSize: 470,
         onboardingComplete: true,
@@ -80,11 +80,21 @@ function seedFrontendSettings(accounts) {
         // An unlocked premium screen is usually an empty one — seed what each
         // screen needs to look like a working feature instead of a blank panel.
         //
-        // Auto-cleanup rules (Storage tab). Real shape per StorageSettings.jsx
-        // (account/folder/age/unit/action, NOT the accountEmail/olderThan shape
-        // cleanupEngine.js reads internally — that mismatch means a real rule
-        // never actually fires today, so `enabled: true` here is safe: nothing
-        // will archive or delete real demo mail in the background).
+        // Auto-cleanup rules (Storage tab), in the shape StorageSettings.jsx
+        // saves: account/folder/age/unit/action.
+        //
+        // `enabled: true` used to be safe only because cleanupEngine.js read a
+        // different shape and no rule ever fired. That bug is fixed (1f2ca123),
+        // so the safety now has to be real: the oldest message demoData.js
+        // builds is `daysAgo: 8`, and these thresholds are 30 days and 90 days,
+        // so nothing in the demo mailbox is ever stale and the engine returns
+        // before it touches a mailbox. Keep any threshold well past the demo
+        // range if you change these, or a capture run will archive and delete
+        // its own fixtures.
+        //
+        // The seeded `version` above must also stay at the store's current
+        // persist version — a lower one runs the v4 -> v5 migration over this
+        // fixture, which disarms both rules and paints a warning into the shot.
         cleanupRules: [
           { id: '11111111-1111-4111-8111-111111111111', account: 'all', folder: 'INBOX', age: 30, unit: 'days', action: 'archive-then-delete', enabled: true },
           { id: '22222222-2222-4222-8222-222222222222', account: 'all', folder: 'Trash', age: 90, unit: 'days', action: 'delete', enabled: true },
