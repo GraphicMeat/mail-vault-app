@@ -467,24 +467,14 @@
   <script>
     // Theme toggle
     const themeToggle = document.getElementById('theme-toggle');
-    const sunIcon = document.getElementById('sun-icon');
-    const moonIcon = document.getElementById('moon-icon');
-
-    function updateThemeIcons() {
-      const isDark = document.documentElement.classList.contains('dark');
-      sunIcon.classList.toggle('hidden', !isDark);
-      moonIcon.classList.toggle('hidden', isDark);
-    }
 
     if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
       document.documentElement.classList.add('dark');
     }
-    updateThemeIcons();
 
     themeToggle.addEventListener('click', () => {
       document.documentElement.classList.toggle('dark');
       localStorage.theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
-      updateThemeIcons();
     });
 
     // Mobile Menu
