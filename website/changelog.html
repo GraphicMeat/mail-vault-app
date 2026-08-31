@@ -85,10 +85,8 @@
 
         <div class="hidden md:flex items-center gap-8">
           <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
-          <a href="/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
-          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
         </div>
 
@@ -116,10 +114,8 @@
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
-          <a href="/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
-          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
         </div>
@@ -136,7 +132,7 @@
       <article class="mb-16" data-version="2.11.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.11.0</span>
-          <span class="text-slate-500 dark:text-slate-400 text-sm">August 28, 2026</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">August 31, 2026</span>
           <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
@@ -168,6 +164,18 @@
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>MailVault now tells you when an email is watching you, and can stop it.</strong> Most marketing mail carries a hidden image, usually a single transparent pixel, that your mail program fetches from the sender's server the moment the message opens. That one fetch reports back that you read it, at what minute, how many times you came back to it, roughly where you were, and what you read it on — none of which you agreed to. Every message MailVault opens is now checked for those beacons, and a small eye appears beside the subject, on the row and above the open message, next to the marks for a faked sender and a mismatched reply address. Click it and MailVault names the company doing the tracking and shows the exact address the pixel would have called. That much is free, for everyone, forever. With a subscription MailVault also takes the beacon out of the message before it is drawn, so nothing is ever requested and the sender is told nothing at all; the eye closes to say so. It works in the reading pane, in threads, in Chat view and in a popped-out message window, and there is a Tracker Blocking screen under Features that shows the same email side by side, tracked and cleared, with the tracking code itself spelled out. Nearly 500 known tracking addresses ship with the app — merged from the MailTrackerBlocker and Ugly Email projects and extended with senders newer than both — and the screen links out to both projects, with their licences, so you can read the lists rather than take our word for them. The list is bundled and updated in releases. MailVault never asks a server which pixels to block: doing that would be one more thing reporting on what you read.</span>
             </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault now introduces itself the first time you open it.</strong> A new install used to land on an empty mailbox list with an Add Account button and no explanation of what the app was for, which is a poor first impression for something whose whole point is that your mail stops living on someone else's computer. The first launch is now a short tour. It opens on the logo and asks which of the nine languages to use — asked, not guessed from the machine, because the language your computer is set to is often not the language you read mail in — and everything after that is already in it. Then it says, in four cards, what MailVault actually does with a mailbox and where the password goes: into the system keychain, not into a file the app writes. Adding a mailbox is one button on that page, and it opens the same account dialog as the sidebar does; there is also "I'll do this later" for anyone without their server details to hand, which carries on through the rest of the tour rather than dumping them at the end. Next it asks how the app should look, with a real message list beside the choice that changes as you pick — light, dark or following the system, and the density — so the decision is made by looking rather than by reading the names of the options. The last two pages say what is included for nothing and what a subscription adds, the second with pictures of each feature rather than a list of names, and anything there can be opened later from Settings -> Help without going through the tour again. While all of this is being read, MailVault is already fetching the first mailbox in the background, so finishing the tour lands on mail rather than on a spinner.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings -> Billing now says what a subscription buys.</strong> It quoted a price against nothing at all: the features it pays for were described on five separate locked panels scattered through the app and on the website, and nowhere in the tab that asks for the money. Billing now lists every Premium feature above the plan card, each with a line saying what it does and, where it has a screen of its own, a link straight to it. The list appears in every build, including the Mac App Store one, because a list of features carries no price. Settings -> Help gained the same gallery, and a link to the FAQ in the language the app is set to.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The FAQ is now six pages instead of one.</strong> Twenty-three questions on a single page meant scrolling past everything to reach anything. They are now grouped — getting started, storage and the vault, mail providers, Premium, backup and restore, and troubleshooting — behind a hub with a search box that filters the whole list of questions at once. Every answer is plain text that is always visible and needs no scripting to open, every page carries its own structured data so search engines can quote the answers, and old links into the single page still land on the right question.</span>
+            </li>
           </ul>
         </div>
 
@@ -194,6 +202,18 @@
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>Spellcheck marks misspelled words on macOS.</strong> The button that turns spellchecking off and on has been in the message toolbar since 2.10.4, and on macOS it never had anything to turn on: the checker built into the system stays off until an app asks for it, and MailVault never asked. Words went unmarked whichever way the button was set — the setting was real, the underlines were not. MailVault now asks at startup, so misspellings are marked the way they are in every other Mac app, and the button does what it has been saying it does.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Auto-cleanup rules now actually run — and every existing rule has been switched off until you say otherwise.</strong> The rules that archive or delete mail past a certain age were written down by the settings screen in one shape and read by the engine in another: it looked for fields the screen has never saved, worked out an age threshold of nothing, and stopped before touching a single message. Every rule anyone has ever created has been silently doing nothing, run after unattended run. Simply fixing the reader would have been worse than the bug — rules made months ago, watched to do nothing and forgotten would have woken up on the next launch and started deleting real mail with no warning. So the stored rules have been rewritten into the one shape and every one of them switched off, with a notice on the screen saying why. Turning one back on is a single toggle, and that is yours to decide. A rule the engine cannot make sense of is now skipped and reported rather than treated as though everything were old enough to go.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The rule editor no longer offers a folder the engine refuses to touch.</strong> Drafts could be picked, saved and switched on; the rule then sat there looking active and did nothing, because Drafts is protected and always has been. It is no longer in the list, and the two lists — what may be picked and what may be acted on — now come from the same place, so they cannot drift apart again.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A new message is sent from the account whose mail you are reading.</strong> Compose opened on whichever account sent the last message, so switching account in the sidebar and clicking Compose wrote from the account you had just left — a difference visible only in the From row, if you thought to look at it before pressing Send. A new message now starts on the account on screen, and in All Inboxes, where every account's mail is in one list, on the account of the last message you opened. An address you have chosen to send as is still remembered, on the account it belongs to. Replies, forwards and saved drafts keep the account they always had.</span>
             </li>
           </ul>
         </div>
