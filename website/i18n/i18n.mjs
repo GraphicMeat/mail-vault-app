@@ -22,6 +22,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { injectNav } from './nav.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '..');
@@ -599,6 +600,9 @@ function ensureOgLocale(html) {
 }
 
 export function inject() {
+  // The menu first: it owns the banner interior, and it covers pages the
+  // localizer skips (changelog/privacy/terms have menus but stay English).
+  injectNav();
   let touched = 0, missing = [], noFooter = [];
   for (const rel of sourcePages()) {
     const file = path.join(ROOT, rel);
@@ -1001,7 +1005,7 @@ export function chunk(id) {
   console.log(JSON.stringify(corpus[id], null, 2));
 }
 
-const CMDS = { extract, inject, build, status, check, chunk, prune, missing, verify };
+const CMDS = { extract, inject, build, status, check, chunk, prune, missing, verify, nav: injectNav };
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const cmd = process.argv[2];
   if (!CMDS[cmd]) {

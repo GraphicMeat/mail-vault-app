@@ -1,5 +1,9 @@
 {
   "0b2f4950a151": "MailVault-Einstellungen für geplante Backups mit täglichen, wöchentlichen und eigenen Zeitplänen sowie Uhrzeitsteuerung",
   "7e28f4edb996": "MailVault Time Capsule zeigt eine Momentaufnahme eines Postfachs zu einem bestimmten Zeitpunkt",
-  "fe81d78bb9d1": "MailVault E-Mail-Tracker-Blockierung zeigt, wie Tracking-Pixel aus einer Nachricht entfernt werden, bevor sie gerendert wird"
+  "fe81d78bb9d1": "MailVault E-Mail-Tracker-Blockierung zeigt, wie Tracking-Pixel aus einer Nachricht entfernt werden, bevor sie gerendert wird",
+  "2dda3c18c3bd": "Dunkelmodus umschalten",
+  "57f5f5efbc59": "Menü",
+  "42adf4e738a4": "MailVault-Warnung vor Absender-Identitätsdiebstahl: Anzeigename und tatsächliche Absenderadresse nebeneinander",
+  "1a18fad10a0b": "MailVault-Warnung vor abweichender Reply-To-Domain: sendende Domain und die Adresse, an die Antworten gingen"
 }

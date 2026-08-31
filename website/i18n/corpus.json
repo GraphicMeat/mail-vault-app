@@ -130,6 +130,8 @@
     "7f8060cdc9c2": "<strong>Attachments</strong> &mdash; The PDF invoice, the signed document, the project file that was only ever sent via email."
   },
   "11": {
+    "2dda3c18c3bd": "Toggle dark mode",
+    "57f5f5efbc59": "Menu",
     "010b85ad56b3": "Getting Started",
     "19dcb44003d1": "What MailVault is, which email providers it works with, what it runs on, and how it keeps your mail private.",
     "dfe6f264210e": "4 questions",
@@ -151,6 +153,9 @@
     "c0780dac1621": "Still have questions?",
     "abc17fc06a38": "Ask on GitHub",
     "cf6c5f436fa9": "Search the FAQ",
+    "0b2f4950a151": "MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control",
+    "7e28f4edb996": "MailVault Time Capsule showing a point-in-time snapshot of a mailbox",
+    "fe81d78bb9d1": "MailVault email tracker blocking showing tracking pixels stripped from a message before it renders",
     "caf0e8e3f701": "Download Free for macOS",
     "245ee568afb1": "Download Free for Linux",
     "9cf8ee2d0967": "Subscribing…",
@@ -287,9 +292,8 @@
     "877fcbac8464": "Troubleshooting — MailVault FAQ",
     "af4e42c0ed12": "Download limit",
     "0fa5edab65b1": "Upload limit",
-    "0b2f4950a151": "MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control",
-    "7e28f4edb996": "MailVault Time Capsule showing a point-in-time snapshot of a mailbox",
-    "fe81d78bb9d1": "MailVault email tracker blocking showing tracking pixels stripped from a message before it renders"
+    "42adf4e738a4": "MailVault sender impersonation warning showing the display name and the actual sender address side by side",
+    "1a18fad10a0b": "MailVault Reply-To domain mismatch warning showing the sending domain and the address replies would go to"
   },
   "01": {
     "331635bfad03": "AI Email Cleanup — Local AI-Powered Email Classification | MailVault",
@@ -395,7 +399,6 @@
     "e1d517831a41": "Six patch releases in a single day. macOS code signing, App Sandbox, and Bun-compiled sidecars don't mix well — here's the full story of how we fixed it.",
     "a78b94f51a58": "5 min read",
     "90600dedf512": "Behind the scenes of building MailVault. Development updates, technical deep dives, and release notes.",
-    "9b0eaf14d3bb": "Toggle theme",
     "fa3229126bbe": "Docs — MailVault",
     "9e9cf3221a30": "Documentation",
     "1ec295839f81": "Guides, workflows, and answers for getting the most out of MailVault.",
@@ -519,6 +522,7 @@
     "512fc5e73cfc": "openSUSE"
   },
   "02": {
+    "a0d9bbad5f93": "Pricing",
     "70f8bb9a8a53": "Home",
     "ca12a5418e44": "MailVault Features — Email Management, Threading, Security, Backup & More",
     "d880c4c1ee21": "MailVault is an email client and backup tool for macOS and Linux. From unified inbox and threaded conversations to local archiving, here's everything it can do.",
@@ -665,7 +669,6 @@
     "ae077838f162": "MailVault Features",
     "3baec7f6b0bc": "Explore every MailVault feature: email management, threading, chat view, sender verification, local backup, bulk operations, multi-account support, and more.",
     "2dcfbd50f79f": "MailVault — Archive IMAP Emails Locally | Free Up Server Storage on Mac &amp; Linux",
-    "a0d9bbad5f93": "Pricing",
     "2bea083b5be7": "Now available for macOS &amp; Linux",
     "531a1ec08967": "Download Free",
     "06e3cc249c26": "All platforms &amp; formats &darr;",
