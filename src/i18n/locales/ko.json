@@ -1694,5 +1694,6 @@
   "search.foundResults": "<0>{{count}}</0>건을 찾았습니다",
   "search.inFolder": " ({{folder}} 내)",
   "search.inAllFolders": " (모든 폴더)",
-  "email.viaList": "{{listName}} 경유"
+  "email.viaList": "{{listName}} 경유",
+  "settings.storage.cleanupRulesDisarmed": "버그 때문에 자동 정리 규칙이 한 번도 실행되지 않았습니다. 지금은 고쳤지만 기존 규칙은 꺼 두었습니다. 각 규칙을 확인한 뒤 다시 켜세요."
 }

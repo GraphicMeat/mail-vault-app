@@ -1694,5 +1694,6 @@
   "search.foundResults": "<0>{{count}}</0> 件見つかりました",
   "search.inFolder": "（{{folder}} 内）",
   "search.inAllFolders": "（すべてのフォルダー）",
-  "email.viaList": "{{listName}} 経由"
+  "email.viaList": "{{listName}} 経由",
+  "settings.storage.cleanupRulesDisarmed": "不具合により、自動の整理ルールが一度も実行されていませんでした。修正済みですが、既存のルールはオフにしてあります。内容を確認してから、もう一度オンにしてください。"
 }

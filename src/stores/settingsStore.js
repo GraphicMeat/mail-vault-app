@@ -74,6 +74,57 @@ export const DEFAULT_SHORTCUTS = {
   openSettings: 'Meta+,',
 };
 
+/**
+ * One canonical cleanup-rule shape: the one the add/edit form writes.
+ * Also accepts the engine's old never-written spec, so a rule that was
+ * hand-written or seeded against the stale docs upgrades instead of being
+ * silently ignored forever.
+ */
+function normalizeCleanupRule(rule) {
+  const { accountEmail, olderThan, ...rest } = rule || {};
+  return {
+    ...rest,
+    account: rest.account ?? (accountEmail === '*' ? 'all' : accountEmail) ?? 'all',
+    age: rest.age ?? olderThan?.value,
+    unit: rest.unit ?? olderThan?.unit ?? 'days',
+    action: rest.action === 'archive-delete' ? 'archive-then-delete' : rest.action,
+    // Every stored rule predates the engine fix, so every stored rule has been
+    // doing nothing. Arming them by renaming fields would archive or delete
+    // real mail on the next launch, unattended, for rules people created months
+    // ago and forgot. Switching them off is one toggle to undo, and the undo is
+    // the user's to make.
+    enabled: false,
+  };
+}
+
+/**
+ * v3 → v4: linkAlerts moved from bare-UID keys to `accountId-mailbox-uid`.
+ * The old keys can't be upgraded — a UID alone doesn't say which mailbox or
+ * account it belonged to — so drop the map. Alerts come back as each message
+ * is opened.
+ *
+ * v4 → v5: the cleanup engine read `accountEmail` / `olderThan` /
+ * `'archive-delete'` while the form has only ever written `account` / `age` +
+ * `unit` / `'archive-then-delete'`. Rewrite stored rules into the one shape
+ * and disarm them (see normalizeCleanupRule).
+ *
+ * Exported for tests: the disarm is the safety mechanism of the fix, so it
+ * needs a test that can call it directly.
+ */
+export function migrateSettings(persisted, version) {
+  if (!persisted) return persisted;
+  let next = persisted;
+  if (version < 4) next = { ...next, linkAlerts: {} };
+  if (version < 5 && Array.isArray(next.cleanupRules) && next.cleanupRules.length > 0) {
+    next = {
+      ...next,
+      cleanupRules: next.cleanupRules.map(normalizeCleanupRule),
+      cleanupRulesDisarmed: true,
+    };
+  }
+  return next;
+}
+
 export const useSettingsStore = create(
   persist(
     (set, get) => ({
@@ -266,9 +317,12 @@ export const useSettingsStore = create(
       setUnreadPerAccount: (counts) => set({ unreadPerAccount: counts }),
       setUnreadForAccount: (accountId, count) => set(s => ({ unreadPerAccount: { ...s.unreadPerAccount, [accountId]: count } })),
 
-      // Auto-cleanup rules
-      // Each: { id, accountEmail: '*' | 'email@...', folder, olderThan: { value: number, unit: 'days'|'months' }, action: 'delete'|'archive-delete', enabled: boolean }
+      // Auto-cleanup rules — one shape, the one StorageSettings.jsx writes.
+      // Each: { id, account: 'all' | 'email@...', folder, age: number, unit: 'days'|'months', action: 'delete'|'archive-then-delete', enabled: boolean }
       cleanupRules: [],
+      // Set by the v4 → v5 migration when it switches previously-inert rules
+      // off. Purely a notice for StorageSettings; cleared once acknowledged.
+      cleanupRulesDisarmed: false,
 
       // Helper mode: 'on-demand' (default) or 'always-on' (recommended)
       // on-demand: helper starts with app, stops when app quits
@@ -759,6 +813,8 @@ export const useSettingsStore = create(
         cleanupRules: state.cleanupRules.filter(r => r.id !== id),
       })),
 
+      dismissCleanupRulesDisarmed: () => set({ cleanupRulesDisarmed: false }),
+
       toggleCleanupRule: (id) => {
         if (!hasPremiumAccess(get().billingProfile)) return;
         set((state) => ({
@@ -843,6 +899,7 @@ export const useSettingsStore = create(
           trackerBlockingEnabled: true,
           trackerAlerts: {},
           cleanupRules: [],
+          cleanupRulesDisarmed: false,
           activeMigration: null,
           migrationHistory: [],
           incompleteMigration: null,
@@ -854,15 +911,9 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => safeStorage),
-      // v3 → v4: linkAlerts moved from bare-UID keys to `accountId-mailbox-uid`.
-      // The old keys can't be upgraded — a UID alone doesn't say which mailbox
-      // or account it belonged to — so drop the map. Alerts come back as each
-      // message is opened.
-      migrate: (persisted, version) => (
-        version < 4 && persisted ? { ...persisted, linkAlerts: {} } : persisted
-      ),
+      migrate: migrateSettings,
       merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {

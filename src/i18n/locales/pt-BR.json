@@ -1694,5 +1694,6 @@
   "search.foundResults": "<0>{{count}}</0> resultados encontrados",
   "search.inFolder": " em {{folder}}",
   "search.inAllFolders": " em todas as pastas",
-  "email.viaList": "via {{listName}}"
+  "email.viaList": "via {{listName}}",
+  "settings.storage.cleanupRulesDisarmed": "Um erro impedia que as regras de limpeza fossem executadas. Já foi corrigido, e suas regras existentes estão desativadas: revise cada uma antes de ativá-la de novo."
 }

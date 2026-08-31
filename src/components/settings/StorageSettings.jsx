@@ -43,6 +43,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
     updateCleanupRule,
     removeCleanupRule,
     toggleCleanupRule,
+    cleanupRulesDisarmed,
+    dismissCleanupRulesDisarmed,
   } = useSettingsStore();
   const isPaidUser = hasPremiumAccess(billingProfile);
 
@@ -436,6 +438,23 @@ export function StorageSettings({ accounts, onUpgrade }) {
             <p className="text-sm text-mail-text-muted">
               {t('settings.storage.automaticallyCleanUpOldEmails2')}
             </p>
+
+            {/* Rules saved before the engine was fixed never ran. Say so, rather
+                than leaving the user to find their rules mysteriously off. */}
+            {cleanupRulesDisarmed && cleanupRules.length > 0 && (
+              <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning rounded-lg">
+                <AlertTriangle size={16} className="text-mail-warning shrink-0 mt-0.5" />
+                <p className="text-xs text-mail-warning flex-1">
+                  {t('settings.storage.cleanupRulesDisarmed')}
+                </p>
+                <button
+                  onClick={dismissCleanupRulesDisarmed}
+                  className="text-xs text-mail-warning underline shrink-0"
+                >
+                  {t('common.close')}
+                </button>
+              </div>
+            )}
 
             {/* Existing rules list */}
             {cleanupRules.length > 0 && (

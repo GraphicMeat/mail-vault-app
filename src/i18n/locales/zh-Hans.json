@@ -1694,5 +1694,6 @@
   "search.foundResults": "找到 <0>{{count}}</0> 条结果",
   "search.inFolder": "（在 {{folder}} 中）",
   "search.inAllFolders": "（在所有文件夹中）",
-  "email.viaList": "经由 {{listName}}"
+  "email.viaList": "经由 {{listName}}",
+  "settings.storage.cleanupRulesDisarmed": "此前的缺陷导致自动清理规则从未真正运行。问题已修复，你现有的规则已被关闭——请逐条确认后再重新启用。"
 }

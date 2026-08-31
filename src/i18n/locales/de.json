@@ -1694,5 +1694,6 @@
   "search.foundResults": "<0>{{count}}</0> Treffer gefunden",
   "search.inFolder": " in {{folder}}",
   "search.inAllFolders": " in allen Ordnern",
-  "email.viaList": "über {{listName}}"
+  "email.viaList": "über {{listName}}",
+  "settings.storage.cleanupRulesDisarmed": "Ein Fehler hat verhindert, dass Aufräumregeln je gelaufen sind. Er ist behoben – deine vorhandenen Regeln sind jetzt aus. Prüfe jede, bevor du sie wieder einschaltest."
 }

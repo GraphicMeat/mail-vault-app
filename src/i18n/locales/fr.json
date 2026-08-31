@@ -1694,5 +1694,6 @@
   "search.foundResults": "<0>{{count}}</0> résultats trouvés",
   "search.inFolder": " dans {{folder}}",
   "search.inAllFolders": " dans tous les dossiers",
-  "email.viaList": "via {{listName}}"
+  "email.viaList": "via {{listName}}",
+  "settings.storage.cleanupRulesDisarmed": "Un bug empêchait les règles de nettoyage de s'exécuter. Il est corrigé, et vos règles existantes sont désactivées : vérifiez chacune avant de la réactiver."
 }

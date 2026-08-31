@@ -1694,5 +1694,6 @@
   "search.foundResults": "Found <0>{{count}}</0> results",
   "search.inFolder": " in {{folder}}",
   "search.inAllFolders": " in all folders",
-  "email.viaList": "via {{listName}}"
+  "email.viaList": "via {{listName}}",
+  "settings.storage.cleanupRulesDisarmed": "A bug stopped auto-cleanup rules from ever running. It's fixed — and your existing rules have been switched off, so review each one before turning it back on."
 }
