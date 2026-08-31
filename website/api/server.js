@@ -58,8 +58,8 @@ app.use(analytics({
 //
 // This site used to build its own nodemailer transport here. It never worked:
 // `nodemailer` was not installed in the deployed tree, the require threw, and
-// every sendMail call sat behind a null check — no contact notification or
-// welcome mail ever went out. Rather than install the dependency and keep a
+// every sendMail call sat behind a null check — no welcome mail ever went
+// out. Rather than install the dependency and keep a
 // second copy of the Purelymail credentials on this host, all mail now goes
 // through graphicmeat.com, which already had a working sender.
 //
@@ -74,7 +74,7 @@ const GM_KEY = process.env.GRAPHICMEAT_PARTNER_KEY;
 const gmConfigured = () => Boolean(GM_URL && GM_KEY);
 
 if (!gmConfigured()) {
-  console.warn('GRAPHICMEAT_PARTNER_URL/KEY not set — contact and subscribe mail will not be sent.');
+  console.warn('GRAPHICMEAT_PARTNER_URL/KEY not set — subscribe mail will not be sent.');
 }
 
 async function sendViaGraphicMeat(endpoint, payload) {
@@ -114,9 +114,9 @@ app.use(cors({
 }));
 
 // Parse JSON bodies — skip for Stripe webhook (needs raw body for signature verification)
-// urlencoded is here so the newsletter and contact forms keep working with
-// JavaScript switched off: a plain <form method="post"> posts form-encoded, and
-// those requests get a redirect back to the page instead of a JSON body.
+// urlencoded is here so the newsletter form keeps working with JavaScript
+// switched off: a plain <form method="post"> posts form-encoded, and those
+// requests get a redirect back to the page instead of a JSON body.
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/billing/webhook') return next();
   express.json({ limit: '64kb' })(req, res, (err) => {
@@ -133,12 +133,11 @@ const isFormPost = (req) => req.is('application/x-www-form-urlencoded');
 // field that reached the Location header would be an open redirect.
 const FORM_RESULTS = {
   subscribe: { ok: '/?subscribed=1#newsletter', error: '/?subscribe_error=1#newsletter' },
-  contact: { ok: '/?contacted=1', error: '/?contact_error=1' },
 };
 const redirectForm = (res, kind, ok) => res.redirect(303, FORM_RESULTS[kind][ok ? 'ok' : 'error']);
 
 // Field caps. The client sets maxlength; a POST does not have to honour it.
-const LIMITS = { email: 254, name: 100, message: 5000, category: 32 };
+const LIMITS = { email: 254 };
 const tooLong = (value, max) => typeof value === 'string' && value.length > max;
 
 // Trust proxy (for rate limiting behind reverse proxy)
@@ -157,13 +156,6 @@ const voteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
   message: { error: 'Too many votes, please try again later.' }
-});
-
-// Strict rate limit for contact form
-const contactLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 3,
-  message: { error: 'Too many messages. Please try again later.' }
 });
 
 // ===========================================
@@ -357,70 +349,6 @@ app.post('/api/subscribe', async (req, res) => {
     console.error('Error subscribing:', error);
     if (isFormPost(req)) return redirectForm(res, 'subscribe', false);
     res.status(500).json({ error: 'Failed to subscribe' });
-  }
-});
-
-// -------------------------------------------
-// Contact Form
-// -------------------------------------------
-
-app.post('/api/contact', contactLimiter, async (req, res) => {
-  try {
-    const db = getPool();
-    const { name, email, category, message, website: honeypot, _t } = req.body;
-
-    // Honeypot: if the hidden field is filled, it's a bot
-    if (honeypot) {
-      if (isFormPost(req)) return redirectForm(res, 'contact', true);
-      return res.json({ success: true, message: 'Message sent successfully' });
-    }
-
-    // Timing: reject if submitted faster than 3 seconds
-    if (_t && (Date.now() - parseInt(_t)) < 3000) {
-      if (isFormPost(req)) return redirectForm(res, 'contact', true);
-      return res.json({ success: true, message: 'Message sent successfully' });
-    }
-
-    // Validation
-    if (!name || !email || !message) {
-      if (isFormPost(req)) return redirectForm(res, 'contact', false);
-      return res.status(400).json({ error: 'Name, email, and message are required' });
-    }
-
-    if (!isValidEmail(email) || tooLong(email, LIMITS.email)) {
-      if (isFormPost(req)) return redirectForm(res, 'contact', false);
-      return res.status(400).json({ error: 'Valid email is required' });
-    }
-
-    if (tooLong(name, LIMITS.name) || tooLong(message, LIMITS.message) || tooLong(category, LIMITS.category)) {
-      if (isFormPost(req)) return redirectForm(res, 'contact', false);
-      return res.status(400).json({
-        error: `Name is limited to ${LIMITS.name} characters and the message to ${LIMITS.message}.`,
-      });
-    }
-
-    // Insert contact message
-    await db.execute(
-      'INSERT INTO contacts (name, email, category, message, ip_hash) VALUES (?, ?, ?, ?, ?)',
-      [name, email.toLowerCase(), category || 'other', message, hashIP(getClientIP(req))]
-    );
-
-    // Notification goes out through GraphicMeat, which holds the SMTP creds.
-    // The message is already stored above, so a mail failure is logged and
-    // swallowed rather than losing the submission the user just made.
-    sendViaGraphicMeat('contact', {
-      name,
-      email: email.toLowerCase(),
-      category: category || 'general',
-      message,
-    }).catch(err => console.error('Failed to send contact notification:', err.message));
-
-    if (isFormPost(req)) return redirectForm(res, 'contact', true);
-    res.json({ success: true, message: 'Message sent successfully' });
-  } catch (error) {
-    console.error('Error submitting contact:', error);
-    if (isFormPost(req)) return redirectForm(res, 'contact', false);
-    res.status(500).json({ error: 'Failed to send message' });
   }
 });
 
