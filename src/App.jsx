@@ -751,7 +751,7 @@ function App() {
       );
     }
     return (
-      <div className="h-screen bg-mail-bg flex items-center justify-center pt-8">
+      <div className="h-screen bg-mail-bg flex items-center justify-center pt-8" data-testid="welcome-screen">
         <motion.div
           initial={{ opacity: 1, y: 0 }}
           animate={{ opacity: 1, y: 0 }}

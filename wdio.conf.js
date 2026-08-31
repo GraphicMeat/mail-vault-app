@@ -1,5 +1,5 @@
 import { resolve, join } from 'path';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { spawn, execFileSync } from 'child_process';
 import {
@@ -15,6 +15,7 @@ import {
   seedAccounts,
   resetAppState,
   stopDaemon,
+  appDataDir,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 
@@ -170,6 +171,23 @@ let mockServers = [];
 let credentialsPath;
 let seededAccounts = [];
 
+/**
+ * Seed `onboardingComplete: true`, exactly as wdio.screenshots.conf.js's
+ * seedFrontendSettings already does. Every spec except the one that tests
+ * onboarding itself (connected-onboarding.test.js, which clears the flag at
+ * runtime) then boots straight past the six-step tour and into the seeded
+ * accounts — the tour no longer has a "Get Started" button for a helper to
+ * click through, and 58 unrelated spec files should not pay for it anyway.
+ *
+ * `resetAppState` wipes the whole data dir first, so this has to run AFTER
+ * it on every spec file, not just once in onPrepare.
+ */
+function seedOnboardingComplete(home) {
+  writeFileSync(join(appDataDir(home), 'frontend-settings.json'), JSON.stringify({
+    'mailvault-settings': { version: 4, state: { onboardingComplete: true } },
+  }));
+}
+
 export const config = {
   runner: 'local',
   specs: ['./tests/e2e/**/*.test.js'],
@@ -321,7 +339,10 @@ export const config = {
   // Each spec file gets a fresh app state — see resetAppState().
   beforeSession: function () {
     const accounts = JSON.parse(process.env.E2E_MOCK_ACCOUNTS || '[]');
-    if (accounts.length) resetAppState(testDataDir, accounts);
+    if (accounts.length) {
+      resetAppState(testDataDir, accounts);
+      seedOnboardingComplete(testDataDir);
+    }
   },
 
   // Make the mock accounts available to all tests. TEST_EMAIL* keeps the shape

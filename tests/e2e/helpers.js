@@ -10,16 +10,6 @@
 // Wait helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Wait for the app to fully load.
- *
- * Handles three startup screens automatically:
- * 1. Onboarding — auto-dismisses by clicking "Get Started"
- * 2. Welcome (no accounts) — returns 'welcome' so tests can branch
- * 3. Main UI (sidebar visible) — returns 'ready'
- *
- * @returns {'ready' | 'welcome'}
- */
 // Diagnostics for headless CI: what is the webview actually showing?
 async function dumpAppState(label) {
   try {
@@ -49,70 +39,45 @@ async function dumpAppState(label) {
   }
 }
 
+/**
+ * Wait for the app to fully load.
+ *
+ * `onboardingComplete` is seeded true before every spec (wdio.conf.js
+ * `beforeSession`, the same way wdio.screenshots.conf.js already seeds it),
+ * so the app boots straight past the six-step onboarding tour. Only
+ * connected-onboarding.test.js ever sees that flow, and it clears the flag
+ * and drives the tour itself — this helper only has two states to find:
+ *
+ * 1. Welcome (no accounts) — returns 'welcome' so tests can branch
+ * 2. Main UI (sidebar visible) — returns 'ready'
+ *
+ * Keyed on `data-testid`, not copy: a button's label is free to change (or
+ * disappear — see connected-onboarding.test.js's header comment) without
+ * this hanging instead of failing.
+ *
+ * @returns {'ready' | 'welcome'}
+ */
 export async function waitForApp(timeout = 30_000) {
-  // First, wait for *any* content to render (onboarding, welcome, or sidebar)
   try {
-    await browser.waitUntil(
-      async () => {
-        return browser.execute(() => {
-          return document.querySelector('[data-testid="sidebar"]') !== null ||
-            (document.body?.textContent || '').includes('Get Started') ||
-            (document.body?.textContent || '').includes('Add Your First Account');
-        });
-      },
-      {
-        timeout,
-        timeoutMsg: `App did not render any content within ${timeout}ms`,
-        interval: 500,
-      },
-    );
-  } catch (err) {
-    await dumpAppState('no-content');
-    throw err;
-  }
-
-  // Auto-dismiss onboarding if present
-  const dismissedOnboarding = await browser.execute(() => {
-    const buttons = document.querySelectorAll('button');
-    for (const btn of buttons) {
-      if ((btn.textContent || '').trim().includes('Get Started')) {
-        btn.click();
-        return true;
-      }
-    }
-    return false;
-  });
-
-  if (dismissedOnboarding) {
-    // Wait for onboarding to transition out
-    await browser.pause(500);
-  }
-
-  // Now check if we land on sidebar (has accounts) or welcome screen (no accounts)
-  let state;
-  try {
-    state = await browser.waitUntil(
+    return await browser.waitUntil(
       async () => {
         return browser.execute(() => {
           const sidebar = document.querySelector('[data-testid="sidebar"]');
           if (sidebar && sidebar.offsetHeight > 0) return 'ready';
-          if (document.body.textContent.includes('Add Your First Account')) return 'welcome';
-          // Still loading (keychain prompt, etc.)
-          return null;
+          if (document.querySelector('[data-testid="welcome-screen"]')) return 'welcome';
+          return null; // still loading (keychain prompt, etc.)
         });
       },
       {
-        timeout: timeout - 5000,
-        timeoutMsg: `App stuck after onboarding — neither sidebar nor welcome screen appeared`,
+        timeout,
+        timeoutMsg: `App did not reach a ready state within ${timeout}ms (neither sidebar nor welcome screen appeared)`,
         interval: 500,
       },
     );
   } catch (err) {
-    await dumpAppState('stuck-after-onboarding');
+    await dumpAppState('not-ready');
     throw err;
   }
-
-  return state;
 }
 
 /**
