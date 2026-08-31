@@ -227,12 +227,22 @@ describe('resolveInitialComposeIdentity', () => {
 
   it('a mailto: prefill with no account behaves like a fresh compose, not a restore', () => {
     // Only unified-inbox rows carry `_accountId`. Without one this is the
-    // Compose button by another name, so it follows the same precedence.
+    // Compose button by another name, so it follows the same precedence —
+    // which is now the mailbox being read, not the identity that last sent.
     const out = resolveInitialComposeIdentity({
       ...base,
       initialData: { to: 'a@b.c', _prefill: true },
       lastIdentity: { accountId: 'a2', address: 'alias@y.com' },
     });
-    expect(out).toEqual({ accountId: 'a2', address: 'alias@y.com' });
+    expect(out).toEqual({ accountId: 'a1', address: '' });
+  });
+
+  it('a mailto: prefill with no account still follows the mailbox being read', () => {
+    const out = resolveInitialComposeIdentity({
+      ...base,
+      initialData: { to: 'a@b.c', _prefill: true },
+      selectedAccountId: 'a2',
+    });
+    expect(out).toEqual({ accountId: 'a2', address: '' });
   });
 });

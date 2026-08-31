@@ -371,7 +371,7 @@ export default function ChangeServerModal() {
                   <Button variant="primary"
                     onClick={handleRestoreContinue}
                   >
-                    {t('changeServer.continue')}
+                    {t('common.continue')}
                   </Button>
                 </div>
               </div>
