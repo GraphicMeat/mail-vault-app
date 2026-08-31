@@ -52,6 +52,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "Las respuestas a este mensaje irían a un dominio distinto al del remitente. Los remitentes legítimos suelen dirigir las respuestas al mismo dominio desde el que envían; una discrepancia es un indicio habitual de phishing.",
   "alert.replyTo.repliesWouldGo": "Las respuestas irían a:",
   "alert.replyTo.sentDomain": "Enviado desde el dominio:",
+  "alert.replyTo.domainMismatch": "Discrepancia en el dominio de Reply-To",
   "alert.sender.actualSenderAddress": "Dirección real del remitente:",
   "alert.sender.displayNameShows": "El nombre mostrado dice:",
   "alert.sender.senderImpersonationDetected": "Suplantación de remitente detectada",

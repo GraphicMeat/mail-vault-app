@@ -30,7 +30,7 @@ export function ReplyToAlertIcon({ mismatch, size = 14 }) {
 
   if (!mismatch) return null;
 
-  const title = 'Reply-To domain mismatch';
+  const title = t('alert.replyTo.domainMismatch');
 
   return (
     <>

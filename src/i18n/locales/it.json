@@ -52,6 +52,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "Le risposte a questo messaggio andrebbero a un dominio diverso da quello del mittente. I mittenti legittimi indirizzano le risposte allo stesso dominio da cui inviano: una differenza è un indizio comune di phishing.",
   "alert.replyTo.repliesWouldGo": "Le risposte andrebbero a:",
   "alert.replyTo.sentDomain": "Inviato dal dominio:",
+  "alert.replyTo.domainMismatch": "Dominio Reply-To non corrispondente",
   "alert.sender.actualSenderAddress": "Indirizzo reale del mittente:",
   "alert.sender.displayNameShows": "Il nome visualizzato mostra:",
   "alert.sender.senderImpersonationDetected": "Rilevata impersonificazione del mittente",

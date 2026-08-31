@@ -52,6 +52,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "이 메시지에 답장하면 발신자와 다른 도메인으로 전달됩니다. 정상적인 발신자는 보통 보낸 도메인과 같은 곳으로 답장을 받습니다. 불일치는 흔한 피싱 징후입니다.",
   "alert.replyTo.repliesWouldGo": "답장 주소:",
   "alert.replyTo.sentDomain": "보낸 도메인:",
+  "alert.replyTo.domainMismatch": "Reply-To 도메인 불일치",
   "alert.sender.actualSenderAddress": "실제 발신자 주소:",
   "alert.sender.displayNameShows": "표시 이름:",
   "alert.sender.senderImpersonationDetected": "발신자 사칭이 감지됨",

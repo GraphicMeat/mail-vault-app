@@ -766,6 +766,7 @@
   "alert.replyTo.repliesMessageWouldGoDifferent": "Replies to this message would go to a different domain than the sender. Legitimate senders usually route replies to the same domain they send from — a mismatch is a common phishing indicator.",
   "alert.replyTo.sentDomain": "Sent from domain:",
   "alert.replyTo.repliesWouldGo": "Replies would go to:",
+  "alert.replyTo.domainMismatch": "Reply-To domain mismatch",
   "alert.link.linkTextSays": "Link text says:",
   "alert.link.actuallyGoes": "Actually goes to:",
   "transferLimit.dismissUntilTomorrow": "Dismiss until tomorrow",
