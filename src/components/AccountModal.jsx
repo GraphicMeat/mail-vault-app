@@ -962,7 +962,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   className="px-4 py-2.5 text-mail-text-muted hover:text-mail-text
                             transition-colors"
                 >
-                  {t('account.back')}
+                  {t('common.back')}
                 </button>
                 <Button
                   type="submit"

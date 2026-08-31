@@ -44,8 +44,13 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
             ))}
         </div>
 
+      <div data-testid="preview-panes" data-layout={layoutMode}
+           className={`flex-1 min-w-0 flex ${threeColumn ? 'flex-row' : 'flex-col'}`}>
+
         <div data-testid="preview-list" data-view={viewStyle} data-density={emailListStyle}
-             className={`${threeColumn ? 'w-44' : 'flex-1'} flex-shrink-0 border-r border-mail-border overflow-hidden`}>
+             className={`flex-shrink-0 overflow-hidden ${threeColumn
+                          ? 'w-44 border-r border-mail-border'
+                          : 'h-[55%] border-b border-mail-border'}`}>
           {rows.map(r => viewStyle === 'chat' ? (
             <div key={r.id} className={`px-2 ${DENSITY[emailListStyle] || DENSITY.default}`}>
               <div className="inline-block max-w-[85%] rounded-lg bg-mail-surface px-2 py-1 text-mail-text">
@@ -66,19 +71,23 @@ export function AppearancePreview({ layoutMode, sidebarStyle, viewStyle, emailLi
           ))}
         </div>
 
-        {threeColumn && (
-          <div data-testid="preview-pane-viewer" className="flex-1 p-3 space-y-2 min-w-0">
-            <div className="text-mail-text font-semibold truncate">{rows[0].subject}</div>
-            <div className="text-mail-text-muted truncate">{rows[0].sender}</div>
-            <div className="space-y-1 pt-1">
-              <div className="h-1.5 bg-mail-border rounded-full w-full" />
-              <div className="h-1.5 bg-mail-border rounded-full w-11/12" />
-              <div className="h-1.5 bg-mail-border rounded-full w-4/5" />
-              <div className="h-1.5 bg-mail-border rounded-full w-2/3" />
-            </div>
+        {/* The reader exists in BOTH layouts — two-column stacks it under the
+            list instead of dropping it (`App.jsx` switches the same flex
+            container between row and column). The preview used to omit it
+            entirely, so choosing two-column looked like choosing to have
+            nowhere to read. */}
+        <div data-testid="preview-pane-viewer" className="flex-1 p-3 space-y-2 min-w-0 min-h-0 overflow-hidden">
+          <div className="text-mail-text font-semibold truncate">{rows[0].subject}</div>
+          <div className="text-mail-text-muted truncate">{rows[0].sender}</div>
+          <div className="space-y-1 pt-1">
+            <div className="h-1.5 bg-mail-border rounded-full w-full" />
+            <div className="h-1.5 bg-mail-border rounded-full w-11/12" />
+            <div className="h-1.5 bg-mail-border rounded-full w-4/5" />
+            <div className="h-1.5 bg-mail-border rounded-full w-2/3" />
           </div>
-        )}
+        </div>
       </div>
+    </div>
       <div className="px-2 py-1 border-t border-mail-border text-[9px] text-mail-text-muted">
         {t('onboarding.previewCaption')}
       </div>

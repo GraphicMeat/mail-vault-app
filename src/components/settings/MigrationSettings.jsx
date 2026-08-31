@@ -586,7 +586,7 @@ export default function MigrationSettings({ onUpgrade }) {
               <Button variant="secondary" className="bg-transparent"
                 onClick={() => setStep(s => s - 1)}
               >
-                {t('settings.migration.back')}
+                {t('common.back')}
               </Button>
             ) : <div />}
             <button
@@ -601,7 +601,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <Loader size={14} className="animate-spin" />
                   {t('settings.migration.starting')}
                 </span>
-              ) : step === 4 ? t('settings.migration.startMigration') : t('bulk.ops.next')}
+              ) : step === 4 ? t('settings.migration.startMigration') : t('common.next')}
             </button>
           </div>
         </>

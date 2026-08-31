@@ -566,7 +566,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white
                               rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {t('bulk.ops.next')}
+                    {t('common.next')}
                     <ArrowRight size={14} />
                   </button>
                 </div>
@@ -678,7 +678,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                             hover:bg-mail-border rounded-lg transition-colors"
                 >
                   <ArrowLeft size={14} />
-                  {t('bulk.ops.back')}
+                  {t('common.back')}
                 </button>
                 <button
                   onClick={handleConfirm}

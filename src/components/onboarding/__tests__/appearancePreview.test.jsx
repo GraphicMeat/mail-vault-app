@@ -22,11 +22,30 @@ describe('appearance preview', () => {
 
   // This is the assertion that keeps the preview honest: it is a drawing of the
   // app, and the one thing it must not lie about is the layout being chosen.
-  it('drops the reading pane in two-column', () => {
+  //
+  // It used to assert the reading pane was DROPPED in two-column, which was
+  // green and wrong: `App.jsx` keeps the reader in both layouts and only swaps
+  // the container between row and column. The preview matched the assertion
+  // instead of the app, so picking two-column looked like picking to have
+  // nowhere to read a message.
+  it('keeps the reading pane in both layouts and only changes where it sits', () => {
     const { rerender } = render(<AppearancePreview {...base} />);
     expect(screen.getByTestId('preview-pane-viewer')).toBeTruthy();
+    expect(screen.getByTestId('preview-panes').className).toContain('flex-row');
+
     rerender(<AppearancePreview {...base} layoutMode="two-column" />);
-    expect(screen.queryByTestId('preview-pane-viewer')).toBeNull();
+    expect(screen.getByTestId('preview-pane-viewer')).toBeTruthy();
+    expect(screen.getByTestId('preview-panes').className).toContain('flex-col');
+    expect(screen.getByTestId('preview-panes').dataset.layout).toBe('two-column');
+  });
+
+  // Stacked means the list sits ON TOP of the reader, which is the arrangement
+  // `App.jsx` produces with `flex-col` and a bottom border on the list.
+  it('puts the list above the reader when stacked', () => {
+    render(<AppearancePreview {...base} layoutMode="two-column" />);
+    const panes = screen.getByTestId('preview-panes');
+    const order = [...panes.children].map(c => c.dataset.testid || c.getAttribute('data-testid'));
+    expect(order).toEqual(['preview-list', 'preview-pane-viewer']);
   });
 
   it('swaps rows for bubbles in chat view', () => {

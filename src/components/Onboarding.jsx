@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ArrowLeft } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAccountStore } from '../stores/accountStore';
 import { onboardingSteps } from './onboarding/steps.js';
@@ -25,10 +26,29 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
 
   const step = steps[index];
   const next = () => setIndex(i => Math.min(i + 1, steps.length - 1));
+  const back = () => setIndex(i => Math.max(i - 1, 0));
   const finish = () => setOnboardingComplete(true);
 
   return (
-    <div className="h-screen bg-mail-bg flex items-center justify-center p-4 pt-8" data-testid={`onboarding-${step}`}>
+    <div className="relative h-screen bg-mail-bg flex items-center justify-center p-4 pt-8" data-testid={`onboarding-${step}`}>
+      {/* One back control for the whole flow rather than one per step: the six
+          steps put Continue in six different places, and a control that moves
+          between screens is one people stop trusting. Absent on the first step
+          instead of disabled — there is nothing behind it. */}
+      {index > 0 && (
+        <button
+          type="button"
+          onClick={back}
+          data-testid="onboarding-back"
+          aria-label={t('common.back')}
+          className="absolute top-4 left-4 flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs
+                     text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
+        >
+          <ArrowLeft size={14} />
+          {t('common.back')}
+        </button>
+      )}
+
       {step === 'splash' && <Splash onContinue={next} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
