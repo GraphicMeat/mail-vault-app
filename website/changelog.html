@@ -154,6 +154,14 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The first-run tour now has a back button, and explains every mark MailVault can put on a message.</strong> Going back a step was not possible at all: the six screens only moved forward, so a wrong language or a mistyped server meant starting again. There is now one back control, in the same place on every screen, and it respects the shortened tour someone gets when they already have an account. The screen about link and sender warnings used to name four things in words that appear nowhere else in the app; it now lists the warnings by the exact titles the alerts themselves use — "Dangerous links detected", "Sender impersonation detected", "Reply-To domain mismatch", "Tracking blocked" — and Settings → Security explains each one in full, beside a picture of the warning it opens, in every language MailVault speaks. That screen previously described only the two kinds of link warning, and did it in English no matter which language you had chosen, while saying nothing at all about faked senders, mismatched reply addresses or the tracking marks.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Premium screens in the tour can be stepped through, and their screenshots open full size.</strong> Ten features behind a list you had to aim at is a list most people scroll past; there are now previous and next buttons that wrap around, a position counter, and a click on any screenshot opens it large enough to actually read.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>Double-click an account in the sidebar to go straight to its inbox.</strong> One click on an account takes you back to whichever folder you were last reading in it, which is what you want most of the time and the wrong thing when what you actually want is new mail. Double-click now goes to that account's Inbox, from anywhere — another folder, another account, or the All Inboxes list.</span>
             </li>
             <li class="flex items-start gap-3">
@@ -197,6 +205,26 @@
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The tour's two-column preview shows where a message is read.</strong> Choosing the two-column layout drew a sidebar and a list and nothing else, which said the layout had nowhere to read a message. It has always had one — the reading pane sits under the list rather than beside it — and the preview now shows that.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Feature names in the Premium list are no longer cut off.</strong> "Scheduled automatic backups", and the longer translations of it, ran past the edge of the button and were clipped mid-word, so the tile named a feature nobody could identify. Names now wrap.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Continue button no longer moves while you browse Premium features.</strong> The panel resized itself to whichever feature was showing, so the button slid up and down under the pointer.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a FAQ topic no longer narrows the page.</strong> The FAQ index and the topic pages disagreed about column width, so every click through visibly shrank the text.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Reply-To warning is translated.</strong> Its title was English in all eight other languages, unlike the two warnings either side of it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>A message that refused to open now opens on the first try.</strong> Reading mail means asking the server for it, and MailVault keeps a few connections to your mail server open and reuses them rather than starting a new conversation for every message. A connection the server had quietly dropped in the meantime was still handed out, and the message opened onto "Server refused UID FETCH: connection lost". Pressing "Try again" worked — which made it look random — because the second attempt happened to get a fresh connection. MailVault now notices that the connection died under it and quietly asks again on a new one, so the first press is the only press.</span>
             </li>
             <li class="flex items-start gap-3">
@@ -234,6 +262,10 @@
             Changed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Every page on mailvaultapp.com is built from one menu definition.</strong> The menu had been copied by hand into each page, so a new page froze it at whatever the page it was copied from happened to have — twice this left the price out of nearly every page. The release notes page was worse: it is rebuilt on every release from a template that carried its own copy, so publishing a version quietly reverted that page's menu. There is now a single definition every page is generated from, and the links move to the compact menu earlier on narrow screens, where six items in the longer languages had begun to overrun the bar.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
               <span><strong>An open message no longer carries a second, quieter claim about where it lives.</strong> The band across the top of a message says where that message is kept — in your vault, on the mail server, or the last copy left anywhere — and a small symbol beside the sender's name said it again, a couple of centimetres below. The two were worked out differently: the band reads the same record as the row you clicked, while the symbol asked only whether the message was in the folder on screen. So a message the band called "Saved in your vault" wore a blue cloud that read "On the server — not saved to your vault yet". The symbol beside the sender is gone; the band is the message's one statement, and every row in the list keeps its own.</span>
