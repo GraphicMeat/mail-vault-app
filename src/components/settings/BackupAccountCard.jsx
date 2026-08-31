@@ -152,16 +152,16 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         setTimeout(() => setManualStatus('idle'), 2000);
       } else if (result.status === 'degraded') {
         setManualStatus('degraded');
-        setManualError(result.message || tr('settings.backup.account.backedUpLocallyExternalFailed'));
+        setManualError(result.message || 'Backed up locally, but external backup failed for some emails.');
         setTimeout(() => setManualStatus('idle'), 5000);
       } else {
         setManualStatus('error');
-        setManualError(result.message || tr('settings.backup.account.backupFailed'));
+        setManualError(result.message || 'Backup failed');
       }
     } catch (err) {
       console.error('Manual backup failed:', err);
       setManualStatus('error');
-      setManualError(err.message || tr('settings.backup.account.backupFailed'));
+      setManualError(err.message || 'Backup failed');
     } finally {
       setRunningManual(false);
     }
@@ -186,11 +186,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 const result = await api.backupStatus(account.id, JSON.stringify(resolved.account), null);
                 setBackupStatusData(result);
                 if (!result?.folders?.length && !result?.total_server && !result?.total_app && !result?.total_external) {
-                  setBackupStatusError(tr('settings.backup.account.noCoverageDataYet'));
+                  setBackupStatusError('No backup coverage data is available for this account yet.');
                 }
               } catch (e) {
                 console.error('Backup status check failed:', e);
-                setBackupStatusError(e?.message || tr('settings.backup.account.couldNotVerifyCoverage'));
+                setBackupStatusError(e?.message || 'Could not verify backup coverage for this account.');
               } finally {
                 setLoadingStatus(false);
               }
@@ -229,9 +229,9 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                   onChange={(e) => handleConfigChange('scope', e.target.value || null)}
                   className={selectClass}
                 >
-                  <option value="">{t('settings.backup.account.useGlobalSetting', { scope: globalScope === 'all' ? tr('settings.storage.allEmails') : tr('settings.backup.account.archivedOnly') })}</option>
+                  <option value="">{tr('settings.backup.account.useGlobalSetting', { scope: globalScope === 'all' ? tr('settings.storage.allEmails') : tr('settings.backup.account.archivedOnly') })}</option>
                   <option value="archived">{t('settings.backup.account.archivedEmailsOnly')}</option>
-                  <option value="all">{t('settings.backup.account.allEmailsDownload')}</option>
+                  <option value="all">{t('settings.backup.account.allEmailsDownloadFromServer')}</option>
                 </select>
               </div>
 
@@ -289,7 +289,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         </div>
         <div>
           <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
-          <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
+          <div className="text-sm font-semibold text-mail-text">{tr('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
         </div>
         <div>
           <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
@@ -305,7 +305,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       {state.lastStatus === 'degraded' && (
         <div className="flex items-start gap-2 text-xs text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-2">
           <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
-          <span>{state.lastError || t('settings.backup.account.backedUpLocallyExternalFailed')}</span>
+          <span>{state.lastError || 'Backed up locally, but external backup failed for some emails.'}</span>
         </div>
       )}
 
@@ -317,14 +317,14 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             {history.map((entry, i) => (
               <div key={i} className="flex items-center justify-between text-xs p-2 bg-mail-bg rounded-lg">
                 <span className="text-mail-text-muted w-36">{formatTimestamp(entry.timestamp)}</span>
-                <span className="text-mail-text w-24">{t('common.emailCount', { count: entry.emailsBackedUp })}</span>
+                <span className="text-mail-text w-24">{tr('common.emailCount', { count: entry.emailsBackedUp })}</span>
                 <span className="text-mail-text-muted w-20">{formatDuration(entry.durationSecs)}</span>
                 {entry.success && entry.externalCopyOk !== false ? (
                   <span className="text-mail-success flex items-center gap-1">
                     <CheckCircle2 size={12} /> {t('settings.backup.account.success')}
                   </span>
                 ) : entry.success && entry.externalCopyOk === false ? (
-                  <span className="text-mail-warning flex items-center gap-1" title={entry.externalCopyError || tr('settings.backup.account.externalCopyFailed')}>
+                  <span className="text-mail-warning flex items-center gap-1" title={entry.externalCopyError || 'External copy failed'}>
                     <AlertCircle size={12} /> {t('settings.backup.account.partial')}
                   </span>
                 ) : (
@@ -346,11 +346,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-mail-text font-medium">
-                {decodeImapUtf7(backupProgress.folder) || tr('settings.backup.account.starting')} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
+                {decodeImapUtf7(backupProgress.folder) || 'Starting...'} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
               </span>
               <span className="text-mail-text-muted">
-                {t('settings.backup.account.emailsBackedUpProgress', { count: backupProgress.completed_emails })}
-                {backupProgress.missing_in_folder > 0 && ` · ${t('settings.backup.account.toDownloadCount', { count: backupProgress.missing_in_folder })}`}
+                {t('settings.backup.account.emailsBackedUp', { count: backupProgress.completed_emails })}
+                {backupProgress.missing_in_folder > 0 && t('settings.backup.account.toDownloadSuffix', { count: backupProgress.missing_in_folder })}
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
@@ -362,7 +362,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             {archiveProgress && archiveProgress.total > 0 && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs text-mail-text-muted">
-                  <span>{t('settings.backup.account.downloadingProgress', { completed: archiveProgress.completed, total: archiveProgress.total })}</span>
+                  <span>{t('settings.backup.account.downloadingEmails', { completed: archiveProgress.completed, total: archiveProgress.total })}</span>
                   <span>{Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
@@ -387,7 +387,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           ) : manualStatus === 'degraded' ? (
             <span className="text-mail-warning">{t('settings.backup.account.partial')}</span>
           ) : (
-            t('settings.backup.account.backUpNow')
+            'Back up now'
           )}
         </button>
         {manualStatus === 'degraded' && manualError && (
@@ -424,7 +424,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           </div>
         </div>
         {isPaidUser && !globalEnabled ? (
-          <div aria-label={tr('settings.backup.account.enableScheduleFor', { email: account.email })}>
+          <div aria-label={`Enable backup schedule for ${account.email}`}>
             <ToggleSwitch active={config.enabled} onClick={handleToggle} />
           </div>
         ) : !isPaidUser && !IS_APPSTORE_BUILD && upsellBackupShown && onUpgrade ? (
@@ -443,7 +443,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
             {scheduleContent}
           </div>
-          <div data-testid="backup-schedule-locked" className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-6">
               <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
                 <Clock size={20} className="text-mail-accent-text" />
@@ -480,7 +480,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.backedUp')}</div>
-              <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
+              <div className="text-sm font-semibold text-mail-text">{tr('common.emailCount', { count: state.emailsBackedUp || 0 })}</div>
             </div>
             <div>
               <div className="text-xs text-mail-text-muted">{t('settings.backup.account.storage')}</div>
@@ -493,7 +493,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-mail-text">{decodeImapUtf7(backupProgress.folder)} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
-                  <span className="text-mail-text-muted">{t('common.emailCount', { count: backupProgress.completed_emails })}</span>
+                  <span className="text-mail-text-muted">{tr('common.emailCount', { count: backupProgress.completed_emails })}</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
                   <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />

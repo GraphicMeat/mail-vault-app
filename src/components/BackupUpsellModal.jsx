@@ -44,7 +44,7 @@ export default function BackupUpsellModal({ onUpgrade }) {
         </h2>
         {count > 0 && (
           <p className="text-sm text-mail-text mb-1">
-            {count.toLocaleString()} emails backed up.
+            {t('backupUpsell.emailsBackedUp', { count: count.toLocaleString() })}
           </p>
         )}
         <p className="text-sm text-mail-text-muted mb-5">

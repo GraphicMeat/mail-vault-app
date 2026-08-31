@@ -49,10 +49,17 @@ const { syncNow } = await import('../../src/services/syncService.js');
 const PREMIUM = { hasSubscription: true, status: 'active', premiumAccess: true };
 const FREE = { hasSubscription: false };
 
-/** A rule that would definitely do work if the engine got that far. */
+/**
+ * A rule that would definitely do work if the engine got that far — in the
+ * shape StorageSettings.jsx saves. This used to be written in the engine's own
+ * (never-written) vocabulary, which meant the "control" case below passed while
+ * the engine was in fact incapable of acting on any real rule. The gate is what
+ * this file tests; the rule still has to be a real one for that to mean anything.
+ * Rule execution itself is covered in cleanupEngine.test.js.
+ */
 const liveRule = {
-  id: 'rule-1', enabled: true, accountEmail: '*', folder: 'INBOX',
-  olderThan: { value: 30, unit: 'days' }, action: 'delete',
+  id: 'rule-1', enabled: true, account: 'all', folder: 'INBOX',
+  age: 30, unit: 'days', action: 'delete',
 };
 
 beforeEach(() => {

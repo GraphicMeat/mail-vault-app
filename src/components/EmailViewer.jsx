@@ -519,7 +519,7 @@ function EmailViewerComponent({ onComposeReply }) {
           transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
           className="w-8 h-8 border-2 border-mail-accent border-t-transparent rounded-full"
         />
-        <p className="text-sm text-mail-text-muted">Loading message…</p>
+        <p className="text-sm text-mail-text-muted">{t('viewer.loadingMessage')}</p>
       </div>
     );
   }

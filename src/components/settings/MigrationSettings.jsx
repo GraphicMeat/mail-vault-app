@@ -333,10 +333,7 @@ export default function MigrationSettings({ onUpgrade }) {
             <AlertCircle size={20} className="text-mail-warning mt-0.5 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm text-mail-text mb-3">
-                {t('settings.migration.incompleteMigrationFound', {
-                  completed: incompleteMigration.completed_folders || 0,
-                  total: incompleteMigration.total_folders || 0,
-                })}
+                {t('settings.migration.incompleteFoldersCompleted', { completed: incompleteMigration.completed_folders || 0, total: incompleteMigration.total_folders || 0 })}
               </p>
               {showDiscardConfirm ? (
                 <div className="bg-mail-surface rounded-lg p-3">
@@ -408,7 +405,7 @@ export default function MigrationSettings({ onUpgrade }) {
           {step === 1 && (
             <div className="bg-mail-surface/50 border border-mail-border rounded-lg p-3 mb-2">
               <p className="text-xs text-mail-text-muted">
-                {t('settings.migration.serverOnlyExplanation')}
+                {t('settings.migration.copiesEmailsBetweenServers')}
               </p>
             </div>
           )}
@@ -471,7 +468,7 @@ export default function MigrationSettings({ onUpgrade }) {
                         className="w-4 h-4 rounded border-mail-border accent-[var(--mail-accent)]"
                       />
                       <span className="text-sm text-mail-text">{t('settings.migration.selectAll')}</span>
-                      <span className="text-xs text-mail-text-muted ml-auto">{folderMappings.length} folders</span>
+                      <span className="text-xs text-mail-text-muted ml-auto">{t('common.folderCount', { count: folderMappings.length })}</span>
                     </div>
                     <div className="max-h-80 overflow-y-auto space-y-1">
                       {folderMappings.map((mapping, i) => {
@@ -520,21 +517,21 @@ export default function MigrationSettings({ onUpgrade }) {
 
                 {/* Summary card */}
                 <div className="bg-mail-surface rounded-lg p-4 space-y-3 mb-4">
-                  <SummaryRow label={t('settings.migration.source')} account={sourceAccount} accountColors={accountColors} />
-                  <SummaryRow label={t('settings.migration.destination')} account={destAccount} accountColors={accountColors} />
+                  <SummaryRow label="Source" account={sourceAccount} accountColors={accountColors} />
+                  <SummaryRow label="Destination" account={destAccount} accountColors={accountColors} />
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.folders')}</span>
-                    <span className="text-mail-text">{t('settings.migration.folderCount', { count: selectedMappings.length })}</span>
+                    <span className="text-mail-text">{t('common.folderCount', { count: selectedMappings.length })}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.emails')}</span>
                     <span className="text-mail-text">
-                      {isCounting ? t('settings.migration.emailsCounting', { totalEmails: totalEmails.toLocaleString() }) : t('settings.migration.emailsApprox', { totalEmails: totalEmails.toLocaleString() })}
+                      {isCounting ? t('settings.migration.emailsCounting', { totalEmails: totalEmails.toLocaleString() }) : `~${totalEmails.toLocaleString()} emails`}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-mail-text-muted">{t('settings.migration.estimatedTime')}</span>
-                    <span className="text-mail-text">~{etaMinutes} min</span>
+                    <span className="text-mail-text">{t('settings.migration.approxMinutes', { etaMinutes })}</span>
                   </div>
                 </div>
 
@@ -570,7 +567,7 @@ export default function MigrationSettings({ onUpgrade }) {
                       <span className="text-mail-text truncate flex items-center gap-1">
                         {mapping.dest_path}
                         {mapping.auto_create && (
-                          <span className="text-mail-success text-xs">{t('settings.migration.plusNew')}</span>
+                          <span className="text-mail-success text-xs">+ New</span>
                         )}
                       </span>
                     </div>
@@ -625,7 +622,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   </div>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <div className="text-sm font-semibold text-mail-text">{entry.migratedEmails} emails</div>
+                  <div className="text-sm font-semibold text-mail-text">{t('common.emailCount', { count: entry.migratedEmails })}</div>
                   <div className="text-xs text-mail-text-muted">{formatDuration(entry.duration)}</div>
                 </div>
                 <StatusBadge status={entry.status} />
@@ -651,7 +648,7 @@ export default function MigrationSettings({ onUpgrade }) {
           <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
             {mainContent}
           </div>
-          <div data-testid="migration-locked" className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
             <div className="flex flex-col items-center gap-3 text-center px-6">
               <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
                 <ArrowLeftRight size={20} className="text-mail-accent-text" />
@@ -776,7 +773,7 @@ function RateLimitCountdown({ initialSeconds }) {
     return () => clearTimeout(timer);
   }, [seconds]);
   if (seconds <= 0) return null;
-  return <p className="text-xs text-mail-warning font-semibold">{t('settings.migration.rateLimitedRetrying', { seconds })}</p>;
+  return <p className="text-xs text-mail-warning font-semibold">{t('settings.migration.rateLimitedRetryingIn', { seconds })}</p>;
 }
 
 function ProgressView({ migration, accounts, accountColors, onPause, onResume, onCancel, showCancelConfirm, onConfirmCancel, onCancelCancel, cancelRemoving, cancelRemoveError }) {
@@ -805,7 +802,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
     : null;
 
   return (
-    <div className="space-y-4" data-testid="migration-progress">
+    <div className="space-y-4">
       {/* Header: source -> dest */}
       <div className="flex items-center gap-3">
         {srcAccount && (
@@ -844,7 +841,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
         </div>
         <div className="flex items-center justify-between mt-1">
           <span className="text-xs text-mail-text-muted">
-            {t('settings.migration.progressEmailsPercent', { migrated: migration.migrated_emails, total: totalTarget, percent })}
+            {t('settings.migration.emailsProgressPercent', { migrated: migration.migrated_emails, totalTarget, percent })}
           </span>
           {etaMinutes != null && (
             <span className="text-xs text-mail-text-muted">
@@ -897,7 +894,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
                       : `${folder.total || folder.email_count || 0}`}
                 </span>
                 {folder.skipped > 0 && (
-                  <span className="text-xs text-mail-text-muted">({folder.skipped} duplicates skipped)</span>
+                  <span className="text-xs text-mail-text-muted">{t('settings.migration.duplicatesSkippedParen', { count: folder.skipped })}</span>
                 )}
               </div>
             );
@@ -935,7 +932,7 @@ function ProgressView({ migration, accounts, accountColors, onPause, onResume, o
           size="sm"
           panelBg="bg-mail-surface"
           title={t('settings.migration.cancelMigration')}
-          description={t('settings.migration.cancelMigrationDescription')}
+          description="Migration will stop. Choose what to do with emails already copied to the destination."
           footer={
             <div className="flex items-center gap-2 w-full">
               <Button variant="secondary" size="sm" onClick={() => onConfirmCancel('keep')}>{t('settings.migration.keepEmails')}</Button>
@@ -982,17 +979,13 @@ function CompletionView({ migration, onDone }) {
         {isFailed ? t('settings.migration.migrationFailed') : isCancelled ? t('settings.migration.migrationCancelled') : t('settings.migration.migrationComplete')}
       </h4>
       <p className="text-sm text-mail-text-muted mb-1">
-        {t('settings.migration.completionSummary', {
-          emails: migration.migrated_emails,
-          folders: migration.folders?.length || 0,
-          duration: formatDuration(migration.elapsed_seconds),
-        })}
+        {t('settings.migration.emailsMigratedAcrossFolders', { emails: migration.migrated_emails, folders: migration.folders?.length || 0, duration: formatDuration(migration.elapsed_seconds) })}
       </p>
       {migration.skipped_emails > 0 && (
         <p className="text-xs text-mail-text-muted">{t('settings.migration.duplicatesSkipped', { count: migration.skipped_emails })}</p>
       )}
       {migration.failed_emails > 0 && (
-        <p className="text-xs text-mail-danger">{t('settings.migration.emailsFailedCount', { count: migration.failed_emails })}</p>
+        <p className="text-xs text-mail-danger">{t('settings.migration.emailsFailed', { count: migration.failed_emails })}</p>
       )}
       <button
         onClick={onDone}

@@ -1321,7 +1321,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   size={14}
                   className={`transition-transform ${quotedExpanded ? 'rotate-90' : ''}`}
                 />
-                <span>{quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show')} original message</span>
+                <span>{t('compose.showHideOriginalMessage', { action: quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show') })}</span>
               </button>
               {quotedExpanded && (
                 <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
@@ -1455,12 +1455,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 title={t('compose.sendDelay')}
               >
                 <option value={0}>{t('compose.sendNow')}</option>
-                <option value={15}>15s delay</option>
-                <option value={30}>30s delay</option>
-                <option value={60}>1m delay</option>
-                <option value={120}>2m delay</option>
-                <option value={180}>3m delay</option>
-                <option value={300}>5m delay</option>
+                <option value={15}>{t('compose.delay15s')}</option>
+                <option value={30}>{t('compose.delay30s')}</option>
+                <option value={60}>{t('compose.delay1m')}</option>
+                <option value={120}>{t('compose.delay2m')}</option>
+                <option value={180}>{t('compose.delay3m')}</option>
+                <option value={300}>{t('compose.delay5m')}</option>
               </select>
               <button
                 type="submit"

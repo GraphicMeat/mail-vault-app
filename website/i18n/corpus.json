@@ -516,7 +516,10 @@
     "b7d3aa92b24a": "Debian, Ubuntu, Mint",
     "bc5fc74a0c92": "Fedora",
     "178c95686c9f": "Arch, Manjaro",
-    "512fc5e73cfc": "openSUSE"
+    "512fc5e73cfc": "openSUSE",
+    "c0780dac1621": "Still have questions?",
+    "abc17fc06a38": "Ask on GitHub",
+    "af4304c4fc25": "MailVault is free for core features including email reading, composing, search, threading, local archiving, and manual backup. Premium features — scheduled automatic backups, cross-account mailbox migration, and auto-cleanup rules — are available for $4/month or $25/year; the yearly plan includes a 14-day free trial. The source code is available on GitHub."
   },
   "02": {
     "70f8bb9a8a53": "Home",
@@ -1774,7 +1777,8 @@
     "3afecc79e78f": "<strong>What MailVault does.</strong> It recognises the limit response, stops the run cleanly instead of retrying into a longer lockout, and tells you the daily limit was reached. Start the backup again once the suspension clears and it continues where it stopped — messages already saved locally are skipped, so nothing is downloaded twice. Everything already on disk stays readable and searchable while you wait.",
     "52028898858b": "<strong>The button in the message toolbar tells you which case you are in.</strong> With a dictionary present it toggles the underlines on and off, and MailVault remembers the setting. With none, it opens these same instructions instead of pretending to be a switch.",
     "538219a72c07": "Swap the language code for your own — <code>hunspell-de-de</code>, <code>hunspell-fr</code>, and so on. You can install several; MailVault checks against the one that matches your system language, and against all of them if none matches. <strong>Restart MailVault afterwards</strong> — the checker is set up when the app starts.",
-    "64590f8f00ea": "<strong>The snap build is a special case.</strong> A strictly confined snap cannot see dictionaries installed on the host, so it carries its own copy. If the snap reports no dictionary, install the .deb package instead — it uses the dictionaries already on your system."
+    "64590f8f00ea": "<strong>The snap build is a special case.</strong> A strictly confined snap cannot see dictionaries installed on the host, so it carries its own copy. If the snap reports no dictionary, install the .deb package instead — it uses the dictionaries already on your system.",
+    "d0ebcbbb0b3e": "MailVault is free for core features including email reading, composing, search, threading, local archiving, and manual backup. Premium features — scheduled automatic backups, cross-account mailbox migration, and auto-cleanup rules — are available for <span data-mv-price=\"{monthly}/month or {yearly}/year\">$4/month or $25/year</span>; the yearly plan includes a 14-day free trial. The source code is available on <a href=\"https://github.com/GraphicMeat/mail-vault-app\" class=\"text-primary-500 hover:underline\" target=\"_blank\">GitHub</a>. See <a href=\"/pricing.html\" class=\"text-primary-500 hover:underline\">full pricing</a> for details."
   },
   "09": {
     "0699c16d177f": "Email Feels Like <span class=\"lamp-text\">Messaging</span>",

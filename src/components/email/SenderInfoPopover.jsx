@@ -118,17 +118,17 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
         {/* To/CC */}
         <div className="text-xs text-mail-text-muted space-y-0.5">
           <div>
-            To: {(Array.isArray(email.to) ? email.to : []).map(t => t.name || t.address).join(', ') || 'Unknown'}
+            {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
           </div>
           {email.cc?.length > 0 && (
-            <div>CC: {email.cc.map(c => c.name || c.address).join(', ')}</div>
+            <div>{t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}</div>
           )}
         </div>
 
         {/* "via" mailing list indicator */}
         {listName && (
           <div className="text-[10px] text-mail-text-muted italic mt-1">
-            via {listName}
+            {t('email.viaList', { listName })}
           </div>
         )}
     </Popover>

@@ -24,7 +24,7 @@ export function BackupToast({ showSettings, onOpenBackup }) {
             <div className="flex items-center gap-1">
               <Loader2 size={12} className="text-mail-accent-text animate-spin flex-shrink-0" />
               <span className="text-xs font-semibold text-mail-text truncate">
-                Backing up {activeBackup.accountEmail}
+                {t('settings.backup.schedule.backingUpAccount', { email: activeBackup.accountEmail })}
               </span>
             </div>
             <span className="text-[10px] text-mail-text-muted">

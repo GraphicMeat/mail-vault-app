@@ -64,8 +64,7 @@ export default function RestoreModal() {
         {!active && detected && (
           <>
             <p className="text-mail-text-muted text-sm mb-3">
-              This account moved to a new server that looks empty, but {localTotal} emails
-              are stored locally. Upload them to the new server?
+              {t('restore.accountMovedEmptyServerUpload', { localTotal })}
             </p>
             <ul className="text-sm text-mail-text mb-4 max-h-40 overflow-auto">
               {detected.folders.map((f) => (
@@ -79,7 +78,7 @@ export default function RestoreModal() {
                 {t('restore.notNow')}
               </Button>
               <Button variant="primary" onClick={onStart}>
-                Restore {localTotal}
+                {t('restore.restoreCount', { localTotal })}
               </Button>
             </div>
           </>
@@ -89,10 +88,10 @@ export default function RestoreModal() {
           <div className="text-sm">
             <div className="flex items-center gap-2 mb-2 text-mail-text">
               <Loader2 className="animate-spin" size={16} />
-              <span>Uploading{active.current_folder ? ` — ${decodeImapUtf7(active.current_folder)}` : ''}…</span>
+              <span>{t('restore.uploadingFolder', { suffix: active.current_folder ? ` — ${decodeImapUtf7(active.current_folder)}` : '' })}</span>
             </div>
             <div className="text-mail-text-muted">
-              {active.uploaded_emails} uploaded · {active.skipped_emails} skipped · {active.failed_emails} failed
+              {t('restore.uploadedSkippedFailed', { uploaded: active.uploaded_emails, skipped: active.skipped_emails, failed: active.failed_emails })}
               {active.folder_progress ? ` · ${active.folder_progress}` : ''}
             </div>
             <div className="flex justify-end mt-4">
@@ -109,7 +108,7 @@ export default function RestoreModal() {
               <CheckCircle2 size={16} /> {t('restore.restoreComplete')}
             </div>
             <div className="text-mail-text-muted">
-              {active.uploaded_emails} uploaded · {active.skipped_emails} skipped · {active.failed_emails} failed
+              {t('restore.uploadedSkippedFailed', { uploaded: active.uploaded_emails, skipped: active.skipped_emails, failed: active.failed_emails })}
             </div>
             <div className="flex justify-end mt-4">
               <Button variant="primary" onClick={onClose}>

@@ -35,6 +35,34 @@ describe('service-layer messages', () => {
  * catalog — a TypeError at best, silent nonsense at worst. Such a file must
  * import under an alias.
  */
+/**
+ * `emailParser.js` called `t('util.emailParser.justNow')` seven times and
+ * imported nothing. A free identifier is a global to the bundler, so the build
+ * was green, every unit test that never reached those lines was green, and the
+ * chat view threw `t is not defined` the first time it formatted a name. The
+ * hooks audit cannot see this: it only reads .jsx.
+ */
+const ALL = execSync(
+  "find src -name '*.js' -o -name '*.jsx' | grep -v __tests__",
+  { encoding: 'utf8' }
+).trim().split('\n');
+
+describe('every t() call has something to call', () => {
+  it('never calls t(...) or tr(...) without binding it', () => {
+    const offenders = [];
+    for (const f of ALL) {
+      const src = readFileSync(resolve(process.cwd(), f), 'utf8');
+      const callsT = /(?:^|[^A-Za-z0-9_.'"`])t\(\s*['"]/m.test(src);
+      const bindsT = /\bt\b[^;\n]*from ['"][^'"]*i18n|const t = useT\(\)|\bt as \w+/.test(src);
+      if (callsT && !bindsT) offenders.push(`${f}: t`);
+      const callsTr = /(?:^|[^A-Za-z0-9_.'"`])tr\(\s*['"]/m.test(src);
+      const bindsTr = /as tr\b|const tr = /.test(src);
+      if (callsTr && !bindsTr) offenders.push(`${f}: tr`);
+    }
+    expect(offenders).toEqual([]);
+  });
+});
+
 describe('no module shadows its own catalog import', () => {
   it('never imports bare `t` into a file that also binds `t` locally', () => {
     const offenders = [];

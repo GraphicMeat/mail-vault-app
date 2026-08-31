@@ -43,6 +43,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
     updateCleanupRule,
     removeCleanupRule,
     toggleCleanupRule,
+    cleanupRulesDisarmed,
+    dismissCleanupRulesDisarmed,
   } = useSettingsStore();
   const isPaidUser = hasPremiumAccess(billingProfile);
 
@@ -158,8 +160,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {localCacheDurationMonths === 0 ? t('settings.storage.allEmails') :
-                 localCacheDurationMonths === 12 ? t('settings.storage.yearDuration') :
-                 t('settings.storage.monthsDuration', { count: localCacheDurationMonths })}
+                 localCacheDurationMonths === 1 ? t('settings.storage.month1') :
+                 localCacheDurationMonths === 12 ? t('settings.storage.year1') :
+                 t('settings.storage.monthsCount', { count: localCacheDurationMonths })}
               </span>
             </div>
 
@@ -184,10 +187,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
               {/* Tick marks */}
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick1mo')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick3mo')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick6mo')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.tick1yr')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo1')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo3')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo6')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.year1')}</span>
                 <span className="text-[10px] text-mail-text-muted">{t('settings.storage.all')}</span>
               </div>
             </div>
@@ -205,10 +208,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       : (localStorageUsage.totalMB || 0) >= 1
                       ? t('settings.storage.mb', { localStorageUsage: (localStorageUsage.totalMB || 0).toFixed(2) })
                       : t('settings.storage.kb', { localStorageUsage: ((localStorageUsage.totalMB || 0) * 1024).toFixed(0) })}
-                    {' '}{t('settings.storage.emailsSavedCount', { count: localStorageUsage.emailCount || 0 })}
+                    {' '}{t('settings.storage.emailsSavedParen', { count: (localStorageUsage.emailCount || 0).toLocaleString() })}
                   </>
                 ) : (
-                  t('settings.storage.calculating')
+                  'Calculating...'
                 )}
               </div>
             </div>
@@ -227,7 +230,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 <div className="text-sm text-mail-text">{t('settings.storage.messagesPreviousServer')}</div>
                 <div className="text-xs text-mail-text-muted">
                   {t('settings.storage.savedOrphans', { count: orphanStats.count })}
-                  {' '}{t('settings.storage.orphansDetail', { mb: (orphanStats.bytes / (1024 * 1024)).toFixed(1) })}
+                  {' '}{t('settings.storage.orphanBytesKeptInVault', { mb: (orphanStats.bytes / (1024 * 1024)).toFixed(1) })}
                 </div>
               </div>
               {!purgeOrphansConfirm ? (
@@ -355,9 +358,9 @@ export function StorageSettings({ accounts, onUpgrade }) {
           </div>
           {clearCacheResult && (
             <div className="text-xs text-mail-success px-1">
-              {t('settings.storage.clearedCachedEmails', { count: clearCacheResult.deletedCount })}
-              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedEmailsPreservedSuffix', { count: clearCacheResult.skippedArchived })}
-              . {t('settings.storage.resyncStarted')}
+              {t('settings.storage.clearedCachedEmails', { count: clearCacheResult.deletedCount.toLocaleString() })}
+              {clearCacheResult.skippedArchived > 0 && t('settings.storage.archivedPreservedSuffix', { count: clearCacheResult.skippedArchived.toLocaleString() })}
+              {t('settings.storage.resyncStarted')}
             </div>
           )}
         </div>
@@ -367,7 +370,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       <div data-testid="settings-auto-cleanup" className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Clock size={18} className="text-mail-accent-text" />
-          {t('settings.storage.autoCleanupHeading')}
+          Auto-Cleanup
           {!isPaidUser && (
             <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
               {t('common.premium')}
@@ -436,11 +439,28 @@ export function StorageSettings({ accounts, onUpgrade }) {
               {t('settings.storage.automaticallyCleanUpOldEmails2')}
             </p>
 
+            {/* Rules saved before the engine was fixed never ran. Say so, rather
+                than leaving the user to find their rules mysteriously off. */}
+            {cleanupRulesDisarmed && cleanupRules.length > 0 && (
+              <div className="flex items-start gap-2 p-3 bg-mail-warning-tint border border-mail-warning rounded-lg">
+                <AlertTriangle size={16} className="text-mail-warning shrink-0 mt-0.5" />
+                <p className="text-xs text-mail-warning flex-1">
+                  {t('settings.storage.cleanupRulesDisarmed')}
+                </p>
+                <button
+                  onClick={dismissCleanupRulesDisarmed}
+                  className="text-xs text-mail-warning underline shrink-0"
+                >
+                  {t('common.close')}
+                </button>
+              </div>
+            )}
+
             {/* Existing rules list */}
             {cleanupRules.length > 0 && (
               <div className="space-y-2">
                 {cleanupRules.map((rule) => (
-                  <div key={rule.id} data-testid="cleanup-rule-row" className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
+                  <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
                     <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
                       <span className="font-medium text-mail-text">{decodeImapUtf7(rule.folder)}</span>
                       <span className="text-mail-text-muted truncate">
@@ -676,12 +696,12 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       try {
                         const result = await runCleanupRules();
                         if (result.archived > 0 || result.deleted > 0) {
-                          setCleanupResult({ text: `${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${t('settings.storage.archivedCount', { count: result.archived })})` : ''}`, isError: false });
+                          setCleanupResult(`${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
                         } else {
-                          setCleanupResult({ text: t('settings.storage.noEmailsMatchedCriteria'), isError: false });
+                          setCleanupResult('No emails matched cleanup criteria');
                         }
                       } catch (e) {
-                        setCleanupResult({ text: t('settings.storage.cleanupFailed', { err: e.message }), isError: true });
+                        setCleanupResult(`Cleanup failed: ${e.message}`);
                       } finally {
                         setCleanupRunning(false);
                         setTimeout(() => setCleanupResult(null), 5000);
@@ -696,8 +716,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 )}
               </div>
               {cleanupResult && (
-                <p className={`text-xs mt-2 ${cleanupResult.isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
-                  {cleanupResult.text}
+                <p className={`text-xs mt-2 ${cleanupResult.startsWith('Cleanup failed') ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
+                  {cleanupResult}
                 </p>
               )}
             </>)}
@@ -763,7 +783,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          {t('settings.storage.emptiesVaultExplanation')}
+          Empties your vault on this computer and forgets every account and setting.
+          Mail still on the server is untouched; anything the server no longer has is gone for good.
         </p>
         <Button variant="dangerTint"
           onClick={() => setShowClearConfirm(true)}
@@ -777,8 +798,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
         isOpen={showClearConfirm}
         onClose={() => !clearing && setShowClearConfirm(false)}
         title={t('settings.storage.emptyVaultComputer')}
-        description={t('settings.storage.emptyVaultConfirmDescription')}
-        confirmLabel={t('settings.storage.emptyTheVault')}
+        description="Every email in your vault, every account, and every setting is deleted from this computer. Mail still on the server can be downloaded again; anything the server no longer has has no other copy. This cannot be undone."
+        confirmLabel="Empty the vault"
         destructive
         loading={clearing}
         onConfirm={async () => {

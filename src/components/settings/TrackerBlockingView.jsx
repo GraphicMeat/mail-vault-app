@@ -35,10 +35,10 @@ const SOURCES = () => ([
 
 /** What the sender learns when that one pixel loads. */
 const LEAKED = () => ([
-  tr('settings.tracking.leakedOpened'),
-  tr('settings.tracking.leakedTime'),
-  tr('settings.tracking.leakedIp'),
-  tr('settings.tracking.leakedDevice'),
+  'That you opened it — and every time you re-open it',
+  'The minute you opened it, and your time zone',
+  'Your IP address, so roughly where you were',
+  'Your device and mail client, from the user agent',
 ]);
 
 function SampleMail({ blocked }) {
@@ -57,18 +57,18 @@ function SampleMail({ blocked }) {
       </div>
       <div className="p-3 text-[11px] leading-relaxed text-[#333] bg-white">
         <div className="font-semibold text-[12px] text-[#111]">{t('settings.tracking.weeklyDigest')}</div>
-        <div className="text-[#666] mb-2">news@mailer.example.com</div>
+        <div className="text-[#666] mb-2">{t('settings.tracking.newsMailerExampleCom')}</div>
         <p className="m-0 mb-2">{t('settings.tracking.hiThereHereWhatMissed')}</p>
         <div className="h-6 rounded bg-[#eef1f6]" />
         {blocked ? (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-700">
             <ShieldCheck size={11} />
-            {t('settings.tracking.pixelRemovedCaption')}
+            {t('settings.tracking.onePixelRemovedBeforeRender')}
           </div>
         ) : (
           <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-600">
             <span className="inline-block w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
-            {t('settings.tracking.pixelLoadingCaption')}
+            1×1 pixel loading from mailer.example.com
           </div>
         )}
       </div>
@@ -110,14 +110,13 @@ export function TrackerBlockingView({ onUpgrade }) {
               {t('settings.tracking.blockTrackingPixels')}
             </h4>
             <p className="text-xs text-mail-text-muted mt-1 max-w-xl">
-              {t('settings.tracking.explainer')}
+              {t('settings.tracking.marketingMailHidesPixel')}
             </p>
           </div>
           {isPremium ? (
             <ToggleSwitch
               active={trackerBlockingEnabled}
               onClick={() => setTrackerBlockingEnabled(!trackerBlockingEnabled)}
-              testId="tracker-blocking-toggle"
             />
           ) : (
             <div className="flex items-center gap-1.5 text-xs text-mail-text-muted shrink-0">
@@ -216,9 +215,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           </p>
         )}
         <p className="text-[11px] text-mail-text-muted/70 mt-3">
-          {TRACKER_PATTERNS.length} known open-tracking endpoints are bundled with the app, merged
-          from the MailTrackerBlocker and Ugly Email lists. The list ships in the app and is updated
-          with each release — MailVault never fetches one at runtime.
+          {t('settings.tracking.knownEndpointsBundled', { count: TRACKER_PATTERNS.length })}
         </p>
         {/* Named upstreams, linked. A blocklist whose provenance is a sentence
             is a claim; one you can open and read is a citation. */}

@@ -51,7 +51,7 @@ export function OutboxTray({ onRestoreDraft }) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-mail-text truncate">{subject}</p>
                 {recipient && (
-                  <p className="text-[10px] text-mail-text-muted truncate">To: {recipient}</p>
+                  <p className="text-[10px] text-mail-text-muted truncate">{t('outbox.toRecipient', { recipient })}</p>
                 )}
                 <p className={`text-[11px] mt-0.5 ${isError ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
                   {isSending && 'Sending…'}

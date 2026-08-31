@@ -1041,9 +1041,7 @@ function App() {
       {pendingOperation && (
         <div className="fixed top-4 right-4 z-50 bg-mail-surface border border-mail-strong rounded-xl p-4 max-w-sm">
           <p className="text-sm text-mail-text mb-3">
-            You have an unfinished operation: {pendingOperation.type.replace(/_/g, ' ')} {
-              ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString()
-            } remaining emails in {decodeImapUtf7(pendingOperation.mailbox)}.
+            {t('app.unfinishedOperationRemaining', { type: pendingOperation.type.replace(/_/g, ' '), count: ((pendingOperation.totalUids || []).length - (pendingOperation.completedUids || []).length).toLocaleString(), mailbox: decodeImapUtf7(pendingOperation.mailbox) })}
           </p>
           <div className="flex gap-2">
             <button

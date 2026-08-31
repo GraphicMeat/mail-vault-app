@@ -85,8 +85,10 @@
 
         <div class="hidden md:flex items-center gap-8">
           <a href="/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">Blog</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
         </div>
 
@@ -114,8 +116,10 @@
       <div id="mobile-menu" class="hidden md:hidden pb-4">
         <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
           <a href="/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Features</a>
+          <a href="/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Pricing</a>
           <a href="/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Use Cases</a>
           <a href="/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Docs</a>
+          <a href="/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">Blog</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
           <a href="https://github.com/GraphicMeat/mail-vault-app/releases/latest" target="_blank" class="sm:hidden mt-1 px-3 py-2 rounded-lg gradient-bg text-white font-medium text-center hover:opacity-90 transition-opacity">Download</a>
         </div>
@@ -154,6 +158,10 @@
             </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault now speaks nine languages.</strong> The whole app — every screen, every button, every message it puts on screen, the menu bar and the tray icon's menu, the notifications it sends and the errors it reports when a mail server refuses something — is available in English, Spanish, French, Italian, German, Brazilian Portuguese, Japanese, Korean and Simplified Chinese. Pick a language in Settings and it changes as you watch: nothing to restart, nothing to reinstall. Dates, times and numbers follow the language you chose rather than the one your computer happens to be set to, which matters if you read English mail on a German Mac, or the other way round. The website is translated too — every page, in all nine, with screenshots taken in each language rather than English pictures under translated text, so what the page shows is what you will see. Nothing about this reaches the network: the translations ship inside the app, and choosing one tells nobody anything.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
               <span><strong>On Linux, MailVault now says why spelling is not being checked, and what to install.</strong> Linux has no spell checker of its own: the dictionary comes from your distribution, and a minimal desktop install often has none — which looks exactly like a button that does not work. MailVault now checks what is there. Where a dictionary is installed the red underlines appear and the toolbar button turns them off and on as usual; where none is, the button opens the instructions instead — the one-line install command for Debian, Ubuntu, Fedora, Arch and openSUSE, how to pick a different language, and a link to the guide on the website. When several dictionaries are installed, MailVault checks against the one matching your system language. The snap package now carries English dictionaries of its own, because a confined snap cannot see the ones installed on the rest of the system, and the .deb suggests one at install time.</span>
             </li>
             <li class="flex items-start gap-3">
@@ -171,6 +179,10 @@
             Fixed
           </h3>
           <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message that refused to open now opens on the first try.</strong> Reading mail means asking the server for it, and MailVault keeps a few connections to your mail server open and reuses them rather than starting a new conversation for every message. A connection the server had quietly dropped in the meantime was still handed out, and the message opened onto "Server refused UID FETCH: connection lost". Pressing "Try again" worked — which made it look random — because the second attempt happened to get a fresh connection. MailVault now notices that the connection died under it and quietly asks again on a new one, so the first press is the only press.</span>
+            </li>
             <li class="flex items-start gap-3">
               <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
               <span><strong>"Mark as read" works on a message in your vault in the All Inboxes list.</strong> Ticking a message the vault holds and choosing "Mark as read" did nothing at all — no error, no change, the row stayed bold. Messages the vault holds and the mail server does not are kept in a different list inside MailVault from the ones the server just sent, and every read/unread change only ever touched the second one. The change now reaches both, and it is written into the vault's own record of the message, so it is still read after switching folders or restarting rather than quietly coming back unread.</span>
@@ -3868,6 +3880,6 @@
     });
   </script>
   <!-- ?v=N is the Cloudflare cache bust; keep it in step with website/index.html -->
-  <script defer src="/version-gate.js?v=4"></script>
+  <script defer src="/version-gate.js?v=5"></script>
 </body>
 </html>

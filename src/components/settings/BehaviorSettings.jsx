@@ -86,17 +86,17 @@ export function BehaviorSettings() {
             <div className="flex items-center gap-2 p-3 bg-mail-bg rounded-lg text-sm text-mail-text-muted">
               <RefreshCw size={14} />
               <span>
-                Last refreshed: {(() => {
+                {t('settings.behavior.lastRefreshed')} {(() => {
                   const diff = Date.now() - lastRefreshTime;
                   const minutes = Math.floor(diff / 60000);
                   if (minutes < 1) return t('util.emailParser.justNow');
-                  if (minutes === 1) return '1 minute ago';
+                  if (minutes === 1) return t('settings.behavior.oneMinuteAgo');
                   if (minutes < 60) return t('settings.behavior.minutesAgo', { minutes });
                   const hours = Math.floor(minutes / 60);
-                  if (hours === 1) return '1 hour ago';
+                  if (hours === 1) return t('settings.behavior.oneHourAgo');
                   if (hours < 24) return t('settings.behavior.hoursAgo', { hours });
                   const days = Math.floor(hours / 24);
-                  if (days === 1) return '1 day ago';
+                  if (days === 1) return t('settings.behavior.oneDayAgo');
                   return t('settings.behavior.daysAgo', { days });
                 })()}
               </span>
@@ -129,13 +129,13 @@ export function BehaviorSettings() {
                         text-mail-text focus:border-mail-accent transition-all cursor-pointer"
             >
               <option value={0}>{t('settings.behavior.offSendImmediately')}</option>
-              <option value={15}>15 seconds</option>
-              <option value={30}>30 seconds</option>
-              <option value={60}>1 minute</option>
-              <option value={120}>2 minutes</option>
-              <option value={180}>3 minutes</option>
-              <option value={240}>4 minutes</option>
-              <option value={300}>5 minutes</option>
+              <option value={15}>{t('settings.behavior.seconds15')}</option>
+              <option value={30}>{t('settings.behavior.seconds30')}</option>
+              <option value={60}>{t('settings.behavior.minute1')}</option>
+              <option value={120}>{t('settings.behavior.minutes2')}</option>
+              <option value={180}>{t('settings.behavior.minutes3')}</option>
+              <option value={240}>{t('settings.behavior.minutes4')}</option>
+              <option value={300}>{t('settings.behavior.minutes5')}</option>
             </select>
             {(sendDelay ?? 0) > 0 && (
               <p className="mt-2 text-xs text-mail-warning flex items-center gap-1.5">
@@ -203,9 +203,9 @@ export function BehaviorSettings() {
                 className="w-full"
               />
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">1s</span>
-                <span className="text-[10px] text-mail-text-muted">5s</span>
-                <span className="text-[10px] text-mail-text-muted">10s</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs1')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs5')}</span>
+                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs10')}</span>
               </div>
             </div>
           )}
@@ -231,7 +231,7 @@ export function BehaviorSettings() {
                 {t('settings.behavior.searchHistoryLimit')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
-                {searchHistoryLimit} searches
+                {t('settings.behavior.searchesCount', { count: searchHistoryLimit })}
               </span>
             </div>
             <input
@@ -258,14 +258,14 @@ export function BehaviorSettings() {
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
                 {filterHistoryPeriodDays >= 30 && filterHistoryPeriodDays < 60
-                  ? '1 month'
+                  ? t('settings.behavior.month1')
                   : filterHistoryPeriodDays >= 60 && filterHistoryPeriodDays < 90
-                  ? '2 months'
+                  ? t('settings.behavior.months2')
                   : filterHistoryPeriodDays >= 90 && filterHistoryPeriodDays < 180
-                  ? '3 months'
+                  ? t('settings.behavior.months3')
                   : filterHistoryPeriodDays >= 180 && filterHistoryPeriodDays < 365
-                  ? '6 months'
-                  : '1 year'}
+                  ? t('settings.behavior.months6')
+                  : t('settings.behavior.year1')}
               </span>
             </div>
             <input
@@ -278,9 +278,9 @@ export function BehaviorSettings() {
               className="w-full"
             />
             <div className="flex justify-between mt-1 px-1">
-              <span className="text-[10px] text-mail-text-muted">1 month</span>
-              <span className="text-[10px] text-mail-text-muted">6 months</span>
-              <span className="text-[10px] text-mail-text-muted">1 year</span>
+              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.month1')}</span>
+              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.months6')}</span>
+              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.year1')}</span>
             </div>
           </div>
 
@@ -291,7 +291,7 @@ export function BehaviorSettings() {
                 {t('settings.behavior.numberPopularFiltersShow')}
               </label>
               <span className="text-sm font-medium text-mail-accent-text">
-                {topFiltersLimit} filters
+                {t('settings.behavior.filtersCount', { count: topFiltersLimit })}
               </span>
             </div>
             <input
@@ -317,7 +317,7 @@ export function BehaviorSettings() {
               <div>
                 <div className="text-sm text-mail-text">{t('settings.behavior.searchHistory')}</div>
                 <div className="text-xs text-mail-text-muted">
-                  {searchHistory.length} saved searches
+                  {t('settings.behavior.savedSearches', { count: searchHistory.length })}
                 </div>
               </div>
             </div>
@@ -336,7 +336,7 @@ export function BehaviorSettings() {
               <div>
                 <div className="text-sm text-mail-text">{t('settings.behavior.filterHistory')}</div>
                 <div className="text-xs text-mail-text-muted">
-                  {filterUsageHistory.length} filter uses tracked
+                  {t('settings.behavior.filterUsesTracked', { count: filterUsageHistory.length })}
                 </div>
               </div>
             </div>

@@ -570,7 +570,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   <Server size={18} className="text-mail-accent-text" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-medium text-mail-text text-sm truncate">Other / Custom</div>
+                  <div className="font-medium text-mail-text text-sm truncate">{t('account.otherCustom')}</div>
                   <div className="text-xs text-mail-text-muted truncate">{t('account.autoDetectManualConfig')}</div>
                 </div>
               </button>
@@ -607,7 +607,7 @@ export function AccountModal({ onClose, onSuccess }) {
                 <div className="flex items-start gap-3 p-3 bg-mail-success/10 rounded-lg text-sm">
                   <Check size={16} className="text-mail-success mt-0.5 flex-shrink-0" />
                   <span className="text-mail-text">
-                    Detected: {detectedProvider.config.name}. Settings auto-filled.
+                    {t('account.detectedSettingsAutofilled', { provider: detectedProvider.config.name })}
                   </span>
                 </div>
               )}
@@ -616,7 +616,7 @@ export function AccountModal({ onClose, onSuccess }) {
               {showOAuth2Option && authType === 'oauth2' && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    Email Address *
+                    {t('account.emailAddressRequired')}
                   </label>
                   <div className="relative">
                     <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
@@ -655,7 +655,7 @@ export function AccountModal({ onClose, onSuccess }) {
                         {oauthLoading ? (
                           <>
                             <Loader size={18} className="animate-spin" />
-                            Waiting for {({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')} sign-in...
+                            {t('account.waitingForProviderSignIn', { provider: ({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider') })}
                           </>
                         ) : (
                           <>
@@ -714,7 +714,7 @@ export function AccountModal({ onClose, onSuccess }) {
                     <div className="flex items-center gap-3 p-3 bg-mail-success/10 border border-mail-success/20 rounded-lg text-sm">
                       <Check size={16} className="text-mail-success flex-shrink-0" />
                       <div>
-                        <span className="text-mail-text font-medium">{({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider')} account connected</span>
+                        <span className="text-mail-text font-medium">{t('account.providerAccountConnected', { provider: ({ google: 'Google', microsoft: 'Microsoft', yahoo: 'Yahoo' }[providerConfig?.oauth2Provider] || providerConfig?.name || 'provider') })}</span>
                         {formData.email && (
                           <span className="text-mail-text-muted ml-1">({formData.email})</span>
                         )}
@@ -728,7 +728,7 @@ export function AccountModal({ onClose, onSuccess }) {
               {/* Display Name — always shown */}
               <div>
                 <label className="block text-sm text-mail-text-muted mb-1.5">
-                  Display Name (optional)
+                  {t('account.displayNameOptional')}
                 </label>
                 <input
                   type="text"
@@ -771,7 +771,7 @@ export function AccountModal({ onClose, onSuccess }) {
               {authType === 'password' && (
                 <div>
                   <label className="block text-sm text-mail-text-muted mb-1.5">
-                    Password *
+                    {t('account.passwordRequired')}
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
@@ -836,7 +836,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm text-mail-text-muted mb-1.5">
-                        IMAP Host *
+                        {t('account.imapHostRequired')}
                       </label>
                       <input
                         type="text"
@@ -876,7 +876,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       className="w-full px-3 py-2 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text text-sm focus:border-mail-accent transition-all"
                     >
-                      <option value="ssl">SSL/TLS</option>
+                      <option value="ssl">{t('account.sslTls')}</option>
                       <option value="starttls">{t('account.starttls')}</option>
                       <option value="none">{t('account.none')}</option>
                     </select>
@@ -885,7 +885,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm text-mail-text-muted mb-1.5">
-                        SMTP Host *
+                        {t('account.smtpHostRequired')}
                       </label>
                       <input
                         type="text"

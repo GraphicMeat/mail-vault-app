@@ -70,7 +70,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   // Same reasoning as BulkOperationProgress: quarter milestones and the
   // outcome, never every percent.
   const milestone = Math.floor(percentage / 25) * 25;
-  const of = `${completed.toLocaleString()} of ${total.toLocaleString()}`;
+  const of = t('bulk.progress.completedOfTotal', { completed: completed.toLocaleString(), total: total.toLocaleString() });
   const announcement = isComplete
     ? (errors > 0 ? t('bulk.save.messages', { config: config.errorLabel(errors), of }) : t('bulk.save.messages', { config: config.successLabel, of }))
     // activeLabel ends in an ellipsis for the eye; a screen reader would
@@ -143,7 +143,7 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
         <div className="px-4 py-3">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-mail-text-muted">
-              {completed} of {total} emails
+              {t('bulk.progress.completedOfTotalEmails', { completed, total })}
             </span>
             <span className="text-sm font-medium text-mail-accent-text">
               {percentage}%
