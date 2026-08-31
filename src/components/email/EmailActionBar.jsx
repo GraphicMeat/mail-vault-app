@@ -64,7 +64,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {!isSentEmail && onReply && (
         <ActionButton
           icon={Reply}
-          label="Reply"
+          label={t('emailActionBar.reply')}
           onClick={() => onReply?.(email)}
           compact={compact}
         />
@@ -74,7 +74,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {!isSentEmail && !singleRecipient && onReplyAll && (
         <ActionButton
           icon={ReplyAll}
-          label="Reply All"
+          label={t('emailActionBar.replyAll')}
           onClick={() => onReplyAll?.(email)}
           compact={compact}
         />
@@ -84,7 +84,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onForward && (
         <ActionButton
           icon={Forward}
-          label="Forward"
+          label={t('emailActionBar.forward')}
           onClick={() => onForward(email)}
           compact={compact}
         />
@@ -105,7 +105,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onDelete && (
         <ActionButton
           icon={Trash2}
-          label="Delete"
+          label={t('common.delete')}
           onClick={() => onDelete(email)}
           disabled={disabled.delete}
           isDestructive
@@ -117,7 +117,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {!isLocalOnly && onMove && (
         <ActionButton
           icon={FolderInput}
-          label="Move"
+          label={t('emailActionBar.move')}
           onClick={() => onMove?.(email)}
           disabled={disabled.move}
           compact={compact}
@@ -139,7 +139,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onOpenInWindow && (
         <ActionButton
           icon={ExternalLink}
-          label="Open"
+          label={t('common.open')}
           onClick={() => onOpenInWindow(email)}
           compact={compact}
         />
@@ -149,7 +149,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onViewSource && (
         <ActionButton
           icon={Code}
-          label="Source"
+          label={t('emailActionBar.source')}
           onClick={() => onViewSource(email)}
           compact={compact}
         />
@@ -159,7 +159,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       {onExport && (
         <ActionButton
           icon={ImageDown}
-          label="Export"
+          label={t('common.export')}
           onClick={() => onExport(email)}
           compact={compact}
         />

@@ -33,6 +33,7 @@
   "errors.imapPrefixed",
   "errors.imapTimeout",
   "errors.smtpPrefixed",
+  "export.dialog.formatHtmlLabel",
   "export.dialog.formatImageLabel",
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",

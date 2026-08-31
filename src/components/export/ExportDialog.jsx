@@ -105,7 +105,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
             <Choice name="mv-export-format" value="image" checked={format === 'image'} onChange={setFormat}
               icon={ImageDown} label={t('export.dialog.formatImageLabel')} hint={t('export.dialog.formatImageHint')} />
             <Choice name="mv-export-format" value="html" checked={format === 'html'} onChange={setFormat}
-              icon={FileCode2} label="HTML" hint={t('export.dialog.formatHtmlHint')} />
+              icon={FileCode2} label={t('export.dialog.formatHtmlLabel')} hint={t('export.dialog.formatHtmlHint')} />
           </div>
 
           {showLayout && (
