@@ -1551,6 +1551,7 @@
   "onboarding.densityDefault": "默认",
   "onboarding.densityComfortable": "宽松",
   "onboarding.moreInAppearance": "日期格式、签名等在“设置 → 外观”里。",
+  "onboarding.recommended": "GraphicMeat 推荐",
   "onboarding.freeTitle": "从今天起属于你",
   "onboarding.freeSubtitle": "这些全部免费，永久有效，每台设备都一样。",
   "free.vault.title": "磁盘上的保险库",

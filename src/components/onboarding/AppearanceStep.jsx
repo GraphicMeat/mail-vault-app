@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowRight, Sun, Moon } from 'lucide-react';
+import { ArrowRight, Sun, Moon, Wand2 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
@@ -34,6 +34,7 @@ export function AppearanceStep({ onContinue }) {
   const t = useT();
   const theme = useThemeStore(s => s.theme);
   const toggleTheme = useThemeStore(s => s.toggleTheme);
+  const setTheme = useThemeStore(s => s.setTheme);
 
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const setLayoutMode = useSettingsStore(s => s.setLayoutMode);
@@ -43,6 +44,17 @@ export function AppearanceStep({ onContinue }) {
   const setViewStyle = useSettingsStore(s => s.setViewStyle);
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const setEmailListStyle = useSettingsStore(s => s.setEmailListStyle);
+
+  // The five values the app is actually designed around — the same set every
+  // marketing screenshot is shot in. Written through the same setters the
+  // controls use, so the preview and the persisted settings follow along.
+  const applyRecommended = () => {
+    setTheme('dark');
+    setLayoutMode('three-column');
+    setSidebarStyle('tagcloud');
+    setViewStyle('list');
+    setEmailListStyle('compact');
+  };
 
   return (
     <div className="max-w-4xl w-full">
@@ -103,7 +115,12 @@ export function AppearanceStep({ onContinue }) {
             viewStyle={viewStyle}
             emailListStyle={emailListStyle}
           />
-          <div className="flex justify-end mt-3">
+          <div className="flex items-center justify-between gap-2 mt-3">
+            <Button variant="accentTint" size="lg" onClick={applyRecommended}
+                    data-testid="appearance-recommended">
+              <Wand2 size={14} />
+              {t('onboarding.recommended')}
+            </Button>
             <Button variant="primary" size="lg" onClick={onContinue} data-testid="onboarding-continue">
               {t('common.continue')}
               <ArrowRight size={14} />

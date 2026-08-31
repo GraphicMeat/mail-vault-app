@@ -10,6 +10,7 @@ const setSidebarStyle = vi.fn();
 const setViewStyle = vi.fn();
 const setEmailListStyle = vi.fn();
 const toggleTheme = vi.fn();
+const setTheme = vi.fn();
 
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: (sel) => sel({
@@ -19,12 +20,12 @@ vi.mock('../../../stores/settingsStore', () => ({
   }),
 }));
 vi.mock('../../../stores/themeStore', () => ({
-  useThemeStore: (sel) => sel({ theme: 'dark', toggleTheme }),
+  useThemeStore: (sel) => sel({ theme: 'dark', toggleTheme, setTheme }),
 }));
 
 import { AppearanceStep } from '../AppearanceStep';
 
-afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, toggleTheme].forEach(m => m.mockClear()); });
+afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, toggleTheme, setTheme].forEach(m => m.mockClear()); });
 
 describe('appearance step', () => {
   it('offers exactly the five first-run controls', () => {
@@ -45,6 +46,18 @@ describe('appearance step', () => {
     expect(setLayoutMode).toHaveBeenCalledWith('two-column');
     fireEvent.click(screen.getByTestId('appearance-theme-toggle'));
     expect(toggleTheme).toHaveBeenCalled();
+  });
+
+  // One click has to move every one of the five controls: a partial preset
+  // leaves the screen half-recommended and nobody can tell which half.
+  it('applies the recommended settings in one click', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByTestId('appearance-recommended'));
+    expect(setTheme).toHaveBeenCalledWith('dark');
+    expect(setLayoutMode).toHaveBeenCalledWith('three-column');
+    expect(setSidebarStyle).toHaveBeenCalledWith('tagcloud');
+    expect(setViewStyle).toHaveBeenCalledWith('list');
+    expect(setEmailListStyle).toHaveBeenCalledWith('compact');
   });
 
   it('renders the preview beside the controls', () => {
