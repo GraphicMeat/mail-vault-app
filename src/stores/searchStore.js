@@ -5,6 +5,7 @@ import { hasValidCredentials, ensureFreshToken } from '../services/authUtils';
 import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
 import { emailKey, flattenMailboxes } from './slices/unifiedHelpers';
+import { mailboxDescendants, SUBTREE_PREFIX } from '../services/workflows/mailboxTree';
 
 // The folders a server-side "all folders" search has to visit. \Noselect boxes
 // are pure containers — SELECT fails on them — and a path can appear twice once
@@ -20,6 +21,40 @@ export function serverSearchTargets(mailboxes) {
   }
   paths.sort((a, b) => (/^inbox$/i.test(a) ? -1 : 0) - (/^inbox$/i.test(b) ? -1 : 0));
   return paths;
+}
+
+/**
+ * Which folders one search visits, and how much of the vault it may keep.
+ *
+ * One folder is too narrow to find a filed message and all 59 is too wide to
+ * read; a branch is the scope the hierarchy exists to give you.
+ */
+export function searchScope(folder, { activeMailbox, mailboxes }) {
+  const everyFolder = () => serverSearchTargets(mailboxes);
+  let targets;
+  let restrictTo = null;
+
+  if (folder === 'all') {
+    targets = everyFolder();
+  } else if (folder === 'current') {
+    // 'UNIFIED' is a view, not a mailbox: SELECTing it fails, and the view it
+    // names is every folder anyway.
+    targets = (activeMailbox && activeMailbox !== 'UNIFIED') ? [activeMailbox] : everyFolder();
+  } else if (String(folder).startsWith(SUBTREE_PREFIX)) {
+    const branch = new Set(mailboxDescendants(
+      String(folder).slice(SUBTREE_PREFIX.length), flattenMailboxes(mailboxes)));
+    // A branch root can be a container the server refuses to SELECT. Its
+    // children are still perfectly searchable.
+    targets = everyFolder().filter(p => branch.has(p));
+    // Only a branch narrows the vault. "All folders" must not: a vault
+    // directory for a mailbox the server no longer lists still holds readable
+    // mail, and discarding it would be the same lie as searching INBOX alone.
+    restrictTo = branch;
+  } else {
+    targets = [folder];
+  }
+
+  return { targets, localMailbox: targets.length === 1 ? targets[0] : null, restrictTo };
 }
 
 // Merge the three sources into the list the UI shows: one row per
@@ -134,9 +169,13 @@ export const useSearchStore = create((set, get) => ({
 
     try {
       const allResults = [];
+      const scope = searchScope(searchFilters.folder, { activeMailbox, mailboxes });
 
       // 1. Search in-memory emails (already loaded headers)
-      if (searchFilters.location !== 'local') {
+      // The loaded headers belong to the selected folder, so a branch search
+      // run from somewhere else must not smuggle them in.
+      const openFolderInScope = !scope.restrictTo || scope.restrictTo.has(activeMailbox);
+      if (searchFilters.location !== 'local' && openFolderInScope) {
         const inMemoryResults = filterEmailsLocally(emails, 'server');
         allResults.push(...inMemoryResults);
         console.log(`[Search] Found ${inMemoryResults.length} in-memory matches`);
@@ -149,13 +188,15 @@ export const useSearchStore = create((set, get) => ({
             sender: searchFilters.sender,
             dateFrom: searchFilters.dateFrom,
             dateTo: searchFilters.dateTo,
-            mailbox: searchFilters.folder === 'current' ? activeMailbox :
-                     searchFilters.folder === 'all' ? null : searchFilters.folder,
+            mailbox: scope.localMailbox,
             mailboxes,
             hasAttachments: searchFilters.hasAttachments
           });
-          allResults.push(...localResults);
-          console.log(`[Search] Found ${localResults.length} local Maildir matches`);
+          const kept = scope.restrictTo
+            ? localResults.filter(r => scope.restrictTo.has(r._mailbox))
+            : localResults;
+          allResults.push(...kept);
+          console.log(`[Search] Found ${kept.length} local Maildir matches`);
         } catch (error) {
           console.warn('[Search] Local search failed:', error);
         }
@@ -175,11 +216,7 @@ export const useSearchStore = create((set, get) => ({
         // makes a message the vault never backed up look like it isn't there.
         // 'UNIFIED' is a view, not a mailbox: SELECTing it fails, and the view
         // it names is every folder anyway.
-        const everyFolder = () => serverSearchTargets(mailboxes);
-        const targets = searchFilters.folder === 'all' ? everyFolder()
-          : searchFilters.folder === 'current'
-            ? (activeMailbox && activeMailbox !== 'UNIFIED' ? [activeMailbox] : everyFolder())
-            : [searchFilters.folder];
+        const targets = scope.targets;
 
         for (const [i, mailboxToSearch] of targets.entries()) {
           if (superseded()) return;

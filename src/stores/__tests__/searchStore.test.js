@@ -50,7 +50,7 @@ vi.mock('../../services/api', () => ({
   },
 }));
 
-const { useSearchStore, serverSearchTargets } = await import('../searchStore');
+const { useSearchStore, serverSearchTargets, searchScope } = await import('../searchStore');
 
 beforeEach(() => {
   localResults = [];
@@ -255,5 +255,146 @@ describe('serverSearchTargets', () => {
 
   it('is empty when the tree is', () => {
     expect(serverSearchTargets(undefined)).toEqual([]);
+  });
+});
+
+// ── Searching a branch instead of one folder or all of them ────────────────
+// bson73: "the structure tells us exactly where something was filed, which lets
+// us narrow down search much more effectively." One folder is too narrow and
+// all 59 is too wide; the useful scope is the branch.
+
+const box = (path, extra = {}) => ({ path, name: path.split('.').pop(), delimiter: '.', children: [], ...extra });
+const NESTED = [
+  box('INBOX'),
+  box('Kunden'),
+  box('Kunden.Company XY'),
+  box('Kunden.Company XY.Invoices'),
+  box('Kunden.Company XY.Invoices.erledigt'),
+  box('Kunden-Alt'),
+  box('Sammelmappe', { noselect: true }),
+  box('Sammelmappe.Real'),
+];
+const scopeOf = (folder, activeMailbox = 'INBOX') =>
+  searchScope(folder, { activeMailbox, mailboxes: NESTED });
+
+describe('searchScope', () => {
+  it('sends "all folders" at every folder the server will open', () => {
+    expect(scopeOf('all').targets).toEqual(serverSearchTargets(NESTED));
+    expect(scopeOf('all').targets).not.toContain('Sammelmappe');
+  });
+
+  it('sends "current folder" at exactly that folder', () => {
+    expect(scopeOf('current', 'Kunden.Company XY').targets).toEqual(['Kunden.Company XY']);
+  });
+
+  it('treats the unified view as every folder, since it is not a mailbox', () => {
+    expect(scopeOf('current', 'UNIFIED').targets).toEqual(serverSearchTargets(NESTED));
+  });
+
+  it('sends a named folder at just that folder', () => {
+    expect(scopeOf('Kunden.Company XY').targets).toEqual(['Kunden.Company XY']);
+  });
+
+  it('sends a branch at the folder and everything filed under it', () => {
+    expect(scopeOf('sub:Kunden').targets).toEqual([
+      'Kunden', 'Kunden.Company XY', 'Kunden.Company XY.Invoices',
+      'Kunden.Company XY.Invoices.erledigt',
+    ]);
+  });
+
+  it('does not let a branch swallow a sibling whose name it prefixes', () => {
+    expect(scopeOf('sub:Kunden').targets).not.toContain('Kunden-Alt');
+  });
+
+  it('skips a branch root the server will not open, but keeps its children', () => {
+    expect(scopeOf('sub:Sammelmappe').targets).toEqual(['Sammelmappe.Real']);
+  });
+
+  it('names one mailbox for the vault when the scope is one folder', () => {
+    expect(scopeOf('Kunden.Company XY').localMailbox).toBe('Kunden.Company XY');
+    expect(scopeOf('current', 'INBOX').localMailbox).toBe('INBOX');
+  });
+
+  it('lets the vault read everything when the scope is wider than one folder', () => {
+    expect(scopeOf('all').localMailbox).toBe(null);
+    expect(scopeOf('sub:Kunden').localMailbox).toBe(null);
+  });
+
+  it('restricts vault rows only for a branch, never for "all folders"', () => {
+    // A vault directory for a folder the server no longer lists still holds
+    // readable mail, and "all folders" must not discard it.
+    expect(scopeOf('all').restrictTo).toBe(null);
+    expect([...scopeOf('sub:Kunden').restrictTo]).toContain('Kunden.Company XY');
+  });
+});
+
+describe('searching a branch', () => {
+  it('asks the server about the branch and no other folder', async () => {
+    state.mailboxes = NESTED;
+    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
+      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    expect(serverCalls).toEqual([
+      'Kunden', 'Kunden.Company XY', 'Kunden.Company XY.Invoices',
+      'Kunden.Company XY.Invoices.erledigt',
+    ]);
+  });
+
+  it('drops a vault hit that was filed outside the branch', async () => {
+    state.mailboxes = NESTED;
+    state.activeMailbox = 'Kunden';
+    localResults = [
+      { uid: 1, subject: 'Rechnung A', _accountId: 'acct-1', _mailbox: 'Kunden.Company XY.Invoices', source: 'local', from: { address: 'a@b.c' } },
+      { uid: 2, subject: 'Rechnung B', _accountId: 'acct-1', _mailbox: 'Kunden-Alt', source: 'local', from: { address: 'a@b.c' } },
+    ];
+    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
+      location: 'local', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    const found = useSearchStore.getState().searchResults.map(r => r._mailbox);
+    expect(found).toContain('Kunden.Company XY.Invoices');
+    expect(found).not.toContain('Kunden-Alt');
+  });
+
+  it('keeps a vault hit from a folder the server no longer lists, on "all folders"', async () => {
+    state.mailboxes = NESTED;
+    localResults = [
+      { uid: 3, subject: 'Rechnung alt', _accountId: 'acct-1', _mailbox: 'Ehemalige Kunden', source: 'local', from: { address: 'a@b.c' } },
+    ];
+    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
+      location: 'local', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    expect(useSearchStore.getState().searchResults.map(r => r._mailbox)).toContain('Ehemalige Kunden');
+  });
+});
+
+describe('searching a branch, continued', () => {
+  it('does not surface the open folder in-memory rows when it sits outside the branch', async () => {
+    // The loaded headers belong to whatever folder is selected. Searching a
+    // branch you are not currently in must not smuggle them in.
+    state.mailboxes = NESTED;
+    state.activeMailbox = 'Kunden-Alt';
+    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
+      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    expect(useSearchStore.getState().searchResults.find(r => r.uid === 34)).toBeUndefined();
+  });
+
+  it('keeps them when the open folder is inside the branch', async () => {
+    state.mailboxes = NESTED;
+    state.activeMailbox = 'Kunden.Company XY';
+    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
+      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    expect(useSearchStore.getState().searchResults.find(r => r.uid === 34)).toBeTruthy();
   });
 });

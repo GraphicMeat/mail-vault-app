@@ -1869,5 +1869,7 @@
   "safety.link.dangerous.blurb": "Il testo del link mostra un URL, ma il link porta a un dominio diverso — un indizio comune di phishing.",
   "safety.link.suspicious.blurb": "Il link passa attraverso un reindirizzamento di tracciamento verso un dominio diverso.",
   "sidebar.expandFolder": "Mostra sottocartelle",
-  "sidebar.collapseFolder": "Nascondi sottocartelle"
+  "sidebar.collapseFolder": "Nascondi sottocartelle",
+  "search.includeSubfolders": "Includi sottocartelle",
+  "search.inFolderAndSubfolders": " in {{folder}} e nelle sue sottocartelle"
 }

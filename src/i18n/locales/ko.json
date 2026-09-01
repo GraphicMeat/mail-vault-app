@@ -1869,5 +1869,7 @@
   "safety.link.dangerous.blurb": "링크 텍스트에 표시된 주소와 실제 연결되는 도메인이 다릅니다. 피싱에서 흔히 나타나는 신호입니다.",
   "safety.link.suspicious.blurb": "이 링크는 추적용 리디렉션을 거쳐 다른 도메인으로 이동합니다.",
   "sidebar.expandFolder": "하위 폴더 표시",
-  "sidebar.collapseFolder": "하위 폴더 숨기기"
+  "sidebar.collapseFolder": "하위 폴더 숨기기",
+  "search.includeSubfolders": "하위 폴더 포함",
+  "search.inFolderAndSubfolders": " {{folder}} 및 하위 폴더에서"
 }

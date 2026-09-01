@@ -1869,5 +1869,7 @@
   "safety.link.dangerous.blurb": "Der Linktext zeigt eine URL, der Link führt aber zu einer anderen Domain — ein häufiges Phishing-Anzeichen.",
   "safety.link.suspicious.blurb": "Der Link läuft über eine Tracking-Weiterleitung zu einer anderen Domain.",
   "sidebar.expandFolder": "Unterordner einblenden",
-  "sidebar.collapseFolder": "Unterordner ausblenden"
+  "sidebar.collapseFolder": "Unterordner ausblenden",
+  "search.includeSubfolders": "Unterordner einbeziehen",
+  "search.inFolderAndSubfolders": " in {{folder}} und dessen Unterordnern"
 }

@@ -1869,5 +1869,7 @@
   "safety.link.dangerous.blurb": "O texto do link mostra uma URL, mas o link leva a outro domínio — um indício comum de phishing.",
   "safety.link.suspicious.blurb": "O link passa por um redirecionamento de rastreamento até chegar a outro domínio.",
   "sidebar.expandFolder": "Mostrar subpastas",
-  "sidebar.collapseFolder": "Ocultar subpastas"
+  "sidebar.collapseFolder": "Ocultar subpastas",
+  "search.includeSubfolders": "Incluir subpastas",
+  "search.inFolderAndSubfolders": " em {{folder}} e suas subpastas"
 }

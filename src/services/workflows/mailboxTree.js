@@ -166,6 +166,9 @@ export function buildMailboxTree(mailboxes) {
   return roots;
 }
 
+/** A folder filter naming a branch — `sub:Kunden` — rather than one folder. */
+export const SUBTREE_PREFIX = 'sub:';
+
 /**
  * `path` and every mailbox filed beneath it, in list order.
  *

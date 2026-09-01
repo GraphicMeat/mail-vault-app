@@ -4,6 +4,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
+import { SUBTREE_PREFIX } from '../services/workflows/mailboxTree';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -119,6 +120,15 @@ export function SearchBar() {
     setShowFilters(false);
   };
 
+  // The folder filter carries its own scope: `sub:X` means X and everything
+  // filed under it. The select shows the folder either way; the checkbox is
+  // what the prefix means.
+  const scopedToBranch = String(searchFilters.folder).startsWith(SUBTREE_PREFIX);
+  const pickedFolder = scopedToBranch
+    ? String(searchFilters.folder).slice(SUBTREE_PREFIX.length)
+    : searchFilters.folder;
+  const branchable = pickedFolder !== 'all';
+
   const handleFilterChange = (key, value) => {
     setSearchFilters({ [key]: value });
     // Auto-search when filters change if there's an active search
@@ -231,6 +241,7 @@ export function SearchBar() {
         <div className="relative" ref={filterRef}>
           <button
             type="button"
+            data-testid="search-filters-toggle"
             onClick={() => setShowFilters(!showFilters)}
             className={`p-2 rounded-lg border transition-colors ${
               showFilters || searchFilters.sender || searchFilters.dateFrom || searchFilters.dateTo || searchFilters.hasAttachments
@@ -264,8 +275,12 @@ export function SearchBar() {
                       {t('common.folder')}
                     </label>
                     <select
-                      value={searchFilters.folder}
-                      onChange={(e) => handleFilterChange('folder', e.target.value)}
+                      data-testid="search-folder-scope"
+                      value={pickedFolder}
+                      onChange={(e) => handleFilterChange('folder',
+                        scopedToBranch && e.target.value !== 'all'
+                          ? `${SUBTREE_PREFIX}${e.target.value}`
+                          : e.target.value)}
                       className="w-full px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-sm text-mail-text focus:border-mail-accent focus:outline-none"
                     >
@@ -281,6 +296,19 @@ export function SearchBar() {
                         ))
                       }
                     </select>
+                    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-mail-text-muted
+                                      cursor-pointer has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
+                      <input
+                        type="checkbox"
+                        data-testid="search-include-subfolders"
+                        checked={branchable && scopedToBranch}
+                        disabled={!branchable}
+                        onChange={(e) => handleFilterChange('folder',
+                          e.target.checked ? `${SUBTREE_PREFIX}${pickedFolder}` : pickedFolder)}
+                        className="accent-mail-accent"
+                      />
+                      {t('search.includeSubfolders')}
+                    </label>
                   </div>
 
                   {/* Sender */}
@@ -550,8 +578,13 @@ export function SearchBar() {
             <>
               <T k="search.foundResults" vars={{ count: searchResults.length }}
                  parts={[(s) => <span className="font-medium text-mail-text">{s}</span>]} />
-              {searchFilters.folder === 'current' && t('search.inFolder', { folder: decodeImapUtf7(activeMailbox) })}
-              {searchFilters.folder === 'all' && t('search.inAllFolders')}
+              {!scopedToBranch && searchFilters.folder === 'current' && t('search.inFolder', { folder: decodeImapUtf7(activeMailbox) })}
+              {!scopedToBranch && searchFilters.folder === 'all' && t('search.inAllFolders')}
+              {/* A branch count read as one folder's is the same lie the
+                  INBOX-only "all folders" search used to tell. */}
+              {scopedToBranch && t('search.inFolderAndSubfolders', {
+                folder: decodeImapUtf7(pickedFolder === 'current' ? activeMailbox : pickedFolder),
+              })}
               {searchResults.length > 0 && (
                 <span className="ml-2 text-[10px]">
                   {t('search.localServerCounts', { local: searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length, server: searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length })}
