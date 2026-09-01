@@ -1867,5 +1867,7 @@
   "common.previous": "前へ",
   "premium.viewLarger": "拡大表示",
   "safety.link.dangerous.blurb": "リンクのテキストと実際のリンク先のドメインが異なります。フィッシングによく見られる兆候です。",
-  "safety.link.suspicious.blurb": "このリンクはトラッキング用のリダイレクトを経由して別のドメインへ移動します。"
+  "safety.link.suspicious.blurb": "このリンクはトラッキング用のリダイレクトを経由して別のドメインへ移動します。",
+  "sidebar.expandFolder": "サブフォルダを表示",
+  "sidebar.collapseFolder": "サブフォルダを非表示"
 }

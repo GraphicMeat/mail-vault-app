@@ -216,6 +216,10 @@ export const useSettingsStore = create(
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
       sidebarAccountsRatio: 0.4, // Ratio of accounts section height vs total available (0.2 - 0.8)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — render accounts & folders as list rows or wrapped bubble tags
+      // Which folders are open in the sidebar tree, per account. Session state
+      // lost the whole expansion on every account switch, which on a five-level
+      // server means re-opening four folders to get back where you were.
+      expandedFolders: {}, // { [accountId]: string[] } — server paths
       listPaneSize: 350, // Width of the email list in three-column
       // Height of the email list when the panes are stacked. Separate from the
       // width above: one number read on two axes let a legal list width become
@@ -688,6 +692,9 @@ export const useSettingsStore = create(
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
       setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
+      setExpandedFolders: (accountId, paths) => set(state => ({
+        expandedFolders: { ...state.expandedFolders, [accountId]: [...paths] },
+      })),
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
@@ -877,6 +884,7 @@ export const useSettingsStore = create(
           emailViewerTheme: 'system',
           sidebarCollapsed: false,
           sidebarStyle: 'list',
+          expandedFolders: {},
           listPaneSize: 350,
           listPaneHeight: 320,
           viewerPaneSize: 50,

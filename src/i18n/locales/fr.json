@@ -1867,5 +1867,7 @@
   "common.previous": "Précédent",
   "premium.viewLarger": "Agrandir",
   "safety.link.dangerous.blurb": "Le texte du lien affiche une URL, mais le lien mène en réalité à un autre domaine — un indice de hameçonnage courant.",
-  "safety.link.suspicious.blurb": "Le lien passe par une redirection de suivi avant d'atteindre un autre domaine."
+  "safety.link.suspicious.blurb": "Le lien passe par une redirection de suivi avant d'atteindre un autre domaine.",
+  "sidebar.expandFolder": "Afficher les sous-dossiers",
+  "sidebar.collapseFolder": "Masquer les sous-dossiers"
 }

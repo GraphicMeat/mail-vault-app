@@ -17,20 +17,18 @@ import { formatBytes } from '../utils/formatBytes';
 import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
-import { compareNames } from '../utils/collation.js';
+import { FolderTree, getMailboxIcon } from './FolderTree';
+import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
 import {
   Inbox,
   Send,
   File,
   Trash2,
-  Star,
   Archive,
   AlertCircle,
   AlertTriangle,
   CheckCircle2,
   Plus,
-  ChevronDown,
-  ChevronRight,
   Settings,
   Bug,
   HardDrive,
@@ -50,23 +48,6 @@ import {
   Loader,
   Gift,
 } from 'lucide-react';
-
-const MAILBOX_ICONS = {
-  INBOX: Inbox,
-  '\\Sent': Send,
-  '\\Drafts': File,
-  '\\Trash': Trash2,
-  '\\Junk': Trash2,
-  '\\Starred': Star,
-  '\\Important': AlertCircle,
-  '\\Archive': Archive,
-  '\\All': Archive
-};
-
-function getMailboxIcon(mailbox) {
-  const Icon = MAILBOX_ICONS[mailbox.specialUse] || MAILBOX_ICONS[mailbox.path] || Inbox;
-  return Icon;
-}
 
 const UNIFIED_FOLDERS = () => ([
   { id: 'INBOX', name: tr('sidebar.inbox'), icon: Inbox },
@@ -644,7 +625,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const isPremium = hasPremiumAccess(billingProfile);
 
-  const [expandedFolders, setExpandedFolders] = useState(new Set(['INBOX']));
+  const storedExpanded = useSettingsStore(s => s.expandedFolders);
+  const setStoredExpanded = useSettingsStore(s => s.setExpandedFolders);
+
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showError, setShowError] = useState(false);
 
@@ -742,30 +725,42 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const tagCloud = sidebarStyle === 'tagcloud';
   const activeAccount = orderedAccounts.find(a => a.id === activeAccountId);
 
-  // Sort mailboxes: INBOX first, then alphabetically; children sorted alphabetically too
-  const sortedMailboxes = useMemo(() => {
-    const sorted = [...mailboxes].sort((a, b) => {
-      if (a.path === 'INBOX') return -1;
-      if (b.path === 'INBOX') return 1;
-      return compareNames(a.name, b.name);
-    });
-    return sorted.map(m => m.children?.length > 0
-      ? { ...m, children: [...m.children].sort((a, b) => compareNames(a.name, b.name)) }
-      : m
-    );
-  }, [mailboxes]);
+  const folderTree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+
+  // Whatever was open last time, plus every folder that has to be open for the
+  // one being read to be on screen — a hit opened from search can be five
+  // levels down inside four collapsed parents.
+  const expandedFolders = useMemo(() => {
+    const set = new Set(storedExpanded[activeAccountId] || []);
+    for (const p of mailboxAncestors(activeMailbox, folderTree)) set.add(p);
+    return set;
+  }, [storedExpanded, activeAccountId, activeMailbox, folderTree]);
 
   const toggleFolder = (path) => {
-    setExpandedFolders(prev => {
-      const next = new Set(prev);
-      if (next.has(path)) {
-        next.delete(path);
-      } else {
-        next.add(path);
-      }
-      return next;
-    });
+    const next = new Set(expandedFolders);
+    if (next.has(path)) next.delete(path);
+    else next.add(path);
+    setStoredExpanded(activeAccountId, next);
   };
+
+  const selectFolder = (path) => activateAccount(activeAccountId, path);
+
+  // Bubbles are a flat wrap by design, so the row itself has to carry the
+  // hierarchy: ten folders called "erledigt" are otherwise one bubble ten times.
+  const folderBubbles = useMemo(() => {
+    const out = [];
+    const walk = (nodes, trail) => {
+      for (const n of nodes) {
+        const here = [...trail, mailboxLabel(n.name)];
+        if (!n.noselect) {
+          out.push({ path: n.path, specialUse: n.specialUse, label: here.slice(-2).join(' \u203a '), title: here.join(' \u203a ') });
+        }
+        walk(n.children, here);
+      }
+    };
+    walk(folderTree, []);
+    return out;
+  }, [folderTree]);
 
   // Shared hover bubble (rendered in both collapsed and expanded views)
   const hoverBubble = hoverAccountId && hoverPos && (
@@ -906,51 +901,15 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {/* Folder icons with expandable children — hidden in unified inbox mode */}
         {unifiedInbox && <div className="flex-1" />}
-        {!unifiedInbox && <div className="flex-1 overflow-y-auto w-full py-2 flex flex-col items-center gap-0.5">
-          {sortedMailboxes.map(mailbox => {
-            const Icon = getMailboxIcon(mailbox);
-            const isActive = activeMailbox === mailbox.path;
-            const hasChildren = mailbox.children?.length > 0;
-            const isExpanded = expandedFolders.has(mailbox.path);
-            return (
-              <div key={mailbox.path} className="w-full flex flex-col items-center">
-                <button
-                  className={`p-2 rounded-lg transition-all
-                             ${isActive && !mailbox.noselect
-                               ? 'bg-mail-accent/10 text-mail-accent-text'
-                               : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
-                  onClick={() => {
-                    if (mailbox.noselect && hasChildren) {
-                      toggleFolder(mailbox.path);
-                    } else if (!mailbox.noselect) {
-                      activateAccount(activeAccountId, mailbox.path);
-                      if (hasChildren) toggleFolder(mailbox.path);
-                    }
-                  }}
-                  title={mailboxLabel(mailbox.name)}
-                >
-                  <Icon size={16} />
-                </button>
-                {hasChildren && isExpanded && mailbox.children.map(child => {
-                  const ChildIcon = getMailboxIcon(child);
-                  const isChildActive = activeMailbox === child.path;
-                  return (
-                    <button
-                      key={child.path}
-                      className={`p-1.5 rounded-lg transition-all
-                                 ${isChildActive
-                                   ? 'bg-mail-accent/10 text-mail-accent-text'
-                                   : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
-                      onClick={() => activateAccount(activeAccountId, child.path)}
-                      title={mailboxLabel(child.name)}
-                    >
-                      <ChildIcon size={13} />
-                    </button>
-                  );
-                })}
-              </div>
-            );
-          })}
+        {!unifiedInbox && <div className="flex-1 overflow-y-auto w-full py-2 text-sm">
+          <FolderTree
+            compact
+            mailboxes={mailboxes}
+            activeMailbox={activeMailbox}
+            expanded={expandedFolders}
+            onToggle={toggleFolder}
+            onSelect={selectFolder}
+          />
         </div>}
 
         {/* Footer icons */}
@@ -1324,48 +1283,23 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             {t('sidebar.folders')}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {sortedMailboxes.flatMap(mailbox => {
-              const bubbles = [];
-              if (!mailbox.noselect) {
-                const Icon = getMailboxIcon(mailbox);
-                const isActive = activeMailbox === mailbox.path;
-                bubbles.push(
-                  <button
-                    key={mailbox.path}
-                    onClick={() => activateAccount(activeAccountId, mailbox.path)}
-                    title={mailboxLabel(mailbox.name)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
-                               ${isActive
-                                 ? 'bg-mail-accent-fill text-white border-mail-accent'
-                                 : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
-                  >
-                    <Icon size={12} />
-                    <span className="truncate max-w-[140px]">{mailboxLabel(mailbox.name)}</span>
-                  </button>
-                );
-              }
-              if (mailbox.children?.length > 0) {
-                mailbox.children.forEach(child => {
-                  if (child.noselect) return;
-                  const ChildIcon = getMailboxIcon(child);
-                  const isChildActive = activeMailbox === child.path;
-                  bubbles.push(
-                    <button
-                      key={child.path}
-                      onClick={() => activateAccount(activeAccountId, child.path)}
-                      title={mailboxLabel(child.name)}
-                      className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
-                                 ${isChildActive
-                                   ? 'bg-mail-accent-fill text-white border-mail-accent'
-                                   : 'text-mail-text-muted border-mail-border hover:bg-mail-surface-hover hover:text-mail-text'}`}
-                    >
-                      <ChildIcon size={12} />
-                      <span className="truncate max-w-[140px]">{mailboxLabel(child.name)}</span>
-                    </button>
-                  );
-                });
-              }
-              return bubbles;
+            {folderBubbles.map(f => {
+              const Icon = getMailboxIcon(f);
+              const isActive = activeMailbox === f.path;
+              return (
+                <button
+                  key={f.path}
+                  onClick={() => selectFolder(f.path)}
+                  title={f.title}
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                             ${isActive
+                               ? 'bg-mail-accent-fill text-white border-mail-accent'
+                               : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+                >
+                  <Icon size={12} />
+                  <span className="truncate max-w-[180px]">{f.label}</span>
+                </button>
+              );
             })}
           </div>
         </div>
@@ -1375,74 +1309,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           {t('sidebar.folders')}
         </div>
 
-        {sortedMailboxes.map(mailbox => {
-          const Icon = getMailboxIcon(mailbox);
-          const hasChildren = mailbox.children?.length > 0;
-          const isExpanded = expandedFolders.has(mailbox.path);
-          const isActive = activeMailbox === mailbox.path;
-
-          return (
-            <div key={mailbox.path}>
-              <div
-                className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors
-                           ${mailbox.noselect ? 'cursor-default' : 'cursor-pointer'}
-                           ${isActive && !mailbox.noselect
-                             ? 'bg-mail-accent/10 text-mail-accent-text'
-                             : 'text-mail-text hover:bg-mail-surface-hover'}`}
-                onClick={() => {
-                  if (mailbox.noselect && hasChildren) {
-                    toggleFolder(mailbox.path);
-                  } else if (!mailbox.noselect) {
-                    activateAccount(activeAccountId, mailbox.path);
-                  }
-                }}
-              >
-                {hasChildren && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleFolder(mailbox.path);
-                    }}
-                    className="p-0.5"
-                  >
-                    {isExpanded ? (
-                      <ChevronDown size={14} />
-                    ) : (
-                      <ChevronRight size={14} />
-                    )}
-                  </button>
-                )}
-                {!hasChildren && <div className="w-5" />}
-                <Icon size={16} />
-                <span className="text-sm flex-1 truncate">{mailboxLabel(mailbox.name)}</span>
-              </div>
-
-              {hasChildren && isExpanded && (
-                <div className="ml-4">
-                  {mailbox.children.map(child => {
-                    const ChildIcon = getMailboxIcon(child);
-                    const isChildActive = activeMailbox === child.path;
-
-                    return (
-                      <div
-                        key={child.path}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded-lg
-                                   cursor-pointer transition-colors ${isChildActive
-                                     ? 'bg-mail-accent/10 text-mail-accent-text'
-                                     : 'text-mail-text hover:bg-mail-surface-hover'}`}
-                        onClick={() => activateAccount(activeAccountId, child.path)}
-                      >
-                        <div className="w-5" />
-                        <ChildIcon size={14} />
-                        <span className="text-sm truncate">{mailboxLabel(child.name)}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        <FolderTree
+          mailboxes={mailboxes}
+          activeMailbox={activeMailbox}
+          expanded={expandedFolders}
+          onToggle={toggleFolder}
+          onSelect={selectFolder}
+        />
       </div>}
 
       {/* Footer */}
