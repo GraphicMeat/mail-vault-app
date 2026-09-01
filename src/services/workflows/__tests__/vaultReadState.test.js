@@ -99,14 +99,17 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
+import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
 const UID = 5;
-const SEL_KEY = `${ACCOUNT.id}:${UID}`;
+// Derived, not spelled: this file's subject is read state, and a test that
+// hardcodes a key format goes red every time the format is corrected.
+const SEL_KEY = _selKey(vaultRow());
 
 // The vault row as the unified loader builds it: provenance attached, archived,
 // and absent from `emails` because the server list does not carry it.
-function vaultRow(flags = []) {
+function vaultRow(flags = []) {  // eslint-disable-line no-use-before-define
   return {
     uid: UID, messageId: 'v@mock', subject: 'Press slot Friday', flags,
     from: { address: 'them@mock.test' }, date: '2026-08-12T08:02:00Z',

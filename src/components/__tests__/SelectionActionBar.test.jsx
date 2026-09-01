@@ -194,7 +194,7 @@ describe('SelectionActionBar selection count', () => {
 });
 
 describe('SelectionActionBar export', () => {
-  const row = (uid, accountId) => ({ uid, subject: `m${uid}`, _accountId: accountId });
+  const row = (uid, accountId, mailbox = 'INBOX') => ({ uid, subject: `m${uid}`, _accountId: accountId, _mailbox: mailbox });
 
   beforeEach(() => {
     openExport.mockClear();
@@ -233,14 +233,17 @@ describe('SelectionActionBar export', () => {
   it('does not pull another account\'s message with the same uid into a unified selection', () => {
     useMailStoreMock.setState({
       activeMailbox: 'UNIFIED',
-      selectedEmailIds: new Set(['acct-1:1']),
-      sortedEmails: [row(1, 'acct-1'), row(1, 'acct-2')],
+      selectedEmailIds: new Set(['acct-1:INBOX:1']),
+      // Three rows share uid 1: another account, and the same account's Sent
+      // folder — which the unified list puts on screen beside the INBOX one.
+      sortedEmails: [row(1, 'acct-1'), row(1, 'acct-2'), row(1, 'acct-1', 'Sent')],
     });
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Export selected'));
     const sent = openExport.mock.calls[0][0].messages;
     expect(sent).toHaveLength(1);
     expect(sent[0]._accountId).toBe('acct-1');
+    expect(sent[0]._mailbox).toBe('INBOX');
   });
 
   it('opens nothing when no selected key resolves to a loaded row', () => {

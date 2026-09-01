@@ -273,9 +273,9 @@ describe('RowActionMenuItems', () => {
   });
 
   describe('unified inbox selection keys', () => {
-    it('builds the accountId:uid selection key in unified inbox mode, not a raw uid', async () => {
+    it('builds the account-and-folder selection key in unified inbox mode, not a raw uid', async () => {
       useMailStoreMock.setState({ activeMailbox: 'UNIFIED' });
-      const email = baseEmail({ uid: 7, _accountId: 'acct-9', isArchived: false, source: 'server' });
+      const email = baseEmail({ uid: 7, _accountId: 'acct-9', _mailbox: 'INBOX', isArchived: false, source: 'server' });
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
@@ -283,7 +283,7 @@ describe('RowActionMenuItems', () => {
       const [executor] = onRequestDelete.mock.calls[0];
       await executor();
 
-      expect(useMailStoreMock.getState().setSelection).toHaveBeenCalledWith(['acct-9:7']);
+      expect(useMailStoreMock.getState().setSelection).toHaveBeenCalledWith(['acct-9:INBOX:7']);
     });
   });
 

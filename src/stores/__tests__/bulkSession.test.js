@@ -201,11 +201,26 @@ describe('setEmailsSelected', () => {
     expect([...useMailStore.getState().selectedEmailIds]).toEqual([99]);
   });
 
-  it('keys by account in the unified inbox', () => {
+  it('keys by account AND folder in the unified inbox', () => {
     useMailStore.setState({ activeMailbox: 'UNIFIED' });
 
-    useMailStore.getState().setEmailsSelected([{ uid: 7, _accountId: 'acct-2' }], true);
+    useMailStore.getState().setEmailsSelected(
+      [{ uid: 7, _accountId: 'acct-2', _mailbox: 'INBOX' }], true);
 
-    expect([...useMailStore.getState().selectedEmailIds]).toEqual(['acct-2:7']);
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual(['acct-2:INBOX:7']);
+  });
+
+  it('keeps one account two folders, same uid, as two selections', () => {
+    // The unified list merges each account's INBOX with its Sent folder, so
+    // this pair is on screen together and a uid names neither of them alone.
+    useMailStore.setState({ activeMailbox: 'UNIFIED' });
+
+    useMailStore.getState().setEmailsSelected([
+      { uid: 7, _accountId: 'acct-2', _mailbox: 'INBOX' },
+      { uid: 7, _accountId: 'acct-2', _mailbox: 'Sent' },
+    ], true);
+
+    expect([...useMailStore.getState().selectedEmailIds].sort())
+      .toEqual(['acct-2:INBOX:7', 'acct-2:Sent:7']);
   });
 });

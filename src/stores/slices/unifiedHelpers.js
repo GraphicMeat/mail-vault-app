@@ -131,20 +131,35 @@ export function bodyMatchesHeader(header, body) {
   return headerId === bodyId;
 }
 
-// ── Unified selection key helpers ──────────────────────────────────────────
-// In unified mode, prefix selection keys with accountId to avoid cross-account UID collisions
+// ── Selection key helpers ──────────────────────────────────────────────────
+// A key has to name a message, and a uid names one only inside one mailbox of
+// one account. `accountId:uid` was not enough: the unified list merges each
+// account's INBOX with its Sent folder, so that account's INBOX 34 and Sent 34
+// shared a key — the same mistake as reading a search hit's uid against the
+// selected folder, one level down.
+//
+// Format is `accountId:mailbox:uid`. accountId is a UUID and uid is digits, so
+// reading the accountId from the left and the uid from the right leaves the
+// whole middle to the mailbox — which may itself contain a colon.
 export function _selKey(email) {
-  return email._accountId ? `${email._accountId}:${email.uid}` : `${email.uid}`;
+  if (!email._accountId) return `${email.uid}`;
+  return `${email._accountId}:${email._mailbox ?? ''}:${email.uid}`;
 }
 
 export function _parseSelKey(key) {
   const s = String(key);
-  const i = s.indexOf(':');
-  if (i > 0) {
-    const rawUid = s.slice(i + 1);
-    return { accountId: s.slice(0, i), uid: /^\d+$/.test(rawUid) ? Number(rawUid) : rawUid };
-  }
-  return { accountId: null, uid: key };
+  const first = s.indexOf(':');
+  // A bare uid is the single-folder list's key. Numeric, so it compares equal
+  // to the uid on the row rather than to its string form.
+  if (first <= 0) return { accountId: null, mailbox: null, uid: /^\d+$/.test(s) ? Number(s) : key };
+  const last = s.lastIndexOf(':');
+  const rawUid = s.slice(last + 1);
+  return {
+    accountId: s.slice(0, first),
+    // Keys written before the mailbox joined the format have only two parts.
+    mailbox: last > first ? s.slice(first + 1, last) : null,
+    uid: /^\d+$/.test(rawUid) ? Number(rawUid) : rawUid,
+  };
 }
 
 // ── Unified folder resolution ──────────────────────────────────────────────
