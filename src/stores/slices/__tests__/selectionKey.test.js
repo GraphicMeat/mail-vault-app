@@ -83,16 +83,13 @@ describe('nothing builds a selection key by hand', () => {
     const out = execSync(
       "grep -rnE '[$][{][A-Za-z_.]*[Aa]ccountId[}]:[$][{][A-Za-z_.]*[Uu]id[}]' "
       + "src --include='*.js' --include='*.jsx' "
-      + "| grep -v __tests__ | grep -v unifiedHelpers.js | grep -v loadUnifiedInbox.js "
-      + "| grep -v selectEmail.js || true",
+      + "| grep -v __tests__ | grep -v unifiedHelpers.js | grep -v loadUnifiedInbox.js || true",
       { encoding: 'utf8' }
     ).trim();
-    // Two exclusions, both different keys with different jobs:
-    //   loadUnifiedInbox — dedupes rows within one folder per account.
-    //   selectEmail      — `selectedEmailId`, the OPEN message, not the ticked
-    //                      set. It is separately inconsistent (App.jsx compares
-    //                      it to a bare `e.uid`, which cannot match in unified
-    //                      mode) and that is its own fix, not this one.
+    // One exclusion: loadUnifiedInbox's is a different key with a different
+    // job — it dedupes rows within one folder per account, and says so where it
+    // is defined. `selectedEmailId` used to be excluded too; it goes through
+    // rowKey now.
     expect(out).toBe('');
   });
 });

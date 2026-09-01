@@ -1086,8 +1086,12 @@ export function isUnread(email) {
  * Returns the input array itself when the filter is off — callers memoize on
  * identity, and a fresh array there would rebuild every row for nothing.
  */
-export function filterUnread(emails, unreadOnly, keepUid) {
+/**
+ * `keepId` is the open message, kept on screen even once it is read — compared
+ * through `keyOf`, because in a list spanning mailboxes a uid names two rows.
+ */
+export function filterUnread(emails, unreadOnly, keepId, keyOf = (e) => e.uid) {
   if (!unreadOnly) return emails || [];
   if (!emails) return [];
-  return emails.filter(e => isUnread(e) || (keepUid != null && e.uid === keepUid));
+  return emails.filter(e => isUnread(e) || (keepId != null && keyOf(e) === keepId));
 }

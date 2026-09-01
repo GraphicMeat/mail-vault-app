@@ -172,6 +172,30 @@ export function _parseSelKey(key) {
   };
 }
 
+// ── The OPEN message ───────────────────────────────────────────────────────
+// `selectedEmailId` names one row. In a single-folder list a uid does that; in
+// a list spanning mailboxes it does not, so the id is the full key there. Every
+// reader has to ask the same question, or one of them silently never matches —
+// which is how j/k navigation came to do nothing in the unified inbox while the
+// row highlight worked fine.
+export function rowKey(email, spans) {
+  return spans ? _selKey(email) : email.uid;
+}
+
+/**
+ * The row `delta` places from the open one, clamped to the ends.
+ *
+ * An open message that is not in `rows` starts navigation at the top, which is
+ * what the caller did before and is right: the unread filter can hide the row
+ * you are reading.
+ */
+export function stepThroughList(rows, currentId, spans, delta) {
+  if (!rows?.length) return null;
+  const idx = rows.findIndex(e => rowKey(e, spans) === currentId);
+  if (idx === -1) return rows[0];
+  return rows[Math.min(Math.max(idx + delta, 0), rows.length - 1)] ?? null;
+}
+
 // ── Unified folder resolution ──────────────────────────────────────────────
 // Maps canonical folder IDs to IMAP specialUse flags for cross-provider resolution
 export const SPECIAL_USE_MAP = {

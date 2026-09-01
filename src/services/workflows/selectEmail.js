@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, rowKey } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -185,7 +185,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // guess. Stamp it here, where it is already resolved.
   const withAccount = (e) => (e && !e._accountId ? { ...e, _accountId: accountId } : e);
 
-  const selectedEmailId = isUnified ? `${accountId}:${uid}` : uid;
+  // Through the helper: a uid names one row only inside one mailbox, and
+  // EmailList already highlights by comparing this against a full key.
+  const selectedEmailId = rowKey({ _accountId: accountId, _mailbox: mailbox, uid }, isUnified);
   useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source, lastSelectedAccountId: accountId });
 
   try {

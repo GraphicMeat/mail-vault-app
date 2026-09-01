@@ -47,6 +47,7 @@ import { resolveErrorToastProps } from './utils/errorToast';
 import { resolveEscapeAction } from './utils/escapeAction';
 import { shouldStartFullInit } from './utils/shouldStartFullInit';
 import { filterUnread } from './utils/emailParser';
+import { rowKey, stepThroughList, spansMailboxes } from './stores/slices/unifiedHelpers';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
@@ -334,6 +335,22 @@ function App() {
     };
   }, []);
 
+  // j/k walk the list the user can actually see: with the unread filter on,
+  // the store still holds every loaded message, so navigating the raw
+  // sortedEmails would select rows that aren't on screen.
+  //
+  // Every comparison goes through rowKey. Comparing the open message's id to a
+  // bare `e.uid` is what made this do nothing at all in the unified inbox.
+  const step = (delta) => {
+    const state = useMailStore.getState();
+    const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = state;
+    const spans = spansMailboxes(state);
+    const keyOf = (e) => rowKey(e, spans);
+    const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf);
+    const target = stepThroughList(visible, selectedEmailId, spans, delta);
+    if (target) selectEmail(keyOf(target));
+  };
+
   // Keyboard shortcuts — wire all shortcut actions to app state/store methods
   useKeyboardShortcuts({
     compose: () => setComposeState({}),
@@ -349,39 +366,33 @@ function App() {
       const email = useMailStore.getState().selectedEmail;
       if (email) setComposeState({ mode: 'forward', replyTo: email });
     },
+    // The open message's own row knows where it lives; the id alone does not
+    // once the list spans mailboxes.
     archive: () => {
-      const uid = useMailStore.getState().selectedEmailId;
-      if (uid) useMailStore.getState().saveEmailsLocally([uid]);
+      const email = useMailStore.getState().selectedEmail;
+      if (email) useMailStore.getState().saveEmailsLocally([email.uid]);
     },
     delete: () => {
-      const uid = useMailStore.getState().selectedEmailId;
-      if (uid) useMailStore.getState().deleteEmailFromServer(uid);
+      const { selectedEmail, selectedEmailId } = useMailStore.getState();
+      // deleteEmailFromServer resolves a composite key itself, and falls back
+      // to the active mailbox for a bare uid — so hand it the id as it stands.
+      if (selectedEmail || selectedEmailId) {
+        useMailStore.getState().deleteEmailFromServer(selectedEmailId);
+      }
     },
     // j/k walk the list the user can actually see: with the unread filter on,
     // the store still holds every loaded message, so navigating the raw
     // sortedEmails would select rows that aren't on screen.
-    nextEmail: () => {
-      const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = useMailStore.getState();
-      const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId);
-      if (!visible.length) return;
-      const idx = visible.findIndex(e => e.uid === selectedEmailId);
-      const next = idx < visible.length - 1 ? idx + 1 : idx;
-      if (visible[next]) selectEmail(visible[next].uid);
-    },
-    prevEmail: () => {
-      const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = useMailStore.getState();
-      const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId);
-      if (!visible.length) return;
-      const idx = visible.findIndex(e => e.uid === selectedEmailId);
-      const prev = idx > 0 ? idx - 1 : 0;
-      if (visible[prev]) selectEmail(visible[prev].uid);
-    },
+    nextEmail: () => step(+1),
+    prevEmail: () => step(-1),
     goToInbox: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'INBOX'); },
     goToSent: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Sent'); },
     goToDrafts: () => { const s = useMailStore.getState(); s.activateAccount(s.activeAccountId, 'Drafts'); },
     toggleSelect: () => {
-      const uid = useMailStore.getState().selectedEmailId;
-      if (uid) useMailStore.getState().toggleEmailSelection(uid);
+      const email = useMailStore.getState().selectedEmail;
+      if (email) {
+        useMailStore.getState().toggleEmailSelection(email.uid, email._accountId, email._mailbox);
+      }
     },
     escape: () => {
       const {
