@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -92,7 +92,7 @@ export async function _prefetchAdjacentEmails(currentUid) {
   const get = () => useMailStore.getState();
 
   const { sortedEmails, activeAccountId, activeMailbox, emailCache } = get();
-  const isUnified = activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(get());
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
   if (!_shouldPrefetch()) {
@@ -153,7 +153,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;

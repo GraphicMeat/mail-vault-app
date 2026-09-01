@@ -131,6 +131,16 @@ export function bodyMatchesHeader(header, body) {
   return headerId === bodyId;
 }
 
+// ── Does this list hold rows from more than one mailbox? ───────────────────
+// Two views do: the unified inbox (many accounts, each contributing its INBOX
+// and its Sent folder) and a folder subtree (one account, a whole branch).
+// Downstream they mean exactly the same thing — a row's location must be read
+// off the row, never off activeMailbox — so they answer one question here
+// rather than being special-cased apart in twenty places.
+export function spansMailboxes(state) {
+  return state?.activeMailbox === 'UNIFIED' || !!state?.mailboxScope;
+}
+
 // ── Selection key helpers ──────────────────────────────────────────────────
 // A key has to name a message, and a uid names one only inside one mailbox of
 // one account. `accountId:uid` was not enough: the unified list merges each

@@ -6,6 +6,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
+import { _selKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
@@ -135,6 +136,7 @@ function EmailListComponent() {
   const loading = useSyncStore(s => s.loading);
   const loadingMore = useSyncStore(s => s.loadingMore);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const mailboxScope = useAccountStore(s => s.mailboxScope);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const viewMode = useUiStore(s => s.viewMode);
   const totalEmails = useMessageListStore(s => s.totalEmails);
@@ -560,9 +562,10 @@ function EmailListComponent() {
     return rows;
   }, [displayEmails, searchActive, deferredThreads, emailKey]);
 
-  const isUnified = activeMailbox === 'UNIFIED';
-  // In unified mode, selection keys are "accountId:uid" to avoid cross-account UID collisions
-  const selKey = (email) => isUnified && email._accountId ? `${email._accountId}:${email.uid}` : email.uid;
+  const isUnified = spansMailboxes({ activeMailbox, mailboxScope });
+  // Through the helper: a uid is unique only inside one mailbox of one account,
+  // and a key built here by hand is a key the store cannot read back.
+  const selKey = (email) => isUnified ? _selKey(email) : email.uid;
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;

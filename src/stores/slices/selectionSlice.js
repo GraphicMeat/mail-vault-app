@@ -3,7 +3,7 @@
 // This slice contains state, simple inline actions, and passthrough wrappers.
 
 import { buildThreads } from '../../utils/emailParser';
-import { _selKey, _parseSelKey, _resolveUnifiedContext } from './unifiedHelpers';
+import { _selKey, _parseSelKey, _resolveUnifiedContext, spansMailboxes } from './unifiedHelpers';
 import {
   selectEmail as _selectEmail,
   _prefetchAdjacentEmails,
@@ -60,10 +60,14 @@ export const createSelectionSlice = (set, get) => ({
 
   // ── Simple inline actions (stay in slice) ──
 
-  toggleEmailSelection: (uid, accountId = null) => {
+  toggleEmailSelection: (uid, accountId = null, mailbox = null) => {
     set(state => {
-      const isUnified = state.activeMailbox === 'UNIFIED';
-      const key = isUnified && accountId ? `${accountId}:${uid}` : uid;
+      const isUnified = spansMailboxes(state);
+      // Through the helper, never by hand: the checkbox has to write the key
+      // every other control reads.
+      const key = isUnified && accountId
+        ? _selKey({ _accountId: accountId, _mailbox: mailbox, uid })
+        : uid;
       const newSelection = new Set(state.selectedEmailIds);
       if (newSelection.has(key)) {
         newSelection.delete(key);
@@ -81,7 +85,7 @@ export const createSelectionSlice = (set, get) => ({
   // per message in the thread.
   setEmailsSelected: (emails, selected) => {
     set(state => {
-      const isUnified = state.activeMailbox === 'UNIFIED';
+      const isUnified = spansMailboxes(state);
       const next = new Set(state.selectedEmailIds);
       for (const e of emails) {
         const key = isUnified && e._accountId ? _selKey(e) : e.uid;
@@ -94,7 +98,7 @@ export const createSelectionSlice = (set, get) => ({
 
   selectAllEmails: () => {
     const { sortedEmails, activeMailbox } = get();
-    const isUnified = activeMailbox === 'UNIFIED';
+    const isUnified = spansMailboxes(get());
     set({ selectedEmailIds: new Set(sortedEmails.map(e => isUnified ? _selKey(e) : e.uid)) });
   },
 
@@ -113,7 +117,7 @@ export const createSelectionSlice = (set, get) => ({
     const { selectedEmailIds, sortedEmails, activeMailbox } = get();
     if (selectedEmailIds.size === 0) return { threads: 0, emails: 0 };
 
-    const isUnified = activeMailbox === 'UNIFIED';
+    const isUnified = spansMailboxes(get());
     // Thread over the same messages the list threaded over. An INBOX list
     // threads INBOX + Sent together (EmailList's `mergedEmails`, via
     // getChatEmails) so a conversation reads whole; re-threading INBOX alone

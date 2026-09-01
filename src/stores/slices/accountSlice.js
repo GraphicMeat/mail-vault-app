@@ -99,6 +99,11 @@ export const createAccountSlice = (set, get) => ({
   mailboxes: [],
   mailboxesFetchedAt: null,
   activeMailbox: 'INBOX',
+  // Set while the list shows a whole branch: { root, paths }. activeMailbox
+  // stays the branch root — a real, SELECT-able path — so nothing that treats
+  // it as a mailbox has to learn a second magic value the way 'UNIFIED' made
+  // twenty call sites do.
+  mailboxScope: null,
 
   // Connection status: 'connected' | 'disconnected' | 'error'
   connectionStatus: 'disconnected',

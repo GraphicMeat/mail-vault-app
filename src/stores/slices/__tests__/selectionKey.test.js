@@ -44,3 +44,55 @@ describe('_selKey', () => {
     expect(_parseSelKey(_selKey(email))).toMatchObject({ accountId: 'acct-1', uid: 7 });
   });
 });
+
+// ── Which lists span more than one mailbox ─────────────────────────────────
+import { spansMailboxes } from '../unifiedHelpers';
+
+describe('spansMailboxes', () => {
+  it('is false for an ordinary folder, where activeMailbox names the location', () => {
+    expect(spansMailboxes({ activeMailbox: 'INBOX', mailboxScope: null })).toBe(false);
+  });
+
+  it('is true for the unified inbox', () => {
+    expect(spansMailboxes({ activeMailbox: 'UNIFIED', mailboxScope: null })).toBe(true);
+  });
+
+  it('is true for a folder subtree', () => {
+    // Same consequence as unified: a row's location has to be read off the row.
+    expect(spansMailboxes({
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden/Company XY'] },
+    })).toBe(true);
+  });
+
+  it('does not fall over on a half-built state', () => {
+    expect(spansMailboxes(null)).toBe(false);
+    expect(spansMailboxes({})).toBe(false);
+  });
+});
+
+// ── One producer, or the checkbox and the store disagree ───────────────────
+// The list built the key inline, the store built it inline, and the helper
+// built a third. They agreed only by coincidence: correcting the helper alone
+// left the checkbox writing a key nothing else could read, and no test saw it.
+describe('nothing builds a selection key by hand', () => {
+  it('leaves no inline `accountId:uid` template outside the helper', async () => {
+    const { execSync } = await import('node:child_process');
+    // Only keys that END in a uid — `${accountId}:${mailbox}` is a cache key
+    // for a whole folder and is a different thing entirely.
+    const out = execSync(
+      "grep -rnE '[$][{][A-Za-z_.]*[Aa]ccountId[}]:[$][{][A-Za-z_.]*[Uu]id[}]' "
+      + "src --include='*.js' --include='*.jsx' "
+      + "| grep -v __tests__ | grep -v unifiedHelpers.js | grep -v loadUnifiedInbox.js "
+      + "| grep -v selectEmail.js || true",
+      { encoding: 'utf8' }
+    ).trim();
+    // Two exclusions, both different keys with different jobs:
+    //   loadUnifiedInbox — dedupes rows within one folder per account.
+    //   selectEmail      — `selectedEmailId`, the OPEN message, not the ticked
+    //                      set. It is separately inconsistent (App.jsx compares
+    //                      it to a bare `e.uid`, which cannot match in unified
+    //                      mode) and that is its own fix, not this one.
+    expect(out).toBe('');
+  });
+});

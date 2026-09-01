@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
-import { _selKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { _selKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describeDeleteEverywhere } from '../utils/custodyCopy';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
@@ -27,7 +27,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
   const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
   const purgeSelectedEverywhere = useMailStore(s => s.purgeSelectedEverywhere);
-  const isUnified = useMailStore(s => s.activeMailbox === 'UNIFIED');
+  const isUnified = useMailStore(s => spansMailboxes(s));
   const [showMove, setShowMove] = useState(false);
 
   // Selection key format the store's bulk workflows expect — accountId:uid in

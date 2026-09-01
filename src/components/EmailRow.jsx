@@ -67,7 +67,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
                  ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
+      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input
           type="checkbox"
           checked={isChecked}
@@ -187,7 +187,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
                  ${isUnread ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
-      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId); }}>
+      <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input type="checkbox" checked={isChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
 

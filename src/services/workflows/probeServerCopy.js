@@ -28,7 +28,7 @@ import * as db from '../db';
 import { ensureFreshToken, hasValidCredentials } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
 import { applyServerRemoval, stampVaultEntry } from './messageMutations';
-import { _resolveUnifiedContext } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, spansMailboxes } from '../../stores/slices/unifiedHelpers';
 
 /**
  * @param {number} uid
@@ -42,7 +42,7 @@ export async function probeServerCopy(uid, scope = {}) {
   const get = () => useMailStore.getState();
   const state = get();
 
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = scope.accountId || unified?.accountId || state.activeAccountId;
   const rawMailbox = scope.mailbox || unified?.mailbox || state.activeMailbox;

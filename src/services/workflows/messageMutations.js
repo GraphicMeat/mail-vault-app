@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -43,7 +43,7 @@ export async function saveEmailLocally(uid) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
@@ -232,7 +232,7 @@ export async function removeLocalEmail(uid) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
@@ -267,7 +267,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMb = mailboxOverride || unified?.mailbox || state.activeMailbox;
@@ -592,7 +592,7 @@ export async function markEmailReadStatus(uid, read) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const realUid = unified?.uid ?? uid;
   const accountId = unified?.accountId || state.activeAccountId;
@@ -629,7 +629,7 @@ export async function exportEmail(uid) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
@@ -646,7 +646,7 @@ async function _markSelected(read) {
 
   const state = get();
   const { selectedEmailIds, accounts } = state;
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
@@ -712,7 +712,7 @@ export const markSelectedAsUnread = () => _markSelected(false);
 // includes `localEmails`).
 
 function _resolveKeyContext(key, state, emailMap, sentPath) {
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
   const uid = ctx?.uid ?? key;
   const accountId = ctx?.accountId || state.activeAccountId;
@@ -733,7 +733,7 @@ export async function deleteSelectedFromServer() {
 
   const state = get();
   const { selectedEmailIds } = state;
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
@@ -969,7 +969,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
 
   const sentPath = get().getSentMailboxPath();
@@ -1230,7 +1230,7 @@ export async function moveEmails(uids, targetMailbox) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = state.activeMailbox === 'UNIFIED';
+  const isUnified = spansMailboxes(state);
   const selectedEmailId = state.selectedEmailId;
   const { activeAccountId, activeMailbox } = state;
 
