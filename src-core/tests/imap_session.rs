@@ -291,3 +291,77 @@ async fn a_refusal_is_not_retried() {
         "the server answered — asking again on a new connection is pure cost"
     );
 }
+
+/// The same dead pooled socket, on a delete.
+///
+/// Reported 2026-09-01: deleting a message from the reading pane put the row
+/// straight back, and deleting it again worked. The row is removed
+/// optimistically, the pooled connection the peer had closed answered the
+/// first command with `connection lost`, and the frontend restored the row —
+/// while the failed session was discarded, so the second attempt got a fresh
+/// connection and went through. That second press is what `run_uid_delete`
+/// does for the user.
+///
+/// Only for a delete addressed by UID, which is why this is not `run_read`:
+/// re-issuing it against a uid the server has already expunged is a no-op, the
+/// same property `pending_delete`'s next-launch replay has always relied on.
+#[async_std::test]
+async fn a_delete_whose_socket_dies_retries_once_on_a_new_connection() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            // Only the first STORE dies; the replacement connection works.
+            .fault(Trigger::nth("STORE", 1), Action::DropConnection),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    pool.run_uid_delete(&config, true, |mut session| async move {
+        delete_email(&mut session, "INBOX", 1, true).await?;
+        Ok(((), session, Some("INBOX".to_string())))
+    })
+    .await
+    .expect("the retry must land the delete the first attempt lost");
+
+    assert!(
+        server.state().find("INBOX").unwrap().by_uid(1).is_none(),
+        "the message is still there — the retry never reached the server",
+    );
+    assert_eq!(
+        server.connection_count(),
+        2,
+        "the retry must open a NEW connection, not reuse the dead one"
+    );
+}
+
+/// Negative control for the test above: with every STORE dying, the retry
+/// cannot succeed — so the green above is the retry working, not the fault
+/// failing to fire. And the retry happens once: two connections, not a loop.
+#[async_std::test]
+async fn a_delete_that_keeps_losing_the_socket_fails_after_exactly_one_retry() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml("Hello", "sam@example.com", "Body")))
+            .fault(Trigger::on("STORE"), Action::DropConnection),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let err = pool
+        .run_uid_delete(&config, true, |mut session| async move {
+            delete_email(&mut session, "INBOX", 1, true).await?;
+            Ok(((), session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect_err("a server that never answers must still surface an error");
+
+    assert!(
+        mailvault_core::imap::pool::is_connection_lost(&err),
+        "the error that drives the retry must be recognisable as one: {err}"
+    );
+    assert!(
+        server.state().find("INBOX").unwrap().by_uid(1).is_some(),
+        "nothing was deleted, so the message must still be there",
+    );
+    assert_eq!(server.connection_count(), 2, "one attempt, one retry, no loop");
+}

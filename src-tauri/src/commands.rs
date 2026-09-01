@@ -478,10 +478,18 @@ pub async fn imap_delete_email(
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let permanent = permanent.unwrap_or(false);
 
-    with_priority(&pool, &account, |mut session| async move {
-        imap::delete_email(&mut session, &mailbox, uid, permanent).await
-            .map_err(|e| format!("Failed to delete email: {}", e))?;
-        Ok(((), session, Some(mailbox)))
+    // `run_uid_delete`, not `with_priority`: a pooled socket the peer closed
+    // while it sat idle fails this before the SELECT lands, and the frontend
+    // restores the row it had already taken out — a delete that reads as a
+    // message coming back from the dead. See the pool's own doc for why a
+    // uid-addressed delete is the one mutation safe to re-send.
+    pool.run_uid_delete(&account, true, |mut session| {
+        let mailbox = mailbox.clone();
+        async move {
+            imap::delete_email(&mut session, &mailbox, uid, permanent).await
+                .map_err(|e| format!("Failed to delete email: {}", e))?;
+            Ok(((), session, Some(mailbox)))
+        }
     }).await.map_err(|e| {
         tracing::error!("[delete_email] uid={} failed: {}", uid, e);
         e

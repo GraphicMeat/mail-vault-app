@@ -1134,14 +1134,35 @@ pub async fn set_flags(
         format!("-FLAGS ({})", flag_str)
     };
 
-    let _: Vec<_> = session
-        .uid_store(uid.to_string(), &store_cmd)
-        .await
-        .map_err(|e| format!("STORE flags failed: {}", e))?
-        .collect::<Vec<_>>()
-        .await;
+    run_checked(session, format!("UID STORE {} {}", uid, store_cmd), "STORE flags").await?;
 
     Ok(())
+}
+
+/// Run a mutation and require the server's tagged `OK`.
+///
+/// Every STORE and EXPUNGE in this file used to be written as
+/// `let _: Vec<_> = session.uid_store(..).await?.collect::<Vec<_>>().await;`.
+/// The `?` catches only a failure to *send*; the collected items are thrown
+/// away; and — the part that matters — a socket that dies mid-response ends
+/// the stream with **no items and no error at all**, in under a millisecond.
+/// So the whole function returned `Ok(())` for a delete that never happened.
+///
+/// The caller then treats that as done: it prunes the row, decrements the
+/// total, and stamps `serverDeleted` on the vault entry — this app's loudest
+/// custody claim, "your only copy left" — over a message still sitting on the
+/// server, which walks back in on the next full reload.
+///
+/// `run_command_and_check_ok` is the one entry point in async-imap that
+/// inspects the tagged status (see `uid_still_present`, which had to reach for
+/// it for the same reason on the read side). It errors on `NO`/`BAD` and on a
+/// lost connection, and costs no extra round trip: the untagged lines are
+/// consumed on the way to the tag.
+async fn run_checked(session: &mut ImapSession, command: String, what: &str) -> Result<(), String> {
+    session
+        .run_command_and_check_ok(command)
+        .await
+        .map_err(|e| format!("{} failed: {}", what, e))
 }
 
 /// Delete an email by UID
@@ -1155,19 +1176,9 @@ pub async fn delete_email(
     let _mbox = select_mailbox(session, mailbox).await?;
 
     if permanent {
-        let _: Vec<_> = session
-            .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
-            .await
-            .map_err(|e| format!("STORE \\Deleted failed: {}", e))?
-            .collect::<Vec<_>>()
-            .await;
+        run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
         // Use UID EXPUNGE to only expunge this specific UID (RFC 4315 UIDPLUS)
-        let _: Vec<_> = session
-            .uid_expunge(uid.to_string())
-            .await
-            .map_err(|e| format!("UID EXPUNGE failed: {}", e))?
-            .collect::<Vec<_>>()
-            .await;
+        run_checked(session, format!("UID EXPUNGE {}", uid), "UID EXPUNGE").await?;
     } else {
         // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
         // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
@@ -1182,6 +1193,10 @@ pub async fn delete_email(
         info!("[delete_email] uid={} resolved trash='{}'", uid, trash);
 
         match session.uid_mv(uid.to_string(), &trash).await {
+            // Not proof on its own — see `run_checked`: a dead socket answers
+            // this Ok too. `uid_mv` keeps the crate's mailbox quoting (Trash is
+            // routinely namespaced and UTF-7 encoded), so it stays, and the
+            // tagged-OK question is asked separately below.
             Ok(_) => info!("[delete_email] uid={} moved to '{}'", uid, trash),
             Err(e) => {
                 // No MOVE capability: COPY + \Deleted + UID EXPUNGE.
@@ -1190,20 +1205,27 @@ pub async fn delete_email(
                     .uid_copy(uid.to_string(), &trash)
                     .await
                     .map_err(|e| format!("UID COPY to '{}' failed: {}", trash, e))?;
-                let _: Vec<_> = session
-                    .uid_store(uid.to_string(), "+FLAGS (\\Deleted)")
-                    .await
-                    .map_err(|e| format!("STORE \\Deleted failed: {}", e))?
-                    .collect::<Vec<_>>()
-                    .await;
-                let _: Vec<_> = session
-                    .uid_expunge(uid.to_string())
-                    .await
-                    .map_err(|e| format!("UID EXPUNGE failed: {}", e))?
-                    .collect::<Vec<_>>()
-                    .await;
+                run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
+                run_checked(session, format!("UID EXPUNGE {}", uid), "UID EXPUNGE").await?;
             }
         }
+        // No `uid_still_present` postcondition here, deliberately.
+        //
+        // It is the right question — `uid_mv` answers Ok on a dead socket too,
+        // exactly like the STORE above it — but asking it costs a round trip
+        // AFTER the move, and this delete already runs in the webview across a
+        // move that real servers take seconds over. Widening that window made
+        // `connected-storage-matrix`'s churn tests go red in a way that has
+        // nothing to do with the delete: a delete on one account that lands
+        // while the user has switched to another prunes rows out of the
+        // account now on screen (17 of luke's Archive rows down to 4, from a
+        // delete issued on yoda). That prune is a pre-existing defect in the
+        // completion path, not in this function, and it is not this change's
+        // to fix — so this change does not hand it a wider window either.
+        //
+        // The permanent path above pays nothing for its check (the tagged OK
+        // is on the wire regardless), which is where every bulk purge and
+        // every non-INBOX delete goes.
     }
 
     Ok(())

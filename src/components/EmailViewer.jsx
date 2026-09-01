@@ -29,6 +29,7 @@ import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { useExportStore } from '../stores/exportStore';
 import { AttachmentItem, DownloadAllButton } from './email/AttachmentBar';
+import { CloseViewerButton } from './email/CloseViewerButton';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -287,6 +288,15 @@ function EmailViewerComponent({ onComposeReply }) {
     setDeleting(true);
     try {
       await deleteEmailFromServer(selectedEmail.uid);
+    } catch (err) {
+      // The workflow removes the row optimistically and puts it back when the
+      // server refuses (deleteEmailFromServer's restoreRow). Unreported, that
+      // reads as "I deleted it and it came back on its own" — which is exactly
+      // what a dead pooled socket produced here. The row menu's delete has
+      // toasted this since it was written (EmailList's RowDeleteConfirmModal);
+      // the reading pane swallowed it.
+      console.error('[EmailViewer] delete failed:', err);
+      useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
     } finally {
       setDeleting(false);
     }
@@ -543,6 +553,7 @@ function EmailViewerComponent({ onComposeReply }) {
           />
           {selectedEmail.subject}
         </h1>
+        <CloseViewerButton />
       </div>
 
       {/* Custody band — the reading pane opens under the claim about where this

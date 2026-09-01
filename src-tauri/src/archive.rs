@@ -494,17 +494,13 @@ async fn delete_single_email(
     mailbox: &str,
     uid: u32,
 ) -> Result<(), String> {
-    let mut guard = pool.get_priority(account).await?;
-
-    match imap::delete_email(&mut guard.session, mailbox, uid, true).await {
-        Ok(()) => {
-            guard.last_selected = Some(mailbox.to_string());
-            pool.return_priority(account, guard).await;
-            Ok(())
-        }
-        Err(e) => {
-            // guard drops — semaphore permit released, session not returned to pool
-            Err(e)
-        }
-    }
+    // Retries once on a fresh connection when the pooled socket turns out to
+    // have died while idle — the same one-line failure that made a single
+    // delete look like a message resurrecting itself, except here it costs one
+    // uid out of a bulk run and is reported as an error count nobody can act
+    // on. See ImapPool::run_uid_delete for why re-sending this is safe.
+    pool.run_uid_delete(account, true, |mut session| async move {
+        imap::delete_email(&mut session, mailbox, uid, true).await?;
+        Ok(((), session, Some(mailbox.to_string())))
+    }).await
 }

@@ -198,6 +198,50 @@ impl ImapPool {
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
+        self.run_retrying(config, priority, f).await
+    }
+
+    /// Run a **UID-addressed delete** on a pooled session, once more on a
+    /// brand-new connection if the first attempt died with the socket.
+    ///
+    /// Same failure as `run_read` — a peer that closed the connection while it
+    /// sat idle in the pool — and the user-visible shape was worse than a
+    /// spinner: the row vanishes optimistically, the dead socket answers
+    /// `connection lost` before the SELECT is even through, the frontend puts
+    /// the row back, and a delete that was never attempted looks like a
+    /// message that resurrected itself. Deleting again worked, because the
+    /// failed session is discarded rather than re-pooled.
+    ///
+    /// `run_read`'s doc rules mutations out of that retry, and rightly: a
+    /// STORE/APPEND/COPY whose reply was lost may already have been applied,
+    /// and sending it twice applies it twice. A delete addressed BY UID is the
+    /// exception the rule already makes elsewhere — `pending_delete`'s replay
+    /// re-issues exactly these commands at the next launch precisely because
+    /// re-deleting a uid the server no longer has is a no-op, not a second
+    /// deletion. Nothing else may use this.
+    pub async fn run_uid_delete<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
+        self.run_retrying(config, priority, f).await
+    }
+
+    async fn run_retrying<F, Fut, T>(
+        &self,
+        config: &ImapConfig,
+        priority: bool,
+        f: F,
+    ) -> Result<T, String>
+    where
+        F: Fn(ImapSession) -> Fut,
+        Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
+    {
         match self.attempt(config, priority, false, &f).await {
             Err(e) if is_connection_lost(&e) => {
                 warn!("[IMAP pool] {} — retrying once on a new connection", e);
