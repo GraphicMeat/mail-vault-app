@@ -4,22 +4,28 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
+import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { t as tr, useT  } from '../i18n/index.js';
 
 /**
- * Flatten a mailbox tree into a flat list, skipping noselect folders.
+ * Every folder you could file into, in the order the server files them, each
+ * carrying the trail of names above it.
+ *
+ * The old version read `mb.children`, which is always empty — so every row came
+ * back at depth 0 and ten folders called "erledigt" were ten identical buttons.
  */
-function flattenMailboxes(mailboxes, depth = 0) {
-  const result = [];
-  for (const mb of mailboxes) {
-    if (!mb.noselect) {
-      result.push({ ...mb, depth });
+function selectableFolders(mailboxes) {
+  const out = [];
+  const walk = (nodes, trail) => {
+    for (const node of nodes) {
+      const here = [...trail, mailboxLabel(node.name)];
+      // An unselectable container is not a target, but its children are.
+      if (!node.noselect) out.push({ ...node, trail: here });
+      walk(node.children, here);
     }
-    if (mb.children?.length > 0) {
-      result.push(...flattenMailboxes(mb.children, depth + 1));
-    }
-  }
-  return result;
+  };
+  walk(buildMailboxTree(mailboxes), []);
+  return out;
 }
 
 export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
@@ -69,15 +75,18 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
   }, [onClose]);
 
   const folders = useMemo(() => {
-    const flat = flattenMailboxes(mailboxes);
     // Filter out the current mailbox
-    const filtered = flat.filter(mb => mb.path !== activeMailbox);
+    const filtered = selectableFolders(mailboxes).filter(mb => mb.path !== activeMailbox);
     if (!filter.trim()) return filtered;
     const q = filter.toLowerCase();
     return filtered.filter(mb => mailboxLabel(mb.name).toLowerCase().includes(q)
       || decodeImapUtf7(mb.path).toLowerCase().includes(q)
       || mb.path.toLowerCase().includes(q));
   }, [mailboxes, activeMailbox, filter]);
+
+  // A search takes the parents away, and indentation with nothing to indent
+  // from says nothing — so the row names its own parent instead.
+  const searching = filter.trim().length > 0;
 
   const handleMove = async (targetPath) => {
     if (moving) return;
@@ -139,14 +148,19 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
           folders.map((folder) => (
             <button
               key={folder.path}
+              data-testid="move-folder-option"
+              data-path={folder.path}
               onClick={() => handleMove(folder.path)}
               disabled={moving}
+              title={folder.trail.join(' \u203a ')}
               className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-mail-text
                         hover:bg-mail-surface-hover transition-colors disabled:opacity-50 text-left"
-              style={{ paddingLeft: `${12 + folder.depth * 16}px` }}
+              style={{ paddingLeft: `${12 + (searching ? 0 : folder.depth * 16)}px` }}
             >
               <FolderSymlink size={14} className="text-mail-text-muted flex-shrink-0" />
-              <span className="truncate">{mailboxLabel(folder.name)}</span>
+              <span className="truncate">
+                {searching ? folder.trail.slice(-2).join(' \u203a ') : mailboxLabel(folder.name)}
+              </span>
             </button>
           ))
         )}
