@@ -41,6 +41,10 @@ const NOOP_SKIP_SECS: u64 = 60;
 /// as dead and connect fresh.
 const NOOP_TIMEOUT: Duration = Duration::from_secs(5);
 
+/// Breather before the single connect retry — long enough to outlive a Wi-Fi
+/// hiccup, short enough that a sync tick still finishes.
+const CONNECT_RETRY_DELAY: Duration = Duration::from_millis(500);
+
 /// Connection key: "email-host:port".
 ///
 /// The port matters: two configs differing only by port are two different
@@ -362,9 +366,15 @@ impl ImapPool {
             }
         }
 
-        // Create new connection (capabilities cached inside create_imap_session)
+        // Create new connection (capabilities cached inside create_imap_session).
+        // One retry: a handshake torn down by a network blip fails the whole
+        // sync cycle otherwise, and every account on the machine hits it at once.
         info!("Creating new IMAP connection for {}", config.email);
-        let session = create_imap_session(config, self).await.map_err(|e| {
+        let session = retry_once_on_transient(CONNECT_RETRY_DELAY, || {
+            create_imap_session(config, self)
+        })
+        .await
+        .map_err(|e| {
             warn!("IMAP connection failed for {}: {}", config.email, e);
             e
         })?;
@@ -407,5 +417,136 @@ impl ImapPool {
 impl Default for ImapPool {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// True when a *fresh connect* failed for a transport reason worth one retry —
+/// TLS handshake torn down mid-negotiation, TCP/DNS blip, socket already dead.
+/// A rejected credential is the server's answer: repeating it only burns
+/// login attempts, so auth failures are never retryable.
+pub fn is_retryable_connect_error(err: &str) -> bool {
+    const NEEDLES: [&str; 5] = [
+        "tls handshake",       // both the direct-TLS and the STARTTLS wrap
+        "tcp connect",
+        "dns resolve failed",
+        "connection closed",   // "closed via error" / "closed gracefully"
+        "user canceled",       // Security.framework's word for a torn-down handshake
+    ];
+    let lowered = err.to_ascii_lowercase();
+    is_connection_lost(err) || NEEDLES.iter().any(|n| lowered.contains(n))
+}
+
+/// Run `attempt`, and on a transient transport failure run it once more after
+/// `delay`. Anything else (auth, a tagged NO) returns its first error.
+pub async fn retry_once_on_transient<T, F, Fut>(
+    delay: Duration,
+    mut attempt: F,
+) -> Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    match attempt().await {
+        Err(e) if is_retryable_connect_error(&e) => {
+            warn!("[IMAP pool] {} — retrying once in {:?}", e, delay);
+            tokio::time::sleep(delay).await;
+            attempt().await
+        }
+        other => other,
+    }
+}
+
+#[cfg(test)]
+mod connect_retry_tests {
+    use super::*;
+    use std::cell::Cell;
+
+    const TLS_CLOSED: &str = "TLS handshake with imap.gmail.com failed: connection closed via error";
+    const TLS_CANCELED: &str = "TLS handshake with imap.purelymail.com failed: user canceled";
+    const AUTH: &str = "Login failed for butcher@graphicmeat.com: NO [AUTHENTICATIONFAILED] Invalid credentials";
+    const OAUTH: &str = "XOAUTH2 auth failed for thecoldzero@gmail.com: NO Invalid credentials (Failure)";
+
+    #[test]
+    fn a_torn_down_tls_handshake_is_retryable() {
+        assert!(is_retryable_connect_error(TLS_CLOSED));
+        assert!(is_retryable_connect_error(TLS_CANCELED));
+    }
+
+    #[test]
+    fn tcp_and_dns_blips_are_retryable() {
+        assert!(is_retryable_connect_error(
+            "TCP connect to imap.zoho.com:993 failed: future timed out"
+        ));
+        assert!(is_retryable_connect_error(
+            "DNS resolve failed for imap.zoho.com:993: nodename nor servname provided"
+        ));
+    }
+
+    #[test]
+    fn a_dead_socket_is_retryable() {
+        assert!(is_retryable_connect_error("SELECT INBOX failed: io: Broken pipe (os error 32)"));
+    }
+
+    #[test]
+    fn a_rejected_credential_is_never_retryable() {
+        assert!(!is_retryable_connect_error(AUTH));
+        assert!(!is_retryable_connect_error(OAUTH));
+        assert!(!is_retryable_connect_error("Password missing"));
+        assert!(!is_retryable_connect_error("OAuth2 access token missing"));
+    }
+
+    #[tokio::test]
+    async fn a_transient_failure_is_tried_once_more() {
+        let calls = Cell::new(0);
+        let out: Result<&str, String> = retry_once_on_transient(Duration::ZERO, || {
+            calls.set(calls.get() + 1);
+            let first = calls.get() == 1;
+            async move {
+                if first { Err(TLS_CLOSED.to_string()) } else { Ok("session") }
+            }
+        })
+        .await;
+
+        assert_eq!(out, Ok("session"));
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[tokio::test]
+    async fn two_transient_failures_return_the_second_error() {
+        let calls = Cell::new(0);
+        let out: Result<&str, String> = retry_once_on_transient(Duration::ZERO, || {
+            calls.set(calls.get() + 1);
+            async move { Err(TLS_CANCELED.to_string()) }
+        })
+        .await;
+
+        assert_eq!(out, Err(TLS_CANCELED.to_string()));
+        assert_eq!(calls.get(), 2);
+    }
+
+    #[tokio::test]
+    async fn a_rejected_credential_is_not_tried_again() {
+        let calls = Cell::new(0);
+        let out: Result<&str, String> = retry_once_on_transient(Duration::ZERO, || {
+            calls.set(calls.get() + 1);
+            async move { Err(AUTH.to_string()) }
+        })
+        .await;
+
+        assert_eq!(out, Err(AUTH.to_string()));
+        assert_eq!(calls.get(), 1);
+    }
+
+    #[tokio::test]
+    async fn a_first_try_that_works_is_not_repeated() {
+        let calls = Cell::new(0);
+        let out: Result<&str, String> = retry_once_on_transient(Duration::ZERO, || {
+            calls.set(calls.get() + 1);
+            async move { Ok("session") }
+        })
+        .await;
+
+        assert_eq!(out, Ok("session"));
+        assert_eq!(calls.get(), 1);
     }
 }

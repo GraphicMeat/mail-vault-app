@@ -78,6 +78,10 @@ pub struct SyncEngine {
     /// `account_id` → UTC day whose cap we already logged, so a capped account
     /// costs one log line a day instead of one per sync tick.
     cap_logged: Mutex<HashMap<String, String>>,
+    /// `account_id\x01requested` → the path this server actually serves.
+    /// Filled the first time a SELECT comes back "no such mailbox", so the
+    /// LIST that resolves it costs one round trip per process, not per tick.
+    mailbox_aliases: Mutex<HashMap<String, String>>,
 }
 
 impl SyncEngine {
@@ -97,6 +101,7 @@ impl SyncEngine {
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
             cap_logged: Mutex::new(HashMap::new()),
+            mailbox_aliases: Mutex::new(HashMap::new()),
         }
     }
 
@@ -274,6 +279,42 @@ impl SyncEngine {
         result
     }
 
+    /// The path this account actually serves for `requested`, as far as we know.
+    async fn alias_for(&self, account_id: &str, requested: &str) -> String {
+        self.mailbox_aliases
+            .lock()
+            .await
+            .get(&format!("{}\x01{}", account_id, requested))
+            .cloned()
+            .unwrap_or_else(|| requested.to_string())
+    }
+
+    /// Ask the server for its folder list and map `requested` onto a real path.
+    /// `None` when nothing matches — the caller keeps the server's own error.
+    async fn resolve_mailbox(
+        &self,
+        session: &mut imap::ImapSession,
+        account_id: &str,
+        requested: &str,
+    ) -> Option<String> {
+        let mailboxes = match imap::list_mailboxes(session).await {
+            Ok(m) => m,
+            Err(e) => {
+                warn!("[sync] LIST failed while resolving '{}': {}", requested, e);
+                return None;
+            }
+        };
+        let actual = imap::resolve_mailbox_path(requested, &mailboxes)?;
+        if actual == requested {
+            return None; // same SELECT, same answer — don't loop
+        }
+        self.mailbox_aliases
+            .lock()
+            .await
+            .insert(format!("{}\x01{}", account_id, requested), actual.clone());
+        Some(actual)
+    }
+
     /// Internal sync implementation.
     async fn do_sync(
         &self,
@@ -297,7 +338,24 @@ impl SyncEngine {
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
         let has_condstore = self.pool.has_capability(config, "CONDSTORE").await;
 
-        let outcome = self.sync_mailbox(&mut session, account, mailbox, has_condstore).await;
+        // Callers name folders generically ("Sent"); providers serve their own
+        // paths ("[Google Mail]/Sent Mail"). Use a name already resolved for
+        // this account, and resolve a fresh one the first time the server says
+        // the folder is not there.
+        let mut mailbox = self.alias_for(account_id, mailbox).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore).await;
+
+        if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
+            if let Some(actual) = self.resolve_mailbox(&mut session, account_id, &mailbox).await {
+                info!(
+                    "[sync] {} has no '{}' — syncing '{}' instead",
+                    account.email, mailbox, actual
+                );
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore).await;
+                mailbox = actual;
+            }
+        }
+        let mailbox = mailbox.as_str();
 
         let guard = PooledSessionGuard {
             session,
@@ -1051,6 +1109,73 @@ mod tests {
 
     fn cache_dir_for(dir: &Path) -> PathBuf {
         tauri_cache_dir(dir, "acc1", "INBOX")
+    }
+
+    // ── Folder-name resolution ──────────────────────────────────────────
+    // Callers name folders generically ("Sent"). Gmail serves
+    // "[Google Mail]/Sent Mail" and answers [NONEXISTENT] for anything else,
+    // which used to fail every Sent sync forever.
+
+    #[tokio::test]
+    async fn a_generic_folder_name_syncs_the_folder_the_server_serves() {
+        let dir = scratch_dir("sent_alias");
+        let mut sent = synthetic_mailbox("[Google Mail]/Sent Mail", 4);
+        sent.attrs.push("\\Sent".to_string());
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(sent),
+        );
+        let engine = engine_for(&dir);
+
+        let result = engine.sync_account(&account_for(&server), "Sent").await;
+
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.mailbox, "[Google Mail]/Sent Mail");
+        assert_eq!(result.new_emails, 4);
+        assert_eq!(
+            count_sidecars(&tauri_cache_dir(&dir, "acc1", "[Google Mail]/Sent Mail")),
+            4
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_folder_the_server_really_has_is_never_rerouted() {
+        let dir = scratch_dir("no_reroute");
+        let mut sent = synthetic_mailbox("[Google Mail]/Sent Mail", 4);
+        sent.attrs.push("\\Sent".to_string());
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(synthetic_mailbox("Sent", 1))
+                .mailbox(sent),
+        );
+        let engine = engine_for(&dir);
+
+        let result = engine.sync_account(&account_for(&server), "Sent").await;
+
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.mailbox, "Sent");
+        assert_eq!(result.new_emails, 1);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_folder_with_no_counterpart_keeps_the_servers_own_error() {
+        let dir = scratch_dir("no_counterpart");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let engine = engine_for(&dir);
+
+        let result = engine.sync_account(&account_for(&server), "Projects").await;
+
+        assert!(!result.success);
+        let err = result.error.unwrap_or_default();
+        assert!(err.contains("NONEXISTENT"), "unexpected error: {}", err);
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     #[tokio::test]

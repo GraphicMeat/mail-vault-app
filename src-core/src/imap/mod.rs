@@ -2448,3 +2448,156 @@ mod tests {
         assert_eq!(config_with(None, Some(true)).effective_security(), ImapSecurity::Ssl);
     }
 }
+
+// ── Mailbox-name resolution ─────────────────────────────────────────────────
+
+/// Map a mailbox name the caller asked for onto the path this server actually
+/// serves. Returns `None` when nothing matches — the caller keeps its own error.
+pub fn resolve_mailbox_path(requested: &str, mailboxes: &[MailboxInfo]) -> Option<String> {
+    let selectable = |m: &&MailboxInfo| !m.noselect;
+
+    // A folder that really carries this name wins: an account can hold both a
+    // hand-made "Sent" and the provider's own \\Sent folder.
+    if let Some(m) = mailboxes
+        .iter()
+        .filter(selectable)
+        .find(|m| m.path.eq_ignore_ascii_case(requested))
+    {
+        return Some(m.path.clone());
+    }
+
+    // Otherwise read the request as a role name ("Sent", "Sent Messages") and
+    // hand back the folder the server flagged for that role. A name with no
+    // role is never guessed at.
+    let role = detect_special_use(&[], requested)?;
+    mailboxes
+        .iter()
+        .filter(selectable)
+        .find(|m| m.special_use.as_deref() == Some(role.as_str()))
+        .map(|m| m.path.clone())
+}
+
+/// True when the server answered "that mailbox is not here" — as opposed to the
+/// socket dying or the command being refused. Only this answer is worth
+/// re-asking with a resolved folder path.
+pub fn is_missing_mailbox(err: &str) -> bool {
+    const NEEDLES: [&str; 5] = [
+        "nonexistent",      // RFC 5530 [NONEXISTENT] response code
+        "unknown mailbox",  // Gmail
+        "no such mailbox",  // Purelymail / Zoho
+        "doesn't exist",    // Dovecot
+        "does not exist",
+    ];
+    let lowered = err.to_ascii_lowercase();
+    NEEDLES.iter().any(|n| lowered.contains(n))
+}
+
+#[cfg(test)]
+mod is_missing_mailbox_tests {
+    use super::*;
+
+    #[test]
+    fn gmails_nonexistent_answer_is_a_missing_mailbox() {
+        assert!(is_missing_mailbox(
+            r#"SELECT CONDSTORE Sent failed: no response: code: None, info: Some("[NONEXISTENT] Unknown Mailbox: Sent (Failure)")"#
+        ));
+    }
+
+    #[test]
+    fn purelymails_wording_is_a_missing_mailbox_too() {
+        assert!(is_missing_mailbox(
+            r#"SELECT CONDSTORE Sent Messages failed: no response: code: None, info: Some("SELECT failed. No such mailbox.")"#
+        ));
+    }
+
+    #[test]
+    fn dovecots_wording_is_a_missing_mailbox_too() {
+        assert!(is_missing_mailbox("SELECT Sent failed: NO Mailbox doesn\'t exist: Sent"));
+    }
+
+    #[test]
+    fn a_dead_socket_is_not_a_missing_mailbox() {
+        assert!(!is_missing_mailbox("SELECT CONDSTORE INBOX failed: io: Broken pipe (os error 32)"));
+    }
+
+    #[test]
+    fn a_failed_handshake_is_not_a_missing_mailbox() {
+        assert!(!is_missing_mailbox(
+            "TLS handshake with imap.gmail.com failed: connection closed via error"
+        ));
+    }
+}
+
+#[cfg(test)]
+mod resolve_mailbox_path_tests {
+    use super::*;
+
+    fn mb(path: &str, special_use: Option<&str>) -> MailboxInfo {
+        MailboxInfo {
+            name: path.rsplit('/').next().unwrap_or(path).to_string(),
+            path: path.to_string(),
+            special_use: special_use.map(str::to_string),
+            flags: Vec::new(),
+            delimiter: Some("/".to_string()),
+            noselect: false,
+            children: Vec::new(),
+        }
+    }
+
+    fn gmail() -> Vec<MailboxInfo> {
+        vec![
+            mb("INBOX", Some("\\Inbox")),
+            mb("[Google Mail]/Sent Mail", Some("\\Sent")),
+            mb("[Google Mail]/Bin", Some("\\Trash")),
+            mb("[Google Mail]/Spam", Some("\\Junk")),
+        ]
+    }
+
+    #[test]
+    fn gmail_sent_resolves_to_the_special_use_folder() {
+        assert_eq!(
+            resolve_mailbox_path("Sent", &gmail()),
+            Some("[Google Mail]/Sent Mail".to_string())
+        );
+    }
+
+    #[test]
+    fn sent_messages_is_the_same_role_as_sent() {
+        assert_eq!(
+            resolve_mailbox_path("Sent Messages", &gmail()),
+            Some("[Google Mail]/Sent Mail".to_string())
+        );
+    }
+
+    #[test]
+    fn an_exact_path_beats_the_special_use_folder() {
+        let mut boxes = gmail();
+        boxes.push(mb("Sent", None));
+        assert_eq!(resolve_mailbox_path("Sent", &boxes), Some("Sent".to_string()));
+    }
+
+    #[test]
+    fn trash_resolves_too_so_this_is_not_sent_only() {
+        assert_eq!(
+            resolve_mailbox_path("Trash", &gmail()),
+            Some("[Google Mail]/Bin".to_string())
+        );
+    }
+
+    #[test]
+    fn a_name_with_no_role_is_never_guessed() {
+        assert_eq!(resolve_mailbox_path("Projects", &gmail()), None);
+    }
+
+    #[test]
+    fn no_folder_for_the_role_stays_unresolved() {
+        assert_eq!(resolve_mailbox_path("Sent", &[mb("INBOX", Some("\\Inbox"))]), None);
+    }
+
+    #[test]
+    fn an_unselectable_folder_is_never_returned() {
+        let mut container = mb("[Google Mail]/Sent Mail", Some("\\Sent"));
+        container.noselect = true;
+        assert_eq!(resolve_mailbox_path("Sent", &[mb("INBOX", Some("\\Inbox")), container]), None);
+    }
+}
