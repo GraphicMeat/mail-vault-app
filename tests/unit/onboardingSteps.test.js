@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { onboardingSteps } from '../../src/components/onboarding/steps.js';
 
 describe('onboarding step list', () => {
-  it('walks a first run through all six steps', () => {
+  it('walks a first run through all seven steps', () => {
     expect(onboardingSteps(0)).toEqual(
-      ['splash', 'account', 'appearance', 'free', 'premium', 'cta'],
+      ['splash', 'account', 'appearance', 'defaultMail', 'free', 'premium', 'cta'],
     );
   });
 
@@ -12,7 +12,7 @@ describe('onboarding step list', () => {
   // credentials again would be nonsense.
   it('skips credentials on a replay', () => {
     expect(onboardingSteps(2)).toEqual(
-      ['splash', 'appearance', 'free', 'premium', 'cta'],
+      ['splash', 'appearance', 'defaultMail', 'free', 'premium', 'cta'],
     );
   });
 

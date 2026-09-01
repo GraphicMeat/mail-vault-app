@@ -6,6 +6,7 @@ import { onboardingSteps } from './onboarding/steps.js';
 import { Splash } from './onboarding/Splash';
 import { AccountStep } from './onboarding/AccountStep';
 import { AppearanceStep } from './onboarding/AppearanceStep';
+import { DefaultMailStep } from './onboarding/DefaultMailStep';
 import { FreeFeatures } from './onboarding/FreeFeatures';
 import { PremiumGallery } from './onboarding/PremiumGallery';
 import { UpgradeCta } from './onboarding/UpgradeCta';
@@ -52,6 +53,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
       {step === 'splash' && <Splash onContinue={next} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
+      {step === 'defaultMail' && <DefaultMailStep onContinue={next} />}
       {step === 'free' && <FreeFeatures onContinue={next} />}
       {step === 'premium' && (
         <div className="max-w-3xl w-full">

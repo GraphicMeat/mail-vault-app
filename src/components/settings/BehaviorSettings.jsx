@@ -2,6 +2,7 @@ import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
+import { DefaultMailApp } from './DefaultMailApp';
 import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
@@ -33,6 +34,8 @@ export function BehaviorSettings() {
 
   return (
     <>
+      <DefaultMailApp />
+
       {/* Email Sync (Behavior) */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">

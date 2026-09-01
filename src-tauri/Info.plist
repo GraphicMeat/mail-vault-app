@@ -12,5 +12,24 @@
     <true/>
     <key>SUScheduledCheckInterval</key>
     <integer>86400</integer>
+    <!-- Mail links elsewhere on the system open MailVault.
+         Hand-written on purpose: tauri-plugin-deep-link writes CFBundleURLTypes
+         only in its mobile/iOS branch (its build.rs calls
+         tauri_plugin::mobile::update_info_plist off `config.mobile`), so on
+         desktop macOS the `plugins.deep-link.desktop.schemes` entry in
+         tauri.conf.json registers nothing here. Registering the scheme is also
+         all we can do: the App Sandbox forbids claiming the default, and this
+         build is sandboxed. -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>mailto</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>mailto</string>
+            </array>
+        </dict>
+    </array>
 </dict>
 </plist>

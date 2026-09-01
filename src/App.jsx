@@ -50,7 +50,7 @@ import { filterUnread } from './utils/emailParser';
 import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
-import { setMailtoComposeOpener } from './utils/mailto';
+import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
@@ -514,6 +514,26 @@ function App() {
         })
         .catch(e => console.warn('[App] Could not check DMG status:', e));
     }
+  }, []);
+
+  // `mailto:` handed over by the OS — a link clicked in a browser, a PDF, a chat
+  // app. The bridge drains a queue in Rust rather than reading an event payload:
+  // when the click *launches* MailVault the URL is queued before this webview
+  // exists, so a listener alone would drop the first mailto of every cold start.
+  useEffect(() => {
+    let stop = null;
+    let active = true;
+    Promise.all([
+      import('@tauri-apps/api/core'),
+      import('@tauri-apps/api/event'),
+    ]).then(([{ invoke }, { listen }]) => {
+      const bridge = startMailtoBridge({ invoke, listen });
+      // Unmounted while the imports were in flight — same guard the listeners
+      // below use, or the bridge outlives the component that owns it.
+      if (!active) bridge.stop();
+      else stop = bridge.stop;
+    }).catch(() => {}); // not in Tauri
+    return () => { active = false; if (stop) stop(); };
   }, []);
 
   // Listen for server crash events from the Rust backend

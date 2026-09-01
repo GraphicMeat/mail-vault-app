@@ -116,6 +116,12 @@ describe('onboarding', function () {
 
     await $('[data-testid="onboarding-continue"]').click();
 
+    // "Default email app" sits between appearance and the free features. The
+    // row renders only once the backend has answered what the OS says, so wait
+    // for its state rather than for the step container.
+    await $('[data-testid="default-mail-state"]').waitForExist({ timeout: 5000 });
+    await $('[data-testid="onboarding-continue"]').click();
+
     await $('[data-testid="free-feature-vault"]').waitForExist({ timeout: 5000 });
     // The claims that need explaining are icons, so each card carries the real
     // glyphs: the vault legend is LEGEND_ENTRIES, the same array the mail
@@ -135,12 +141,17 @@ describe('onboarding', function () {
 
     await $('[data-testid="premium-tile-tracker-blocking"]').click();
     // Asset shipped AND cleared the CSP — a missing <img> makes this false, so
-    // it cannot pass by absence.
-    const painted = await browser.execute(() => {
-      const img = document.querySelector('[data-testid="premium-shot"]');
-      return !!img && img.complete && img.naturalWidth > 0;
-    });
-    expect(painted).toBe(true);
+    // it cannot pass by absence. Waited for rather than read once: decoding is
+    // not synchronous with the click, so reading immediately makes this assert
+    // whatever the cache happened to have ready. A missing or blocked image
+    // still fails, by timeout.
+    await browser.waitUntil(
+      async () => browser.execute(() => {
+        const img = document.querySelector('[data-testid="premium-shot"]');
+        return !!img && img.complete && img.naturalWidth > 0;
+      }),
+      { timeout: 5000, interval: 100, timeoutMsg: 'the premium screenshot never painted' },
+    );
 
     await $('[data-testid="onboarding-continue"]').click();
 
@@ -161,6 +172,8 @@ describe('onboarding', function () {
       await $('[data-testid="onboarding-language-de"]').click();
       await $('[data-testid="onboarding-continue"]').click();
       await $('[data-testid="appearance-preview"]').waitForExist({ timeout: 5000 });
+      await $('[data-testid="onboarding-continue"]').click();
+      await $('[data-testid="default-mail-state"]').waitForExist({ timeout: 5000 });
       await $('[data-testid="onboarding-continue"]').click();
       await $('[data-testid="free-feature-vault"]').waitForExist({ timeout: 5000 });
       await $('[data-testid="onboarding-continue"]').click();

@@ -84,6 +84,7 @@ mod github;
 // graph/imap/oauth2 now live in mailvault_core (shared with src-daemon).
 pub use mailvault_core::graph;
 mod iap;
+mod mailto;
 pub use mailvault_core::imap;
 mod migration;
 mod move_emails;
@@ -178,6 +179,41 @@ fn log_from_frontend(message: String) {
 }
 
 // ── Client identity (persistent per-install UUID for device registration) ────
+
+/// Stands in for the OS handing over a `mailto:` URL.
+///
+/// The e2e harness disables `tauri-plugin-single-instance` (see the automation
+/// carve-out below), and that plugin is exactly what forwards a real deep link
+/// to the running app — so no test can produce a genuine handover. This injects
+/// one at the same seam the real one uses (queue, then wake-up) and is inert
+/// outside the `webdriver` build.
+#[tauri::command]
+fn e2e_queue_mailto(app: tauri::AppHandle, url: String) {
+    #[cfg(feature = "webdriver")]
+    {
+        app.state::<mailto::PendingMailto>().push(url);
+        let _ = app.emit("mailto-open", ());
+    }
+    #[cfg(not(feature = "webdriver"))]
+    {
+        let _ = (app, url);
+    }
+}
+
+#[tauri::command]
+fn take_pending_mailto(state: tauri::State<mailto::PendingMailto>) -> Vec<String> {
+    state.take()
+}
+
+#[tauri::command]
+fn mailto_default_status() -> mailto::MailtoStatus {
+    mailto::status()
+}
+
+#[tauri::command]
+fn mailto_make_default() -> mailto::MailtoStatus {
+    mailto::make_default()
+}
 
 #[tauri::command]
 fn get_client_info(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
@@ -4928,6 +4964,7 @@ fn main() {
         }))
     };
     let builder = builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
@@ -4955,7 +4992,8 @@ fn main() {
         .manage(oauth2::OAuth2Manager::new())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
-        .manage(vault::VaultState::default());
+        .manage(vault::VaultState::default())
+        .manage(mailto::PendingMailto::default());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -4963,6 +5001,10 @@ fn main() {
     let app = builder
         .invoke_handler(tauri::generate_handler![
             apply_menu_labels,
+            take_pending_mailto,
+            e2e_queue_mailto,
+            mailto_default_status,
+            mailto_make_default,
             spellcheck::spellcheck_status,
             log_from_frontend,
             install_pending_update,
@@ -5107,6 +5149,38 @@ fn main() {
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset
         ])
         .setup(|app| {
+            // `mailto:` from the OS. The queue is the source of truth and the
+            // event is only a wake-up: when the click *launches* the app the URL
+            // lands here before the webview exists, so a listener alone would
+            // drop the first mailto of every cold start.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    let queue = handle.state::<mailto::PendingMailto>();
+                    for url in event.urls() {
+                        queue.push(url.to_string());
+                    }
+                    if let Some(window) = handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.unminimize();
+                        let _ = window.set_focus();
+                    }
+                    let _ = handle.emit("mailto-open", ());
+                });
+                // The URL this process was launched with, if any.
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    let queue = app.state::<mailto::PendingMailto>();
+                    for url in urls {
+                        queue.push(url.to_string());
+                    }
+                }
+                // Linux and Windows register at runtime; macOS is static, from
+                // `CFBundleURLTypes` in the bundle.
+                #[cfg(any(target_os = "linux", target_os = "windows"))]
+                let _ = app.deep_link().register_all();
+            }
+
             // WebKitGTK's checker is off until it is switched on, and it needs a
             // dictionary on disk to say anything. Everywhere else the OS checks
             // spelling; this is a no-op there.

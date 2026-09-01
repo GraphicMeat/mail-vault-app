@@ -111,3 +111,40 @@ export function addressesToHtml(text) {
       : _escapeHtml(seg.text))
     .join('');
 }
+
+// ── mailto: handed over by the OS ───────────────────────────────────────────
+
+/**
+ * Bridges `mailto:` URLs the OS hands to the app into compose.
+ *
+ * The queue in Rust is the source of truth, not the event payload: when the
+ * click *launches* the app the URL is queued before this webview exists, so a
+ * listener alone would drop the first mailto of every cold start. The event is
+ * only a wake-up — every path drains the same queue.
+ *
+ * Returns `stop` synchronously so a React cleanup can detach without awaiting,
+ * and `ready` for tests and anyone who needs the first drain to have landed.
+ */
+export function startMailtoBridge({ invoke, listen }) {
+  let active = true;
+  let unlisten = null;
+
+  const drain = async () => {
+    const urls = await invoke('take_pending_mailto');
+    for (const url of urls || []) openMailtoCompose(url);
+  };
+
+  const ready = listen('mailto-open', drain)
+    .then(fn => {
+      // Stopped while `listen` was still in flight: detach immediately rather
+      // than leaving a handler nobody holds a reference to.
+      if (!active) fn();
+      else unlisten = fn;
+    })
+    .then(() => (active ? drain() : undefined));
+
+  return {
+    ready,
+    stop: () => { active = false; if (unlisten) unlisten(); },
+  };
+}

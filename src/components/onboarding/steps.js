@@ -9,6 +9,7 @@ export function onboardingSteps(accountCount) {
     'splash',
     ...(accountCount > 0 ? [] : ['account']),
     'appearance',
+    'defaultMail',
     'free',
     'premium',
     'cta',

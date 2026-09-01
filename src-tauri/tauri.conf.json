@@ -37,7 +37,9 @@
     "active": true,
     "category": "Productivity",
     "copyright": "© 2026 MailVault",
-    "externalBin": ["binaries/mailvault-daemon"],
+    "externalBin": [
+      "binaries/mailvault-daemon"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -48,13 +50,17 @@
     "longDescription": "A modern, reactive email client that supports local email storage. Save your emails locally forever, even after they're deleted from the server.",
     "linux": {
       "deb": {
-        "recommends": ["hunspell-en-us"]
+        "recommends": [
+          "hunspell-en-us"
+        ]
       }
     },
     "macOS": {
       "entitlements": "entitlements.plist",
       "exceptionDomain": "",
-      "frameworks": ["Sparkle.framework"],
+      "frameworks": [
+        "Sparkle.framework"
+      ],
       "providerShortName": null,
       "signingIdentity": null,
       "minimumSystemVersion": "11.0",
@@ -64,7 +70,12 @@
     "resources": [],
     "shortDescription": "Reactive Email Client with Local Storage",
     "createUpdaterArtifacts": true,
-    "targets": ["app", "dmg", "appimage", "deb"],
+    "targets": [
+      "app",
+      "dmg",
+      "appimage",
+      "deb"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
@@ -77,6 +88,13 @@
       "endpoints": [
         "https://github.com/GraphicMeat/mail-vault-app/releases/latest/download/latest.json"
       ]
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "mailto"
+        ]
+      }
     }
   }
 }
