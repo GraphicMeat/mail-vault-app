@@ -51,6 +51,10 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
     activeMailbox: rootPath,
     mailboxScope: { root: rootPath, paths },
     emails: [],
+    // The folder before left its vault rows here, and deriveDisplayRows pushes
+    // them into the list. A branch load is server-backed, so they would appear
+    // under a heading that has nothing to do with them.
+    localEmails: [],
     selectedEmailIds: new Set(),
     selectedEmailId: null,
     selectedEmail: null,
@@ -101,6 +105,9 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
     // Publish as we go: a 23-folder branch is long enough that a list which
     // fills only at the end reads as a folder that found nothing.
     set({ emails: newestFirst(merged), subtreeProgress: { done: i + 1, total: paths.length } });
+    // sortedEmails is recomputed by an explicit call, not derived: writing
+    // `emails` and stopping leaves the list painting the folder before.
+    get().updateSortedEmails();
   }
 
   if (isStale()) return;

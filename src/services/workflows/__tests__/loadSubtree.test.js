@@ -87,6 +87,7 @@ beforeEach(() => {
     savedEmailIds: new Set(),
     totalEmails: 0,
     loading: false,
+    updateSortedEmails: vi.fn(),
   };
 });
 
@@ -201,6 +202,24 @@ describe('loadSubtree', () => {
     await run;
 
     expect(state.emails).toEqual([]);
+  });
+
+  it('repaints the list after each folder, not only the store', async () => {
+    // sortedEmails is recomputed by an explicit call, not derived — so a load
+    // that writes `emails` and stops leaves the list showing the folder before.
+    emailsByMailbox = { 'Kunden': [msg(1, 1)], 'Kunden/Company XY': [msg(2, 2)] };
+
+    await loadSubtree(ACCOUNT.id, 'Kunden');
+
+    expect(state.updateSortedEmails.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('drops the previous folder vault rows instead of showing them under the branch', async () => {
+    state.localEmails = [{ uid: 500, _mailbox: 'INBOX', subject: 'from the folder before' }];
+
+    await loadSubtree(ACCOUNT.id, 'Kunden');
+
+    expect(state.localEmails).toEqual([]);
   });
 
   it('clears the scope when an ordinary folder is opened again', async () => {

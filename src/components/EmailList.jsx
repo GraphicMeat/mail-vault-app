@@ -869,7 +869,7 @@ function EmailListComponent() {
             </div>
           ) : (
             <div className="flex flex-col">
-              <h2 className="text-lg font-semibold text-mail-text">
+              <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text">
                 {activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
                 {/* A branch total read as one folder's is the same lie the
                     INBOX-only "all folders" search used to tell. */}
