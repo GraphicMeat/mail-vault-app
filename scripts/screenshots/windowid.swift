@@ -32,6 +32,7 @@ let onScreen = Set(windows(.optionOnScreenOnly).compactMap { $0[kCGWindowNumber 
 
 struct Candidate {
     let id: Int
+    let pid: Int
     let onScreen: Bool
     let width: Double
     let height: Double
@@ -39,21 +40,30 @@ struct Candidate {
 }
 
 let owner = arg == "--info" ? "mailvault" : arg
+
+// A MailVault the user already has open matches the owner name just as well as
+// the one this run launched, and the rule below takes the LARGEST match — which
+// is theirs, with their real mail in it. MAILVAULT_WINDOW_PID pins the capture
+// to one process; without it the old name-only behaviour stands.
+let pidFilter = ProcessInfo.processInfo.environment["MAILVAULT_WINDOW_PID"].flatMap { Int($0) }
+
 let candidates: [Candidate] = all.compactMap { w in
     guard let name = w[kCGWindowOwnerName as String] as? String,
           name.lowercased() == owner.lowercased(),
+          pidFilter == nil || (w[kCGWindowOwnerPID as String] as? Int) == pidFilter,
           let id = w[kCGWindowNumber as String] as? Int,
           let bounds = w[kCGWindowBounds as String] as? [String: Any],
           let width = bounds["Width"] as? Double,
           let height = bounds["Height"] as? Double
     else { return nil }
-    return Candidate(id: id, onScreen: onScreen.contains(id), width: width, height: height,
+    return Candidate(id: id, pid: w[kCGWindowOwnerPID as String] as? Int ?? -1,
+                     onScreen: onScreen.contains(id), width: width, height: height,
                      layer: w[kCGWindowLayer as String] as? Int ?? -1)
 }
 
 if arg == "--info" {
     for c in candidates {
-        print("id=\(c.id) onscreen=\(c.onScreen) layer=\(c.layer) size=\(Int(c.width))x\(Int(c.height))")
+        print("id=\(c.id) pid=\(c.pid) onscreen=\(c.onScreen) layer=\(c.layer) size=\(Int(c.width))x\(Int(c.height))")
     }
     exit(0)
 }

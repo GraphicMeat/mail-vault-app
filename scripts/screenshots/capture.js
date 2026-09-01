@@ -8,7 +8,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, existsSync } from 'node:fs';
+import { mkdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 
 const HERE = import.meta.dirname;
@@ -25,12 +25,32 @@ const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
 export const OUT_DIR = process.env.SHOTS_OUT
   || resolve(HERE, '../../website/screenshots', LOCALE_DIR === 'en' ? '' : LOCALE_DIR);
 
-/** Compile the window-id helper once per run. */
+/** Compile the window-id helper, and again whenever its source moves ahead of
+ *  it — a cached binary from before an edit is a wrong window nobody sees. */
 function windowIdBinary() {
-  if (!existsSync(SWIFT_BIN)) {
+  if (!existsSync(SWIFT_BIN) || statSync(SWIFT_SRC).mtimeMs > statSync(SWIFT_BIN).mtimeMs) {
     execFileSync('swiftc', ['-O', SWIFT_SRC, '-o', SWIFT_BIN], { stdio: 'inherit' });
   }
   return SWIFT_BIN;
+}
+
+/**
+ * The pid of the app this run launched, or null.
+ *
+ * A MailVault the user already has open answers to the same owner name, and
+ * windowid takes the largest match — so on a machine with the real app running,
+ * the run photographs someone's actual mailbox and says nothing about it. The
+ * conf publishes the binary path it launched; the window is pinned to whatever
+ * process is running exactly that.
+ */
+function appPid() {
+  const binary = process.env.SHOTS_APP_BINARY;
+  if (!binary) return null;
+  try {
+    return execFileSync('pgrep', ['-f', binary], { encoding: 'utf-8' }).trim().split('\n')[0] || null;
+  } catch {
+    return null; // not up yet — windowId retries, and fails loudly if it never is
+  }
 }
 
 /**
@@ -42,7 +62,11 @@ export function windowId(appName = 'MailVault', attempts = 4) {
   let lastError;
   for (let i = 0; i < attempts; i++) {
     try {
-      return execFileSync(windowIdBinary(), [appName], { encoding: 'utf-8' }).trim();
+      const pid = appPid();
+      return execFileSync(windowIdBinary(), [appName], {
+        encoding: 'utf-8',
+        env: pid ? { ...process.env, MAILVAULT_WINDOW_PID: pid } : process.env,
+      }).trim();
     } catch (e) {
       lastError = e;
       execFileSync('sleep', ['0.5']);

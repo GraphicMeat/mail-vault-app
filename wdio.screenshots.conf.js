@@ -168,6 +168,10 @@ export const config = {
     const credentialsPath = seedAccounts(dataDir, accounts);
     seedFrontendSettings(accounts);
 
+    // capture.js pins the screenshot to the window owned by this exact binary —
+    // see appPid() there. Without it a MailVault the user already has open is a
+    // larger, equally valid match.
+    process.env.SHOTS_APP_BINARY = appBinary;
     process.env.SHOTS_ACCOUNTS = JSON.stringify(accounts);
     process.env.SHOTS_DATA_DIR = dataDir;
     mockServers.forEach((s, i) => console.log(`[shots] mock IMAP ${DEMO_ACCOUNTS[i].email}: ${s.port}`));
