@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Unterordner einblenden",
   "sidebar.collapseFolder": "Unterordner ausblenden",
   "search.includeSubfolders": "Unterordner einbeziehen",
-  "search.inFolderAndSubfolders": " in {{folder}} und dessen Unterordnern"
+  "search.inFolderAndSubfolders": " in {{folder}} und dessen Unterordnern",
+  "list.acrossFolders_one": "in {{count}} Ordner",
+  "list.acrossFolders_other": "in {{count}} Ordnern"
 }

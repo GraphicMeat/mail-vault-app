@@ -7,6 +7,7 @@ import {
   init as _init,
   setActiveAccount as _setActiveAccount,
 } from '../../services/workflows/activateAccount';
+import { loadSubtree as _loadSubtree } from '../../services/workflows/loadSubtree';
 import { _prefetchAllMailboxes, _prewarmAccountCaches } from '../../services/workflows/prefetch';
 import { addAccount as _addAccount } from '../../services/workflows/addAccount';
 import { updateAccount as _updateAccount } from '../../services/workflows/updateAccount';
@@ -104,6 +105,8 @@ export const createAccountSlice = (set, get) => ({
   // it as a mailbox has to learn a second magic value the way 'UNIFIED' made
   // twenty call sites do.
   mailboxScope: null,
+  // { done, total } while a branch is still fanning out, else null.
+  subtreeProgress: null,
 
   // Connection status: 'connected' | 'disconnected' | 'error'
   connectionStatus: 'disconnected',
@@ -128,6 +131,7 @@ export const createAccountSlice = (set, get) => ({
   removeAccount: (accountId) => _removeAccount(accountId),
   setActiveAccount: (accountId) => _setActiveAccount(accountId),
   activateAccount: (accountId, mailbox, opts) => _activateAccount(accountId, mailbox, opts),
+  loadSubtree: (accountId, rootPath, opts) => _loadSubtree(accountId, rootPath, opts),
   setUnifiedInbox: (enabled) => _setUnifiedInbox(enabled),
   switchUnifiedFolder: (mailbox) => _switchUnifiedFolder(mailbox),
   loadUnifiedInbox: (preUnifiedSnapshot, mailbox) => _loadUnifiedInbox(preUnifiedSnapshot, mailbox),

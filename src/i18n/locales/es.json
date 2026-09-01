@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Mostrar subcarpetas",
   "sidebar.collapseFolder": "Ocultar subcarpetas",
   "search.includeSubfolders": "Incluir subcarpetas",
-  "search.inFolderAndSubfolders": " en {{folder}} y sus subcarpetas"
+  "search.inFolderAndSubfolders": " en {{folder}} y sus subcarpetas",
+  "list.acrossFolders_one": "en {{count}} carpeta",
+  "list.acrossFolders_other": "en {{count}} carpetas"
 }

@@ -91,7 +91,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
     console.warn(`[loadMailboxes] Mailbox "${effectiveMailbox}" not found in cache, falling back to INBOX`);
     effectiveMailbox = 'INBOX';
     if (!isBackgroundRefresh) {
-      useMailStoreRef.setState({ activeMailbox: 'INBOX' });
+      useMailStoreRef.setState({ activeMailbox: 'INBOX', mailboxScope: null });
       useSettingsStore.getState().setLastMailbox(accountId, 'INBOX');
     }
   }
@@ -471,6 +471,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       activeAccountId: accountId,
       activeMailbox: restored.mailbox || mailbox,
       unifiedInbox: false,
+      mailboxScope: null,
       emails: painted,
       totalEmails: restored.totalEmails,
       // All three were previously left at the OUTGOING account's values, so
@@ -534,6 +535,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       activeAccountId: accountId,
       activeMailbox: mailbox,
       unifiedInbox: false,
+      mailboxScope: null,
       // Clear stale data from previous account/mailbox — prevents cross-account bleed
       emails: [],
       localEmails: [],

@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Show subfolders",
   "sidebar.collapseFolder": "Hide subfolders",
   "search.includeSubfolders": "Include subfolders",
-  "search.inFolderAndSubfolders": " in {{folder}} and its subfolders"
+  "search.inFolderAndSubfolders": " in {{folder}} and its subfolders",
+  "list.acrossFolders_one": "across {{count}} folder",
+  "list.acrossFolders_other": "across {{count}} folders"
 }

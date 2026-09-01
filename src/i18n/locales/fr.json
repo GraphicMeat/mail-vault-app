@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Afficher les sous-dossiers",
   "sidebar.collapseFolder": "Masquer les sous-dossiers",
   "search.includeSubfolders": "Inclure les sous-dossiers",
-  "search.inFolderAndSubfolders": " dans {{folder}} et ses sous-dossiers"
+  "search.inFolderAndSubfolders": " dans {{folder}} et ses sous-dossiers",
+  "list.acrossFolders_one": "dans {{count}} dossier",
+  "list.acrossFolders_other": "dans {{count}} dossiers"
 }

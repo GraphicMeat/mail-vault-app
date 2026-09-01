@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "하위 폴더 표시",
   "sidebar.collapseFolder": "하위 폴더 숨기기",
   "search.includeSubfolders": "하위 폴더 포함",
-  "search.inFolderAndSubfolders": " {{folder}} 및 하위 폴더에서"
+  "search.inFolderAndSubfolders": " {{folder}} 및 하위 폴더에서",
+  "list.acrossFolders_other": "폴더 {{count}}개",
+  "list.acrossFolders_one": "폴더 {{count}}개"
 }

@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Mostrar subpastas",
   "sidebar.collapseFolder": "Ocultar subpastas",
   "search.includeSubfolders": "Incluir subpastas",
-  "search.inFolderAndSubfolders": " em {{folder}} e suas subpastas"
+  "search.inFolderAndSubfolders": " em {{folder}} e suas subpastas",
+  "list.acrossFolders_one": "em {{count}} pasta",
+  "list.acrossFolders_other": "em {{count}} pastas"
 }

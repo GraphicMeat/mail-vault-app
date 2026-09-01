@@ -871,6 +871,13 @@ function EmailListComponent() {
             <div className="flex flex-col">
               <h2 className="text-lg font-semibold text-mail-text">
                 {activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
+                {/* A branch total read as one folder's is the same lie the
+                    INBOX-only "all folders" search used to tell. */}
+                {mailboxScope && (
+                  <span className="ml-2 text-xs font-normal text-mail-text-muted">
+                    {t('list.acrossFolders', { count: mailboxScope.paths.length })}
+                  </span>
+                )}
               </h2>
               <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
                 {/* ponytail: the header used to always show the server total, so a

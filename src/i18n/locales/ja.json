@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "サブフォルダを表示",
   "sidebar.collapseFolder": "サブフォルダを非表示",
   "search.includeSubfolders": "サブフォルダを含める",
-  "search.inFolderAndSubfolders": "「{{folder}}」とそのサブフォルダ内"
+  "search.inFolderAndSubfolders": "「{{folder}}」とそのサブフォルダ内",
+  "list.acrossFolders_other": "{{count}} 個のフォルダ",
+  "list.acrossFolders_one": "{{count}} 個のフォルダ"
 }

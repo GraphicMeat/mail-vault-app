@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "Mostra sottocartelle",
   "sidebar.collapseFolder": "Nascondi sottocartelle",
   "search.includeSubfolders": "Includi sottocartelle",
-  "search.inFolderAndSubfolders": " in {{folder}} e nelle sue sottocartelle"
+  "search.inFolderAndSubfolders": " in {{folder}} e nelle sue sottocartelle",
+  "list.acrossFolders_one": "in {{count}} cartella",
+  "list.acrossFolders_other": "in {{count}} cartelle"
 }

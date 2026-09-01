@@ -18,7 +18,7 @@ import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { FolderTree, getMailboxIcon } from './FolderTree';
-import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
+import { buildMailboxTree, mailboxAncestors, mailboxDescendants } from '../services/workflows/mailboxTree';
 import {
   Inbox,
   Send,
@@ -584,6 +584,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
+  const loadSubtree = useAccountStore(s => s.loadSubtree);
 
   // Single click resumes the folder you last read in that account; double click
   // is the shortcut straight to its Inbox. Bound on the row WRAPPER so all
@@ -743,7 +744,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     setStoredExpanded(activeAccountId, next);
   };
 
-  const selectFolder = (path) => activateAccount(activeAccountId, path);
+  // A folder with folders under it lists the whole branch; a leaf is an
+  // ordinary folder and takes the ordinary path.
+  const selectFolder = (path) => {
+    const branch = mailboxDescendants(path, mailboxes)
+      .filter(p => !mailboxes.find(m => m.path === p)?.noselect);
+    if (branch.length > 1) loadSubtree(activeAccountId, path);
+    else activateAccount(activeAccountId, path);
+  };
 
   // Bubbles are a flat wrap by design, so the row itself has to carry the
   // hierarchy: ten folders called "erledigt" are otherwise one bubble ten times.

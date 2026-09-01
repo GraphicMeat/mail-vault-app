@@ -1871,5 +1871,7 @@
   "sidebar.expandFolder": "显示子文件夹",
   "sidebar.collapseFolder": "隐藏子文件夹",
   "search.includeSubfolders": "包含子文件夹",
-  "search.inFolderAndSubfolders": "在“{{folder}}”及其子文件夹中"
+  "search.inFolderAndSubfolders": "在“{{folder}}”及其子文件夹中",
+  "list.acrossFolders_other": "{{count}} 个文件夹",
+  "list.acrossFolders_one": "{{count}} 个文件夹"
 }
