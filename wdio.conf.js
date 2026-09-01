@@ -78,6 +78,21 @@ const MOCK_ACCOUNTS = [
     // render — which is what makes 9301's failure a property of the message and
     // not of the folder.
     extraMailbox: { name: 'Flaky', count: 2, subjectPrefix: 'Flaky message', uidStart: 9301 },
+    // bson73's shape (discussion #1): five levels, and the leaf at the bottom
+    // of two different branches has the same name. Parked on luke because it is
+    // the only account no skipFolders spec counts folders through.
+    //
+    // "Project B" and its "Invoices" are deliberately NOT listed: a server may
+    // LIST a leaf whose parents are not themselves mailboxes, and the tree has
+    // to draw them anyway or the subtree is unreachable.
+    nestedMailboxes: [
+      'Kunden',
+      'Kunden/Company XY',
+      'Kunden/Company XY/Project A',
+      'Kunden/Company XY/Project A/Invoices',
+      'Kunden/Company XY/Project A/Invoices/erledigt',
+      'Kunden/Company XY/Project B/Invoices/erledigt',
+    ],
     faults: bodyFetchDropsAlways(9301),
   },
   {
@@ -258,6 +273,7 @@ export const config = {
         archiveCount: a.archiveCount,
         archiveSubjectPrefix: a.archiveSubjectPrefix,
         extraMailbox: a.extraMailbox,
+        nestedMailboxes: a.nestedMailboxes,
       }))),
     );
     seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({ ...a, port: mockServers[i].port }));

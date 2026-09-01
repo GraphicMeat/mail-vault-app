@@ -451,7 +451,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null } = {}) {
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null, nestedMailboxes = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
 
@@ -589,6 +589,21 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     mailboxes.push(mailbox(extraMailbox.name, extraMailbox.count, {
       owner, attrs: ['\\HasNoChildren'], subjectPrefix: extraMailbox.subjectPrefix,
       uidStart: extraMailbox.uidStart || 1,
+    }));
+  }
+
+  // After extraMailbox on purpose. The LAST-in-the-array rule above is
+  // load-bearing only for the accounts a skipFolders spec counts through
+  // (yoda, vader); appending here would shift their indices. So only an
+  // account with no skipFolders spec may carry these — luke.
+  //
+  // Names hold the hierarchy delimiter, which is all a nested folder is over
+  // the wire: the server LISTs one flat set and the delimiter says where the
+  // levels fall.
+  for (const name of nestedMailboxes || []) {
+    mailboxes.push(mailbox(name, 1, {
+      owner, attrs: ['\\HasNoChildren'], subjectPrefix: `Nested ${name}`,
+      uidStart: 9401 + (nestedMailboxes.indexOf(name) * 10),
     }));
   }
 
