@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { _selKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
-import { describeServerDelete, describeDeleteEverywhere } from '../utils/custodyCopy';
+import { describeServerDelete, describePurge } from '../utils/custodyCopy';
+import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
 import { useExportStore } from '../stores/exportStore';
@@ -40,6 +41,18 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   const hasUnarchived = emails.some(e => !e.isArchived);
   const hasArchived = emails.some(e => e.isArchived);
   const hasServerBacked = emails.some(e => e.source !== 'local-only');
+
+  // Where this row's messages actually are, ORed over the whole set — the
+  // purge clears every place any of them is, so the copy has to name every
+  // place any of them is. The vault axis is `isArchived` (the same field the
+  // row glyph reads); the backup axis is the mirror scan, which answers
+  // true / false / null and only `true` is a copy we can promise to delete.
+  const backupScan = useBackupScan();
+  const purge = describePurge({
+    server: hasServerBacked,
+    vault: hasArchived,
+    backup: emails.some(e => isBackedUp(e, backupScan) === true),
+  }, emails.length);
 
   // markSelectedAsRead/Unread and purgeSelectedEverywhere act on the global
   // selectedEmailIds — and, as part of finishing, unconditionally reset it to
@@ -187,30 +200,25 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         </MenuItem>
       )}
 
-      {/* hasArchived || hasServerBacked is a verified tautology, not a live
-          gate: the display-row derivation forces isArchived: true
-          on every row whose source becomes 'local-only' (deriveDisplayRows in
-          messageListSlice.js), so isLocalOnly always implies isArchived and
-          this never evaluates false for a real email. Kept explicit as the
-          documented reason Delete everywhere is always safe to show, rather
-          than simplified to an unconditional render. */}
-      {(hasArchived || hasServerBacked) && (
+      {/* Only where a copy of our own exists. On a message that is nothing but
+          a server message, this item used to render as "Delete everywhere" and
+          did exactly what the item above it does — a second, scarier-sounding
+          spelling of Delete from server. `describePurge` returns null for that
+          scope, which is the gate; every scope it names has a vault or backup
+          copy to destroy, and the item says which. */}
+      {purge && (
         <MenuItem
           tone="danger"
           onClick={(e) => {
             e.stopPropagation();
             onRequestDelete(
               () => runScoped(purgeSelectedEverywhere, { destructive: true }),
-              {
-                title: t('rowMenu.deleteEverywhere2'),
-                description: describeDeleteEverywhere(emails.length),
-                confirmLabel: t('rowMenu.deleteEverywhere'),
-              }
+              { title: purge.title, description: purge.description, confirmLabel: purge.label },
             );
           }}
         >
           <ShieldX size={14} />
-          {t('rowMenu.deleteEverywhere')}
+          {purge.label}
         </MenuItem>
       )}
     </>

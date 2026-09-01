@@ -16,6 +16,10 @@
 //  2. Destructive items must route through onRequestDelete's parent-owned
 //     confirmation, never fire immediately — an inline confirm inside a
 //     virtualized row is the documented unreliable pattern this repo avoids.
+//  3. The purge item is offered only where a copy of OUR OWN exists — the
+//     vault, the backup mirror, or both — and it names the places it will
+//     clear. On a server-only message it used to render as "Delete
+//     everywhere" and do exactly what Delete from server does.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
@@ -41,6 +45,12 @@ vi.mock('../MoveToFolderDropdown', () => ({
 const initialStoreState = () => ({
   activeMailbox: 'INBOX',
   activeAccountId: 'acct-1',
+  // The backup mirror scan (MessageStateIcon's useBackupScan). null is the
+  // real store's default and means "no answer" — the backup axis of the purge
+  // scope is off unless a test says otherwise.
+  backedUpKeys: null,
+  backedUpScopes: null,
+  backupConfigured: null,
   selectedEmailIds: new Set(),
   // A real reducer (spy-wrapped, not a bare vi.fn()) so runScoped's
   // "is selectedEmailIds still exactly what I scoped it to" check in its
@@ -114,20 +124,23 @@ describe('RowActionMenuItems', () => {
     expect(screen.getByText('Unarchive')).toBeTruthy();
     expect(screen.queryByText('Archive')).toBeNull();
     expect(screen.getByText('Delete from server')).toBeTruthy();
-    expect(screen.getByText('Delete everywhere')).toBeTruthy();
+    expect(screen.getByText('Delete from server and vault')).toBeTruthy();
   });
 
-  it('an unarchived server-backed row shows Archive, not Unarchive, plus both deletes', () => {
+  it('an unarchived server-backed row shows Archive, not Unarchive, and NO purge item', () => {
+    // Nothing but the server holds it, so there is no second copy to destroy:
+    // a purge here would be Delete from server under a scarier name.
     const email = baseEmail({ isArchived: false, source: 'server' });
     render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
 
     expect(screen.getByText('Archive')).toBeTruthy();
     expect(screen.queryByText('Unarchive')).toBeNull();
     expect(screen.getByText('Delete from server')).toBeTruthy();
-    expect(screen.getByText('Delete everywhere')).toBeTruthy();
+    expect(screen.queryByText(/^Delete from (vault|server and|server,|backup)/)).toBeNull();
+    expect(screen.queryByText('Delete everywhere')).toBeNull();
   });
 
-  it('a local-only row hides Delete from server but keeps Delete everywhere', () => {
+  it('a local-only row hides Delete from server and offers the vault-only purge', () => {
     // Local-only rows are always archived (deriveDisplayRows/updateSortedEmails
     // force isArchived: true wherever source becomes 'local-only').
     const email = baseEmail({ isArchived: true, source: 'local-only' });
@@ -135,7 +148,56 @@ describe('RowActionMenuItems', () => {
 
     expect(screen.getByText('Unarchive')).toBeTruthy();
     expect(screen.queryByText('Delete from server')).toBeNull();
-    expect(screen.getByText('Delete everywhere')).toBeTruthy();
+    expect(screen.getByText('Delete from vault')).toBeTruthy();
+  });
+
+  it('a mirrored local-only row names the vault AND the backup', () => {
+    useMailStoreMock.setState({
+      backedUpKeys: new Set(['acct-1:INBOX:42']),
+      backedUpScopes: new Set(['acct-1:INBOX']),
+      backupConfigured: true,
+    });
+    const email = baseEmail({ isArchived: true, source: 'local-only' });
+    render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Delete from vault & backup')).toBeTruthy();
+  });
+
+  it('a mirrored archived row names all three places', () => {
+    useMailStoreMock.setState({
+      backedUpKeys: new Set(['acct-1:INBOX:42']),
+      backedUpScopes: new Set(['acct-1:INBOX']),
+      backupConfigured: true,
+    });
+    const email = baseEmail({ isArchived: true, source: 'server' });
+    render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Delete from server, vault and backup')).toBeTruthy();
+  });
+
+  it('a mirror the scan could not read is not counted as a copy', () => {
+    // backedUpKeys null is "no answer" (drive unplugged, scan failed). Naming
+    // a backup we cannot see promises to delete a file we may not find.
+    useMailStoreMock.setState({ backedUpKeys: null, backupConfigured: true });
+    const email = baseEmail({ isArchived: true, source: 'server' });
+    render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Delete from server and vault')).toBeTruthy();
+    expect(screen.queryByText('Delete from server, vault and backup')).toBeNull();
+  });
+
+  it('a row outside the scanned scopes is not counted as backed up', () => {
+    // Absence from a mailbox nobody scanned is not evidence — same rule the
+    // row glyph follows (isBackedUp returns null, not false).
+    useMailStoreMock.setState({
+      backedUpKeys: new Set(['acct-1:Sent:42']),
+      backedUpScopes: new Set(['acct-1:Sent']),
+      backupConfigured: true,
+    });
+    const email = baseEmail({ isArchived: true, source: 'server' });
+    render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Delete from server and vault')).toBeTruthy();
   });
 
   it('Mark as unread shows for a read email, Mark as read for an unread one', () => {
@@ -226,7 +288,7 @@ describe('RowActionMenuItems', () => {
       expect(useMailStoreMock.getState().loadEmails).toHaveBeenCalledTimes(1);
     });
 
-    it('Delete everywhere scopes to every message in the set, including local-only ones', async () => {
+    it('the purge scopes to every message in the set, including local-only ones', async () => {
       const emails = [
         baseEmail({ uid: 1, source: 'server' }),
         baseEmail({ uid: 2, source: 'local-only', isArchived: true }),
@@ -234,10 +296,11 @@ describe('RowActionMenuItems', () => {
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={emails} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
-      fireEvent.click(screen.getByText('Delete everywhere'));
+      fireEvent.click(screen.getByText('Delete from server and vault'));
       const [executor, copy] = onRequestDelete.mock.calls[0];
-      expect(copy.title).toBe('Delete everywhere?');
-      expect(copy.description).toMatch(/^These 2 emails leave the server, your vault, and your backup drive\./);
+      expect(copy.title).toBe('Delete permanently?');
+      expect(copy.confirmLabel).toBe('Delete from server and vault');
+      expect(copy.description).toMatch(/^These 2 emails will be gone\./);
       await executor();
 
       expect(useMailStoreMock.getState().setSelection).toHaveBeenCalledWith([1, 2]);
@@ -245,18 +308,18 @@ describe('RowActionMenuItems', () => {
   });
 
   describe('a destructive action never fires immediately', () => {
-    it('Delete everywhere routes through onRequestDelete instead of purging immediately', () => {
-      const email = baseEmail({ isArchived: false, source: 'server' });
+    it('the purge routes through onRequestDelete instead of purging immediately', () => {
+      const email = baseEmail({ isArchived: true, source: 'server' });
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
-      fireEvent.click(screen.getByText('Delete everywhere'));
+      fireEvent.click(screen.getByText('Delete from server and vault'));
 
       expect(onRequestDelete).toHaveBeenCalledTimes(1);
       expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
       const [executor, copy] = onRequestDelete.mock.calls[0];
       expect(typeof executor).toBe('function');
-      expect(copy.description).toMatch(/the server, your vault, and your backup drive/);
+      expect(copy.description).toMatch(/^This email will be gone\./);
     });
 
     it('Delete from server also routes through onRequestDelete, not deleteEmailFromServer directly', () => {
@@ -275,11 +338,11 @@ describe('RowActionMenuItems', () => {
   describe('unified inbox selection keys', () => {
     it('builds the account-and-folder selection key in unified inbox mode, not a raw uid', async () => {
       useMailStoreMock.setState({ activeMailbox: 'UNIFIED' });
-      const email = baseEmail({ uid: 7, _accountId: 'acct-9', _mailbox: 'INBOX', isArchived: false, source: 'server' });
+      const email = baseEmail({ uid: 7, _accountId: 'acct-9', _mailbox: 'INBOX', isArchived: true, source: 'server' });
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
-      fireEvent.click(screen.getByText('Delete everywhere'));
+      fireEvent.click(screen.getByText('Delete from server and vault'));
       const [executor] = onRequestDelete.mock.calls[0];
       await executor();
 
@@ -317,15 +380,15 @@ describe('RowActionMenuItems', () => {
       expect(calls[calls.length - 1][0]).toEqual([1, 2, 3]);
     });
 
-    it('Delete everywhere restores the prior selection minus the acted-on key', async () => {
+    it('the purge restores the prior selection minus the acted-on key', async () => {
       // Row's own uid (2) happens to already be part of the prior selection —
       // it must not survive the restore, since that message is now gone.
       useMailStoreMock.setState({ selectedEmailIds: new Set([1, 2, 3]) });
-      const email = baseEmail({ uid: 2, isArchived: false, source: 'server' });
+      const email = baseEmail({ uid: 2, isArchived: true, source: 'server' });
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
-      fireEvent.click(screen.getByText('Delete everywhere'));
+      fireEvent.click(screen.getByText('Delete from server and vault'));
       const [executor] = onRequestDelete.mock.calls[0];
       await executor();
 
@@ -334,13 +397,13 @@ describe('RowActionMenuItems', () => {
       expect(calls[calls.length - 1][0]).toEqual([1, 3]); // restored minus the deleted row
     });
 
-    it('Delete everywhere on a row outside the prior selection restores it unchanged', async () => {
+    it('a purge on a row outside the prior selection restores it unchanged', async () => {
       useMailStoreMock.setState({ selectedEmailIds: new Set([1, 2, 3]) });
-      const email = baseEmail({ uid: 99, isArchived: false, source: 'server' });
+      const email = baseEmail({ uid: 99, isArchived: true, source: 'server' });
       const onRequestDelete = vi.fn();
       render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
 
-      fireEvent.click(screen.getByText('Delete everywhere'));
+      fireEvent.click(screen.getByText('Delete from server and vault'));
       const [executor] = onRequestDelete.mock.calls[0];
       await executor();
 

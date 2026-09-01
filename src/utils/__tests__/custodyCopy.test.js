@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { vaultClause, describeServerDelete, describeDeleteEverywhere } from '../custodyCopy';
+import { vaultClause, describeServerDelete, describePurge } from '../custodyCopy';
 
 // The bug this replaced: every "Delete from server" confirmation said "This
 // cannot be undone", whether or not a vault copy existed. These assertions
@@ -55,14 +55,46 @@ describe('describeServerDelete', () => {
   });
 });
 
-describe('describeDeleteEverywhere', () => {
-  it('names all three places and is always permanent', () => {
-    for (const n of [1, 7]) {
-      const s = describeDeleteEverywhere(n);
-      expect(s).toContain('the server');
-      expect(s).toContain('your vault');
-      expect(s).toContain('your backup drive');
-      expect(s).toMatch(/cannot be undone/);
+
+// The purge item names the places it will actually clear, and is offered only
+// where at least one of them is a copy of our own. A "Delete everywhere" on a
+// message the vault has never held offers to destroy something that is not
+// there — and does, verbatim, what the Delete from server above it does.
+describe('describePurge', () => {
+  const scope = (s, v, b) => ({ server: s, vault: v, backup: b });
+
+  it('is not offered when only the server holds the message', () => {
+    expect(describePurge(scope(true, false, false), 1)).toBeNull();
+    expect(describePurge({}, 1)).toBeNull();
+  });
+
+  it('names exactly the places that hold it', () => {
+    expect(describePurge(scope(false, true, false), 1).label).toBe('Delete from vault');
+    expect(describePurge(scope(false, true, true), 1).label).toBe('Delete from vault & backup');
+    expect(describePurge(scope(false, false, true), 1).label).toBe('Delete from backup');
+    expect(describePurge(scope(true, true, false), 1).label).toBe('Delete from server and vault');
+    expect(describePurge(scope(true, false, true), 1).label).toBe('Delete from server and backup');
+    expect(describePurge(scope(true, true, true), 1).label).toBe('Delete from server, vault and backup');
+  });
+
+  it('never names a place that does not hold it', () => {
+    expect(describePurge(scope(false, true, false), 1).label).not.toMatch(/server|backup/i);
+    expect(describePurge(scope(true, true, false), 1).label).not.toMatch(/backup/i);
+  });
+
+  it('warns that nothing survives, whatever the scope', () => {
+    for (const sc of [scope(false, true, false), scope(true, true, true), scope(false, false, true)]) {
+      expect(describePurge(sc, 1).description).toMatch(/cannot be undone/);
     }
+  });
+
+  it('agrees in number with the set it acts on', () => {
+    expect(describePurge(scope(true, true, false), 1).description).toMatch(/^This email will be gone\./);
+    expect(describePurge(scope(true, true, false), 4).description).toMatch(/^These 4 emails will be gone\./);
+  });
+
+  it('asks one question for every scope, since the button already names the places', () => {
+    expect(describePurge(scope(false, true, false), 1).title).toBe('Delete permanently?');
+    expect(describePurge(scope(true, true, true), 9).title).toBe('Delete permanently?');
   });
 });

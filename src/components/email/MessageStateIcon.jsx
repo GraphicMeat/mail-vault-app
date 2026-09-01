@@ -221,16 +221,33 @@ export function MessageStateIcon({ email, size = 14, backedUp = false, serverKno
  * Scope, not just uid: a uid identifies a message inside one mailbox only.
  */
 export function useBackedUp(email) {
-  const backedUpKeys = useMailStore(s => s.backedUpKeys);
-  const backedUpScopes = useMailStore(s => s.backedUpScopes);
-  const backupConfigured = useMailStore(s => s.backupConfigured);
-  const activeAccountId = useMailStore(s => s.activeAccountId);
-  const activeMailbox = useMailStore(s => s.activeMailbox);
+  return isBackedUp(email, useBackupScan());
+}
+
+/**
+ * The five store fields the answer is read from, subscribed once.
+ *
+ * Split out for callers that must ask about a SET of messages — a thread row's
+ * menu acts on every message in the thread, and a hook cannot be called in a
+ * loop. Same fields, same rule, one subscription.
+ */
+export function useBackupScan() {
+  return {
+    backedUpKeys: useMailStore(s => s.backedUpKeys),
+    backedUpScopes: useMailStore(s => s.backedUpScopes),
+    backupConfigured: useMailStore(s => s.backupConfigured),
+    activeAccountId: useMailStore(s => s.activeAccountId),
+    activeMailbox: useMailStore(s => s.activeMailbox),
+  };
+}
+
+/** The rule itself, given an already-read scan. See `useBackedUp`. */
+export function isBackedUp(email, { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox } = {}) {
   // No backup drive at all: there is nowhere for a second copy to be, so the
   // axis does not apply and nothing is drawn or said. Checked BEFORE the null
   // test, which is the different case of a drive that exists and went unread.
   if (backupConfigured === false) return false;
-  if (!email || backedUpKeys === null) return null;
+  if (!email || !backedUpKeys) return null;
   const accountId = email._accountId || activeAccountId;
   // A row that carries no folder tag is from the active view by construction —
   // the same rule custodyRowFor matches rows by.

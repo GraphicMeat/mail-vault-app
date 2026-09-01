@@ -41,12 +41,45 @@ export function describeServerDelete(total, inVault) {
   return `${lead} ${vaultClause(total, inVault)}`;
 }
 
+
+// Which label each scope earns. Also the gate: a scope with no copy of our own
+// has no entry, and a caller with no entry has no item to render.
+const PURGE_LABEL_KEY = {
+  v: 'rowMenu.deleteVault',
+  vb: 'rowMenu.deleteVaultBackup',
+  b: 'rowMenu.deleteBackup',
+  sv: 'rowMenu.deleteServerVault',
+  sb: 'rowMenu.deleteServerBackup',
+  svb: 'rowMenu.deleteServerVaultBackup',
+};
+
 /**
- * Confirmation body for "Delete everywhere" — server, vault and backup drive.
- * Custody makes no difference here: nothing survives either way.
+ * "Delete everywhere", named for the places this message is actually in.
+ *
+ * The purge itself is unchanged — it clears the server, the vault and the
+ * backup mirror in that order — but saying "Delete everywhere" over a message
+ * the vault has never held offers to destroy something that is not there, and
+ * the row menu offered exactly that on every server-only message: the same
+ * work as the "Delete from server" one line above it, under a name claiming
+ * far more, over a confirmation that promised to clear a vault and a backup
+ * drive that had never held it.
+ *
+ * @param {{server:boolean, vault:boolean, backup:boolean}} scope where the
+ *        messages this row acts on live, ORed over the whole set
+ * @param {number} total how many messages that is
+ * @returns {{label:string, title:string, description:string}|null}
+ *          null when nothing but the server holds them — no item belongs here
  */
-export function describeDeleteEverywhere(total) {
-  return total === 1
-    ? t('custody.emailLeavesServerVaultBackup')
-    : t('custody.theseEmailsLeaveServerVault', { total: total.toLocaleString() });
+export function describePurge({ server = false, vault = false, backup = false } = {}, total = 1) {
+  const key = PURGE_LABEL_KEY[`${server ? 's' : ''}${vault ? 'v' : ''}${backup ? 'b' : ''}`];
+  if (!key) return null;
+  return {
+    label: t(key),
+    // One title for all six scopes: the button under it already names the
+    // places, and six more translated question forms buy nothing.
+    title: t('rowMenu.deletePermanently2'),
+    // `count` is the raw number — a formatted one selects no plural category
+    // and renders the key itself.
+    description: t('custody.purgeNothingLeft', { count: total }),
+  };
 }
