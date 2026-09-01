@@ -53,6 +53,20 @@ export const createSelectionSlice = (set, get) => ({
     }));
   },
 
+  // Put the reader away and leave the list. The same four fields every
+  // workflow clears when the open message stops existing (applyServerRemoval,
+  // removeLocalEmail) — closing is the deliberate version of that, so it
+  // clears the same set rather than a subset that leaves the pane half-open.
+  // `loadingEmail` too: closing during a body fetch must not leave the spinner
+  // standing as the whole pane's content.
+  closeEmail: () => set({
+    selectedEmailId: null,
+    selectedEmail: null,
+    selectedEmailSource: null,
+    selectedThread: null,
+    loadingEmail: false,
+  }),
+
   // ── Passthrough wrappers to workflow functions ──
 
   _prefetchAdjacentEmails: (currentUid) => _prefetchAdjacentEmails(currentUid),

@@ -186,6 +186,71 @@ describe('Email Viewer', function () {
       console.warn('[email-viewer] Reply All button not found — email is single-recipient');
     }
   });
+
+  /**
+   * Opening a message used to be a one-way door. Every other exit from the
+   * reading pane either opens something else (another row, another folder) or
+   * destroys the message (delete, archive-and-purge) — and in the stacked
+   * two-column layout the list gives up more than half its height the moment a
+   * message opens (App.jsx's `stackedSolo`), with no gesture to get it back.
+   */
+  describe('closing the reader', function () {
+    const readerIsOpen = () => browser.execute(() =>
+      document.querySelector('button[title="Reply"]')?.offsetHeight > 0
+      || document.querySelector('button[title="Forward"]')?.offsetHeight > 0);
+
+    const listRowCount = () => browser.execute(() =>
+      document.querySelectorAll('[data-testid="email-row"]').length);
+
+    it('opens a message and shows a close button', async function () {
+      // Idempotent: the cases above leave a message open, but this must not
+      // depend on which of them got that far.
+      if (!(await readerIsOpen())) {
+        await browser.execute(() => document.querySelector('[data-testid="email-row"]')?.click());
+        await browser.waitUntil(readerIsOpen,
+          { timeout: 15_000, interval: 500, timeoutMsg: 'Reader did not open' });
+      }
+
+      const close = await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="close-viewer"]');
+        return btn ? { visible: btn.offsetHeight > 0, label: btn.getAttribute('aria-label') } : null;
+      });
+
+      expect(close).not.toBe(null);
+      expect(close.visible).toBe(true);
+      // Icon-only, so the name is the only thing a screen reader has.
+      expect(close.label).toBe('Close');
+    });
+
+    it('closes the reader and leaves the list standing', async function () {
+      const rowsBefore = await listRowCount();
+      expect(rowsBefore).toBeGreaterThan(0);
+
+      const clicked = await browser.execute(() => {
+        const btn = document.querySelector('[data-testid="close-viewer"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      });
+      expect(clicked).toBe(true);
+
+      await browser.waitUntil(async () => !(await readerIsOpen()),
+        { timeout: 10_000, interval: 300, timeoutMsg: 'Reader was still open after Close' });
+
+      // The list is what is left — closing the reader must not unload it.
+      expect(await listRowCount()).toBeGreaterThan(0);
+      const closeGone = await browser.execute(() =>
+        !document.querySelector('[data-testid="close-viewer"]'));
+      expect(closeGone).toBe(true);
+    });
+
+    it('reopens on the next row click', async function () {
+      // A close that also broke selection would leave the list inert.
+      await browser.execute(() => document.querySelector('[data-testid="email-row"]')?.click());
+      await browser.waitUntil(readerIsOpen,
+        { timeout: 15_000, interval: 500, timeoutMsg: 'Reader did not reopen after being closed' });
+    });
+  });
 });
 
 /**

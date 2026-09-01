@@ -25,6 +25,7 @@ import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem } from './AttachmentBar';
+import { CloseViewerButton } from './CloseViewerButton';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers, summarizeTrackers } from '../../utils/trackerDetect';
 import { recordTrackerSummary } from '../../services/trackerVerdicts';
@@ -590,6 +591,8 @@ export function ThreadView({ thread, onComposeReply }) {
             {saving ? tr('email.thread.archiving') : tr('email.thread.archiveAll')}
           </button>
         )}
+
+        <CloseViewerButton className="ml-2" />
       </div>
 
       {/* Thread emails — virtualized */}

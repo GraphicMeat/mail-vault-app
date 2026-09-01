@@ -1148,3 +1148,44 @@ describe('lastSelectedAccountId — which account a fresh compose sends from', (
     expect(useMailStore.getState().lastSelectedAccountId).toBe('acct-2');
   });
 });
+
+describe('closeEmail — the way out of the reading pane', () => {
+  // Opening a message used to be a one-way door: the only exits either opened
+  // something else or destroyed the message. In the stacked layout the list
+  // gives up more than half its height while a message is open (App.jsx's
+  // `stackedSolo`), so "close it and leave me the list" has to be reachable.
+  it('clears everything the reader renders from, single message or thread', () => {
+    useMailStore.setState({
+      selectedEmailId: 7,
+      selectedEmail: { uid: 7, subject: 'Open' },
+      selectedEmailSource: 'server',
+      selectedThread: { lastEmail: { uid: 7 }, emails: [], messageCount: 1 },
+      loadingEmail: true,
+    });
+
+    useMailStore.getState().closeEmail();
+
+    const s = useMailStore.getState();
+    expect(s.selectedEmailId).toBeNull();
+    expect(s.selectedEmail).toBeNull();
+    expect(s.selectedEmailSource).toBeNull();
+    expect(s.selectedThread).toBeNull();
+    // A close mid-fetch must not leave the spinner as the pane's whole content.
+    expect(s.loadingEmail).toBe(false);
+  });
+
+  it('leaves the list and any bulk selection alone', () => {
+    useMailStore.setState({
+      selectedEmailId: 7,
+      selectedEmail: { uid: 7 },
+      emails: [{ uid: 7 }, { uid: 8 }],
+      selectedEmailIds: new Set([8]),
+    });
+
+    useMailStore.getState().closeEmail();
+
+    const s = useMailStore.getState();
+    expect(s.emails.map(e => e.uid)).toEqual([7, 8]);
+    expect(s.selectedEmailIds).toEqual(new Set([8]));
+  });
+});
