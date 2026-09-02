@@ -48,7 +48,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
         aria-current={isActive ? 'true' : undefined}
         title={label}
         style={{ paddingLeft: 8 + node.depth * (compact ? INDENT / 2 : INDENT) }}
-        className={`flex items-center gap-2 pr-2 py-1.5 rounded-lg transition-colors
+        className={`flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
                    ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                    ${isActive
                      ? 'bg-mail-accent/10 text-mail-accent-text'

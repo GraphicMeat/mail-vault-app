@@ -1137,7 +1137,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             const initial = getAccountInitial(account, getDisplayName(account.id));
             return (
             <React.Fragment key={account.id}>
-              <div
+              <div className="mb-1"
                 ref={el => { hoverRowRefs.current[account.id] = el; }}
                 onMouseEnter={() => handleAccountHoverStart(account.id)}
                 onMouseLeave={scheduleHoverClose}
