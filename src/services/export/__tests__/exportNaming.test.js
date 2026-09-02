@@ -89,3 +89,33 @@ describe('pageName', () => {
     expect(pageName('2026-08-12 - Brisket.png', 1, 1)).toBe('2026-08-12 - Brisket.png');
   });
 });
+
+// Every fixture above hands `from` a "Name <addr>" STRING. The app never does:
+// `email.from` is a {name, address} object and `to`/`cc` are arrays of them, so
+// the string-only reader put "[object Object]" in every exported filename.
+describe('addresses as the app actually stores them', () => {
+  const OBJ = { name: 'Ana Brandt', address: 'ana@sizzlemedia.co' };
+
+  it('names a single message after the sender, not [object Object]', () => {
+    const name = singleName(msg('2024-05-01T10:30:00Z', OBJ, 'Hello'), 'png');
+    expect(name).toContain('Ana Brandt');
+    expect(name).not.toContain('[object Object]');
+  });
+
+  it('names a thread member after the sender', () => {
+    const name = threadMemberName(msg('2024-05-01T10:30:00Z', OBJ, 'Hello'), 0, 'png');
+    expect(name).toMatch(/^01 - /);
+    expect(name).toContain('Ana Brandt');
+    expect(name).not.toContain('[object Object]');
+  });
+
+  it('falls back to the address when there is no display name', () => {
+    const name = threadMemberName(
+      msg('2024-05-01T10:30:00Z', { address: 'ana@sizzlemedia.co' }, 'Hello'), 0, 'png');
+    expect(name).toContain('ana@sizzlemedia.co');
+  });
+
+  it('still reads the string form the samples and fixtures use', () => {
+    expect(singleName(msg('2024-05-01T10:30:00Z', ANA, 'Hello'), 'png')).toContain('Ana Brandt');
+  });
+});

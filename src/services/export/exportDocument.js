@@ -12,6 +12,26 @@ const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;');
 
+// `from` is a {name, address} object and `to`/`cc` are arrays of them —
+// that is the shape the whole app reads (`email.from.address` everywhere).
+// Export was the one place treating them as "Name <addr>" strings, so every
+// filename and every header card said "[object Object]". The string form is
+// still accepted because the sample fixtures and the unit tests use it.
+const oneAddress = (a) => (typeof a === 'string' ? a.trim()
+  : [a?.name, a?.address && `<${a.address}>`].filter(Boolean).join(' '));
+
+/** Full `Name <addr>` form, comma-joined for a recipient list. */
+export const addressLine = (value) => (Array.isArray(value) ? value : [value])
+  .filter(Boolean).map(oneAddress).filter(Boolean).join(', ');
+
+/** Short form for a filename or a thread summary: the name, else the address. */
+export const displayName = (value) => {
+  const a = Array.isArray(value) ? value[0] : value;
+  if (a && typeof a === 'object') return a.name || a.address || '';
+  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(a || '');
+  return match ? (match[1] || match[2]) : String(a || '');
+};
+
 /**
  * The stamp on an exported document. This was pinned to `en-GB` and built once
  * at module load, so a German export carried "05 Jan 2026" and a language
@@ -30,9 +50,9 @@ export function headerCardHtml(message) {
   return `<header class="mv-head">
   <h1 class="mv-subject">${esc(message.subject || t('svc.exportDocument.noSubject'))}</h1>
   <table class="mv-meta">
-    ${row(t('common.from'), message.from)}
-    ${row(t('common.to'), message.to)}
-    ${row(t('svc.exportDocument.cc'), message.cc)}
+    ${row(t('common.from'), addressLine(message.from))}
+    ${row(t('common.to'), addressLine(message.to))}
+    ${row(t('svc.exportDocument.cc'), addressLine(message.cc))}
     ${row(t('svc.exportDocument.date'), formatStamp(message.date))}
   </table>
 </header>`;

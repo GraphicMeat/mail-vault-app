@@ -1,6 +1,6 @@
 import { sanitizeForExport } from './exportSanitize';
 import { t as tr } from '../../i18n/index.js';
-import { EXPORT_CSS, EXPORT_WIDTH_PX, headerCardHtml, provenanceHtml, formatStamp } from './exportDocument';
+import { EXPORT_CSS, EXPORT_WIDTH_PX, headerCardHtml, provenanceHtml, formatStamp, displayName } from './exportDocument';
 
 // The exported thread runs on almost nothing: <details> does the folding,
 // sandbox does the isolation, and the heights were measured before the file was
@@ -16,10 +16,7 @@ import { EXPORT_CSS, EXPORT_WIDTH_PX, headerCardHtml, provenanceHtml, formatStam
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-const senderName = (from) => {
-  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from || '');
-  return match ? (match[1] || match[2]) : (from || tr('svc.exportDocument.unknownSender'));
-};
+const senderName = (from) => displayName(from) || tr('svc.exportDocument.unknownSender');
 
 const rootSubject = (s) => String(s || '').replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '').trim();
 

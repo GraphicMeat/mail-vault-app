@@ -1,4 +1,5 @@
 import { t } from '../../i18n/index.js';
+import { displayName } from './exportDocument';
 // Names for exported files. Every segment has to survive macOS, Windows and
 // Linux, so the reserved set is the union of all three, not any one of them.
 
@@ -15,8 +16,7 @@ export function safeSegment(text, max = 120) {
 }
 
 function senderLabel(from) {
-  const match = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(from || '');
-  return safeSegment(match ? (match[1] || match[2]) : (from || 'Unknown sender'), 60);
+  return safeSegment(displayName(from) || 'Unknown sender', 60);
 }
 
 const pad = (n) => String(n).padStart(2, '0');

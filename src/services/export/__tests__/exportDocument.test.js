@@ -35,6 +35,24 @@ describe('headerCardHtml', () => {
     expect(headerCardHtml(message)).not.toContain('Cc');
     expect(headerCardHtml({ ...message, cc: 'Theo <theo@skewer.systems>' })).toContain('Cc');
   });
+
+  // The shape the app really stores: `from` an object, `to`/`cc` arrays of them.
+  // Read as strings they rendered as "[object Object]" in the card the PNG is
+  // rasterized from — the fixture above is the only reason that ever looked fine.
+  it('renders the object form the app stores, not [object Object]', () => {
+    const html = headerCardHtml({
+      ...message,
+      from: { name: 'Ana Brandt', address: 'ana@sizzlemedia.co' },
+      to: [{ name: 'Rowan Marsh', address: 'rowan@primecut.studio' },
+           { address: 'theo@skewer.systems' }],
+      cc: [],
+    });
+    expect(html).not.toContain('[object Object]');
+    expect(html).toContain('Ana Brandt');
+    expect(html).toContain('rowan@primecut.studio');
+    expect(html).toContain('theo@skewer.systems');
+    expect(html).not.toContain('Cc');
+  });
 });
 
 describe('provenanceHtml', () => {
