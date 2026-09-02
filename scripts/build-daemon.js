@@ -51,8 +51,10 @@ console.log('Building mailvault-daemon...');
 const cargoProfile = process.env.DAEMON_PROFILE || 'release';
 const cargoTarget = tauriTarget || '';
 const cargoTargetFlag = cargoTarget ? `--target ${cargoTarget}` : '';
+// `debug` is cargo's default profile and has no flag of its own.
+const cargoProfileFlag = cargoProfile === 'debug' ? '' : `--${cargoProfile}`;
 execSync(
-  `cargo build -p mailvault-daemon --${cargoProfile} ${cargoTargetFlag}`.replace(/\s+/g, ' ').trim(),
+  `cargo build -p mailvault-daemon ${cargoProfileFlag} ${cargoTargetFlag}`.replace(/\s+/g, ' ').trim(),
   { stdio: 'inherit', cwd: rootDir }
 );
 

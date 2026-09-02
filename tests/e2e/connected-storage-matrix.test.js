@@ -710,12 +710,22 @@ describe('Storage matrix diagnostics', function () {
       expect(await clickBarButton('Archive selected')).toBe(true);
       // Same settle condition as row 1: `archived` is also true for the
       // `-server-unknown` variant this row shows until the uid set is proven.
-      await browser.waitUntil(async () => {
-        const r = await rowFor(subject);
-        return r?.archived === true && !r.icon?.includes('server-unknown');
-      }, {
-        timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
-      });
+      //
+      // When this times out, the store's own uid-set claim is the diagnosis:
+      // `serverUidsComplete: false` with the sidecar holding every uid means
+      // nothing re-proved the mailbox after the archive — the 2026-09-02 red
+      // was a stale daemon sidecar (no sync ticket, every activation fell to
+      // the IMAP path), invisible from the icon alone.
+      try {
+        await browser.waitUntil(async () => {
+          const r = await rowFor(subject);
+          return r?.archived === true && !r.icon?.includes('server-unknown');
+        }, {
+          timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never settled into Archived with a proven server uid set`,
+        });
+      } catch (e) {
+        throw new Error(`${e.message}; store=${JSON.stringify(await whereIsRow(accountId, 'Archive', 2))}`);
+      }
 
       const row = await rowFor(subject);
       const disk = { vault: !!(await waitForDisk(() => vaultFile(accountId, 'Archive', 2))), backup: !!backupFile(LUKE, 'Archive', 2) };
