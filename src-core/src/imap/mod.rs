@@ -909,12 +909,26 @@ pub async fn search_all_uids(
     mailbox: &str,
     _has_esearch: bool,
 ) -> Result<Vec<u32>, String> {
+    Ok(search_all_uid_flags(session, mailbox)
+        .await?
+        .into_iter()
+        .map(|(uid, _)| uid)
+        .collect())
+}
+
+/// Every UID in the mailbox with its flags, ascending by UID. The same one
+/// round trip `search_all_uids` makes — FLAGS cost a few bytes per message and
+/// let the backup reconcile the vault's read state without a second pass.
+pub async fn search_all_uid_flags(
+    session: &mut ImapSession,
+    mailbox: &str,
+) -> Result<Vec<(u32, Vec<String>)>, String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let expected = mbox.exists;
 
     info!("[IMAP] Listing UIDs via UID FETCH 1:* for {}", mailbox);
     let fetch_stream = session
-        .uid_fetch("1:*", "(UID)")
+        .uid_fetch("1:*", "(UID FLAGS)")
         .await
         .map_err(|e| format!("UID FETCH 1:* failed for {}: {}", mailbox, e))?;
 
@@ -924,11 +938,11 @@ pub async fn search_all_uids(
     for item in fetch_stream.collect::<Vec<_>>().await {
         let fetch = item.map_err(|e| format!("UID FETCH 1:* failed for {}: {}", mailbox, e))?;
         if let Some(uid) = fetch.uid {
-            result.push(uid);
+            result.push((uid, extract_flags(&fetch)));
         }
     }
 
-    result.sort_unstable();
+    result.sort_unstable_by_key(|(uid, _)| *uid);
 
     // A connection dropped mid-response ends the stream with NO error, so a
     // short — or empty — list otherwise looks like a legitimate "mailbox is

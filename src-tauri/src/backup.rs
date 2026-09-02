@@ -65,7 +65,7 @@ pub struct AccountBackupStatus {
 /// are only accepted on Linux as a temporary override; on macOS they are ignored
 /// (raw paths lose sandbox access after restart).
 /// Returns (resolved_path, needs_release) — caller must call release_backup_path if needs_release is true.
-fn resolve_backup_path(
+pub(crate) fn resolve_backup_path(
     app_handle: &tauri::AppHandle,
     caller_path: Option<String>,
 ) -> (Option<String>, bool) {
@@ -103,7 +103,7 @@ fn resolve_backup_path(
 }
 
 /// Release bookmark-based access if it was started.
-fn release_backup_path(path: &str) {
+pub(crate) fn release_backup_path(path: &str) {
     external_location::release_external_access(path);
 }
 
@@ -697,15 +697,16 @@ async fn run_imap_backup_inner(
         // mailboxes, and a corrupted session makes every later command return 0
         // results — search_all_uids uses UID FETCH instead. Still discard the
         // session if it fails, so nothing inherits a dirty read buffer.
-        let server_uids = {
+        let server_flags = {
             let mut guard = pool.get_background(&account).await?;
-            let result = imap::search_all_uids(&mut guard.session, mailbox_path, false).await;
+            let result = imap::search_all_uid_flags(&mut guard.session, mailbox_path).await;
             match &result {
                 Ok(_) => pool.return_background(&account, guard).await,
                 Err(_) => pool.discard(&account, guard).await,
             }
             result?
         };
+        let server_uids: Vec<u32> = server_flags.iter().map(|(uid, _)| *uid).collect();
 
         // Get local UIDs
         let local_uids = scan_local_uids(&app_handle, &account_id, mailbox_path)?;
@@ -786,6 +787,30 @@ async fn run_imap_backup_inner(
                 // archive already set the shared cancel flag — the folder loop
                 // breaks on the next iteration and the checkpoint allows resume
                 bandwidth_limited = true;
+            }
+        }
+
+        // A copy that predates a change made on the server — read on the
+        // phone, starred elsewhere — carries the state it was stored with, and
+        // that state is what restore uploads and the mirror keeps. The listing
+        // above already has every flag, so catching up is one directory pass
+        // with nothing more to fetch. Only the copies that were already here:
+        // the ones just stored carry the server's flags already.
+        let changes: Vec<crate::vault_flags::FlagChange> = server_flags
+            .iter()
+            .filter(|(uid, _)| local_uids.contains(uid))
+            .map(|(uid, flags)| crate::vault_flags::FlagChange { uid: *uid, flags: flags.clone() })
+            .collect();
+        if !changes.is_empty() {
+            let dirs = crate::vault_flags::dirs_for(
+                &app_handle, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
+            )?;
+            let applied = crate::vault_flags::apply_in(&dirs, &changes, false);
+            if applied.total() > 0 {
+                info!(
+                    "backup: {} — read state caught up on {} vault files, {} mirror files, {} index entries",
+                    mailbox_path, applied.renamed, applied.mirrored, applied.index_patched
+                );
             }
         }
 

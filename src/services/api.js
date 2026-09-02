@@ -475,6 +475,19 @@ export async function appendLocalIndex(accountId, mailbox, entries) {
   }
 }
 
+/**
+ * Every durable copy of a message's read state, in one call: the vault file
+ * name and its external-mirror copy, local-index.json, the header sidecar.
+ * `changes` carry each message's full IMAP flag list. Rust does nothing for a
+ * message the vault does not hold and says so in the counts it returns.
+ */
+export async function vaultApplyFlags(accountId, mailbox, accountEmail, changes) {
+  if (IS_TAURI) {
+    return tauriInvoke('vault_apply_flags', { accountId, mailbox, accountEmail, changes });
+  }
+  return { renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 };
+}
+
 export async function removeFromLocalIndex(accountId, mailbox, uid) {
   if (IS_TAURI) {
     return tauriInvoke('local_index_remove', { accountId, mailbox, uid });

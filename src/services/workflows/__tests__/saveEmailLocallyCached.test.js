@@ -173,8 +173,10 @@ describe('saveEmailLocally — already-cached branch', () => {
 });
 
 describe('saveEmailLocally — not-yet-cached branch', () => {
-  it('fetches the message and writes it to the vault', async () => {
+  it('fetches the message and writes it to the vault with its own read state', async () => {
     mockIsEmailSaved.mockResolvedValue(false);
+    // ROW is unread. The file name used to say "seen" regardless, and that
+    // name is what restore uploads and what a vault row reads back.
     mockFetchEmail.mockResolvedValue({ ...ROW, rawSource: 'cmF3' });
 
     await saveEmailLocally(30);
@@ -182,9 +184,31 @@ describe('saveEmailLocally — not-yet-cached branch', () => {
     expect(mockFetchEmail).toHaveBeenCalledWith(ACCOUNT, 30, 'INBOX');
     expect(mockTauriInvoke).toHaveBeenCalledWith('maildir_store', expect.objectContaining({
       accountId: ACCOUNT.id, mailbox: 'INBOX', uid: 30,
-      rawSourceBase64: 'cmF3', flags: ['archived', 'seen'],
+      rawSourceBase64: 'cmF3', flags: ['archived'],
     }));
     expect(mockArchiveEmail).not.toHaveBeenCalled();
+  });
+
+  it('stores a read message as read', async () => {
+    mockIsEmailSaved.mockResolvedValue(false);
+    mockFetchEmail.mockResolvedValue({ ...ROW, flags: ['\\Seen'], rawSource: 'cmF3' });
+
+    await saveEmailLocally(30);
+
+    expect(mockTauriInvoke).toHaveBeenCalledWith('maildir_store', expect.objectContaining({
+      uid: 30, flags: ['archived', 'seen'],
+    }));
+  });
+
+  it('carries a star and a reply mark into the file name too', async () => {
+    mockIsEmailSaved.mockResolvedValue(false);
+    mockFetchEmail.mockResolvedValue({ ...ROW, flags: ['\\Flagged', '\\Answered'], rawSource: 'cmF3' });
+
+    await saveEmailLocally(30);
+
+    expect(mockTauriInvoke).toHaveBeenCalledWith('maildir_store', expect.objectContaining({
+      uid: 30, flags: ['archived', 'flagged', 'replied'],
+    }));
   });
 
   it('refuses a fetch that came back with no raw source', async () => {

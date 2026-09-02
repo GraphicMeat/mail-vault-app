@@ -278,7 +278,9 @@ async fn fetch_and_store(
 
     let email = email.ok_or_else(|| format!("Email UID {} not found", uid))?;
 
-    let flags = ["archived".to_string(), "seen".to_string()];
+    // The server's own read state, not a hardcoded "seen": this name is what
+    // restore uploads, what the mirror copies, and what a vault row reads back.
+    let flags = crate::vault_flags::store_flags(&email.flags);
     let cur_dir = super::maildir_cur_path(app_handle, account_id, mailbox)?;
     fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
 

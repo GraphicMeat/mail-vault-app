@@ -4,8 +4,11 @@
 // and in no other array — deriveDisplayRows pushes it onto the list from there.
 // Every read-state mutation used to map `emails` alone, so the row on screen
 // never changed: the reported symptom was "mark as read does nothing at all".
-// The flag also has to reach local-index.json, or the row reverts to unread on
-// the next folder switch, which looks the same to the person using it.
+// The flag also has to reach disk, or the row reverts to unread on the next
+// folder switch, which looks the same to the person using it. Disk is one Rust
+// call (`vaultApplyFlags`) that lands the change on the vault file name, its
+// mirror copy, local-index.json and the header sidecar together — local-index
+// alone was written before, and restore and the mirror read the file name.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 
@@ -39,7 +42,9 @@ vi.mock('../../db', () => ({
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
 vi.mock('../../api', () => ({
+  vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   fetchEmailLight: vi.fn().mockResolvedValue(null),
@@ -170,25 +175,38 @@ describe('marking a vault-only row read from the unified list', () => {
     expect(useMailStore.getState().localEmails[0].flags).toContain('\\Seen');
   });
 
-  it('writes the flag into local-index.json so it survives a reload', async () => {
+  it('hands the flag to the vault writer with the message\'s whole flag list', async () => {
     primeUnifiedVault([]);
 
     await useMailStore.getState().markSelectedAsRead();
 
-    expect(mockAppendLocalIndex).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', [expect.objectContaining({ uid: UID, flags: ['\\Seen'] })],
+    // The account's address names the mirror directory; the full flag list is
+    // what Rust merges over the file name.
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }],
     );
+    // The old index-only write is gone — two writers would race each other.
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
   it('takes the flag back off again on mark-unread', async () => {
     primeUnifiedVault(['\\Seen']);
-    mockGetLocalIndexEntry.mockResolvedValue({ uid: UID, flags: ['\\Seen'] });
 
     await useMailStore.getState().markSelectedAsUnread();
 
     expect(rowSeen()).toBe(false);
-    expect(mockAppendLocalIndex).toHaveBeenCalledWith(
-      ACCOUNT.id, 'INBOX', [expect.objectContaining({ flags: [] })],
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: [] }],
+    );
+  });
+
+  it('keeps every other flag the message had', async () => {
+    primeUnifiedVault(['\\Flagged']);
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Flagged', '\\Seen'] }],
     );
   });
 
@@ -201,15 +219,89 @@ describe('marking a vault-only row read from the unified list', () => {
     await useMailStore.getState().markSelectedAsRead();
 
     expect(rowSeen()).toBe(true);
-    expect(mockAppendLocalIndex).toHaveBeenCalled();
+    expect(mockVaultApplyFlags).toHaveBeenCalled();
   });
 
-  it('leaves the vault index alone for a message the vault does not hold', async () => {
+  // Whether the vault holds the message is Rust's question now — it has the
+  // directory, and answering it here from archivedEmailIds skipped the header
+  // sidecar, which every synced message has and every repaint from cache reads.
+  it('tells the vault writer about a server-only message too', async () => {
     primeUnifiedVault([]);
     useMailStore.setState({ archivedEmailIds: new Set() });
 
     await useMailStore.getState().markSelectedAsRead();
 
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }],
+    );
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+  });
+
+  it('writes a whole selection to the vault in one call, not one per message', async () => {
+    primeUnifiedVault([]);
+    const second = { ...vaultRow([]), uid: UID + 1, messageId: 'v2@mock', subject: 'Second slot' };
+    useMailStore.setState(s => ({
+      localEmails: [...s.localEmails, second],
+      archivedEmailIds: new Set([UID, UID + 1]),
+      selectedEmailIds: new Set([SEL_KEY, _selKey(second)]),
+    }));
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    // The writer rewrites the whole index; two calls would race each other.
+    expect(mockVaultApplyFlags).toHaveBeenCalledTimes(1);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', ACCOUNT.email,
+      expect.arrayContaining([{ uid: UID, flags: ['\\Seen'] }, { uid: UID + 1, flags: ['\\Seen'] }]),
+    );
+  });
+
+  // A uid names a message only inside one (account, mailbox). The INBOX list
+  // merges Sent replies into its threads and stamps them `_fromSentFolder`;
+  // such a row is selected by its bare uid, and INBOX has its own message
+  // under that number. Writing it under INBOX would rename a different
+  // message's file — the one restore uploads.
+  it('refuses to write a Sent copy merged into the INBOX list under INBOX\'s uid', async () => {
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      activeAccountId: ACCOUNT.id,
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      viewMode: 'all',
+      emails: [{ ...vaultRow([]), _accountId: undefined, _mailbox: undefined, _fromSentFolder: true, isArchived: false, source: 'server' }],
+      sentEmails: [],
+      localEmails: [],
+      savedEmailIds: new Set(),
+      archivedEmailIds: new Set(),
+      serverUids: serverUids(new Set([UID]), { complete: true }),
+      deleteTombstones: new Set(),
+      totalEmails: 1,
+      selectedEmailIds: new Set([UID]),
+      selectedEmail: null,
+      selectedEmailId: null,
+      emailCache: new Map(),
+      loadEmails: vi.fn(),
+      _sortedEmailsFingerprint: '',
+    });
+    invalidateChatAndThreadCaches();
+    useMailStore.getState().updateSortedEmails();
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    // The row on screen still flips — that half is not in question.
+    expect(rowSeen()).toBe(true);
+    expect(mockVaultApplyFlags).not.toHaveBeenCalled();
+  });
+
+  it('keeps the row read when the vault writer fails', async () => {
+    primeUnifiedVault([]);
+    mockVaultApplyFlags.mockRejectedValueOnce(new Error('disk gone'));
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(rowSeen()).toBe(true);
+    expect(useMailStore.getState().error).toBeFalsy();
   });
 });

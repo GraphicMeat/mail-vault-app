@@ -42,7 +42,9 @@ vi.mock('../../db', () => ({
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
 }));
 
+const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
 vi.mock('../../api', () => ({
+  vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
   fetchEmailLight: (...a) => mockFetchEmailLight(...a),
   updateEmailFlags: (...a) => mockUpdateEmailFlags(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),

@@ -36,6 +36,18 @@ export function indexEntryFor(email, extra = {}) {
 }
 
 
+// Maildir flags for a fresh vault copy: archived, plus whatever the server
+// says about read state. `seen` used to be hardcoded, which is where every
+// downstream lie about a vault message's read state began — the file name is
+// what restore uploads, what the mirror copies, and what a vault row reads.
+export const vaultStoreFlags = (flags = []) => [
+  'archived',
+  ...(flags.includes('\\Seen') ? ['seen'] : []),
+  ...(flags.includes('\\Flagged') ? ['flagged'] : []),
+  ...(flags.includes('\\Answered') ? ['replied'] : []),
+];
+
+
 // ── saveEmailLocally workflow ──
 
 export async function saveEmailLocally(uid) {
@@ -70,7 +82,7 @@ export async function saveEmailLocally(uid) {
         mailbox: mailbox,
         uid: email.uid,
         rawSourceBase64: email.rawSource,
-        flags: ['archived', 'seen'],
+        flags: vaultStoreFlags(email.flags),
       });
     }
 
@@ -543,18 +555,50 @@ function _mapLocalSeen(localEmails, matches, read) {
   return localEmails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e);
 }
 
-// local-index.json is where a vault row's flags are read back from on the next
-// load, so without this the row reverts to unread on the next folder switch.
-// `local_index_append` upserts by uid: re-append the entry with new flags.
-// Silent on a message the vault does not hold — that is the ordinary case.
-async function _persistVaultSeen(useMailStore, accountId, mailbox, uid, read) {
+// The durable half of a read-state change.
+//
+// One Rust call lands it on every copy the vault keeps: the Maildir file name
+// (which restore and the external mirror read the flags off), the mirror's
+// copy, local-index.json (which the unified list reads a vault row back from)
+// and the header sidecar (which the next repaint from cache reads). Each of
+// those used to be written by a different path or by none — a message marked
+// read here restored to a new server as unread, a vault row rebuilt from its
+// file rendered unread whatever had been done to it, and a switch away and
+// back repainted the old state until the next delta sync corrected it.
+//
+// Best-effort, and silent for a message the vault does not hold: Rust finds
+// nothing to rename or patch and says so in its counts. The rows' flags are
+// read after applySeenLocally / _markSelected mapped them, so `_withSeen` here
+// is a no-op that keeps the call honest if the order ever changes.
+//
+// One call for all of `uids`: the writer rewrites the whole index file, so a
+// call per message would race itself and the losers' flags would vanish.
+//
+// A uid is a name only inside one (account, mailbox). The row is the proof of
+// which one: a Sent copy merged into the INBOX list carries `_fromSentFolder`
+// / `_mailbox`, and writing it under INBOX's uid would rename a different
+// message's file — the one restore uploads. So a row that names another
+// folder, or no row at all (a flag list rebuilt from nothing would strip
+// \Flagged and \Answered), is skipped rather than guessed at.
+async function _persistVaultSeen(useMailStore, accountId, mailbox, uids, read, isUnified = false) {
   try {
-    if (!useMailStore.getState().archivedEmailIds?.has(uid)) return;
-    const entry = await db.getLocalIndexEntry(accountId, mailbox, uid);
-    if (!entry) return;
-    await api.appendLocalIndex(accountId, mailbox, [{ ...entry, flags: _withSeen(entry.flags, read) }]);
+    const s = useMailStore.getState();
+    const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || [])];
+    const changes = [];
+    for (const uid of uids) {
+      const row = pool.find(e => e && e.uid === uid && (!isUnified || !e._accountId || e._accountId === accountId));
+      const rowMailbox = row?._mailbox || (row?._fromSentFolder ? (s.getSentMailboxPath?.() || 'Sent') : null);
+      if (!row || (rowMailbox && rowMailbox !== mailbox)) {
+        console.warn('[applySeenLocally] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
+        continue;
+      }
+      changes.push({ uid, flags: _withSeen(row.flags, read) });
+    }
+    if (!changes.length) return;
+    const accountEmail = s.accounts?.find(a => a.id === accountId)?.email || null;
+    await api.vaultApplyFlags(accountId, mailbox, accountEmail, changes);
   } catch (e) {
-    console.warn('[applySeenLocally] Failed to persist vault read state for uid', uid, e);
+    console.warn('[applySeenLocally] Failed to persist vault read state for', accountId, mailbox, uids, e);
   }
 }
 
@@ -581,7 +625,7 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
 
   _refreshAfterFlagChange(useMailStore);
   _syncUnreadBadge(useMailStore, accountId, mailbox);
-  _persistVaultSeen(useMailStore, accountId, mailbox, uid, read);
+  _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read, isUnified);
 }
 
 
@@ -678,22 +722,43 @@ async function _markSelected(read) {
     _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
   }
 
+  const targets = [];
   for (const key of keys) {
     try {
       const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-      const realUid = ctx?.uid ?? key;
-      const accountId = ctx?.accountId || state.activeAccountId;
       const rawMailbox = ctx?.mailbox || state.activeMailbox;
-      const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
-      let account = ctx?.account || accounts.find(a => a.id === accountId);
-      // The vault copy is written whatever the server says: a vault-only
-      // message has no server copy to fail against, and the row on screen has
-      // already changed.
-      _persistVaultSeen(useMailStore, accountId, mailbox, realUid, read);
-      account = await ensureFreshToken(account);
-      await _setSeenOnServer(account, accountId, mailbox, realUid, read);
+      const accountId = ctx?.accountId || state.activeAccountId;
+      targets.push({
+        key,
+        uid: ctx?.uid ?? key,
+        accountId,
+        mailbox: rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox,
+        account: ctx?.account || accounts.find(a => a.id === accountId),
+      });
     } catch (e) {
-      console.error(`Failed to mark email ${key} as ${read ? 'read' : 'unread'}:`, e);
+      console.error(`Failed to resolve email ${key}:`, e);
+    }
+  }
+
+  // The vault copies are written whatever the server says — a vault-only
+  // message has no server copy to fail against, and the rows on screen have
+  // already changed — and written ONCE per folder, not once per message.
+  const byFolder = new Map();
+  for (const t of targets) {
+    const k = `${t.accountId}|${t.mailbox}`;
+    if (!byFolder.has(k)) byFolder.set(k, { ...t, uids: [] });
+    byFolder.get(k).uids.push(t.uid);
+  }
+  for (const f of byFolder.values()) {
+    _persistVaultSeen(useMailStore, f.accountId, f.mailbox, f.uids, read, isUnified);
+  }
+
+  for (const t of targets) {
+    try {
+      const account = await ensureFreshToken(t.account);
+      await _setSeenOnServer(account, t.accountId, t.mailbox, t.uid, read);
+    } catch (e) {
+      console.error(`Failed to mark email ${t.key} as ${read ? 'read' : 'unread'}:`, e);
     }
   }
 }

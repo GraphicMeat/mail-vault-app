@@ -94,6 +94,7 @@ pub use mailvault_core::oauth2;
 mod smtp;
 mod spellcheck;
 mod vault;
+mod vault_flags;
 
 #[cfg(target_os = "macos")]
 use cocoa::appkit::NSApplication;
@@ -820,7 +821,7 @@ fn send_notification(app_handle: tauri::AppHandle, title: String, body: String) 
 // Directory structure: email_cache/<accountId>_<mailbox>/_meta.json + <uid>.json per email
 // Old monolithic format (single .json file) is auto-migrated on first save.
 
-fn cache_base_name(account_id: &str, mailbox: &str) -> String {
+pub(crate) fn cache_base_name(account_id: &str, mailbox: &str) -> String {
     format!("{}_{}",
         account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
         mailbox.replace(|c: char| !c.is_alphanumeric(), "_")
@@ -1933,24 +1934,33 @@ pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox
     Ok(base.join("Maildir").join(account_id).join(&safe_mailbox).join("cur"))
 }
 
+/// The flags a vault file name carries, as the Maildir words AND as the IMAP
+/// names — `seen` and `\Seen` both, for a file named `12:2,AS`.
+///
+/// Every row in the app asks `flags.includes('\Seen')`; a row built from its
+/// .eml used to get the words alone and render unread whatever the file said.
+/// The words stay, because `build_maildir_filename` and the archived checks
+/// read them; the names are what the rest of the app reads.
 pub(crate) fn parse_flags_from_filename(filename: &str) -> Vec<String> {
-    if let Some(flags_part) = filename.split(":2,").nth(1) {
-        let mut flags = Vec::new();
-        for c in flags_part.chars() {
-            match c {
-                'A' => flags.push("archived".to_string()),
-                'D' => flags.push("draft".to_string()),
-                'F' => flags.push("flagged".to_string()),
-                'R' => flags.push("replied".to_string()),
-                'S' => flags.push("seen".to_string()),
-                'T' => flags.push("trashed".to_string()),
-                _ => {}
-            }
+    let Some(flags_part) = filename.split(":2,").nth(1) else { return Vec::new() };
+    let mut flags = Vec::new();
+    for c in flags_part.chars() {
+        match c {
+            'A' => flags.push("archived".to_string()),
+            'D' => flags.push("draft".to_string()),
+            'F' => flags.push("flagged".to_string()),
+            'R' => flags.push("replied".to_string()),
+            'S' => flags.push("seen".to_string()),
+            'T' => flags.push("trashed".to_string()),
+            _ => {}
         }
-        flags
-    } else {
-        Vec::new()
     }
+    for (word, name) in [("seen", "\\Seen"), ("flagged", "\\Flagged"), ("replied", "\\Answered")] {
+        if flags.iter().any(|f| f == word) {
+            flags.push(name.to_string());
+        }
+    }
+    flags
 }
 
 pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
@@ -2432,7 +2442,7 @@ fn maildir_store(
 
 // ── Local index (local-index.json) ──────────────────────────────────────────
 
-fn local_index_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+pub(crate) fn local_index_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     Ok(vault::root(app_handle)?.join("maildir").join(account_id).join(mailbox).join("local-index.json"))
 }
 
@@ -5028,6 +5038,7 @@ fn main() {
             maildir_delete,
             maildir_delete_many,
             maildir_set_flags,
+            vault_flags::vault_apply_flags,
             maildir_storage_stats,
             maildir_clear_cache,
             maildir_migrate_json_to_eml,
@@ -5476,6 +5487,17 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_vault_file_name_reports_its_flags_by_both_names() {
+        // The IMAP name is what every row reads; the word is what the
+        // archived checks and build_maildir_filename read.
+        assert_eq!(parse_flags_from_filename("12:2,AS.eml"), vec!["archived", "seen", "\\Seen"]);
+        assert_eq!(parse_flags_from_filename("12:2,A"), vec!["archived"]);
+        assert_eq!(parse_flags_from_filename("12:2,FRS"), vec!["flagged", "replied", "seen", "\\Seen", "\\Flagged", "\\Answered"]);
+        // The names round-trip through the builder without changing the name.
+        assert_eq!(build_maildir_filename(12, &parse_flags_from_filename("12:2,AS")), "12:2,AS");
+    }
 
     #[test]
     fn save_attachment_to_creates_missing_parent_directories() {

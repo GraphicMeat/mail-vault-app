@@ -36,7 +36,14 @@ export async function saveEmails(emails, accountId, mailbox) {
       mailbox,
       uid: email.uid,
       rawSourceBase64: email.rawSource,
-      flags: ['archived', 'seen'],
+      // The message's own flags — the same rule as vaultStoreFlags in
+      // workflows/messageMutations.js, which owns the Tauri path.
+      flags: [
+        'archived',
+        ...(email.flags?.includes('\\Seen') ? ['seen'] : []),
+        ...(email.flags?.includes('\\Flagged') ? ['flagged'] : []),
+        ...(email.flags?.includes('\\Answered') ? ['replied'] : []),
+      ],
     });
     results.push({ ...email, localId: `${accountId}-${mailbox}-${email.uid}` });
   }
