@@ -104,7 +104,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-import { _selKey } from '../../../stores/slices/unifiedHelpers';
+import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
 const UID = 5;
@@ -301,16 +301,20 @@ describe('marking a vault-only row read from the unified list', () => {
     useMailStore.getState().updateSortedEmails();
   }
 
-  it('writes a Sent copy merged into the INBOX list under Sent, not under INBOX\'s uid', async () => {
+  // A bare key names the folder on screen — even with no loaded row under
+  // it (the bulk modal selects uids the render window never held) and even
+  // when the only row in memory carrying that number is a merged Sent copy.
+  // The Sent copy is reached by its own key (selectionKey), never by a bare
+  // uid.
+  it('reads a bare uid as the folder on screen, never as the merged Sent copy sharing it', async () => {
     primeInboxWithSent({ sentEmails: [sentRow()], selected: [UID] });
 
     await useMailStore.getState().markSelectedAsRead();
 
-    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
-    expect(mockUpdateEmailFlags).not.toHaveBeenCalledWith(expect.anything(), UID, ['\\Seen'], 'add', 'INBOX');
-    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
-    // And the row on screen flips — it lives in `sentEmails`, in no other array.
-    expect(useMailStore.getState().sentEmails[0].flags).toContain('\\Seen');
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', 'INBOX');
+    expect(mockVaultApplyFlags).not.toHaveBeenCalledWith(ACCOUNT.id, SENT, expect.anything(), expect.anything());
+    expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
   });
 
   // A bare uid cannot say which of two same-numbered rows was ticked — a
@@ -326,6 +330,24 @@ describe('marking a vault-only row read from the unified list', () => {
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', 'INBOX');
     expect(rowSeen()).toBe(true);
     expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
+  });
+
+  // The key the checkbox writes for a merged Sent copy names its folder (see
+  // selectionKey), so a bulk change reaches the Sent message even though the
+  // folder on screen has a message under that uid.
+  it('writes a merged Sent copy under Sent when its key names the folder', async () => {
+    const inbox = { ...vaultRow([]), _accountId: undefined, _mailbox: undefined, isArchived: false, source: 'server' };
+    const sent = sentRow();
+    primeInboxWithSent({ emails: [inbox], sentEmails: [sent], selected: [] });
+    useMailStore.setState({ selectedEmailIds: new Set([selectionKey(sent, useMailStore.getState())]) });
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
+    expect(rowSeen()).toBe(false);
+    expect(useMailStore.getState().sentEmails[0].flags).toContain('\\Seen');
   });
 
   // The unified list keys a row by account, folder and uid, so there the

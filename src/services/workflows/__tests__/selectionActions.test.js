@@ -287,6 +287,35 @@ describe('deleteSelectedFromServer', () => {
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
   });
 
+  // The INBOX list merges the account's Sent copies in, and a uid names a
+  // message only inside one folder. The map the delete resolved its rows
+  // through was keyed by bare uid and let the LAST entry win — the Sent copy —
+  // so deleting the folder's own message under that number deleted the Sent
+  // message instead, and the row it took off the list came back at the next
+  // sync (while the merged copy vanished from its thread).
+  it('deletes the folder\'s own message when a merged Sent copy shares its uid', async () => {
+    primeStore(seedThread(), [1]);
+    useMailStore.setState({
+      mailboxes: [
+        { name: 'INBOX', path: 'INBOX', children: [] },
+        { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+      ],
+      sentEmails: [{
+        uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'],
+        from: { address: 'me@mock.test' }, date: '2026-08-03T10:00:00Z',
+        _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+      }],
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockDeleteEmail).toHaveBeenCalledTimes(1);
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 1, 'INBOX');
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
+    // The Sent copy is a different message: it stays, on the server and in the list.
+    expect(useMailStore.getState().sentEmails.map(e => e.uid)).toEqual([1]);
+  });
+
   it('keeps the row when the server delete fails', async () => {
     mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
     primeStore(seedThread(), [1]);

@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -228,11 +228,12 @@ export async function saveSelectedLocally() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const { selectedEmailIds, activeMailbox } = get();
+  const { selectedEmailIds } = get();
   if (selectedEmailIds.size === 0) return;
   const keys = Array.from(selectedEmailIds);
   useMailStore.setState({ selectedEmailIds: new Set() });
-  const uids = activeMailbox === 'UNIFIED' ? keys.map(k => _parseSelKey(k).uid) : keys;
+  // A bare uid parses to itself; a full key to its uid.
+  const uids = keys.map(k => _parseSelKey(k).uid);
   await get().saveEmailsLocally(uids);
 }
 
@@ -712,7 +713,7 @@ async function _markSelected(read) {
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
-  const selKeyOf = (e) => (isUnified ? _selKey(e) : e.uid);
+  const selKeyOf = (e) => selectionKey(e, state);
 
   // Which message each key names — account, folder, uid — resolved once, up
   // front, so that every write below follows it: the rows on screen, the
@@ -801,12 +802,16 @@ export const markSelectedAsUnread = () => _markSelected(false);
 function _resolveKeyContext(key, state, emailMap) {
   const isUnified = spansMailboxes(state);
   const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-  const uid = ctx?.uid ?? _parseSelKey(key).uid;
-  const accountId = ctx?.accountId || state.activeAccountId;
+  // A full key names its account and folder itself (a merged Sent copy in a
+  // single folder's list gets one — see selectionKey); a bare uid names the
+  // view's.
+  const parsed = _parseSelKey(key);
+  const uid = ctx?.uid ?? parsed.uid;
+  const accountId = ctx?.accountId || parsed.accountId || state.activeAccountId;
   const emailObj = emailMap.get(key);
   // The row's own folder where it names one — `_mailbox`, or the Sent path
-  // for a copy the INBOX list merged in — and the view's otherwise.
-  const rawMailbox = ctx?.mailbox || resolveEmailLocation(emailObj, state)?.mailbox || state.activeMailbox;
+  // for a copy the INBOX list merged in — the key's, and the view's otherwise.
+  const rawMailbox = ctx?.mailbox || resolveEmailLocation(emailObj, state)?.mailbox || parsed.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
   const account = ctx?.account || state.accounts.find(a => a.id === accountId);
   return { uid, accountId, mailbox, account, emailObj, tombstone: `${accountId}|${mailbox}|${uid}` };
@@ -828,7 +833,7 @@ export async function deleteSelectedFromServer() {
   const keys = Array.from(selectedEmailIds);
 
   const allEmails = [...state.emails, ...state.sentEmails];
-  const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
+  const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
   const contextOf = (key) => _resolveKeyContext(key, state, emailMap);
 
   // Journal the intent BEFORE anything else, and await it.
@@ -873,8 +878,8 @@ export async function deleteSelectedFromServer() {
   useMailStore.setState({
     deleteTombstones: newTombstones,
     selectedEmailIds: new Set(),
-    emails: state.emails.filter(e => !deletedKeySet.has(isUnified ? _selKey(e) : e.uid)),
-    sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(isUnified ? _selKey(e) : e.uid)),
+    emails: state.emails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
+    sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
     totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
     selectedEmailId: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmailId,
     selectedEmail: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmail,
@@ -1072,7 +1077,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // `_localStaged` duplicate sitting in `localEmails` can never masquerade as
   // the server-backed row's verdict.
   const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
-  const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
+  const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
 
   const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap));
 
@@ -1122,8 +1127,8 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   useMailStore.setState({
     deleteTombstones: tombstones,
     selectedEmailIds: new Set(),
-    emails: state.emails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
-    sentEmails: state.sentEmails.filter(e => !keySet.has(isUnified ? _selKey(e) : e.uid)),
+    emails: state.emails.filter(e => !keySet.has(selectionKey(e, state))),
+    sentEmails: state.sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
     totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
   });
   get().updateSortedEmails();
@@ -1360,10 +1365,7 @@ export async function moveEmails(uids, targetMailbox) {
   }
 
   const keySet = new Set(uids);
-  const filteredEmails = get().emails.filter(e => {
-    const k = isUnified ? _selKey(e) : e.uid;
-    return !keySet.has(k);
-  });
+  const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
   const newTotal = Math.max(0, (get().totalEmails || 0) - uids.length);
   const updates = {
     emails: filteredEmails,

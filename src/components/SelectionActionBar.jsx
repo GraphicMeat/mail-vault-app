@@ -9,7 +9,7 @@ import {
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { vaultClause } from '../utils/custodyCopy';
 import { useMailStore } from '../stores/mailStore';
-import { _selKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
+import { selectionKey } from '../stores/slices/unifiedHelpers';
 import { useExportStore } from '../stores/exportStore';
 import { t, useT  } from '../i18n/index.js';
 
@@ -62,9 +62,9 @@ export function SelectionActionBar() {
   // A key the render window cannot resolve is simply not in the list, and the
   // dialog's own heading counts what it is actually about to export.
   const exportSelected = () => {
-    const isUnified = spansMailboxes(useMailStore.getState());
-    const { sortedEmails = [] } = useMailStore.getState();
-    const messages = sortedEmails.filter(e => selectedEmailIds.has(isUnified ? _selKey(e) : e.uid));
+    const state = useMailStore.getState();
+    const { sortedEmails = [] } = state;
+    const messages = sortedEmails.filter(e => selectedEmailIds.has(selectionKey(e, state)));
     if (messages.length) useExportStore.getState().openExport({ messages });
   };
 

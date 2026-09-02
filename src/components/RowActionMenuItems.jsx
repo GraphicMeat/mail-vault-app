@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
-import { _selKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
+import { selectionKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -28,13 +28,11 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
   const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
   const purgeSelectedEverywhere = useMailStore(s => s.purgeSelectedEverywhere);
-  const isUnified = useMailStore(s => spansMailboxes(s));
   const [showMove, setShowMove] = useState(false);
 
-  // Selection key format the store's bulk workflows expect — accountId:uid in
-  // unified inbox (cross-account uid collisions), plain uid otherwise. Every
-  // message the checkbox would select, in the same order.
-  const keys = emails.map(e => (isUnified ? _selKey(e) : e.uid));
+  // The key the store's bulk workflows expect — the one the checkbox writes.
+  // Every message the checkbox would select, in the same order.
+  const keys = emails.map(e => selectionKey(e, useMailStore.getState()));
 
   const hasUnread = emails.some(e => !e.flags?.includes('\\Seen'));
   const hasRead = emails.some(e => e.flags?.includes('\\Seen'));

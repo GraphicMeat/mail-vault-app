@@ -9,7 +9,7 @@
  * read against the account.
  */
 import { describe, it, expect } from 'vitest';
-import { _selKey, _parseSelKey } from '../unifiedHelpers';
+import { _selKey, _parseSelKey, selectionKey } from '../unifiedHelpers';
 
 const row = (accountId, mailbox, uid) => ({ _accountId: accountId, _mailbox: mailbox, uid });
 
@@ -47,6 +47,33 @@ describe('_selKey', () => {
 
 // ── Which lists span more than one mailbox ─────────────────────────────────
 import { spansMailboxes } from '../unifiedHelpers';
+
+// What the checkbox writes and every bulk workflow reads. A single folder's
+// list keys by bare uid — except for a row it merged in from ANOTHER folder
+// (a Sent copy in the INBOX list), which carries its provenance and gets the
+// full key: INBOX's own message under that number is a different message,
+// and a bare uid cannot say which of the two was ticked.
+describe('selectionKey', () => {
+  const single = { activeMailbox: 'INBOX', activeAccountId: 'a1', getSentMailboxPath: () => 'Sent' };
+
+  it('keys a row of the folder on screen by its bare uid', () => {
+    expect(selectionKey({ uid: 7 }, single)).toBe(7);
+    expect(selectionKey({ uid: 7, _mailbox: 'INBOX' }, single)).toBe(7);
+  });
+
+  it('gives a Sent copy merged into the INBOX list the full key', () => {
+    const full = _selKey({ _accountId: 'a1', _mailbox: 'Sent', uid: 7 });
+    expect(selectionKey({ uid: 7, _accountId: 'a1', _fromSentFolder: true, _mailbox: 'Sent' }, single)).toBe(full);
+    // Provenance from the flag alone — the folder comes from the view's Sent path.
+    expect(selectionKey({ uid: 7, _fromSentFolder: true }, single)).toBe(full);
+  });
+
+  it('keys every row of a list spanning mailboxes by account, folder and uid', () => {
+    const unified = { activeMailbox: 'UNIFIED', activeAccountId: 'a1' };
+    expect(selectionKey({ uid: 7, _accountId: 'a2', _mailbox: 'INBOX' }, unified))
+      .toBe(_selKey({ _accountId: 'a2', _mailbox: 'INBOX', uid: 7 }));
+  });
+});
 
 describe('spansMailboxes', () => {
   it('is false for an ordinary folder, where activeMailbox names the location', () => {

@@ -185,6 +185,22 @@ export function rowKey(email, spans) {
   return spans ? _selKey(email) : email.uid;
 }
 
+// ── The selection key ──────────────────────────────────────────────────────
+// What the checkbox writes and every bulk workflow reads back. A list spanning
+// mailboxes keys by account, folder and uid. A single folder's list keys by
+// bare uid — except for a row it merged in from ANOTHER folder (a Sent copy in
+// the INBOX list, which carries `_fromSentFolder` / `_mailbox`), which gets
+// the full key: INBOX's own message under that number is a different message,
+// and a bare uid cannot say which of the two was ticked. A map keyed by bare
+// uid let the Sent copy win that collision, and a delete aimed at the folder's
+// own message deleted the Sent one.
+export function selectionKey(email, state) {
+  if (spansMailboxes(state)) return email._accountId ? _selKey(email) : email.uid;
+  const loc = resolveEmailLocation(email, state);
+  if (!loc || loc.mailbox === state.activeMailbox) return email.uid;
+  return _selKey({ _accountId: loc.accountId, _mailbox: loc.mailbox, uid: email.uid });
+}
+
 /**
  * The row `delta` places from the open one, clamped to the ends.
  *
