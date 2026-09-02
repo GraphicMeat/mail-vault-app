@@ -9,6 +9,7 @@ import { replaceCidUrls } from '../attachmentUtils';
 import { resolveMessageBody } from './bodyResolver';
 import { useMailStore } from '../../stores/mailStore';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
+import { trace } from './exportTrace';
 
 // Samples run the real pipeline over fixture data, so they must reach it
 // without a subscription. Everything else meets the gate below.
@@ -86,14 +87,17 @@ export async function buildExport({
     .sort((a, b) => a.date - b.date);
   const failures = [];
   const prepared = [];
+  trace('start', { format, layout, mirror, messages: ordered.length });
 
   for (const message of ordered) {
     try {
+      trace('hydrate', { uid: message.uid });
       const full = await hydrate(message);
       const fetcher = forceMirrorFailure
         ? async () => { throw new Error('forced mirror failure'); }
         : fetchAsset;
       prepared.push({ message: full, body: await prepareBody(full, mirror, fetcher, stats) });
+      trace('prepared', { uid: message.uid });
     } catch (err) {
       // One body that will not load is not a failed export of the other forty.
       failures.push({ uid: message.uid, subject: message.subject, error: String(err.message || err) });
@@ -127,10 +131,12 @@ export async function buildExport({
   const rendered = [];
   for (const item of prepared) {
     try {
+      trace('render', { uid: item.message.uid });
       canvases.push(await renderMessageToCanvas({
         message: item.message, bodyHtml: item.body, account, mailbox, stats,
       }));
       rendered.push(item);
+      trace('rendered', { uid: item.message.uid });
     } catch (err) {
       failures.push({ uid: item.message.uid, subject: item.message.subject, error: String(err.message || err) });
     }
@@ -155,5 +161,6 @@ export async function buildExport({
     }));
   }
 
+  trace('files', { n: files.length });
   return { ok: true, partial: failures.length > 0, failures, stats, files };
 }

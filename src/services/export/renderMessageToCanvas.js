@@ -1,5 +1,6 @@
 import { domToCanvas } from 'modern-screenshot';
 import { buildMessageDocument, EXPORT_WIDTH_PX, EXPORT_SCALE } from './exportDocument';
+import { trace } from './exportTrace';
 
 // The export frame never gets allow-scripts. Quotes and signatures are
 // expanded by building the document that way, so there is nothing left for a
@@ -32,6 +33,7 @@ export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOU
     });
 
     const doc = iframe.contentDocument;
+    trace('frame-loaded', { images: doc.images.length });
 
     // Whether a scrollbar takes layout space is a property of the MACHINE, not
     // of the mail: on a Mac set to always-show scrollbars the frame's usable
@@ -44,6 +46,7 @@ export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOU
     // or the frame is measured mid-load and the bottom of the mail is cut off.
     if (doc.fonts?.ready) await doc.fonts.ready;
     await Promise.all([...doc.images].map(img => (img.decode ? img.decode().catch(() => {}) : null)));
+    trace('images-decoded', { srcs: [...doc.images].map(i => i.currentSrc || i.src).slice(0, 5) });
 
     // Collapse before measuring. scrollHeight on a frame TALLER than its
     // content returns the frame's own height — the Task 0 probe rasterized
@@ -84,9 +87,13 @@ export async function renderMessageToCanvas({ message, bodyHtml, account, mailbo
       width: EXPORT_WIDTH_PX, height: frame.height,
       font: false, timeout: 3000,
     };
+    trace('dom-to-canvas', { visibility: document.visibilityState });
     try {
-      return await domToCanvas(frame.doc.body, options);
+      const canvas = await domToCanvas(frame.doc.body, options);
+      trace('canvas', { w: canvas.width, h: canvas.height });
+      return canvas;
     } catch (first) {
+      trace('canvas-retry', { error: String(first?.message || first) });
       // Known WebKit flake: the first foreignObject rasterize of a document can
       // come back empty or throw. One retry, then it is a real failure.
       return await domToCanvas(frame.doc.body, options);

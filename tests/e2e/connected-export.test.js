@@ -170,6 +170,7 @@ const setFault = (f) => browser.execute((fault) => {
 }, f);
 
 const clearSeams = () => browser.execute(() => {
+  delete window.__MV_EXPORT_TRACE__;
   delete window.__MV_EXPORT_DEST__;
   delete window.__MV_EXPORT_DIR__;
   delete window.__MV_FORCE_EXPORT_FAILURE__;
@@ -194,18 +195,20 @@ async function closeDialog() {
  * bare "nothing was written" names the symptom and hides the notice the dialog
  * is displaying, which is the only place the reason exists.
  */
-async function waitForFile(file, timeout = 90_000) {
+async function waitForWritten(check, what, timeout = 90_000) {
   try {
-    await browser.waitUntil(async () => fs.existsSync(file) && fs.statSync(file).size > 0,
-      { timeout, interval: 500, timeoutMsg: 'no bytes' });
+    await browser.waitUntil(check, { timeout, interval: 500, timeoutMsg: 'no bytes' });
   } catch (err) {
     const shown = await browser.execute(() => {
       const d = [...document.querySelectorAll('[role="dialog"]')].find(el => el.offsetHeight > 0);
       return d ? (d.textContent || '').replace(/\s+/g, ' ').slice(0, 400) : '(no dialog on screen)';
     });
-    throw new Error(`nothing was written to ${file} — the dialog was showing: ${shown}`);
+    const trace = await browser.execute(() => JSON.stringify(window.__MV_EXPORT_TRACE__ || null));
+    throw new Error(`${typeof what === 'function' ? what() : what} — the dialog was showing: ${shown}\n  export trace: ${trace}`);
   }
 }
+const waitForFile = (file, timeout) => waitForWritten(
+  () => fs.existsSync(file) && fs.statSync(file).size > 0, `nothing was written to ${file}`, timeout);
 
 describe('Export', function () {
   this.timeout(180_000);
@@ -294,8 +297,8 @@ describe('Export', function () {
     await setDir(dir);
     await confirmExport();
 
-    await browser.waitUntil(async () => fs.readdirSync(dir).length >= 2,
-      { timeout: 90_000, interval: 1000, timeoutMsg: `only ${fs.readdirSync(dir).length} file(s) in ${dir}` });
+    await waitForWritten(() => fs.readdirSync(dir).length >= 2,
+      () => `only ${fs.readdirSync(dir).length} file(s) in ${dir}`);
 
     const names = fs.readdirSync(dir).sort();
     expect(names[0]).toMatch(/^01 - /);
