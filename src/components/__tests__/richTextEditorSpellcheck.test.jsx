@@ -17,14 +17,20 @@ vi.mock('lucide-react', () => {
   });
 });
 
-// A chainable no-op editor: the toolbar builds `editor.chain().focus().x().run()`
-// for every other button, and RichTextEditor's content-sync effect uses the same
-// shape. Only blur/focus are observed here.
+// A chainable editor that RECORDS what was chained: the toolbar builds
+// `editor.chain().focus().x().run()` for every other button, and the two
+// effects in RichTextEditor use the same shape. Retracting a spelling marker
+// is a chain, not a command, so the chain is what has to be observable.
 const commands = { blur: vi.fn(), focus: vi.fn() };
-const chain = () => new Proxy({}, { get: () => (() => chain()) });
+const chained = [];
+const chain = () => new Proxy({}, {
+  get: (_t, name) => (...args) => { chained.push([String(name), ...args]); return chain(); },
+});
 const fakeEditor = {
   commands,
   chain,
+  // The rebuild puts the caret back where it was, so it has to read it first.
+  state: { selection: { from: 3, to: 7 } },
   getHTML: () => '',
   getText: () => '',
   getAttributes: () => ({}),
@@ -57,6 +63,7 @@ const renderEditor = () => render(
 
 beforeEach(() => {
   settings = { spellcheckEnabled: true, setSpellcheckEnabled };
+  chained.length = 0;
   vi.clearAllMocks();
   vi.useFakeTimers({ shouldAdvanceTime: true });
 });
@@ -94,14 +101,34 @@ describe('compose spellcheck toggle', () => {
     expect(setSpellcheckEnabled).toHaveBeenCalledWith(false);
   });
 
-  it('re-enters the editable so the existing squiggles are re-evaluated', () => {
+  // Replaces an older case that asserted blur() then a deferred focus(). That
+  // was the documented cure and it does not work: photographed on the runner,
+  // a marked sentence keeps every underline through blur/focus, through
+  // `spellcheck=false` on the editable itself, and through a `contenteditable`
+  // off/on cycle. WebKit binds the marker to the TEXT NODE; only replacing the
+  // nodes retracts it.
+  it('rebuilds the text nodes when the switch flips, off the undo history', () => {
+    const { rerender } = renderEditor();
+    chained.length = 0;
+
+    settings.spellcheckEnabled = false;
+    rerender(<RichTextEditor content="" onUpdate={() => {}} />);
+
+    const names = chained.map(([name]) => name);
+    expect(names).toContain('setContent');
+    // A spellcheck toggle must not become an undo step.
+    expect(chained).toContainEqual(['setMeta', 'addToHistory', false]);
+    // …and must not throw the caret to the top of the message.
+    expect(chained).toContainEqual(['setTextSelection', { from: 3, to: 7 }]);
+    // The old cure is gone: it never retracted anything.
+    expect(commands.blur).not.toHaveBeenCalled();
+  });
+
+  it('does not rebuild on the first paint', () => {
     renderEditor();
-    fireEvent.mouseDown(screen.getByTitle(/^Spellcheck/));
-    expect(commands.blur).toHaveBeenCalled();
-    // focus is deferred a tick — before that the blur has not been applied yet.
-    expect(commands.focus).not.toHaveBeenCalled();
-    vi.runAllTimers();
-    expect(commands.focus).toHaveBeenCalled();
+    // Mount must not re-set the content: the editor has only just parsed it,
+    // and a rebuild here would fight the content-sync effect beside it.
+    expect(chained.map(([name]) => name)).not.toContain('setContent');
   });
 
   it('says what the click will do, in both states', () => {

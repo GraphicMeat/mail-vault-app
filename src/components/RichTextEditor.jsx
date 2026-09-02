@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -60,14 +60,12 @@ function Toolbar({ editor }) {
     editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run();
   }, [editor]);
 
-  // The attribute lives on the wrapper below and the editable inherits it;
-  // WebKit keeps painting the squiggles it already drew until the editable is
-  // re-entered, so re-enter it.
+  // Just the preference. Retracting the underlines already on screen is the
+  // editor's job, below — re-entering the editable does not do it, whatever
+  // the previous comment here claimed.
   const toggleSpellcheck = useCallback(() => {
     setSpellcheckEnabled(!spellcheckEnabled);
-    editor?.commands.blur();
-    setTimeout(() => editor?.commands.focus(), 0);
-  }, [editor, spellcheckEnabled, setSpellcheckEnabled]);
+  }, [spellcheckEnabled, setSpellcheckEnabled]);
 
   const S = 15;
 
@@ -216,6 +214,33 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   useEffect(() => {
     if (editorRef) editorRef.current = editor;
   }, [editor, editorRef]);
+
+  // Make the switch mean something for words already on screen.
+  //
+  // WebKit binds a spelling marker to the TEXT NODE, so changing an attribute
+  // never retracts one that is already painted. Measured on the runner against
+  // a marked sentence (red pixels, 3993 = marked, 3527 = clean): wrapper
+  // attribute + blur/focus 3993, `spellcheck=false` on the editable itself
+  // 3993, a `contenteditable` off/on cycle 3993 — and replacing the nodes,
+  // 3527. Only the last one clears.
+  //
+  // In an effect, not in the click handler: the handler runs BEFORE React has
+  // written the new attribute, so nodes rebuilt there are created while
+  // checking is still on, get marked again on the spot, and the switch looks
+  // just as broken. `addToHistory: false` keeps Undo out of it — the same
+  // idiom the external-content sync below uses — and the selection goes back
+  // because the document is identical, so the positions still hold.
+  const spellcheckSettled = useRef(false);
+  useEffect(() => {
+    if (!editor) return;
+    if (!spellcheckSettled.current) { spellcheckSettled.current = true; return; }
+    const { from, to } = editor.state.selection;
+    editor.chain()
+      .setMeta('addToHistory', false)
+      .setContent(editor.getHTML())
+      .setTextSelection({ from, to })
+      .run();
+  }, [spellcheckEnabled, editor]);
 
   // Sync content from parent when it changes externally (mount, minimize/restore,
   // signature swap on account change, template fallback). None of that is a user

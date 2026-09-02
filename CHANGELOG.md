@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Turning spellcheck off now takes away the red underlines already on the page.** The button at the right of the message toolbar has always stopped new mistakes being marked, but every word already underlined kept its mark for as long as the message stayed open — so pressing it looked like it had done nothing, and the release that introduced the button said the underlines stop. They now go the moment you press it, and come back when you press it again. The underline is drawn by the system rather than by MailVault, and it belongs to the text itself rather than to the box the text sits in, so changing the setting on the box was never going to reach one that had already been drawn. MailVault now re-lays the text when the switch is flipped, which is what actually retracts the marks — without disturbing what you have written, where the cursor is, or what Undo does next.
+
 ## [2.11.0] - 2026-08-31
 
 ### Added
