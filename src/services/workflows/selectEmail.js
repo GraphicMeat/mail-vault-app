@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, rowKey } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, rowKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -146,6 +146,19 @@ export async function _prefetchAdjacentEmails(currentUid) {
 }
 
 
+// The list row the open message came from — in ITS folder. The INBOX list
+// merges the account's Sent copies in (`sentEmails`), and INBOX has its own
+// message under a merged copy's uid; looking the row up by bare uid handed
+// that one back: its flags painted the Sent copy's viewer, and its Message-ID
+// made the Sent copy's own vault file look like another message's.
+function _rowOf(state, accountId, mailbox, uid) {
+  const pool = [...(state.emails || []), ...(state.sortedEmails || []), ...(state.localEmails || []), ...(state.sentEmails || [])];
+  return pool.find(e => e.uid === uid
+    && (e._accountId || state.activeAccountId) === accountId
+    && (resolveEmailLocation(e, state)?.mailbox ?? mailbox) === mailbox);
+}
+
+
 // ── selectEmail workflow ──
 
 export async function selectEmail(uid, source = 'server', mailboxOverride = null) {
@@ -165,8 +178,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // opening an ordinary message costs nothing extra. Imported here rather than
   // at the top for the same reason mailStore is: localDrafts reaches back into
   // the store this workflow is reached FROM.
-  const clickedRow = state.emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid)
-    || state.sortedEmails.find(e => e.uid === uid);
+  const clickedRow = _rowOf(state, accountId, mailbox, uid);
   if (clickedRow?.flags?.includes('draft')) {
     const { openLocalDraft } = await import('../localDrafts');
     if (await openLocalDraft(accountId, mailbox, uid)) return;
@@ -203,7 +215,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       if (hydrated !== cachedEmail) get().addToCache(cacheKey, hydrated, cacheLimitMB);
       // The cached body is frozen at fetch time, but flags keep moving (mark
       // read/unread, sync, another client). The list row is the current copy.
-      const row = get().emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid);
+      const row = _rowOf(get(), accountId, mailbox, uid);
       const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
       useMailStore.setState({ selectedEmail: withAccount(fresh), selectedEmailSource: source, loadingEmail: false });
       await _autoMarkRead(useMailStore, {
@@ -214,8 +226,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     }
 
     // 2. Check Maildir for cached .eml file
-    const headerRow = get().emails.find(e => isUnified ? (e._accountId === accountId && e.uid === uid) : e.uid === uid)
-      || get().sortedEmails.find(e => e.uid === uid);
+    const headerRow = _rowOf(get(), accountId, mailbox, uid);
     const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, headerRow);
 
     if (localEmail && (source === 'local-only' || localEmail.html !== undefined)) {

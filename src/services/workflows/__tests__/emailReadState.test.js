@@ -257,6 +257,55 @@ describe('selectEmail — cached body, current flags', () => {
   });
 });
 
+// A Sent copy the INBOX list merged in, opened by its own folder (EmailRow
+// hands selectEmail `_mailbox`). INBOX has its own message under that uid, and
+// every lookup of "the clicked row" by bare uid handed that one back: its
+// flags painted the Sent copy's viewer, and its Message-ID made the Sent
+// copy's own vault file look like another message's.
+describe('selectEmail — a Sent copy opened from the INBOX list', () => {
+  const SENT_ROW = {
+    uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: [],
+    from: { address: ACCOUNT.email }, date: '2026-08-01T11:00:00Z',
+    _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+  };
+  const primeWithSent = () => {
+    markAsReadMode = 'manual';
+    primeStore(['\\Seen']);
+    useMailStore.setState({
+      mailboxes: [
+        { name: 'INBOX', path: 'INBOX', children: [] },
+        { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+      ],
+      sentEmails: [SENT_ROW],
+    });
+  };
+
+  it('paints a cache hit with the Sent row\'s flags, not INBOX\'s same-numbered row', async () => {
+    primeWithSent();
+    useMailStore.getState().addToCache(
+      'acct1-Sent-1',
+      { uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'], html: '<p>sent</p>', text: 'sent' },
+      128,
+    );
+
+    await useMailStore.getState().selectEmail(1, 'server', 'Sent');
+
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+    expect(viewerSeen()).toBe(false); // the Sent row is unread; INBOX 1 is read
+  });
+
+  it('keeps a vault copy whose Message-ID matches the Sent row, not INBOX\'s', async () => {
+    primeWithSent();
+    mockGetLocalEmailLight.mockResolvedValue({ uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: [], html: '<p>vault</p>', text: 'vault' });
+
+    await useMailStore.getState().selectEmail(1, 'server', 'Sent');
+
+    expect(mockGetLocalEmailLight).toHaveBeenCalledWith(ACCOUNT.id, 'Sent', 1);
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+    expect(useMailStore.getState().selectedEmail?.html).toBe('<p>vault</p>');
+  });
+});
+
 describe('markEmailReadStatus', () => {
   it('closes the viewer when the open email is marked unread', async () => {
     primeStore(['\\Seen']);
