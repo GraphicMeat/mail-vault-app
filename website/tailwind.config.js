@@ -6,6 +6,7 @@ export default {
   content: [
     './**/*.html',
     './pricing-localize.js',
+    './search.js',
     '!./node_modules/**',
     '!./api/**',
     // Generated locale copies only ever carry classes their English source

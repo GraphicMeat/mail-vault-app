@@ -174,6 +174,14 @@
       <h1 class="text-4xl font-bold mb-2">Documentação</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">Guias, fluxos de trabalho e respostas para tirar o máximo do MailVault.</p>
 
+      <!-- Search is progressive enhancement over the index below: with scripting
+           off the box stays hidden and every guide is still one link away. -->
+      <div id="mv-docs-search" hidden class="mb-8">
+        <input id="mv-docs-q" type="search" autocomplete="off" data-mv-search data-index="#mv-docs-index" data-heading="#mv-docs-heading" data-results="#mv-docs-results" data-empty="#mv-docs-empty" data-row=".mv-doc" data-group=".mv-docs-group" aria-label="Search the docs, guides and FAQ" placeholder="Search the docs, guides and FAQ" aria-controls="mv-docs-results" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
+
+      <div id="mv-docs-results" hidden class="grid gap-4 mb-8"></div>
+
       <!-- Reference — the three destinations people arrive looking for. -->
       <h2 class="text-2xl font-bold mb-4">Referência</h2>
       <div class="grid gap-4 sm:grid-cols-3 mb-14">
@@ -210,14 +218,8 @@
 
       </div>
 
-      <!-- Search is progressive enhancement over the index below: with scripting
-           off the box stays hidden and every guide is still one link away. -->
-      <div id="mv-docs-search" hidden class="mb-8">
-        <input id="mv-docs-q" type="search" autocomplete="off" aria-label="Buscar na documentação" placeholder="Buscar na documentação" aria-controls="mv-docs-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
-      </div>
-
-      <h2 class="text-2xl font-bold mb-6">Guias</h2>
-      <p id="mv-docs-empty" hidden class="text-slate-500 dark:text-slate-400">Nenhum guia corresponde a essa busca.</p>
+      <h2 id="mv-docs-heading" class="text-2xl font-bold mb-6">Guias</h2>
+      <p id="mv-docs-empty" hidden class="text-slate-500 dark:text-slate-400">Nothing on the site matches that search.</p>
 
       <div id="mv-docs-index" class="space-y-8">
 
@@ -416,26 +418,8 @@
       });
     });
 
-    // Filter the index. Plain substring over title and summary — 17 cards.
-    const box = document.getElementById('mv-docs-search');
-    const field = document.getElementById('mv-docs-q');
-    const empty = document.getElementById('mv-docs-empty');
-    const cards = [...document.querySelectorAll('#mv-docs-index .mv-doc')];
-    box.hidden = false;
-    field.addEventListener('input', () => {
-      const needle = field.value.trim().toLowerCase();
-      let hits = 0;
-      for (const card of cards) {
-        const match = !needle || card.textContent.toLowerCase().includes(needle);
-        card.hidden = !match;
-        if (match) hits++;
-      }
-      for (const group of document.querySelectorAll('#mv-docs-index .mv-docs-group')) {
-        group.hidden = ![...group.querySelectorAll('.mv-doc')].some(c => !c.hidden);
-      }
-      empty.hidden = hits > 0;
-    });
   </script>
+  <script defer src="/search.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

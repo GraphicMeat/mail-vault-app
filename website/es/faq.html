@@ -177,6 +177,14 @@
       <h1 class="text-4xl font-bold mb-2">Preguntas frecuentes</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">Todo lo que necesitas saber sobre MailVault.</p>
 
+      <!-- Search is progressive enhancement over the list below: with scripting
+           off the box stays hidden and every question is still one link away. -->
+      <div id="mv-faq-search" hidden class="mb-8">
+        <input id="mv-faq-q" type="search" autocomplete="off" data-mv-search data-index="#mv-faq-index" data-heading="#mv-faq-heading" data-results="#mv-faq-results" data-empty="#mv-faq-empty" data-row=".mv-faq-q" data-group=".mv-faq-group" aria-label="Search the FAQ, guides and docs" placeholder="Search the FAQ, guides and docs" aria-controls="mv-faq-results" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
+      </div>
+
+      <div id="mv-faq-results" hidden class="grid gap-4 mb-8"></div>
+
       <div class="grid gap-4 sm:grid-cols-2 mb-14">
 
         <a href="/es/faq/getting-started.html" class="group rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 hover:border-primary-500 transition-colors">
@@ -247,14 +255,8 @@
 
       </div>
 
-      <!-- Search is progressive enhancement over the list below: with scripting
-           off the box stays hidden and every question is still one link away. -->
-      <div id="mv-faq-search" hidden class="mb-8">
-        <input id="mv-faq-q" type="search" autocomplete="off" aria-label="Buscar en las FAQ" placeholder="Buscar en las FAQ" aria-controls="mv-faq-index" class="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3 text-slate-900 dark:text-slate-100">
-      </div>
-
-      <h2 class="text-2xl font-bold mb-6">Todas las preguntas</h2>
-      <p id="mv-faq-empty" hidden class="text-slate-500 dark:text-slate-400">Ninguna pregunta coincide con esa búsqueda.</p>
+      <h2 id="mv-faq-heading" class="text-2xl font-bold mb-6">Todas las preguntas</h2>
+      <p id="mv-faq-empty" hidden class="text-slate-500 dark:text-slate-400">Nothing on the site matches that search.</p>
 
       <div id="mv-faq-index" class="grid gap-8 sm:grid-cols-2">
 
@@ -408,26 +410,8 @@
       if (owner) location.replace(owner.href);
     }
 
-    // Filter the index. Plain substring over the question text — 23 rows.
-    const box = document.getElementById('mv-faq-search');
-    const field = document.getElementById('mv-faq-q');
-    const empty = document.getElementById('mv-faq-empty');
-    const rows = [...document.querySelectorAll('#mv-faq-index .mv-faq-q')];
-    box.hidden = false;
-    field.addEventListener('input', () => {
-      const needle = field.value.trim().toLowerCase();
-      let hits = 0;
-      for (const row of rows) {
-        const match = !needle || row.textContent.toLowerCase().includes(needle);
-        row.hidden = !match;
-        if (match) hits++;
-      }
-      for (const group of document.querySelectorAll('#mv-faq-index .mv-faq-group')) {
-        group.hidden = ![...group.querySelectorAll('.mv-faq-q')].some(r => !r.hidden);
-      }
-      empty.hidden = hits > 0;
-    });
   </script>
+  <script defer src="/search.js?v=1"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
 </body>
 </html>

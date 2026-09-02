@@ -65,6 +65,12 @@ jobs:
           node website/i18n/i18n.mjs build
           node website/i18n/i18n.mjs verify
 
+      - name: Build the search index
+        # docs.html and faq.html search the text of every page through this
+        # file, one per locale root. Generated here rather than committed, so
+        # it can never disagree with the pages that were just built.
+        run: node scripts/build-search-index.mjs
+
       - name: Build site CSS
         # The site is served as static files; Tailwind is compiled here so the
         # committed website/assets/tailwind.css can never go stale in production.

@@ -8,7 +8,7 @@
     "dev:web": "python3 -m http.server 3000",
     "start:api": "cd api && npm start",
     "build": "cd .. && npm run build:website-css",
-    "i18n": "node i18n/i18n.mjs extract && node i18n/i18n.mjs inject && node i18n/i18n.mjs build && node i18n/i18n.mjs verify",
+    "i18n": "node i18n/i18n.mjs extract && node i18n/i18n.mjs inject && node i18n/i18n.mjs build && node i18n/i18n.mjs verify && node ../scripts/build-search-index.mjs .",
     "i18n:status": "node i18n/i18n.mjs status"
   },
   "devDependencies": {
