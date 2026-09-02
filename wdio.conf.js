@@ -258,15 +258,24 @@ export const config = {
     // automation traffic (a directory poll, a pixel capture) stalls or reads
     // black. The DOM-driven specs still pass, so the run looks green and lies.
     // 2026-09-02: connected-export sat 87 s inside one rasterize this way.
+    // A runner with no password on wake flags itself locked every time the
+    // display sleeps; a user-activity assertion wakes it and clears the flag,
+    // so try that once before refusing.
     if (process.platform === 'darwin' && !process.env.CI) {
-      let locked = 'false';
-      try {
-        locked = execFileSync('sh', ['-c',
-          'ioreg -n Root -d1 -a | plutil -extract IOConsoleUsers.0.CGSSessionScreenIsLocked raw -o - -'],
-        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-      } catch { /* key absent = not locked */ }
-      if (locked === 'true') {
-        throw new Error('The runner\'s screen is locked — WebKit suspends hidden pages, so results are not trustworthy. Unlock it and rerun.');
+      const screenLocked = () => {
+        try {
+          return execFileSync('sh', ['-c',
+            'ioreg -n Root -d1 -a | plutil -extract IOConsoleUsers.0.CGSSessionScreenIsLocked raw -o - -'],
+          { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() === 'true';
+        } catch { return false; /* key absent = not locked */ }
+      };
+      if (screenLocked()) {
+        try { execFileSync('caffeinate', ['-u', '-t', '2'], { stdio: 'ignore' }); } catch { /* no caffeinate */ }
+        await new Promise((r) => setTimeout(r, 1500));
+        if (screenLocked()) {
+          throw new Error('The runner\'s screen is locked — WebKit suspends hidden pages, so results are not trustworthy. Unlock it and rerun.');
+        }
+        console.log('[wdio] runner display was asleep — woke it');
       }
     }
 
