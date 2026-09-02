@@ -69,6 +69,7 @@
   "common.retry": "Retry",
   "common.folder": "Folder",
   "common.open": "Open",
+  "common.openFolder": "Open Folder",
   "common.save": "Save",
   "common.noAccountsConfigured": "No accounts configured",
   "settings.mailLocation.pointMailvaultFolderAlreadyHolds": "Point MailVault at a folder that already holds your mail",

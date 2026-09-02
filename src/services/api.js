@@ -533,6 +533,12 @@ export async function backupGetExternalLocation() {
   return null;
 }
 
+/// Open a folder (or file) in the OS file manager. `open_file` is a Tauri
+/// command, so it falls through the daemon routing table untouched.
+export async function openPath(path) {
+  return tauriInvoke('open_file', { path });
+}
+
 // ── Mail storage location (vault) ─────────────────────────────────────────────
 
 export async function vaultGetStatus() {

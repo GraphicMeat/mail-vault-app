@@ -1,6 +1,6 @@
 import { Button } from '../ui/Button';
 import React, { useState, useEffect } from 'react';
-import { AlertCircle, FolderOpen, HardDrive, Loader } from 'lucide-react';
+import { AlertCircle, ExternalLink, FolderOpen, HardDrive, Loader } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import { t, useT  } from '../../i18n/index.js';
@@ -12,7 +12,13 @@ import { t, useT  } from '../../i18n/index.js';
  * Distinct from the external backup below: this is the copy the app reads and
  * writes, so exactly one of them is live at a time.
  */
-export default function MailStorageLocation() {
+/**
+ * `readOnly` is the App Store build: it cannot relocate the vault (the sidecar
+ * daemon would need its own security-scoped access), but it must still be able
+ * to SHOW the folder — that is the whole reason people write in unable to find
+ * it. So the path and the Open Folder button stay; the move controls go.
+ */
+export default function MailStorageLocation({ readOnly = false }) {
   const t = useT();
   const vaultStatus = useSettingsStore(s => s.vaultStatus);
   const setVaultStatus = useSettingsStore(s => s.setVaultStatus);
@@ -163,22 +169,31 @@ export default function MailStorageLocation() {
 
       <div className="flex flex-wrap items-center gap-2">
         <button
+          onClick={() => { setError(''); api.openPath(vaultStatus.displayPath).catch(e => setError(String(e?.message || e))); }}
+          disabled={busy !== null || missing || !vaultStatus?.displayPath}
+          className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 transition-colors"
+          title={vaultStatus?.displayPath || ''}
+        >
+          <ExternalLink size={13} />
+          {t('common.openFolder')}
+        </button>
+        {!readOnly && <button
           onClick={handleMove}
           disabled={busy !== null}
           className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 transition-colors"
         >
           {busy === 'move' ? <Loader size={13} className="animate-spin" /> : <FolderOpen size={13} />}
           {t('settings.storage.moveMailAnotherFolder')}
-        </button>
-        <button
+        </button>}
+        {!readOnly && <button
           onClick={handleAdopt}
           disabled={busy !== null}
           className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 transition-colors"
           title={t('settings.mailLocation.pointMailvaultFolderAlreadyHolds')}
         >
           {t('settings.mailLocation.useExistingFolder')}
-        </button>
-        {isCustom && (
+        </button>}
+        {!readOnly && isCustom && (
           <button
             onClick={() => (missing ? handleReset(false) : setConfirmReset(true))}
             disabled={busy !== null}

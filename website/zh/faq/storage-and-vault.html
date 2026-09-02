@@ -58,7 +58,7 @@
       "name": "我的邮件存在哪里？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a universal standard, your emails can be opened by Apple Mail, Thunderbird, Outlook, or any other mail client — you are never locked in to MailVault."
+        "text": "你的保险库是一个存放标准 .eml 文件的文件夹，按 Maildir 格式组织 — 就在你的 Mac 或 Linux 机器上，一封邮件一个文件，不需要数据库。在 macOS 上 MailVault 运行在沙盒中，所以文件夹是 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 包为 ~/.local/share/com.mailvault.app/，Snap 为 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在 Finder 中是隐藏的，Spotlight 也不会索引它，所以在硬盘上搜索 com.mailvault.app 找不到任何东西：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 打开 Finder 的“前往”菜单，或者在个人文件夹中按 Command + J 并勾选显示“资源库”文件夹。MailVault 也会在设置、备份与恢复、你的邮件存放在哪里中显示正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 — 你永远不会被 MailVault 锁定。"
       }
     },
     {
@@ -243,21 +243,21 @@
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               <p class="mb-4">你的保险库就是你 Mac 或 Linux 机器上的一个文件夹，里面是按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式组织的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a> &mdash; 一封邮件一个文件，不需要数据库。你的数据从不离开你的电脑，也从不上传到任何云服务。因为 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 —— 你永远不会被 MailVault 锁住。</p>
 
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">The exact folder</p>
-              <p class="mb-2">MailVault is a sandboxed app, so on macOS the vault sits inside the app's own container &mdash; not directly under <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code>, which is where most people look first:</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">确切的文件夹</p>
+              <p class="mb-2">MailVault 是沙盒应用，因此在 macOS 上保险库位于应用自己的容器内 &mdash; 而不是大多数人首先查看的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> 下：</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/</code></pre>
-              <p class="mb-4">On Linux it is <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/.local/share/com.mailvault.app/</code> for the .deb package, and <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/snap/mailvault/current/.local/share/com.mailvault.app/</code> for the Snap.</p>
-              <p class="mb-4">Searching the drive for <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">com.mailvault.app</code> usually finds nothing, and that is expected: <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> is hidden in Finder and Spotlight does not index it. Open it by path instead.</p>
+              <p class="mb-4">在 Linux 上，.deb 包为 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/.local/share/com.mailvault.app/</code>，Snap 为 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/snap/mailvault/current/.local/share/com.mailvault.app/</code>。</p>
+              <p class="mb-4">在硬盘上搜索 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">com.mailvault.app</code> 通常什么也找不到，这是正常的：<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> 在 Finder 中是隐藏的，Spotlight 也不会索引它。请改用路径打开。</p>
 
-              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">Opening the hidden Library folder on a Mac</p>
+              <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">在 Mac 上打开隐藏的“资源库”文件夹</p>
               <ol class="list-decimal list-inside space-y-2 mb-4">
-                <li><strong>Go to Folder.</strong> In Finder press <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Shift + Command + G</code>, type <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> — or paste the full path above to land straight in the vault — and press Return.</li>
-                <li><strong>The Go menu.</strong> In Finder, open the <strong>Go</strong> menu and hold <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Option</code>: <strong>Library</strong> appears in the list while the key is held.</li>
-                <li><strong>Show it for good.</strong> Finder &rarr; <strong>Go</strong> &rarr; <strong>Home</strong> (<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Shift + Command + H</code>), then press <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Command + J</code> and tick <strong>Show Library Folder</strong>. It stays visible from then on.</li>
-                <li><strong>Terminal.</strong> One command opens the vault in Finder:</li>
+                <li><strong>前往文件夹。</strong>在 Finder 中按 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Shift + Command + G</code>，输入 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library</code> — 或粘贴上面的完整路径直接进入保险库 — 然后按 Return。</li>
+                <li><strong>“前往”菜单。</strong>在 Finder 中打开 <strong>前往</strong> 菜单并按住 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Option</code>：按住期间列表中会出现 <strong>资源库</strong>。</li>
+                <li><strong>永久显示。</strong>Finder &rarr; <strong>前往</strong> &rarr; <strong>个人</strong>（<code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Shift + Command + H</code>），然后按 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">Command + J</code> 并勾选 <strong>显示“资源库”文件夹</strong>。此后它会一直可见。</li>
+                <li><strong>终端。</strong>一条命令即可在 Finder 中打开保险库：</li>
               </ol>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>open ~/Library/Containers/com.mailvault.app/Data/Library/Application\ Support/com.mailvault.app</code></pre>
-              <p class="mb-4">MailVault also tells you the folder it is actually using: <strong>Settings &rarr; Backup &rarr; Where your mail is stored</strong>. If you have moved the vault to another drive, that is the path to open — the one above is only the default.</p>
+              <p class="mb-4">MailVault 也会显示它实际使用的文件夹：<strong>设置 &rarr; 备份与恢复 &rarr; 你的邮件存放在哪里</strong>。如果你已把保险库移到别的磁盘，要打开的是那个路径 — 上面的只是默认值。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">目录结构：</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>com.mailvault.app/
@@ -278,7 +278,7 @@
               <p class="mb-4"><a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml（RFC 5322）</a>是邮件消息的互联网标准格式。每封邮件 —— 邮件头、正文和附件 —— 都存成一个自包含的文本文件。与专有数据库不同，.eml 文件能被任何邮件客户端（Apple Mail、Thunderbird、Outlook）打开，也能用任何文本编辑器阅读。</p>
               <p class="mb-4"><a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 是一种久经考验的邮件存放目录结构，邮件服务器已经用了几十年。每封邮件就是一个文件，所以不存在一个会整体损坏的数据库 —— 一个文件坏了，归档的其余部分毫发无损。.eml + Maildir 合在一起，意味着你的邮件面向未来、可移植，永远不会被任何单一应用锁住。</p>
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">文件名标记：</p>
-              <p>Each message is named <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code>, the standard Maildir naming — the characters after <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> track status: <strong>A</strong> = Archived, <strong>S</strong> = Seen, <strong>R</strong> = Replied, <strong>F</strong> = Flagged. So <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> is message 102, archived and seen.</p>
+              <p>每封邮件的文件名为 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">&lt;uid&gt;:2,&lt;flags&gt;.eml</code>，即 Maildir 的标准命名 — <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">2,</code> 之后的字符表示状态：<strong>A</strong> = 已归档，<strong>S</strong> = 已读，<strong>R</strong> = 已回复，<strong>F</strong> = 已标记。因此 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">102:2,AS.eml</code> 是第 102 封邮件，已归档且已读。</p>
             </div>
         </article>
 

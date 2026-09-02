@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import {
   AlertCircle,
+  ExternalLink,
   Loader,
   HardDrive,
   Lock,
@@ -10,6 +11,7 @@ import {
 } from 'lucide-react';
 import { IS_APPSTORE_BUILD, IAP_PRODUCT_BACKUPS } from '../../utils/buildFlags';
 import MailStorageLocation from './MailStorageLocation';
+import * as api from '../../services/api';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { T } from '../../i18n/T.jsx';
 
@@ -29,6 +31,7 @@ export default function BackupConfig() {
   const [entitled, setEntitled] = useState(!IS_APPSTORE_BUILD);
   const [iapBusy, setIapBusy] = useState(null); // 'purchase' | 'restore' | null
   const [iapError, setIapError] = useState('');
+  const [openError, setOpenError] = useState('');
 
   // Load default backup path, external location, and migrate legacy on mount
   useEffect(() => {
@@ -181,12 +184,18 @@ export default function BackupConfig() {
     );
   }
 
+  // What the path field above is showing — the external copy when one is
+  // configured, otherwise the app's own Maildir.
+  const backupFolder = externalBackupLocation?.displayPath
+    || (defaultBackupPath ? `${defaultBackupPath}/Maildir` : null);
+
   return (
     <div className="space-y-6">
       {/* Moving the store off the app container needs the sidecar daemon to hold
           its own security-scoped access — unverified under the App Store sandbox,
-          so this is Developer ID / Linux only for now. */}
-      {!IS_APPSTORE_BUILD && <MailStorageLocation />}
+          so relocation is Developer ID / Linux only. Showing and opening the
+          folder is safe everywhere, so MAS gets the read-only card. */}
+      <MailStorageLocation readOnly={IS_APPSTORE_BUILD} />
 
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
         <h4 className="font-semibold text-mail-text flex items-center gap-2">
@@ -230,6 +239,16 @@ export default function BackupConfig() {
             <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
               {externalBackupLocation?.displayPath || (defaultBackupPath ? tr('settings.backup.config.maildirAppOnly', { defaultBackupPath }) : tr('chat.bubble.loading'))}
             </div>
+            {backupFolder && (
+              <button
+                onClick={() => { setOpenError(''); api.openPath(backupFolder).catch(e => setOpenError(String(e?.message || e))); }}
+                className="flex items-center gap-1.5 text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
+                title={backupFolder}
+              >
+                <ExternalLink size={13} />
+                {t('common.openFolder')}
+              </button>
+            )}
             <button
               onClick={handleChooseBackupDir}
               className="text-xs font-medium px-3 py-2 rounded-lg border border-mail-border text-mail-text hover:bg-mail-surface-hover transition-colors whitespace-nowrap"
@@ -276,6 +295,8 @@ export default function BackupConfig() {
               )}
             </div>
           )}
+
+          {openError && <p className="mt-1 text-xs text-mail-danger">{openError}</p>}
 
           {/* Error detail */}
           {externalBackupLocation?.lastError && externalBackupLocation.status !== 'ready' && !validatingExternal && (
