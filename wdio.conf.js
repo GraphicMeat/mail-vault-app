@@ -253,6 +253,23 @@ export const config = {
   onPrepare: async function () {
     console.log(`[wdio] Test HOME: ${testDataDir}`);
 
+    // A locked screen occludes every window: the webview reports `hidden`,
+    // WebKit suspends the page's timers, and anything that waits without
+    // automation traffic (a directory poll, a pixel capture) stalls or reads
+    // black. The DOM-driven specs still pass, so the run looks green and lies.
+    // 2026-09-02: connected-export sat 87 s inside one rasterize this way.
+    if (process.platform === 'darwin' && !process.env.CI) {
+      let locked = 'false';
+      try {
+        locked = execFileSync('sh', ['-c',
+          'ioreg -n Root -d1 -a | plutil -extract IOConsoleUsers.0.CGSSessionScreenIsLocked raw -o - -'],
+        { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      } catch { /* key absent = not locked */ }
+      if (locked === 'true') {
+        throw new Error('The runner\'s screen is locked — WebKit suspends hidden pages, so results are not trustworthy. Unlock it and rerun.');
+      }
+    }
+
     // A tauri-wd left behind by an aborted run still owns port 4444, and every
     // session then fails with "App did not report plugin port in time". Mock
     // servers from an aborted run just squat on memory. Both names are ours alone.
