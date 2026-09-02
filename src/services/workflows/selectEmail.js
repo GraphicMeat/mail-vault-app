@@ -180,10 +180,12 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // Cancel any pending delayed mark-as-read from previous email
   if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
 
-  // Which mailbox a message came from is not recoverable from the message: a
-  // body fetched from the server carries no account, so reply/forward had to
-  // guess. Stamp it here, where it is already resolved.
-  const withAccount = (e) => (e && !e._accountId ? { ...e, _accountId: accountId } : e);
+  // Which account and folder a message came from is not recoverable from the
+  // message: a body fetched from the server carries neither, so reply/forward
+  // had to guess, and the viewer's mark-unread wrote against the folder on
+  // screen — INBOX's own message under a merged Sent copy's uid. Stamp both
+  // here, where they are already resolved.
+  const withAccount = (e) => (e ? { ...e, _accountId: e._accountId || accountId, _mailbox: e._mailbox || mailbox } : e);
 
   // Through the helper: a uid names one row only inside one mailbox, and
   // EmailList already highlights by comparing this against a full key.

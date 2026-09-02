@@ -44,10 +44,13 @@ export function _resolveUnifiedContext(key, state) {
   const parsed = _parseSelKey(key);
 
   // Search across multiple lists — email may have been evicted from one but remain in another
-  const searchLists = [state.emails, state.sortedEmails, state.localEmails].filter(Boolean);
+  const searchLists = [state.emails, state.sortedEmails, state.localEmails, state.sentEmails].filter(Boolean);
   for (const list of searchLists) {
     if (parsed.accountId) {
-      email = list.find(e => e._accountId === parsed.accountId && e.uid === parsed.uid);
+      // The key names the folder too: the same account's INBOX and Sent rows
+      // share uids, and only one of them is this key.
+      email = list.find(e => e._accountId === parsed.accountId && e.uid === parsed.uid
+        && (parsed.mailbox == null || (e._mailbox ?? '') === parsed.mailbox));
     } else {
       email = list.find(e => e.uid === key);
     }

@@ -259,26 +259,38 @@ describe('marking a vault-only row read from the unified list', () => {
   });
 
   // A uid names a message only inside one (account, mailbox). The INBOX list
-  // merges Sent replies into its threads and stamps them `_fromSentFolder`;
-  // such a row is selected by its bare uid, and INBOX has its own message
-  // under that number. Writing it under INBOX would rename a different
-  // message's file — the one restore uploads.
-  it('refuses to write a Sent copy merged into the INBOX list under INBOX\'s uid', async () => {
+  // merges the account's Sent copies in for context and stamps them
+  // `_fromSentFolder`; such a row is selected by its bare uid, and INBOX has
+  // its own message under that number. Both writes have to follow the row's
+  // own folder: `UID STORE` against INBOX would flag INBOX's message, and a
+  // vault write under INBOX's uid would rename a different message's file —
+  // the one restore uploads.
+  const SENT = 'Sent';
+  const sentRow = (flags = []) => ({
+    uid: UID, messageId: 's@mock', subject: 'Re: Press slot Friday', flags,
+    from: { address: ACCOUNT.email }, date: '2026-08-12T09:00:00Z',
+    _accountId: ACCOUNT.id, _fromSentFolder: true, isArchived: false, source: 'server',
+  });
+  function primeInboxWithSent({ emails = [], sentEmails = [], activeMailbox = 'INBOX', selected }) {
     useMailStore.setState({
       accounts: [ACCOUNT],
       activeAccountId: ACCOUNT.id,
-      activeMailbox: 'INBOX',
-      unifiedInbox: false,
+      activeMailbox,
+      unifiedInbox: activeMailbox === 'UNIFIED',
+      mailboxes: [
+        { name: 'INBOX', path: 'INBOX', children: [] },
+        { name: SENT, path: SENT, specialUse: '\\Sent', children: [] },
+      ],
       viewMode: 'all',
-      emails: [{ ...vaultRow([]), _accountId: undefined, _mailbox: undefined, _fromSentFolder: true, isArchived: false, source: 'server' }],
-      sentEmails: [],
+      emails,
+      sentEmails,
       localEmails: [],
       savedEmailIds: new Set(),
       archivedEmailIds: new Set(),
-      serverUids: serverUids(new Set([UID]), { complete: true }),
+      serverUids: serverUids(new Set(emails.map(e => e.uid)), { complete: true }),
       deleteTombstones: new Set(),
-      totalEmails: 1,
-      selectedEmailIds: new Set([UID]),
+      totalEmails: emails.length,
+      selectedEmailIds: new Set(selected),
       selectedEmail: null,
       selectedEmailId: null,
       emailCache: new Map(),
@@ -287,12 +299,51 @@ describe('marking a vault-only row read from the unified list', () => {
     });
     invalidateChatAndThreadCaches();
     useMailStore.getState().updateSortedEmails();
+  }
+
+  it('writes a Sent copy merged into the INBOX list under Sent, not under INBOX\'s uid', async () => {
+    primeInboxWithSent({ sentEmails: [sentRow()], selected: [UID] });
 
     await useMailStore.getState().markSelectedAsRead();
 
-    // The row on screen still flips — that half is not in question.
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalledWith(expect.anything(), UID, ['\\Seen'], 'add', 'INBOX');
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
+    // And the row on screen flips — it lives in `sentEmails`, in no other array.
+    expect(useMailStore.getState().sentEmails[0].flags).toContain('\\Seen');
+  });
+
+  // A bare uid cannot say which of two same-numbered rows was ticked — a
+  // single folder's list keys its selection by uid alone. The folder on
+  // screen owns that number; the merged Sent copy is left as it was.
+  it('keeps a bare uid on the folder on screen when a merged Sent copy shares it', async () => {
+    const inbox = { ...vaultRow([]), _accountId: undefined, _mailbox: undefined, isArchived: false, source: 'server' };
+    primeInboxWithSent({ emails: [inbox], sentEmails: [sentRow()], selected: [UID] });
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', 'INBOX');
     expect(rowSeen()).toBe(true);
-    expect(mockVaultApplyFlags).not.toHaveBeenCalled();
+    expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
+  });
+
+  // The unified list keys a row by account, folder and uid, so there the
+  // folder IS known — and the same account's INBOX row under that number is
+  // not the one ticked.
+  it('resolves a unified key to the folder it names, not the same-numbered INBOX row', async () => {
+    const inbox = { ...vaultRow([]), isArchived: false, source: 'server' };
+    const sent = { ...sentRow(), _mailbox: SENT, _fromSentFolder: undefined };
+    primeInboxWithSent({ activeMailbox: 'UNIFIED', emails: [inbox, sent], selected: [_selKey(sent)] });
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(expect.objectContaining({ id: ACCOUNT.id }), UID, ['\\Seen'], 'add', SENT);
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith(ACCOUNT.id, SENT, ACCOUNT.email, [{ uid: UID, flags: ['\\Seen'] }]);
+    const rows = useMailStore.getState().emails;
+    expect(rows.find(e => e._mailbox === 'INBOX').flags).not.toContain('\\Seen');
+    expect(rows.find(e => e._mailbox === SENT).flags).toContain('\\Seen');
   });
 
   it('keeps the row read when the vault writer fails', async () => {

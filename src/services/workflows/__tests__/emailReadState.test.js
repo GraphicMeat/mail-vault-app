@@ -298,4 +298,35 @@ describe('markEmailReadStatus', () => {
     expect(useMailStore.getState().selectedEmailId).toBe(2);
     expect(useMailStore.getState().selectedEmail?.uid).toBe(2);
   });
+
+  // The INBOX list merges the account's Sent copies in for context, and a
+  // Sent message with no INBOX reply is a row of its own there — opened by
+  // its own folder (EmailRow hands selectEmail `_mailbox`). The viewer's
+  // toggle then passes the bare uid, and INBOX holds a different message
+  // under that number: the write has to follow the open copy's folder.
+  it('marks the open Sent copy under its own folder, not INBOX\'s message with the same uid', async () => {
+    markAsReadMode = 'manual';
+    primeStore(['\\Seen']);
+    useMailStore.setState({
+      mailboxes: [
+        { name: 'INBOX', path: 'INBOX', children: [] },
+        { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+      ],
+      sentEmails: [{
+        uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'],
+        from: { address: ACCOUNT.email }, date: '2026-08-01T11:00:00Z',
+        _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+      }],
+    });
+    mockFetchEmailLight.mockResolvedValue({ uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'], html: '<p>sent</p>', text: 'sent' });
+
+    await useMailStore.getState().selectEmail(1, 'server', 'Sent');
+    await useMailStore.getState().markEmailReadStatus(1, false);
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'remove', 'Sent');
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalledWith(expect.anything(), 1, ['\\Seen'], 'remove', 'INBOX');
+    expect(seenOf(1)).toBe(true); // INBOX's own message 1, untouched
+    expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
+    expect(useMailStore.getState().selectedEmail).toBe(null);
+  });
 });

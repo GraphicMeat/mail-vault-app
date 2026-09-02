@@ -24,76 +24,20 @@
  * file; the flags this spec changes on the mock server are put back in
  * `after`).
  *
- * The "other client" is a raw IMAP session from this process to the mock —
- * the same wire the app uses, with none of the app in the way.
+ * The "other client" is a raw IMAP session from this process to the mock
+ * (rawImap.js) — the same wire the app uses, with none of the app in the way.
  */
 
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { createConnection } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
+import { appDataDir } from './mockImap.js';
+import { serverFlags, storeFlag } from './rawImap.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
 
-// ── The other client ────────────────────────────────────────────────────────
-
-/**
- * One command per call, on a fresh plaintext session to the mock: LOGIN,
- * SELECT, the command, LOGOUT. Returns the untagged lines the command produced.
- */
-function imap(port, mailbox, command) {
-  return new Promise((resolve, reject) => {
-    const sock = createConnection({ host: '127.0.0.1', port });
-    const steps = [
-      // The mock accepts any credentials; the name only has to read as a
-      // different client in its log.
-      `A1 LOGIN "other-client" "${MOCK_PASSWORD}"`,
-      `A2 SELECT "${mailbox}"`,
-      `A3 ${command}`,
-      'A4 LOGOUT',
-    ];
-    let buf = '';
-    let step = -1;
-    const collected = [];
-    const fail = (why) => { sock.destroy(); reject(new Error(`mock imap :${port} ${mailbox} "${command}" — ${why}`)); };
-    const timer = setTimeout(() => fail('timed out'), 10_000);
-    const next = () => {
-      step += 1;
-      if (step >= steps.length) { clearTimeout(timer); sock.end(); resolve(collected); return; }
-      sock.write(`${steps[step]}\r\n`);
-    };
-    sock.on('data', (chunk) => {
-      buf += chunk.toString();
-      let nl;
-      while ((nl = buf.indexOf('\r\n')) >= 0) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 2);
-        if (step < 0) { if (line.startsWith('* OK')) next(); continue; }
-        const tag = `A${step + 1} `;
-        if (line.startsWith(tag)) {
-          if (!line.startsWith(`${tag}OK`)) return fail(line);
-          next();
-        } else if (step === 2 && line.startsWith('* ')) {
-          collected.push(line);
-        }
-      }
-    });
-    sock.on('error', (e) => fail(e.message));
-  });
-}
-
-/** The flags the server holds for `uid`. */
-async function serverFlags(port, mailbox, uid) {
-  const lines = await imap(port, mailbox, `UID FETCH ${uid} (FLAGS)`);
-  const line = lines.find((l) => l.includes(`UID ${uid} `) || l.endsWith(`UID ${uid})`));
-  const m = line && line.match(/FLAGS \(([^)]*)\)/);
-  return m ? m[1].split(/\s+/).filter(Boolean) : null;
-}
-
-const storeFlag = (port, mailbox, uid, op) => imap(port, mailbox, `UID STORE ${uid} ${op} (\\Seen)`);
 
 // ── Disk ────────────────────────────────────────────────────────────────────
 

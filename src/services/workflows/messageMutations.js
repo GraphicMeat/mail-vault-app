@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -545,11 +545,12 @@ function _syncUnreadBadge(useMailStore, accountId, mailbox) {
 
 // The vault half of a read-state change.
 //
-// `localEmails` holds the rows the list gets from the vault; a row that is only
-// in the vault is in NO other array, so a mutation that maps `emails` alone
-// leaves it untouched — the change never reaches the screen. Identity matters
-// too: the array is replaced only when a row actually changed, because
-// updateSortedEmails memoises on it.
+// `localEmails` holds the rows the list gets from the vault, and `sentEmails`
+// the Sent copies an INBOX list merges in; a row in one of those is in NO
+// other array, so a mutation that maps `emails` alone leaves it untouched —
+// the change never reaches the screen. Identity matters too: the array is
+// replaced only when a row actually changed, because updateSortedEmails
+// memoises on it.
 function _mapLocalSeen(localEmails, matches, read) {
   if (!localEmails?.length || !localEmails.some(matches)) return localEmails;
   return localEmails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e);
@@ -574,21 +575,22 @@ function _mapLocalSeen(localEmails, matches, read) {
 // One call for all of `uids`: the writer rewrites the whole index file, so a
 // call per message would race itself and the losers' flags would vanish.
 //
-// A uid is a name only inside one (account, mailbox). The row is the proof of
-// which one: a Sent copy merged into the INBOX list carries `_fromSentFolder`
-// / `_mailbox`, and writing it under INBOX's uid would rename a different
-// message's file — the one restore uploads. So a row that names another
-// folder, or no row at all (a flag list rebuilt from nothing would strip
-// \Flagged and \Answered), is skipped rather than guessed at.
+// A uid is a name only inside one (account, mailbox), and the row is the proof
+// of which one: a Sent copy merged into the INBOX list carries
+// `_fromSentFolder` / `_mailbox`, and INBOX's own message under that number
+// is a different file — the one restore uploads. So the row read here is the
+// one of THIS folder, and no row at all (a flag list rebuilt from nothing
+// would strip \Flagged and \Answered) is skipped rather than guessed at.
 async function _persistVaultSeen(useMailStore, accountId, mailbox, uids, read, isUnified = false) {
   try {
     const s = useMailStore.getState();
-    const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || [])];
+    const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
     const changes = [];
     for (const uid of uids) {
-      const row = pool.find(e => e && e.uid === uid && (!isUnified || !e._accountId || e._accountId === accountId));
-      const rowMailbox = row?._mailbox || (row?._fromSentFolder ? (s.getSentMailboxPath?.() || 'Sent') : null);
-      if (!row || (rowMailbox && rowMailbox !== mailbox)) {
+      const row = pool.find(e => e && e.uid === uid
+        && (!isUnified || !e._accountId || e._accountId === accountId)
+        && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox);
+      if (!row) {
         console.warn('[applySeenLocally] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
         continue;
       }
@@ -608,14 +610,22 @@ async function _persistVaultSeen(useMailStore, accountId, mailbox, uids, read, i
 // flags the message had when it was fetched, so skipping it makes the next
 // open of that message show the stale state and offer the wrong next action.
 export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, isUnified = false }) {
-  const matches = (e) => (isUnified ? (e._accountId === accountId && e.uid === uid) : (e.uid === uid));
+  // The row of THIS folder: a Sent copy merged into the INBOX list and INBOX's
+  // own message share a uid, and only one of them changed. A row that names
+  // no folder is the view's — which is where `mailbox` came from.
+  const s = useMailStore.getState();
+  const matches = (e) => e.uid === uid
+    && (!isUnified || e._accountId === accountId)
+    && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox;
   useMailStore.setState(state => ({
     emails: state.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
     // A vault-only row lives in `localEmails` and never in `emails` — see
     // deriveDisplayRows, which pushes it into the list from there. Mapping
     // only `emails` is why marking one read did nothing at all on screen.
     localEmails: _mapLocalSeen(state.localEmails, matches, read),
-    selectedEmail: state.selectedEmail?.uid === uid
+    // And a Sent copy merged into the INBOX list lives in `sentEmails`.
+    sentEmails: _mapLocalSeen(state.sentEmails, matches, read),
+    selectedEmail: state.selectedEmail && matches(state.selectedEmail)
       ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
       : state.selectedEmail,
   }));
@@ -637,22 +647,30 @@ export async function markEmailReadStatus(uid, read) {
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
-  const realUid = unified?.uid ?? uid;
-  const accountId = unified?.accountId || state.activeAccountId;
-  const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
-  let account = unified?.account || state.accounts.find(a => a.id === accountId);
+  // The message this uid names — account and folder from the row, not from
+  // the view: the INBOX list merges the account's Sent copies in, and INBOX
+  // has its own message under a merged copy's number. The viewer's toggle is
+  // the caller, so the open copy (stamped with its folder when it was opened)
+  // is the answer whenever it matches; otherwise the first row carrying the
+  // uid, in-folder rows before merged Sent copies (see _markSelected).
+  const open = state.selectedEmail?.uid === uid ? state.selectedEmail : null;
+  const row = open || [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])].find(e => e.uid === uid);
+  const loc = resolveEmailLocation(row, state);
+  const accountId = loc?.accountId || state.activeAccountId;
+  const rawMailbox = loc?.mailbox || state.activeMailbox;
+  const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+  let account = state.accounts.find(a => a.id === accountId);
   if (!account) return;
   account = await ensureFreshToken(account);
 
   try {
-    await _setSeenOnServer(account, accountId, mailbox, realUid, read);
+    await _setSeenOnServer(account, accountId, mailbox, uid, read);
 
-    applySeenLocally(useMailStore, { accountId, mailbox, uid: realUid, read, isUnified });
+    applySeenLocally(useMailStore, { accountId, mailbox, uid, read, isUnified });
 
     // Marking the open email unread means "not dealt with yet" — keeping it on
     // screen contradicts that, and the next open would just mark it read again.
-    if (!read && useMailStore.getState().selectedEmail?.uid === realUid) {
+    if (!read && useMailStore.getState().selectedEmail?.uid === uid) {
       useMailStore.setState({
         selectedEmailId: null,
         selectedEmail: null,
@@ -689,19 +707,41 @@ async function _markSelected(read) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const { selectedEmailIds, accounts } = state;
+  const { selectedEmailIds } = state;
   const isUnified = spansMailboxes(state);
   if (selectedEmailIds.size === 0) return;
 
   const keys = Array.from(selectedEmailIds);
-  const keySet = new Set(keys);
   const selKeyOf = (e) => (isUnified ? _selKey(e) : e.uid);
 
-  const matches = (e) => keySet.has(selKeyOf(e));
+  // Which message each key names — account, folder, uid — resolved once, up
+  // front, so that every write below follows it: the rows on screen, the
+  // vault copies and the server. The folder comes from the row, not the view
+  // (the resolver the delete workflows use): the INBOX list merges the
+  // account's Sent copies in, and a uid names a message only inside one
+  // folder, so a `UID STORE` against INBOX for a merged Sent row would flag
+  // INBOX's own message under that number.
+  //
+  // In-folder rows first. A single folder's list keys its selection by bare
+  // uid, which cannot say which of two same-numbered rows was ticked; the
+  // folder on screen owns the number, and a merged Sent copy answers only
+  // when no in-folder row carries it. ponytail: the key itself naming the
+  // folder, as the unified list's does, is the real fix for that ambiguity.
+  const emailMap = new Map();
+  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]) {
+    const k = selKeyOf(e);
+    if (!emailMap.has(k)) emailMap.set(k, e);
+  }
+  const targets = keys.map(key => ({ key, ..._resolveKeyContext(key, state, emailMap) }));
+  const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
+  const matches = (e) => targetKeys.has(emailScopeKey(e, state));
+
   useMailStore.setState(s => ({
     emails: s.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
-    // Vault-only rows are reached through `localEmails`, not `emails`.
+    // Vault-only rows are reached through `localEmails`, not `emails` — and
+    // the INBOX list's merged Sent copies through `sentEmails`.
     localEmails: _mapLocalSeen(s.localEmails, matches, read),
+    sentEmails: _mapLocalSeen(s.sentEmails, matches, read),
     selectedEmail: s.selectedEmail && matches(s.selectedEmail)
       ? { ...s.selectedEmail, flags: _withSeen(s.selectedEmail.flags, read) }
       : s.selectedEmail,
@@ -720,24 +760,6 @@ async function _markSelected(read) {
     for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
   } else {
     _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
-  }
-
-  const targets = [];
-  for (const key of keys) {
-    try {
-      const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-      const rawMailbox = ctx?.mailbox || state.activeMailbox;
-      const accountId = ctx?.accountId || state.activeAccountId;
-      targets.push({
-        key,
-        uid: ctx?.uid ?? key,
-        accountId,
-        mailbox: rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox,
-        account: ctx?.account || accounts.find(a => a.id === accountId),
-      });
-    } catch (e) {
-      console.error(`Failed to resolve email ${key}:`, e);
-    }
   }
 
   // The vault copies are written whatever the server says — a vault-only
@@ -769,20 +791,22 @@ export const markSelectedAsUnread = () => _markSelected(false);
 
 // ── shared per-key context resolution ──
 //
-// Both delete workflows below need the same thing per selected key: unwind a
-// unified-inbox composite key (or a plain uid) into the real uid, account,
-// mailbox and — if we have one — the matching email object. `emailMap` and
-// `sentPath` are supplied by the caller since each builds `emailMap` from a
-// different set of arrays (see purgeEverywhere's comment on why it also
-// includes `localEmails`).
+// The bulk read-state and delete workflows need the same thing per selected
+// key: unwind a unified-inbox composite key (or a plain uid) into the real
+// uid, account, mailbox and — if we have one — the matching email object.
+// `emailMap` is supplied by the caller since each builds it from a different
+// set of arrays (see purgeEverywhere's comment on why it also includes
+// `localEmails`).
 
-function _resolveKeyContext(key, state, emailMap, sentPath) {
+function _resolveKeyContext(key, state, emailMap) {
   const isUnified = spansMailboxes(state);
   const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
-  const uid = ctx?.uid ?? key;
+  const uid = ctx?.uid ?? _parseSelKey(key).uid;
   const accountId = ctx?.accountId || state.activeAccountId;
   const emailObj = emailMap.get(key);
-  const rawMailbox = ctx?.mailbox || (emailObj?._fromSentFolder && sentPath ? sentPath : state.activeMailbox);
+  // The row's own folder where it names one — `_mailbox`, or the Sent path
+  // for a copy the INBOX list merged in — and the view's otherwise.
+  const rawMailbox = ctx?.mailbox || resolveEmailLocation(emailObj, state)?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
   const account = ctx?.account || state.accounts.find(a => a.id === accountId);
   return { uid, accountId, mailbox, account, emailObj, tombstone: `${accountId}|${mailbox}|${uid}` };
@@ -803,10 +827,9 @@ export async function deleteSelectedFromServer() {
 
   const keys = Array.from(selectedEmailIds);
 
-  const sentPath = get().getSentMailboxPath();
   const allEmails = [...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
-  const contextOf = (key) => _resolveKeyContext(key, state, emailMap, sentPath);
+  const contextOf = (key) => _resolveKeyContext(key, state, emailMap);
 
   // Journal the intent BEFORE anything else, and await it.
   //
@@ -1037,7 +1060,6 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const isUnified = spansMailboxes(state);
   if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
 
-  const sentPath = get().getSentMailboxPath();
   // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
   // that's where a genuinely local-only row actually lives. localEmails goes
   // FIRST: `new Map(...)` keeps the last entry on a uid collision, and a
@@ -1052,7 +1074,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [isUnified ? _selKey(e) : e.uid, e]));
 
-  const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap, sentPath));
+  const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap));
 
   // Local-only is a claim about provenance, so prove it from provenance.
   // `source` on a store object is derived from `serverUids`, which is
