@@ -7,6 +7,7 @@
 // old unread state until something else forced a re-derive.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
+import { _selKey } from '../../../stores/slices/unifiedHelpers';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -569,5 +570,110 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
+  });
+});
+
+// The reader's thread is a snapshot from buildThreads that nothing re-derives.
+// Deleting one of its messages used to leave that message in the open thread
+// as a ghost row — or, when it was the newest one (the one selectedEmailId
+// names), close the whole thread over a single message.
+describe('deleteEmailFromServer with a thread open', () => {
+  const openThread = (emails) => {
+    const lastEmail = emails[emails.length - 1];
+    useMailStore.setState({
+      selectedThread: { threadId: 'a@mock', subject: 'General', emails, lastEmail, messageCount: emails.length },
+      selectedEmailId: lastEmail.uid,
+    });
+  };
+
+  it('takes the deleted message out of the open thread and keeps the rest open', async () => {
+    const emails = seedThread();
+    primeStore(emails, []);
+    openThread(emails);
+
+    await useMailStore.getState().deleteEmailFromServer(2);
+
+    const thread = useMailStore.getState().selectedThread;
+    expect(thread.emails.map(e => e.uid)).toEqual([1]);
+    expect(thread.messageCount).toBe(1);
+    expect(thread.lastEmail.uid).toBe(1);
+    // The list row stays open: the key now names a surviving message.
+    expect(useMailStore.getState().selectedEmailId).toBe(1);
+  });
+
+  it('closes the reader only when the thread has no message left', async () => {
+    const emails = seedThread();
+    primeStore(emails, []);
+    openThread([emails[0]]);
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().selectedThread).toBeNull();
+    expect(useMailStore.getState().selectedEmailId).toBeNull();
+  });
+
+  it('leaves an open thread alone when the deleted message is not in it', async () => {
+    const emails = seedThread();
+    primeStore(emails, []);
+    openThread([emails[1]]);
+    const before = useMailStore.getState().selectedThread;
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().selectedThread).toBe(before);
+  });
+
+  it('matches the message by folder: a merged Sent copy sharing the uid stays in the thread', async () => {
+    const emails = seedThread();
+    const sentCopy = {
+      uid: 1, messageId: 's@mock', subject: 'Re: General', flags: ['\\Seen'],
+      from: { address: 'me@mock.test' }, date: '2026-08-03T10:00:00Z',
+      _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+    };
+    primeStore(emails, []);
+    useMailStore.setState({
+      mailboxes: [
+        { name: 'INBOX', path: 'INBOX', children: [] },
+        { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+      ],
+      sentEmails: [sentCopy],
+    });
+    openThread([emails[0], sentCopy]);
+    useMailStore.setState({ selectedEmailId: 1 });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    const thread = useMailStore.getState().selectedThread;
+    expect(thread.emails).toEqual([sentCopy]);
+    expect(useMailStore.getState().selectedEmailId).toBe(_selKey(sentCopy));
+  });
+
+  it('puts the message back in the open thread when the server refuses', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    const emails = seedThread();
+    primeStore(emails, []);
+    openThread(emails);
+
+    await expect(useMailStore.getState().deleteEmailFromServer(2)).rejects.toThrow('nope');
+
+    expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([1, 2]);
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+  });
+
+  it('does not reopen a thread the user has already left when the server refuses', async () => {
+    let reject;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise((_, r) => { reject = r; }));
+    const emails = seedThread();
+    primeStore(emails, []);
+    openThread(emails);
+
+    const pending = useMailStore.getState().deleteEmailFromServer(2);
+    await new Promise(r => setTimeout(r, 0));
+    useMailStore.getState().closeEmail();
+    reject(new Error('nope'));
+    await expect(pending).rejects.toThrow('nope');
+
+    expect(useMailStore.getState().selectedThread).toBeNull();
+    expect(useMailStore.getState().selectedEmailId).toBeNull();
   });
 });

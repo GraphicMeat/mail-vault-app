@@ -1,6 +1,5 @@
-import React, { memo, useState, useCallback, useRef, useEffect, useMemo, useId } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import ReactDOM from 'react-dom';
-import { displayText } from '../utils/bidiText';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
@@ -15,9 +14,7 @@ import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
-import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
-import { Z } from './ui/layers';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -38,11 +35,10 @@ import {
   Search,
   MessageSquare,
   Users,
-  AlertTriangle,
-  Trash2,
   Mail,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { BulkSelectionBubble } from './BulkSelectionBubble';
 import { BulkOperationProgress } from './BulkOperationProgress';
 import { bulkOperationManager } from '../services/BulkOperationManager';
@@ -1385,73 +1381,8 @@ function EmailListComponent() {
         onCancel={handleBulkCancel}
         onDismiss={() => setBulkOpProgress(null)}
       />
-      <RowDeleteConfirmModal
-        pending={pendingDelete}
-        onCancel={() => setPendingDelete(null)}
-        onConfirm={() => {
-          if (!pendingDelete) return;
-          const exec = pendingDelete.executor;
-          setPendingDelete(null);
-          // Not awaited, and the modal is already gone: every delete verb
-          // behind this button pulls its rows from the list before it touches
-          // the network (deleteEmailFromServer, purgeEverywhere), and puts
-          // them back if the server refuses. Holding a modal open over a
-          // backdrop for the seconds an IMAP round trip takes bought the user
-          // nothing but a frozen window.
-          Promise.resolve()
-            .then(exec)
-            .catch((err) => {
-              console.error('[EmailList] row delete failed:', err);
-              // Plain `error`: resolveErrorToastProps defaults an unmatched
-              // message to the error-styled toast (utils/errorToast.js).
-              useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
-            });
-        }}
-      />
+      <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
     </div>
-  );
-}
-
-function RowDeleteConfirmModal({ pending, onCancel, onConfirm }) {
-  const t = useT();
-  const descId = useId();
-
-  return (
-    <Dialog
-      open={Boolean(pending)}
-      onClose={onCancel}
-      role="alertdialog"
-      // Portal + the top layer: this is raised from inside a virtualized row,
-      // whose ancestor `transform` would otherwise be its containing block.
-      portal
-      z={Z.fatal}
-      size="sm"
-      aria-describedby={descId}
-      panelClassName="min-w-[320px] max-w-[420px]"
-      footer={
-        <div className="flex justify-end gap-2 w-full">
-          {/* Cancel takes first focus: nothing destructive is ever one stray
-              Return away. */}
-          <Button variant="ghost" size="sm" onClick={onCancel} data-autofocus>
-            {t('common.cancel')}
-          </Button>
-          <Button variant="danger" size="sm" onClick={onConfirm}>
-            <Trash2 size={14} /> {pending?.copy.confirmLabel}
-          </Button>
-        </div>
-      }
-    >
-      <div className="flex items-start gap-3">
-        <AlertTriangle size={20} aria-hidden="true" className="text-mail-danger flex-shrink-0 mt-0.5" />
-        <div>
-          {/* Both delete verbs open this one modal. The title used to be
-              hardcoded to "Delete from server?", so Delete everywhere
-              asked about an action it was not about to perform. */}
-          <h3 className="text-base font-semibold text-mail-text mb-1">{pending?.copy.title}</h3>
-          <p id={descId} className="text-sm text-mail-text-muted" dir="auto">{displayText(pending?.copy.description)}</p>
-        </div>
-      </div>
-    </Dialog>
   );
 }
 

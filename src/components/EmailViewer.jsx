@@ -293,7 +293,7 @@ function EmailViewerComponent({ onComposeReply }) {
       // server refuses (deleteEmailFromServer's restoreRow). Unreported, that
       // reads as "I deleted it and it came back on its own" — which is exactly
       // what a dead pooled socket produced here. The row menu's delete has
-      // toasted this since it was written (EmailList's RowDeleteConfirmModal);
+      // toasted this since it was written (DeleteConfirmModal);
       // the reading pane swallowed it.
       console.error('[EmailViewer] delete failed:', err);
       useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });

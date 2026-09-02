@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -318,14 +318,23 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // back — exactly the contract the bulk paths use.
   const tombstone = `${accountId}|${mailbox}|${realUid}`;
   const isThisEmail = (e) => (isUnified ? _selKey(e) === String(uid) || (e._accountId === accountId && e.uid === realUid) : e.uid === uid);
+  // The open thread is a snapshot; take the message out of it too, and close
+  // the reader only when nothing is left (pruneSelectedThread). Matched by
+  // folder wherever the row can say where it lives: a thread merges INBOX with
+  // Sent, and the two share uids.
+  const isThisMessage = (e) => {
+    const loc = resolveEmailLocation(e, state);
+    return loc ? e.uid === realUid && loc.accountId === accountId && loc.mailbox === mailbox : isThisEmail(e);
+  };
+  const threadUpdate = pruneSelectedThread(state, isThisMessage);
   useMailStore.setState({
     deleteTombstones: new Set(state.deleteTombstones).add(tombstone),
     emails: state.emails.filter(e => !isThisEmail(e)),
     sentEmails: state.sentEmails.filter(e => !isThisEmail(e)),
     selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => k !== uid && k !== realUid)),
-    ...(selectedEmailId === uid || selectedEmailId === realUid
+    ...(threadUpdate ?? (selectedEmailId === uid || selectedEmailId === realUid
       ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null }
-      : {}),
+      : {})),
   });
   get().updateSortedEmails();
 
@@ -340,6 +349,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     // next launch would delete a message the app is currently showing as
     // present. Same call the bulk path makes for its whole group.
     if (journalled) db.clearPendingDeletes(accountId, mailbox, [realUid]);
+    // The open thread was pruned optimistically too: put the message back, or
+    // the row the reload restores counts one more than the reader shows. Only
+    // while that pruned thread is still what is open — a reader the user has
+    // since moved on from is not this delete's to reopen.
+    const cur = get();
+    if (threadUpdate && cur.selectedThread === threadUpdate.selectedThread && cur.selectedEmailId === threadUpdate.selectedEmailId) {
+      useMailStore.setState({ selectedThread: state.selectedThread, selectedEmailId });
+    }
     if (!isUnified) get().loadEmails();
   };
 
@@ -380,7 +397,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   await applyServerRemoval(uid, {
     accountId, mailbox, isUnified, skipRefresh,
-    clearSelection: selectedEmailId === uid,
+    clearSelection: !threadUpdate && selectedEmailId === uid,
     deletedByUs: true,
   });
 }

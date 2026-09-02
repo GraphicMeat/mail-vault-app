@@ -151,20 +151,24 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
           </div>
         </div>
 
-        {/* To/CC line (visible when parent is expanded) */}
-        {expanded && (
+        {/* To/CC line. A thread row names its recipient without being opened —
+            "who was this sent to" is what a collapsed reply leaves unanswered.
+            The single-email header keeps it behind the expand, with More. */}
+        {(expanded || variant === 'thread') && (
           <div className="text-xs text-mail-text-muted mt-1">
             <div>
               {t('email.header.to', { to: (Array.isArray(email.to) ? email.to : []).map(x => x.name || x.address).join(', ') || t('settings.cleanup.unknown') })}
               {email.cc?.length > 0 && (
                 <span className="ml-2">{t('email.header.cc', { cc: email.cc.map(c => c.name || c.address).join(', ') })}</span>
               )}
-              <button
-                onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
-                className="ml-2 text-mail-accent-text hover:underline"
-              >
-                {headerExpanded ? t('email.sender.less') : t('email.sender.more')}
-              </button>
+              {expanded && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); setHeaderExpanded(!headerExpanded); }}
+                  className="ml-2 text-mail-accent-text hover:underline"
+                >
+                  {headerExpanded ? t('email.sender.less') : t('email.sender.more')}
+                </button>
+              )}
             </div>
 
             {/* Extended details */}

@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
-import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey, spansMailboxes } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
@@ -26,6 +26,7 @@ import { EmailActionBar } from './EmailActionBar';
 import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers, summarizeTrackers } from '../../utils/trackerDetect';
 import { recordTrackerSummary } from '../../services/trackerVerdicts';
@@ -296,7 +297,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete }) {
   const t = useT();
   const [expanded, setExpanded] = useState(isNewest);
   const [, forceUpdate] = useState(0);
@@ -383,7 +384,10 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
             onReplyAll={() => onComposeReply?.('replyAll', loadedEmail || email)}
             onForward={() => onComposeReply?.('forward', loadedEmail || email)}
             onArchive={null}
-            onDelete={null}
+            // A vault-only row (server copy gone) is not this delete's to make:
+            // the workflow looks the row up in `emails`, and a vault row lives
+            // in `localEmails`. The same gate Archive/Move/Read apply.
+            onDelete={email.source === 'local-only' ? null : onDelete}
             onMove={null}
             onToggleRead={null}
             onOpenInWindow={() => {
@@ -474,7 +478,29 @@ export function ThreadView({ thread, onComposeReply }) {
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const [saving, setSaving] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const scrollContainerRef = useRef(null);
+
+  // One message, not the thread. The confirm reads as the reading pane's
+  // (viewer.*): the message leaves the server; a vault copy stays.
+  const requestDelete = useCallback((email) => {
+    const state = useMailStore.getState();
+    const mailbox = resolveEmailLocation(email, state)?.mailbox;
+    // A composite key only where the workflow parses one (the unified list);
+    // elsewhere the bare uid plus the folder this row resolves to — a thread
+    // merges INBOX with Sent, so the active folder is not where every row lives.
+    const id = spansMailboxes(state) ? selectionKey(email, state) : email.uid;
+    setPendingDelete({
+      executor: () => useMailStore.getState().deleteEmailFromServer(id, { mailboxOverride: mailbox }),
+      copy: {
+        title: t('viewer.deleteEmail'),
+        description: archivedEmailIds.has(email.uid)
+          ? t('viewer.emailArchivedLocallyDeletingServer')
+          : t('viewer.emailPermanentlyDeletedServer'),
+        confirmLabel: t('common.delete'),
+      },
+    });
+  }, [archivedEmailIds, t]);
 
   // Sort emails by user preference (oldest-first or newest-first)
   const sortedEmails = useMemo(() =>
@@ -623,12 +649,15 @@ export function ThreadView({ thread, onComposeReply }) {
                   signatureDisplay={signatureDisplay}
                   shouldShowSignature={sigVisMap[email.uid] !== false}
                   onComposeReply={onComposeReply}
+                  onDelete={requestDelete}
                 />
               </div>
             );
           })}
         </div>
       </div>
+
+      <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
     </div>
   );
 }

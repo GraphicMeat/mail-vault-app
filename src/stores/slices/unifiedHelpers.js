@@ -202,6 +202,34 @@ export function selectionKey(email, state) {
 }
 
 /**
+ * The open thread minus one message, as a store update. Null when no thread is
+ * open or it does not hold the message; the reader's clear-set when the message
+ * was the thread's last.
+ *
+ * `selectedThread` is a snapshot of buildThreads' output that nothing
+ * re-derives, so a delete that only filtered `emails` left a ghost row in the
+ * reader — or, when the deleted message was the newest (the one selectedEmailId
+ * names), closed the whole thread over a single message. selectedEmailId moves
+ * to the surviving newest message, the same way selectThread points it at
+ * lastEmail, so the list row stays drawn as open.
+ */
+export function pruneSelectedThread(state, isRemoved) {
+  const thread = state.selectedThread;
+  if (!thread?.emails?.some(isRemoved)) return null;
+  const emails = thread.emails.filter(e => !isRemoved(e));
+  if (emails.length === 0) {
+    return { selectedThread: null, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null };
+  }
+  const lastEmail = emails.reduce((a, b) => (new Date(b.date) > new Date(a.date) ? b : a));
+  // ponytail: participants/unreadCount/dateRange stay as built — the reader
+  // draws subject, messageCount and emails; the list rebuilds its own threads.
+  return {
+    selectedThread: { ...thread, emails, lastEmail, messageCount: emails.length },
+    selectedEmailId: selectionKey(lastEmail, state),
+  };
+}
+
+/**
  * The row `delta` places from the open one, clamped to the ends.
  *
  * An open message that is not in `rows` starts navigation at the top, which is
