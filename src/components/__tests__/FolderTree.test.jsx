@@ -160,3 +160,79 @@ describe('FolderTree', () => {
     expect(node.getAttribute('data-path')).toBe('INBOX.Bokelmu&Awg-hle');
   });
 });
+
+// The tag-cloud style used to flatten the same tree into "Telefonie › NFon AG"
+// breadcrumb chips, which read as ten unrelated folders. Chips keep their own
+// name; a parent gets the tree's chevron and its children hang beneath it.
+import { FolderBubbles } from '../FolderTree';
+
+describe('FolderBubbles', () => {
+  const drawBubbles = (props = {}) => render(
+    <FolderBubbles
+      mailboxes={MAILBOXES}
+      activeMailbox="INBOX"
+      expanded={new Set()}
+      onToggle={() => {}}
+      onSelect={() => {}}
+      {...props}
+    />
+  );
+
+  it('draws only the top level until a parent is opened', () => {
+    drawBubbles();
+    expect(rowPaths()).toEqual(['INBOX', 'INBOX.Kunden', 'INBOX.Lieferanten', 'INBOX.Sent']);
+  });
+
+  it('labels a chip with its own name and carries the trail in the title', () => {
+    drawBubbles({ expanded: ALL_OPEN });
+    const leaf = row('INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt');
+    expect(leaf.textContent).toBe('erledigt');
+    expect(leaf.getAttribute('title'))
+      .toBe('Lieferanten › Technik › Telefonie › NFon AG › erledigt');
+  });
+
+  it('gives a parent a chevron that opens it without selecting it', () => {
+    const onToggle = vi.fn();
+    const onSelect = vi.fn();
+    drawBubbles({ onToggle, onSelect });
+    expect(toggle('INBOX.Kunden')).toBeUndefined();
+    fireEvent.click(toggle('INBOX.Lieferanten'));
+    expect(onToggle).toHaveBeenCalledWith('INBOX.Lieferanten');
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('hangs an open parent\'s children beneath it, then resumes its siblings', () => {
+    drawBubbles({ expanded: new Set(['INBOX.Lieferanten']) });
+    expect(rowPaths()).toEqual([
+      'INBOX', 'INBOX.Kunden', 'INBOX.Lieferanten', 'INBOX.Lieferanten.Technik', 'INBOX.Sent',
+    ]);
+    const child = row('INBOX.Lieferanten.Technik');
+    expect(child.getAttribute('data-depth')).toBe('1');
+    // Its own indented group, not another chip in the parent's row.
+    expect(child.parentElement).not.toBe(row('INBOX.Lieferanten').parentElement);
+  });
+
+  it('selects the folder by its full server path', () => {
+    const onSelect = vi.fn();
+    drawBubbles({ onSelect, expanded: ALL_OPEN });
+    fireEvent.click(row('INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt'));
+    expect(onSelect).toHaveBeenCalledWith('INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt');
+  });
+
+  it('opens rather than selects a folder the server marked unselectable', () => {
+    const onSelect = vi.fn();
+    const onToggle = vi.fn();
+    render(
+      <FolderBubbles
+        mailboxes={[box('INBOX'), box('INBOX.Container', { noselect: true }), box('INBOX.Container.Real')]}
+        activeMailbox="INBOX"
+        expanded={new Set()}
+        onToggle={onToggle}
+        onSelect={onSelect}
+      />
+    );
+    fireEvent.click(row('INBOX.Container'));
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onToggle).toHaveBeenCalledWith('INBOX.Container');
+  });
+});

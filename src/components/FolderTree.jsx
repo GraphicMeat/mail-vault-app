@@ -31,8 +31,30 @@ export function getMailboxIcon(mailbox) {
 
 const INDENT = 12;
 
-function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact }) {
+/** The chevron that opens a folder with folders inside — same in both styles. */
+function FolderToggle({ node, isOpen, onToggle, size = 14 }) {
   const t = useT();
+  return (
+    <button
+      type="button"
+      data-testid="folder-toggle"
+      data-path={node.path}
+      aria-label={isOpen ? t('sidebar.collapseFolder') : t('sidebar.expandFolder')}
+      className="p-0.5 shrink-0"
+      onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
+    >
+      {isOpen ? <ChevronDown size={size} /> : <ChevronRight size={size} />}
+    </button>
+  );
+}
+
+/** Click a folder: select it, or open it when the server says it holds nothing. */
+function activate(node, onToggle, onSelect) {
+  if (node.noselect) { if (node.children.length) onToggle(node.path); }
+  else onSelect(node.path);
+}
+
+function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
@@ -53,22 +75,10 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
                    ${isActive
                      ? 'bg-mail-accent/10 text-mail-accent-text'
                      : 'text-mail-text hover:bg-mail-surface-hover'}`}
-        onClick={() => {
-          if (node.noselect) { if (hasChildren) onToggle(node.path); }
-          else onSelect(node.path);
-        }}
+        onClick={() => activate(node, onToggle, onSelect)}
       >
         {hasChildren ? (
-          <button
-            type="button"
-            data-testid="folder-toggle"
-            data-path={node.path}
-            aria-label={isOpen ? t('sidebar.collapseFolder') : t('sidebar.expandFolder')}
-            className="p-0.5 shrink-0"
-            onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
-          >
-            {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          </button>
+          <FolderToggle node={node} isOpen={isOpen} onToggle={onToggle} />
         ) : (
           <div className="w-5 shrink-0" />
         )}
@@ -113,4 +123,84 @@ export function FolderTree({
       compact={compact}
     />
   ));
+}
+
+function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect }) {
+  const Icon = getMailboxIcon(node);
+  const hasChildren = node.children.length > 0;
+  const isActive = !node.noselect && activeMailbox === node.path;
+  const label = mailboxLabel(node.name);
+
+  return (
+    <div
+      data-testid="folder-row"
+      data-path={node.path}
+      data-depth={node.depth}
+      aria-current={isActive ? 'true' : undefined}
+      title={[...trail, label].join(' › ')}
+      className={`inline-flex items-center gap-1 pl-2.5 py-1 rounded-full text-xs transition-colors border
+                 ${hasChildren ? 'pr-1' : 'pr-2.5'}
+                 ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
+                 ${isActive
+                   ? 'bg-mail-accent-fill text-white border-mail-accent'
+                   : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
+      onClick={() => activate(node, onToggle, onSelect)}
+    >
+      <Icon size={12} />
+      <span className="truncate max-w-[180px]">{label}</span>
+      {hasChildren && (
+        <FolderToggle node={node} isOpen={expanded.has(node.path)} onToggle={onToggle} size={12} />
+      )}
+    </div>
+  );
+}
+
+function BubbleLevel({ nodes, trail, ...rest }) {
+  // A wrapped row per run of siblings. An open parent ends its run so its
+  // children can hang beneath it; the siblings after it start a fresh row,
+  // which is what keeps two open parents from pooling their children.
+  const runs = [];
+  let chips = [];
+  for (const n of nodes) {
+    chips.push(n);
+    if (n.children.length && rest.expanded.has(n.path)) { runs.push({ chips, open: n }); chips = []; }
+  }
+  if (chips.length) runs.push({ chips, open: null });
+
+  return runs.map(({ chips, open }, i) => (
+    <React.Fragment key={open ? open.path : `run-${i}`}>
+      <div className="flex flex-wrap gap-1.5">
+        {chips.map(n => <FolderChip key={n.path} node={n} trail={trail} {...rest} />)}
+      </div>
+      {open && (
+        <div className="ml-2 pl-2 border-l border-mail-border flex flex-col gap-1.5">
+          <BubbleLevel nodes={open.children} trail={[...trail, mailboxLabel(open.name)]} {...rest} />
+        </div>
+      )}
+    </React.Fragment>
+  ));
+}
+
+/**
+ * The same tree as chips: the tag-cloud sidebar style.
+ *
+ * A chip carries only its own name — the breadcrumb chips this replaced
+ * ("Telefonie › NFon AG") read as unrelated folders — and a parent gets the
+ * tree's chevron, with its children indented beneath it while open.
+ */
+export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect }) {
+  const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <BubbleLevel
+        nodes={tree}
+        trail={[]}
+        activeMailbox={activeMailbox}
+        expanded={expanded}
+        onToggle={onToggle}
+        onSelect={onSelect}
+      />
+    </div>
+  );
 }

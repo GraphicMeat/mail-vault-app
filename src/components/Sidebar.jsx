@@ -14,10 +14,9 @@ import { useBackupStore } from '../stores/backupStore';
 import { motion } from 'framer-motion';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
-import { mailboxLabel } from '../utils/imapUtf7';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
-import { FolderTree, getMailboxIcon } from './FolderTree';
+import { FolderTree, FolderBubbles } from './FolderTree';
 import { buildMailboxTree, mailboxAncestors, mailboxDescendants } from '../services/workflows/mailboxTree';
 import {
   Inbox,
@@ -724,6 +723,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const collapsed = sidebarCollapsed;
   const showUnifiedInbox = orderedAccounts.length >= 2;
   const tagCloud = sidebarStyle === 'tagcloud';
+  const Folders = tagCloud ? FolderBubbles : FolderTree;
   const activeAccount = orderedAccounts.find(a => a.id === activeAccountId);
 
   const folderTree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
@@ -752,23 +752,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     if (branch.length > 1) loadSubtree(activeAccountId, path);
     else activateAccount(activeAccountId, path);
   };
-
-  // Bubbles are a flat wrap by design, so the row itself has to carry the
-  // hierarchy: ten folders called "erledigt" are otherwise one bubble ten times.
-  const folderBubbles = useMemo(() => {
-    const out = [];
-    const walk = (nodes, trail) => {
-      for (const n of nodes) {
-        const here = [...trail, mailboxLabel(n.name)];
-        if (!n.noselect) {
-          out.push({ path: n.path, specialUse: n.specialUse, label: here.slice(-2).join(' \u203a '), title: here.join(' \u203a ') });
-        }
-        walk(n.children, here);
-      }
-    };
-    walk(folderTree, []);
-    return out;
-  }, [folderTree]);
 
   // Shared hover bubble (rendered in both collapsed and expanded views)
   const hoverBubble = hoverAccountId && hoverPos && (
@@ -1285,46 +1268,20 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {unifiedInbox && (
         <UnifiedFolderList tagCloud={tagCloud} />
       )}
-      {!unifiedInbox && tagCloud && (
+      {!unifiedInbox && (
         <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
           <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
             {t('sidebar.folders')}
           </div>
-          <div className="flex flex-wrap gap-1.5">
-            {folderBubbles.map(f => {
-              const Icon = getMailboxIcon(f);
-              const isActive = activeMailbox === f.path;
-              return (
-                <button
-                  key={f.path}
-                  onClick={() => selectFolder(f.path)}
-                  title={f.title}
-                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
-                             ${isActive
-                               ? 'bg-mail-accent-fill text-white border-mail-accent'
-                               : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
-                >
-                  <Icon size={12} />
-                  <span className="truncate max-w-[180px]">{f.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <Folders
+            mailboxes={mailboxes}
+            activeMailbox={activeMailbox}
+            expanded={expandedFolders}
+            onToggle={toggleFolder}
+            onSelect={selectFolder}
+          />
         </div>
       )}
-      {!unifiedInbox && !tagCloud && <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
-        <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          {t('sidebar.folders')}
-        </div>
-
-        <FolderTree
-          mailboxes={mailboxes}
-          activeMailbox={activeMailbox}
-          expanded={expandedFolders}
-          onToggle={toggleFolder}
-          onSelect={selectFolder}
-        />
-      </div>}
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border space-y-0.5">
