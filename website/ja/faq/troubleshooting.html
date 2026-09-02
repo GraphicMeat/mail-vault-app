@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>トラブルシューティング — MailVault FAQ</title>
-  <meta name="description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta name="description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/ja/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/ja/faq/troubleshooting.html">
   <meta property="og:title" content="トラブルシューティング — MailVault FAQ">
-  <meta property="og:description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta property="og:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -23,7 +23,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="トラブルシューティング — MailVault FAQ">
-  <meta name="twitter:description" content="よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。">
+  <meta name="twitter:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -67,6 +67,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "スペル辞書がインストールされていないからです。macOSとWindowsではシステムが辞書を提供しますが、Linuxでは辞書はディストリビューションから提供され、最小構成のデスクトップにはないことがよくあります。MailVaultはWebKitGTKを通じてスペルチェックを行い、WebKitGTKはenchantとhunspellを使って単語を調べるため、hunspellの辞書が入ってはじめて下線を引けます。お使いの言語の辞書をインストールしてMailVaultを再起動してください。Debian、Ubuntu、Mintでは sudo apt install hunspell-en-us、Fedoraでは sudo dnf install hunspell-en、ArchやManjaroでは sudo pacman -S hunspell-en_us、openSUSEでは sudo zypper install myspell-en_US を実行します。言語コードはご自身のものに置き換えてください（hunspell-de-de、hunspell-fr など）。MailVaultはシステムの言語に一致する辞書を選びます。メッセージのツールバーにあるスペルチェックのボタンが、どちらの状態かを示します。辞書があるときは下線の表示を切り替え、ないときはこの手順を開きます。snap版は厳格に隔離されているためホストにインストールされた辞書を参照できず、独自の辞書を同梱しています。辞書なしと報告される場合は、代わりに.debパッケージを使ってください。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "I added a folder on the server — how soon does MailVault show it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault keeps a copy of your folder list on disk, so folders appear instantly when you open an account, and it refreshes that list from the server at most once every ten minutes. If you create, rename or delete a folder in webmail or another client, MailVault picks the change up the next time it opens that account or you click a folder in the sidebar, once the ten minutes have passed — so a new folder normally shows up within ten minutes. Restarting the app does not make it faster, because the cached list is stored on disk and survives a restart. The Refresh button reloads the messages in the folder you are reading; the folder list follows its own ten-minute check. Subfolders need no setup: MailVault draws the hierarchy from the paths the server reports, so a new subfolder appears nested under its parent, and folders for accounts you are not looking at are refreshed in the background on the same schedule."
       }
     }
   ]
@@ -202,7 +210,7 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">トラブルシューティング</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">よくある2つの問題の対処法。Gmailの1日あたりの通信量の上限と、Linuxでスペルチェックが何も下線を引かない件。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.</p>
 
       <div class="space-y-4">
 
@@ -273,6 +281,24 @@
               </p>
               <p>
                 <strong>snapのビルドは特別な場合です。</strong>厳密に閉じ込められたsnapはホストに入れた辞書を見られないため、自前のコピーを持っています。snapが辞書なしと伝えてきたら、代わりに.debパッケージを入れてください — こちらはシステムにすでにある辞書を使います。
+              </p>
+            </div>
+        </article>
+
+        <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">I added a folder on the server &mdash; how soon does MailVault show it?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Within ten minutes.</strong> MailVault keeps a copy of your folder list on disk so the sidebar fills in the moment you open an account, and it re-reads the list from the server at most once every ten minutes. Create, rename or delete a folder in webmail or another mail client, and MailVault picks the change up the next time it opens that account or you click a folder in the sidebar &mdash; once those ten minutes have passed.
+              </p>
+              <p>
+                <strong>Restarting does not hurry it along.</strong> The cached list is on disk, not in memory, so it survives a quit and relaunch. Waiting out the ten minutes and then clicking any folder is the fastest way to see a change you just made.
+              </p>
+              <p>
+                <strong>The Refresh button is about messages, not folders.</strong> It reloads the mail in the folder you are reading. The folder list runs on its own ten-minute check, which is why a brand new folder can stay hidden for a few minutes after a refresh.
+              </p>
+              <p>
+                <strong>Subfolders need no setup.</strong> MailVault builds the tree from the paths the server reports, so a new subfolder turns up nested under its parent with the right name and position. Accounts you are not currently reading are refreshed in the background on the same schedule, a couple at a time, so switching to one rarely shows you a stale list.
               </p>
             </div>
         </article>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>疑难解答 — MailVault 常见问题</title>
-  <meta name="description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta name="description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/troubleshooting.html">
   <meta property="og:title" content="疑难解答 — MailVault 常见问题">
-  <meta property="og:description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta property="og:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -23,7 +23,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="疑难解答 — MailVault 常见问题">
-  <meta name="twitter:description" content="两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。">
+  <meta name="twitter:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -67,6 +67,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "因为没有安装拼写词典。在 macOS 和 Windows 上，系统会自带一个；在 Linux 上，词典来自你的发行版，而最小化的桌面安装往往一个都没有。MailVault 通过 WebKitGTK 做拼写检查，后者经由 enchant 和 hunspell 查词，所以只有装了 hunspell 词典才能画出下划线。为你的语言装一个，然后重启 MailVault：Debian、Ubuntu 或 Mint 上运行 sudo apt install hunspell-en-us；Fedora 上 sudo dnf install hunspell-en；Arch 或 Manjaro 上 sudo pacman -S hunspell-en_us；openSUSE 上 sudo zypper install myspell-en_US。把语言代码换成你自己的——hunspell-de-de、hunspell-fr 等等——MailVault 会挑选与你系统语言匹配的词典。邮件工具栏上的拼写检查按钮会告诉你属于哪种情况：有词典时它切换下划线，没有词典时它打开这份说明。snap 版本受严格限制，看不到宿主系统上安装的词典，所以它自带一份；如果它报告没有词典，请改用 .deb 包。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "I added a folder on the server — how soon does MailVault show it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault keeps a copy of your folder list on disk, so folders appear instantly when you open an account, and it refreshes that list from the server at most once every ten minutes. If you create, rename or delete a folder in webmail or another client, MailVault picks the change up the next time it opens that account or you click a folder in the sidebar, once the ten minutes have passed — so a new folder normally shows up within ten minutes. Restarting the app does not make it faster, because the cached list is stored on disk and survives a restart. The Refresh button reloads the messages in the folder you are reading; the folder list follows its own ten-minute check. Subfolders need no setup: MailVault draws the hierarchy from the paths the server reports, so a new subfolder appears nested under its parent, and folders for accounts you are not looking at are refreshed in the background on the same schedule."
       }
     }
   ]
@@ -202,7 +210,7 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">疑难解答</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">两个最常见问题的解决办法：Gmail 每日流量上限，以及在 Linux 上拼写检查不划线。</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.</p>
 
       <div class="space-y-4">
 
@@ -273,6 +281,24 @@
               </p>
               <p>
                 <strong>snap 版是个特例。</strong>严格受限的 snap 看不到装在宿主系统上的词典，所以它自带一份。如果 snap 报告没有词典，改装 .deb 包——它会用你系统上已有的词典。
+              </p>
+            </div>
+        </article>
+
+        <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">I added a folder on the server &mdash; how soon does MailVault show it?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Within ten minutes.</strong> MailVault keeps a copy of your folder list on disk so the sidebar fills in the moment you open an account, and it re-reads the list from the server at most once every ten minutes. Create, rename or delete a folder in webmail or another mail client, and MailVault picks the change up the next time it opens that account or you click a folder in the sidebar &mdash; once those ten minutes have passed.
+              </p>
+              <p>
+                <strong>Restarting does not hurry it along.</strong> The cached list is on disk, not in memory, so it survives a quit and relaunch. Waiting out the ten minutes and then clicking any folder is the fastest way to see a change you just made.
+              </p>
+              <p>
+                <strong>The Refresh button is about messages, not folders.</strong> It reloads the mail in the folder you are reading. The folder list runs on its own ten-minute check, which is why a brand new folder can stay hidden for a few minutes after a refresh.
+              </p>
+              <p>
+                <strong>Subfolders need no setup.</strong> MailVault builds the tree from the paths the server reports, so a new subfolder turns up nested under its parent with the right name and position. Accounts you are not currently reading are refreshed in the background on the same schedule, a couple at a time, so switching to one rarely shows you a stale list.
               </p>
             </div>
         </article>

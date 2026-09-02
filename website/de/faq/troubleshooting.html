@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fehlerbehebung — MailVault FAQ</title>
-  <meta name="description" content="Lösungen für die zwei häufigsten Probleme: das tägliche Gmail-Datenlimit und die Rechtschreibprüfung, die unter Linux nichts unterringelt.">
+  <meta name="description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/de/faq/troubleshooting.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/de/faq/troubleshooting.html">
   <meta property="og:title" content="Fehlerbehebung — MailVault FAQ">
-  <meta property="og:description" content="Lösungen für die zwei häufigsten Probleme: das tägliche Gmail-Datenlimit und die Rechtschreibprüfung, die unter Linux nichts unterringelt.">
+  <meta property="og:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -23,7 +23,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Fehlerbehebung — MailVault FAQ">
-  <meta name="twitter:description" content="Lösungen für die zwei häufigsten Probleme: das tägliche Gmail-Datenlimit und die Rechtschreibprüfung, die unter Linux nichts unterringelt.">
+  <meta name="twitter:description" content="Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.">
   <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -67,6 +67,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Weil kein Rechtschreibwörterbuch installiert ist. Unter macOS und Windows liefert das System eines mit; unter Linux kommt das Wörterbuch von deiner Distribution, und eine minimale Desktop-Installation hat oft keines. MailVault prüft die Rechtschreibung über WebKitGTK, das Wörter über enchant und hunspell nachschlägt, es kann also erst unterstreichen, wenn ein hunspell-Wörterbuch vorhanden ist. Installiere eines für deine Sprache und starte MailVault neu: unter Debian, Ubuntu oder Mint sudo apt install hunspell-en-us; unter Fedora sudo dnf install hunspell-en; unter Arch oder Manjaro sudo pacman -S hunspell-en_us; unter openSUSE sudo zypper install myspell-en_US. Ersetze den Sprachcode durch deinen eigenen — hunspell-de-de, hunspell-fr und so weiter — und MailVault wählt das Wörterbuch, das zu deiner Systemsprache passt. Der Rechtschreib-Button in der Nachrichten-Symbolleiste sagt dir, welcher Fall vorliegt: Er schaltet die Unterstreichungen um, wenn ein Wörterbuch vorhanden ist, und öffnet diese Anleitung, wenn keines da ist. Der Snap-Build kann Wörterbücher auf dem Host nicht sehen, weil er strikt eingeschränkt ist, und bringt deshalb ein eigenes mit; meldet er keines, nutze stattdessen das .deb-Paket."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "I added a folder on the server — how soon does MailVault show it?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "MailVault keeps a copy of your folder list on disk, so folders appear instantly when you open an account, and it refreshes that list from the server at most once every ten minutes. If you create, rename or delete a folder in webmail or another client, MailVault picks the change up the next time it opens that account or you click a folder in the sidebar, once the ten minutes have passed — so a new folder normally shows up within ten minutes. Restarting the app does not make it faster, because the cached list is stored on disk and survives a restart. The Refresh button reloads the messages in the folder you are reading; the folder list follows its own ten-minute check. Subfolders need no setup: MailVault draws the hierarchy from the paths the server reports, so a new subfolder appears nested under its parent, and folders for accounts you are not looking at are refreshed in the background on the same schedule."
       }
     }
   ]
@@ -202,7 +210,7 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">Fehlerbehebung</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">Lösungen für die zwei häufigsten Probleme: das tägliche Gmail-Datenlimit und die Rechtschreibprüfung, die unter Linux nichts unterringelt.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Fixes for the problems people hit most: the Gmail daily bandwidth cap, spellcheck underlining nothing on Linux, and a folder added on the server not showing up yet.</p>
 
       <div class="space-y-4">
 
@@ -273,6 +281,24 @@
               </p>
               <p>
                 <strong>Der Snap-Build ist ein Sonderfall.</strong> Ein streng abgeschottetes Snap sieht die auf dem Host installierten Wörterbücher nicht und bringt deshalb eine eigene Kopie mit. Meldet das Snap, dass kein Wörterbuch da ist, installiere stattdessen das .deb-Paket — es nutzt die Wörterbücher, die schon auf deinem System liegen.
+              </p>
+            </div>
+        </article>
+
+        <article id="folder-list-refresh" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">I added a folder on the server &mdash; how soon does MailVault show it?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>
+                <strong>Within ten minutes.</strong> MailVault keeps a copy of your folder list on disk so the sidebar fills in the moment you open an account, and it re-reads the list from the server at most once every ten minutes. Create, rename or delete a folder in webmail or another mail client, and MailVault picks the change up the next time it opens that account or you click a folder in the sidebar &mdash; once those ten minutes have passed.
+              </p>
+              <p>
+                <strong>Restarting does not hurry it along.</strong> The cached list is on disk, not in memory, so it survives a quit and relaunch. Waiting out the ten minutes and then clicking any folder is the fastest way to see a change you just made.
+              </p>
+              <p>
+                <strong>The Refresh button is about messages, not folders.</strong> It reloads the mail in the folder you are reading. The folder list runs on its own ten-minute check, which is why a brand new folder can stay hidden for a few minutes after a refresh.
+              </p>
+              <p>
+                <strong>Subfolders need no setup.</strong> MailVault builds the tree from the paths the server reports, so a new subfolder turns up nested under its parent with the right name and position. Accounts you are not currently reading are refreshed in the background on the same schedule, a couple at a time, so switching to one rarely shows you a stale list.
               </p>
             </div>
         </article>
