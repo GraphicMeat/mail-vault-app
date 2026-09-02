@@ -5,7 +5,12 @@ import { MotionConfig } from 'framer-motion';
 import App from './App';
 import { setLocale } from './i18n/index.js';
 import { useSettingsStore } from './stores/settingsStore';
+import { wireConnectivityEvents, installNetMock } from './stores/connectivityStore';
 import './styles/index.css';
+
+// Listen to the webview's path-monitor events. Cheap, and the only signal that
+// arrives the instant the Wi-Fi drops rather than on the next 30s heartbeat.
+wireConnectivityEvents();
 
 // Apply the persisted language once the store has hydrated — and NOT before.
 //
@@ -29,6 +34,10 @@ import { MAIL_DARK_BG, MAIL_DARK_TEXT } from './utils/mailChrome';
 // stayed open through several passes. Same compile-time gate as e2eMotion:
 // `VITE_E2E` is a constant, so a normal build drops this entirely.
 if (import.meta.env.VITE_E2E === '1') {
+  // Mock connectivity object. Real network state cannot be driven from a test,
+  // and pulling the runner's Wi-Fi would take the mock IMAP server with it, so
+  // the suite pins the verdict here instead.
+  installNetMock(window);
   import('./stores/mailStore').then(({ useMailStore }) => {
     window.__MAIL_STORE__ = useMailStore;
   });

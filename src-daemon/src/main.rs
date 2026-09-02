@@ -8,6 +8,7 @@ pub use mailvault_core::imap;
 mod inference;
 mod ipc;
 mod learning;
+mod netgate;
 pub mod llm;
 pub use mailvault_core::oauth2;
 mod server;
@@ -210,11 +211,16 @@ async fn main() {
 
     let imap_pool = Arc::new(imap::ImapPool::new());
     let contacts = contacts_index::ContactsState::new(mail_dir.clone());
+    // Connectivity gate. Its watchdog parks on a notify while online, so it
+    // costs nothing until something actually fails.
+    let net = netgate::NetGate::new();
+    net.spawn_watchdog();
     let sync_eng = Arc::new(sync_engine::SyncEngine::new(
         Arc::clone(&imap_pool),
         mail_dir.clone(),
         data_dir.clone(),
         Arc::clone(&contacts),
+        Arc::clone(&net),
     ));
 
     let state = Arc::new(server::DaemonState {
@@ -230,6 +236,7 @@ async fn main() {
         _oauth2_manager: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
         contacts: Arc::clone(&contacts),
+        net,
     });
 
     // Start background classification queue worker

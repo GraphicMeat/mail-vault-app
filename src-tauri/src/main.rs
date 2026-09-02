@@ -787,49 +787,17 @@ fn request_notification_permission(app_handle: tauri::AppHandle) -> Result<bool,
 }
 
 #[tauri::command]
-fn check_network_connectivity() -> Result<bool, String> {
-    info!("=== CHECK NETWORK CONNECTIVITY START ===");
-
-    // Try to connect to a reliable server
-    use std::net::TcpStream;
-    use std::time::Duration;
-
-    let hosts = [
-        ("8.8.8.8", 53),         // Google DNS
-        ("1.1.1.1", 53),         // Cloudflare DNS
-        ("208.67.222.222", 53),  // OpenDNS
-    ];
-
-    // Use a shorter timeout for faster detection
-    let timeout = Duration::from_millis(1500);
-
-    for (host, port) in hosts {
-        info!("Trying to connect to {}:{}...", host, port);
-        let addr_str = format!("{}:{}", host, port);
-        match addr_str.parse::<std::net::SocketAddr>() {
-            Ok(addr) => {
-                match TcpStream::connect_timeout(&addr, timeout) {
-                    Ok(stream) => {
-                        // Explicitly drop the stream
-                        drop(stream);
-                        info!("Network connectivity confirmed via {}", host);
-                        info!("=== CHECK NETWORK CONNECTIVITY END (ONLINE) ===");
-                        return Ok(true);
-                    }
-                    Err(e) => {
-                        warn!("Failed to connect to {}:{} - Error: {} (kind: {:?})", host, port, e, e.kind());
-                    }
-                }
-            }
-            Err(e) => {
-                error!("Failed to parse address {}: {}", addr_str, e);
-            }
-        }
+async fn check_network_connectivity() -> Result<bool, String> {
+    // Was a blocking `fn`: three sequential `TcpStream::connect_timeout` calls,
+    // up to 4.5s of the UI thread with the window frozen. Now one async probe
+    // that dials all three concurrently — 1.5s worst case, on the runtime.
+    let online = mailvault_core::net::probe_internet().await;
+    if online {
+        info!("Network connectivity confirmed");
+    } else {
+        warn!("No network connectivity detected - all probe hosts unreachable");
     }
-
-    warn!("No network connectivity detected - all connection attempts failed");
-    info!("=== CHECK NETWORK CONNECTIVITY END (OFFLINE) ===");
-    Ok(false)
+    Ok(online)
 }
 
 #[tauri::command]

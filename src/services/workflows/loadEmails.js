@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
@@ -222,7 +223,7 @@ export async function loadEmails() {
     // Check network connectivity
     if (invoke) {
       try {
-        const isOnline = await invoke('check_network_connectivity');
+        const isOnline = await useConnectivityStore.getState().probe();
         if (isStale()) return;
         console.log('[loadEmails] Network connectivity result:', isOnline);
         if (isOnline === false) {

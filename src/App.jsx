@@ -26,6 +26,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
+import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
@@ -823,6 +824,9 @@ function App() {
     <div className="h-screen bg-mail-bg flex flex-col overflow-clip">
       {/* Storage folder unreachable — blocks sync, so it sits above everything */}
       <VaultAlertBanner />
+      {/* No internet. Below the vault banner: an unplugged drive is the worse
+          problem, and only one of the two is the user's to fix right now. */}
+      <OfflineBanner />
       {/* overflow-CLIP, not hidden: an overflow-hidden box is still a scroll
           container, and WebKit scrolls one sideways to reveal a text selection.
           With no scrollbar the offset sticks and the sidebar and list end up

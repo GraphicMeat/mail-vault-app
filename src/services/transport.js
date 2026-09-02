@@ -133,6 +133,13 @@ async function sendHeartbeat() {
       _daemonAlive = true;
       _heartbeatRetryDelay = HEARTBEAT_INITIAL_DELAY; // Reset backoff
       _lastHeartbeat = result;
+      // The daemon owns the connectivity verdict — it is the process actually
+      // dialling. Riding the heartbeat means the steady-state truth reaches the
+      // UI without a second poll; the webview's own events cover the edges.
+      if (typeof result.online === 'boolean') {
+        const { useConnectivityStore } = await import('../stores/connectivityStore');
+        useConnectivityStore.getState().setOnline(result.online);
+      }
       console.log(`[transport] Daemon alive (v${result.version}, uptime ${result.uptime_secs}s)`);
       return true;
     }

@@ -3,6 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, resolveServerAccount } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
@@ -906,16 +907,24 @@ export async function activateAccount(accountId, mailbox, options = {}) {
             // daemon been dead: ask the server directly, and prove it.
             if (freshCache?.emails?.length > 0) return;
           } else {
+            // `success:false` alone cannot tell "no internet" from "the server
+            // refused" — and this branch called every offline sync a server
+            // error, which is the wrong story AND the wrong remedy. The daemon
+            // labels the ones it never dialled.
+            const offline = syncResult?.offline === true;
+            if (offline) useConnectivityStore.getState().setOnline(false);
             if (!signal.aborted) {
               useMailStore.setState({
                 connectionStatus: 'error',
-                connectionError: syncResult?.error || 'The server refused the sync. Nothing in your vault changed.',
-                connectionErrorType: 'serverError',
+                connectionError: offline
+                  ? t('svc.activateAccount.noInternetConnectionShowingWhat')
+                  : (syncResult?.error || 'The server refused the sync. Nothing in your vault changed.'),
+                connectionErrorType: offline ? 'offline' : 'serverError',
                 loading: false,
                 loadingMore: false,
               });
             }
-            serverTrace.end('daemon-sync-error', { error: syncResult?.error });
+            serverTrace.end(offline ? 'offline' : 'daemon-sync-error', { error: syncResult?.error });
             return;
           }
         } catch (e) {
@@ -928,7 +937,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const invoke = window.__TAURI__?.core?.invoke;
       if (invoke) {
         try {
-          const isOnline = await invoke('check_network_connectivity');
+          const isOnline = await useConnectivityStore.getState().probe();
           if (signal.aborted) return;
           if (isOnline === false) {
             useMailStore.setState({ connectionStatus: 'error', connectionError: t('svc.activateAccount.noInternetConnectionShowingWhat'), connectionErrorType: 'offline', loading: false, loadingMore: false });

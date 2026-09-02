@@ -5,6 +5,7 @@ use crate::imap;
 use crate::inference;
 use crate::ipc::{self, AuthHandshake, RpcRequest, RpcResponse};
 use crate::learning;
+use crate::netgate::NetGate;
 use crate::llm;
 use crate::oauth2;
 use crate::snapshot;
@@ -34,6 +35,10 @@ pub struct DaemonState {
     pub _oauth2_manager: oauth2::OAuth2Manager,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
     pub contacts: Arc<contacts_index::ContactsState>,
+    /// Shut while the host has no connectivity. Sync consults it; user-initiated
+    /// IMAP ops only *feed* it — a captive portal must never lock the user out
+    /// of an action they explicitly asked for.
+    pub net: Arc<NetGate>,
 }
 
 /// Start the daemon socket server.
@@ -171,6 +176,7 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
             "alive": true,
             "uptime_secs": state.started_at.elapsed().as_secs(),
             "version": env!("CARGO_PKG_VERSION"),
+            "online": state.net.is_online(),
         })),
 
         "daemon.status" => RpcResponse::success(
@@ -217,6 +223,16 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "graph.set_read" => handle_graph(&state, req.params, id, "set_read").await,
         "graph.delete_message" => handle_graph(&state, req.params, id, "delete_message").await,
         "graph.move_emails" => handle_graph(&state, req.params, id, "move_emails").await,
+
+        // ── Connectivity ────────────────────────────────────────────
+        "net.status" => RpcResponse::success(id, state.net.status()),
+        // Forced probe. The app calls this on the webview's `online` event, so
+        // a reconnect reopens the gate at once instead of waiting out the
+        // watchdog's backoff.
+        "net.probe" => {
+            state.net.confirm_online().await;
+            RpcResponse::success(id, state.net.status())
+        }
 
         // ── Sync engine (Phase 3) ───────────────────────────────────
         "sync.now" => handle_sync_now(Arc::clone(state), req.params, id).await,
@@ -514,7 +530,10 @@ where
 
     let guard = match state.imap_pool.get_background(&account).await {
         Ok(g) => g,
-        Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        Err(e) => {
+            state.net.note_failure(&e).await;
+            return RpcResponse::error(id, ipc::INTERNAL_ERROR, e);
+        }
     };
 
     let PooledSessionGuard { session, last_selected: _, _permit } = guard;
@@ -527,10 +546,14 @@ where
                 _permit,
             };
             state.imap_pool.return_background(&account, return_guard).await;
+            // A completed round trip is the cheapest proof of reach there is —
+            // one user opening one email reopens the gate for every account.
+            state.net.note_success();
             RpcResponse::success(id, result)
         }
         Err(e) => {
             // _permit dropped — semaphore released, pool creates new session next time
+            state.net.note_failure(&e).await;
             RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
         }
     }

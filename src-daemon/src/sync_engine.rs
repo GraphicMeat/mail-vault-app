@@ -5,6 +5,7 @@
 //! and listens for sync events.
 
 use crate::contacts_index::ContactsState;
+use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{ImapPool, PooledSessionGuard};
 use mailvault_core::transfer_stats;
@@ -26,6 +27,10 @@ pub struct SyncResult {
     pub total_emails: u32,
     pub success: bool,
     pub error: Option<String>,
+    /// The daemon never dialled: its connectivity gate is shut. Distinct from
+    /// `success:false`, which the app renders as a *server* error — the wrong
+    /// story, and the wrong remedy, when the Wi-Fi is simply off.
+    pub offline: bool,
 }
 
 /// Account configuration for sync (loaded from keychain/settings).
@@ -78,6 +83,9 @@ pub struct SyncEngine {
     /// `account_id` → UTC day whose cap we already logged, so a capped account
     /// costs one log line a day instead of one per sync tick.
     cap_logged: Mutex<HashMap<String, String>>,
+    /// Shut while the host has no connectivity — every sync short-circuits
+    /// rather than dialling nine accounts into a dead socket.
+    net: Arc<NetGate>,
     /// `account_id\x01requested` → the path this server actually serves.
     /// Filled the first time a SELECT comes back "no such mailbox", so the
     /// LIST that resolves it costs one round trip per process, not per tick.
@@ -90,6 +98,7 @@ impl SyncEngine {
         data_dir: PathBuf,
         app_dir: PathBuf,
         contacts: Arc<ContactsState>,
+        net: Arc<NetGate>,
     ) -> Self {
         Self {
             pool,
@@ -100,6 +109,7 @@ impl SyncEngine {
             contacts,
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
+            net,
             cap_logged: Mutex::new(HashMap::new()),
             mailbox_aliases: Mutex::new(HashMap::new()),
         }
@@ -166,6 +176,7 @@ impl SyncEngine {
                     total_emails: state.total_emails,
                     success: true,
                     error: None,
+                    offline: false,
                 });
             }
             if state.status == SyncStatus::Error {
@@ -196,6 +207,7 @@ impl SyncEngine {
                             total_emails: state.total_emails,
                             success: true,
                             error: None,
+                            offline: false,
                         });
                     }
                 }
@@ -213,6 +225,21 @@ impl SyncEngine {
     ) -> SyncResult {
         let account_id = &account.id;
 
+        // No connectivity: return without touching the network. This is the
+        // whole point of the gate — nine accounts times one sync tick is nine
+        // 15s TCP timeouts and nine log lines, repeated every tick, for a
+        // machine whose Wi-Fi is simply off.
+        if !self.net.is_online() {
+            return SyncResult {
+                account_id: account_id.clone(),
+                mailbox: mailbox.to_string(),
+                new_emails: 0, updated_flags: 0, total_emails: 0,
+                success: false,
+                error: Some("No internet connection".to_string()),
+                offline: true,
+            };
+        }
+
         // Soft daily cap: skip the account entirely rather than spend the
         // remaining allowance. Resets on its own at the next UTC day.
         if let Some(reason) = self.transfer_cap_reached(account).await {
@@ -220,7 +247,7 @@ impl SyncEngine {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
                 new_emails: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(reason),
+                success: false, error: Some(reason), offline: false,
             };
         }
 
@@ -239,7 +266,16 @@ impl SyncEngine {
 
         info!("[sync] Starting sync for {} ({})", account.email, mailbox);
 
-        let result = self.do_sync(account, mailbox).await;
+        let mut result = self.do_sync(account, mailbox).await;
+
+        // Teach the gate what just happened. A success is proof of reach; a
+        // connect-shaped failure only *asks* — `note_failure` probes and the
+        // probe decides, so one provider's outage never gates the other eight.
+        if result.success {
+            self.net.note_success();
+        } else if let Some(err) = result.error.clone() {
+            result.offline = !self.net.note_failure(&err).await;
+        }
 
         // Update state
         {
@@ -331,7 +367,7 @@ impl SyncEngine {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
                 new_emails: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(e),
+                success: false, error: Some(e), offline: false,
             },
         };
 
@@ -379,12 +415,13 @@ impl SyncEngine {
                 total_emails: delta.total_emails,
                 success: true,
                 error: None,
+                offline: false,
             },
             Err(e) => SyncResult {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
                 new_emails: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(e),
+                success: false, error: Some(e), offline: false,
             },
         }
     }
@@ -579,6 +616,13 @@ impl SyncEngine {
     /// delays `sync.wait`. Writes headers chunk by chunk rather than at the end,
     /// so the app's cache-drain sees progress while this is still running.
     pub async fn backfill_mailbox(&self, account: &SyncAccount, mailbox: &str) {
+        // Offline: return *without* marking the key as gave-up. A backfill that
+        // never dialled has not been proven unfetchable, and gave-up keys last
+        // the life of the process — one dropped Wi-Fi would strand the mailbox
+        // until the next restart.
+        if !self.net.is_online() {
+            return;
+        }
         let key = format!("{}\u{1}{}", account.id, mailbox);
         if self.backfill_gave_up.lock().await.contains(&key) {
             return; // a previous attempt got nowhere — don't re-scan every sync
@@ -903,6 +947,7 @@ mod tests {
             total_emails: 100,
             success: true,
             error: None,
+            offline: false,
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"new_emails\":5"));
@@ -975,12 +1020,7 @@ mod tests {
     #[tokio::test]
     async fn test_gave_up_backfill_does_not_report_as_in_flight() {
         let dir = scratch_dir("backfill_flag");
-        let engine = SyncEngine::new(
-            Arc::new(imap::ImapPool::new()),
-            dir.clone(),
-            dir.clone(),
-            ContactsState::new(dir.clone()),
-        );
+        let engine = engine_for(&dir);
         let key = format!("acc1\u{1}INBOX");
 
         assert!(!engine.is_backfilling("acc1").await);
@@ -1083,12 +1123,22 @@ mod tests {
     use mock_imap::state::{synthetic_mailbox, Mailbox};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
 
+    /// Mock connectivity object: a gate whose probe answers what the test says.
+    fn gate(online: bool) -> Arc<NetGate> {
+        NetGate::with_probe(Arc::new(move || Box::pin(async move { online })))
+    }
+
     fn engine_for(dir: &Path) -> SyncEngine {
+        engine_with_net(dir, gate(true))
+    }
+
+    fn engine_with_net(dir: &Path, net: Arc<NetGate>) -> SyncEngine {
         SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.to_path_buf(),
             dir.to_path_buf(),
             ContactsState::new(dir.to_path_buf()),
+            net,
         )
     }
 
@@ -1109,6 +1159,105 @@ mod tests {
 
     fn cache_dir_for(dir: &Path) -> PathBuf {
         tauri_cache_dir(dir, "acc1", "INBOX")
+    }
+
+    // ── Connectivity gate ───────────────────────────────────────────────
+    // A shut gate must stop the traffic, label the result so the app can say
+    // "no internet" instead of "the server refused", and reopen on its own.
+
+    #[tokio::test]
+    async fn a_shut_gate_stops_the_sync_before_it_dials() {
+        let dir = scratch_dir("net_gate_shut");
+        // The server is up and reachable: if the gate leaked, this sync would
+        // SUCCEED. Success is the failure mode here.
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let engine = engine_with_net(&dir, gate(false));
+        engine.net.note_failure("Network is unreachable").await;
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+
+        assert!(!result.success);
+        assert!(result.offline, "must be labelled offline, not a server error");
+        assert_eq!(result.error.as_deref(), Some("No internet connection"));
+        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 0, "nothing was fetched");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The control for the test above: same server, same code, open gate.
+    #[tokio::test]
+    async fn an_open_gate_syncs_the_same_mailbox_normally() {
+        let dir = scratch_dir("net_gate_open");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let engine = engine_with_net(&dir, gate(true));
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert!(!result.offline);
+        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 3);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A sync that reaches the server is proof of connectivity — the gate must
+    /// take it, so a user who reconnects does not wait out the backoff.
+    #[tokio::test]
+    async fn a_successful_sync_reopens_a_gate_that_had_shut() {
+        let dir = scratch_dir("net_gate_reopen");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        // Probe still says down, so only `note_success` can reopen this.
+        let net = gate(false);
+        let engine = engine_with_net(&dir, Arc::clone(&net));
+        net.note_failure("No route to host").await;
+        assert!(!net.is_online());
+
+        // Simulate the app's own reconnect nudge, then sync.
+        net.note_success();
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert!(net.is_online());
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A server that answers "no such mailbox" is not a connectivity failure.
+    /// Gating on it would strand an online user on one bad folder name.
+    #[tokio::test]
+    async fn a_server_error_leaves_the_gate_open() {
+        let dir = scratch_dir("net_gate_server_error");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let net = gate(false); // probe would say down if anyone asked it
+        let engine = engine_with_net(&dir, Arc::clone(&net));
+
+        let result = engine.sync_account(&account_for(&server), "NoSuchFolder").await;
+
+        assert!(!result.success);
+        assert!(!result.offline, "a tagged NO is the server answering, not the network");
+        assert!(net.is_online(), "the gate must not shut on a server refusal");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A dropped Wi-Fi must not cost the mailbox its backfill for the life of
+    /// the process — `backfill_gave_up` is never cleared.
+    #[tokio::test]
+    async fn an_offline_backfill_is_not_recorded_as_given_up() {
+        let dir = scratch_dir("net_gate_backfill");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let net = gate(false);
+        let engine = engine_with_net(&dir, Arc::clone(&net));
+        net.note_failure("Network is down").await;
+
+        engine.backfill_mailbox(&account_for(&server), "INBOX").await;
+
+        assert!(
+            engine.backfill_gave_up.lock().await.is_empty(),
+            "a backfill that never dialled has not been proven unfetchable"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
     }
 
     // ── Folder-name resolution ──────────────────────────────────────────
