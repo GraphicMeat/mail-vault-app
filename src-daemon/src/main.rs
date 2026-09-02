@@ -1,18 +1,16 @@
 mod auth;
 pub mod classification;
+mod classification_worker;
 pub mod contacts_index;
-// imap/graph/oauth2/dns now live in mailvault_core (shared with src-tauri).
-pub use mailvault_core::dns;
-pub use mailvault_core::graph;
+// imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::imap;
+mod handlers;
 mod inference;
 mod ipc;
 mod learning;
 mod netgate;
 pub mod llm;
-pub use mailvault_core::oauth2;
 mod server;
-mod smtp;
 mod snapshot;
 pub mod sync_engine;
 
@@ -233,14 +231,13 @@ async fn main() {
         inference: inference_engine,
         classification: classification::ClassificationState::new(data_dir.clone()),
         imap_pool,
-        _oauth2_manager: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
         contacts: Arc::clone(&contacts),
         net,
     });
 
     // Start background classification queue worker
-    server::start_classification_worker(Arc::clone(&state));
+    classification_worker::start_classification_worker(Arc::clone(&state));
 
     // Debounced flush of the contacts index to disk (every 30s).
     {
@@ -316,5 +313,70 @@ async fn main() {
         error!("Daemon server failed: {}", e);
         cleanup_pid_file(&data_dir);
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scratch(name: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("mv-main-{name}-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn without_vault_meta_the_mail_lives_in_the_app_dir() {
+        let app = scratch("no-meta");
+        assert_eq!(resolve_mail_dir(&app), (app.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    #[test]
+    fn an_empty_display_path_means_no_custom_vault() {
+        let app = scratch("empty-path");
+        std::fs::write(app.join("vault-meta.json"), r#"{"displayPath":""}"#).unwrap();
+        assert_eq!(resolve_mail_dir(&app), (app.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    #[test]
+    fn a_marked_vault_folder_becomes_the_mail_dir() {
+        let app = scratch("marked-app");
+        let vault = scratch("marked-vault");
+        std::fs::write(vault.join(".mailvault-vault.json"), "{}").unwrap();
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(resolve_mail_dir(&app), (vault.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn an_unreachable_vault_folder_disables_mail_operations() {
+        let app = scratch("gone-app");
+        let vault = scratch("gone-vault");
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
+        std::fs::remove_dir_all(&vault).unwrap();
+
+        assert_eq!(resolve_mail_dir(&app), (app.clone(), false));
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    #[test]
+    fn a_corrupt_vault_meta_falls_back_to_the_app_dir() {
+        let app = scratch("corrupt");
+        std::fs::write(app.join("vault-meta.json"), "not json at all").unwrap();
+        assert_eq!(resolve_mail_dir(&app), (app.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
     }
 }

@@ -19,15 +19,9 @@ tracing-appender = "0.2"
 rand = "0.9"
 dirs = "5"
 chrono = "0.4"
-base64 = "0.22"
 sha2 = "0.10"
-walkdir = "2"
-mailparse = "0.15"
 flate2 = "1"
 mailvault-core = { path = "../src-core" }
-lettre = { version = "0.11", default-features = false, features = ["tokio1-rustls-tls", "smtp-transport", "builder"] }
-hostname = "0.4"
-url = "2"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 futures = "0.3"
 candle-core = "0.8"
@@ -42,10 +36,6 @@ mock-imap = { path = "../src-mock-imap" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }
-keyring = { version = "3", features = ["apple-native"] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

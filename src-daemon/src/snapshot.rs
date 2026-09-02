@@ -350,7 +350,7 @@ mod tests {
 
     #[test]
     fn test_create_and_load_snapshot() {
-        let dir = std::env::temp_dir().join("mailvault-test-snap-create");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-create-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
 
         let info = create_snapshot(&dir, "acc1", "user@test.com", sample_mailboxes()).unwrap();
@@ -373,7 +373,7 @@ mod tests {
 
     #[test]
     fn test_list_snapshots() {
-        let dir = std::env::temp_dir().join("list-test");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-list-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
 
         // Create two snapshots with enough time gap for unique filenames
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn test_delete_snapshot() {
-        let dir = std::env::temp_dir().join("delete-test");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-delete-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
 
         let info = create_snapshot(&dir, "acc1", "user@test.com", sample_mailboxes()).unwrap();
@@ -406,7 +406,7 @@ mod tests {
 
     #[test]
     fn test_list_snapshots_empty_account() {
-        let dir = std::env::temp_dir().join("empty-test");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-empty-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
 
         let list = list_snapshots(&dir, "nonexistent").unwrap();
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn test_gzip_roundtrip_integrity() {
-        let dir = std::env::temp_dir().join("mailvault-test-snap-gzip");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-gzip-{}", uuid::Uuid::new_v4()));
         cleanup(&dir);
 
         let info = create_snapshot(&dir, "acc1", "user@test.com", sample_mailboxes()).unwrap();

@@ -2,10 +2,9 @@ use candle_core::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama::ModelWeights;
 use std::path::Path;
-use std::sync::Arc;
 use tokenizers::Tokenizer;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 /// Loaded model state — kept in memory between inference calls.
 pub struct LoadedModel {
@@ -156,7 +155,10 @@ impl InferenceEngine {
 
 /// Select the best available device (Metal on macOS, CPU elsewhere).
 fn select_device() -> Device {
-    #[cfg(feature = "metal")]
+    // candle-core carries its `metal` feature exactly on the macOS target
+    // (src-daemon/Cargo.toml). This used to read `feature = "metal"`, a feature
+    // of *this* crate that never existed, so the block was always compiled out.
+    #[cfg(target_os = "macos")]
     {
         match Device::new_metal(0) {
             Ok(device) => {
@@ -212,6 +214,19 @@ mod tests {
             Device::Cpu => {}
             _ => {} // Metal or other accelerator
         }
+    }
+
+    /// Metal used to be gated behind `feature = "metal"` — a feature of the
+    /// candle dependency, never of this crate — so the block was compiled out
+    /// and every macOS inference ran on the CPU.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_selects_the_metal_device() {
+        let device = select_device();
+        assert!(
+            matches!(device, Device::Metal(_)),
+            "macOS builds enable candle's metal feature, so the GPU must be selected, got {device:?}"
+        );
     }
 
     #[tokio::test]

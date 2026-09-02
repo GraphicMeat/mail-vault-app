@@ -25,6 +25,8 @@ export class AccountPipeline {
     this.concurrency = options.concurrency || 3;
     this.onProgress = options.onProgress || (() => {});
     this.onComplete = options.onComplete || (() => {});
+    // Fired when a sync that landed after the paint brought new headers in.
+    this.onHeadersRefreshed = options.onHeadersRefreshed || (() => {});
     this.onError = options.onError || (() => {});
 
     this._queue = [];
@@ -127,7 +129,7 @@ export class AccountPipeline {
       const account = await ensureFreshToken(this.account);
       this.account = account;
 
-      await syncNow({
+      const { ticket } = await syncNow({
         id: this.accountId,
         email: account.email,
         imapConfig: {
@@ -140,25 +142,62 @@ export class AccountPipeline {
           oauth2Transport: account.oauth2Transport,
         },
       }, mailbox);
-      // May return a previous sync's result immediately — background accounts
-      // only need a warm cache, and activateAccount re-syncs on switch.
-      await waitForSync(this.accountId, 30000);
       if (this._destroyed) return false;
 
-      const meta = await db.getEmailHeadersMeta(this.accountId, mailbox);
-      const cached = meta?.totalCached
-        ? await db.getEmailHeadersPartial(this.accountId, mailbox, meta.totalCached)
-        : null;
-      if (!cached?.emails?.length) return false;
+      // Warm cache: paint what the daemon already has and let the sync land later.
+      const warm = await this._readDaemonCache(mailbox);
+      if (warm) {
+        this._lastLoadedEmails = warm.emails;
+        console.log(
+          `[Pipeline:${this.account.email}] ${mailbox}: ${warm.emails.length}/${warm.totalEmails ?? '?'} headers from daemon cache`
+        );
+        this._reloadWhenSynced(ticket, mailbox);
+        return true;
+      }
 
-      this._lastLoadedEmails = cached.emails;
+      // Cold cache: nothing to paint, so the sync is worth waiting for.
+      await waitForSync(ticket, 30000);
+      if (this._destroyed) return false;
+      const cold = await this._readDaemonCache(mailbox);
+      if (!cold) return false;
+
+      this._lastLoadedEmails = cold.emails;
       console.log(
-        `[Pipeline:${this.account.email}] ${mailbox}: ${cached.emails.length}/${meta.totalEmails ?? '?'} headers from daemon cache`
+        `[Pipeline:${this.account.email}] ${mailbox}: ${cold.emails.length}/${cold.totalEmails ?? '?'} headers from daemon cache`
       );
       return true;
     } catch (e) {
       console.warn(`[Pipeline:${this.account.email}] Daemon header sync failed for ${mailbox}:`, e.message);
       return false;
+    }
+  }
+
+  /** The daemon's header sidecars for one mailbox, or null when it cached nothing. */
+  async _readDaemonCache(mailbox) {
+    const meta = await db.getEmailHeadersMeta(this.accountId, mailbox);
+    if (!meta?.totalCached) return null;
+    const cached = await db.getEmailHeadersPartial(this.accountId, mailbox, meta.totalCached);
+    if (!cached?.emails?.length) return null;
+    return { emails: cached.emails, totalEmails: meta.totalEmails };
+  }
+
+  /**
+   * Re-read the cache once this sync completes, and tell the caller what changed.
+   * Never throws and never rejects: a timed-out or failed sync just leaves the
+   * headers already painted standing.
+   */
+  async _reloadWhenSynced(ticket, mailbox) {
+    try {
+      const result = await waitForSync(ticket, 30000);
+      if (this._destroyed) return;
+
+      const fresh = await this._readDaemonCache(mailbox);
+      if (!fresh || this._destroyed) return;
+
+      this._lastLoadedEmails = fresh.emails;
+      this.onHeadersRefreshed(mailbox, fresh.emails, result);
+    } catch (e) {
+      console.warn(`[Pipeline:${this.account.email}] ${mailbox}: sync reload skipped:`, e.message);
     }
   }
 

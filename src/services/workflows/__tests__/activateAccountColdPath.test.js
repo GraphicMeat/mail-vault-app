@@ -91,7 +91,7 @@ vi.mock('../../transport', () => ({
   getDaemonHealth: () => mockGetDaemonHealth(),
 }));
 const mockMailboxIsUnchanged = vi.fn();
-const mockSyncNow = vi.fn().mockResolvedValue(undefined);
+const mockSyncNow = vi.fn().mockResolvedValue({ started: true, ticket: 1 });
 const mockWaitForSync = vi.fn();
 vi.mock('../../syncProbe', () => ({
   mailboxIsUnchanged: (...a) => mockMailboxIsUnchanged(...a),
@@ -241,7 +241,7 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
   beforeEach(() => {
     mockGetDaemonHealth.mockReturnValue({ alive: true });
     mockMailboxIsUnchanged.mockResolvedValue({ unchanged: false, reason: 'never-synced' });
-    mockSyncNow.mockResolvedValue(undefined);
+    mockSyncNow.mockResolvedValue({ started: true, ticket: 1 });
   });
 
   it('proves completeness true when the post-sync disk read (capped at 500) already covers totalEmails', async () => {
@@ -325,7 +325,7 @@ describe('activateAccount daemon-sync cold path (daemon alive, first visit)', ()
 describe('activateAccount probe.unchanged branch (daemon alive)', () => {
   beforeEach(() => {
     mockGetDaemonHealth.mockReturnValue({ alive: true });
-    mockSyncNow.mockResolvedValue(undefined);
+    mockSyncNow.mockResolvedValue({ started: true, ticket: 1 });
   });
 
   it('a proven true survives a subsequent activation without paying for a sync', async () => {

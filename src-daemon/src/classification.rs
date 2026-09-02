@@ -112,13 +112,25 @@ pub fn save_classifications(
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
 
     let mut existing = load_classifications(data_dir, account_id);
-    existing.extend(new_entries.clone());
+    // A user override in the file outranks anything automatic arriving after
+    // it: the worker batches its saves, so a batch that classified the message
+    // before the override landed would otherwise undo it on flush. An incoming
+    // override still replaces whatever is there.
+    let incoming: Vec<(String, EmailClassification)> = new_entries
+        .iter()
+        .filter(|(mid, entry)| {
+            entry.source == ClassificationSource::UserOverride
+                || !matches!(existing.get(*mid), Some(e) if e.source == ClassificationSource::UserOverride)
+        })
+        .map(|(mid, entry)| (mid.clone(), entry.clone()))
+        .collect();
+    existing.extend(incoming);
 
     let json = serde_json::to_string_pretty(&existing)
         .map_err(|e| format!("Failed to serialize: {}", e))?;
 
     let path = classifications_path(data_dir, account_id);
-    fs::write(&path, json).map_err(|e| format!("Failed to write: {}", e))?;
+    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
 
     info!(
         "Saved {} classifications for {} (total: {})",
@@ -146,7 +158,7 @@ pub fn save_single_classification(
         .map_err(|e| format!("Failed to serialize: {}", e))?;
 
     let path = classifications_path(data_dir, account_id);
-    fs::write(&path, json).map_err(|e| format!("Failed to write: {}", e))?;
+    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
     Ok(())
 }
 
@@ -220,7 +232,7 @@ pub fn override_classification(
     let json = serde_json::to_string_pretty(&all)
         .map_err(|e| format!("Failed to serialize: {}", e))?;
     let path = classifications_path(data_dir, account_id);
-    fs::write(&path, json).map_err(|e| format!("Failed to write: {}", e))?;
+    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
 
     Ok(updated)
 }
@@ -481,7 +493,7 @@ impl ClassificationState {
         }
         let path = queue_path(&self.data_dir);
         if let Ok(json) = serde_json::to_string(&persisted) {
-            let _ = fs::write(&path, json);
+            let _ = mailvault_core::fsx::write_atomic(&path, json.as_bytes());
         }
     }
 }
@@ -854,7 +866,7 @@ pub fn save_model(data_dir: &Path, account_id: &str, model: &NaiveBayesModel) ->
     let dir = models_dir(data_dir);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create models dir: {}", e))?;
     let json = serde_json::to_string(model).map_err(|e| format!("Failed to serialize model: {}", e))?;
-    fs::write(model_path(data_dir, account_id), json)
+    mailvault_core::fsx::write_atomic(&model_path(data_dir, account_id), json.as_bytes())
         .map_err(|e| format!("Failed to write model: {}", e))
 }
 
@@ -1184,7 +1196,7 @@ mod tests {
     use super::*;
 
     fn test_dir(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!("mailvault-test-classify-{}", name))
+        std::env::temp_dir().join(format!("mailvault-test-classify-{}-{}", name, uuid::Uuid::new_v4()))
     }
 
     #[test]
@@ -1404,6 +1416,74 @@ mod tests {
         assert_eq!(updated.importance, "low"); // Unchanged
         assert_eq!(updated.action, "keep");
         assert_eq!(updated.source, ClassificationSource::UserOverride);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn entry(category: &str, source: ClassificationSource) -> EmailClassification {
+        EmailClassification {
+            category: category.into(),
+            importance: "medium".into(),
+            action: "keep".into(),
+            confidence: 0.5,
+            classified_at: "t".into(),
+            model_used: "m".into(),
+            source,
+            snapshot: None,
+        }
+    }
+
+    /// The classification worker batches its saves, so a batch can be open when
+    /// the user overrides one of the messages it carries. The save must not undo
+    /// the override.
+    #[test]
+    fn an_override_in_the_file_survives_a_later_automatic_save() {
+        let dir = test_dir("override-survives");
+        let _ = fs::remove_dir_all(&dir);
+
+        let mut overridden = HashMap::new();
+        overridden.insert("<m1@t>".to_string(), entry("work", ClassificationSource::UserOverride));
+        save_classifications(&dir, "acc1", &overridden).unwrap();
+
+        // A batch that classified <m1@t> automatically before the override landed.
+        let mut batch = HashMap::new();
+        batch.insert("<m1@t>".to_string(), entry("newsletter", ClassificationSource::Llm));
+        batch.insert("<m2@t>".to_string(), entry("newsletter", ClassificationSource::Llm));
+        save_classifications(&dir, "acc1", &batch).unwrap();
+
+        let saved = load_classifications(&dir, "acc1");
+        assert_eq!(
+            saved["<m1@t>"].category, "work",
+            "an automatic classification must not overwrite the user's own"
+        );
+        assert_eq!(saved["<m1@t>"].source, ClassificationSource::UserOverride);
+        assert_eq!(
+            saved["<m2@t>"].category, "newsletter",
+            "the rest of the batch still has to land"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// The other direction: the override RPC's own save has to win. Green
+    /// before the guard existed too — it is here so the guard cannot be
+    /// widened into "the file always wins" without a test going red.
+    #[test]
+    fn an_incoming_override_replaces_an_automatic_entry() {
+        let dir = test_dir("override-replaces");
+        let _ = fs::remove_dir_all(&dir);
+
+        let mut automatic = HashMap::new();
+        automatic.insert("<m1@t>".to_string(), entry("newsletter", ClassificationSource::Llm));
+        save_classifications(&dir, "acc1", &automatic).unwrap();
+
+        let mut override_save = HashMap::new();
+        override_save.insert("<m1@t>".to_string(), entry("work", ClassificationSource::UserOverride));
+        save_classifications(&dir, "acc1", &override_save).unwrap();
+
+        let saved = load_classifications(&dir, "acc1");
+        assert_eq!(saved["<m1@t>"].category, "work");
+        assert_eq!(saved["<m1@t>"].source, ClassificationSource::UserOverride);
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -66,13 +66,14 @@ jobs:
             target
           key: rust-imap-${{ hashFiles('Cargo.lock') }}
           restore-keys: rust-imap-
-      # mailvault-daemon pulls keyring -> libdbus-sys (sync-secret-service on
-      # Linux), which needs dbus headers at build time even though no test
-      # touches the keychain.
+      # mailvault-core pulls async-native-tls, which on Linux binds the system
+      # OpenSSL through pkg-config. The daemon's keyring -> libdbus/libsecret
+      # chain is gone with the credentials RPCs, so those headers are not needed
+      # here (the Tauri build job below still installs them for the app).
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev libdbus-1-dev libsecret-1-dev libglib2.0-dev
+          sudo apt-get install -y pkg-config libssl-dev
       - run: cargo test -p mailvault-core -p mailvault-daemon -p mock-imap
       # JS integration suite drives the same mock server through imapflow — an
       # independent client implementation cross-checking the mock. Replaced the

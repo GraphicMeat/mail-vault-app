@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 // ── Model Registry ─────────────────────────────────────────────────────────
 
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn test_list_models_no_downloads() {
-        let dir = std::env::temp_dir().join("mailvault-test-llm-list");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-llm-list-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
@@ -420,7 +420,7 @@ mod tests {
 
     #[test]
     fn test_delete_nonexistent_model() {
-        let dir = std::env::temp_dir().join("mailvault-test-llm-delete");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-llm-delete-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn test_delete_unknown_model() {
-        let dir = std::env::temp_dir().join("mailvault-test-llm-unknown");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-llm-unknown-{}", uuid::Uuid::new_v4()));
         let result = delete_model(&dir, "nonexistent-model");
         assert!(result.is_err());
     }

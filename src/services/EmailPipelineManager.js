@@ -67,6 +67,7 @@ class EmailPipelineManager {
         concurrency: 3,
         onProgress: (state) => this._onProgress(accountId, state),
         onComplete: () => this._onActiveComplete(accountId),
+        onHeadersRefreshed: (mailbox, emails) => this._onHeadersRefreshed(account, pipeline, mailbox, emails),
         onError: (err) => console.warn(`[PipelineManager] Active pipeline error:`, err.message)
       });
       this.pipelines.set(accountId, pipeline);
@@ -132,6 +133,7 @@ class EmailPipelineManager {
           concurrency: 1,
           onProgress: (state) => this._onProgress(account.id, state),
           onComplete: () => console.log(`[PipelineManager] Background account ${account.email} headers complete`),
+          onHeadersRefreshed: (mailbox, emails) => this._onHeadersRefreshed(account, pipeline, mailbox, emails),
           onError: (err) => console.warn(`[PipelineManager] Background pipeline error (${account.email}):`, err.message)
         });
 
@@ -360,6 +362,28 @@ class EmailPipelineManager {
       }
     } catch (e) {
       console.warn(`[PipelineManager] Sent headers load failed (${account.email}):`, e.message);
+    }
+  }
+
+  /**
+   * A sync landed after its headers were already painted from cache.
+   * Sent feeds the chat view; INBOX arrivals for an account whose content
+   * cascade already ran would otherwise never get their bodies this session.
+   */
+  async _onHeadersRefreshed(account, pipeline, mailbox, emails) {
+    if (pipeline._destroyed || this._destroyed) return;
+
+    if (mailbox === useMailStore.getState().getSentMailboxPath() && account.id === this._activeAccountId) {
+      useMailStore.getState().loadSentHeaders(account.id);
+    } else if (
+      mailbox === 'INBOX' &&
+      this._contentCascadeDone.has(account.id) &&
+      (pipeline._phase === 'idle' || pipeline._phase === 'done')
+    ) {
+      const { localCacheDurationMonths } = useSettingsStore.getState();
+      const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
+      const uids = this._getUncachedUids(emails, savedIds, localCacheDurationMonths);
+      if (uids.length > 0) pipeline.startContentCaching(uids, 'INBOX');
     }
   }
 

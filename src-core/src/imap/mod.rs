@@ -2009,7 +2009,6 @@ fn extract_flags(fetch: &Fetch) -> Vec<String> {
             Flag::Recent => "\\Recent".to_string(),
             Flag::MayCreate => "\\MayCreate".to_string(),
             Flag::Custom(c) => c.to_string(),
-            _ => format!("{:?}", f),
         })
         .collect()
 }

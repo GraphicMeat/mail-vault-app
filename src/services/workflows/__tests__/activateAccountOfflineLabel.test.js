@@ -88,7 +88,8 @@ vi.mock('../../transport', () => ({
   getDaemonHealth: () => mockGetDaemonHealth(),
 }));
 const mockMailboxIsUnchanged = vi.fn();
-const mockSyncNow = vi.fn().mockResolvedValue(undefined);
+// `sync.now` answers with the ticket `waitForSync` is then given.
+const mockSyncNow = vi.fn().mockResolvedValue({ started: true, ticket: 1 });
 const mockWaitForSync = vi.fn();
 vi.mock('../../syncProbe', () => ({
   mailboxIsUnchanged: (...a) => mockMailboxIsUnchanged(...a),

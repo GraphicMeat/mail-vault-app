@@ -3717,7 +3717,6 @@ dependencies = [
 name = "mailvault-daemon"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "candle-core",
  "candle-nn",
  "candle-transformers",
@@ -3726,11 +3725,7 @@ dependencies = [
  "flate2",
  "futures",
  "hf-hub",
- "hostname",
- "keyring",
- "lettre",
  "libc",
- "mailparse",
  "mailvault-core",
  "mock-imap",
  "rand 0.9.4",
@@ -3743,9 +3738,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "url",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

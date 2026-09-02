@@ -4,7 +4,6 @@ use serde_json::Value;
 /// JSON-RPC 2.0 request.
 #[derive(Debug, Deserialize)]
 pub struct RpcRequest {
-    pub jsonrpc: String,
     pub method: String,
     #[serde(default)]
     pub params: Value,
@@ -33,11 +32,9 @@ pub struct RpcError {
 
 // Standard JSON-RPC error codes
 pub const PARSE_ERROR: i32 = -32700;
-pub const INVALID_REQUEST: i32 = -32600;
 pub const METHOD_NOT_FOUND: i32 = -32601;
 pub const INVALID_PARAMS: i32 = -32602;
 pub const INTERNAL_ERROR: i32 = -32603;
-pub const AUTH_REQUIRED: i32 = -32000;
 pub const AUTH_FAILED: i32 = -32001;
 
 impl RpcResponse {

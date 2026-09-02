@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn test_generate_and_load_token() {
-        let dir = std::env::temp_dir().join("mailvault-test-auth");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-auth-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
 
         let token1 = generate_token(&dir).unwrap();
@@ -129,7 +129,7 @@ mod tests {
     fn test_token_file_permissions() {
         use std::os::unix::fs::PermissionsExt;
 
-        let dir = std::env::temp_dir().join("mailvault-test-auth-perms");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-auth-perms-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
 
         generate_token(&dir).unwrap();

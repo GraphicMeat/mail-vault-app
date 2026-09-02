@@ -12,7 +12,7 @@ use crate::imap::{EmailAddress, EmailHeader};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
 
@@ -228,7 +228,7 @@ impl ContactsState {
             let path = self.path_for(&account_id);
             match serde_json::to_string(&entries) {
                 Ok(json) => {
-                    if let Err(e) = fs::write(&path, json) {
+                    if let Err(e) = mailvault_core::fsx::write_atomic(&path, json.as_bytes()) {
                         warn!("[contacts_index] write {}: {}", path.display(), e);
                     }
                 }

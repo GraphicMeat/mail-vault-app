@@ -15,7 +15,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn, error};
+use tracing::{info, warn};
 
 /// Result of a single account sync.
 #[derive(Debug, Clone, Serialize)]
@@ -68,9 +68,14 @@ pub struct SyncEngine {
     /// which follows the — possibly relocated — mail vault.
     app_dir: PathBuf,
     states: Mutex<HashMap<String, SyncState>>,
-    /// Watch channels per account — notified when sync completes.
-    /// `sync.wait` RPC handler subscribes to these for efficient blocking.
-    watchers: Mutex<HashMap<String, tokio::sync::watch::Sender<Option<SyncResult>>>>,
+    /// One watch channel per issued sync ticket, resolved when that sync — and
+    /// only that sync — finishes. Keyed by ticket rather than by account
+    /// because INBOX and Sent sync concurrently and would otherwise answer
+    /// each other's waits. `std::sync::Mutex` so `begin` is callable from the
+    /// RPC handler before it spawns, which is what closes the
+    /// wait-arrives-before-the-task-starts race.
+    tickets: std::sync::Mutex<HashMap<u64, tokio::sync::watch::Sender<Option<SyncResult>>>>,
+    next_ticket: std::sync::atomic::AtomicU64,
     contacts: Arc<ContactsState>,
     /// `account_id\x01mailbox` keys with a backfill IN FLIGHT right now.
     /// The app pauses its own pagination while this is set, so it must clear
@@ -105,7 +110,8 @@ impl SyncEngine {
             data_dir,
             app_dir,
             states: Mutex::new(HashMap::new()),
-            watchers: Mutex::new(HashMap::new()),
+            tickets: std::sync::Mutex::new(HashMap::new()),
+            next_ticket: std::sync::atomic::AtomicU64::new(1),
             contacts,
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
@@ -145,74 +151,52 @@ impl SyncEngine {
         Some(reason)
     }
 
-    /// Get or create a watch channel for an account.
-    async fn get_watcher(&self, account_id: &str) -> tokio::sync::watch::Receiver<Option<SyncResult>> {
-        let mut watchers = self.watchers.lock().await;
-        if let Some(sender) = watchers.get(account_id) {
-            return sender.subscribe();
+    /// Issue a ticket for a sync that is about to start.
+    ///
+    /// Sync callable on purpose: the RPC handler takes the ticket *before* it
+    /// spawns the task, so a `sync.wait` that arrives first still has
+    /// something to subscribe to.
+    pub fn begin(&self, account_id: &str, mailbox: &str) -> u64 {
+        let ticket = self.next_ticket.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let (tx, _rx) = tokio::sync::watch::channel(None);
+        let mut tickets = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
+        tickets.insert(ticket, tx);
+        // ponytail: 64 finished tickets kept for late waiters; a ring buffer if
+        // the linear scan ever shows up in a profile.
+        while tickets.len() > MAX_LIVE_TICKETS {
+            let oldest = *tickets.keys().min().expect("non-empty");
+            tickets.remove(&oldest);
         }
-        let (tx, rx) = tokio::sync::watch::channel(None);
-        watchers.insert(account_id.to_string(), tx);
-        rx
+        info!("[sync] ticket {} issued for {} ({})", ticket, account_id, mailbox);
+        ticket
     }
 
-    /// Wait for a sync to complete for a specific account, with timeout.
-    pub async fn wait_for_sync(&self, account_id: &str, timeout_ms: u64) -> Result<SyncResult, String> {
-        let mut rx = self.get_watcher(account_id).await;
+    /// Run a sync and resolve its ticket with the result.
+    pub async fn run_ticket(&self, ticket: u64, account: &SyncAccount, mailbox: &str) -> SyncResult {
+        let result = self.sync_account(account, mailbox).await;
+        if let Some(tx) = self.tickets.lock().unwrap_or_else(|e| e.into_inner()).get(&ticket) {
+            // `send` drops the value when nobody is subscribed yet — which is
+            // the normal case, since the waiter usually arrives afterwards.
+            tx.send_replace(Some(result.clone()));
+        }
+        result
+    }
 
-        // Check if a result is already available (sync completed before we subscribed)
+    /// Wait for the sync a ticket was issued for, with timeout.
+    pub async fn wait_for_ticket(&self, ticket: u64, timeout_ms: u64) -> Result<SyncResult, String> {
+        let mut rx = match self.tickets.lock().unwrap_or_else(|e| e.into_inner()).get(&ticket) {
+            Some(tx) => tx.subscribe(),
+            None => return Err(format!("Unknown sync ticket {}", ticket)),
+        };
+        // Already finished — a sync can complete between sync.now and sync.wait.
         if let Some(result) = rx.borrow().clone() {
             return Ok(result);
         }
-
-        // Also check the sync state — if it's already Idle with a last_sync, return immediately
-        if let Some(state) = self.get_state(account_id).await {
-            if state.status == SyncStatus::Idle && state.last_sync.is_some() {
-                return Ok(SyncResult {
-                    account_id: account_id.to_string(),
-                    mailbox: String::new(),
-                    new_emails: state.new_emails,
-                    updated_flags: 0,
-                    total_emails: state.total_emails,
-                    success: true,
-                    error: None,
-                    offline: false,
-                });
-            }
-            if state.status == SyncStatus::Error {
-                return Err(state.last_error.unwrap_or_else(|| "Sync failed".to_string()));
-            }
-        }
-
-        // Wait for the next sync completion
         let timeout = tokio::time::Duration::from_millis(timeout_ms);
-        match tokio::time::timeout(timeout, async {
-            loop {
-                rx.changed().await.map_err(|_| "Sync watcher closed".to_string())?;
-                if let Some(result) = rx.borrow().clone() {
-                    return Ok(result);
-                }
-            }
-        }).await {
-            Ok(result) => result,
-            Err(_) => {
-                // Timeout — check state one more time
-                if let Some(state) = self.get_state(account_id).await {
-                    if state.status == SyncStatus::Idle && state.last_sync.is_some() {
-                        return Ok(SyncResult {
-                            account_id: account_id.to_string(),
-                            mailbox: String::new(),
-                            new_emails: state.new_emails,
-                            updated_flags: 0,
-                            total_emails: state.total_emails,
-                            success: true,
-                            error: None,
-                            offline: false,
-                        });
-                    }
-                }
-                Err("Sync timed out".to_string())
-            }
+        match tokio::time::timeout(timeout, rx.changed()).await {
+            Ok(Ok(())) => rx.borrow().clone().ok_or_else(|| "Sync watcher closed".to_string()),
+            Ok(Err(_)) => Err("Sync watcher closed".to_string()),
+            Err(_) => Err("Sync timed out".to_string()),
         }
     }
 
@@ -243,6 +227,16 @@ impl SyncEngine {
         // Soft daily cap: skip the account entirely rather than spend the
         // remaining allowance. Resets on its own at the next UTC day.
         if let Some(reason) = self.transfer_cap_reached(account).await {
+            // Record it too, or `sync.status` reports whatever the last real
+            // sync left behind and the cap is invisible to the app.
+            self.states.lock().await.insert(account_id.clone(), SyncState {
+                account_id: account_id.clone(),
+                status: SyncStatus::Error,
+                last_sync: Some(unix_now()),
+                last_error: Some(reason.clone()),
+                new_emails: 0,
+                total_emails: 0,
+            });
             return SyncResult {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
@@ -251,16 +245,22 @@ impl SyncEngine {
             };
         }
 
-        // Update state to syncing
+        // Update state to syncing. Carry the last result forward — `sync.status`
+        // is what the app shows *while* the sync runs, and blanking it flashed
+        // "never synced, 0 messages" for the whole duration.
         {
             let mut states = self.states.lock().await;
+            let previous = states.get(account_id);
+            let (last_sync, new_emails, total_emails) = previous
+                .map(|s| (s.last_sync, s.new_emails, s.total_emails))
+                .unwrap_or((None, 0, 0));
             states.insert(account_id.clone(), SyncState {
                 account_id: account_id.clone(),
                 status: SyncStatus::Syncing,
-                last_sync: None,
+                last_sync,
                 last_error: None,
-                new_emails: 0,
-                total_emails: 0,
+                new_emails,
+                total_emails,
             });
         }
 
@@ -280,15 +280,10 @@ impl SyncEngine {
         // Update state
         {
             let mut states = self.states.lock().await;
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs();
-
             states.insert(account_id.clone(), SyncState {
                 account_id: account_id.clone(),
                 status: if result.success { SyncStatus::Idle } else { SyncStatus::Error },
-                last_sync: Some(now),
+                last_sync: Some(unix_now()),
                 last_error: result.error.clone(),
                 new_emails: result.new_emails,
                 total_emails: result.total_emails,
@@ -302,14 +297,6 @@ impl SyncEngine {
             );
         } else {
             warn!("[sync] Sync failed for {}: {:?}", account.email, result.error);
-        }
-
-        // Notify any waiting clients
-        {
-            let watchers = self.watchers.lock().await;
-            if let Some(tx) = watchers.get(account_id) {
-                let _ = tx.send(Some(result.clone()));
-            }
         }
 
         result
@@ -378,14 +365,33 @@ impl SyncEngine {
         // paths ("[Google Mail]/Sent Mail"). Use a name already resolved for
         // this account, and resolve a fresh one the first time the server says
         // the folder is not there.
-        let mut mailbox = self.alias_for(account_id, mailbox).await;
+        let requested = mailbox;
+        let mut mailbox = self.alias_for(account_id, requested).await;
         let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
-            if let Some(actual) = self.resolve_mailbox(&mut session, account_id, &mailbox).await {
+            if mailbox != requested {
+                // The alias points at a folder this server no longer serves.
+                // Forget it, or every later sync SELECTs the dead path and the
+                // name the caller asked for is never tried again — not even
+                // after the user creates a real folder by that name.
+                self.mailbox_aliases
+                    .lock()
+                    .await
+                    .remove(&format!("{}\x01{}", account_id, requested));
+                mailbox = requested.to_string();
+                // The name the caller asked for may exist by now. Try it before
+                // asking the server to resolve it: `resolve_mailbox` answers
+                // None for an exact match, so this is the only path that finds
+                // a plain folder by the requested name in the same tick.
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore).await;
+            }
+        }
+        if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
+            if let Some(actual) = self.resolve_mailbox(&mut session, account_id, requested).await {
                 info!(
                     "[sync] {} has no '{}' — syncing '{}' instead",
-                    account.email, mailbox, actual
+                    account.email, requested, actual
                 );
                 outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore).await;
                 mailbox = actual;
@@ -820,6 +826,13 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+fn unix_now() -> u64 {
+    now_ms() / 1000
+}
+
+/// Finished tickets kept around so a late `sync.wait` still finds its result.
+const MAX_LIVE_TICKETS: usize = 64;
+
 fn read_tauri_cache_meta(cache_dir: &Path) -> Option<CachedMeta> {
     let json = fs::read_to_string(cache_dir.join("_meta.json")).ok()?;
     let meta: serde_json::Value = serde_json::from_str(&json).ok()?;
@@ -881,7 +894,8 @@ fn write_cache_meta_full(
         "lastSynced": now_ms(),
     });
     let meta_json = serde_json::to_string(&meta).map_err(|e| format!("Serialize meta: {}", e))?;
-    fs::write(cache_dir.join("_meta.json"), &meta_json).map_err(|e| format!("Write meta: {}", e))
+    mailvault_core::fsx::write_atomic(&cache_dir.join("_meta.json"), meta_json.as_bytes())
+        .map_err(|e| format!("Write meta: {}", e))
 }
 
 /// Write per-UID header sidecars, overwriting existing ones — a freshly fetched
@@ -891,7 +905,7 @@ fn write_headers(cache_dir: &Path, headers: &[ImapEmailHeader]) -> Result<(), St
     fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
     for header in headers {
         let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
-        fs::write(cache_dir.join(format!("{}.json", header.uid)), &email_json)
+        mailvault_core::fsx::write_atomic(&cache_dir.join(format!("{}.json", header.uid)), email_json.as_bytes())
             .map_err(|e| format!("Write email {}: {}", header.uid, e))?;
     }
     info!("[sync] Cache written: {} headers", headers.len());
@@ -955,7 +969,7 @@ mod tests {
     }
 
     fn scratch_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mv_sync_test_{}", name));
+        let dir = std::env::temp_dir().join(format!("mv_sync_test_{}_{}", name, uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir
@@ -1122,6 +1136,7 @@ mod tests {
 
     use mock_imap::state::{synthetic_mailbox, Mailbox};
     use mock_imap::{Action, MockImap, Scenario, Trigger};
+    use std::time::Duration;
 
     /// Mock connectivity object: a gate whose probe answers what the test says.
     fn gate(online: bool) -> Arc<NetGate> {
@@ -1323,6 +1338,92 @@ mod tests {
         assert!(!result.success);
         let err = result.error.unwrap_or_default();
         assert!(err.contains("NONEXISTENT"), "unexpected error: {}", err);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// An alias survives for the life of the process. If the folder it points
+    /// at goes away, every later sync of the requested name SELECTs the dead
+    /// path — so a folder the user later creates by that very name is never
+    /// tried again. A failed alias has to forget itself.
+    #[tokio::test]
+    async fn an_alias_that_stops_working_is_forgotten() {
+        let dir = scratch_dir("alias_selfclear");
+        let engine = engine_for(&dir);
+        let alias_key = "acc1\u{1}Sent".to_string();
+
+        let mut gmail_sent = synthetic_mailbox("[Google Mail]/Sent Mail", 4);
+        gmail_sent.attrs.push("\\Sent".to_string());
+        let first = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(gmail_sent),
+        );
+        let result = engine.sync_account(&account_for(&first), "Sent").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.mailbox, "[Google Mail]/Sent Mail");
+        assert!(
+            engine.mailbox_aliases.lock().await.contains_key(&alias_key),
+            "precondition: the alias is remembered"
+        );
+        drop(first);
+
+        // Same account, and now the folder the alias points at is gone.
+        let second = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let result = engine.sync_account(&account_for(&second), "Sent").await;
+        assert!(!result.success, "there is no Sent folder to sync");
+        assert!(
+            !engine.mailbox_aliases.lock().await.contains_key(&alias_key),
+            "an alias that no longer resolves must be dropped, not kept forever"
+        );
+        drop(second);
+
+        // The user makes a plain "Sent" — no \Sent attribute, so only the
+        // requested name itself can find it.
+        let third = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(synthetic_mailbox("Sent", 2)),
+        );
+        let result = engine.sync_account(&account_for(&third), "Sent").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.mailbox, "Sent");
+        assert_eq!(result.new_emails, 2);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The alias target vanished AND a real folder by the requested name now
+    /// exists, both in the same server generation. Forgetting the alias is not
+    /// enough: `resolve_mailbox` answers None for an exact match of the
+    /// requested name (its "same SELECT, same answer" guard), so without a
+    /// retry of the requested name this tick fails and only the next one heals.
+    #[tokio::test]
+    async fn a_dead_alias_with_a_real_folder_by_the_requested_name_syncs_in_one_tick() {
+        let dir = scratch_dir("alias_one_tick");
+        let engine = engine_for(&dir);
+
+        let mut gmail_sent = synthetic_mailbox("[Google Mail]/Sent Mail", 4);
+        gmail_sent.attrs.push("\\Sent".to_string());
+        let first = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(gmail_sent),
+        );
+        let result = engine.sync_account(&account_for(&first), "Sent").await;
+        assert_eq!(result.mailbox, "[Google Mail]/Sent Mail", "precondition: aliased");
+        drop(first);
+
+        // Provider folder gone, plain "Sent" (no \Sent attribute) in its place.
+        let second = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 2))
+                .mailbox(synthetic_mailbox("Sent", 3)),
+        );
+        let result = engine.sync_account(&account_for(&second), "Sent").await;
+        assert!(result.success, "the requested name must be tried in the same tick: {:?}", result.error);
+        assert_eq!(result.mailbox, "Sent");
+        assert_eq!(result.new_emails, 3);
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -1564,6 +1665,355 @@ mod tests {
             !engine.is_backfilling("acc1").await,
             "a failed backfill that keeps reporting in-flight strands the mailbox"
         );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // ── Ticketed sync.wait ──────────────────────────────────────────────
+    //
+    // A wait used to be keyed by account and answered with the last result the
+    // account produced, forever. Two mailboxes syncing at once answered each
+    // other's waits, and every activation after the first read a stale result.
+
+    /// INBOX and Sent sync concurrently in production (activateAccount and
+    /// AccountPipeline fire together). INBOX is held back here so it finishes
+    /// last — the old per-account watcher would hand its waiter Sent's result.
+    #[tokio::test]
+    async fn a_wait_returns_the_result_of_the_sync_it_was_issued_for() {
+        let dir = scratch_dir("ticket_pairing");
+        let mut sent = synthetic_mailbox("Sent", 2);
+        sent.attrs.push("\\Sent".to_string());
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 3))
+                .mailbox(sent)
+                .fault(
+                    Trigger::with("SELECT", "INBOX"),
+                    Action::Delay(Duration::from_millis(400)),
+                ),
+        );
+        let engine = Arc::new(engine_for(&dir));
+        let account = account_for(&server);
+
+        let t_inbox = engine.begin("acc1", "INBOX");
+        let t_sent = engine.begin("acc1", "Sent");
+        for (ticket, mailbox) in [(t_inbox, "INBOX"), (t_sent, "Sent")] {
+            let engine = Arc::clone(&engine);
+            let account = account.clone();
+            tokio::spawn(async move { engine.run_ticket(ticket, &account, mailbox).await });
+        }
+
+        let inbox = engine.wait_for_ticket(t_inbox, 5000).await.expect("INBOX wait");
+        assert_eq!(inbox.mailbox, "INBOX");
+        assert_eq!(inbox.new_emails, 3, "the INBOX waiter must not be served Sent's result");
+
+        let sent = engine.wait_for_ticket(t_sent, 5000).await.expect("Sent wait");
+        assert_eq!(sent.mailbox, "Sent");
+        assert_eq!(sent.new_emails, 2);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// `sync.now` and `sync.wait` are two round trips; the sync can finish in
+    /// between. The result has to still be there when the waiter arrives.
+    #[tokio::test]
+    async fn a_late_waiter_still_gets_its_result() {
+        let dir = scratch_dir("late_waiter");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 4)));
+        let engine = engine_for(&dir);
+
+        let ticket = engine.begin("acc1", "INBOX");
+        engine.run_ticket(ticket, &account_for(&server), "INBOX").await;
+
+        let result = engine.wait_for_ticket(ticket, 1000).await.expect("late wait");
+        assert_eq!(result.new_emails, 4);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// THE regression. The old wait read the account's last completed result
+    /// before waiting for anything, so a second sync answered instantly with
+    /// the first one's result — the app re-read its cache before the new sync
+    /// had written a byte, and a recovered server still looked broken.
+    #[tokio::test]
+    async fn a_second_sync_is_not_answered_by_the_first_ones_result() {
+        let dir = scratch_dir("stale_wait");
+        let engine = Arc::new(engine_for(&dir));
+
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 6)));
+        let t1 = engine.begin("acc1", "INBOX");
+        engine.run_ticket(t1, &account_for(&first), "INBOX").await;
+        assert!(engine.wait_for_ticket(t1, 1000).await.is_ok(), "precondition: one completed sync");
+        drop(first);
+
+        let second = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 6))
+                .fault(
+                    Trigger::with("SELECT", "INBOX"),
+                    Action::Delay(Duration::from_millis(600)),
+                ),
+        );
+        let account = account_for(&second);
+        let t2 = engine.begin("acc1", "INBOX");
+        {
+            let engine = Arc::clone(&engine);
+            let account = account.clone();
+            tokio::spawn(async move { engine.run_ticket(t2, &account, "INBOX").await });
+        }
+
+        assert_eq!(
+            engine.wait_for_ticket(t2, 150).await.unwrap_err(),
+            "Sync timed out",
+            "a wait on a sync still in flight must block, not hand back the previous result"
+        );
+        assert!(engine.wait_for_ticket(t2, 5000).await.is_ok(), "and then answer when it lands");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// `sync.status` is what the app shows while a sync runs. Entering Syncing
+    /// used to blank the last timestamp and the mailbox totals, so every
+    /// refresh flashed "never synced, 0 messages" for the whole duration.
+    #[tokio::test]
+    async fn a_running_sync_keeps_the_previous_result_visible() {
+        let dir = scratch_dir("state_carryover");
+        let engine = Arc::new(engine_for(&dir));
+
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 30)));
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let settled = engine.get_state("acc1").await.expect("a completed sync records a state");
+        let t1 = settled.last_sync.expect("a completed sync stamps last_sync");
+        assert_eq!(settled.total_emails, 30);
+        drop(first);
+
+        let second = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 30))
+                .fault(
+                    Trigger::with("SELECT", "INBOX"),
+                    Action::Delay(Duration::from_millis(600)),
+                ),
+        );
+        let account = account_for(&second);
+        let ticket = engine.begin("acc1", "INBOX");
+        {
+            let engine = Arc::clone(&engine);
+            let account = account.clone();
+            tokio::spawn(async move { engine.run_ticket(ticket, &account, "INBOX").await });
+        }
+
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        let running = engine.get_state("acc1").await.expect("a running sync has a state");
+        assert_eq!(running.status, SyncStatus::Syncing, "precondition: the second sync is in flight");
+        assert_eq!(
+            running.last_sync,
+            Some(t1),
+            "the last successful sync time must survive the next sync"
+        );
+        assert_eq!(
+            running.total_emails, 30,
+            "so must the mailbox total — the app shows it while the sync runs"
+        );
+
+        engine.wait_for_ticket(ticket, 5000).await.expect("the second sync must finish");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_unknown_ticket_is_an_error() {
+        let dir = scratch_dir("unknown_ticket");
+        let engine = engine_for(&dir);
+
+        let err = engine.wait_for_ticket(4242, 10).await.unwrap_err();
+        assert!(err.contains("Unknown sync ticket"), "unexpected error: {err}");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A capped sync returns before it connects. It still has to finish its
+    /// ticket — the app is blocked on it — and the cap has to reach
+    /// `sync.status`, which the early return never touched.
+    #[tokio::test]
+    async fn a_cap_blocked_sync_finishes_its_ticket_and_records_the_error() {
+        let dir = scratch_dir("cap_ticket");
+        let engine = engine_for(&dir);
+        let account: SyncAccount = serde_json::from_value(serde_json::json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "imapConfig": { "email": "user@example.com", "imapHost": "imap.example.com" }
+        }))
+        .unwrap();
+
+        let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        fs::create_dir_all(dir.join("transfer_stats")).unwrap();
+        fs::write(
+            dir.join("transfer_stats").join("acc1.daemon.json"),
+            format!(r#"{{"days":{{"{}":{{"down":209715200,"up":0}}}}}}"#, today),
+        )
+        .unwrap();
+        fs::write(
+            dir.join("frontend-settings.json"),
+            serde_json::json!({
+                "mailvault-settings": { "state": { "transferLimits": { "acc1": {
+                    "capEnabled": true,
+                    "dailyDownLimitBytes": 100 * MB,
+                }}}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let ticket = engine.begin("acc1", "INBOX");
+        engine.run_ticket(ticket, &account, "INBOX").await;
+
+        let result = engine
+            .wait_for_ticket(ticket, 1000)
+            .await
+            .expect("a capped sync must finish its ticket, not time out");
+        assert!(!result.success);
+        assert!(result.error.unwrap_or_default().contains("Daily transfer cap"));
+
+        let state = engine.get_state("acc1").await.expect("the cap must record a state");
+        assert_eq!(state.status, SyncStatus::Error);
+        assert!(state.last_error.unwrap_or_default().contains("Daily transfer cap"));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // ── Characterization: the live delta paths nothing pinned ────────────
+    //
+    // These describe what the engine does today. They exist so a refactor of
+    // the flag/prune/gap paths cannot quietly change behaviour.
+
+    /// With CONDSTORE the engine asks CHANGEDSINCE for exactly the UIDs whose
+    /// flags moved and patches the sidecars in place — no re-download.
+    #[tokio::test]
+    async fn condstore_flag_changes_are_patched_into_cached_sidecars() {
+        let dir = scratch_dir("condstore_flags");
+        let engine = engine_for(&dir);
+
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 10);
+        drop(first);
+
+        // Same ten messages; uid 5 was read and starred since.
+        let mut changed = synthetic_mailbox("INBOX", 10);
+        {
+            let msg = changed.by_uid_mut(5).expect("uid 5");
+            msg.flags = vec!["\\Seen".to_string(), "\\Flagged".to_string()];
+            msg.modseq = 50;
+        }
+        changed.highest_modseq = 50;
+        let second = MockImap::start(Scenario::new().mailbox(changed));
+
+        let result = engine.sync_account(&account_for(&second), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert!(
+            second.count_commands("CHANGEDSINCE") >= 1,
+            "the flag patch must ride CHANGEDSINCE, not a re-fetch: {:?}",
+            second.commands()
+        );
+        let uid5: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(cache.join("5.json")).unwrap()).unwrap();
+        assert_eq!(uid5["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Without CONDSTORE nothing would ever refresh read/star state on cached
+    /// mail, so the engine re-reads flags (no headers) for the recent window.
+    #[tokio::test]
+    async fn flags_are_refreshed_without_condstore() {
+        let dir = scratch_dir("no_condstore_flags");
+        let engine = engine_for(&dir);
+
+        let first = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 10))
+                .without_cap("CONDSTORE"),
+        );
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 10);
+        drop(first);
+
+        let mut changed = synthetic_mailbox("INBOX", 10);
+        changed.by_uid_mut(5).expect("uid 5").flags = vec!["\\Seen".to_string()];
+        let second = MockImap::start(Scenario::new().mailbox(changed).without_cap("CONDSTORE"));
+
+        let result = engine.sync_account(&account_for(&second), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(
+            second.count_commands("CHANGEDSINCE"),
+            0,
+            "a server without CONDSTORE must never be asked for CHANGEDSINCE"
+        );
+        assert!(
+            second
+                .commands()
+                .iter()
+                .any(|c| c.to_uppercase().contains("UID FETCH") && c.to_uppercase().contains("FLAGS")),
+            "the fallback is a flags-only UID FETCH: {:?}",
+            second.commands()
+        );
+        let uid5: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(cache.join("5.json")).unwrap()).unwrap();
+        assert_eq!(uid5["flags"], serde_json::json!(["\\Seen"]));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A mailbox emptied server-side must leave nothing behind — the prune
+    /// guard only protects against a *short* UID listing, not an honest zero.
+    #[tokio::test]
+    async fn an_emptied_mailbox_prunes_every_sidecar() {
+        let dir = scratch_dir("emptied_mailbox");
+        let engine = engine_for(&dir);
+
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 12)));
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 12);
+        drop(first);
+
+        let emptied = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+        let result = engine.sync_account(&account_for(&emptied), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(count_sidecars(&cache), 0, "every sidecar must go");
+        assert_eq!(read_tauri_cache_meta(&cache).unwrap().total_emails, Some(0));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A UIDNEXT gap wider than the range limit is cheaper as a page fetch than
+    /// as a 695-UID range. The page only covers 500, so the backfill is what
+    /// actually finishes the mailbox.
+    #[tokio::test]
+    async fn a_uidnext_gap_beyond_the_range_limit_falls_back_to_a_page_and_backfill_completes_it() {
+        let dir = scratch_dir("uidnext_gap");
+        let engine = engine_for(&dir);
+
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 5);
+        drop(first);
+
+        let second = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 700)));
+        let account = account_for(&second);
+        let result = engine.sync_account(&account, "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.new_emails, 500, "a gap over the limit falls back to one 500-header page");
+
+        engine.backfill_mailbox(&account, "INBOX").await;
+        assert_eq!(count_sidecars(&cache), 700, "backfill must finish what the page started");
 
         fs::remove_dir_all(&dir).unwrap();
     }

@@ -37,7 +37,13 @@ pub fn load_feedback(data_dir: &Path, account_id: &str) -> Feedback {
     }
 
     match fs::read_to_string(&path) {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
+        Ok(json) => serde_json::from_str(&json).unwrap_or_else(|e| {
+            // The file exists but does not parse — a truncated write. Saying so
+            // is the only warning before the next save persists this default
+            // over the user's rules.
+            warn!("Feedback for {} is unreadable ({}), starting from empty: {}", account_id, e, path.display());
+            Feedback::default()
+        }),
         Err(e) => {
             warn!("Failed to read feedback for {}: {}", account_id, e);
             Feedback::default()
@@ -58,7 +64,7 @@ pub fn save_feedback(
         .map_err(|e| format!("Failed to serialize: {}", e))?;
 
     let path = feedback_path(data_dir, account_id);
-    fs::write(&path, json).map_err(|e| format!("Failed to write: {}", e))?;
+    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
 
     info!(
         "Saved feedback for {} ({} rules, {} corrections)",
@@ -75,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_load_nonexistent_feedback() {
-        let dir = std::env::temp_dir().join("mailvault-test-learning-load");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-learning-load-{}", uuid::Uuid::new_v4()));
         let feedback = load_feedback(&dir, "nonexistent");
         assert!(feedback.rules.is_empty());
         assert!(feedback.corrections.is_empty());
@@ -83,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_save_and_load_feedback() {
-        let dir = std::env::temp_dir().join("mailvault-test-learning-save");
+        let dir = std::env::temp_dir().join(format!("mailvault-test-learning-save-{}", uuid::Uuid::new_v4()));
         let _ = fs::remove_dir_all(&dir);
 
         let feedback = Feedback {
@@ -98,6 +104,20 @@ mod tests {
         assert_eq!(loaded.rules.len(), 1);
         assert_eq!(loaded.corrections.len(), 1);
         assert_eq!(loaded.stats.total_classified, 100);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_corrupt_feedback_file_is_reported_not_silently_emptied() {
+        let dir = std::env::temp_dir().join(format!("mailvault-test-learning-corrupt-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(dir.join("ai-feedback")).unwrap();
+        fs::write(dir.join("ai-feedback").join("acc1.json"), "{not json").unwrap();
+
+        let loaded = load_feedback(&dir, "acc1");
+
+        assert!(loaded.rules.is_empty(), "a torn file still reads as the default");
+        assert!(loaded.corrections.is_empty());
 
         let _ = fs::remove_dir_all(&dir);
     }

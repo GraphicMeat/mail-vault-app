@@ -805,10 +805,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
 
           serverTrace.mark('daemon-sync-start');
           console.log('[activateAccount] Triggering daemon sync for', accountId, effectiveMailbox);
-          await syncNow(syncAccount, effectiveMailbox);
+          const { ticket } = await syncNow(syncAccount, effectiveMailbox);
 
           console.log('[activateAccount] Waiting for daemon sync completion...');
-          const syncResult = await waitForSync(accountId, 30000);
+          const syncResult = await waitForSync(ticket, 30000);
           console.log('[activateAccount] Daemon sync result:', JSON.stringify(syncResult));
           if (signal.aborted) return;
 
