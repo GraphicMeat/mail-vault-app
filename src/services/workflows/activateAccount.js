@@ -11,6 +11,7 @@ import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
 import { syncNow, waitForSync } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
+import { proveServerUidsIfUnproven } from './loadEmails';
 import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
 import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
@@ -1010,6 +1011,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
           console.log('[activateAccount] CONDSTORE: nothing changed');
           useMailStore.setState(serverVerifiedPatch({ totalEmails: serverTotal }));
           get().updateSortedEmails();
+          await proveServerUidsIfUnproven(account, effectiveMailbox, serverTotal);
+          if (signal.aborted) return;
 
           if (uidMap.size < serverTotal) {
             useMailStore.setState({ hasMoreEmails: true, totalEmails: serverTotal });
@@ -1025,6 +1028,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         } else if (newUidNext === cachedUidNext && serverTotal <= (cachedMeta?.totalCached ?? uidMap.size)) {
           useMailStore.setState(serverVerifiedPatch({ totalEmails: serverTotal }));
           get().updateSortedEmails();
+          await proveServerUidsIfUnproven(account, effectiveMailbox, serverTotal);
+          if (signal.aborted) return;
 
           if (uidMap.size < serverTotal) {
             useMailStore.setState({ hasMoreEmails: true });

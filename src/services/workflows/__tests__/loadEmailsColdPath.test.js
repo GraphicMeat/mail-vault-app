@@ -36,10 +36,11 @@ vi.mock('../../db', () => ({
 
 const mockFetchEmails = vi.fn();
 const mockCheckMailboxStatus = vi.fn();
+const mockSearchAllUids = vi.fn().mockResolvedValue([]);
 vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
-  searchAllUids: vi.fn().mockResolvedValue([]),
+  searchAllUids: (...a) => mockSearchAllUids(...a),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
 }));
@@ -98,6 +99,62 @@ beforeEach(() => {
   mockGetEmailHeadersMeta.mockResolvedValue(null);
   mockGetEmailHeadersPartial.mockResolvedValue({ emails: [], totalEmails: 0 });
   mockSaveEmailHeaders.mockResolvedValue(undefined);
+  mockSearchAllUids.mockResolvedValue([]);
+});
+
+// loadEmails() is the refresh cycle (after bulk actions, row menus, retries)
+// and always talks IMAP directly. Its "nothing changed" exits used to carry
+// the store's claim forward untouched — so a set that was unproven when the
+// refresh started stayed unproven, and every row kept the "server unknown"
+// icon. See activateAccountColdPath.test.js for the same rule on the
+// activation path.
+describe('loadEmails delta path — an unchanged verdict re-proves an unproven uid set', () => {
+  function primeUnprovenWithCachedSync(highestModseq) {
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      activeAccountId: ACCOUNT.id,
+      activeMailbox: 'INBOX',
+      emails: [mkHeader(1)],
+      localEmails: [],
+      savedEmailIds: new Set(),
+      archivedEmailIds: new Set(),
+      serverUids: serverUids(new Set(), { complete: false }),
+      deleteTombstones: new Set(),
+      totalEmails: 1,
+    });
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq, totalEmails: 1, totalCached: 1 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq, exists: 1 });
+  }
+
+  it('CONDSTORE noop proves the set', async () => {
+    primeUnprovenWithCachedSync(5);
+    mockSearchAllUids.mockResolvedValue([1]);
+
+    await useMailStore.getState().loadEmails();
+
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
+
+  it('delta noop (no CONDSTORE) proves the set', async () => {
+    primeUnprovenWithCachedSync(null);
+    mockSearchAllUids.mockResolvedValue([1]);
+
+    await useMailStore.getState().loadEmails();
+
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
+
+  it('a proven set costs no search', async () => {
+    primeUnprovenWithCachedSync(5);
+    useMailStore.setState({ serverUids: serverUids(new Set([1]), { complete: true }) });
+
+    await useMailStore.getState().loadEmails();
+
+    expect(mockSearchAllUids).not.toHaveBeenCalled();
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
 });
 
 describe('loadEmails cold path — no cached sync (first visit this session)', () => {

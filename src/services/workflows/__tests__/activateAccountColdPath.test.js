@@ -44,20 +44,23 @@ vi.mock('../../db', () => ({
 const mockFetchEmails = vi.fn();
 const mockCheckMailboxStatus = vi.fn();
 const mockFetchMailboxes = vi.fn().mockResolvedValue([]);
+const mockSearchAllUids = vi.fn().mockResolvedValue([]);
 vi.mock('../../api', () => ({
   fetchEmails: (...a) => mockFetchEmails(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
   fetchMailboxes: (...a) => mockFetchMailboxes(...a),
-  searchAllUids: vi.fn().mockResolvedValue([]),
+  searchAllUids: (...a) => mockSearchAllUids(...a),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
   graphListFolders: vi.fn().mockResolvedValue([]),
   graphListMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
 }));
 
+const resolveNow = (id, account) => Promise.resolve({ ok: true, account });
+const mockResolveServerAccount = vi.fn(resolveNow);
 vi.mock('../../authUtils', () => ({
   ensureFreshToken: (a) => Promise.resolve(a),
-  resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
+  resolveServerAccount: (...a) => mockResolveServerAccount(...a),
 }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: () => false,
@@ -171,7 +174,112 @@ beforeEach(() => {
   mockFetchMailboxes.mockResolvedValue([]);
   mockGetRestoreDescriptor.mockReturnValue(null);
   mockGetDaemonHealth.mockReturnValue({ alive: false });
+  mockSearchAllUids.mockResolvedValue([]);
+  mockResolveServerAccount.mockImplementation(resolveNow);
   forgetMemo(ACCOUNT.id);
+});
+
+// The IMAP delta path's "nothing changed" verdicts. A cached sync exists
+// (meta + one cached header, so hasCachedSync holds) and the server reports
+// the same UIDNEXT/HIGHESTMODSEQ the cache was written under. Before this
+// fix those branches returned with no proof at all, so a mailbox whose
+// activation started from a cleared store — or whose daemon wait failed and
+// fell back here — stayed "server unknown" for the rest of the visit. The
+// e2e that caught it: connected-storage-matrix row 2 against a daemon whose
+// sync.now carried no ticket, so every activation took this fallback.
+function primeCachedSyncUnproven() {
+  primeActiveForBackgroundRefresh();
+  useMailStore.setState({ serverUids: serverUids(new Set(), { complete: false }) });
+  mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: 5, totalEmails: 1, totalCached: 1 });
+  mockGetEmailHeadersPartial.mockResolvedValue({ emails: [mkHeader(1)], totalEmails: 1, totalCached: 1, uidValidity: 1 });
+  // The disk paint and the server half run concurrently off one uidMap, and
+  // the server half only takes the delta path once the paint has merged a
+  // row into it (hasCachedSync). Only the server half awaits
+  // resolveServerAccount, so a slower resolve is the disk read winning —
+  // which is what happens on a real machine, where the read is local.
+  mockResolveServerAccount.mockImplementation((id, account) =>
+    new Promise((r) => setTimeout(() => r({ ok: true, account }), 10)));
+}
+
+// Every test below asserts the delta path was the one taken — a cold page
+// fetch would leave completeness alone for the wrong reason.
+const expectDeltaPath = () => {
+  expect(mockCheckMailboxStatus).toHaveBeenCalledTimes(1);
+  expect(mockFetchEmails).not.toHaveBeenCalled();
+};
+
+describe('activateAccount IMAP delta path: an unchanged verdict re-proves an unproven uid set', () => {
+  it('CONDSTORE "nothing changed" proves the set with one UID SEARCH', async () => {
+    primeCachedSyncUnproven();
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: 5, exists: 1 });
+    mockSearchAllUids.mockResolvedValue([1]);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expectDeltaPath();
+    const state = useMailStore.getState();
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(state.serverUids.complete).toBe(true);
+    expect([...state.serverUids.uids]).toEqual([1]);
+  });
+
+  it('the no-CONDSTORE delta-noop proves it the same way', async () => {
+    primeCachedSyncUnproven();
+    mockGetEmailHeadersMeta.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null, totalEmails: 1, totalCached: 1 });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null, exists: 1 });
+    mockSearchAllUids.mockResolvedValue([1]);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expectDeltaPath();
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
+
+  it('an already-proven set pays for no search', async () => {
+    primeCachedSyncUnproven();
+    useMailStore.setState({ serverUids: serverUids(new Set([1]), { complete: true }) });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: 5, exists: 1 });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expectDeltaPath();
+    expect(mockSearchAllUids).not.toHaveBeenCalled();
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
+
+  it('an empty listing against a non-empty mailbox is not proof', async () => {
+    primeCachedSyncUnproven();
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: 5, exists: 1 });
+    mockSearchAllUids.mockResolvedValue([]);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expectDeltaPath();
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().serverUids.complete).toBe(false);
+  });
+
+  // The production shape of the e2e failure: the daemon is alive, the probe
+  // says unchanged, completeness is unproven so the sync runs — and the wait
+  // fails (timeout, restart, protocol mismatch). The fallback must still end
+  // in proof, not in "server unknown" until the next successful sync.
+  it('daemon alive but the sync wait fails: the IMAP fallback still proves the set', async () => {
+    primeCachedSyncUnproven();
+    mockGetDaemonHealth.mockReturnValue({ alive: true });
+    mockMailboxIsUnchanged.mockResolvedValue({ unchanged: true, reason: 'modseq-match' });
+    mockSyncNow.mockResolvedValue({ started: true, ticket: 7 });
+    mockWaitForSync.mockRejectedValue(new Error('Sync timed out'));
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: 5, exists: 1 });
+    mockSearchAllUids.mockResolvedValue([1]);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(mockWaitForSync).toHaveBeenCalled();
+    expectDeltaPath();
+    expect(mockSearchAllUids).toHaveBeenCalledTimes(1);
+    expect(useMailStore.getState().serverUids.complete).toBe(true);
+  });
 });
 
 describe('activateAccount IMAP-fallback cold path (daemon not alive, first visit)', () => {

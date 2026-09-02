@@ -22,6 +22,46 @@ import {
 import { t } from '../../i18n/index.js';
 
 
+/**
+ * Turn a "nothing changed" verdict into proof of the mailbox's uid set.
+ *
+ * A delta check that finds the server unchanged since the cache was written
+ * says nothing about whether the STORE's uid set is the whole mailbox — and
+ * that set is exactly what the row icons read ("server unknown" until
+ * proven). The daemon path already refuses to short-circuit on an unchanged
+ * verdict while completeness is unproven (activateAccount.js); the IMAP
+ * branches used to return early with no proof at all, so a mailbox that
+ * opened from a cleared store, or whose daemon wait timed out, stayed
+ * "server unknown" for the rest of the visit. One UID SEARCH, only when
+ * unproven, is the whole cost.
+ *
+ * Never claims on an empty listing against a non-empty mailbox (a desynced
+ * reply), and never writes over a view that moved on during the round trip.
+ */
+export async function proveServerUidsIfUnproven(account, mailbox, serverTotal) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+  const { activeAccountId, activeMailbox, serverUids: current } = get();
+  if (current.complete || activeMailbox !== mailbox) return;
+
+  let uids;
+  try {
+    uids = await api.searchAllUids(account, mailbox);
+  } catch (e) {
+    console.warn('[serverUids] Could not prove %s/%s, leaving it unproven:', activeAccountId, mailbox, e?.message || e);
+    return;
+  }
+  if (uids.length === 0 && serverTotal > 0) {
+    console.warn('[serverUids] UID SEARCH returned 0 but EXISTS=%d — not claiming completeness', serverTotal);
+    return;
+  }
+  const now = get();
+  if (now.activeAccountId !== activeAccountId || now.activeMailbox !== mailbox) return;
+  useMailStore.setState({ serverUids: serverUids(new Set(uids), { complete: true }) });
+  now.updateSortedEmails();
+}
+
+
 // ── Suspicious empty result detection helper ──
 function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) {
   if (serverTotal > 0) return false;
@@ -337,6 +377,8 @@ export async function loadEmails() {
         });
         get().updateSortedEmails();
         useMailStore.setState({ loading: false, loadingMore: false });
+        await proveServerUidsIfUnproven(account, activeMailbox, serverTotal);
+        if (isStale()) return;
         loadTrace.end('condstore-noop', {
           existingCount: existingEmails.length,
           serverTotal,
@@ -386,6 +428,8 @@ export async function loadEmails() {
             });
             get().updateSortedEmails();
             useMailStore.setState({ loading: false, loadingMore: false });
+            await proveServerUidsIfUnproven(account, activeMailbox, serverTotal);
+            if (isStale()) return;
             loadTrace.end('condstore-flags-only', {
               changedFlags: changes.length,
               serverTotal,
@@ -413,6 +457,8 @@ export async function loadEmails() {
         });
         get().updateSortedEmails();
         useMailStore.setState({ loading: false, loadingMore: false });
+        await proveServerUidsIfUnproven(account, activeMailbox, serverTotal);
+        if (isStale()) return;
         loadTrace.end('delta-noop', {
           existingCount: existingEmails.length,
           serverTotal,
