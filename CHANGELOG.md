@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Switching folders right after a delete no longer shows the previous folder's messages under the new folder's name.** Every delete ends by refreshing the list it ran in, and that refresh takes as long as the server takes. Click another folder of the same account while it is still on its way — Inbox, then Archive — and the refresh landed after the switch: the list under the Archive heading was the Inbox, with the Inbox's count, and because MailVault keeps the last list it showed for each folder, the wrong one came back on the next visit to Archive until a fresh sync of that folder replaced it. A refresh now paints only the folder it was started for, and is dropped when the view has moved on to another one.
+
 ## [2.11.1] - 2026-09-02
 
 ### Fixed

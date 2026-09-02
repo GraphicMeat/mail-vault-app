@@ -265,3 +265,28 @@ describe('loadEmails cold path — UIDVALIDITY changed (full reload)', () => {
     expect(state.serverUids.complete).toBe(false);
   });
 });
+
+// A refresh is issued for one (account, mailbox) pair and commits its rows
+// later. Every delete ends in loadEmails(), and the user keeps clicking while
+// the server works — so by the time the fetch returns, the view can be on a
+// different folder of the SAME account. The account guard alone let INBOX's
+// rows land under the Archive header (connected-storage-matrix's churn cases:
+// "17 rows" in luke's 5-row Archive were luke's INBOX), and the switch-away
+// then memoised the wrong list under Archive for the rest of the session.
+describe('loadEmails — the view moves to another folder mid-flight', () => {
+  it('drops a fetch issued for INBOX once the active mailbox is Archive', async () => {
+    primeCold('INBOX');
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 4, highestModseq: null });
+    mockFetchEmails.mockImplementation(async () => {
+      // The Archive click lands while INBOX's page-1 fetch is on the wire.
+      useMailStore.setState({ activeMailbox: 'Archive', emails: [mkHeader(900)] });
+      return { total: 3, emails: [mkHeader(1), mkHeader(2), mkHeader(3)] };
+    });
+
+    await useMailStore.getState().loadEmails();
+
+    const state = useMailStore.getState();
+    expect(state.activeMailbox).toBe('Archive');
+    expect(state.emails.map((e) => e.uid)).toEqual([900]);
+  });
+});

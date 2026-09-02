@@ -107,7 +107,7 @@ export async function loadEmails() {
   // Bump generation
   const generation = bumpLoadEmailsGeneration();
 
-  const isStale = () => get().activeAccountId !== activeAccountId || getLoadEmailsGeneration() !== generation;
+  const isStale = () => get().activeAccountId !== activeAccountId || get().activeMailbox !== activeMailbox || getLoadEmailsGeneration() !== generation;
 
   // Safety: clear stuck loading state after 20s
   const loadingGuard = setTimeout(() => {
@@ -731,7 +731,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const isStale = () => get().activeAccountId !== activeAccountId || getLoadEmailsGeneration() !== generation;
+  const isStale = () => get().activeAccountId !== activeAccountId || get().activeMailbox !== activeMailbox || getLoadEmailsGeneration() !== generation;
 
   await _restoreGraphIdMap(activeAccountId, activeMailbox);
   if (isStale()) return;
