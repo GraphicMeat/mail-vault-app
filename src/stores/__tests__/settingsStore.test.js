@@ -204,3 +204,21 @@ describe('tracker blocking is premium', () => {
     expect(useSettingsStore.getState().trackerAlerts).toEqual({ 'acct-1-INBOX-41': info });
   });
 });
+
+describe('threadMode', () => {
+  it('defaults to grouped', () => {
+    expect(useSettingsStore.getState().threadMode).toBe('grouped');
+  });
+
+  it('setThreadMode writes the value', () => {
+    useSettingsStore.getState().setThreadMode('flat');
+    expect(useSettingsStore.getState().threadMode).toBe('flat');
+    useSettingsStore.getState().setThreadMode('grouped');
+  });
+
+  it('resetSettings restores grouped', () => {
+    useSettingsStore.getState().setThreadMode('expandable');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().threadMode).toBe('grouped');
+  });
+});

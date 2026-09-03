@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "Includi sottocartelle",
   "search.inFolderAndSubfolders": " in {{folder}} e nelle sue sottocartelle",
   "list.acrossFolders_one": "in {{count}} cartella",
-  "list.acrossFolders_other": "in {{count}} cartelle"
+  "list.acrossFolders_other": "in {{count}} cartelle",
+  "settings.appearance.threadMode": "Conversazioni",
+  "settings.appearance.threadModeDescription": "Come vengono mostrate le risposte nell'elenco dei messaggi.",
+  "settings.appearance.threadModeGrouped": "Raggruppate",
+  "settings.appearance.threadModeGroupedHint": "Le risposte si raccolgono in una sola riga",
+  "settings.appearance.threadModeExpandable": "Espandibili",
+  "settings.appearance.threadModeExpandableHint": "Apri le risposte nell'elenco",
+  "settings.appearance.threadModeFlat": "Disattivate",
+  "settings.appearance.threadModeFlatHint": "Ogni messaggio su una riga a sé",
+  "thread.showReplies": "Mostra risposte",
+  "thread.hideReplies": "Nascondi risposte"
 }

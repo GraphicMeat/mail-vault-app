@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "하위 폴더 포함",
   "search.inFolderAndSubfolders": " {{folder}} 및 하위 폴더에서",
   "list.acrossFolders_other": "폴더 {{count}}개",
-  "list.acrossFolders_one": "폴더 {{count}}개"
+  "list.acrossFolders_one": "폴더 {{count}}개",
+  "settings.appearance.threadMode": "대화",
+  "settings.appearance.threadModeDescription": "메시지 목록에서 답장을 표시하는 방식입니다.",
+  "settings.appearance.threadModeGrouped": "그룹화",
+  "settings.appearance.threadModeGroupedHint": "답장을 한 줄로 묶습니다",
+  "settings.appearance.threadModeExpandable": "펼치기",
+  "settings.appearance.threadModeExpandableHint": "목록에서 답장을 펼칩니다",
+  "settings.appearance.threadModeFlat": "끄기",
+  "settings.appearance.threadModeFlatHint": "메시지마다 한 줄씩",
+  "thread.showReplies": "답장 보기",
+  "thread.hideReplies": "답장 숨기기"
 }

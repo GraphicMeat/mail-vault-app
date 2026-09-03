@@ -202,6 +202,7 @@ export const useSettingsStore = create(
       emailListStyle: 'default', // 'default' | 'compact'
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
+      threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
       timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
@@ -685,6 +686,7 @@ export const useSettingsStore = create(
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
+      setThreadMode: (mode) => set({ threadMode: mode }),
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setTimeFormat: (value) => set({ timeFormat: value }),
@@ -876,6 +878,7 @@ export const useSettingsStore = create(
           emailListStyle: 'default',
           emailListGrouping: 'chronological',
           threadSortOrder: 'oldest-first',
+          threadMode: 'grouped',
           dateFormat: 'auto',
           customDateFormat: '',
           timeFormat: 'auto',

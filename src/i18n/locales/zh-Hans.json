@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "包含子文件夹",
   "search.inFolderAndSubfolders": "在“{{folder}}”及其子文件夹中",
   "list.acrossFolders_other": "{{count}} 个文件夹",
-  "list.acrossFolders_one": "{{count}} 个文件夹"
+  "list.acrossFolders_one": "{{count}} 个文件夹",
+  "settings.appearance.threadMode": "会话",
+  "settings.appearance.threadModeDescription": "回复在邮件列表中的显示方式。",
+  "settings.appearance.threadModeGrouped": "分组",
+  "settings.appearance.threadModeGroupedHint": "回复折叠为一行",
+  "settings.appearance.threadModeExpandable": "可展开",
+  "settings.appearance.threadModeExpandableHint": "在列表中展开回复",
+  "settings.appearance.threadModeFlat": "关闭",
+  "settings.appearance.threadModeFlatHint": "每封邮件单独一行",
+  "thread.showReplies": "显示回复",
+  "thread.hideReplies": "隐藏回复"
 }

@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "Unterordner einbeziehen",
   "search.inFolderAndSubfolders": " in {{folder}} und dessen Unterordnern",
   "list.acrossFolders_one": "in {{count}} Ordner",
-  "list.acrossFolders_other": "in {{count}} Ordnern"
+  "list.acrossFolders_other": "in {{count}} Ordnern",
+  "settings.appearance.threadMode": "Konversationen",
+  "settings.appearance.threadModeDescription": "Wie Antworten in der Nachrichtenliste angezeigt werden.",
+  "settings.appearance.threadModeGrouped": "Gruppiert",
+  "settings.appearance.threadModeGroupedHint": "Antworten werden zu einer Zeile zusammengefasst",
+  "settings.appearance.threadModeExpandable": "Aufklappbar",
+  "settings.appearance.threadModeExpandableHint": "Antworten in der Liste aufklappen",
+  "settings.appearance.threadModeFlat": "Aus",
+  "settings.appearance.threadModeFlatHint": "Jede Nachricht in einer eigenen Zeile",
+  "thread.showReplies": "Antworten anzeigen",
+  "thread.hideReplies": "Antworten ausblenden"
 }

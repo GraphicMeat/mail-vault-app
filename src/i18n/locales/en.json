@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "Include subfolders",
   "search.inFolderAndSubfolders": " in {{folder}} and its subfolders",
   "list.acrossFolders_one": "across {{count}} folder",
-  "list.acrossFolders_other": "across {{count}} folders"
+  "list.acrossFolders_other": "across {{count}} folders",
+  "settings.appearance.threadMode": "Conversations",
+  "settings.appearance.threadModeDescription": "How replies are shown in the message list.",
+  "settings.appearance.threadModeGrouped": "Grouped",
+  "settings.appearance.threadModeGroupedHint": "Replies collapse into one row",
+  "settings.appearance.threadModeExpandable": "Expandable",
+  "settings.appearance.threadModeExpandableHint": "Unfold replies in the list",
+  "settings.appearance.threadModeFlat": "Off",
+  "settings.appearance.threadModeFlatHint": "Every message on its own row",
+  "thread.showReplies": "Show replies",
+  "thread.hideReplies": "Hide replies"
 }

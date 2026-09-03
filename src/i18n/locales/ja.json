@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "サブフォルダを含める",
   "search.inFolderAndSubfolders": "「{{folder}}」とそのサブフォルダ内",
   "list.acrossFolders_other": "{{count}} 個のフォルダ",
-  "list.acrossFolders_one": "{{count}} 個のフォルダ"
+  "list.acrossFolders_one": "{{count}} 個のフォルダ",
+  "settings.appearance.threadMode": "会話",
+  "settings.appearance.threadModeDescription": "メッセージ一覧での返信の表示方法。",
+  "settings.appearance.threadModeGrouped": "まとめる",
+  "settings.appearance.threadModeGroupedHint": "返信を1行にまとめる",
+  "settings.appearance.threadModeExpandable": "展開可能",
+  "settings.appearance.threadModeExpandableHint": "一覧内で返信を展開する",
+  "settings.appearance.threadModeFlat": "オフ",
+  "settings.appearance.threadModeFlatHint": "メッセージごとに1行",
+  "thread.showReplies": "返信を表示",
+  "thread.hideReplies": "返信を隠す"
 }

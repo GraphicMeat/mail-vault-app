@@ -1885,5 +1885,15 @@
   "search.includeSubfolders": "Incluir subpastas",
   "search.inFolderAndSubfolders": " em {{folder}} e suas subpastas",
   "list.acrossFolders_one": "em {{count}} pasta",
-  "list.acrossFolders_other": "em {{count}} pastas"
+  "list.acrossFolders_other": "em {{count}} pastas",
+  "settings.appearance.threadMode": "Conversas",
+  "settings.appearance.threadModeDescription": "Como as respostas aparecem na lista de mensagens.",
+  "settings.appearance.threadModeGrouped": "Agrupadas",
+  "settings.appearance.threadModeGroupedHint": "As respostas se recolhem em uma linha",
+  "settings.appearance.threadModeExpandable": "Expansíveis",
+  "settings.appearance.threadModeExpandableHint": "Desdobre as respostas na lista",
+  "settings.appearance.threadModeFlat": "Desativadas",
+  "settings.appearance.threadModeFlatHint": "Cada mensagem em sua própria linha",
+  "thread.showReplies": "Mostrar respostas",
+  "thread.hideReplies": "Ocultar respostas"
 }
