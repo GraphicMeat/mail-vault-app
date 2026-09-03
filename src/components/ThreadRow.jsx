@@ -19,11 +19,33 @@ import {
   RefreshCw,
   Paperclip,
   Archive,
+  ChevronRight,
 } from 'lucide-react';
 import { t as tr, useT  } from '../i18n/index.js';
 
+// The unfold control (expandable thread mode). Nothing when the mode is off,
+// so grouped and flat rows keep the exact shape they had.
+function ThreadDisclosure({ expandable, expanded, threadId, onToggleExpand }) {
+  const t = useT();
+  if (!expandable) return null;
+  const label = expanded ? t('thread.hideReplies') : t('thread.showReplies');
+  return (
+    <button
+      type="button"
+      data-testid="thread-expand"
+      aria-expanded={!!expanded}
+      aria-label={label}
+      title={label}
+      className="w-5 h-5 -ml-1 flex items-center justify-center rounded flex-shrink-0 text-mail-text-muted hover:text-mail-text hover:bg-mail-border"
+      onClick={(e) => { e.stopPropagation(); onToggleExpand(threadId); }}
+    >
+      <ChevronRight size={14} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+    </button>
+  );
+}
+
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
   const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
@@ -90,6 +112,8 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
+
+      <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
 
       <div className="w-5 flex items-center justify-center flex-shrink-0">
         <ConnectedStateIcon email={latestEmail} size={14} />
@@ -158,7 +182,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
   const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailsLocally } = actions;
@@ -223,6 +247,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
         <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
       </div>
+
+      <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
 
       <div className="w-5 flex items-center justify-center flex-shrink-0">
         <ConnectedStateIcon email={latestEmail} size={13} />

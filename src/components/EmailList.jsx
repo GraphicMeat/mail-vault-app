@@ -189,6 +189,7 @@ function EmailListComponent() {
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
   const threadMode = useSettingsStore(s => s.threadMode);
   const setThreadMode = useSettingsStore(s => s.setThreadMode);
+  const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const isCompact = emailListStyle === 'compact';
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
@@ -436,6 +437,18 @@ function EmailListComponent() {
   const threadCache = useRef({ fingerprint: '', threads: new Map() });
   const [deferredThreads, setDeferredThreads] = useState(null); // null = not computed yet
 
+  // Threads unfolded in place (expandable mode). Reset with the list, and
+  // whenever the mode changes: a folded row must not remember a stale unfold.
+  const [expandedThreads, setExpandedThreads] = useState(() => new Set());
+  const toggleThreadExpanded = useCallback((threadId) => {
+    setExpandedThreads(prev => {
+      const next = new Set(prev);
+      if (next.has(threadId)) next.delete(threadId); else next.add(threadId);
+      return next;
+    });
+  }, []);
+  useEffect(() => { setExpandedThreads(new Set()); }, [activeMailbox, activeAccountId, viewMode, threadMode]);
+
   // Fingerprint for thread computation — only merge INBOX + Sent for INBOX view
   const mergedEmails = useMemo(
     () => searchActive ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
@@ -543,7 +556,9 @@ function EmailListComponent() {
 
     // Reuse cached rows only when thread model AND display emails are both unchanged.
     // deferredThreads is a new Map on every recomputation, so identity check is reliable.
-    if (cache.deferredThreads === deferredThreads && cache.displayEmails === displayEmails) {
+    if (cache.deferredThreads === deferredThreads && cache.displayEmails === displayEmails
+        && cache.expandedThreads === expandedThreads && cache.threadMode === threadMode
+        && cache.threadSortOrder === threadSortOrder) {
       return cache.rows;
     }
 
@@ -557,6 +572,7 @@ function EmailListComponent() {
     result.sort((a, b) => b.lastDate - a.lastDate);
 
     const rows = [];
+    const unfold = threadMode === 'expandable';
     for (const thread of result) {
       if (thread.messageCount === 1) {
         rows.push({ type: 'email', email: freshen(thread.emails[0]) });
@@ -564,12 +580,20 @@ function EmailListComponent() {
         thread.emails = thread.emails.map(freshen);
         thread.lastEmail = freshen(thread.lastEmail) || thread.emails[thread.emails.length - 1];
         rows.push({ type: 'thread', thread });
+        if (unfold && expandedThreads.has(thread.threadId)) {
+          // Only the folder's own messages — never the Sent copies an INBOX
+          // list merges in for context; opening one of those would open the
+          // wrong folder. Same rule as the row's checkbox (threadRowMembers).
+          const members = threadRowMembers(thread.emails);
+          const ordered = threadSortOrder === 'newest-first' ? [...members].reverse() : members;
+          for (const email of ordered) rows.push({ type: 'thread-member', email, threadId: thread.threadId });
+        }
       }
     }
 
-    displayRowCache.current = { deferredThreads, rows, displayEmails };
+    displayRowCache.current = { deferredThreads, rows, displayEmails, expandedThreads, threadMode, threadSortOrder };
     return rows;
-  }, [displayEmails, searchActive, deferredThreads, emailKey]);
+  }, [displayEmails, searchActive, deferredThreads, emailKey, expandedThreads, threadMode, threadSortOrder]);
 
   // Through the helper: a uid is unique only inside one mailbox of one account,
   // and a key built here by hand is a key the store cannot read back.
@@ -626,6 +650,7 @@ function EmailListComponent() {
     const item = threadedDisplay[index];
     if (!item) return index;
     if (item.type === 'thread') return `th-${item.thread.threadId}`;
+    if (item.type === 'thread-member') return `tm-${item.threadId}-${item.email._accountId || ''}:${item.email.uid}`;
     return `em-${item.email._accountId || ''}:${item.email.uid}`;
   }, [threadedDisplay]);
 
@@ -1335,6 +1360,9 @@ function EmailListComponent() {
                       onStartSaving={startSaving}
                       onStopSaving={stopSaving}
                       derivedFrom={displayEmails}
+                      expandable={threadMode === 'expandable'}
+                      expanded={expandedThreads.has(item.thread.threadId)}
+                      onToggleExpand={toggleThreadExpanded}
                     />
                   </div>
                 );
@@ -1351,6 +1379,8 @@ function EmailListComponent() {
                     height: vr.size + 'px',
                     transform: `translateY(${vr.start}px)`,
                   }}
+                  data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
+                  className={item.type === 'thread-member' ? 'pl-6' : undefined}
                 >
                   <RowComponent
                     key={item.email.uid}

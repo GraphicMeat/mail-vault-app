@@ -845,4 +845,71 @@ describe('thread modes', () => {
       useSettingsStore.setState({ emailListGrouping: 'chronological' });
     }
   });
+
+  it('expandable: the chevron unfolds the replies under the thread row, and folds them back', async () => {
+    const { container } = await mount('expandable');
+    expect(lastVirtualizerConfig.count).toBe(1);
+    const chevron = screen.getByTestId('thread-expand');
+    expect(chevron.getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(chevron);
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(4);
+    const members = container.querySelectorAll('[data-testid="thread-member-row"]');
+    expect(members.length).toBe(3);
+    expect(screen.getByTestId('thread-expand').getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('thread-expand'));
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(1);
+    expect(container.querySelector('[data-testid="thread-member-row"]')).toBeNull();
+  });
+
+  it('expandable: members follow threadSortOrder', async () => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    useSettingsStore.setState({ threadSortOrder: 'newest-first' });
+    try {
+      const { container } = await mount('expandable');
+      fireEvent.click(screen.getByTestId('thread-expand'));
+      await settle();
+      const subjects = [...container.querySelectorAll('[data-testid="thread-member-row"] [data-testid="email-row"]')]
+        .map(n => n.getAttribute('data-uid'));
+      expect(subjects).toEqual(['3', '2', '1']);
+    } finally {
+      useSettingsStore.setState({ threadSortOrder: 'oldest-first' });
+    }
+  });
+
+  it('grouped: no chevron is drawn', async () => {
+    await mount('grouped');
+    expect(screen.queryByTestId('thread-expand')).toBeNull();
+  });
+
+  it('clicking the chevron does not open the thread', async () => {
+    await mount('expandable');
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().selectThread.mockClear();
+    fireEvent.click(screen.getByTestId('thread-expand'));
+    expect(useMailStore.getState().selectThread).not.toHaveBeenCalled();
+  });
+
+  // A mode switch is a live setting change, not a remount: the row cache must
+  // notice that the same threads now want different rows.
+  it('switching to expandable while mounted grows a chevron that still unfolds', async () => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { rerender } = await mount('grouped');
+    expect(screen.queryByTestId('thread-expand')).toBeNull();
+    expect(lastVirtualizerConfig.count).toBe(1);
+
+    const { EmailList } = await import('../EmailList.jsx');
+    useSettingsStore.setState({ threadMode: 'expandable' });
+    rerender(React.createElement(EmailList.type));
+    await settle();
+
+    const chevron = screen.getByTestId('thread-expand');
+    expect(chevron).not.toBeNull();
+    fireEvent.click(chevron);
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(4);
+  });
 });

@@ -59,6 +59,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   return (
     <div
       data-testid="email-row"
+      data-uid={email.uid}
       data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
@@ -179,6 +180,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   return (
     <div
       data-testid="email-row"
+      data-uid={email.uid}
       data-landed={landed || undefined}
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
