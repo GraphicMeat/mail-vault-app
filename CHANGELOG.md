@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A file dropped on the compose window's "Drop here to attach file" strip is now attached.** Dragging a file into a message offers two targets: the message body, which places a picture inline, and a strip beneath it that attaches the file instead. Dropping on the strip did nothing — no attachment row, no error — while the same file dropped on the body appeared as expected, so a screenshot could be placed inline but never attached. The strip is only drawn while a drag is over the window, and the window took it down in the first instant of the drop, a hair before the strip's own drop handler ran; with no target left to deliver the drop to, it was discarded. The strip now stays up until the drop has been handled. Dropping elsewhere on the window, and the paperclip button, were never affected.
+
 ## [2.11.1] - 2026-09-03
 
 ### Added

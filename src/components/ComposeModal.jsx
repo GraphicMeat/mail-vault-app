@@ -1112,7 +1112,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         onDragLeave={() => { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }}
         // Capture phase: the editor's handleDrop stops propagation in the bubble
         // phase, so a bubble-phase reset would never run for editor drops.
-        onDropCapture={() => { dragDepth.current = 0; setDragging(false); }}
+        // The reset itself waits for the next task. A browser-dispatched event
+        // gets a microtask checkpoint after every listener, so a synchronous
+        // setState here would be committed — and the attach strip unmounted —
+        // before the strip's own onDrop is dispatched; React then drops an
+        // event whose target is no longer mounted, and the file never arrives.
+        onDropCapture={() => { dragDepth.current = 0; setTimeout(() => setDragging(false), 0); }}
         onDrop={handleDrop}
       >
         {/* Header */}
@@ -1297,9 +1302,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             />
           </div>
 
-          {/* React runs capture then bubble within one dispatch and flushes state
-              afterwards, so this strip's onDrop still runs even though
-              onDropCapture on the modal already flipped `dragging`. */}
+          {/* Still mounted when its own onDrop is dispatched: the modal's
+              onDropCapture resets `dragging` on the next task, never inside
+              the drop's own dispatch. */}
           {dragging && (
             <div
               data-testid="compose-attach-dropzone"
