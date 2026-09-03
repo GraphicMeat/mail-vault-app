@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { getRealAttachments, hasRealAttachments, hydrateInlineImages, replaceCidUrls } from '../../src/services/attachmentUtils';
 
 // ---------------------------------------------------------------------------
@@ -192,12 +192,113 @@ describe('hasRealAttachments', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// replaceCidUrls
+// ---------------------------------------------------------------------------
+
+describe('replaceCidUrls', () => {
+  const withContent = (cid, extra = {}) => ({ ...inlineImage(cid), content: 'AAAA', ...extra });
+
+  it('returns the input untouched when there is no html or no attachments', () => {
+    expect(replaceCidUrls(null, [withContent('a')])).toBeNull();
+    expect(replaceCidUrls('', [withContent('a')])).toBe('');
+    const html = '<img src="cid:a">';
+    expect(replaceCidUrls(html, [])).toBe(html);
+    expect(replaceCidUrls(html, undefined)).toBe(html);
+  });
+
+  it('leaves the cid: in place when the attachment carries no bytes', () => {
+    const html = '<img src="cid:logo">';
+    expect(replaceCidUrls(html, [inlineImage('logo')])).toBe(html);
+  });
+
+  it('resolves a Content-ID written without angle brackets', () => {
+    expect(replaceCidUrls('<img src="cid:bare">', [withContent('bare', { contentId: 'bare' })]))
+      .toBe('<img src="data:image/png;base64,AAAA">');
+  });
+
+  it('drops content-type parameters from the data: URI', () => {
+    expect(replaceCidUrls('<img src="cid:x">', [withContent('x', { contentType: 'image/jpeg; name="p.jpg"' })]))
+      .toBe('<img src="data:image/jpeg;base64,AAAA">');
+  });
+
+  it('falls back to application/octet-stream when the type is missing', () => {
+    expect(replaceCidUrls('<img src="cid:x">', [withContent('x', { contentType: undefined })]))
+      .toBe('<img src="data:application/octet-stream;base64,AAAA">');
+  });
+
+  it('replaces every reference to one cid', () => {
+    expect(replaceCidUrls('<img src="cid:x"><a href="cid:x">', [withContent('x')]))
+      .toBe('<img src="data:image/png;base64,AAAA"><a href="data:image/png;base64,AAAA">');
+  });
+
+  it('resolves each cid to its own attachment', () => {
+    const out = replaceCidUrls('<img src="cid:a"><img src="cid:b">', [
+      withContent('a', { content: 'AAAA' }),
+      withContent('b', { content: 'BBBB' }),
+    ]);
+    expect(out).toBe('<img src="data:image/png;base64,AAAA"><img src="data:image/png;base64,BBBB">');
+  });
+
+  it('leaves an attachment whose cid the html never mentions alone', () => {
+    const html = '<p>no pictures</p>';
+    expect(replaceCidUrls(html, [withContent('unused')])).toBe(html);
+  });
+});
+
 describe('hydrateInlineImages', () => {
   const email = {
     uid: 42,
     html: '<img src="cid:logo"><img src="cid:unused">',
     attachments: [pdfAttachment, inlineImage('logo'), inlineImage('other')],
   };
+
+  it('returns the same object outside Tauri', async () => {
+    globalThis.window = {};
+    expect(await hydrateInlineImages(email, 'acct', 'INBOX')).toBe(email);
+  });
+
+  it('does not re-read an attachment that already carries its bytes', async () => {
+    const invoke = vi.fn(async () => 'FRESH');
+    globalThis.window = { __TAURI__: { core: { invoke } } };
+    const cached = { ...email, attachments: [pdfAttachment, { ...inlineImage('logo'), content: 'CACHED' }] };
+
+    const result = await hydrateInlineImages(cached, 'acct', 'INBOX');
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(result).toBe(cached);
+  });
+
+  it('skips an inline image over the 10MB cap', async () => {
+    const invoke = vi.fn(async () => 'X');
+    globalThis.window = { __TAURI__: { core: { invoke } } };
+    const huge = { ...email, attachments: [{ ...inlineImage('logo'), size: 10 * 1024 * 1024 + 1 }] };
+
+    const result = await hydrateInlineImages(huge, 'acct', 'INBOX');
+
+    expect(invoke).not.toHaveBeenCalled();
+    expect(result).toBe(huge);
+  });
+
+  it('keeps the images it could read when one read fails', async () => {
+    globalThis.window = {
+      __TAURI__: {
+        core: {
+          invoke: async (_cmd, { attachmentIndex }) => {
+            if (attachmentIndex === 0) throw new Error('boom');
+            return 'B';
+          },
+        },
+      },
+    };
+    const two = { uid: 1, html: '<img src="cid:a"><img src="cid:b">', attachments: [inlineImage('a'), inlineImage('b')] };
+
+    const result = await hydrateInlineImages(two, 'acct', 'INBOX');
+
+    expect(result).not.toBe(two);
+    expect(result.attachments[0].content).toBeUndefined();
+    expect(result.attachments[1].content).toBe('B');
+  });
 
   it('loads content only for cid-referenced attachments, by original index', async () => {
     const calls = [];

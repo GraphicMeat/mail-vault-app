@@ -166,22 +166,81 @@ describe('mailStore email cache', () => {
   // The thread view paints a cached body straight from this map. An inline
   // image whose bytes were stripped here has nothing for cid: to resolve to,
   // so the second open of a thread showed the filename in a box.
-  it('keeps content on inline images the html references via cid:', () => {
-    const store = useMailStore.getState();
-    store.addToCache('acc1-INBOX-1', {
-      uid: 1,
-      html: '<p>hi</p><img src="cid:shot@mail"><img src="cid:other">',
-      attachments: [
-        { filename: 'shot.png', contentType: 'image/png', contentId: '<shot@mail>', content: 'inlinebytes' },
-        { filename: 'doc.pdf', contentType: 'application/pdf', content: 'pdfbytes' },
-        { filename: 'orphan.png', contentType: 'image/png', contentId: '<nobody@mail>', content: 'orphanbytes' },
-      ],
-    }, 128);
+  describe('inline image content', () => {
+    const inline = (cid, content = 'inlinebytes') =>
+      ({ filename: 'shot.png', contentType: 'image/png', contentId: cid, content });
+    const cachedAttachments = () => useMailStore.getState().emailCache.get('acc1-INBOX-1').email.attachments;
 
-    const [inline, real, orphan] = store.emailCache.get('acc1-INBOX-1').email.attachments;
-    expect(inline.content).toBe('inlinebytes');
-    expect(real.content).toBeUndefined();
-    expect(orphan.content).toBeUndefined();
+    it('keeps content on inline images the html references via cid:', () => {
+      useMailStore.getState().addToCache('acc1-INBOX-1', {
+        uid: 1,
+        html: '<p>hi</p><img src="cid:shot@mail"><img src="cid:other">',
+        attachments: [
+          inline('<shot@mail>'),
+          { filename: 'doc.pdf', contentType: 'application/pdf', content: 'pdfbytes' },
+          { ...inline('<nobody@mail>', 'orphanbytes'), filename: 'orphan.png' },
+        ],
+      }, 128);
+
+      const [embedded, real, orphan] = cachedAttachments();
+      expect(embedded.content).toBe('inlinebytes');
+      expect(real.content).toBeUndefined();
+      expect(orphan.content).toBeUndefined();
+    });
+
+    it('matches a Content-ID with no angle brackets', () => {
+      useMailStore.getState().addToCache('acc1-INBOX-1', {
+        uid: 1, html: '<img src="cid:bare@mail">', attachments: [inline('bare@mail')],
+      }, 128);
+      expect(cachedAttachments()[0].content).toBe('inlinebytes');
+    });
+
+    it('strips an inline image when the email has no html to reference it', () => {
+      useMailStore.getState().addToCache('acc1-INBOX-1', {
+        uid: 1, text: 'plain only', attachments: [inline('<shot@mail>')],
+      }, 128);
+      expect(cachedAttachments()[0].content).toBeUndefined();
+      expect(cachedAttachments()[0].contentId).toBe('<shot@mail>');
+    });
+
+    it('leaves a light copy (no bytes yet) untouched', () => {
+      const att = { filename: 'shot.png', contentType: 'image/png', contentId: '<shot@mail>', size: 100 };
+      useMailStore.getState().addToCache('acc1-INBOX-1', {
+        uid: 1, html: '<img src="cid:shot@mail">', attachments: [att],
+      }, 128);
+      expect(cachedAttachments()[0]).toEqual(att);
+      expect('content' in cachedAttachments()[0]).toBe(false);
+    });
+
+    it('hands a cache hit back with the bytes the thread view paints', () => {
+      const store = useMailStore.getState();
+      store.addToCache('acc1-INBOX-1', {
+        uid: 1, html: '<img src="cid:shot@mail">', attachments: [inline('<shot@mail>')],
+      }, 128);
+      expect(store.getFromCache('acc1-INBOX-1').attachments[0].content).toBe('inlinebytes');
+    });
+
+    it('counts the kept bytes toward the cache limit', () => {
+      const store = useMailStore.getState();
+      const big = (uid) => ({ uid, html: '<img src="cid:x">', attachments: [inline('<x>', 'b'.repeat(1024 * 1024))] });
+      store.addToCache('k-1', big(1), 1.5);
+      store.addToCache('k-2', big(2), 1.5);
+      expect(store.emailCache.has('k-1')).toBe(false);
+      expect(store.emailCache.has('k-2')).toBe(true);
+    });
+
+    it('skips the entry entirely when the inline bytes push it over the single-item cap', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        useMailStore.getState().addToCache('acc1-INBOX-1', {
+          uid: 1, html: '<img src="cid:x">', attachments: [inline('<x>', 'b'.repeat(6 * 1024 * 1024))],
+        }, 128);
+        expect(useMailStore.getState().emailCache.has('acc1-INBOX-1')).toBe(false);
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('oversized'), expect.any(Number), 'acc1-INBOX-1');
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   it('evicts oldest entries when cache limit is exceeded', () => {
