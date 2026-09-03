@@ -7,7 +7,7 @@ import { Button } from '../ui/Button';
 import { AppearancePreview } from './AppearancePreview';
 
 /**
- * Five controls, chosen because the preview can prove each one. Date and time
+ * Six controls, chosen because the preview can prove each one. Date and time
  * format, action button style, signature display, thread sort and the viewer
  * theme all stay in Settings — none of them is a first-run decision.
  *
@@ -44,8 +44,10 @@ export function AppearanceStep({ onContinue }) {
   const setViewStyle = useSettingsStore(s => s.setViewStyle);
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const setEmailListStyle = useSettingsStore(s => s.setEmailListStyle);
+  const threadMode = useSettingsStore(s => s.threadMode);
+  const setThreadMode = useSettingsStore(s => s.setThreadMode);
 
-  // The five values the app is actually designed around — the same set every
+  // The six values the app is actually designed around — the same set every
   // marketing screenshot is shot in. Written through the same setters the
   // controls use, so the preview and the persisted settings follow along.
   const applyRecommended = () => {
@@ -54,6 +56,7 @@ export function AppearanceStep({ onContinue }) {
     setSidebarStyle('tagcloud');
     setViewStyle('list');
     setEmailListStyle('compact');
+    setThreadMode('grouped');
   };
 
   return (
@@ -102,6 +105,15 @@ export function AppearanceStep({ onContinue }) {
               <Choice id="appearance-density-compact" active={emailListStyle} value="compact" onPick={setEmailListStyle}>{t('onboarding.densityCompact')}</Choice>
               <Choice id="appearance-density-default" active={emailListStyle} value="default" onPick={setEmailListStyle}>{t('onboarding.densityDefault')}</Choice>
               <Choice id="appearance-density-comfortable" active={emailListStyle} value="comfortable" onPick={setEmailListStyle}>{t('onboarding.densityComfortable')}</Choice>
+            </div>
+          </div>
+
+          <div data-testid="appearance-control-threads">
+            <div className="text-xs font-medium text-mail-text mb-1">{t('settings.appearance.threadMode')}</div>
+            <div className="flex gap-1.5">
+              <Choice id="appearance-threads-grouped" active={threadMode} value="grouped" onPick={setThreadMode}>{t('settings.appearance.threadModeGrouped')}</Choice>
+              <Choice id="appearance-threads-expandable" active={threadMode} value="expandable" onPick={setThreadMode}>{t('settings.appearance.threadModeExpandable')}</Choice>
+              <Choice id="appearance-threads-flat" active={threadMode} value="flat" onPick={setThreadMode}>{t('settings.appearance.threadModeFlat')}</Choice>
             </div>
           </div>
 

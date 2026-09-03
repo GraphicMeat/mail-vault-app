@@ -9,6 +9,7 @@ const setLayoutMode = vi.fn();
 const setSidebarStyle = vi.fn();
 const setViewStyle = vi.fn();
 const setEmailListStyle = vi.fn();
+const setThreadMode = vi.fn();
 const toggleTheme = vi.fn();
 const setTheme = vi.fn();
 
@@ -16,6 +17,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: (sel) => sel({
     layoutMode: 'three-column', sidebarStyle: 'list', viewStyle: 'list', emailListStyle: 'default',
     setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle,
+    threadMode: 'grouped', setThreadMode,
     localeEpoch: 0,
   }),
 }));
@@ -25,10 +27,10 @@ vi.mock('../../../stores/themeStore', () => ({
 
 import { AppearanceStep } from '../AppearanceStep';
 
-afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, toggleTheme, setTheme].forEach(m => m.mockClear()); });
+afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, setThreadMode, toggleTheme, setTheme].forEach(m => m.mockClear()); });
 
 describe('appearance step', () => {
-  it('offers exactly the five first-run controls', () => {
+  it('offers exactly the six first-run controls', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     expect(screen.getAllByTestId(/^appearance-control-/).map(n => n.dataset.testid || n.getAttribute('data-testid')))
       .toEqual([
@@ -37,6 +39,7 @@ describe('appearance step', () => {
         'appearance-control-sidebar',
         'appearance-control-view',
         'appearance-control-density',
+        'appearance-control-threads',
       ]);
   });
 
@@ -48,7 +51,7 @@ describe('appearance step', () => {
     expect(toggleTheme).toHaveBeenCalled();
   });
 
-  // One click has to move every one of the five controls: a partial preset
+  // One click has to move every one of the six controls: a partial preset
   // leaves the screen half-recommended and nobody can tell which half.
   it('applies the recommended settings in one click', () => {
     render(<AppearanceStep onContinue={() => {}} />);
@@ -58,6 +61,13 @@ describe('appearance step', () => {
     expect(setSidebarStyle).toHaveBeenCalledWith('tagcloud');
     expect(setViewStyle).toHaveBeenCalledWith('list');
     expect(setEmailListStyle).toHaveBeenCalledWith('compact');
+    expect(setThreadMode).toHaveBeenCalledWith('grouped');
+  });
+
+  it('writes the thread mode straight to the store', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByTestId('appearance-threads-flat'));
+    expect(setThreadMode).toHaveBeenCalledWith('flat');
   });
 
   it('renders the preview beside the controls', () => {

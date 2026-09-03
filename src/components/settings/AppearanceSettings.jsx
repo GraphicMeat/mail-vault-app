@@ -13,7 +13,9 @@ import {
   Columns,
   Rows,
   MessageSquare,
+  Layers,
   List,
+  ListTree,
   PenTool,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
@@ -49,6 +51,8 @@ export function AppearanceSettings() {
     setViewStyle,
     emailListStyle,
     setEmailListStyle,
+    threadMode,
+    setThreadMode,
     threadSortOrder,
     setThreadSortOrder,
     dateFormat,
@@ -414,6 +418,38 @@ export function AppearanceSettings() {
             <span className="text-sm font-medium text-mail-text">{t('settings.appearance.compact')}</span>
             <span className="text-xs text-mail-text-muted">{t('settings.appearance.senderSubjectTwoLines')}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Conversations: grouped / expandable / flat */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <Layers size={18} className="text-mail-accent-text" />
+          {t('settings.appearance.threadMode')}
+        </h4>
+        <p className="text-sm text-mail-text-muted mb-4">
+          {t('settings.appearance.threadModeDescription')}
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          {[
+            { value: 'grouped', Icon: Layers, label: 'settings.appearance.threadModeGrouped', hint: 'settings.appearance.threadModeGroupedHint' },
+            { value: 'expandable', Icon: ListTree, label: 'settings.appearance.threadModeExpandable', hint: 'settings.appearance.threadModeExpandableHint' },
+            { value: 'flat', Icon: List, label: 'settings.appearance.threadModeFlat', hint: 'settings.appearance.threadModeFlatHint' },
+          ].map(({ value, Icon, label, hint }) => (
+            <button
+              key={value}
+              data-testid={`thread-mode-${value}`}
+              onClick={() => setThreadMode(value)}
+              className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                        ${threadMode === value
+                          ? 'border-mail-accent bg-mail-accent/10'
+                          : 'border-mail-border hover:border-mail-accent/50'}`}
+            >
+              <Icon size={24} className="text-mail-text-muted" />
+              <span className="text-sm font-medium text-mail-text">{t(label)}</span>
+              <span className="text-xs text-mail-text-muted text-center">{t(hint)}</span>
+            </button>
+          ))}
         </div>
       </div>
 
