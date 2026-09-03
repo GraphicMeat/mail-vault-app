@@ -841,6 +841,7 @@ describe('thread modes', () => {
     try {
       await mount('grouped');
       expect(screen.queryByTestId('thread-mode-toggle')).toBeNull();
+      expect(screen.getByTestId('unread-filter-toggle')).toBeTruthy();
     } finally {
       useSettingsStore.setState({ emailListGrouping: 'chronological' });
     }
@@ -857,6 +858,7 @@ describe('thread modes', () => {
     expect(lastVirtualizerConfig.count).toBe(4);
     const members = container.querySelectorAll('[data-testid="thread-member-row"]');
     expect(members.length).toBe(3);
+    expect([...members].map(n => n.querySelector('[data-testid="email-row"]').getAttribute('data-uid'))).toEqual(['1', '2', '3']);
     expect(screen.getByTestId('thread-expand').getAttribute('aria-expanded')).toBe('true');
 
     fireEvent.click(screen.getByTestId('thread-expand'));
@@ -875,6 +877,24 @@ describe('thread modes', () => {
       const subjects = [...container.querySelectorAll('[data-testid="thread-member-row"] [data-testid="email-row"]')]
         .map(n => n.getAttribute('data-uid'));
       expect(subjects).toEqual(['3', '2', '1']);
+    } finally {
+      useSettingsStore.setState({ threadSortOrder: 'oldest-first' });
+    }
+  });
+
+  it('expandable: changing threadSortOrder while unfolded re-orders the members in place', async () => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { container, rerender } = await mount('expandable');
+    fireEvent.click(screen.getByTestId('thread-expand'));
+    await settle();
+    const uids = () => [...container.querySelectorAll('[data-testid="thread-member-row"] [data-testid="email-row"]')].map(n => n.getAttribute('data-uid'));
+    expect(uids()).toEqual(['1', '2', '3']);
+    try {
+      useSettingsStore.setState({ threadSortOrder: 'newest-first' });
+      const { EmailList } = await import('../EmailList.jsx');
+      rerender(React.createElement(EmailList.type));
+      await settle();
+      expect(uids()).toEqual(['3', '2', '1']);
     } finally {
       useSettingsStore.setState({ threadSortOrder: 'oldest-first' });
     }

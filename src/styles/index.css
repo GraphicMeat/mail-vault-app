@@ -39,6 +39,13 @@
   contain: content;
 }
 
+/* A reply unfolded under its thread row (expandable thread mode) sits one
+   step in. The row is absolutely anchored to its wrapper's edges, so padding
+   on the wrapper is ignored — the offset has to move the anchor itself. */
+.thread-member > .virtual-row {
+  left: 1.5rem;
+}
+
 /* Theme CSS Variables — see DIRECTION CONTRACT above.
    Every value below is contrast-checked against the surface it lands on:
    text and muted text >= 4.5:1, glyphs and control borders >= 3:1. Tints are

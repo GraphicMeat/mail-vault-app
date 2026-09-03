@@ -1380,7 +1380,7 @@ function EmailListComponent() {
                     transform: `translateY(${vr.start}px)`,
                   }}
                   data-testid={item.type === 'thread-member' ? 'thread-member-row' : undefined}
-                  className={item.type === 'thread-member' ? 'pl-6' : undefined}
+                  className={item.type === 'thread-member' ? 'thread-member' : undefined}
                 >
                   <RowComponent
                     key={item.email.uid}
