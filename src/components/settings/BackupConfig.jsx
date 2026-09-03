@@ -37,7 +37,10 @@ export default function BackupConfig() {
   useEffect(() => {
     const inv = window.__TAURI__?.core?.invoke;
     if (!inv) return;
-    inv('get_app_data_dir').then(p => setDefaultBackupPath(p)).catch(() => {});
+    // The app's own Maildir follows the vault, which the user can move off the
+    // app data dir — reading the data dir here would name a folder that is not
+    // where the mail is.
+    api.vaultGetStatus().then(s => setDefaultBackupPath(s?.displayPath || null)).catch(() => {});
     inv('backup_get_external_location').then(loc => {
       if (loc?.status !== 'not_configured') setExternalBackupLocation(loc);
     }).catch(() => {});

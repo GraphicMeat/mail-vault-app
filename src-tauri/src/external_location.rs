@@ -108,6 +108,18 @@ mod macos {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { stop_access_inner(&p) }));
     }
 
+    pub fn open_in_finder(path: &str, bookmark: Option<Vec<u8>>, reveal: bool) -> Result<(), String> {
+        let p = path.to_string();
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe { open_in_finder_inner(&p, bookmark, reveal) })) {
+            Ok(result) => result,
+            Err(e) => {
+                let msg = format!("open_in_finder panicked: {:?}", e.downcast_ref::<&str>().unwrap_or(&"unknown"));
+                error!("[external_location] {}", msg);
+                Err(msg)
+            }
+        }
+    }
+
     // ── Inner unsafe implementations ──
 
     unsafe fn create_bookmark_inner(path: &str) -> Result<Vec<u8>, String> {
@@ -184,6 +196,61 @@ mod macos {
             let _: () = msg_send![url, stopAccessingSecurityScopedResource];
             info!("[external_location] stopAccessingSecurityScopedResource({})", path);
         }
+    }
+
+    /// Open (or reveal) `path` in Finder, holding the folder's security-scoped
+    /// bookmark for the call.
+    ///
+    /// Without that scope a folder outside the sandbox container is refused
+    /// (`_LSOpenURLsWithCompletionHandler ... error -54`) — and the app only
+    /// ever starts the scope for the length of a backup or a validation, so a
+    /// click arriving in between saw nothing at all. NSWorkspace also returns
+    /// whether the open was accepted; spawning `/usr/bin/open` threw the exit
+    /// code away, which is why the failure was silent.
+    unsafe fn open_in_finder_inner(path: &str, bookmark: Option<Vec<u8>>, reveal: bool) -> Result<(), String> {
+        let url = path_to_nsurl(path)?;
+
+        // The scope has to be started on the URL the bookmark resolves to —
+        // a plain fileURLWithPath: carries no extension to consume.
+        let scoped: *const Object = match bookmark {
+            Some(bytes) if !bytes.is_empty() => {
+                let nsdata = bytes_to_nsdata(&bytes);
+                let mut error_ptr: *const Object = std::ptr::null();
+                let mut is_stale: bool = false;
+                let url: *const Object = msg_send![class!(NSURL),
+                    URLByResolvingBookmarkData: nsdata
+                    options: 1usize << 10 // NSURLBookmarkResolutionWithSecurityScope
+                    relativeToURL: std::ptr::null::<Object>()
+                    bookmarkDataIsStale: &mut is_stale
+                    error: &mut error_ptr
+                ];
+                url
+            }
+            _ => std::ptr::null(),
+        };
+        let started: bool = if scoped.is_null() {
+            false
+        } else {
+            msg_send![scoped, startAccessingSecurityScopedResource]
+        };
+
+        let workspace: *const Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let result = if workspace.is_null() {
+            Err("NSWorkspace unavailable".to_string())
+        } else if reveal {
+            let urls: *const Object = msg_send![class!(NSArray), arrayWithObject: url];
+            let _: () = msg_send![workspace, activateFileViewerSelectingURLs: urls];
+            Ok(())
+        } else {
+            let ok: bool = msg_send![workspace, openURL: url];
+            if ok { Ok(()) } else { Err(format!("Finder refused to open {}", path)) }
+        };
+
+        if started {
+            let _: () = msg_send![scoped, stopAccessingSecurityScopedResource];
+        }
+        info!("[external_location] open_in_finder({}, reveal: {}, scoped: {}) -> {:?}", path, reveal, started, result);
+        result
     }
 
     // ── Helpers ──
@@ -409,6 +476,25 @@ pub fn release_external_access(path: &str) {
     }
     #[cfg(not(target_os = "macos"))]
     { let _ = path; }
+}
+
+/// Open (or reveal) `path` in Finder, holding the security-scoped bookmark of
+/// whichever configured location contains it. macOS only — see
+/// [`macos::open_in_finder_inner`] for why spawning `/usr/bin/open` cannot work
+/// for a folder outside the sandbox container.
+#[cfg(target_os = "macos")]
+pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool) -> Result<(), String> {
+    let bookmark = [SLOT_EXTERNAL_BACKUP, SLOT_VAULT].iter().find_map(|slot| {
+        let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())?;
+        let display_path = meta["displayPath"].as_str()?;
+        if display_path.is_empty() || !std::path::Path::new(path).starts_with(display_path) {
+            return None;
+        }
+        fs::read(bookmark_file(app_data_dir, slot)).ok()
+    });
+    macos::open_in_finder(path, bookmark, reveal)
 }
 
 /// Validate the saved external location by resolving + testing write access.

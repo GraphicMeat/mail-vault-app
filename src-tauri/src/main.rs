@@ -1602,17 +1602,16 @@ fn save_attachment_to(
 }
 
 #[tauri::command]
-fn show_in_folder(path: String) -> Result<(), String> {
+fn show_in_folder(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
     info!("show_in_folder called for: {}", path);
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg("-R")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("Failed to reveal in Finder: {}", e))?;
+        return finder_open(&app_handle, &path, true);
     }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = &app_handle;
 
     #[cfg(target_os = "windows")]
     {
@@ -1633,27 +1632,39 @@ fn show_in_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Hand a path to Finder, holding the security-scoped bookmark that covers it.
+///
+/// A path outside the sandbox container is refused unless the app holds the
+/// bookmark's scope at that moment — and `.spawn()`ing `/usr/bin/open` threw
+/// away the refusal, so the button appeared to do nothing.
+#[cfg(target_os = "macos")]
+fn finder_open(app_handle: &tauri::AppHandle, path: &str, reveal: bool) -> Result<(), String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Could not get app data directory: {}", e))?;
+    external_location::open_in_finder(&data_dir, path, reveal)
+}
+
 #[tauri::command]
-fn open_file(path: String) -> Result<(), String> {
+fn open_file(app_handle: tauri::AppHandle, path: String) -> Result<(), String> {
     info!("open_file called for: {}", path);
 
     #[cfg(target_os = "macos")]
     {
         // LaunchServices takes any folder ending in `.app` for a bundle — and
-        // the app data dir is named `com.mailvault.app`. `open` then tries to
-        // LAUNCH it, fails with "executable is missing", and shows nothing.
+        // the app data dir is named `com.mailvault.app`. Opening it would try
+        // to LAUNCH it, fail with "executable is missing", and show nothing.
         // Reveal such a folder in its parent instead; everything else opens.
         // ponytail: only `.app` is special-cased; add `.bundle`/`.framework`
         // if a data folder ever gets one of those names.
         let p = std::path::Path::new(&path);
-        if p.is_dir() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app")) {
-            return show_in_folder(path);
-        }
-        Command::new("open")
-            .arg(&path)
-            .spawn()
-            .map_err(|e| format!("Failed to open file: {}", e))?;
+        let reveal = p.is_dir() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app"));
+        return finder_open(&app_handle, &path, reveal);
     }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = &app_handle;
 
     #[cfg(target_os = "windows")]
     {
