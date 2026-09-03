@@ -163,6 +163,27 @@ describe('mailStore email cache', () => {
     expect(cached.email.attachments[1].content).toBeUndefined();
   });
 
+  // The thread view paints a cached body straight from this map. An inline
+  // image whose bytes were stripped here has nothing for cid: to resolve to,
+  // so the second open of a thread showed the filename in a box.
+  it('keeps content on inline images the html references via cid:', () => {
+    const store = useMailStore.getState();
+    store.addToCache('acc1-INBOX-1', {
+      uid: 1,
+      html: '<p>hi</p><img src="cid:shot@mail"><img src="cid:other">',
+      attachments: [
+        { filename: 'shot.png', contentType: 'image/png', contentId: '<shot@mail>', content: 'inlinebytes' },
+        { filename: 'doc.pdf', contentType: 'application/pdf', content: 'pdfbytes' },
+        { filename: 'orphan.png', contentType: 'image/png', contentId: '<nobody@mail>', content: 'orphanbytes' },
+      ],
+    }, 128);
+
+    const [inline, real, orphan] = store.emailCache.get('acc1-INBOX-1').email.attachments;
+    expect(inline.content).toBe('inlinebytes');
+    expect(real.content).toBeUndefined();
+    expect(orphan.content).toBeUndefined();
+  });
+
   it('evicts oldest entries when cache limit is exceeded', () => {
     const store = useMailStore.getState();
     // Each email is ~100KB. With a 0.2MB limit, only ~2 fit.

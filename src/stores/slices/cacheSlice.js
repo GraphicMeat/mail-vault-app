@@ -60,11 +60,15 @@ export const createCacheSlice = (set, get) => ({
     const { emailCache } = get();
 
     // Strip heavy fields before caching — rawSource is already on disk as .eml,
-    // and attachment content is fetched on demand
+    // and real attachments are fetched on demand. Inline images stay: the
+    // thread view paints a cached body as-is, and a cid: with no bytes behind
+    // it rendered as the filename in a box on every open after the first.
     const lightEmail = { ...email };
     delete lightEmail.rawSource;
     if (lightEmail.attachments) {
+      const html = lightEmail.html || '';
       lightEmail.attachments = lightEmail.attachments.map(att => {
+        if (att.contentId && html.includes(`cid:${att.contentId.replace(/^<|>$/g, '')}`)) return att;
         const { content, ...meta } = att;
         return meta;
       });
