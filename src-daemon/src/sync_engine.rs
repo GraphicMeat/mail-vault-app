@@ -7,7 +7,7 @@
 use crate::contacts_index::ContactsState;
 use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
-use crate::imap::pool::{ImapPool, PooledSessionGuard};
+use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
 use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -338,26 +338,57 @@ impl SyncEngine {
         Some(actual)
     }
 
-    /// Internal sync implementation.
+    /// Internal sync implementation: one attempt on a pooled session, once
+    /// more on a brand-new connection if that attempt died with the socket.
+    ///
+    /// The hole `ImapPool::run_read` closes for the app's reads, on the path
+    /// that carries the traffic: a pooled socket the peer closed while it sat
+    /// idle answers its first command with `Broken pipe`, and the tick handed
+    /// that to the user as the server refusing — fifteen times in one
+    /// morning's log. Everything here is a read (SELECT / FETCH / SEARCH; the
+    /// writes go to the local cache), so repeating it is free.
     async fn do_sync(
         &self,
         account: &SyncAccount,
         mailbox: &str,
     ) -> SyncResult {
-        let account_id = &account.id;
-        let config = &account.imap_config;
-
-        // Get a session from the pool
-        let guard = match self.pool.get_background(config).await {
-            Ok(g) => g,
-            Err(e) => return SyncResult {
-                account_id: account_id.clone(),
+        let account_id = account.id.clone();
+        match retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh)).await {
+            Ok((delta, mailbox)) => SyncResult {
+                account_id,
+                mailbox,
+                new_emails: delta.new_emails,
+                updated_flags: delta.updated_flags,
+                total_emails: delta.total_emails,
+                success: true,
+                error: None,
+                offline: false,
+            },
+            Err(e) => SyncResult {
+                account_id,
                 mailbox: mailbox.to_string(),
                 new_emails: 0, updated_flags: 0, total_emails: 0,
                 success: false, error: Some(e), offline: false,
             },
-        };
+        }
+    }
 
+    /// One attempt: check out (`fresh`: never from the pool), sync, hand the
+    /// session back. Returns the delta and the folder actually synced.
+    async fn sync_on(
+        &self,
+        account: &SyncAccount,
+        mailbox: &str,
+        fresh: bool,
+    ) -> Result<(SyncDelta, String), String> {
+        let account_id = &account.id;
+        let config = &account.imap_config;
+
+        let guard = if fresh {
+            self.pool.get_background_fresh(config).await?
+        } else {
+            self.pool.get_background(config).await?
+        };
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
         let has_condstore = self.pool.has_capability(config, "CONDSTORE").await;
 
@@ -397,11 +428,9 @@ impl SyncEngine {
                 mailbox = actual;
             }
         }
-        let mailbox = mailbox.as_str();
-
         let guard = PooledSessionGuard {
             session,
-            last_selected: Some(mailbox.to_string()),
+            last_selected: Some(mailbox.clone()),
             _permit,
         };
         // Hand the session back on success; on error discard it — a failed
@@ -412,24 +441,7 @@ impl SyncEngine {
             _ => self.pool.discard(config, guard).await,
         }
 
-        match outcome {
-            Ok(delta) => SyncResult {
-                account_id: account_id.clone(),
-                mailbox: mailbox.to_string(),
-                new_emails: delta.new_emails,
-                updated_flags: delta.updated_flags,
-                total_emails: delta.total_emails,
-                success: true,
-                error: None,
-                offline: false,
-            },
-            Err(e) => SyncResult {
-                account_id: account_id.clone(),
-                mailbox: mailbox.to_string(),
-                new_emails: 0, updated_flags: 0, total_emails: 0,
-                success: false, error: Some(e), offline: false,
-            },
-        }
+        outcome.map(|delta| (delta, mailbox))
     }
 
     /// Delta sync for one mailbox.
@@ -658,8 +670,16 @@ impl SyncEngine {
     }
 
     async fn run_backfill(&self, account: &SyncAccount, mailbox: &str) -> Result<usize, String> {
+        retry_once_on_dead_socket(|fresh| self.backfill_on(account, mailbox, fresh)).await
+    }
+
+    async fn backfill_on(&self, account: &SyncAccount, mailbox: &str, fresh: bool) -> Result<usize, String> {
         let config = &account.imap_config;
-        let guard = self.pool.get_background(config).await?;
+        let guard = if fresh {
+            self.pool.get_background_fresh(config).await?
+        } else {
+            self.pool.get_background(config).await?
+        };
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
 
         let outcome = self.backfill_with_session(&mut session, account, mailbox).await;
@@ -1665,6 +1685,113 @@ mod tests {
             !engine.is_backfilling("acc1").await,
             "a failed backfill that keeps reporting in-flight strands the mailbox"
         );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // ── Dead pooled socket ──────────────────────────────────────────────
+    //
+    // A pooled session the peer closed while it sat idle answers its first
+    // command with `Broken pipe`, and the tick used to hand that to the user
+    // as the server refusing — fifteen times in one morning's daemon log. The
+    // app's reads already ask again on a new connection (`ImapPool::run_read`);
+    // the sync, which carries the traffic, must too.
+
+    /// How many SELECTs one cold sync issues — measured, not hardcoded, so the
+    /// fault below lands on the *pooled* session's first command whatever the
+    /// sync does on the way there.
+    async fn selects_per_cold_sync() -> usize {
+        let dir = scratch_dir("select_count_probe");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
+        let result = engine_for(&dir).sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "probe sync failed: {:?}", result.error);
+        fs::remove_dir_all(&dir).unwrap();
+        server.count_commands("SELECT")
+    }
+
+    #[tokio::test]
+    async fn a_sync_whose_pooled_socket_died_retries_once_on_a_new_connection() {
+        let dir = scratch_dir("dead_socket_retry");
+        let cold = selects_per_cold_sync().await;
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 5))
+                // The first command the second sync sends on the pooled session.
+                .fault(Trigger::nth("SELECT", cold + 1), Action::DropConnection),
+        );
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+
+        let first = engine.sync_account(&account, "INBOX").await;
+        assert!(first.success, "precondition: a healthy session in the pool: {:?}", first.error);
+        assert_eq!(server.connection_count(), 1);
+
+        let second = engine.sync_account(&account, "INBOX").await;
+
+        assert!(
+            second.success,
+            "the retry must finish the sync the dead socket failed: {:?}",
+            second.error
+        );
+        assert_eq!(
+            server.connection_count(),
+            2,
+            "the retry must open a NEW connection, not reuse the dead one"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Negative control: with every SELECT dying the retry cannot succeed, so
+    /// the green above is the retry working, not the fault failing to fire.
+    /// And it happens once — two connections, not a loop.
+    #[tokio::test]
+    async fn a_sync_that_keeps_losing_the_socket_fails_after_exactly_one_retry() {
+        let dir = scratch_dir("dead_socket_control");
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 5))
+                .fault(Trigger::on("SELECT"), Action::DropConnection),
+        );
+        let engine = engine_for(&dir);
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+
+        assert!(!result.success);
+        let err = result.error.unwrap_or_default();
+        assert!(
+            imap::pool::is_connection_lost(&err),
+            "the error that drives the retry must be recognisable as one: {err}"
+        );
+        assert_eq!(server.connection_count(), 2, "one attempt, one retry, no loop");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// THE regression behind the report. A socket the peer closed cleanly
+    /// (FIN, not RST) answers SELECT with EOF, and async-imap parses EOF as an
+    /// EMPTY mailbox — EXISTS 0, no error. The reconcile then agreed with it
+    /// (0 UIDs against EXISTS 0) and pruned the cache: 1399 INBOX headers in
+    /// one tick on 2026-09-03. The sync may fail; it must not delete mail.
+    #[tokio::test]
+    async fn a_dead_socket_never_prunes_the_cache() {
+        let dir = scratch_dir("dead_socket_prune");
+        let healthy = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
+        let engine = engine_for(&dir);
+        let warm = engine.sync_account(&account_for(&healthy), "INBOX").await;
+        assert!(warm.success, "precondition: a warm cache to lose: {:?}", warm.error);
+        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 5);
+        drop(healthy);
+
+        let dead = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 5))
+                .fault(Trigger::on("SELECT"), Action::DropConnection),
+        );
+        let result = engine.sync_account(&account_for(&dead), "INBOX").await;
+
+        assert!(!result.success, "EOF on SELECT is not an empty mailbox");
+        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 5, "a dead socket must not prune the cache");
 
         fs::remove_dir_all(&dir).unwrap();
     }

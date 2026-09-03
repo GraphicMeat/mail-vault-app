@@ -690,10 +690,28 @@ fn detect_special_use(attrs: &[String], path: &str) -> Option<String> {
 
 /// Select a mailbox and return its status
 pub async fn select_mailbox(session: &mut ImapSession, mailbox: &str) -> Result<Mailbox, String> {
-    session
+    let mbox = session
         .select(mailbox)
         .await
-        .map_err(|e| format!("SELECT {} failed: {}", mailbox, e))
+        .map_err(|e| format!("SELECT {} failed: {}", mailbox, e))?;
+    selected(mailbox, mbox)
+}
+
+/// A SELECT reply that carried nothing is a dead socket, not an empty folder.
+///
+/// async-imap's `parse_mailbox` reads untagged lines until the tagged reply
+/// and returns whatever it has when the stream ends first — so a socket the
+/// peer closed while it sat in the pool parses as `Mailbox::default()`:
+/// EXISTS 0, no UIDVALIDITY, no error. Every guard downstream then agrees
+/// with it (0 UIDs against EXISTS 0) and the reconcile prunes the cache:
+/// 1399 INBOX headers in one sync on 2026-09-03. A real SELECT always
+/// carries FLAGS and UIDVALIDITY (RFC 3501 §6.3.1); their absence is the
+/// socket. Worded as `connection lost` so the pool's retry recognises it.
+fn selected(mailbox: &str, mbox: Mailbox) -> Result<Mailbox, String> {
+    if mbox.uid_validity.is_none() && mbox.flags.is_empty() {
+        return Err(format!("SELECT {} failed: connection lost", mailbox));
+    }
+    Ok(mbox)
 }
 
 /// Fetch email headers by page (newest first)
@@ -818,6 +836,7 @@ pub async fn check_mailbox_status(
         // Use CONDSTORE SELECT to get HIGHESTMODSEQ
         let mbox = session.select_condstore(mailbox).await
             .map_err(|e| format!("SELECT CONDSTORE {} failed: {}", mailbox, e))?;
+        let mbox = selected(mailbox, mbox)?;
         Ok((mbox.exists, mbox.uid_validity, mbox.uid_next, mbox.highest_modseq))
     } else {
         let mbox = select_mailbox(session, mailbox).await?;
@@ -1600,7 +1619,9 @@ async fn search_message_id_in(
     term: &str,
 ) -> Result<Option<Vec<u32>>, String> {
     match session.select(mailbox).await {
-        Ok(_) => {}
+        Ok(mbox) => {
+            selected(mailbox, mbox)?;
+        }
         Err(async_imap::error::Error::No(msg)) => {
             warn!("[IMAP] Message-ID probe: SELECT {} refused: {}", mailbox, msg);
             return Ok(None);

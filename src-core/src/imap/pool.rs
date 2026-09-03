@@ -58,10 +58,11 @@ fn conn_key(config: &ImapConfig) -> String {
 /// on first use and nothing else, so it is the one failure worth trying again;
 /// a tagged `NO`/`BAD` is the server's answer and repeating it changes nothing.
 pub fn is_connection_lost(err: &str) -> bool {
-    const NEEDLES: [&str; 6] = [
+    const NEEDLES: [&str; 7] = [
         "connection lost", // async_imap::error::Error::ConnectionLost
         "connection reset",
         "connection aborted",
+        "connection closed", // the TLS layer: "closed via error" / "closed gracefully"
         "broken pipe",
         "unexpected end of file",
         "not connected",
@@ -145,6 +146,13 @@ impl ImapPool {
     /// At most MAX_POOL_SIZE concurrent priority sessions per account — excess callers queue.
     pub async fn get_priority(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
         self.checkout(config, true, false).await
+    }
+
+    /// A brand-new background connection, never a pooled one: the second
+    /// attempt of `retry_once_on_dead_socket` for callers that drive the
+    /// session themselves rather than through `run_read`. See `checkout`.
+    pub async fn get_background_fresh(&self, config: &ImapConfig) -> Result<PooledSessionGuard, String> {
+        self.checkout(config, false, true).await
     }
 
     /// Check out a session, optionally skipping the pool entirely.
@@ -242,13 +250,7 @@ impl ImapPool {
         F: Fn(ImapSession) -> Fut,
         Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
     {
-        match self.attempt(config, priority, false, &f).await {
-            Err(e) if is_connection_lost(&e) => {
-                warn!("[IMAP pool] {} — retrying once on a new connection", e);
-                self.attempt(config, priority, true, &f).await
-            }
-            other => other,
-        }
+        retry_once_on_dead_socket(|fresh| self.attempt(config, priority, fresh, &f)).await
     }
 
     /// One `run_read` attempt: check out, run, pool the session on success.
@@ -469,15 +471,34 @@ impl Default for ImapPool {
 /// A rejected credential is the server's answer: repeating it only burns
 /// login attempts, so auth failures are never retryable.
 pub fn is_retryable_connect_error(err: &str) -> bool {
-    const NEEDLES: [&str; 5] = [
+    const NEEDLES: [&str; 4] = [
         "tls handshake",       // both the direct-TLS and the STARTTLS wrap
         "tcp connect",
         "dns resolve failed",
-        "connection closed",   // "closed via error" / "closed gracefully"
         "user canceled",       // Security.framework's word for a torn-down handshake
     ];
     let lowered = err.to_ascii_lowercase();
     is_connection_lost(err) || NEEDLES.iter().any(|n| lowered.contains(n))
+}
+
+/// Run `attempt(false)` on a pooled session and, if it died with the socket,
+/// `attempt(true)` once more — the flag tells the caller to check out a
+/// brand-new connection (`get_background_fresh`) rather than another pooled
+/// one killed by the same event. Anything else returns its first error.
+///
+/// For read-only work: the second attempt re-sends every command.
+pub async fn retry_once_on_dead_socket<T, F, Fut>(attempt: F) -> Result<T, String>
+where
+    F: Fn(bool) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    match attempt(false).await {
+        Err(e) if is_connection_lost(&e) => {
+            warn!("[IMAP pool] {} — retrying once on a new connection", e);
+            attempt(true).await
+        }
+        other => other,
+    }
 }
 
 /// Run `attempt`, and on a transient transport failure run it once more after
@@ -529,6 +550,9 @@ mod connect_retry_tests {
     #[test]
     fn a_dead_socket_is_retryable() {
         assert!(is_retryable_connect_error("SELECT INBOX failed: io: Broken pipe (os error 32)"));
+        assert!(is_connection_lost("SELECT INBOX failed: io: Broken pipe (os error 32)"));
+        assert!(is_connection_lost("SELECT CONDSTORE INBOX failed: io: connection closed gracefully"));
+        assert!(is_connection_lost("SELECT INBOX failed: connection lost"));
     }
 
     #[test]

@@ -96,6 +96,41 @@ async fn a_dropped_list_is_an_error_not_an_empty_folder_list() {
     assert!(!err.is_empty());
 }
 
+/// async-imap's `parse_mailbox` returns whatever it collected when the stream
+/// ends before the tagged reply — on a dead socket that is `Mailbox::default()`,
+/// EXISTS 0 and no error, which the daemon's reconcile once pruned 1399 cached
+/// headers against. The pool's retry keys on the wording.
+#[async_std::test]
+async fn a_select_on_a_dropped_socket_is_an_error_not_an_empty_mailbox() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("SELECT"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = select_mailbox(&mut sess, "INBOX")
+        .await
+        .expect_err("a SELECT on a dead socket must not report an empty mailbox");
+    assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
+}
+
+/// Same hole on the CONDSTORE flavour the daemon's delta sync actually uses.
+#[async_std::test]
+async fn a_condstore_select_on_a_dropped_socket_is_an_error_too() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("SELECT"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = check_mailbox_status(&mut sess, "INBOX", true)
+        .await
+        .expect_err("EXISTS 0 from a dead socket is not a mailbox status");
+    assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
+}
+
 #[async_std::test]
 async fn a_dropped_connection_surfaces_as_an_error_not_a_hang() {
     let server = MockImap::start(
