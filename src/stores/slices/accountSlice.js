@@ -136,7 +136,7 @@ export const createAccountSlice = (set, get) => ({
   switchUnifiedFolder: (mailbox) => _switchUnifiedFolder(mailbox),
   loadUnifiedInbox: (preUnifiedSnapshot, mailbox) => _loadUnifiedInbox(preUnifiedSnapshot, mailbox),
   saveEmailLocally: (uid) => _saveEmailLocally(uid),
-  saveEmailsLocally: (uids) => _saveEmailsLocally(uids),
+  saveEmailsLocally: (rows) => _saveEmailsLocally(rows),
 
   cancelArchive: () => {
     const invoke = window.__TAURI__?.core?.invoke;

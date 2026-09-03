@@ -31,7 +31,7 @@ import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers, summarizeTrackers } from '../../utils/trackerDetect';
 import { recordTrackerSummary } from '../../services/trackerVerdicts';
 import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
-import { getSenderName } from '../../utils/emailParser';
+import { getSenderName, threadRowMembers } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
@@ -568,13 +568,19 @@ export function ThreadView({ thread, onComposeReply }) {
     return () => clearTimeout(timer);
   }, [threadId]);
 
-  const allArchived = thread.emails.every(e => archivedEmailIds.has(e.uid));
+  // Archive All acts on the part of the thread that lives in the folder on
+  // screen — the same rule as the row's archive button (see threadRowMembers).
+  // The Sent copies an INBOX list merges in are context, not members.
+  const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
+  const allArchived = members.every(e => archivedEmailIds.has(e.uid));
 
   const handleArchiveThread = async () => {
     setSaving(true);
     try {
-      const uids = thread.emails.filter(em => !archivedEmailIds.has(em.uid)).map(em => em.uid);
-      if (uids.length > 0) await saveEmailsLocally(uids);
+      // Rows, not uids: each one names its own account and folder, which is
+      // what a thread opened from All Inboxes needs to archive at all.
+      const rows = members.filter(em => !archivedEmailIds.has(em.uid));
+      if (rows.length > 0) await saveEmailsLocally(rows);
     } finally {
       setSaving(false);
     }

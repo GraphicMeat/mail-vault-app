@@ -68,8 +68,8 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const uids = members.filter(em => !em.isArchived).map(em => em.uid);
-      if (uids.length > 0) await saveEmailsLocally(uids);
+      const rows = members.filter(em => !em.isArchived);
+      if (rows.length > 0) await saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);
     }
@@ -201,8 +201,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      const uids = members.filter(em => !em.isArchived).map(em => em.uid);
-      if (uids.length > 0) await saveEmailsLocally(uids);
+      const rows = members.filter(em => !em.isArchived);
+      if (rows.length > 0) await saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);
     }

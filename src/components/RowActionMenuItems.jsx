@@ -109,7 +109,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         <MenuItem
           onClick={async (e) => {
             e.stopPropagation();
-            await saveEmailsLocally(emails.filter(em => !em.isArchived).map(em => em.uid));
+            await saveEmailsLocally(emails.filter(em => !em.isArchived));
             onClose();
           }}
         >

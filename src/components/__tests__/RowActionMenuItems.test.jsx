@@ -246,7 +246,7 @@ describe('RowActionMenuItems', () => {
 
       fireEvent.click(screen.getByText('Archive'));
       await Promise.resolve();
-      expect(actions.saveEmailsLocally).toHaveBeenCalledWith([1]);
+      expect(actions.saveEmailsLocally).toHaveBeenCalledWith([expect.objectContaining({ uid: 1 })]);
     });
 
     it('Unarchive only unarchives the archived messages in the set', async () => {

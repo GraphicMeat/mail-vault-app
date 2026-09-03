@@ -371,7 +371,7 @@ function App() {
     // once the list spans mailboxes.
     archive: () => {
       const email = useMailStore.getState().selectedEmail;
-      if (email) useMailStore.getState().saveEmailsLocally([email.uid]);
+      if (email) useMailStore.getState().saveEmailsLocally([email]);
     },
     delete: () => {
       const { selectedEmail, selectedEmailId } = useMailStore.getState();

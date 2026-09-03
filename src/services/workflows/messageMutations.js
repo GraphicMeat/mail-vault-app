@@ -112,21 +112,75 @@ export async function saveEmailLocally(uid) {
 
 
 // ── saveEmailsLocally workflow ──
+//
+// Takes ROWS, not uids. A uid names a message only inside one mailbox of one
+// account, and the rows a thread or a selection hands over do not all live in
+// the view's: the all-inboxes list mixes every account under the placeholder
+// mailbox 'UNIFIED', and a single folder's list merges Sent copies in. Reading
+// the location off the view sent every one of those to `archive_emails` under
+// the last-activated account and a mailbox no server has — "Archived with 3
+// error(s)" on a thread opened from All Inboxes. Each row resolves its own
+// location and the run is one archive per (account, mailbox). A row whose
+// location cannot be resolved is skipped: a guessed folder archives a different
+// message under this uid.
 
-export async function saveEmailsLocally(uids) {
+export async function saveEmailsLocally(rows) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const { activeAccountId, accounts, activeMailbox } = get();
-  let account = accounts.find(a => a.id === activeAccountId);
-  if (!account) return;
+  const state = get();
+  const groups = new Map();
+  for (const row of rows || []) {
+    const loc = row?.uid != null ? resolveEmailLocation(row, state) : null;
+    if (!loc) continue;
+    const key = `${loc.accountId}|${loc.mailbox}`;
+    if (!groups.has(key)) groups.set(key, { ...loc, uids: [] });
+    groups.get(key).uids.push(row.uid);
+  }
+  if (groups.size === 0) return;
+
+  const tally = { total: [...groups.values()].reduce((n, g) => n + g.uids.length, 0), completed: 0, errors: 0 };
+  useMailStore.setState({ bulkSaveProgress: { ...tally, active: true } });
+  for (const group of groups.values()) {
+    // Cancel clears the progress object (accountSlice.cancelBulkSave).
+    if (!get().bulkSaveProgress) return;
+    await _archiveGroup(useMailStore, group, tally);
+  }
+  if (!get().bulkSaveProgress) return;
+  useMailStore.setState({ bulkSaveProgress: { ...tally, active: false } });
+  if (!window.__TAURI__?.core?.invoke) {
+    setTimeout(() => useMailStore.setState({ bulkSaveProgress: null }), 3000);
+  }
+}
+
+// One (account, mailbox) of a saveEmailsLocally run. `tally` is the whole run's
+// count: progress is painted as run totals, so a thread spanning two folders
+// reads as one archive, not two that each restart at zero.
+async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) {
+  const get = () => useMailStore.getState();
+  let account = get().accounts.find(a => a.id === accountId);
+  if (!account) {
+    tally.errors += uids.length;
+    return;
+  }
   account = await ensureFreshToken(account);
 
-  const invoke = window.__TAURI__?.core?.invoke;
+  const base = { completed: tally.completed, errors: tally.errors };
+  const paint = (completed, errors) => {
+    tally.completed = base.completed + completed;
+    tally.errors = base.errors + errors;
+    useMailStore.setState({ bulkSaveProgress: { ...tally, active: true } });
+  };
+  // `archivedEmailIds` is keyed by bare uid, so a group that is not the
+  // folder on screen must not paint into it: INBOX's own message under a Sent
+  // copy's uid would read as archived. A list spanning mailboxes holds the
+  // union and takes every group.
+  const s0 = get();
+  const paintsIds = spansMailboxes(s0) || (accountId === s0.activeAccountId && mailbox === s0.activeMailbox);
 
+  const invoke = window.__TAURI__?.core?.invoke;
   if (invoke) {
-    console.log('[saveEmailsLocally] Starting Tauri archive for', uids.length, 'UIDs');
-    useMailStore.setState({ bulkSaveProgress: { total: uids.length, completed: 0, errors: 0, active: true } });
+    console.log('[saveEmailsLocally] Starting Tauri archive for', uids.length, 'UIDs in', accountId, mailbox);
 
     let unlisten;
     try {
@@ -136,9 +190,9 @@ export async function saveEmailsLocally(uids) {
         const current = get().bulkSaveProgress;
         if (current && !current.active) return;
 
-        useMailStore.setState({ bulkSaveProgress: { total: p.total, completed: p.completed, errors: p.errors, active: p.active } });
+        paint(p.completed, p.errors);
 
-        if (p.lastUid) {
+        if (p.lastUid && paintsIds) {
           const { archivedEmailIds } = get();
           if (!archivedEmailIds.has(p.lastUid)) {
             const updated = new Set(archivedEmailIds);
@@ -154,28 +208,20 @@ export async function saveEmailsLocally(uids) {
 
     try {
       const result = await invoke('archive_emails', {
-        accountId: activeAccountId,
+        accountId,
         accountJson: JSON.stringify(account),
-        mailbox: activeMailbox,
+        mailbox,
         uids,
       });
 
       if (unlisten) { unlisten(); unlisten = null; }
 
       console.log('[saveEmailsLocally] invoke result:', JSON.stringify(result));
-      const finalProgress = { total: result?.total ?? uids.length, completed: result?.completed ?? uids.length, errors: result?.errors ?? 0, active: false };
-      console.log('[saveEmailsLocally] Setting final progress:', JSON.stringify(finalProgress));
-      useMailStore.setState({ bulkSaveProgress: finalProgress });
-
-      const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-      const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-      let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
-      if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-      useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
-      get().updateSortedEmails();
+      paint(result?.completed ?? uids.length, result?.errors ?? 0);
+      await _foldVaultGroup(useMailStore, { accountId, mailbox, account });
     } catch (err) {
       console.error('[saveEmailsLocally] archive_emails failed:', err);
-      useMailStore.setState({ bulkSaveProgress: { total: uids.length, completed: 0, errors: uids.length, active: false } });
+      paint(0, uids.length);
     } finally {
       if (unlisten) unlisten();
     }
@@ -183,8 +229,6 @@ export async function saveEmailsLocally(uids) {
   }
 
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
-  useMailStore.setState({ bulkSaveProgress: { total: uids.length, completed: 0, errors: 0, active: true } });
-
   const emails = [];
   let completed = 0;
   let errors = 0;
@@ -192,33 +236,62 @@ export async function saveEmailsLocally(uids) {
   for (const uid of uids) {
     if (!get().bulkSaveProgress) break;
 
-    const cacheKey = `${activeAccountId}-${activeMailbox}-${uid}`;
     try {
-      let email;
-      email = await api.fetchEmail(account, uid, activeMailbox);
-      get().addToCache(cacheKey, email, cacheLimitMB);
+      const email = await api.fetchEmail(account, uid, mailbox);
+      get().addToCache(`${accountId}-${mailbox}-${uid}`, email, cacheLimitMB);
       emails.push(email);
       completed++;
     } catch (error) {
       console.error(`Failed to fetch email ${uid}:`, error);
       errors++;
     }
-    useMailStore.setState({ bulkSaveProgress: { total: uids.length, completed, errors, active: true } });
+    paint(completed, errors);
   }
 
   if (!get().bulkSaveProgress) return;
 
   if (emails.length > 0) {
-    await db.saveEmails(emails, activeAccountId, activeMailbox);
-    const savedEmailIds = await db.getSavedEmailIds(activeAccountId, activeMailbox);
-    const archivedEmailIds = await db.getArchivedEmailIds(activeAccountId, activeMailbox);
-    const localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-    useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
+    await db.saveEmails(emails, accountId, mailbox);
+    await _foldVaultGroup(useMailStore, { accountId, mailbox, account });
+  }
+}
+
+// Re-read the vault sets for the (account, mailbox) a write just landed in and
+// fold them into the view. A single folder's list holds one mailbox's sets, so
+// only its own pair is refreshed — another folder's ids would collide by bare
+// uid. A list spanning mailboxes holds the union (see loadUnifiedInbox), so the
+// group's ids are added and its slice of `localEmails` replaced, stamped the
+// way that loader stamps them.
+async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
+  const get = () => useMailStore.getState();
+  const state = get();
+  const spans = spansMailboxes(state);
+  if (!spans && (accountId !== state.activeAccountId || mailbox !== state.activeMailbox)) return;
+
+  const [saved, archived] = await Promise.all([
+    db.getSavedEmailIds(accountId, mailbox),
+    db.getArchivedEmailIds(accountId, mailbox),
+  ]);
+  let locals = await db.readLocalEmailIndex(accountId, mailbox);
+  if (!locals) locals = await db.getLocalEmails(accountId, mailbox);
+
+  if (!spans) {
+    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds: archived, localEmails: locals });
     get().updateSortedEmails();
+    return;
   }
 
-  useMailStore.setState({ bulkSaveProgress: { total: uids.length, completed, errors, active: false } });
-  setTimeout(() => useMailStore.setState({ bulkSaveProgress: null }), 3000);
+  const s = get();
+  const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
+  useMailStore.setState({
+    savedEmailIds: new Set([...s.savedEmailIds, ...saved]),
+    archivedEmailIds: new Set([...s.archivedEmailIds, ...archived]),
+    localEmails: [
+      ...(s.localEmails || []).filter(e => !own(e)),
+      ...locals.map(e => ({ ...e, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
+    ],
+  });
+  get().updateSortedEmails();
 }
 
 
@@ -228,13 +301,20 @@ export async function saveSelectedLocally() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const { selectedEmailIds } = get();
+  const state = get();
+  const { selectedEmailIds } = state;
   if (selectedEmailIds.size === 0) return;
   const keys = Array.from(selectedEmailIds);
   useMailStore.setState({ selectedEmailIds: new Set() });
-  // A bare uid parses to itself; a full key to its uid.
-  const uids = keys.map(k => _parseSelKey(k).uid);
-  await get().saveEmailsLocally(uids);
+  // Each key names its own account and folder (a full key), or the view's (a
+  // bare uid) — the same reading every other selection workflow does.
+  const emailMap = new Map([...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]
+    .map(e => [selectionKey(e, state), e]));
+  const rows = keys.map(key => {
+    const { uid, accountId, mailbox } = _resolveKeyContext(key, state, emailMap);
+    return { uid, _accountId: accountId, _mailbox: mailbox };
+  });
+  await get().saveEmailsLocally(rows);
 }
 
 
