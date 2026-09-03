@@ -1639,6 +1639,16 @@ fn open_file(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
+        // LaunchServices takes any folder ending in `.app` for a bundle — and
+        // the app data dir is named `com.mailvault.app`. `open` then tries to
+        // LAUNCH it, fails with "executable is missing", and shows nothing.
+        // Reveal such a folder in its parent instead; everything else opens.
+        // ponytail: only `.app` is special-cased; add `.bundle`/`.framework`
+        // if a data folder ever gets one of those names.
+        let p = std::path::Path::new(&path);
+        if p.is_dir() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("app")) {
+            return show_in_folder(path);
+        }
         Command::new("open")
             .arg(&path)
             .spawn()
