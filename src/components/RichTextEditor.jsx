@@ -152,12 +152,18 @@ const readAsDataUrl = (file) => new Promise((resolve, reject) => {
 });
 
 // ponytail: full-size data URIs in the document; resize/compress if large photos make typing lag.
+/** Place already-encoded images (`{ src, name }`) at `pos`, or at the caret when `pos` is null. */
+export function insertImages(editor, images, pos) {
+  if (!images.length || !editor) return;
+  // `alt` is the filename on purpose: the send-time extractor uses it as the MIME part filename.
+  const nodes = images.map(({ src, name }) => ({ type: 'image', attrs: { src, alt: name, title: name } }));
+  editor.chain().focus().insertContentAt(pos ?? editor.state.selection.to, nodes).run();
+}
+
 async function insertImageFiles(editor, files, pos) {
   if (!files.length || !editor) return;
   const srcs = await Promise.all(files.map(readAsDataUrl));   // keep drop order
-  // `alt` is the filename on purpose: the send-time extractor uses it as the MIME part filename.
-  const nodes = srcs.map((src, i) => ({ type: 'image', attrs: { src, alt: files[i].name, title: files[i].name } }));
-  editor.chain().focus().insertContentAt(pos, nodes).run();
+  insertImages(editor, srcs.map((src, i) => ({ src, name: files[i].name })), pos);
 }
 
 export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {

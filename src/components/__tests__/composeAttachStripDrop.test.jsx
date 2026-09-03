@@ -36,6 +36,7 @@ vi.mock('framer-motion', () => ({
 // TipTap never sees this drop; keep only the pure helpers ComposeModal imports.
 vi.mock('../RichTextEditor', () => ({
   RichTextEditor: ({ placeholder }) => React.createElement('div', { 'data-testid': 'editor-stub' }, placeholder),
+  insertImages: vi.fn(),
   textToHtml: (s) => s || '',
   htmlToText: (h) => (h || '').replace(/<[^>]*>/g, ''),
   inlineComposeSpacing: (h) => h,

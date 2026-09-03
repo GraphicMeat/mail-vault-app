@@ -10,7 +10,7 @@ import { X, Send, Paperclip, Loader, Minimize2, FileText, Trash2, ChevronDown, B
 import * as api from '../services/api';
 import { ensureFreshToken } from '../services/authUtils';
 import * as db from '../services/db';
-import { RichTextEditor, textToHtml, htmlToText, inlineComposeSpacing } from './RichTextEditor';
+import { RichTextEditor, insertImages, textToHtml, htmlToText, inlineComposeSpacing } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
 import { extractInlineImages } from '../utils/inlineImages';
@@ -18,6 +18,9 @@ import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRec
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { t, useT  } from '../i18n/index.js';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
+import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -118,6 +121,10 @@ function AttachmentPreview({ attachment, onRemove }) {
   );
 }
 
+// The HTML5 drag handlers below are the browser-preview path. In the app,
+// wry answers AppKit before WebKit sees a file drag, and the drop arrives as
+// `tauri://drag-drop` with pasteboard paths — see src/utils/nativeDrop.js and
+// the effect next to removeAttachment.
 // Only a FILE drag arms the drop zones — dragging selected text inside the
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
@@ -392,6 +399,44 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const removeAttachment = (index) => {
     setAttachments(prev => prev.filter((_, i) => i !== index));
   };
+
+  // Native file drops. In the app a file drag never reaches WebKit (see
+  // src/utils/nativeDrop.js): Tauri reports enter/leave for the zone visuals
+  // and the drop as pasteboard paths plus the pointer position. The element
+  // under that point picks the zone, as the HTML5 handlers do by target.
+  useEffect(() => {
+    if (!window.__TAURI__) return undefined;
+    let disposed = false;
+    const stops = [];
+    const onDrop = async ({ paths = [], position } = {}) => {
+      dragDepth.current = 0;
+      setDragging(false);
+      const point = toClientPoint(position, {
+        dpr: window.devicePixelRatio, width: window.innerWidth, height: window.innerHeight,
+      });
+      const zone = dropZoneAt(point, (x, y) => document.elementFromPoint(x, y));
+      if (!zone || !paths.length) return;
+      try {
+        const records = (await invoke('read_dropped_files', { paths })).map(toAttachment);
+        const inline = zone === 'editor' ? records.filter(r => r.contentType.startsWith('image/')) : [];
+        const attach = records.filter(r => !inline.includes(r));
+        if (inline.length) {
+          const editor = editorRef.current;
+          const pos = editor?.view?.posAtCoords({ left: point.x, top: point.y })?.pos ?? null;
+          insertImages(editor, inline.map(r => ({ src: `data:${r.contentType};base64,${r.content}`, name: r.filename })), pos);
+        }
+        if (attach.length) setAttachments(prev => [...prev, ...attach]);
+      } catch (e) {
+        setError(String(e?.message ?? e));
+      }
+    };
+    Promise.all([
+      listen('tauri://drag-enter', () => setDragging(true)),
+      listen('tauri://drag-leave', () => setDragging(false)),
+      listen('tauri://drag-drop', (ev) => onDrop(ev.payload)),
+    ]).then((fns) => { if (disposed) fns.forEach(f => f()); else stops.push(...fns); }).catch(() => {});
+    return () => { disposed = true; stops.forEach(f => f()); };
+  }, []);
   
   // Close templates dropdown on click outside or Escape
   useEffect(() => {

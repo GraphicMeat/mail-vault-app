@@ -77,6 +77,7 @@ use walkdir::WalkDir;
 mod archive;
 mod backup;
 mod commands;
+mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
 mod export_fetch;
 mod external_location;
@@ -4986,6 +4987,7 @@ fn main() {
         .manage(migration::MigrationCancelToken::default())
         .manage(migration::MigrationPauseToken::default())
         .manage(migration::MigrationNotify::default())
+        .manage(dropped_files::DroppedPaths::default())
         .manage(restore::RestoreCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
@@ -5000,6 +5002,7 @@ fn main() {
     let app = builder
         .invoke_handler(tauri::generate_handler![
             apply_menu_labels,
+            dropped_files::read_dropped_files,
             take_pending_mailto,
             e2e_queue_mailto,
             mailto_default_status,
@@ -5438,6 +5441,11 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Paths from the latest native drop are the only ones the
+            // webview may read back through read_dropped_files.
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                window.state::<dropped_files::DroppedPaths>().remember(paths);
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 // Only hide-to-tray for the main window; popup windows close normally
                 if window.label() == "main" {

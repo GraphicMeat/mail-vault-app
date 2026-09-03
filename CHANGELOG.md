@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A screenshot dropped on the compose window now attaches every time, not every second time.** Dragging the floating thumbnail macOS shows after a screenshot onto "Drop here to attach as a file" took the first screenshot, lost the second, took the third, lost the fourth, with nothing on screen to say a file had gone. The thumbnail is not a file yet when the drag starts — macOS hands the app a promise of one — and the web engine's handling of that promise produced no drop at all every second time, while the system reported each of those drops as completed. MailVault no longer routes file drops through the web engine: the app takes the drop itself, reads the dropped files, and places them as before — an image dropped on the message goes inline where the pointer was, anything dropped on the strip or elsewhere in the window attaches — and a file that cannot be read says why under the toolbar instead of vanishing. One thing changes with it: text dragged from another application into the message, and text rearranged by dragging inside it, is no longer taken on macOS; pasting is unaffected.
+
 ## [2.11.1] - 2026-09-03
 
 ### Added
