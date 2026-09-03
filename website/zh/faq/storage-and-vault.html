@@ -58,7 +58,7 @@
       "name": "我的邮件存在哪里？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "你的保险库是一个存放标准 .eml 文件的文件夹，按 Maildir 格式组织 — 就在你的 Mac 或 Linux 机器上，一封邮件一个文件，不需要数据库。在 macOS 上 MailVault 运行在沙盒中，所以文件夹是 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 包为 ~/.local/share/com.mailvault.app/，Snap 为 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在 Finder 中是隐藏的，Spotlight 也不会索引它，所以在硬盘上搜索 com.mailvault.app 找不到任何东西：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 打开 Finder 的“前往”菜单，或者在个人文件夹中按 Command + J 并勾选显示“资源库”文件夹。MailVault 也会在设置、备份与恢复、你的邮件存放在哪里中显示正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 — 你永远不会被 MailVault 锁定。"
+        "text": "你的保险库是一个存放标准 .eml 文件的文件夹，按 Maildir 格式组织 — 就在你的 Mac 或 Linux 机器上，一封邮件一个文件，不需要数据库。在 macOS 上 MailVault 运行在沙盒中，所以文件夹是 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 包为 ~/.local/share/com.mailvault.app/，Snap 为 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在 Finder 中是隐藏的，Spotlight 也不会索引它，所以在硬盘上搜索 com.mailvault.app 找不到任何东西：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 打开 Finder 的“前往”菜单，或者在个人文件夹中按 Command + J 并勾选显示“资源库”文件夹。MailVault 也会在设置、备份与恢复、备份设置、你的邮件存放在哪里中显示正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 — 你永远不会被 MailVault 锁定。"
       }
     },
     {
@@ -257,7 +257,7 @@
                 <li><strong>终端。</strong>一条命令即可在 Finder 中打开保险库：</li>
               </ol>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>open ~/Library/Containers/com.mailvault.app/Data/Library/Application\ Support/com.mailvault.app</code></pre>
-              <p class="mb-4">MailVault 也会显示它实际使用的文件夹：<strong>设置 &rarr; 备份与恢复 &rarr; 你的邮件存放在哪里</strong>。如果你已把保险库移到别的磁盘，要打开的是那个路径 — 上面的只是默认值。</p>
+              <p class="mb-4">MailVault 也会显示它实际使用的文件夹：<strong>设置 &rarr; 备份与恢复 &rarr; 备份设置 &rarr; 你的邮件存放在哪里</strong>。如果你已把保险库移到别的磁盘，要打开的是那个路径 — 上面的只是默认值。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">目录结构：</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>com.mailvault.app/

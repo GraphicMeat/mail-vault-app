@@ -58,7 +58,7 @@
       "name": "メールはどこに保存されますか？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "保管庫は、標準的な .eml ファイルを Maildir 形式で並べたフォルダです — Mac または Linux マシン上に、1 通につき 1 ファイル、データベースは不要です。macOS では MailVault はサンドボックス化されているため、フォルダは ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ です。Linux では .deb パッケージは ~/.local/share/com.mailvault.app/、Snap は ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder では非表示で Spotlight も索引を作らないため、ドライブ内を com.mailvault.app で検索しても見つかりません: Finder で Shift + Command + G を押して ~/Library と入力するか、Option を押しながら Finder の「移動」メニューを開くか、ホームフォルダで Command + J を押して「ライブラリ」フォルダを表示にチェックを入れてください。MailVault は使用中のフォルダを設定、バックアップと復元、メールの保存場所にも表示します。データが自分のコンピュータから出ることはなく、どのクラウドサービスにもアップロードされません。.eml は共通の標準形式なので、メールは Apple Mail、Thunderbird、Outlook など、どのメールクライアントでも開けます — MailVault に縛られることはありません。"
+        "text": "保管庫は、標準的な .eml ファイルを Maildir 形式で並べたフォルダです — Mac または Linux マシン上に、1 通につき 1 ファイル、データベースは不要です。macOS では MailVault はサンドボックス化されているため、フォルダは ~/Library/Application Support ではなく ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ です。Linux では .deb パッケージは ~/.local/share/com.mailvault.app/、Snap は ~/snap/mailvault/current/.local/share/com.mailvault.app/ です。~/Library は Finder では非表示で Spotlight も索引を作らないため、ドライブ内を com.mailvault.app で検索しても見つかりません: Finder で Shift + Command + G を押して ~/Library と入力するか、Option を押しながら Finder の「移動」メニューを開くか、ホームフォルダで Command + J を押して「ライブラリ」フォルダを表示にチェックを入れてください。MailVault は使用中のフォルダを設定、バックアップと復元、バックアップ設定、メールの保存場所にも表示します。データが自分のコンピュータから出ることはなく、どのクラウドサービスにもアップロードされません。.eml は共通の標準形式なので、メールは Apple Mail、Thunderbird、Outlook など、どのメールクライアントでも開けます — MailVault に縛られることはありません。"
       }
     },
     {
@@ -257,7 +257,7 @@
                 <li><strong>ターミナル。</strong> コマンド 1 つで保管庫を Finder で開けます:</li>
               </ol>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-4"><code>open ~/Library/Containers/com.mailvault.app/Data/Library/Application\ Support/com.mailvault.app</code></pre>
-              <p class="mb-4">MailVault は実際に使っているフォルダも表示します: <strong>設定 &rarr; バックアップと復元 &rarr; メールの保存場所</strong>。保管庫を別のドライブへ移動している場合は、そちらのパスを開いてください — 上のパスは初期設定のものです。</p>
+              <p class="mb-4">MailVault は実際に使っているフォルダも表示します: <strong>設定 &rarr; バックアップと復元 &rarr; バックアップ設定 &rarr; メールの保存場所</strong>。保管庫を別のドライブへ移動している場合は、そちらのパスを開いてください — 上のパスは初期設定のものです。</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">ディレクトリ構成:</p>
               <pre class="bg-slate-100 dark:bg-slate-900 rounded-lg p-4 text-sm overflow-x-auto mb-2"><code>com.mailvault.app/
