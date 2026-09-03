@@ -161,6 +161,9 @@ vi.mock('../../stores/settingsStore', () => {
     emailListStyle: 'default',
     emailListGrouping: 'chronological',
     setEmailListGrouping: vi.fn(),
+    threadMode: 'grouped',
+    setThreadMode: vi.fn(),
+    threadSortOrder: 'oldest-first',
     layoutMode: 'three-column',
     accountColors: {},
     // Rows subscribe to this to decide whether the tracker glyph reads
@@ -168,8 +171,11 @@ vi.mock('../../stores/settingsStore', () => {
     trackerBlockingEnabled: true,
     billingProfile: null,
   };
+  const hook = vi.fn((selector) => selector(state));
+  hook.getState = () => state;
+  hook.setState = (update) => Object.assign(state, update);
   return {
-    useSettingsStore: vi.fn((selector) => selector(state)),
+    useSettingsStore: hook,
     getAccountColor: () => '#888',
     getAccountInitial: () => 'T',
     hashColor: () => '#888',
@@ -180,18 +186,30 @@ vi.mock('../../stores/settingsStore', () => {
 
 vi.mock('../../utils/emailParser', async (importOriginal) => ({
   ...(await importOriginal()),
+  // Group by subject, the way the real threader does for replies. The 500
+  // fixture emails all have unique subjects, so this is still one thread per
+  // email for every test that does not deliberately build a conversation.
   buildThreads: (emails) => {
-    // Return a simple Map: each email is its own thread
     const map = new Map();
-    if (emails && emails.length) {
-      emails.forEach((e) => {
-        map.set(e.uid, {
+    for (const e of emails || []) {
+      const key = e.subject;
+      const t = map.get(key);
+      if (t) {
+        t.emails.push(e);
+        t.messageCount = t.emails.length;
+        t.lastEmail = e;
+        t.lastDate = new Date(e.date);
+      } else {
+        map.set(key, {
           threadId: String(e.uid),
+          subject: e.subject,
           messageCount: 1,
           emails: [e],
+          lastEmail: e,
           lastDate: new Date(e.date),
+          unreadCount: 0,
         });
-      });
+      }
     }
     return map;
   },
@@ -753,3 +771,78 @@ describe('vault share line', () => {
   });
 });
 
+
+describe('thread modes', () => {
+  const reply = (uid, subject) => ({
+    uid, subject,
+    from: [{ address: `p${uid}@test.com`, name: `P${uid}` }],
+    to: [{ address: 'me@test.com' }],
+    date: new Date(2024, 0, 1, 0, 0, uid).toISOString(),
+    flags: ['\\Seen'], source: 'server', isArchived: false,
+    _accountId: 'acc1', _mailbox: 'INBOX',
+  });
+  const conversation = [reply(1, 'Re: Plan'), reply(2, 'Re: Plan'), reply(3, 'Re: Plan')];
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  const mount = async (threadMode) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    // Threading in INBOX runs off getChatEmails (INBOX + Sent merged), not
+    // sortedEmails — the default `() => []` mock would hand buildThreads an
+    // empty list and every mode would render flat for the wrong reason.
+    useMailStore.setState({ sortedEmails: conversation, totalEmails: 3, getChatEmails: () => conversation });
+    useSettingsStore.setState({ threadMode });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, getChatEmails: vi.fn(() => []) });
+    useSettingsStore.setState({ threadMode: 'grouped' });
+    useSettingsStore.getState().setThreadMode.mockClear();
+  });
+
+  it('grouped: three replies collapse into one thread row', async () => {
+    const { container } = await mount('grouped');
+    expect(lastVirtualizerConfig.count).toBe(1);
+    expect(container.querySelector('[data-thread-count="3"]')).not.toBeNull();
+  });
+
+  it('flat: every message is its own row and nothing is threaded', async () => {
+    const { container } = await mount('flat');
+    expect(lastVirtualizerConfig.count).toBe(3);
+    expect(container.querySelector('[data-thread-count]')).toBeNull();
+  });
+
+  it('header button cycles grouped → expandable → flat → grouped', async () => {
+    await mount('grouped');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const btn = screen.getByTestId('thread-mode-toggle');
+    expect(btn.getAttribute('data-thread-mode')).toBe('grouped');
+    fireEvent.click(btn);
+    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('expandable');
+    useSettingsStore.setState({ threadMode: 'expandable' });
+    cleanup(); await mount('expandable');
+    fireEvent.click(screen.getByTestId('thread-mode-toggle'));
+    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('flat');
+    cleanup(); await mount('flat');
+    fireEvent.click(screen.getByTestId('thread-mode-toggle'));
+    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('grouped');
+  });
+
+  it('header button is hidden while the list is grouped by sender', async () => {
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    useSettingsStore.setState({ emailListGrouping: 'sender' });
+    try {
+      await mount('grouped');
+      expect(screen.queryByTestId('thread-mode-toggle')).toBeNull();
+    } finally {
+      useSettingsStore.setState({ emailListGrouping: 'chronological' });
+    }
+  });
+});

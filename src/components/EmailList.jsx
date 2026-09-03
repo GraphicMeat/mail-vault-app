@@ -32,6 +32,8 @@ import {
   Archive,
   X,
   Layers,
+  ListTree,
+  List,
   Search,
   MessageSquare,
   Users,
@@ -60,6 +62,15 @@ const VIEW_MODE_LABELS = {
   local: 'sidebar.viewVault',
 };
 
+
+// Header button cycle. Three modes, one button: the icon names the current
+// mode and a click moves to the next.
+const NEXT_THREAD_MODE = { grouped: 'expandable', expandable: 'flat', flat: 'grouped' };
+const THREAD_MODE_LABEL = {
+  grouped: 'settings.appearance.threadModeGrouped',
+  expandable: 'settings.appearance.threadModeExpandable',
+  flat: 'settings.appearance.threadModeFlat',
+};
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
@@ -176,6 +187,8 @@ function EmailListComponent() {
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
+  const threadMode = useSettingsStore(s => s.threadMode);
+  const setThreadMode = useSettingsStore(s => s.setThreadMode);
   const layoutMode = useSettingsStore(s => s.layoutMode);
   const isCompact = emailListStyle === 'compact';
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
@@ -340,7 +353,7 @@ function EmailListComponent() {
     setFocusedRow(null);
     // Clear display row cache when grouping mode changes
     displayRowCache.current = { deferredThreads: null, rows: [], displayEmails: null };
-  }, [emailListGrouping]);
+  }, [emailListGrouping, threadMode]);
 
   // Skeleton transition — show lightweight placeholders during account/mailbox switches
   const [showSkeleton, setShowSkeleton] = useState(false);
@@ -443,7 +456,7 @@ function EmailListComponent() {
 
   // Compute threads in a deferred callback to avoid blocking render
   useEffect(() => {
-    if (!mergedEmails || searchActive) {
+    if (!mergedEmails || searchActive || threadMode === 'flat') {
       setDeferredThreads(null);
       return;
     }
@@ -465,7 +478,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mergedEmails, threadFingerprint, searchActive, viewMode]);
+  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode]);
 
   // Deferred sender grouping computation
   useEffect(() => {
@@ -941,6 +954,18 @@ function EmailListComponent() {
           >
             <Users size={16} />
           </button>
+          {/* Thread mode cycle — meaningless under sender grouping, so hidden there */}
+          {emailListGrouping !== 'sender' && (
+            <button
+              onClick={() => setThreadMode(NEXT_THREAD_MODE[threadMode] || 'grouped')}
+              className="p-1.5 rounded-lg transition-colors text-mail-text-muted hover:text-mail-text"
+              title={`${t('settings.appearance.threadMode')}: ${t(THREAD_MODE_LABEL[threadMode] || THREAD_MODE_LABEL.grouped)}`}
+              data-testid="thread-mode-toggle"
+              data-thread-mode={threadMode}
+            >
+              {threadMode === 'flat' ? <List size={16} /> : threadMode === 'expandable' ? <ListTree size={16} /> : <Layers size={16} />}
+            </button>
+          )}
           <button
             onClick={() => setShowSearch(!showSearch)}
             className={`p-2 rounded-lg transition-colors ${
