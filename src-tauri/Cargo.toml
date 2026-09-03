@@ -1,6 +1,6 @@
 [package]
 name = "mailvault"
-version = "2.11.1"
+version = "2.11.2"
 description = "A reactive email client with local storage"
 authors = ["MailVault"]
 edition = "2021"
