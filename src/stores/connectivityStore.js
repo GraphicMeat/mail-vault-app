@@ -41,6 +41,11 @@ export const useConnectivityStore = create((set, get) => ({
   setOnline(online, { force = false } = {}) {
     if (force) _forced = online === true;
     else if (_forced !== null) return;
+    // The daemon's gate starts optimistic and only probes after one of its own
+    // syncs fails, so a heartbeat `true` from an idle daemon is a default, not
+    // a verdict. The OS path monitor saying "no link" outranks it: nothing
+    // routes off a machine with no link, whatever the gate believes.
+    else if (online && !readNavigator()) return;
     const next = force ? _forced : online === true;
     if (get().online !== next) {
       console.log(`[connectivity] ${next ? 'online' : 'OFFLINE'}`);

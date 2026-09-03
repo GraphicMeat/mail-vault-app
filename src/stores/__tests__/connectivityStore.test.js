@@ -32,6 +32,7 @@ beforeEach(() => {
   __resetConnectivityForTests();
   mockDaemonCall.mockReset();
   delete globalThis.window.__TAURI__;
+  navigator.onLine = true;
 });
 
 describe('connectivity store', () => {
@@ -85,6 +86,26 @@ describe('connectivity store', () => {
 
     mockDaemonCall.mockResolvedValue({ online: true });
     await useConnectivityStore.getState().probe();
+    expect(useConnectivityStore.getState().online).toBe(true);
+  });
+
+  // The daemon's gate starts optimistic and only probes after one of ITS OWN
+  // syncs fails. Idle app, Wi-Fi off: the webview's `offline` shows the
+  // banner, then the next heartbeat — a local socket, so it works offline —
+  // carries the gate's untested `true` and clears it inside 30s. That is the
+  // report "no banner when the internet is off".
+  it('lets no heartbeat override the OS saying there is no link', () => {
+    const win = fakeWindow();
+    wireConnectivityEvents(win);
+    navigator.onLine = false;
+    win.emit('offline');
+    expect(useConnectivityStore.getState().online).toBe(false);
+
+    useConnectivityStore.getState().setOnline(true); // heartbeat
+    expect(useConnectivityStore.getState().online).toBe(false);
+
+    navigator.onLine = true;
+    useConnectivityStore.getState().setOnline(true);
     expect(useConnectivityStore.getState().online).toBe(true);
   });
 
