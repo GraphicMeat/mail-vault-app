@@ -1413,59 +1413,55 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
 
 
 // ── moveEmails workflow ──
+//
+// Takes SELECTION KEYS — what the checkbox writes and every bulk action reads
+// back (selectionKey) — and moves each message out of ITS OWN folder. A bare
+// uid names the view's folder; a full `account:folder:uid` names its own: a
+// merged Sent copy in the INBOX list, a search hit from another folder, any
+// row of a list spanning folders. The single-folder branch used to hand the
+// keys straight to `imap_move_emails`, whose `uids` is a Vec<u32>:
+//
+//   invalid args `uids` for command `imap_move_emails`: invalid type: string
+//   "e7ce0440-…:INBOX:34363", expected u32   (bson73, discussion #1)
+//
+// One move per (account, mailbox). A key that names no account, or no numeric
+// uid, is skipped: a guessed folder moves a different message under that uid.
 
-export async function moveEmails(uids, targetMailbox) {
+export async function moveEmails(keys, targetMailbox) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const selectedEmailId = state.selectedEmailId;
-  const { activeAccountId, activeMailbox } = state;
+  const { activeAccountId, activeMailbox, selectedEmailId } = state;
 
-  if (isUnified) {
-    const groups = new Map();
-    for (const key of uids) {
-      const ctx = _resolveUnifiedContext(key, state);
-      if (!ctx) continue;
-      if (!groups.has(ctx.accountId)) groups.set(ctx.accountId, { account: ctx.account, mailbox: ctx.mailbox, uids: [] });
-      groups.get(ctx.accountId).uids.push(ctx.uid);
-    }
-    for (const [, group] of groups) {
-      const freshAccount = await ensureFreshToken(group.account);
-      await api.moveEmails(freshAccount, group.uids, group.mailbox, targetMailbox);
-    }
-  } else {
-    const { accounts, mailboxes } = state;
-    let account = accounts.find(a => a.id === activeAccountId);
-    if (!account) return;
-    account = await ensureFreshToken(account);
+  const emailMap = new Map([...state.emails, ...state.sentEmails, ...(state.localEmails || [])]
+    .map(e => [selectionKey(e, state), e]));
+  const groups = new Map();
+  for (const key of keys) {
+    const ctx = _resolveKeyContext(key, state, emailMap);
+    if (!ctx.account || typeof ctx.uid !== 'number') continue;
+    const gk = `${ctx.accountId}|${ctx.mailbox}`;
+    if (!groups.has(gk)) groups.set(gk, { account: ctx.account, accountId: ctx.accountId, mailbox: ctx.mailbox, uids: [], rows: [] });
+    groups.get(gk).uids.push(ctx.uid);
+    groups.get(gk).rows.push(ctx.emailObj);
+  }
 
+  for (const group of groups.values()) {
+    const account = await ensureFreshToken(group.account);
     if (isGraphAccount(account)) {
-      const rowOf = (uid) => state.emails.find(e => e.uid === uid) || state.sentEmails.find(e => e.uid === uid);
-      const messageIds = (await Promise.all(uids.map(uid => resolveGraphMessageId(
-        activeAccountId, activeMailbox, uid, { row: rowOf(uid), token: account.oauth2AccessToken },
-      )))).filter(Boolean);
-      if (messageIds.length !== uids.length) {
-        throw new Error(tr('errors.noGraphIdMove'));
-      }
-
-      const targetFolder = mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
-      if (!targetFolder || !targetFolder._graphFolderId) {
-        throw new Error(tr('errors.moveTargetNotFound', { folder: targetMailbox }));
-      }
-
-      await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
+      await _graphMoveGroup(state, account, group, targetMailbox);
     } else {
-      await api.moveEmails(account, uids, activeMailbox, targetMailbox);
+      await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
     }
   }
 
-  const keySet = new Set(uids);
+  const keySet = new Set(keys);
   const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
-  const newTotal = Math.max(0, (get().totalEmails || 0) - uids.length);
+  const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));
   const updates = {
     emails: filteredEmails,
+    sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
     totalEmails: newTotal,
     selectedEmailIds: new Set(),
   };
@@ -1481,12 +1477,38 @@ export async function moveEmails(uids, targetMailbox) {
   // until it returns the list still renders what was moved away.
   get().updateSortedEmails();
 
+  // A hit moved out of the results list stays gone: the results are not
+  // `emails`, and loadEmails() reloads the folder, not the search.
+  const { useSearchStore } = await import('../../stores/searchStore');
+  const search = useSearchStore.getState();
+  if (search.searchActive) {
+    useSearchStore.setState({ searchResults: search.searchResults.filter(e => !keySet.has(selectionKey(e, state))) });
+  }
+
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
-  // Unified keys aren't UIDs — only the per-account path can name removed UIDs.
+  // Only the view's own folder can name removed uids — the sidecar is per
+  // (account, mailbox), and a merged copy's uid belongs to another one.
+  const own = groups.get(`${activeAccountId}|${activeMailbox}`);
   await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal,
-    isUnified ? undefined : { removedUids: uids });
+    isUnified || !own ? undefined : { removedUids: own.uids });
 
   _invalidateRestore(activeAccountId);
 
   get().loadEmails();
+}
+
+// One (account, mailbox) of a move on a Graph account: every uid must resolve
+// to a Graph message id, and the target must be a folder Graph knows.
+async function _graphMoveGroup(state, account, { accountId, mailbox, uids, rows }, targetMailbox) {
+  const messageIds = (await Promise.all(uids.map((uid, i) => resolveGraphMessageId(
+    accountId, mailbox, uid, { row: rows[i], token: account.oauth2AccessToken },
+  )))).filter(Boolean);
+  if (messageIds.length !== uids.length) {
+    throw new Error(tr('errors.noGraphIdMove'));
+  }
+  const targetFolder = state.mailboxes.find(m => m.path === targetMailbox || m.name === targetMailbox);
+  if (!targetFolder || !targetFolder._graphFolderId) {
+    throw new Error(tr('errors.moveTargetNotFound', { folder: targetMailbox }));
+  }
+  await api.graphMoveEmails(account.oauth2AccessToken, messageIds, targetFolder._graphFolderId);
 }

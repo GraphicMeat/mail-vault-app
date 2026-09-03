@@ -1,6 +1,7 @@
-import React, { forwardRef, useEffect } from 'react';
+import React, { forwardRef, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useViewportShift } from '../../hooks/useViewportShift';
 import { Z } from './layers';
 
 /**
@@ -17,6 +18,10 @@ import { Z } from './layers';
  * Outside clicks are caught by a transparent layer under the panel rather
  * than by a document listener, so the click that closes the popover does not
  * also land on the row behind it.
+ *
+ * Whatever the caller's sum says, the panel ends up inside the window: a menu
+ * opened on the bottom row used to run off the bottom edge and the only way
+ * to its last items was to scroll the list and try again.
  *
  * @param {boolean} open
  * @param {Function} onClose
@@ -39,6 +44,16 @@ export const Popover = forwardRef(function Popover({
   children,
   ...rest
 }, ref) {
+  const panelRef = useRef(null);
+  const setPanel = useCallback((node) => {
+    panelRef.current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) ref.current = node;
+  }, [ref]);
+  // Stays armed through the exit animation (the panel is still mounted then),
+  // and re-runs when the caller moves the panel after measuring its anchor.
+  useViewportShift(panelRef, true, [open, style?.top, style?.left, style?.right, style?.bottom]);
+
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e) => {
@@ -59,7 +74,7 @@ export const Popover = forwardRef(function Popover({
             onClick={(e) => { e.stopPropagation(); onClose?.(); }}
           />
           <motion.div
-            ref={ref}
+            ref={setPanel}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}

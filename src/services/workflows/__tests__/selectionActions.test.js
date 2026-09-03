@@ -7,7 +7,7 @@
 // old unread state until something else forced a re-derive.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
-import { _selKey } from '../../../stores/slices/unifiedHelpers';
+import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -125,6 +125,10 @@ function primeStore(emails, selected) {
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
     activeMailbox: 'INBOX',
+    // A case that spans folders (a subtree scope, a folder list) must not
+    // leak into the next one — the store keeps both across cases.
+    mailboxScope: null,
+    mailboxes: [],
     viewMode: 'all',
     emails,
     sentEmails: [],
@@ -570,6 +574,132 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
     expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
+  });
+
+  // The row menu, the bulk bar and the M shortcut hand this workflow SELECTION
+  // KEYS — what the checkbox writes (selectionKey). A single folder's list keys
+  // its own rows by bare uid, but a row it merged in from another folder gets
+  // the full `account:folder:uid`, and the single-folder branch passed the keys
+  // straight through to `imap_move_emails`, whose `uids` is a Vec<u32>:
+  //
+  //   invalid args `uids` for command `imap_move_emails`: invalid type:
+  //   string "e7ce0440-…:INBOX:34363", expected u32
+  //
+  // (bson73, discussion #1, 2026-09-03.) A key names a message; the wire wants
+  // the uid, under the folder the key names.
+  const MAILBOXES = [
+    { name: 'INBOX', path: 'INBOX', children: [] },
+    { name: 'Sent', path: 'Sent', specialUse: '\\Sent', children: [] },
+  ];
+  const onlyNumbersReachedTheWire = () => {
+    for (const [, uids] of mockMoveEmails.mock.calls) {
+      for (const u of uids) expect(typeof u).toBe('number');
+    }
+  };
+
+  it('moves a merged Sent copy under Sent and the folder\'s own message under INBOX, never a key', async () => {
+    primeStore(seedThread(), []);
+    useMailStore.setState({
+      mailboxes: MAILBOXES,
+      sentEmails: [{
+        uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'],
+        from: { address: 'me@mock.test' }, date: '2026-08-03T10:00:00Z',
+        _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+      }],
+    });
+    const state = useMailStore.getState();
+    // What a thread row's menu hands over: the INBOX message by bare uid, the
+    // merged Sent copy by its full key.
+    const keys = [state.emails[0], state.sentEmails[0]].map(e => selectionKey(e, state));
+    expect(keys).toEqual([1, `${ACCOUNT.id}:Sent:1`]);
+
+    await state.moveEmails(keys, 'Archive');
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(2);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'Sent', 'Archive');
+    onlyNumbersReachedTheWire();
+    // Both rows leave the list; INBOX's uid 2 is untouched.
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([2]);
+    expect(useMailStore.getState().sentEmails).toEqual([]);
+  });
+
+  it('moves a row from another folder under that folder, not the one on screen', async () => {
+    // A search hit: the list shows INBOX.Technik, the row came from INBOX.
+    primeStore([{
+      uid: 34363, messageId: 'h@mock', subject: 'Hetzner status', flags: [],
+      from: { address: 'status@hetzner.test' }, date: '2026-09-01T10:00:00Z', _mailbox: 'INBOX',
+    }], []);
+    useMailStore.setState({ activeMailbox: 'INBOX.Technik', mailboxes: MAILBOXES });
+    const state = useMailStore.getState();
+    const key = selectionKey(state.emails[0], state);
+    expect(key).toBe(`${ACCOUNT.id}:INBOX:34363`);
+
+    await state.moveEmails([key], 'INBOX.Technik.Hetzner Server');
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [34363], 'INBOX', 'INBOX.Technik.Hetzner Server');
+    onlyNumbersReachedTheWire();
+    expect(useMailStore.getState().emails).toEqual([]);
+  });
+
+  it('moves a branch listing folder by folder', async () => {
+    // A subtree list spans folders; the same uid can name a message in each.
+    primeStore([
+      { uid: 1, messageId: 'k1@mock', subject: 'Nested one', flags: [], from: { address: 'a@mock.test' },
+        date: '2026-08-01T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden' },
+      { uid: 1, messageId: 'k2@mock', subject: 'Nested two', flags: [], from: { address: 'b@mock.test' },
+        date: '2026-08-02T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden.Company XY' },
+    ], []);
+    useMailStore.setState({
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] },
+    });
+    const state = useMailStore.getState();
+    const keys = state.emails.map(e => selectionKey(e, state));
+    expect(keys).toEqual([`${ACCOUNT.id}:Kunden:1`, `${ACCOUNT.id}:Kunden.Company XY:1`]);
+
+    await state.moveEmails(keys, 'Archive');
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(2);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'Kunden', 'Archive');
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'Kunden.Company XY', 'Archive');
+    onlyNumbersReachedTheWire();
+    expect(useMailStore.getState().emails).toEqual([]);
+  });
+
+  it('drops a moved search hit from the results list', async () => {
+    // The reporter's path: an all-folders search from Sent lists INBOX hits,
+    // each under the folder it came from.
+    const hit = {
+      uid: 42, messageId: 'x@mock', subject: 'Cross folder thread check', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-01T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'server-search',
+    };
+    primeStore([], []);
+    useMailStore.setState({ activeMailbox: 'Sent', mailboxes: MAILBOXES });
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.setState({ searchActive: true, searchResults: [hit] });
+    const state = useMailStore.getState();
+    const key = selectionKey(hit, state);
+    expect(key).toBe(`${ACCOUNT.id}:INBOX:42`);
+
+    await state.moveEmails([key], 'Archive');
+
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [42], 'INBOX', 'Archive');
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+    useSearchStore.setState({ searchActive: false, searchResults: [] });
+  });
+
+  it('skips a key that names no row it can place, and moves the rest', async () => {
+    primeStore(seedThread(), []);
+    const state = useMailStore.getState();
+
+    await state.moveEmails([1, 'no-such-account:INBOX:9'], 'Archive');
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
+    onlyNumbersReachedTheWire();
   });
 });
 

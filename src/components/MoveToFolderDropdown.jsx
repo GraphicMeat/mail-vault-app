@@ -5,6 +5,7 @@ import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
 import { buildMailboxTree } from '../services/workflows/mailboxTree';
+import { useViewportShift } from '../hooks/useViewportShift';
 import { t as tr, useT  } from '../i18n/index.js';
 
 /**
@@ -39,6 +40,10 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+
+  // Inside the window wherever it opened: beside a menu item on the bottom
+  // row, above the selection bar, under a toolbar button.
+  useViewportShift(dropdownRef, true, [anchorRect?.top, anchorRect?.left]);
 
   // Auto-focus search input
   useEffect(() => {
@@ -114,9 +119,11 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
   return (
     <motion.div
       ref={dropdownRef}
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
+      // Scale, like every other popover: a slide would put the measured box
+      // 8px off its resting place at the moment the viewport sum runs.
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.15 }}
       data-testid="move-to-folder-dropdown"
       className="bg-mail-bg border border-mail-border rounded-xl overflow-hidden w-64"

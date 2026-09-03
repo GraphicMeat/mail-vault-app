@@ -39,7 +39,8 @@ import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey } from '../stores/slices/unifiedHelpers';
+import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
@@ -446,6 +447,21 @@ function EmailViewerComponent({ onComposeReply }) {
         menu.appendChild(item);
       });
       doc.body.appendChild(menu);
+      // The frame is as tall as the message and the pane scrolls it, so the
+      // frame's own viewport is not what the reader sees: clamp to the part
+      // of the frame that is inside the window.
+      const frame = iframe.getBoundingClientRect();
+      const visTop = Math.max(0, -frame.top);
+      const visLeft = Math.max(0, -frame.left);
+      const { x, y } = viewportShift(menu.getBoundingClientRect(),
+        { width: menu.offsetWidth, height: menu.offsetHeight },
+        {
+          top: visTop, left: visLeft,
+          width: Math.min(frame.width, window.innerWidth - frame.left) - visLeft,
+          height: Math.min(frame.height, window.innerHeight - frame.top) - visTop,
+        });
+      menu.style.left = (e.clientX + x) + 'px';
+      menu.style.top = (e.clientY + y) + 'px';
       const close = () => { menu.remove(); doc.removeEventListener('click', close); };
       setTimeout(() => doc.addEventListener('click', close), 0);
     };
@@ -654,7 +670,9 @@ function EmailViewerComponent({ onComposeReply }) {
           />
           {showMoveDropdown && selectedEmail && (
             <MoveToFolderDropdown
-              uids={[selectedEmail.uid]}
+              // The open message's own key: a merged Sent copy, or a message
+              // opened from a branch listing, is not the view's folder's.
+              uids={[selectionKey(selectedEmail, useMailStore.getState())]}
               onClose={() => setShowMoveDropdown(false)}
               anchorRect={moveButtonRef.current?.getBoundingClientRect()}
             />

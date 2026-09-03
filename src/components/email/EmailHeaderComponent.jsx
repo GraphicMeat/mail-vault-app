@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { checkSenderVerification, parseAuthResults } from '../../utils/senderCheck';
 import { getSenderName } from '../../utils/emailParser';
+import { useViewportShift } from '../../hooks/useViewportShift';
 import { t, useT  } from '../../i18n/index.js';
 
 // ── Auth Detail Popover ────────────────────────────────────────────────
@@ -63,6 +64,9 @@ export function AuthDetailPopover({ email, onClose, anchorRect }) {
     if (left < MARGIN) left = MARGIN;
     return { top, left };
   }, [anchorRect]);
+  // The guess above uses a fixed HEIGHT; the panel's real height (an issues
+  // list, a long chain of headers) is measured once it exists.
+  useViewportShift(popoverRef, true, [position]);
 
   const popover = (
     <div ref={popoverRef}

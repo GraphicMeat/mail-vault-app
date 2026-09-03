@@ -110,7 +110,10 @@ export function Dialog({
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className={`relative ${SIZES[size]} ${isFull ? '' : `max-w-[92vw] rounded-2xl ${isPadded ? 'p-6' : ''}`} ${panelBg} border ${panelBorder} ${panelClassName}`}
+          /* A sized panel never outgrows the window: it stops at the
+             container's padding and scrolls, instead of losing its footer
+             below the bottom edge on a short window. */
+          className={`relative ${SIZES[size]} ${isFull ? '' : `max-w-[92vw] max-h-full overflow-y-auto rounded-2xl ${isPadded ? 'p-6' : ''}`} ${panelBg} border ${panelBorder} ${panelClassName}`}
           onClick={e => e.stopPropagation()}
           {...rest}
         >
