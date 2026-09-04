@@ -22,7 +22,7 @@
 //     everywhere" and do exactly what Delete from server does.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { create } from 'zustand';
 
 vi.mock('lucide-react', () => {
@@ -93,6 +93,17 @@ vi.mock('../../stores/exportStore', () => ({
   useExportStore: { getState: () => ({ openExport }) },
 }));
 
+const openCompose = vi.fn();
+vi.mock('../../utils/composeOpener', () => ({
+  openCompose: (...args) => openCompose(...args),
+}));
+
+// The resolver pulls in db/api/mailStore; the menu only needs its answer.
+const resolveMessageBody = vi.fn();
+vi.mock('../../services/export/bodyResolver', () => ({
+  resolveMessageBody: (...args) => resolveMessageBody(...args),
+}));
+
 import { RowActionMenuItems } from '../RowActionMenuItems';
 
 const baseEmail = (overrides) => ({
@@ -110,6 +121,14 @@ function makeActions() {
     deleteEmailFromServer: vi.fn().mockResolvedValue(),
   };
 }
+
+// File level, not per-describe: the file has two top-level describes and
+// neither may inherit the other's calls or resolved value.
+beforeEach(() => {
+  openCompose.mockClear();
+  resolveMessageBody.mockClear();
+  resolveMessageBody.mockResolvedValue({ ok: false });
+});
 
 describe('RowActionMenuItems', () => {
   beforeEach(() => {
@@ -466,6 +485,82 @@ describe('RowActionMenuItems', () => {
 
       const calls = useMailStoreMock.getState().setSelection.mock.calls;
       expect(calls[calls.length - 1][0]).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('composing from the row menu', () => {
+    const SENDER = { name: 'Ann Sender', address: 'ann@example.com' };
+
+    it('Reply opens compose in reply mode with the message body loaded first', async () => {
+      const email = baseEmail({ subject: 'Hi', from: SENDER, date: '2026-09-01T10:00:00Z', _accountId: 'acct-1' });
+      // The resolver's answer carries the body, NOT the header fields: only
+      // a merge over the row's own message keeps uid/_accountId below.
+      resolveMessageBody.mockResolvedValue({ ok: true, email: { html: '<p>body</p>' } });
+      const onClose = vi.fn();
+      render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={onClose} />);
+
+      fireEvent.click(screen.getByText('Reply'));
+
+      await waitFor(() => expect(openCompose).toHaveBeenCalledWith({
+        mode: 'reply',
+        replyTo: expect.objectContaining({ uid: 42, html: '<p>body</p>', _accountId: 'acct-1' }),
+      }));
+      // "loaded first": an eager open followed by a second one must not pass.
+      expect(openCompose).toHaveBeenCalledTimes(1);
+      expect(resolveMessageBody).toHaveBeenCalledWith(email, expect.anything());
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('Reply still opens when the body cannot be loaded, quoting nothing', async () => {
+      const email = baseEmail({ from: SENDER, date: '2026-09-01T10:00:00Z' });
+      resolveMessageBody.mockResolvedValue({ ok: false, reason: 'gone' });
+      render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+      fireEvent.click(screen.getByText('Reply'));
+
+      await waitFor(() => expect(openCompose).toHaveBeenCalledWith({ mode: 'reply', replyTo: email }));
+    });
+
+    it('a thread row replies to its newest message, wherever it sits in the set', async () => {
+      const older = baseEmail({ uid: 1, from: { address: 'a@example.com' }, date: '2026-01-01T00:00:00Z' });
+      const newer = baseEmail({ uid: 2, from: { address: 'b@example.com' }, date: '2026-02-01T00:00:00Z' });
+      for (const set of [[older, newer], [newer, older]]) {
+        resolveMessageBody.mockClear();
+        openCompose.mockClear();
+        render(<RowActionMenuItems emails={set} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+        fireEvent.click(screen.getByText('Reply'));
+        await waitFor(() => expect(resolveMessageBody).toHaveBeenCalledWith(newer, expect.anything()));
+        await waitFor(() => expect(openCompose).toHaveBeenCalledWith({ mode: 'reply', replyTo: expect.objectContaining({ uid: 2 }) }));
+        cleanup();
+      }
+    });
+
+    it('New message to the sender opens a blank compose to that address from the row\'s account', () => {
+      const email = baseEmail({ from: SENDER, date: '2026-09-01T10:00:00Z', _accountId: 'acct-1' });
+      const onClose = vi.fn();
+      render(<RowActionMenuItems emails={[email]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={onClose} />);
+
+      fireEvent.click(screen.getByText('New message to Ann Sender'));
+
+      expect(openCompose).toHaveBeenCalledWith({
+        initialData: { to: 'ann@example.com', _prefill: true, _accountId: 'acct-1' },
+      });
+      expect(resolveMessageBody).not.toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    it('a row with no sender address offers Reply but no new-message item', () => {
+      render(<RowActionMenuItems emails={[baseEmail({ from: null })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+      expect(screen.getByText('Reply')).toBeTruthy();
+      expect(screen.queryByText(/^New message to/)).toBeNull();
+    });
+
+    it('the compose section sits above the rest, behind a separator', () => {
+      render(<RowActionMenuItems emails={[baseEmail({ from: SENDER })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+      const reply = screen.getByText('Reply');
+      const markRead = screen.getByText('Mark as read');
+      expect(reply.compareDocumentPosition(markRead) & reply.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole('separator')).toBeTruthy();
     });
   });
 });
