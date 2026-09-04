@@ -51,3 +51,33 @@ export function pageName(baseName, page, total) {
   const dot = baseName.lastIndexOf('.');
   return t('svc.exportNaming.of', { baseName: baseName.slice(0, dot), page, total, baseName2: baseName.slice(dot) });
 }
+
+// An attachment keeps the name it had in the mail. safeSegment leaves the dot
+// alone, so the extension survives the strip — a .pdf that lost its suffix is a
+// file the OS no longer knows how to open.
+export function attachmentFileName(att, index) {
+  if (att?.filename) return safeSegment(att.filename);
+  const subtype = String(att?.contentType || '').split('/')[1]?.split(';')[0].trim() || '';
+  const ext = /^[a-z0-9]+$/i.test(subtype) ? subtype.toLowerCase() : 'bin';
+  return `attachment-${index + 1}.${ext}`;
+}
+
+/** An attachment written beside an exported image, named after it. */
+export function sidecarName(stem, name) {
+  return `${stem} - ${name}`;
+}
+
+// Two attachments called invoice.pdf are ONE file on disk — and on macOS so are
+// invoice.pdf and Invoice.PDF, so the collision test is case-insensitive.
+export function dedupeNames(names) {
+  const taken = new Set();
+  return names.map((name) => {
+    const dot = name.lastIndexOf('.');
+    const stem = dot > 0 ? name.slice(0, dot) : name;
+    const ext = dot > 0 ? name.slice(dot) : '';
+    let out = name;
+    for (let n = 2; taken.has(out.toLowerCase()); n += 1) out = `${stem} (${n})${ext}`;
+    taken.add(out.toLowerCase());
+    return out;
+  });
+}

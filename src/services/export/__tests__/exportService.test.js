@@ -24,6 +24,11 @@ vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ billingProfile: { hasSubscription: true } }) },
 }));
 
+// resolveEmailLocation reads the view state to place a message that carries no
+// `_mailbox` of its own — which is every message in these fixtures.
+let mailState = { accounts: [], activeAccountId: 'acct-1', activeMailbox: 'INBOX' };
+vi.mock('../../../stores/mailStore', () => ({ useMailStore: { getState: () => mailState } }));
+
 const { buildExport, SAMPLE } = await import('../exportService');
 const { renderMessageToCanvas } = await import('../renderMessageToCanvas');
 const { mirrorRemoteAssets } = await import('../mirrorRemoteAssets');
@@ -190,5 +195,123 @@ describe('a message straight from the store', () => {
     });
     expect(out.ok).toBe(true);
     expect(atob(out.files[0].base64)).toContain('2026');
+  });
+});
+
+// Attachments ride along with the message. Bytes come from the loaded copy when
+// it has them and from the Maildir otherwise, and neither may reach for the
+// active folder: `resolveEmailLocation` places the message from the message.
+describe('attachments', () => {
+  const readAttachment = vi.fn(async ({ attachmentIndex }) => (attachmentIndex === 1 ? 'SU5W' : 'QkxC'));
+
+  // An inline logo the body references by cid, one named attachment, one with
+  // no filename at all — the three shapes getRealAttachments has to tell apart.
+  const withAtts = (n, iso, over = {}) => ({
+    ...message(n, iso),
+    html: `<p>body ${n}</p><img src="cid:logo${n}">`,
+    attachments: [
+      { filename: 'logo.png', contentType: 'image/png', contentId: `<logo${n}>`, size: 100, content: 'TE9HTw==' },
+      { filename: 'invoice.pdf', contentType: 'application/pdf', size: 2000, ...over },
+      { contentType: 'application/pdf', size: 3000 },
+    ],
+  });
+
+  beforeEach(() => {
+    readAttachment.mockClear();
+    mailState = { accounts: [], activeAccountId: 'acct-1', activeMailbox: 'INBOX' };
+  });
+
+  it('reads nothing at all when the toggle is off', async () => {
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00')], format: 'image', layout: 'single', ...base, readAttachment,
+    });
+    expect(out.sidecars).toEqual([]);
+    expect(out.attachmentFailures).toEqual([]);
+    expect(readAttachment).not.toHaveBeenCalled();
+  });
+
+  it('takes the real attachments only, and names an unnamed one after its place', async () => {
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00')], format: 'image', layout: 'single',
+      ...base, attachments: true, readAttachment,
+    });
+    expect(out.sidecars.map(s => s.name)).toEqual(['invoice.pdf', 'attachment-2.pdf']);
+    expect(out.sidecars.map(s => s.base64)).toEqual(['SU5W', 'QkxC']);
+    // The inline logo is the body's, not the reader's.
+    expect(readAttachment.mock.calls.map(c => c[0].attachmentIndex)).toEqual([1, 2]);
+    expect(readAttachment.mock.calls[0][0]).toMatchObject({ accountId: 'acct-1', mailbox: 'INBOX', uid: 1 });
+  });
+
+  it('uses the bytes already on the message instead of reading them back', async () => {
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00', { content: 'data:application/pdf;base64,SU5W\n' })],
+      format: 'image', layout: 'single', ...base, attachments: true, readAttachment,
+    });
+    expect(out.sidecars[0]).toMatchObject({ name: 'invoice.pdf', base64: 'SU5W' });
+    expect(readAttachment).toHaveBeenCalledTimes(1);
+  });
+
+  it('names the attachment it could not read and still exports the message', async () => {
+    readAttachment.mockRejectedValueOnce(new Error('no such file'));
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00')], format: 'image', layout: 'single',
+      ...base, attachments: true, readAttachment,
+    });
+    expect(out.ok).toBe(true);
+    expect(out.attachmentFailures).toEqual(['invoice.pdf']);
+    expect(out.sidecars.map(s => s.name)).toEqual(['attachment-2.pdf']);
+  });
+
+  // A message whose folder cannot be named is one whose UID means nothing:
+  // reading uid 1 out of the wrong mailbox hands back a stranger's file.
+  it('refuses to guess the folder for an unplaceable message', async () => {
+    mailState = { accounts: [], activeAccountId: 'acct-1', activeMailbox: 'UNIFIED' };
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00')], format: 'image', layout: 'single',
+      ...base, attachments: true, readAttachment,
+    });
+    expect(out.ok).toBe(true);
+    expect(readAttachment).not.toHaveBeenCalled();
+    expect(out.attachmentFailures).toEqual(['invoice.pdf', 'attachment-2.pdf']);
+    expect(out.sidecars).toEqual([]);
+  });
+
+  it('files each message\'s attachments under its own image in separate layout', async () => {
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00'), withAtts(2, '2026-08-20T11:30:00')],
+      format: 'image', layout: 'separate', ...base, attachments: true, readAttachment,
+    });
+    expect(out.files).toHaveLength(2);
+    expect(new Set(out.sidecars.map(s => s.stem)))
+      .toEqual(new Set(out.files.map(f => f.name.replace(/\.png$/, ''))));
+    expect(out.sidecars).toHaveLength(4);
+  });
+
+  // The pages are one image cut up, not four exports — the attachments belong
+  // to the THREAD, so they must not be filed under "… (1 of 2)".
+  it('files them under the thread name when the image runs to several pages', async () => {
+    renderMessageToCanvas.mockResolvedValue({
+      width: 1640, height: 8000, toDataURL: () => 'data:image/png;base64,PNGDATA',
+    });
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00'), withAtts(2, '2026-08-20T11:30:00')],
+      format: 'image', layout: 'single', ...base, attachments: true, readAttachment,
+    });
+    expect(out.files.length).toBeGreaterThan(1);
+    expect(new Set(out.sidecars.map(s => s.stem))).toEqual(new Set(['2026-08-12 to 2026-08-20 - Root']));
+    // Two messages, one stem, one invoice.pdf each: the second is renamed, not lost.
+    expect(out.sidecars.map(s => s.name))
+      .toEqual(['invoice.pdf', 'attachment-2.pdf', 'invoice (2).pdf', 'attachment-2 (2).pdf']);
+  });
+
+  it('embeds them in the HTML document instead of writing them beside it', async () => {
+    const out = await buildExport({
+      messages: [withAtts(1, '2026-08-12T09:14:00')], format: 'html', layout: 'single',
+      ...base, attachments: true, readAttachment,
+    });
+    const html = atob(out.files[0].base64);
+    expect(html).toContain('download="invoice.pdf"');
+    expect(html).toContain('href="data:application/pdf;base64,SU5W"');
+    expect(out.sidecars).toEqual([]);
   });
 });

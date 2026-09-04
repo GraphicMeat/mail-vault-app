@@ -143,3 +143,59 @@ describe('buildThreadDocument', () => {
     expect(build()).toContain('820px');
   });
 });
+
+// The links have to live in the OUTER document. A message frame's sandbox has
+// no allow-downloads, so an <a download> inside a srcdoc is inert — the reader
+// clicks it and nothing at all happens.
+describe('attachments in the thread document', () => {
+  const atts = [
+    [{ name: 'invoice.pdf', contentType: 'application/pdf', base64: 'UERG' }],
+    [],
+    [{ name: '<b>.pdf', contentType: 'application/pdf', base64: 'QUJD' },
+      { name: 'photo.png', contentType: 'image/png', base64: 'UE5H' }],
+  ];
+  const firstBlock = (html) =>
+    html.slice(html.indexOf('<details'), html.indexOf('<details', html.indexOf('<details') + 1));
+
+  it('gives every attachment a download link, in its own message', () => {
+    const html = build({ attachments: atts });
+    expect(html.match(/<a download=/g)).toHaveLength(3);
+    expect(html).toContain('href="data:application/pdf;base64,UERG"');
+    expect(firstBlock(html)).toContain('download="invoice.pdf"');
+    expect(firstBlock(html)).not.toContain('download="photo.png"');
+  });
+
+  it('never puts a download link inside a message frame', () => {
+    expect(build({ attachments: atts })).not.toMatch(/srcdoc="[^"]*download=/);
+  });
+
+  it('escapes the file name', () => {
+    const html = build({ attachments: atts });
+    expect(html).toContain('download="&lt;b&gt;.pdf"');
+    expect(html).not.toContain('download="<b>.pdf"');
+  });
+
+  // The blocks are laid out oldest-first, whatever order they arrived in, and
+  // a list that does not travel with its message is filed under someone else's.
+  it('keeps each list with its own message when the input is out of order', () => {
+    const html = buildThreadDocument({
+      messages: [messages[2], messages[0]],
+      bodies: [bodies[2], bodies[0]],
+      heights: [heights[2], heights[0]],
+      attachments: [[{ name: 'late.pdf', contentType: 'application/pdf', base64: 'TA' }], []],
+      ...meta,
+    });
+    expect(html).toContain('download="late.pdf"');
+    expect(firstBlock(html)).not.toContain('download="late.pdf"');
+  });
+
+  it('says nothing about attachments when there are none', () => {
+    expect(build()).not.toContain('<a download');
+    expect(build()).not.toContain('Attachments');
+    expect(build({ attachments: [[], [], []] })).not.toContain('Attachments');
+  });
+
+  it('labels the list when there is one', () => {
+    expect(build({ attachments: atts })).toContain('Attachments');
+  });
+});

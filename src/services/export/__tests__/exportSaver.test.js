@@ -7,7 +7,12 @@ const invoke = vi.fn(() => Promise.resolve('/written/path'));
 
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: (...a) => save(...a), open: (...a) => open(...a) }));
 vi.mock('@tauri-apps/plugin-shell', () => ({ open: (...a) => shellOpen(...a) }));
-vi.mock('@tauri-apps/api/path', () => ({ appCacheDir: async () => '/cache', join: async (...p) => p.join('/') }));
+vi.mock('@tauri-apps/api/path', () => ({
+  appCacheDir: async () => '/cache',
+  join: async (...p) => p.join('/'),
+  dirname: async (p) => p.slice(0, p.lastIndexOf('/')),
+  basename: async (p) => p.slice(p.lastIndexOf('/') + 1),
+}));
 
 const { saveOneFile, saveFilesToDirectory, openInDefaultApp } = await import('../exportSaver');
 
@@ -28,13 +33,51 @@ describe('saveOneFile', () => {
     expect(invoke).toHaveBeenCalledWith('save_attachment_to', {
       filename: 'shot.png', contentBase64: 'AAAA', destPath: '/Users/rokas/Desktop/shot.png',
     });
-    expect(out).toBe('/Users/rokas/Desktop/shot.png');
+    expect(out).toEqual({ path: '/Users/rokas/Desktop/shot.png', failed: [] });
   });
 
   it('writes nothing when the dialog is cancelled', async () => {
     save.mockResolvedValue(null);
     expect(await saveOneFile(file, 'Export Image')).toBeNull();
     expect(invoke).not.toHaveBeenCalled();
+  });
+});
+
+// Attachments ride along beside the image, named after the file the user
+// actually picked — not after the name the dialog suggested, which they are
+// free to change in the panel.
+describe('saveOneFile with attachments beside it', () => {
+  const sidecars = [{ name: 'invoice.pdf', base64: 'PDF' }, { name: 'photo.png', base64: 'PNG' }];
+
+  it('writes each one beside the chosen file, under the chosen stem', async () => {
+    save.mockResolvedValue('/d/My export.png');
+    const out = await saveOneFile(file, 'Export Image', sidecars);
+    expect(invoke.mock.calls.map(c => c[1].destPath)).toEqual([
+      '/d/My export.png', '/d/My export - invoice.pdf', '/d/My export - photo.png',
+    ]);
+    expect(out).toEqual({ path: '/d/My export.png', failed: [] });
+  });
+
+  it('writes nothing at all when the dialog is cancelled', async () => {
+    save.mockResolvedValue(null);
+    expect(await saveOneFile(file, 't', sidecars)).toBeNull();
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('names the attachment that would not write, and still reports the file', async () => {
+    save.mockResolvedValue('/d/shot.png');
+    invoke.mockResolvedValueOnce('/d/shot.png').mockRejectedValueOnce(new Error('disk full'));
+    const out = await saveOneFile(file, 't', sidecars);
+    expect(out.path).toBe('/d/shot.png');
+    expect(out.failed).toEqual(['invoice.pdf']);
+  });
+
+  // An attachment is an extra; the export itself is not. A file that never
+  // reached disk must not come back as a path the dialog then calls a success.
+  it('still throws when the file itself cannot be written', async () => {
+    save.mockResolvedValue('/d/shot.png');
+    invoke.mockRejectedValueOnce(new Error('read-only volume'));
+    await expect(saveOneFile(file, 't', sidecars)).rejects.toThrow(/read-only/);
   });
 });
 
@@ -89,7 +132,7 @@ describe('the e2e destination seam', () => {
     save.mockResolvedValue('/picked/path.png');
     const out = await saveOneFile(file, 't');
     expect(save).toHaveBeenCalled();
-    expect(out).toBe('/picked/path.png');
+    expect(out.path).toBe('/picked/path.png');
     delete window.__MV_EXPORT_DEST__;
   });
 
@@ -102,8 +145,11 @@ describe('the e2e destination seam', () => {
     const out = await e2eSaveOneFile(file, 't');
 
     expect(save).not.toHaveBeenCalled();
-    expect(out).toBe('/forced/path.png');
-    expect(invoke.mock.calls[0][1].destPath).toBe('/forced/path.png');
+    expect(out.path).toBe('/forced/path.png');
+    // By name, not by position: a fresh module graph (resetModules above) also
+    // replays settingsStore's own read_settings_json through this same invoke.
+    expect(invoke.mock.calls.find(c => c[0] === 'save_attachment_to')[1].destPath)
+      .toBe('/forced/path.png');
 
     delete window.__MV_EXPORT_DEST__;
     vi.unstubAllEnvs();

@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}} minutes faites. MailVault est de nouveau à vous.",
   "focus.heldTitle": "Pendant votre concentration",
   "focus.heldBody_one": "{{count}} notification est arrivée pendant le verrouillage de MailVault.",
-  "focus.heldBody_other": "{{count}} notifications sont arrivées pendant le verrouillage de MailVault."
+  "focus.heldBody_other": "{{count}} notifications sont arrivées pendant le verrouillage de MailVault.",
+  "export.dialog.includeAttachments": "Inclure les pièces jointes",
+  "export.dialog.includeAttachmentsHint": "Enregistrées à côté de l'image ou intégrées au fichier HTML.",
+  "export.dialog.attachmentsFailed_one": "{{count}} pièce jointe n'a pas pu être incluse : {{failed}}",
+  "export.dialog.attachmentsFailed_other": "{{count}} pièces jointes n'ont pas pu être incluses : {{failed}}"
 }

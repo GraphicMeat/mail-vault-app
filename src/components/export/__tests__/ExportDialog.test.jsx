@@ -94,6 +94,70 @@ describe('ExportDialog', () => {
     await waitFor(() => expect(saveFilesToDirectory).toHaveBeenCalled());
   });
 
+  it('offers to bring the attachments along, on by default', () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    const box = screen.getByRole('checkbox', { name: /include attachments/i });
+    expect(box.checked).toBe(true);
+  });
+
+  it('passes the attachment choice through to the builder', async () => {
+    render(<ExportDialog {...props} messages={messages} />);
+    fireEvent.click(screen.getByRole('checkbox', { name: /include attachments/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(buildExport).toHaveBeenCalled());
+    expect(buildExport.mock.calls[0][0]).toMatchObject({ attachments: false });
+  });
+
+  it('hands the attachments to the save dialog beside the one file', async () => {
+    const sidecars = [{ stem: 'out', name: 'invoice.pdf', base64: 'P' }];
+    buildExport.mockResolvedValue({
+      ok: true, files: [{ name: 'out.png', base64: 'A' }], sidecars, failures: [], attachmentFailures: [], stats: {},
+    });
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(saveOneFile).toHaveBeenCalled());
+    expect(saveOneFile.mock.calls[0][2]).toEqual(sidecars);
+  });
+
+  // Into a directory there is no "beside" — the sidecar carries its own full
+  // name, or two messages' invoice.pdf land on top of each other.
+  it('writes the attachments into the directory under their sidecar names', async () => {
+    buildExport.mockResolvedValue({
+      ok: true, files: [{ name: 'a.png', base64: 'A' }, { name: 'b.png', base64: 'B' }],
+      sidecars: [{ stem: 'a', name: 'invoice.pdf', base64: 'P' }], failures: [], attachmentFailures: [], stats: {},
+    });
+    render(<ExportDialog {...props} messages={messages} />);
+    fireEvent.click(screen.getByRole('radio', { name: /separate images/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await waitFor(() => expect(saveFilesToDirectory).toHaveBeenCalled());
+    expect(saveFilesToDirectory.mock.calls[0][0].map(f => f.name))
+      .toEqual(['a.png', 'b.png', 'a - invoice.pdf']);
+  });
+
+  it('names the attachments it could not include, and stays open', async () => {
+    const onClose = vi.fn();
+    buildExport.mockResolvedValue({
+      ok: true, files: [{ name: 'out.png', base64: 'A' }], sidecars: [],
+      failures: [], attachmentFailures: ['invoice.pdf'], stats: {},
+    });
+    render(<ExportDialog {...props} onClose={onClose} messages={[messages[0]]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await screen.findByText(/1 attachment could not be included: invoice\.pdf/i);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('reports an attachment the saver could not write', async () => {
+    saveOneFile.mockResolvedValueOnce({ path: '/tmp/out.png', failed: ['photo.png'] });
+    buildExport.mockResolvedValue({
+      ok: true, files: [{ name: 'out.png', base64: 'A' }],
+      sidecars: [{ stem: 'out', name: 'photo.png', base64: 'P' }],
+      failures: [], attachmentFailures: [], stats: {},
+    });
+    render(<ExportDialog {...props} messages={[messages[0]]} />);
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+    await screen.findByText(/photo\.png/i);
+  });
+
   it('shows the upsell instead of the controls for a free user', () => {
     hasPremiumAccess.mockReturnValue(false);
     render(<ExportDialog {...props} messages={messages} />);

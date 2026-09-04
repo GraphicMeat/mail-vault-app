@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}} Minuten geschafft. MailVault gehört wieder dir.",
   "focus.heldTitle": "Während du fokussiert warst",
   "focus.heldBody_one": "{{count}} Mitteilung kam an, während MailVault gesperrt war.",
-  "focus.heldBody_other": "{{count}} Mitteilungen kamen an, während MailVault gesperrt war."
+  "focus.heldBody_other": "{{count}} Mitteilungen kamen an, während MailVault gesperrt war.",
+  "export.dialog.includeAttachments": "Anhänge einschließen",
+  "export.dialog.includeAttachmentsHint": "Neben dem Bild gespeichert oder in die HTML-Datei eingebettet.",
+  "export.dialog.attachmentsFailed_one": "{{count}} Anhang konnte nicht eingefügt werden: {{failed}}",
+  "export.dialog.attachmentsFailed_other": "{{count}} Anhänge konnten nicht eingefügt werden: {{failed}}"
 }

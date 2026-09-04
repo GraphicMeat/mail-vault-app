@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}}분을 마쳤습니다. MailVault는 다시 당신의 것입니다.",
   "focus.heldTitle": "집중하는 동안",
   "focus.heldBody_one": "MailVault가 잠긴 동안 알림 {{count}}개가 도착했습니다.",
-  "focus.heldBody_other": "MailVault가 잠긴 동안 알림 {{count}}개가 도착했습니다."
+  "focus.heldBody_other": "MailVault가 잠긴 동안 알림 {{count}}개가 도착했습니다.",
+  "export.dialog.includeAttachments": "첨부파일 포함",
+  "export.dialog.includeAttachmentsHint": "이미지 옆에 저장하거나 HTML 파일에 포함합니다.",
+  "export.dialog.attachmentsFailed_one": "{{count}}개의 첨부파일을 포함하지 못했습니다: {{failed}}",
+  "export.dialog.attachmentsFailed_other": "{{count}}개의 첨부파일을 포함하지 못했습니다: {{failed}}"
 }

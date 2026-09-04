@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}} minutes done. MailVault is yours again.",
   "focus.heldTitle": "While you were focused",
   "focus.heldBody_one": "{{count}} notification arrived while MailVault was locked.",
-  "focus.heldBody_other": "{{count}} notifications arrived while MailVault was locked."
+  "focus.heldBody_other": "{{count}} notifications arrived while MailVault was locked.",
+  "export.dialog.includeAttachments": "Include attachments",
+  "export.dialog.includeAttachmentsHint": "Saved beside the image, or embedded in the HTML file.",
+  "export.dialog.attachmentsFailed_one": "{{count}} attachment could not be included: {{failed}}",
+  "export.dialog.attachmentsFailed_other": "{{count}} attachments could not be included: {{failed}}"
 }

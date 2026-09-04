@@ -6,6 +6,7 @@ import { Z } from '../ui/layers';
 import { hasPremiumAccess, useSettingsStore } from '../../stores/settingsStore';
 import { buildExport } from '../../services/export/exportService';
 import { saveOneFile, saveFilesToDirectory } from '../../services/export/exportSaver';
+import { sidecarName } from '../../services/export/exportNaming';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { t, useT  } from '../../i18n/index.js';
 
@@ -37,6 +38,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   const [format, setFormat] = useState('image');
   const [layout, setLayout] = useState('single');
   const [mirror, setMirror] = useState(true);
+  const [attachments, setAttachments] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState(null);
 
@@ -58,25 +60,44 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
     setBusy(true);
     setNotice(null);
     try {
-      const result = await buildExport({ messages, format, layout, mirror, account, mailbox });
+      const result = await buildExport({ messages, format, layout, mirror, attachments, account, mailbox });
       if (!result.ok) {
         setNotice(result.reason === 'premium'
           ? t('export.dialog.exportPremiumFeature')
           : t('export.dialog.messageCouldExported'));
         return;
       }
-      if (result.files.length === 1) await saveOneFile(result.files[0], t('common.export'));
-      else await saveFilesToDirectory(result.files, t('common.export'));
+      const sidecars = result.sidecars || [];
+      let unwritten;
+      if (result.files.length === 1) {
+        // Beside the one file, under the name the user picked for it — only the
+        // saver knows that name, so only the saver can compose theirs.
+        const saved = await saveOneFile(result.files[0], t('common.export'), sidecars);
+        unwritten = saved?.failed || [];
+      } else {
+        // Into a directory there is no "beside": each one carries its full name.
+        const named = sidecars.map(s => ({ name: sidecarName(s.stem, s.name), base64: s.base64 }));
+        const saved = await saveFilesToDirectory([...result.files, ...named], t('common.export'));
+        const isSidecar = new Set(named.map(f => f.name));
+        unwritten = (saved?.failed || []).filter(n => isSidecar.has(n));
+      }
 
+      // Two independent failures — an attachment that never loaded and a
+      // message that never rendered — so the dialog states both, not whichever
+      // it checked first, and stays open while either is on screen.
+      const notices = [];
       if (result.partial) {
-        const n = result.failures.length;
-        setNotice(t('export.dialog.exportedSomeFailed', {
-          count: n,
+        notices.push(t('export.dialog.exportedSomeFailed', {
+          count: result.failures.length,
           failed: result.failures.map(f => f.subject || f.uid).join(', '),
         }));
-      } else {
-        onClose?.();
       }
+      const lost = [...(result.attachmentFailures || []), ...unwritten];
+      if (lost.length) {
+        notices.push(t('export.dialog.attachmentsFailed', { count: lost.length, failed: lost.join(', ') }));
+      }
+      if (notices.length) setNotice(notices.join(' '));
+      else onClose?.();
     } catch (err) {
       setNotice(t('export.dialog.exportFailed', { err: err.message || err }));
     } finally {
@@ -123,6 +144,16 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
               <span className="block text-sm text-mail-text">{t('export.dialog.mirrorRemoteContent')}</span>
               <span className="block text-xs text-mail-text-muted">
                 {t('export.dialog.fetchesImagesSendersServersSo')}
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" checked={attachments} onChange={e => setAttachments(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="block text-sm text-mail-text">{t('export.dialog.includeAttachments')}</span>
+              <span className="block text-xs text-mail-text-muted">
+                {t('export.dialog.includeAttachmentsHint')}
               </span>
             </span>
           </label>

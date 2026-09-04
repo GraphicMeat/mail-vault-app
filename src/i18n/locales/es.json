@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}} minutos hechos. MailVault vuelve a ser tuyo.",
   "focus.heldTitle": "Mientras te concentrabas",
   "focus.heldBody_one": "Llegó {{count}} notificación mientras MailVault estaba bloqueado.",
-  "focus.heldBody_other": "Llegaron {{count}} notificaciones mientras MailVault estaba bloqueado."
+  "focus.heldBody_other": "Llegaron {{count}} notificaciones mientras MailVault estaba bloqueado.",
+  "export.dialog.includeAttachments": "Incluir adjuntos",
+  "export.dialog.includeAttachmentsHint": "Se guardan junto a la imagen o se incrustan en el archivo HTML.",
+  "export.dialog.attachmentsFailed_one": "No se pudo incluir {{count}} adjunto: {{failed}}",
+  "export.dialog.attachmentsFailed_other": "No se pudieron incluir {{count}} adjuntos: {{failed}}"
 }

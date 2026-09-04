@@ -1,6 +1,8 @@
 // Writing bytes is already solved: save_attachment_to takes a base64 payload
 // and a destination the user picked. Nothing new goes into Rust for this.
 
+import { sidecarName } from './exportNaming';
+
 const CACHE_SUBDIR = 'mailvault-export';
 
 // WebDriver cannot drive a native macOS save panel, so under VITE_E2E the
@@ -19,7 +21,33 @@ async function writeFile(file, destPath) {
   });
 }
 
-export async function saveOneFile(file, title) {
+// Attachments land beside the export, named after the file the user actually
+// picked — not after the name the dialog offered, which the save panel lets
+// them rewrite. `extname` is deliberately not used: it rejects a path with no
+// extension at all, and the attachments must still land beside that file.
+async function writeSidecars(sidecars, destPath) {
+  if (!sidecars.length) return [];
+  const { dirname, basename, join } = await import('@tauri-apps/api/path');
+  const dir = await dirname(destPath);
+  const picked = await basename(destPath);
+  const dot = picked.lastIndexOf('.');
+  const stem = dot > 0 ? picked.slice(0, dot) : picked;
+
+  const failed = [];
+  for (const sidecar of sidecars) {
+    const name = sidecarName(stem, sidecar.name);
+    try {
+      await writeFile({ name, base64: sidecar.base64 }, await join(dir, name));
+    } catch (err) {
+      // One unwritable attachment is not a failed export. Name it and go on.
+      console.error('[export] failed to write', name, err);
+      failed.push(sidecar.name);
+    }
+  }
+  return failed;
+}
+
+export async function saveOneFile(file, title, sidecars = []) {
   const forced = injectedPath();
   const destPath = forced ?? await (async () => {
     const { save } = await import('@tauri-apps/plugin-dialog');
@@ -27,7 +55,7 @@ export async function saveOneFile(file, title) {
   })();
   if (!destPath) return null;
   await writeFile(file, destPath);
-  return destPath;
+  return { path: destPath, failed: await writeSidecars(sidecars, destPath) };
 }
 
 export async function saveFilesToDirectory(files, title) {

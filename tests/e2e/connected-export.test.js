@@ -23,6 +23,10 @@ import path from 'node:path';
 import os from 'node:os';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { setPremium } from './mockBilling.js';
+import {
+  EXPORT_ATTACHMENT_SUBJECT, EXPORT_ATTACHMENT_PDF_NAME, EXPORT_ATTACHMENT_PDF_BASE64,
+  EXPORT_ATTACHMENT_PNG_NAME, EXPORT_ATTACHMENT_PNG_BASE64, EXPORT_ATTACHMENT_INLINE_NAME,
+} from './mockImap.js';
 
 const OUT = path.join(os.tmpdir(), `mv-export-${process.pid}`);
 const ACCOUNT_A = 'luke@mock.test';
@@ -68,6 +72,21 @@ async function openFirstMessage() {
       [...document.querySelectorAll('button[title]')].map(b => b.getAttribute('title')));
     throw new Error(`the viewer never showed an Export button; buttons present: ${JSON.stringify(titles)}`);
   }
+}
+
+/** Open the one message with this subject, whatever row it landed on. */
+async function openBySubject(subject) {
+  await browser.waitUntil(async () => browser.execute((text) => {
+    const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+      .find(r => r.offsetHeight > 0 && (r.textContent || '').includes(text));
+    if (!row) return false;
+    row.click();
+    return true;
+  }, subject), { timeout: 30_000, interval: 500, timeoutMsg: `no row for "${subject}"` });
+
+  await browser.waitUntil(async () => browser.execute(() =>
+    Boolean(document.querySelector('button[title="Export"]'))),
+  { timeout: 45_000, interval: 500, timeoutMsg: `the viewer never showed an Export button for "${subject}"` });
 }
 
 async function openThread(minMessages = 3) {
@@ -144,6 +163,26 @@ async function setMirror(on) {
     const box = d && d.querySelector('input[type="checkbox"]');
     if (box && box.checked !== want) box.click();
   }, on);
+  await browser.pause(100);
+}
+
+/**
+ * Tick or untick one of the dialog's checkboxes by the text of its label. The
+ * dialog remembers them between opens, so every case sets the ones it cares
+ * about rather than assuming the default it was built with.
+ */
+async function setCheckbox(labelText, want) {
+  const found = await browser.execute((text, value) => {
+    const d = [...document.querySelectorAll('[role="dialog"]')]
+      .find(el => el.offsetHeight > 0 && /Export/.test(el.textContent || ''));
+    if (!d) return false;
+    const label = [...d.querySelectorAll('label')].find(l => (l.textContent || '').includes(text));
+    const box = label && label.querySelector('input[type="checkbox"]');
+    if (!box) return false;
+    if (box.checked !== value) box.click();
+    return true;
+  }, labelText, want);
+  expect(found).toBe(true);
   await browser.pause(100);
 }
 
@@ -328,6 +367,73 @@ describe('Export', function () {
 
     await switchToFolder(ACCOUNT_A, 'INBOX');
     await waitForEmails();
+  });
+
+
+  // The attachments themselves, not a claim about them: every file below is
+  // read back off disk and compared with the fixture's own bytes.
+  describe('attachments', function () {
+    const ATTACHMENTS = 'Include attachments';
+    const sidecar = (stem, name) => path.join(OUT, `${stem} - ${name}`);
+
+    it('writes the attachments beside the image, named after it', async function () {
+      const dest = path.join(OUT, 'with-attachments.png');
+      await openBySubject(EXPORT_ATTACHMENT_SUBJECT);
+      await clickExportEntry();
+      await choose('Image');
+      await setMirror(false);
+      await setCheckbox(ATTACHMENTS, true);
+      await setDest(dest);
+      await confirmExport();
+      await waitForFile(dest);
+
+      const pdf = sidecar('with-attachments', EXPORT_ATTACHMENT_PDF_NAME);
+      const png = sidecar('with-attachments', EXPORT_ATTACHMENT_PNG_NAME);
+      await waitForFile(pdf);
+      await waitForFile(png);
+      expect(fs.readFileSync(pdf).equals(Buffer.from(EXPORT_ATTACHMENT_PDF_BASE64, 'base64'))).toBe(true);
+      expect(fs.readFileSync(png).equals(Buffer.from(EXPORT_ATTACHMENT_PNG_BASE64, 'base64'))).toBe(true);
+      // The inline logo is part of the body, and the body is already in the PNG.
+      expect(fs.existsSync(sidecar('with-attachments', EXPORT_ATTACHMENT_INLINE_NAME))).toBe(false);
+    });
+
+    it('embeds the attachments in the HTML as download links, outside the message frames', async function () {
+      const dest = path.join(OUT, 'with-attachments.html');
+      await openBySubject(EXPORT_ATTACHMENT_SUBJECT);
+      await clickExportEntry();
+      await choose('HTML');
+      await setMirror(false);
+      await setCheckbox(ATTACHMENTS, true);
+      await setDest(dest);
+      await confirmExport();
+      await waitForFile(dest);
+
+      const html = fs.readFileSync(dest, 'utf8');
+      expect(html).toContain(`download="${EXPORT_ATTACHMENT_PDF_NAME}"`);
+      expect(html).toContain(`href="data:application/pdf;base64,${EXPORT_ATTACHMENT_PDF_BASE64}"`);
+      expect(html).toContain(`download="${EXPORT_ATTACHMENT_PNG_NAME}"`);
+      expect(html).not.toContain(`download="${EXPORT_ATTACHMENT_INLINE_NAME}"`);
+      // A frame's sandbox blocks downloads, so a link inside a srcdoc is dead.
+      expect(html).not.toMatch(/srcdoc="[^"]*download=/);
+      expect((html.match(/<script/g) || []).length).toBe(1);
+    });
+
+    it('writes nothing but the image when attachments are turned off', async function () {
+      const dest = path.join(OUT, 'no-attachments.png');
+      await openBySubject(EXPORT_ATTACHMENT_SUBJECT);
+      await clickExportEntry();
+      await choose('Image');
+      await setMirror(false);
+      await setCheckbox(ATTACHMENTS, false);
+      await setDest(dest);
+      await confirmExport();
+      await waitForFile(dest);
+
+      // The sidecars are written after the image, so give them time to appear
+      // before calling their absence a pass.
+      await browser.pause(2000);
+      expect(fs.readdirSync(OUT).filter(n => n.startsWith('no-attachments - '))).toEqual([]);
+    });
   });
 
   describe('what a free user gets', function () {

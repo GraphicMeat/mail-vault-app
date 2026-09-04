@@ -404,6 +404,74 @@ function trackerMessage({ uid, owner, day }) {
   };
 }
 
+// ── The export fixture: one inline image and two real attachments ────────────────
+// connected-export.test.js reads the exported attachments back off disk and
+// compares them byte for byte, so the bytes below ARE the assertion. The two
+// PNGs differ (red pixel vs blue) — identical ones could not tell an inline
+// image written by mistake from the attachment that belongs there.
+
+export const EXPORT_ATTACHMENT_SUBJECT = 'Invoice with two attachments';
+export const EXPORT_ATTACHMENT_BODY_MARKER = 'Invoice attached, logo inline.';
+export const EXPORT_ATTACHMENT_PDF_NAME = 'invoice.pdf';
+export const EXPORT_ATTACHMENT_PNG_NAME = 'photo.png';
+/** Inline: referenced by cid from the body, so it is the body's, not an attachment. */
+export const EXPORT_ATTACHMENT_INLINE_NAME = 'logo.png';
+
+/** A real one-page PDF, xref and all. */
+export const EXPORT_ATTACHMENT_PDF_BASE64 = 'JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2JqCjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2JqCjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCAyMDAgMTAwXSAvUmVzb3VyY2VzIDw8IC9Gb250IDw8IC9GMSA1IDAgUiA+PiA+PiAvQ29udGVudHMgNCAwIFIgPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCA2MiA+PgpzdHJlYW0KQlQgL0YxIDE4IFRmIDIwIDQwIFRkIChNYWlsVmF1bHQgZXhwb3J0IHRlc3QpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL0Jhc2VGb250IC9IZWx2ZXRpY2EgPj4KZW5kb2JqCnhyZWYKMCA2CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAwOSAwMDAwMCBuIAowMDAwMDAwMDU4IDAwMDAwIG4gCjAwMDAwMDAxMTUgMDAwMDAgbiAKMDAwMDAwMDI0MSAwMDAwMCBuIAowMDAwMDAwMzQyIDAwMDAwIG4gCnRyYWlsZXIKPDwgL1NpemUgNiAvUm9vdCAxIDAgUiA+PgpzdGFydHhyZWYKNDEyCiUlRU9GCg==';
+/** A 1x1 blue PNG. */
+export const EXPORT_ATTACHMENT_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mNgYPgPAAEDAQA2dBFAAAAAAElFTkSuQmCC';
+/** A 1x1 red PNG — deliberately not the same bytes as the one above. */
+export const EXPORT_ATTACHMENT_INLINE_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mP4z8AAAAMBAQD3A0FDAAAAAElFTkSuQmCC';
+
+/** base64 as a MIME body: RFC 2045 caps an encoded line at 76 characters. */
+const wrapped = (b64) => b64.match(/.{1,76}/g).join('\n');
+
+function exportAttachmentMessage({ uid, owner, day }) {
+  const { internalDate, header } = stamp(day);
+  const boundary = 'MockMvAttach';
+  const part = (headers, b64) => [`--${boundary}`, ...headers, '', wrapped(b64), ''];
+  return {
+    uid,
+    flags: ['\\Seen'],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: [
+      'From: Invoices <billing@mock.test>',
+      `To: ${owner}`,
+      `Subject: ${EXPORT_ATTACHMENT_SUBJECT}`,
+      `Date: ${header}`,
+      `Message-ID: <mock-attachment-${uid}-${owner}>`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+      '',
+      `--${boundary}`,
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      `<p id="mv-att-body">${EXPORT_ATTACHMENT_BODY_MARKER}</p><img src="cid:mv-inline-logo" alt="logo">`,
+      '',
+      ...part([
+        `Content-Type: image/png; name="${EXPORT_ATTACHMENT_INLINE_NAME}"`,
+        `Content-Disposition: inline; filename="${EXPORT_ATTACHMENT_INLINE_NAME}"`,
+        'Content-ID: <mv-inline-logo>',
+        'Content-Transfer-Encoding: base64',
+      ], EXPORT_ATTACHMENT_INLINE_BASE64),
+      ...part([
+        `Content-Type: application/pdf; name="${EXPORT_ATTACHMENT_PDF_NAME}"`,
+        `Content-Disposition: attachment; filename="${EXPORT_ATTACHMENT_PDF_NAME}"`,
+        'Content-Transfer-Encoding: base64',
+      ], EXPORT_ATTACHMENT_PDF_BASE64),
+      ...part([
+        `Content-Type: image/png; name="${EXPORT_ATTACHMENT_PNG_NAME}"`,
+        `Content-Disposition: attachment; filename="${EXPORT_ATTACHMENT_PNG_NAME}"`,
+        'Content-Transfer-Encoding: base64',
+      ], EXPORT_ATTACHMENT_PNG_BASE64),
+      `--${boundary}--`,
+      '',
+    ].join('\n'),
+  };
+}
+
 /** An HTML message whose body says which message it is. */
 function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
   const { internalDate, header } = stamp(day);
@@ -597,6 +665,11 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
       // list exactly as it was — connected-move-to-folder acts on row 0, and
       // moving this fixture out of INBOX would break the spec below it.
       append(inboxBox, [trackerMessage({ uid: rootUid + 6, owner, day: 55 })]);
+
+      // The attachment fixture, day 54: below the tracker, above the generic
+      // mail. The tracker stays the first single-message row, which is the one
+      // connected-export opens when it does not ask for a subject by name.
+      append(inboxBox, [exportAttachmentMessage({ uid: rootUid + 7, owner, day: 54 })]);
 
       append(sentBox, [
         threadMessage({

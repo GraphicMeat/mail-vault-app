@@ -67,6 +67,10 @@ const THREAD_CSS = `
   .mv-who { font-weight: 600; }
   .mv-alt { color: #6b7280; font-style: italic; overflow-wrap: anywhere; }
   details > iframe { display: block; width: 100%; border: 0; border-top: 1px solid #e3e5ea; }
+  .mv-att-title { margin: 0 14px 4px; font-size: 11px; text-transform: uppercase;
+                  letter-spacing: .06em; color: #9aa1ab; }
+  .mv-att { list-style: none; margin: 0; padding: 0 14px 12px; font-size: 12.5px; }
+  .mv-att li { padding: 2px 0; overflow-wrap: anywhere; }
 
   @media (max-width: 820px) {
     .mv-shell { grid-template-columns: minmax(0, 1fr); }
@@ -130,13 +134,25 @@ addEventListener('load', fitAll);
 fitAll();
 `;
 
-function messageBlock(message, bodyHtml, height, threadSubject, openByDefault, id) {
+// Between the summary and the frame, never inside it: the frame's sandbox has
+// no allow-downloads, so a link in the srcdoc is one that does nothing at all.
+function attachmentsHtml(attachments) {
+  if (!attachments?.length) return '';
+  const items = attachments.map((a) => {
+    const type = String(a.contentType || 'application/octet-stream').split(';')[0].trim();
+    return `<li><a download="${esc(a.name)}" href="data:${esc(type)};base64,${a.base64}">${esc(a.name)}</a></li>`;
+  }).join('');
+  return `\n  <p class="mv-att-title">${esc(tr('email.original.attachments'))}</p>`
+    + `\n  <ul class="mv-att">${items}</ul>`;
+}
+
+function messageBlock(message, bodyHtml, height, threadSubject, openByDefault, id, attachments) {
   const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${EXPORT_CSS}</style></head>`
     + `<body>${headerCardHtml(message)}<main class="mv-body">${sanitizeForExport(bodyHtml)}</main></body></html>`;
   const ownSubject = rootSubject(message.subject);
   const differs = ownSubject && ownSubject.toLowerCase() !== rootSubject(threadSubject).toLowerCase();
   return `<details${openByDefault ? ' open' : ''} id="${id}">
-  <summary><span class="mv-when">${esc(formatStamp(message.date))}</span><span class="mv-who">${esc(senderName(message.from))}</span>${differs ? `<span class="mv-alt">${esc(ownSubject)}</span>` : ''}</summary>
+  <summary><span class="mv-when">${esc(formatStamp(message.date))}</span><span class="mv-who">${esc(senderName(message.from))}</span>${differs ? `<span class="mv-alt">${esc(ownSubject)}</span>` : ''}</summary>${attachmentsHtml(attachments)}
   <iframe sandbox="allow-same-origin" loading="lazy" style="height:${height}px" srcdoc="${esc(doc)}"></iframe>
 </details>`;
 }
@@ -160,8 +176,9 @@ ${items}
 </nav>`;
 }
 
-export function buildThreadDocument({ messages, bodies, heights, account, mailbox, stats }) {
-  const ordered = messages.map((m, i) => ({ message: m, body: bodies[i], height: heights[i] }))
+export function buildThreadDocument({ messages, bodies, heights, account, mailbox, stats, attachments }) {
+  const ordered = messages
+    .map((m, i) => ({ message: m, body: bodies[i], height: heights[i], atts: attachments?.[i] || [] }))
     .sort((a, b) => a.message.date - b.message.date);
   const threadSubject = rootSubject(ordered[0]?.message.subject) || tr('svc.exportDocument.noSubject');
   const single = ordered.length === 1;
@@ -185,7 +202,7 @@ ${single ? '' : railHtml(ordered)}
   <div class="mv-thread-sub">${esc(participants)}</div>
   <div class="mv-thread-sub">${ordered.length} message${single ? '' : 's'} &middot; ${esc(first)}${single ? '' : ` &ndash; ${esc(last)}`}</div>
 </header>
-${ordered.map((o, i) => messageBlock(o.message, o.body, o.height, threadSubject, single, `mv-m${i + 1}`)).join('\n')}
+${ordered.map((o, i) => messageBlock(o.message, o.body, o.height, threadSubject, single, `mv-m${i + 1}`, o.atts)).join('\n')}
 ${provenanceHtml({ account, mailbox, messages: ordered.map(o => o.message), stats })}
 </main>
 </div>

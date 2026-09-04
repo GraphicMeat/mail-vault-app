@@ -1924,5 +1924,9 @@
   "focus.doneBody_other": "{{count}} 分が終わりました。MailVault はまたあなたのものです。",
   "focus.heldTitle": "集中していた間に",
   "focus.heldBody_one": "MailVault のロック中に通知が {{count}} 件届きました。",
-  "focus.heldBody_other": "MailVault のロック中に通知が {{count}} 件届きました。"
+  "focus.heldBody_other": "MailVault のロック中に通知が {{count}} 件届きました。",
+  "export.dialog.includeAttachments": "添付ファイルを含める",
+  "export.dialog.includeAttachmentsHint": "画像と並べて保存するか、HTML ファイルに埋め込みます。",
+  "export.dialog.attachmentsFailed_one": "{{count}} 件の添付ファイルを含められませんでした: {{failed}}",
+  "export.dialog.attachmentsFailed_other": "{{count}} 件の添付ファイルを含められませんでした: {{failed}}"
 }

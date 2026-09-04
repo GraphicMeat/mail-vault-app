@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { safeSegment, singleName, threadName, threadMemberName, pageName } from '../exportNaming';
+import { safeSegment, singleName, threadName, threadMemberName, pageName,
+  attachmentFileName, sidecarName, dedupeNames } from '../exportNaming';
 
 const msg = (iso, from, subject) => ({ date: new Date(iso), from, subject });
 const ANA = 'Ana Brandt <ana@sizzlemedia.co>';
@@ -117,5 +118,52 @@ describe('addresses as the app actually stores them', () => {
 
   it('still reads the string form the samples and fixtures use', () => {
     expect(singleName(msg('2024-05-01T10:30:00Z', ANA, 'Hello'), 'png')).toContain('Ana Brandt');
+  });
+});
+
+// An attachment saved beside the export keeps the name it had in the mail —
+// minus whatever no filesystem accepts. The extension is the half that matters:
+// a stripped ".pdf" is a file nothing will open.
+describe('attachmentFileName', () => {
+  it('keeps the extension while stripping reserved characters', () => {
+    expect(attachmentFileName({ filename: 'in/voice:2026.pdf', contentType: 'application/pdf' }, 0))
+      .toBe('in voice 2026.pdf');
+  });
+
+  it('names an unnamed attachment after its position and its subtype', () => {
+    expect(attachmentFileName({ contentType: 'application/pdf' }, 2)).toBe('attachment-3.pdf');
+  });
+
+  it('falls back to .bin when the subtype is not a plain word', () => {
+    expect(attachmentFileName({ contentType: 'application/vnd.ms-excel' }, 0)).toBe('attachment-1.bin');
+    expect(attachmentFileName({}, 0)).toBe('attachment-1.bin');
+  });
+});
+
+describe('sidecarName', () => {
+  it('reads as the export plus what came with it', () => {
+    expect(sidecarName('2026-08-12 0914 - Ana Brandt - Invoice', 'invoice.pdf'))
+      .toBe('2026-08-12 0914 - Ana Brandt - Invoice - invoice.pdf');
+  });
+});
+
+// Two attachments called invoice.pdf are one file on disk, and the second
+// silently overwrites the first — on macOS even when the cases differ.
+describe('dedupeNames', () => {
+  it('numbers a repeat before the extension', () => {
+    expect(dedupeNames(['invoice.pdf', 'invoice.pdf', 'invoice.pdf']))
+      .toEqual(['invoice.pdf', 'invoice (2).pdf', 'invoice (3).pdf']);
+  });
+
+  it('collides case-insensitively', () => {
+    expect(dedupeNames(['Invoice.PDF', 'invoice.pdf'])).toEqual(['Invoice.PDF', 'invoice (2).pdf']);
+  });
+
+  it('appends at the end when there is no extension', () => {
+    expect(dedupeNames(['notes', 'notes'])).toEqual(['notes', 'notes (2)']);
+  });
+
+  it('leaves distinct names alone', () => {
+    expect(dedupeNames(['a.pdf', 'b.pdf'])).toEqual(['a.pdf', 'b.pdf']);
   });
 });

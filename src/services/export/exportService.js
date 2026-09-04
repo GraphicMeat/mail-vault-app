@@ -4,10 +4,11 @@ import { mirrorRemoteAssets, DEFAULT_CAPS } from './mirrorRemoteAssets';
 import { renderMessageToCanvas, measureMessageHeight } from './renderMessageToCanvas';
 import { planPages, stitchPages } from './imagePacker';
 import { buildThreadDocument } from './exportHtml';
-import { singleName, threadName, threadMemberName, pageName } from './exportNaming';
-import { replaceCidUrls } from '../attachmentUtils';
+import { singleName, threadName, threadMemberName, pageName, attachmentFileName, dedupeNames } from './exportNaming';
+import { replaceCidUrls, getRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { resolveMessageBody } from './bodyResolver';
 import { useMailStore } from '../../stores/mailStore';
+import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
 
@@ -25,6 +26,24 @@ const forcedFailure = () => (E2E ? (globalThis.window?.__MV_FORCE_EXPORT_FAILURE
 export async function fetchAssetViaTauri(url) {
   const { invoke } = window.__TAURI__.core;
   return invoke('fetch_remote_asset', { url });
+}
+
+export async function readAttachmentViaTauri({ accountId, mailbox, uid, attachmentIndex }) {
+  const { invoke } = window.__TAURI__.core;
+  return invoke('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex });
+}
+
+// Same normalisation the attachment bar does before it hands bytes to Rust: a
+// stored `content` may arrive as a whole data: URI, and a Maildir read wraps
+// its base64 at 76 columns.
+function cleanBase64(content) {
+  if (typeof content !== 'string') return content;
+  // Whitespace first, unlike the attachment bar's copy: `.` never crosses a
+  // newline, so a WRAPPED data: URI misses the prefix match and keeps it.
+  const base64 = content.replace(/[\s\n\r]/g, '');
+  return base64.startsWith('data:')
+    ? (base64.match(/^data:[^;]+;base64,(.+)$/)?.[1] ?? base64)
+    : base64;
 }
 
 const toBase64 = (canvas) => {
@@ -69,9 +88,57 @@ async function hydrate(message) {
   return { ...message, ...result.email, date: asDate(message.date) };
 }
 
+/**
+ * The bytes of one message's real attachments, named for a filesystem.
+ *
+ * `location` is resolved from the ORIGINAL header, not from the hydrated copy:
+ * the merge in `hydrate` carries no `_mailbox`, and a uid read out of the wrong
+ * folder is a real but unrelated file. Unplaceable, or unreadable, means the
+ * attachment is named in `failures` — never silently dropped, never guessed at.
+ */
+async function loadAttachments(location, full, readAttachment, failures) {
+  const real = getRealAttachments(full.attachments, full.html);
+  if (!real.length) return [];
+  const names = dedupeNames(real.map((att, i) => attachmentFileName(att, i)));
+
+  const loaded = [];
+  for (const [i, att] of real.entries()) {
+    try {
+      if (!att.content && !location) throw new Error('unknown mailbox');
+      const content = att.content ?? await readAttachment({
+        accountId: location.accountId,
+        mailbox: location.mailbox,
+        uid: full.uid,
+        attachmentIndex: att._originalIndex,
+      });
+      loaded.push({ name: names[i], contentType: att.contentType, base64: cleanBase64(content) });
+    } catch (err) {
+      trace('attachment-failed', { uid: full.uid, name: names[i] });
+      failures.push(names[i]);
+    }
+  }
+  return loaded;
+}
+
+// The attachments of every message that made it into one file, deduped under
+// that file's name — two messages in one image can both carry an invoice.pdf.
+function buildSidecars(items, stemFor) {
+  const groups = new Map();
+  items.forEach((item, i) => {
+    if (!item.attachments.length) return;
+    const stem = stemFor(i);
+    groups.set(stem, [...(groups.get(stem) || []), ...item.attachments]);
+  });
+  return [...groups].flatMap(([stem, atts]) =>
+    dedupeNames(atts.map(a => a.name)).map((name, i) => ({ stem, name, base64: atts[i].base64 })));
+}
+
+const stemOf = (fileName) => fileName.replace(/\.[^.]+$/, '');
+
 export async function buildExport({
   messages, format, layout = 'single', mirror = true, account, mailbox,
   gate, fetchAsset = fetchAssetViaTauri,
+  attachments = false, readAttachment = readAttachmentViaTauri,
 }) {
   if (gate !== SAMPLE) {
     const { billingProfile } = useSettingsStore.getState();
@@ -86,17 +153,28 @@ export async function buildExport({
     .map(m => (m.date instanceof Date ? m : { ...m, date: asDate(m.date) }))
     .sort((a, b) => a.date - b.date);
   const failures = [];
+  const attachmentFailures = [];
   const prepared = [];
   trace('start', { format, layout, mirror, messages: ordered.length });
 
   for (const message of ordered) {
     try {
       trace('hydrate', { uid: message.uid });
-      const full = await hydrate(message);
+      // Resolved from the header the caller handed over, before hydrate merges
+      // a body over it and the `_mailbox` tag is gone.
+      const location = resolveEmailLocation(message, useMailStore.getState());
+      // A cid: image whose bytes the light path stripped stays a cid: URL in the
+      // exported file — a reference nothing outside this app can resolve, and
+      // one the rasterizer's frame then waits on. Same fill the reader does.
+      const full = await hydrateInlineImages(await hydrate(message), location?.accountId, location?.mailbox);
       const fetcher = forceMirrorFailure
         ? async () => { throw new Error('forced mirror failure'); }
         : fetchAsset;
-      prepared.push({ message: full, body: await prepareBody(full, mirror, fetcher, stats) });
+      prepared.push({
+        message: full,
+        body: await prepareBody(full, mirror, fetcher, stats),
+        attachments: attachments ? await loadAttachments(location, full, readAttachment, attachmentFailures) : [],
+      });
       trace('prepared', { uid: message.uid });
     } catch (err) {
       // One body that will not load is not a failed export of the other forty.
@@ -119,11 +197,13 @@ export async function buildExport({
     const html = buildThreadDocument({
       messages: prepared.map(p => p.message),
       bodies: prepared.map(p => p.body),
+      attachments: prepared.map(p => p.attachments),
       heights, account, mailbox, stats,
     });
+    // Embedded as download links in the document itself — nothing beside it.
     return {
-      ok: true, partial: failures.length > 0, failures, stats,
-      files: [{ name: base, base64: utf8ToBase64(html) }],
+      ok: true, partial: failures.length > 0, failures, attachmentFailures, stats,
+      files: [{ name: base, base64: utf8ToBase64(html) }], sidecars: [],
     };
   }
 
@@ -161,6 +241,10 @@ export async function buildExport({
     }));
   }
 
-  trace('files', { n: files.length });
-  return { ok: true, partial: failures.length > 0, failures, stats, files };
+  // Separate images: each message's attachments belong to ITS file. One tall
+  // image: they belong to the thread, not to whichever page it was cut into.
+  const sidecars = buildSidecars(rendered, i => stemOf(layout === 'separate' ? files[i].name : base));
+
+  trace('files', { n: files.length, sidecars: sidecars.length });
+  return { ok: true, partial: failures.length > 0, failures, attachmentFailures, stats, files, sidecars };
 }
