@@ -228,10 +228,14 @@ pub async fn imap_check_mailbox_status(
     mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-    let has_condstore = pool.has_capability(&account, "CONDSTORE").await;
+    // Capabilities are cached when a session is created, so ask after checkout
+    // — before it, the first call of a process always reads `false`.
+    let pool_ref: &ImapPool = &pool;
+    let acct = &account;
 
     let (exists, uid_validity, uid_next, highest_modseq) =
         with_background(&pool, &account, |mut session| async move {
+            let has_condstore = pool_ref.has_capability(acct, "CONDSTORE").await;
             let result = imap::check_mailbox_status(&mut session, &mailbox, has_condstore).await?;
             Ok((result, session, Some(mailbox)))
         }).await?;
@@ -253,9 +257,11 @@ pub async fn imap_search_all_uids(
     mailbox: Option<String>,
 ) -> Result<serde_json::Value, String> {
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-    let has_esearch = pool.has_capability(&account, "ESEARCH").await;
+    let pool_ref: &ImapPool = &pool;
+    let acct = &account;
 
     let uids = with_background(&pool, &account, |mut session| async move {
+        let has_esearch = pool_ref.has_capability(acct, "ESEARCH").await;
         let result = imap::search_all_uids(&mut session, &mailbox, has_esearch).await?;
         Ok((result, session, Some(mailbox)))
     }).await?;
