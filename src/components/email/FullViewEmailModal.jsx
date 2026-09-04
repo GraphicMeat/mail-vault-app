@@ -271,8 +271,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                     attachment={att}
                     attachmentIndex={att._originalIndex}
                     emailUid={email.uid}
-                    account={activeAccountId}
-                    folder={modalMailbox}
                     accountId={activeAccountId}
                     mailbox={modalMailbox}
                   />

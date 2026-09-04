@@ -684,8 +684,6 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
                   attachment={att}
                   attachmentIndex={att._originalIndex}
                   emailUid={email.uid}
-                  account={activeAccountId}
-                  folder={emailMailbox}
                   accountId={activeAccountId}
                   mailbox={emailMailbox}
                   compact

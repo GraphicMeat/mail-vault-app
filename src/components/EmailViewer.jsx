@@ -762,12 +762,12 @@ function EmailViewerComponent({ onComposeReply }) {
                   <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
                 </div>
                 {realAttachments.length > 1 && (
-                  <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} account={activeAccountId} folder={activeMailbox} />
+                  <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} accountId={selectedEmail._accountId || activeAccountId} mailbox={selectedEmail._mailbox} />
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {realAttachments.map((attachment, index) => (
-                  <AttachmentItem key={index} attachment={attachment} attachmentIndex={attachment._originalIndex} emailUid={selectedEmail.uid} account={activeAccountId} folder={activeMailbox} />
+                  <AttachmentItem key={index} attachment={attachment} attachmentIndex={attachment._originalIndex} emailUid={selectedEmail.uid} accountId={selectedEmail._accountId || activeAccountId} mailbox={selectedEmail._mailbox} />
                 ))}
               </div>
             </div>

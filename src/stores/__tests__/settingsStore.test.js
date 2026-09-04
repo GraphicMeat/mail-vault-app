@@ -222,3 +222,15 @@ describe('threadMode', () => {
     expect(useSettingsStore.getState().threadMode).toBe('grouped');
   });
 });
+
+describe('autoDownloadAttachments', () => {
+  it('is off by default', () => {
+    expect(useSettingsStore.getState().autoDownloadAttachments).toBe(false);
+  });
+
+  it('setAutoDownloadAttachments turns it on', () => {
+    useSettingsStore.getState().setAutoDownloadAttachments(true);
+    expect(useSettingsStore.getState().autoDownloadAttachments).toBe(true);
+    useSettingsStore.getState().setAutoDownloadAttachments(false);
+  });
+});

@@ -264,7 +264,9 @@ export class AccountPipeline {
    * @param {string} mailbox - Mailbox name (default 'INBOX')
    */
   async startContentCaching(uids, mailbox = 'INBOX') {
+    this._attachmentsPrefetched = false;
     if (this._destroyed || uids.length === 0) {
+      if (!this._destroyed) this._prefetchAttachments(mailbox);
       this.onComplete();
       return;
     }
@@ -365,9 +367,12 @@ export class AccountPipeline {
     // Last slot to finish checks if we need retries or are done
     if (this._activeSlots === 0 && !this._destroyed) {
       if (this._queue.length === 0 && this._retryQueue.length > 0) {
+        // Every body the server would give is on disk; the stragglers may
+        // never come (a refused uid retries for ever). Sweep now.
+        this._prefetchAttachments(mailbox);
         this._scheduleRetry(mailbox);
       } else if (this._queue.length === 0 && this._retryQueue.length === 0) {
-        this._finish();
+        this._finish(mailbox);
       }
     }
   }
@@ -391,9 +396,22 @@ export class AccountPipeline {
     }, delay);
   }
 
-  async _finish() {
+  /**
+   * Bodies first, attachments after: once the mailbox's body pass has drained,
+   * Rust sweeps its .eml files newest-first on its own thread and writes each
+   * real attachment to the cache. Once per run, only when the setting asks.
+   */
+  _prefetchAttachments(mailbox) {
+    if (this._attachmentsPrefetched || !useSettingsStore.getState().autoDownloadAttachments) return;
+    this._attachmentsPrefetched = true;
+    api.prefetchAttachments(this.accountId, mailbox)
+      .catch(e => console.warn(`[Pipeline:${this.account.email}] Attachment prefetch failed:`, e.message || e));
+  }
+
+  async _finish(mailbox = 'INBOX') {
     console.log(`[Pipeline:${this.account.email}] Content caching complete (${this._completed}/${this._total})`);
     this._phase = 'done';
+    this._prefetchAttachments(mailbox);
     this._lastLoadedEmails = null; // Free header data — no longer needed
     this._graphIdMap = null;
 

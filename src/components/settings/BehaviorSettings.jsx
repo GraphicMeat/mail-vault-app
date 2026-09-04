@@ -3,7 +3,7 @@ import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { DefaultMailApp } from './DefaultMailApp';
-import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter } from 'lucide-react';
+import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
 export function BehaviorSettings() {
@@ -18,6 +18,8 @@ export function BehaviorSettings() {
     setMarkAsReadMode,
     markAsReadDelay,
     setMarkAsReadDelay,
+    autoDownloadAttachments,
+    setAutoDownloadAttachments,
     searchHistoryLimit,
     setSearchHistoryLimit,
     searchHistory,
@@ -105,6 +107,27 @@ export function BehaviorSettings() {
               </span>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Attachments */}
+      <div data-testid="settings-attachments" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <Paperclip size={18} className="text-mail-accent-text" />
+          {t('email.original.attachments')}
+        </h4>
+        <div className="flex items-center justify-between py-2">
+          <div>
+            <div className="font-medium text-mail-text">{t('settings.behavior.autoDownloadAttachments')}</div>
+            <div className="text-sm text-mail-text-muted">
+              {t('settings.behavior.autoDownloadAttachmentsDesc')}
+            </div>
+          </div>
+          <ToggleSwitch
+            active={autoDownloadAttachments}
+            onClick={() => setAutoDownloadAttachments(!autoDownloadAttachments)}
+            testId="toggle-auto-download-attachments"
+          />
         </div>
       </div>
 

@@ -1511,72 +1511,6 @@ fn set_badge_count(_app_handle: tauri::AppHandle, count: i32) -> Result<(), Stri
     Ok(())
 }
 
-fn get_unique_path(dir: &Path, filename: &str) -> PathBuf {
-    let path = dir.join(filename);
-    if !path.exists() {
-        return path;
-    }
-
-    let stem = Path::new(filename)
-        .file_stem()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| filename.to_string());
-    let ext = Path::new(filename)
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy()))
-        .unwrap_or_default();
-
-    let mut counter = 1u32;
-    loop {
-        let candidate = dir.join(format!("{} ({}){}", stem, counter, ext));
-        if !candidate.exists() {
-            return candidate;
-        }
-        counter += 1;
-    }
-}
-
-#[tauri::command]
-fn save_attachment(
-    app_handle: tauri::AppHandle,
-    filename: String,
-    content_base64: String,
-    account: Option<String>,
-    folder: Option<String>,
-) -> Result<String, String> {
-    use base64::Engine;
-
-    info!("save_attachment called for: {}", filename);
-
-    let cache_dir = vault::root(&app_handle)?
-        .join("attachment_cache");
-
-    fs::create_dir_all(&cache_dir)
-        .map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
-
-    let decoded = base64::engine::general_purpose::STANDARD
-        .decode(&content_base64)
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
-
-    // Build a smart cache filename: {account}_{folder}_{filename}
-    let safe = |s: &str| s.replace(|c: char| !c.is_alphanumeric() && c != '.' && c != '-', "_");
-    let prefix = match (account.as_deref(), folder.as_deref()) {
-        (Some(a), Some(f)) => format!("{}_{}_", safe(a), safe(f)),
-        (Some(a), None) => format!("{}_", safe(a)),
-        _ => String::new(),
-    };
-    let cache_name = format!("{}{}", prefix, filename);
-
-    let dest = get_unique_path(&cache_dir, &cache_name);
-
-    fs::write(&dest, &decoded)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
-
-    let path_str = dest.to_string_lossy().to_string();
-    info!("Attachment saved to cache: {}", path_str);
-    Ok(path_str)
-}
-
 #[tauri::command]
 fn save_attachment_to(
     filename: String,
@@ -3099,6 +3033,170 @@ fn maildir_read_attachment(
         .map_err(|e| format!("Failed to get attachment body: {}", e))?;
 
     Ok(base64::engine::general_purpose::STANDARD.encode(&body))
+}
+
+// ── Attachment cache ────────────────────────────────────────────────────────
+// One file per (account, mailbox, uid, part) under <vault>/attachment_cache,
+// named so that a click, the prefetch and the "already downloaded" check all
+// land on the same path without a registry. The part index is the position
+// among `collect_attachment_parts` — the same `_originalIndex` the viewer
+// hands `maildir_read_attachment`.
+
+fn fs_safe(s: &str) -> String {
+    s.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
+}
+
+fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
+    // A sender picks the filename; only its last component may name a file here.
+    let leaf = Path::new(filename)
+        .file_name()
+        .map(|f| f.to_string_lossy().to_string())
+        .filter(|f| !f.is_empty() && f != "." && f != "..")
+        .unwrap_or_else(|| "attachment".to_string());
+    cache_dir.join(format!("{}_{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index, leaf))
+}
+
+fn part_filename(part: &mailparse::ParsedMail) -> String {
+    let disposition = part.get_content_disposition();
+    disposition.params.get("filename")
+        .or_else(|| part.ctype.params.get("name"))
+        .cloned()
+        .unwrap_or_else(|| "attachment".to_string())
+}
+
+fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, part: &mailparse::ParsedMail) -> Result<PathBuf, String> {
+    let dest = attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part));
+    if dest.exists() {
+        return Ok(dest);
+    }
+    fs::create_dir_all(cache_dir)
+        .map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
+    let body = part.get_body_raw()
+        .map_err(|e| format!("Failed to get attachment body: {}", e))?;
+    fs::write(&dest, &body)
+        .map_err(|e| format!("Failed to write file: {}", e))?;
+    Ok(dest)
+}
+
+fn read_eml(cur_dir: &Path, uid: u32) -> Result<Vec<u8>, String> {
+    let file_path = find_file_by_uid(cur_dir, uid)
+        .ok_or_else(|| format!("Email UID {} not found", uid))?;
+    fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))
+}
+
+/// Write one attachment part to the cache (a no-op when it is there already)
+/// and return its path.
+fn cache_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<PathBuf, String> {
+    let raw = read_eml(cur_dir, uid)?;
+    let parsed = mailparse::parse_mail(&raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    let part = parts.get(index)
+        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", index, parts.len()))?;
+    write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part)
+}
+
+/// The cached path of one attachment part, if the file exists.
+// ponytail: parses the .eml for the part's filename on every mount check;
+// pass the name from the viewer if that ever shows up in a profile.
+fn cached_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<PathBuf>, String> {
+    let raw = read_eml(cur_dir, uid)?;
+    let parsed = mailparse::parse_mail(&raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+    let part = parts.get(index)
+        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", index, parts.len()))?;
+    let dest = attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part));
+    Ok(dest.exists().then_some(dest))
+}
+
+/// Sweep a mailbox's cached .eml files newest-first (uid order) and write
+/// every real attachment above `above_uid` to the cache. Returns the paths it
+/// wrote, in sweep order, and the highest uid it saw.
+fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, above_uid: u32) -> Result<(Vec<PathBuf>, u32), String> {
+    let entries = fs::read_dir(cur_dir)
+        .map_err(|e| format!("Failed to read Maildir: {}", e))?;
+    let mut files: Vec<(u32, PathBuf)> = entries.flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let uid: u32 = name.split(':').next()?.parse().ok()?;
+            Some((uid, entry.path()))
+        })
+        .collect();
+    files.sort_unstable_by(|a, b| b.0.cmp(&a.0));
+    let max_uid = files.first().map(|f| f.0).unwrap_or(0);
+
+    let mut written = Vec::new();
+    for (uid, path) in files {
+        if uid <= above_uid { break; }
+        let Ok(raw) = fs::read(&path) else { continue };
+        // A message with no Content-Disposition header has no attachment part.
+        if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { continue; }
+        let Ok(parsed) = mailparse::parse_mail(&raw) else { continue };
+        let (mut text, mut html, mut metas) = (None, None, Vec::new());
+        walk_mime_parts_light(&parsed, &mut text, &mut html, &mut metas);
+        let mut parts = Vec::new();
+        collect_attachment_parts(&parsed, &mut parts);
+        for (index, (part, meta)) in parts.iter().zip(&metas).enumerate() {
+            if !is_real_attachment(&meta.content_type, &meta.content_id, &meta.filename, meta.size, html.as_deref()) { continue; }
+            if attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part)).exists() { continue; }
+            match write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part) {
+                Ok(dest) => written.push(dest),
+                Err(e) => warn!("Attachment prefetch skipped uid {} part {}: {}", uid, index, e),
+            }
+        }
+    }
+    Ok((written, max_uid))
+}
+
+fn attachment_cache_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(vault::root(app_handle)?.join("attachment_cache"))
+}
+
+#[tauri::command]
+fn cache_attachment(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<String, String> {
+    let cache_dir = attachment_cache_dir(&app_handle)?;
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let path = cache_attachment_in(&cache_dir, &cur_dir, &account_id, &mailbox, uid, attachment_index)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn cached_attachment_path(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<Option<String>, String> {
+    let cache_dir = attachment_cache_dir(&app_handle)?;
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    Ok(cached_attachment_in(&cache_dir, &cur_dir, &account_id, &mailbox, uid, attachment_index)?
+        .map(|p| p.to_string_lossy().to_string()))
+}
+
+// One sweep at a time, on a blocking thread; a second mailbox finishing its
+// body pass queues behind the first. The high-water mark keeps a refresh from
+// re-reading the whole mailbox: only uids above the last sweep are opened.
+// ponytail: the mark is per process, so a body cached later for an OLDER uid
+// waits for the next launch; a per-uid marker file would close that gap.
+static PREFETCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+static PREFETCH_HIGH_WATER: std::sync::Mutex<Vec<(String, u32)>> = std::sync::Mutex::new(Vec::new());
+
+#[tauri::command]
+async fn prefetch_attachments(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<usize, String> {
+    let cache_dir = attachment_cache_dir(&app_handle)?;
+    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one_at_a_time = PREFETCH_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        let key = format!("{}/{}", account_id, mailbox);
+        let above = PREFETCH_HIGH_WATER.lock().unwrap_or_else(|p| p.into_inner())
+            .iter().find(|(k, _)| *k == key).map(|(_, uid)| *uid).unwrap_or(0);
+        let (written, max_uid) = prefetch_attachments_in(&cache_dir, &cur_dir, &account_id, &mailbox, above)?;
+        let mut marks = PREFETCH_HIGH_WATER.lock().unwrap_or_else(|p| p.into_inner());
+        match marks.iter_mut().find(|(k, _)| *k == key) {
+            Some(entry) => entry.1 = max_uid,
+            None => marks.push((key, max_uid)),
+        }
+        info!("Attachment prefetch {}/{}: {} written above uid {}", account_id, mailbox, written.len(), above);
+        Ok(written.len())
+    }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -5047,7 +5145,6 @@ fn main() {
             delete_mailbox_cache,
             save_graph_id_map,
             load_graph_id_map,
-            save_attachment,
             save_attachment_to,
             export_fetch::fetch_remote_asset,
             show_in_folder,
@@ -5061,6 +5158,9 @@ fn main() {
             maildir_read_archived_cached,
             maildir_save_archived_cache,
             maildir_read_attachment,
+            cache_attachment,
+            cached_attachment_path,
+            prefetch_attachments,
             maildir_read_raw_source,
             maildir_exists,
             maildir_list,
@@ -5547,6 +5647,117 @@ mod tests {
         )
         .expect("write into a missing directory should succeed");
         assert_eq!(std::fs::read(&written).unwrap(), b"pixels");
+    }
+
+    // -- Attachment cache --
+
+    fn photo_with_inline_and_pixel() -> Vec<u8> {
+        b"From: dave@example.com\r\n\
+Subject: Photo\r\n\
+MIME-Version: 1.0\r\n\
+Content-Type: multipart/mixed; boundary=\"MIX\"\r\n\
+\r\n\
+--MIX\r\n\
+Content-Type: text/html\r\n\
+\r\n\
+<html><body><img src=\"cid:logo123\"></body></html>\r\n\
+--MIX\r\n\
+Content-Type: image/png; name=\"photo.png\"\r\n\
+Content-Disposition: attachment; filename=\"photo.png\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+iVBORw0KGgo=\r\n\
+--MIX\r\n\
+Content-Type: image/png\r\n\
+Content-ID: <logo123>\r\n\
+Content-Disposition: inline\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+iVBORw0KGgo=\r\n\
+--MIX\r\n\
+Content-Type: image/gif\r\n\
+Content-Disposition: inline\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+R0lGODlhAQABAAAAACw=\r\n\
+--MIX--\r\n".to_vec()
+    }
+
+    fn maildir_with(files: &[(u32, &[u8])]) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let cur = dir.path().join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        for (uid, raw) in files {
+            fs::write(cur.join(format!("{}:2,S", uid)), raw).unwrap();
+        }
+        (dir, cur, dir_path_cache())
+    }
+
+    fn dir_path_cache() -> PathBuf {
+        tempfile::tempdir().unwrap().into_path().join("attachment_cache")
+    }
+
+    fn leaf(p: &Path) -> String {
+        p.file_name().unwrap().to_string_lossy().to_string()
+    }
+
+    #[test]
+    fn cache_attachment_writes_the_part_once() {
+        let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
+        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        assert_eq!(leaf(&path), "acct_INBOX_7_0_report.pdf");
+        assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.4\n");
+
+        let again = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        assert_eq!(again, path);
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn cache_attachment_keeps_a_hostile_filename_inside_the_cache() {
+        let raw = String::from_utf8(multipart_with_attachment()).unwrap()
+            .replace("filename=\"report.pdf\"", "filename=\"../../escape.pdf\"");
+        let (_d, cur, cache) = maildir_with(&[(7, raw.as_bytes())]);
+        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        assert_eq!(path.parent().unwrap(), cache);
+        assert_eq!(leaf(&path), "acct_INBOX_7_0_escape.pdf");
+    }
+
+    #[test]
+    fn cached_attachment_in_reports_only_what_exists() {
+        let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
+        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), None);
+        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
+        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), Some(path));
+    }
+
+    #[test]
+    fn prefetch_walks_newest_first_and_skips_what_is_not_an_attachment() {
+        let (_d, cur, cache) = maildir_with(&[
+            (5, &multipart_with_attachment()),
+            (9, &photo_with_inline_and_pixel()),
+            (3, PLAIN_EMAIL),
+        ]);
+        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
+        let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
+        // The photo only: the cid: logo is part of the HTML and the unnamed
+        // 1x1 gif is a tracking pixel — neither is something the user attached.
+        assert_eq!(names, vec!["acct_INBOX_9_0_photo.png", "acct_INBOX_5_0_report.pdf"]);
+        assert_eq!(max_uid, 9);
+        assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
+
+        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
+        assert!(again.is_empty());
+    }
+
+    #[test]
+    fn prefetch_sweeps_only_above_the_uid_it_already_saw() {
+        let (_d, cur, cache) = maildir_with(&[
+            (5, &multipart_with_attachment()),
+            (9, &photo_with_inline_and_pixel()),
+        ]);
+        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5).unwrap();
+        assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
     }
 
     // -- Fixtures --

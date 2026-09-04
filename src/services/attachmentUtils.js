@@ -89,3 +89,19 @@ export function hasRealAttachments(email) {
   if (!email?.attachments?.length) return false;
   return getRealAttachments(email.attachments, email.html).length > 0;
 }
+
+/**
+ * What the viewer can render in-app for an attachment: 'image', 'pdf', or
+ * null (download only). The MIME type decides; a generic type falls back to
+ * the extension, because scanners and some phones send every file as
+ * application/octet-stream.
+ */
+export function previewKind({ contentType, filename } = {}) {
+  const type = (contentType || '').split(';')[0].trim().toLowerCase();
+  if (type.startsWith('image/')) return 'image';
+  if (type === 'application/pdf') return 'pdf';
+  const ext = (filename || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  if (ext === 'pdf') return 'pdf';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return 'image';
+  return null;
+}

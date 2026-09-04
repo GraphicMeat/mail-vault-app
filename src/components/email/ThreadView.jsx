@@ -454,8 +454,8 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
                     attachment={attachment}
                     attachmentIndex={attachment._originalIndex}
                     emailUid={email.uid}
-                    account={location?.accountId}
-                    folder={location?.mailbox}
+                    accountId={location?.accountId}
+                    mailbox={location?.mailbox}
                   />
                 ))}
               </div>

@@ -196,6 +196,10 @@ export const useSettingsStore = create(
       markAsReadMode: 'delay', // 'delay' | 'auto' | 'manual'
       markAsReadDelay: 3, // seconds to wait before marking as read (when mode is 'delay')
 
+      // After a mailbox's bodies are cached, write its attachments to the
+      // attachment cache newest-first so they open without a round trip.
+      autoDownloadAttachments: false,
+
       // Layout settings
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
@@ -679,6 +683,7 @@ export const useSettingsStore = create(
       // Mark as read settings
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
+      setAutoDownloadAttachments: (on) => set({ autoDownloadAttachments: on }),
 
       // Layout settings
       setLayoutMode: (mode) => set({ layoutMode: mode }),

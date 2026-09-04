@@ -156,6 +156,12 @@ const MOCK_ACCOUNTS = [
     subjectPrefix: 'Yoda message',
     inbox: 9,
     inboxUidStart: 901,
+    // uid 910: the PNG+PDF message connected-attachments opens. Newest in the
+    // whole suite, so it heads All Inboxes without scrolling — which is the
+    // view the 2026-09-04 "Failed to download" was reported from. Its subject
+    // matches no other spec's `Yoda message \d+` pattern, and yoda's INBOX
+    // count is asserted nowhere.
+    withAttachments: true,
     crossFolderThread: false,
     // A folder name in IMAP modified UTF-7 (RFC 3501 §5.1.3) — "Bokelmühle"
     // exactly as bson73's server sends it (discussion #1). His server stores
@@ -294,6 +300,7 @@ export const config = {
         inbox: a.inbox,
         inboxUidStart: a.inboxUidStart,
         htmlQuoted: a.htmlQuoted,
+        withAttachments: a.withAttachments,
         crossFolderThread: a.crossFolderThread,
         faults: a.faults,
         archiveCount: a.archiveCount,

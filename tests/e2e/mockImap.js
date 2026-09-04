@@ -177,12 +177,57 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
   ].join('\n');
 }
 
+/** The message carrying a PNG and a PDF, for connected-attachments. */
+export const ATTACHMENT_SUBJECT = 'Attachment preview check';
+export const ATTACHMENT_PNG = 'pixel.png';
+export const ATTACHMENT_PDF = 'blank.pdf';
+
+/**
+ * A plain-text message with two real attachments: a 1x1 PNG and a one-page
+ * PDF — one of each kind the viewer previews in-app. Both are named and
+ * disposition `attachment`, so neither is mistaken for an inline image or a
+ * tracking pixel.
+ */
+export function attachmentMessage({ uid, to, from, subject, date }) {
+  const boundary = 'MockMvAttachBoundary';
+  return [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `Date: ${date}`,
+    `Message-ID: <mock-attach-${uid}-${to}>`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    'Two files attached.',
+    '',
+    `--${boundary}`,
+    `Content-Type: image/png; name="${ATTACHMENT_PNG}"`,
+    `Content-Disposition: attachment; filename="${ATTACHMENT_PNG}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${ATTACHMENT_PDF}"`,
+    `Content-Disposition: attachment; filename="${ATTACHMENT_PDF}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    'JVBERi0xLjQKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgMjAwIDIwMF0+PmVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCnRyYWlsZXI8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoxNjQKJSVFT0YK',
+    `--${boundary}--`,
+    '',
+  ].join('\n');
+}
+
 /**
  * A mailbox holding `count` synthetic messages.
  * Every other message is unread so read/unread affordances have something to show.
  *
  * `htmlQuoted` appends one HTML message with a folded quote (see
- * `htmlQuotedMessage`) as the newest entry.
+ * `htmlQuotedMessage`) as the newest entry; `withAttachments` appends the
+ * PNG+PDF message (see `attachmentMessage`) after it.
  *
  * `uidStart` shifts the whole UID range up. Dates come from the UID
  * (`stamp(uid)` = 2026-01-01 + uid days), so a high `uidStart` is also the only
@@ -190,7 +235,7 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
  * sorted date-descending across every account, and the 700-message account
  * otherwise occupies every visible row (see connected-storage-matrix).
  */
-export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false, uidStart = 1 } = {}) {
+export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false, withAttachments = false, uidStart = 1 } = {}) {
   const messages = [];
   for (let uid = uidStart; uid < uidStart + count; uid++) {
     // Highest UID is newest, so the list has a stable, meaningful sort order.
@@ -223,6 +268,23 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
         to: owner,
         from: `Quoting Sender <quoted@example.com>`,
         subject: HTML_QUOTED_SUBJECT,
+        date: header,
+      }),
+    });
+  }
+  if (withAttachments) {
+    const uid = uidStart + count + (htmlQuoted ? 1 : 0);
+    const { internalDate, header } = stamp(uid);
+    messages.push({
+      uid,
+      flags: ['\\Seen'],
+      internal_date: internalDate,
+      modseq: uid,
+      raw: attachmentMessage({
+        uid,
+        to: owner,
+        from: 'Attaching Sender <attach@example.com>',
+        subject: ATTACHMENT_SUBJECT,
         date: header,
       }),
     });
@@ -451,8 +513,8 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null, nestedMailboxes = null } = {}) {
-  const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, uidStart: inboxUidStart });
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null, nestedMailboxes = null } = {}) {
+  const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
 
   // `inbox: 0` means an empty INBOX to the integration harness — leave it alone.

@@ -83,12 +83,9 @@ class EmailPipelineManager {
     const { localCacheDurationMonths } = useSettingsStore.getState();
     const uidsToFetch = this._getUncachedUids(emails, savedEmailIds, localCacheDurationMonths);
 
-    if (uidsToFetch.length > 0) {
-      await pipeline.startContentCaching(uidsToFetch, activeMailbox);
-    } else {
-      console.log(`[PipelineManager] Active account fully cached, starting background content pipelines`);
-      this._startBackgroundContentPipelines();
-    }
+    // An empty list still runs the after-bodies step (attachment prefetch)
+    // and completes at once, which cascades to the background accounts.
+    await pipeline.startContentCaching(uidsToFetch, activeMailbox);
   }
 
   /**
@@ -214,12 +211,11 @@ class EmailPipelineManager {
       if (emails && emails.length > 0) {
         const savedIds = await db.getSavedEmailIds(account.id, 'INBOX');
         const uids = this._getUncachedUids(emails, savedIds, localCacheDurationMonths);
-        if (uids.length > 0) {
-          // Start caching first, THEN await completion — avoids race where
-          // synchronous onComplete fires before waitForComplete sets up its promise
-          pipeline.startContentCaching(uids, 'INBOX');
-          await pipeline.waitForComplete();
-        }
+        // Start caching first, THEN await completion — avoids race where
+        // synchronous onComplete fires before waitForComplete sets up its promise.
+        // Empty list: nothing to fetch, but the attachment prefetch still runs.
+        pipeline.startContentCaching(uids, 'INBOX');
+        await pipeline.waitForComplete();
       }
       // Mark done only if we got through it — a destroy mid-flight should be
       // retried on the next cascade rather than silently skipped forever.

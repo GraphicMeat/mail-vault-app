@@ -12,13 +12,9 @@ vi.mock('../../stores/mailStore', () => ({
     subscribe: () => () => {},
   },
 }));
+const settings = vi.hoisted(() => ({ cacheLimitMB: 128, hiddenAccounts: {}, autoDownloadAttachments: false }));
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: {
-    getState: () => ({
-      cacheLimitMB: 128,
-      hiddenAccounts: {},
-    }),
-  },
+  useSettingsStore: { getState: () => settings },
 }));
 vi.mock('../db', () => ({
   getSavedEmailIds: () => Promise.resolve(new Set()),
@@ -31,7 +27,7 @@ vi.mock('../syncService', () => ({
   waitForSync: vi.fn(),
 }));
 vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }) }));
-vi.mock('../api', () => ({}));
+vi.mock('../api', () => ({ prefetchAttachments: vi.fn(async () => 0), fetchEmailLight: vi.fn() }));
 vi.mock('../authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
@@ -39,10 +35,13 @@ vi.mock('../authUtils', () => ({
 
 const { AccountPipeline } = await import('../AccountPipeline');
 const db = await import('../db');
+const api = await import('../api');
 const { syncNow, waitForSync } = await import('../syncService');
 
 /** Let the microtask chain behind a resolved promise run to the end. */
 const tick = () => new Promise(r => setTimeout(r, 0));
+/** The worker loop yields 10ms between fetches and staggers its slots by 100ms. */
+const browserTicks = (n) => new Promise(r => setTimeout(r, n * 50));
 
 describe('AccountPipeline memory cleanup', () => {
   it('clears _lastLoadedEmails and _graphIdMap on construction', () => {
@@ -177,5 +176,62 @@ describe('AccountPipeline daemon headers', () => {
     await tick();
 
     expect(onHeadersRefreshed).not.toHaveBeenCalled();
+  });
+});
+
+// Bodies first, attachments after: the attachment prefetch is handed the
+// mailbox only once the body pass for it is over, and only when the setting
+// asks for it. It runs newest-first on its own thread in Rust.
+describe('AccountPipeline attachment prefetch', () => {
+  // Not the active account: _finish's saved-id refresh is another test's concern.
+  const account = { id: 'acc-2', email: 'me@mock.test', password: 'pw' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    settings.autoDownloadAttachments = false;
+  });
+
+  it('hands the mailbox to the attachment prefetch once its bodies are cached', async () => {
+    settings.autoDownloadAttachments = true;
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    await pipeline._finish('Sent');
+    expect(api.prefetchAttachments).toHaveBeenCalledWith('acc-2', 'Sent');
+  });
+
+  it('leaves attachments alone when the setting is off', async () => {
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    await pipeline._finish('INBOX');
+    expect(api.prefetchAttachments).not.toHaveBeenCalled();
+  });
+
+  // A body the server refuses (yoda's 907-909 in the e2e fixture; a real
+  // mailbox's one corrupt message) keeps the retry loop alive for ever.
+  // The attachments of every body that DID land must not wait behind it.
+  it('prefetches once the first pass drains, while failed bodies still wait for a retry', async () => {
+    settings.autoDownloadAttachments = true;
+    api.fetchEmailLight.mockImplementation(async (_a, uid) => {
+      if (uid === 2) throw new Error('Server cannot read that message');
+      return { uid, attachments: [] };
+    });
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    pipeline.startContentCaching([1, 2], 'INBOX');
+    await browserTicks(6);
+
+    expect(pipeline._retryQueue).toEqual([2]);
+    expect(api.prefetchAttachments).toHaveBeenCalledTimes(1);
+    expect(api.prefetchAttachments).toHaveBeenCalledWith('acc-2', 'INBOX');
+    pipeline.destroy(); // clears the retry timer
+  });
+
+  it('still prefetches a mailbox whose bodies were already all cached', async () => {
+    settings.autoDownloadAttachments = true;
+    const pipeline = new AccountPipeline(account, { concurrency: 1 });
+    await pipeline.startContentCaching([], 'INBOX');
+    await tick();
+    expect(api.prefetchAttachments).toHaveBeenCalledWith('acc-2', 'INBOX');
+
+    // A pipeline is reused across account switches; each switch sweeps again.
+    await pipeline.startContentCaching([], 'INBOX');
+    expect(api.prefetchAttachments).toHaveBeenCalledTimes(2);
   });
 });

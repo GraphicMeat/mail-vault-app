@@ -228,6 +228,16 @@ export async function fetchEmailLight(account, uid, mailbox = 'INBOX', accountId
   return email;
 }
 
+/**
+ * Write every real attachment of a mailbox's cached .eml files to the
+ * attachment cache, newest first, on a Rust thread. Fire-and-forget: the
+ * pipeline calls it after the body pass and nothing waits on it.
+ */
+export function prefetchAttachments(accountId, mailbox) {
+  if (!IS_TAURI) return Promise.resolve(0);
+  return tauriInvoke('prefetch_attachments', { accountId, mailbox });
+}
+
 export async function updateEmailFlags(account, uid, flags, action = 'add', mailbox = 'INBOX') {
   if (IS_TAURI) {
     return tauriInvoke('imap_set_flags', { account, uid, mailbox, flags, action });
