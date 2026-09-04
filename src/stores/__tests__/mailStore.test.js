@@ -69,6 +69,7 @@ const mockSettingsState = {
   cacheLimitMB: 128,
   hiddenAccounts: {},
   getLastMailbox: () => 'INBOX',
+  setLastMailbox: () => {},
   emailListStyle: 'default',
   linkAlerts: {},
 };

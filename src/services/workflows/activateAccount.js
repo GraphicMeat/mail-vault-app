@@ -387,6 +387,19 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     }
   }
 
+  // Skip descriptor restore on background refresh — it must do a full load,
+  // otherwise it re-enters the descriptor path and loops infinitely.
+  const isBackgroundRefresh = options._backgroundRefresh === true;
+
+  // The folder to reopen this account on is the one the user asked for, and
+  // it is recorded here, at the click, before any await or early return. It
+  // used to be written only at the tail of the cold path, so a click that
+  // painted from the restore descriptor (or was superseded by the next click)
+  // never recorded itself, and the account came back on a folder already left.
+  if (!isBackgroundRefresh && mailbox && mailbox !== 'UNIFIED') {
+    useSettingsStore.getState().setLastMailbox(accountId, mailbox);
+  }
+
   const { activeAccountId: currentAccountId, emails: currentEmails, totalEmails: currentTotalEmails } = get();
   const isMailboxSwitch = currentAccountId === accountId;
 
@@ -400,15 +413,11 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     _memoizeOutgoing(currentAccountId, previousMailbox, currentEmails);
   }
 
-  // Skip descriptor restore on background refresh — it must do a full load,
-  // otherwise it re-enters the descriptor path and loops infinitely.
-  const isBackgroundRefresh = options._backgroundRefresh === true;
   const viewMode = get().viewMode || 'all';
-  const restored = !isBackgroundRefresh ? _getRestore(
-    accountId,
-    isMailboxSwitch ? mailbox : (get().activeMailbox || mailbox),
-    viewMode
-  ) : null;
+  // Keyed on the requested folder for an account switch too. Keying on the
+  // outgoing account's folder could paint the incoming account on a folder
+  // other than the one just recorded above.
+  const restored = !isBackgroundRefresh ? _getRestore(accountId, mailbox, viewMode) : null;
   if (restored) {
     const isAccountSwitch = !isMailboxSwitch;
     const label = isAccountSwitch ? t('settings.storage.account') : t('svc.activateAccount.mailbox');
@@ -560,9 +569,6 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       connectionErrorType: null,
       error: null,
     });
-    if (isMailboxSwitch) {
-      useSettingsStore.getState().setLastMailbox(accountId, mailbox);
-    }
   }
 
   const uidMap = new UidMap(null);
