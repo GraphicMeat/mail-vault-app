@@ -36,6 +36,7 @@ import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
+import { replyTarget } from '../../utils/replyTarget';
 import { AddressText } from './AddressText';
 import { t as tr, useT  } from '../../i18n/index.js';
 
@@ -330,6 +331,11 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
   const isLoading = bodyEntry?.status === 'loading';
   const loadError = bodyEntry?.status === 'error';
 
+  // The click, Reply, Reply All and Forward all quote this message; the body
+  // is fetched first when the loader has not reached it yet.
+  const compose = (mode) => replyTarget(email, loadedEmail, useMailStore.getState())
+    .then(target => onComposeReply?.(mode, target));
+
   // Both the header's "View Source" and the action bar's open the same panel.
   const toggleRawSource = async () => {
     if (showRaw) { setShowRaw(false); return; }
@@ -356,7 +362,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
       {/* Header — always visible. A click on the message replies to it; the
           chevron inside EmailSenderInfo is the only fold control, and it
           stops the event before it reaches this handler. */}
-      <div data-testid="thread-email-header" onClick={() => onComposeReply?.('reply', loadedEmail || email)}>
+      <div data-testid="thread-email-header" onClick={() => compose('reply')}>
         <EmailSenderInfo
           email={email}
           variant="thread"
@@ -382,9 +388,9 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
           <EmailActionBar
             email={email}
             variant="thread"
-            onReply={() => onComposeReply?.('reply', loadedEmail || email)}
-            onReplyAll={() => onComposeReply?.('replyAll', loadedEmail || email)}
-            onForward={() => onComposeReply?.('forward', loadedEmail || email)}
+            onReply={() => compose('reply')}
+            onReplyAll={() => compose('replyAll')}
+            onForward={() => compose('forward')}
             onArchive={null}
             // A vault-only row (server copy gone) is not this delete's to make:
             // the workflow looks the row up in `emails`, and a vault row lives

@@ -8,7 +8,7 @@ import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
 import { useExportStore } from '../stores/exportStore';
 import { openCompose } from '../utils/composeOpener';
-import { resolveMessageBody } from '../services/export/bodyResolver';
+import { replyTarget } from '../utils/replyTarget';
 import { getSenderName } from '../utils/emailParser';
 import { t, useT  } from '../i18n/index.js';
 
@@ -47,11 +47,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   const senderAddress = newest.from?.address || '';
 
   const replyToNewest = async () => {
-    let res = null;
-    try { res = await resolveMessageBody(newest, useMailStore.getState()); } catch { res = null; }
-    // The fetched copy wins where it answers; the row keeps what it alone
-    // knows (its account in a unified list) where the copy is silent.
-    openCompose({ mode: 'reply', replyTo: res?.ok ? { ...newest, ...res.email } : newest });
+    openCompose({ mode: 'reply', replyTo: await replyTarget(newest, null, useMailStore.getState()) });
   };
 
   const newMessageToSender = () => {
