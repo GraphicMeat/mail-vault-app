@@ -1049,21 +1049,26 @@ pub async fn imap_move_emails(
     source_mailbox: String,
     target_mailbox: String,
 ) -> Result<serde_json::Value, String> {
-    let has_move = pool.has_capability(&account, "MOVE").await;
-
+    // Capabilities are cached when a session is CREATED (pool.rs:415), so read
+    // them inside the closure, after checkout — a read before it sees an empty
+    // map on the first call of a process and takes the slow COPY path.
+    let pool_ref: &ImapPool = &pool;
+    let acct = &account;
     let moved = with_priority(&pool, &account, |mut session| async move {
-        let result = crate::move_emails::move_emails(
+        let has_move = pool_ref.has_capability(acct, "MOVE").await;
+        let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
+        let result = imap::move_uids(
             &mut session,
             &source_mailbox,
             &target_mailbox,
             &uids,
             has_move,
+            has_uidplus,
         )
         .await?;
         Ok((result, session, Some(source_mailbox)))
     })
     .await?;
-
     Ok(serde_json::json!({
         "success": true,
         "moved": moved

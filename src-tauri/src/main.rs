@@ -88,7 +88,6 @@ mod iap;
 mod mailto;
 pub use mailvault_core::imap;
 mod migration;
-mod move_emails;
 mod pending_delete;
 mod restore;
 pub use mailvault_core::oauth2;

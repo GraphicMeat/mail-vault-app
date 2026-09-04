@@ -197,3 +197,79 @@ async fn append_to_a_missing_mailbox_reports_the_failure() {
         .expect_err("append to a missing mailbox must fail");
     assert!(err.to_lowercase().contains("append"), "unhelpful error: {err}");
 }
+
+// ── move_uids ──────────────────────────────────────────────────────────────
+// The shipped move fallback (src-tauri/move_emails.rs, deleted with this)
+// collected and discarded the STORE and EXPUNGE streams, so a socket that died
+// after COPY reported a successful move and the message stayed in both folders.
+
+fn inbox_and_archive(n: u32) -> Scenario {
+    Scenario::new().mailbox(inbox_with(n)).mailbox(Mailbox::new("Archive"))
+}
+
+#[async_std::test]
+async fn move_uids_uses_uid_move_when_the_server_has_it() {
+    let server = MockImap::start(inbox_and_archive(2));
+    let mut sess = session(&server).await;
+
+    let moved = move_uids(&mut sess, "INBOX", "Archive", &[1], true, true).await.expect("move");
+
+    assert_eq!(moved, 1);
+    let state = server.state();
+    assert!(state.find("INBOX").unwrap().by_uid(1).is_none(), "source still holds uid 1");
+    assert_eq!(state.find("Archive").unwrap().messages.len(), 1);
+    assert_eq!(server.count_commands("UID MOVE"), 1);
+    assert_eq!(server.count_commands("UID COPY"), 0);
+}
+
+#[async_std::test]
+async fn move_uids_falls_back_to_copy_delete_expunge_without_move() {
+    let server = MockImap::start(inbox_and_archive(2).without_cap("MOVE"));
+    let mut sess = session(&server).await;
+
+    let moved = move_uids(&mut sess, "INBOX", "Archive", &[1, 2], false, true).await.expect("move");
+
+    assert_eq!(moved, 2);
+    let state = server.state();
+    assert!(state.find("INBOX").unwrap().messages.is_empty(), "source still holds the messages");
+    assert_eq!(state.find("Archive").unwrap().messages.len(), 2);
+    assert_eq!(server.count_commands("UID COPY"), 1);
+    assert_eq!(server.count_commands("UID EXPUNGE"), 1);
+}
+
+/// Without UIDPLUS there is no `UID EXPUNGE`; a plain `EXPUNGE` takes every
+/// `\Deleted` message in the mailbox and leaves the rest — what Thunderbird
+/// does on the same servers.
+#[async_std::test]
+async fn move_uids_without_uidplus_expunges_the_mailbox() {
+    let server = MockImap::start(inbox_and_archive(2).without_cap("MOVE").without_cap("UIDPLUS"));
+    let mut sess = session(&server).await;
+
+    move_uids(&mut sess, "INBOX", "Archive", &[2], false, false).await.expect("move");
+
+    assert_eq!(server.count_commands("UID EXPUNGE"), 0, "UID EXPUNGE needs UIDPLUS");
+    assert_eq!(server.count_commands("EXPUNGE"), 1);
+    let state = server.state();
+    assert!(state.find("INBOX").unwrap().by_uid(2).is_none());
+    assert!(state.find("INBOX").unwrap().by_uid(1).is_some(), "an unflagged message must survive a plain EXPUNGE");
+    assert_eq!(state.find("Archive").unwrap().messages.len(), 1);
+}
+
+/// Negative control for the bug itself: with every STORE dying, the move
+/// cannot succeed — an `Ok` here is the shipped defect.
+#[async_std::test]
+async fn a_move_whose_socket_dies_after_copy_is_an_error_not_a_success() {
+    let server = MockImap::start(
+        inbox_and_archive(1)
+            .without_cap("MOVE")
+            .fault(Trigger::on("STORE"), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = move_uids(&mut sess, "INBOX", "Archive", &[1], false, true)
+        .await
+        .expect_err("a dead socket after COPY must not report a move");
+
+    assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
+    assert!(server.state().find("INBOX").unwrap().by_uid(1).is_some(), "the source copy is still there");
+}

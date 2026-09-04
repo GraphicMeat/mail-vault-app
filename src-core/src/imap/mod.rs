@@ -1307,6 +1307,58 @@ async fn ensure_role_mailbox(
     Ok(create_name.to_string())
 }
 
+/// Move `uids` from `source_mailbox` to `target_mailbox`, verifying every step.
+///
+/// `UID MOVE` when the server advertises MOVE (RFC 6851); otherwise
+/// `UID COPY` + `UID STORE +FLAGS (\Deleted)` + `UID EXPUNGE` (RFC 4315), or a
+/// plain `EXPUNGE` when UIDPLUS is missing too. The STORE and EXPUNGE go through
+/// `run_checked` — see its comment: a collected-and-discarded stream reports
+/// success on a dead socket, and the app's move fallback did exactly that until
+/// 2026-09-05 (the old src-tauri/move_emails.rs), leaving the message in both
+/// folders while the list said it had moved.
+pub async fn move_uids(
+    session: &mut ImapSession,
+    source_mailbox: &str,
+    target_mailbox: &str,
+    uids: &[u32],
+    has_move: bool,
+    has_uidplus: bool,
+) -> Result<u32, String> {
+    if uids.is_empty() {
+        return Ok(0);
+    }
+    let _mbox = select_mailbox(session, source_mailbox).await?;
+    let uid_set = compress_uid_ranges(uids);
+    let count = uids.len() as u32;
+
+    if has_move {
+        info!("[move] UID MOVE {} '{}' -> '{}'", uid_set, source_mailbox, target_mailbox);
+        session
+            .uid_mv(&uid_set, target_mailbox)
+            .await
+            .map_err(|e| format!("UID MOVE failed: {}", e))?;
+        return Ok(count);
+    }
+
+    info!(
+        "[move] COPY+DELETE fallback {} '{}' -> '{}' (uidplus={})",
+        uid_set, source_mailbox, target_mailbox, has_uidplus
+    );
+    session
+        .uid_copy(&uid_set, target_mailbox)
+        .await
+        .map_err(|e| format!("UID COPY failed: {}", e))?;
+    run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid_set), "STORE \\Deleted").await?;
+    if has_uidplus {
+        run_checked(session, format!("UID EXPUNGE {}", uid_set), "UID EXPUNGE").await?;
+    } else {
+        // No UIDPLUS: EXPUNGE takes every \Deleted message in the mailbox,
+        // which is what Thunderbird does on the same servers.
+        run_checked(session, "EXPUNGE".to_string(), "EXPUNGE").await?;
+    }
+    Ok(count)
+}
+
 /// Resolve or auto-create the Sent mailbox for this account.
 /// Order: IMAP SPECIAL-USE `\Sent` → common name candidates → CREATE "Sent".
 /// Returns the resolved mailbox path.
