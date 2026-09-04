@@ -15,6 +15,28 @@ const SANDBOX = 'allow-same-origin';
 // sets the srcdoc attribute but never navigates the frame at all.
 export const FRAME_LOAD_TIMEOUT_MS = 10_000;
 
+// Same reasoning, one step later, and for the same document: an <img> the
+// webview cannot resolve — a host that never answers, a cid: whose bytes were
+// never filled in — leaves the frame LOADING, and everything that waits on a
+// finished document then waits forever. `fonts.ready` does not settle for a
+// document that is still loading, and `decode()` never settles for the image
+// itself. Both waits are worth making, neither is worth hanging on: an export
+// short of one image beats a dialog that never comes back.
+export const SETTLE_TIMEOUT_MS = 5_000;
+
+export async function settleDocument(doc, timeoutMs = SETTLE_TIMEOUT_MS) {
+  const settled = Promise.all([
+    doc.fonts?.ready,
+    ...[...doc.images].map(img => (img.decode ? img.decode().catch(() => {}) : null)),
+  ]);
+  let timer;
+  await Promise.race([
+    settled,
+    new Promise((resolve) => { timer = setTimeout(resolve, timeoutMs); }),
+  ]);
+  clearTimeout(timer);
+}
+
 export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOUT_MS } = {}) {
   const iframe = document.createElement('iframe');
   iframe.setAttribute('sandbox', SANDBOX);
@@ -44,8 +66,7 @@ export async function mountExportFrame(html, { loadTimeoutMs = FRAME_LOAD_TIMEOU
 
     // Everything that changes layout has to settle before the height is read,
     // or the frame is measured mid-load and the bottom of the mail is cut off.
-    if (doc.fonts?.ready) await doc.fonts.ready;
-    await Promise.all([...doc.images].map(img => (img.decode ? img.decode().catch(() => {}) : null)));
+    await settleDocument(doc);
     trace('images-decoded', { srcs: [...doc.images].map(i => i.currentSrc || i.src).slice(0, 5) });
 
     // Collapse before measuring. scrollHeight on a frame TALLER than its

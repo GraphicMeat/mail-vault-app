@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 const domToCanvas = vi.fn();
 vi.mock('modern-screenshot', () => ({ domToCanvas: (...args) => domToCanvas(...args) }));
 
-const { renderMessageToCanvas, mountExportFrame } = await import('../renderMessageToCanvas');
+const { renderMessageToCanvas, mountExportFrame, settleDocument } = await import('../renderMessageToCanvas');
 
 const message = {
   from: 'Ana Brandt <ana@sizzlemedia.co>',
@@ -93,5 +93,37 @@ describe('renderMessageToCanvas', () => {
     domToCanvas.mockRejectedValue(new Error('still broken'));
     await renderMessageToCanvas({ message, bodyHtml: '<p>hi</p>', loadTimeoutMs: 10 }).catch(() => {});
     expect(document.querySelectorAll('iframe').length).toBe(0);
+  });
+});
+
+// An image the webview cannot resolve leaves the frame loading, and everything
+// that waits for a loaded document then waits forever — fonts.ready included.
+// The export sat on that: the dialog spun, no file was written, nothing said
+// why. These are the bounds that end it.
+describe('settleDocument', () => {
+  const ready = { ready: Promise.resolve() };
+
+  it('waits for the fonts and the images that do settle', async () => {
+    const decoded = [];
+    await settleDocument({ fonts: ready, images: [{ decode: async () => decoded.push(1) }] }, 1000);
+    expect(decoded).toEqual([1]);
+  });
+
+  it('gives up on an image that never decodes instead of hanging the export', async () => {
+    const started = Date.now();
+    await settleDocument({ fonts: ready, images: [{ decode: () => new Promise(() => {}) }] }, 20);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  // fonts.ready on a document that is still loading never resolves — which is
+  // exactly the state a dead image leaves the frame in.
+  it('gives up on fonts that never report ready', async () => {
+    const started = Date.now();
+    await settleDocument({ fonts: { ready: new Promise(() => {}) }, images: [] }, 20);
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it('survives an image whose decode rejects, and a document with no fonts API', async () => {
+    await settleDocument({ images: [{ decode: async () => { throw new Error('no bytes'); } }] }, 1000);
   });
 });
