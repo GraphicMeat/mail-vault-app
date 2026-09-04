@@ -18,6 +18,7 @@ import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSp
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
+import { openFolder } from './loadSubtree';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
@@ -1338,7 +1339,7 @@ export async function init() {
           // Quick-load set account active but didn't hydrate — force activation
           console.log('[init] No emails hydrated — forcing activateAccount');
           const lastMailbox = useSettingsStore.getState().getLastMailbox(firstVisible.id);
-          await get().activateAccount(firstVisible.id, lastMailbox || 'INBOX');
+          await openFolder(firstVisible.id, lastMailbox || 'INBOX');
         } else if (currentLoading) {
           // Loading stuck with emails present — clear the flag
           console.warn('[init] Loading stuck with %d emails — forcing loading=false', currentEmails.length);
@@ -1347,7 +1348,7 @@ export async function init() {
         }
       } else {
         const lastMailbox = useSettingsStore.getState().getLastMailbox(firstVisible.id);
-        await get().activateAccount(firstVisible.id, lastMailbox || 'INBOX');
+        await openFolder(firstVisible.id, lastMailbox || 'INBOX');
       }
     }
 
@@ -1372,9 +1373,10 @@ export async function init() {
 // ── setActiveAccount workflow ──
 
 export async function setActiveAccount(accountId) {
-  const { useMailStore } = await import('../../stores/mailStore');
   const lastMailbox = useSettingsStore.getState().getLastMailbox(accountId);
-  await useMailStore.getState().activateAccount(accountId, lastMailbox || 'INBOX');
+  // A remembered folder is opened the way clicking it would open it — see
+  // openFolder for why an account switch still usually takes the plain path.
+  await openFolder(accountId, lastMailbox || 'INBOX');
 }
 
 

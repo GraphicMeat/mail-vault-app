@@ -81,6 +81,17 @@ const SEP = '\u0000';
 
 const splitPath = (m) => (m.delimiter ? String(m.path).split(m.delimiter) : [String(m.path)]);
 
+// "INBOX is case-insensitive" — RFC 3501 5.1. Servers LIST it as INBOX, Inbox
+// and inbox, and all three name the same mailbox.
+const isInbox = (name) => String(name).toUpperCase() === 'INBOX';
+
+// A Dovecot-style namespace: every mailbox filed under INBOX, so INBOX is a
+// sibling of the reader's folders rather than their parent. bson73's server
+// (discussion #1) prefixes all 59 paths — INBOX.Sent, INBOX.Kunden…
+// All-or-nothing on purpose: this decides where rows are DRAWN, and lifting a
+// prefix that only some folders share would strand the rest.
+const isInboxPrefixed = (flat) => flat.length > 0 && flat.every(m => isInbox(splitPath(m)[0]));
+
 function sortLevel(nodes) {
   nodes.sort((a, b) => {
     if (a.path === 'INBOX') return -1;
@@ -105,7 +116,7 @@ export function buildMailboxTree(mailboxes) {
   // own folders one click inside a collapsed INBOX is what made those accounts
   // look like they had a single mailbox. Lift the prefix — but only when it is
   // genuinely the namespace, i.e. nothing at all lives outside it.
-  const prefixed = flat.every(m => splitPath(m)[0] === 'INBOX');
+  const prefixed = isInboxPrefixed(flat);
 
   const roots = [];
   const byKey = new Map();
@@ -178,6 +189,14 @@ export const SUBTREE_PREFIX = 'sub:';
 export function mailboxDescendants(path, mailboxes = []) {
   if (!path) return [];
   const flat = mailboxes || [];
+  // INBOX is never a branch root. Apple Mail, the reference, does not recurse
+  // it either: it is the folder you file OUT of, not a container. On bson73's
+  // INBOX-prefixed server (discussion #1) the raw prefix answered "INBOX" with
+  // the entire account — 26 000 messages instead of the 25 filed in it — and
+  // gating this on the namespace being INBOX-prefixed throughout only moved
+  // the bug: one folder outside it (a Public namespace, a stray Archive) and
+  // the fan-out was back.
+  if (isInbox(path)) return [path];
   const delim = flat.find(m => m.path === path)?.delimiter
     || flat.find(m => m.delimiter)?.delimiter
     || '.';

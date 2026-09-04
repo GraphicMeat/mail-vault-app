@@ -126,6 +126,23 @@ export async function saveEmailHeaders(accountId, mailbox, emails, totalEmails, 
 }
 
 /**
+ * The rows the requested (account, mailbox) actually owns.
+ *
+ * A branch listing merges rows from every folder in its scope and stamps each
+ * with the folder it came from; that list was once written into the branch
+ * ROOT's sidecar, and the root is a real folder — plain 'INBOX' on bson73's
+ * INBOX-prefixed server (discussion #1), whose INBOX cache ends up holding
+ * ~26 000 rows filed in 58 other folders. Fixing the write does nothing for
+ * the caches already on disk, and every cache-first paint puts them back on
+ * screen. A row that carries no stamp is the ordinary case and passes through
+ * untouched; `totalEmails` is the server's count and is never rewritten here.
+ */
+const ownRows = (rows, accountId, mailbox) => (Array.isArray(rows)
+  ? rows.filter(e => (!e?._mailbox || e._mailbox === mailbox)
+      && (!e?._accountId || e._accountId === accountId))
+  : rows);
+
+/**
  * Drop every cached header for one mailbox. Only for UIDVALIDITY changes —
  * the server re-issued its UID space, so cached UIDs now point at other
  * messages (or nothing) and merging would mix two generations.
@@ -147,7 +164,7 @@ export async function getEmailHeadersPartial(accountId, mailbox, limit = 200) {
         const entry = safeParse(data);
         console.log('[db.js] Partial email headers loaded:', entry.emails?.length, 'of', entry.totalCached, 'emails');
         return {
-          emails: entry.emails,
+          emails: ownRows(entry.emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
           totalCached: entry.totalCached,
           uidValidity: entry.uidValidity ?? null,
@@ -188,7 +205,7 @@ export async function getEmailHeadersByUids(accountId, mailbox, uids) {
   if (invoke && uids?.length) {
     try {
       const rows = await invoke('load_email_cache_by_uids', { accountId, mailbox, uids });
-      if (Array.isArray(rows)) return rows;
+      if (Array.isArray(rows)) return ownRows(rows, accountId, mailbox);
     } catch (error) {
       console.warn('[db.js] Failed to load headers by UID:', error);
     }
@@ -228,7 +245,7 @@ export async function getEmailHeaders(accountId, mailbox) {
         const entry = safeParse(data);
         console.log('[db.js] Email headers loaded from file cache:', entry.emails?.length, 'emails');
         return {
-          emails: entry.emails,
+          emails: ownRows(entry.emails, accountId, mailbox),
           totalEmails: entry.totalEmails,
           uidValidity: entry.uidValidity ?? null,
           uidNext: entry.uidNext ?? null,

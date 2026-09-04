@@ -1488,9 +1488,18 @@ export async function moveEmails(keys, targetMailbox) {
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
   // Only the view's own folder can name removed uids — the sidecar is per
   // (account, mailbox), and a merged copy's uid belongs to another one.
+  //
+  // And no write at all when the list spans folders: `filteredEmails` then
+  // holds rows from every folder in the scope, while `activeMailbox` is the
+  // branch ROOT — a real folder ('INBOX' on bson73's INBOX-prefixed server,
+  // discussion #1), unlike the literal 'UNIFIED'. Writing the branch list and
+  // its total into that folder's cache is what the next single-folder load
+  // paints cache-first: mail that was moved away still in the inbox.
   const own = groups.get(`${activeAccountId}|${activeMailbox}`);
-  await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal,
-    isUnified || !own ? undefined : { removedUids: own.uids });
+  if (!isUnified) {
+    await db.saveEmailHeaders(activeAccountId, activeMailbox, filteredEmails, newTotal,
+      own ? { removedUids: own.uids } : undefined);
+  }
 
   _invalidateRestore(activeAccountId);
 

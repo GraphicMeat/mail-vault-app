@@ -113,3 +113,35 @@ export async function loadSubtree(accountId, rootPath, { limitPerFolder = HEADER
   if (isStale()) return;
   set({ loading: false, subtreeProgress: null });
 }
+
+/**
+ * Open a folder the way the sidebar does: a branch if it has folders under it,
+ * an ordinary folder otherwise.
+ *
+ * One decision in one place. It used to live inline in Sidebar.selectFolder,
+ * so every other way of opening a folder — chiefly the remembered folder an
+ * account restores to — took the plain path and came back as the branch root
+ * alone, listing a fraction of what the same click had shown.
+ */
+export async function openFolder(accountId, path) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+
+  // The store holds ONE folder list: the active account's. At a cold start
+  // there is none yet, and mid-switch it still belongs to the account being
+  // left — same folder names, different server. Neither can decide this, and
+  // neither is worth a fetch to find out: the plain open is the honest answer.
+  const mailboxes = (get().activeAccountId === accountId && get().mailboxes) || [];
+  // Only folders the server LISTed and will SELECT count. The path clicked may
+  // be neither: a parent the tree synthesized because the server named only
+  // its leaf (luke's "Project B"), or a \Noselect container. Counting it as
+  // one of the branch made a lone real child look like a two-folder branch,
+  // loadSubtree then filtered the root away, found one path, and opened
+  // nothing — a blank list under a folder that does not exist.
+  const real = new Set(mailboxes.filter(m => !m.noselect).map(m => m.path));
+  const branch = mailboxDescendants(path, mailboxes).filter(p => real.has(p));
+
+  if (branch.length > 1) return get().loadSubtree(accountId, path);
+  // One real folder under it (or the folder itself): open that one.
+  return get().activateAccount(accountId, branch[0] ?? path);
+}

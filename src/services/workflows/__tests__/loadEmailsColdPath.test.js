@@ -82,6 +82,8 @@ function primeCold(mailbox = 'INBOX') {
     accounts: [ACCOUNT],
     activeAccountId: ACCOUNT.id,
     activeMailbox: mailbox,
+    // A branch scope left behind sends the next load down the subtree path.
+    mailboxScope: null,
     emails: [],
     localEmails: [],
     savedEmailIds: new Set(),
@@ -288,5 +290,43 @@ describe('loadEmails — the view moves to another folder mid-flight', () => {
     const state = useMailStore.getState();
     expect(state.activeMailbox).toBe('Archive');
     expect(state.emails.map((e) => e.uid)).toEqual([900]);
+  });
+});
+
+
+// A branch listing (Sidebar click on a folder with folders under it) is not
+// something this workflow can reload: it is single-mailbox by construction —
+// SELECT, CONDSTORE, uid pagination. Every reload path ends here (a move, a
+// delete, refreshAllAccounts), so without the delegation the list silently
+// collapsed to the branch root while the heading still said "across N
+// folders" — bson73, discussion #1.
+describe('loadEmails on a branch listing', () => {
+  it('hands the reload to loadSubtree and keeps the scope', async () => {
+    const loadSubtree = vi.fn().mockResolvedValue(undefined);
+    primeCold('Kunden');
+    useMailStore.setState({
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] },
+      loadSubtree,
+    });
+
+    await useMailStore.getState().loadEmails();
+
+    expect(loadSubtree).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden');
+    // Not one round trip of its own: the single-folder path never ran.
+    expect(mockCheckMailboxStatus).not.toHaveBeenCalled();
+    expect(mockFetchEmails).not.toHaveBeenCalled();
+    expect(useMailStore.getState().mailboxScope?.root).toBe('Kunden');
+  });
+
+  it('leaves a plain folder alone', async () => {
+    const loadSubtree = vi.fn().mockResolvedValue(undefined);
+    primeCold('INBOX');
+    useMailStore.setState({ loadSubtree });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 2, highestModseq: null });
+    mockFetchEmails.mockResolvedValue({ total: 1, emails: [mkHeader(1)] });
+
+    await useMailStore.getState().loadEmails();
+
+    expect(loadSubtree).not.toHaveBeenCalled();
   });
 });

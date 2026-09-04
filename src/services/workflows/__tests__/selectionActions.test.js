@@ -102,6 +102,7 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { loadEmails: realLoadEmails } = await import('../loadEmails');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
@@ -378,6 +379,27 @@ describe('deleteSelectedFromServer', () => {
     expect(prune).toBeTruthy();
     expect(prune[0]).toBe(ACCOUNT.id);
     expect(prune[1]).toBe('INBOX');
+  });
+
+  // Mirror of the move case: a branch root is a real folder ('INBOX' itself on
+  // bson73's INBOX-prefixed server, discussion #1), so the per-mailbox sidecar
+  // must not be handed a list drawn from every folder in the scope.
+  it('writes no header cache for the root of a branch listing', async () => {
+    primeStore([{
+      uid: 1, messageId: 'k1@mock', subject: 'Nested one', flags: [], from: { address: 'a@mock.test' },
+      date: '2026-08-01T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden.Company XY',
+    }], []);
+    useMailStore.setState({
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] },
+    });
+    const state = useMailStore.getState();
+    useMailStore.setState({ selectedEmailIds: new Set([selectionKey(state.emails[0], state)]) });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 1, 'Kunden.Company XY');
+    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
   });
 
   // The whole delete runs in the webview, so a reload or quit inside the loop
@@ -666,6 +688,55 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'Kunden.Company XY', 'Archive');
     onlyNumbersReachedTheWire();
     expect(useMailStore.getState().emails).toEqual([]);
+  });
+
+  it('does not write a branch listing into the root folder\'s header cache', async () => {
+    // The branch root is a REAL folder — 'Kunden' here, plain 'INBOX' on
+    // bson73's INBOX-prefixed server (discussion #1) — and the sidecar is per
+    // (account, mailbox). Writing the merged multi-folder rows and the branch
+    // total into it is what the next single-folder load paints cache-first,
+    // which is the "the moved mail is still in the inbox" half of that report.
+    primeStore([
+      { uid: 1, messageId: 'k1@mock', subject: 'Nested one', flags: [], from: { address: 'a@mock.test' },
+        date: '2026-08-01T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden' },
+      { uid: 1, messageId: 'k2@mock', subject: 'Nested two', flags: [], from: { address: 'b@mock.test' },
+        date: '2026-08-02T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden.Company XY' },
+    ], []);
+    useMailStore.setState({
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] },
+    });
+    const state = useMailStore.getState();
+
+    await state.moveEmails(state.emails.map(e => selectionKey(e, state)), 'Archive');
+
+    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+  });
+
+  it('re-lists the branch after the move instead of collapsing to its root', async () => {
+    // loadEmails() is single-mailbox by construction, so the reload after a
+    // move silently replaced the branch listing with the root folder alone —
+    // while the heading still said "across N folders". bson73 moved one mail
+    // out of a Kunden subfolder and watched the other subfolders vanish.
+    // The real workflow, not primeStore's stub: the delegation is the point.
+    const loadSubtree = vi.fn().mockResolvedValue(undefined);
+    primeStore([
+      { uid: 1, messageId: 'k1@mock', subject: 'Nested one', flags: [], from: { address: 'a@mock.test' },
+        date: '2026-08-01T10:00:00Z', _accountId: ACCOUNT.id, _mailbox: 'Kunden.Company XY' },
+    ], []);
+    useMailStore.setState({
+      activeMailbox: 'Kunden',
+      mailboxScope: { root: 'Kunden', paths: ['Kunden', 'Kunden.Company XY'] },
+      loadEmails: realLoadEmails,
+      loadSubtree,
+    });
+    const state = useMailStore.getState();
+
+    await state.moveEmails([selectionKey(state.emails[0], state)], 'Archive');
+
+    // The reload is fire-and-forget — moveEmails does not await it.
+    await vi.waitFor(() => expect(loadSubtree).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden'));
+    expect(useMailStore.getState().mailboxScope?.root).toBe('Kunden');
   });
 
   it('drops a moved search hit from the results list', async () => {

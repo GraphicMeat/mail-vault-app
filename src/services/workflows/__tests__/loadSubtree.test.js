@@ -66,7 +66,7 @@ const msg = (uid, day) => ({
   date: `2026-08-${String(day).padStart(2, '0')}T10:00:00Z`,
 });
 
-const { loadSubtree } = await import('../loadSubtree');
+const { loadSubtree, openFolder } = await import('../loadSubtree');
 
 beforeEach(() => {
   statusByMailbox = {};
@@ -88,6 +88,8 @@ beforeEach(() => {
     totalEmails: 0,
     loading: false,
     updateSortedEmails: vi.fn(),
+    activateAccount: vi.fn().mockResolvedValue(undefined),
+    loadSubtree: vi.fn().mockResolvedValue(undefined),
   };
 });
 
@@ -260,5 +262,87 @@ describe('opening an ordinary folder', () => {
       resolve(process.cwd(), 'src/services/workflows/activateAccount.js'), 'utf8');
 
     expect(src).toContain("setState({ activeMailbox: 'INBOX', mailboxScope: null })");
+  });
+});
+
+
+// ── One decision, one place ────────────────────────────────────────────────
+// The sidebar decided branch-vs-plain inline, so every OTHER way of opening a
+// folder — the remembered folder an account restores to — got the plain path
+// and came back as the branch root alone.
+describe('openFolder', () => {
+  it('lists the branch when the folder has folders under it', async () => {
+    await openFolder(ACCOUNT.id, 'Kunden');
+
+    expect(state.loadSubtree).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden');
+    expect(state.activateAccount).not.toHaveBeenCalled();
+  });
+
+  it('opens a leaf as the ordinary folder it is', async () => {
+    await openFolder(ACCOUNT.id, 'Kunden/Company XY/Invoices');
+
+    expect(state.activateAccount).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden/Company XY/Invoices');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('never makes INBOX a branch root, even with folders filed under it', async () => {
+    state.mailboxes = [box('INBOX'), box('INBOX/Sub'), box('Public')];
+
+    await openFolder(ACCOUNT.id, 'INBOX');
+
+    expect(state.activateAccount).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('opens plainly when the folder list is not the one for this account', async () => {
+    // A cold start has no list at all, and an account switch still holds the
+    // OUTGOING account's — same folder names, different server. Neither can
+    // decide, and neither is worth a fetch to find out.
+    await openFolder('some-other-account', 'Kunden');
+
+    expect(state.activateAccount).toHaveBeenCalledWith('some-other-account', 'Kunden');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('opens plainly when no folder list has arrived yet', async () => {
+    state.mailboxes = [];
+
+    await openFolder(ACCOUNT.id, 'Kunden');
+
+    expect(state.activateAccount).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  // A parent the server never LISTed (the tree draws it so its leaf stays
+  // reachable) is not a folder: SELECTing it fails, and counting it as part of
+  // its own branch turned one real child into a "branch" that loadSubtree then
+  // reduced to a single path and never loaded.
+  it('opens the one real folder under a parent the server never LISTed', async () => {
+    state.mailboxes = [box('Kunden'), box('Kunden/Company XY/Project B/Invoices/erledigt')];
+
+    await openFolder(ACCOUNT.id, 'Kunden/Company XY/Project B');
+
+    expect(state.activateAccount).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden/Company XY/Project B/Invoices/erledigt');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('lists a branch under an unlisted parent once two real folders sit under it', async () => {
+    state.mailboxes = [
+      box('Kunden'),
+      box('Kunden/Company XY/Project B/Invoices/erledigt'),
+      box('Kunden/Company XY/Project B/Offers'),
+    ];
+
+    await openFolder(ACCOUNT.id, 'Kunden/Company XY/Project B');
+
+    expect(state.loadSubtree).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden/Company XY/Project B');
+    expect(state.activateAccount).not.toHaveBeenCalled();
+  });
+
+  it('opens the one real folder inside a \\Noselect container', async () => {
+    await openFolder(ACCOUNT.id, 'Kunden/Sammelmappe');
+
+    expect(state.activateAccount).toHaveBeenCalledWith(ACCOUNT.id, 'Kunden/Sammelmappe/Real');
+    expect(state.loadSubtree).not.toHaveBeenCalled();
   });
 });

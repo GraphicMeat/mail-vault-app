@@ -77,9 +77,21 @@ export async function loadEmails() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
-  const { activeAccountId, accounts, activeMailbox } = get();
+  const { activeAccountId, accounts, activeMailbox, mailboxScope } = get();
   let account = accounts.find(a => a.id === activeAccountId);
   if (!account) return;
+
+  // A branch listing is not a folder this workflow can reload: it is
+  // single-mailbox by construction (SELECT, CONDSTORE, uid pagination) and has
+  // never read `mailboxScope`. Every reload ends up here — a move, a delete,
+  // refreshAllAccounts — so the list silently became the branch ROOT alone
+  // while the heading still said "across N folders" and the other folders'
+  // mail had simply gone (bson73, discussion #1). activateAccount clears the
+  // scope BEFORE it loads, so an ordinary folder open never reaches this.
+  if (mailboxScope && activeMailbox === mailboxScope.root) {
+    await get().loadSubtree(activeAccountId, mailboxScope.root);
+    return;
+  }
 
   // Early bail if credentials are missing
   if (!hasValidCredentials(account)) {

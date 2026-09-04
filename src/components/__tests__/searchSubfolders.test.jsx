@@ -93,8 +93,27 @@ describe('searching a folder and everything under it', () => {
   it('offers nothing to include when the search is already every folder', () => {
     searchState.searchFilters = { ...searchState.searchFilters, folder: 'all' };
     open();
-    expect(subBox().disabled).toBe(true);
-    expect(subBox().checked).toBe(false);
+    expect(subBox()).toBe(null);
+  });
+
+  // A control that can only be ticked into a no-op is noise. INBOX is now
+  // never a branch root (mailboxTree: Apple Mail does not recurse it either),
+  // so on the folder most readers search from the box could never do anything.
+  it('is not offered for a folder with nothing under it', () => {
+    searchState.searchFilters = { ...searchState.searchFilters, folder: 'INBOX' };
+    open();
+    expect(subBox()).toBe(null);
+  });
+
+  it('is not offered for the current folder when that folder is INBOX', () => {
+    searchState.searchFilters = { ...searchState.searchFilters, folder: 'current' };
+    open();
+    expect(subBox()).toBe(null);
+  });
+
+  it('is offered for a folder that has folders under it', () => {
+    open();
+    expect(subBox()).not.toBe(null);
   });
 
   it('says the branch was searched, so the count is not read as one folder', () => {

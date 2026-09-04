@@ -279,6 +279,106 @@ describe('mailboxDescendants', () => {
   it('returns the folder itself when the list does not know it', () => {
     expect(mailboxDescendants('INBOX.Gone', DOVECOT)).toEqual(['INBOX.Gone']);
   });
+
+  it('gives INBOX no descendants when every path is INBOX-prefixed', () => {
+    // bson73, discussion #1: `INBOX.` on all 59 of his folders, so the raw
+    // prefix match answered "INBOX" with the entire account — clicking INBOX
+    // listed 26 000 messages instead of the 25 filed in it. There INBOX is a
+    // sibling of the reader's folders, which is exactly what buildMailboxTree
+    // already draws.
+    expect(mailboxDescendants('INBOX', DOVECOT)).toEqual(['INBOX']);
+  });
+
+  it('still lists a branch on that same server', () => {
+    // INBOX-specific: everything else on a prefixed server keeps its subtree.
+    expect(mailboxDescendants('INBOX.Lieferanten', DOVECOT)).toEqual([
+      'INBOX.Lieferanten',
+      'INBOX.Lieferanten.Apps',
+      'INBOX.Lieferanten.Bestellungen',
+      'INBOX.Lieferanten.Bestellungen.erledigt',
+      'INBOX.Lieferanten.Technik',
+      'INBOX.Lieferanten.Technik.Telefonie',
+      'INBOX.Lieferanten.Technik.Telefonie.NFon AG',
+      'INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt',
+    ]);
+  });
+
+  it('never lists a branch for INBOX, whatever else the server has', () => {
+    // One folder outside the prefix — a Public namespace, a #shared root, a
+    // stray Archive — used to drop the lift and fan INBOX back out over the
+    // whole personal namespace. Apple Mail, the reference, never recurses
+    // INBOX either: it is the folder you file OUT of, not a container.
+    const mixed = [box('INBOX'), box('INBOX.Sub'), box('Archive')];
+    expect(mailboxDescendants('INBOX', mixed)).toEqual(['INBOX']);
+    // Everything under it still lists its own branch.
+    expect(mailboxDescendants('INBOX.Sub', [...mixed, box('INBOX.Sub.Deep')]))
+      .toEqual(['INBOX.Sub', 'INBOX.Sub.Deep']);
+  });
+
+  it('reads INBOX case-insensitively, the way RFC 3501 defines it', () => {
+    // "INBOX is case-insensitive" (RFC 3501 5.1); Dovecot is commonly
+    // configured to LIST it as `Inbox`, and a case-sensitive compare made that
+    // spelling a branch root again.
+    const lower = [box('Inbox'), box('Inbox.Sent'), box('Inbox.Kunden')];
+    expect(mailboxDescendants('Inbox', lower)).toEqual(['Inbox']);
+    expect(mailboxDescendants('Inbox.Kunden', [...lower, box('Inbox.Kunden.A')]))
+      .toEqual(['Inbox.Kunden', 'Inbox.Kunden.A']);
+  });
+});
+
+// ── The chevron and the click have to answer the same question ─────────────
+//
+// The sidebar draws an expander when a tree node has children; clicking that
+// same row lists a BRANCH when mailboxDescendants finds more than one
+// selectable path (Sidebar.selectFolder). Two derivations of one fact, so
+// every disagreement is a bug the reader sees: a chevron that opens a single
+// folder, or a plain-looking folder that quietly lists a subtree.
+describe('buildMailboxTree and mailboxDescendants agree on what a branch is', () => {
+  // Sidebar's own filter: a path the server refuses to SELECT is not a folder
+  // the click can list. A synthesized parent is not IN the list at all, so it
+  // is not filtered — and it must not be, or a container the server never
+  // LISTed would stop being a branch root while still drawing children.
+  const selectableIn = (flat) => (p) => !flat.find(m => m.path === p)?.noselect;
+
+  const walk = (nodes, fn) => {
+    for (const n of nodes || []) { fn(n); walk(n.children, fn); }
+  };
+
+  const FIXTURES = {
+    dovecot: DOVECOT,
+    'synthesized parents': [box('INBOX'), box('INBOX.a.b.c')],
+    'mixed namespace': [box('INBOX'), box('INBOX.Sub'), box('Public')],
+    'lowercase inbox': [box('Inbox'), box('Inbox.Kunden'), box('Inbox.Kunden.A')],
+    'gmail hoist': [
+      box('INBOX', '/'),
+      box('[Gmail]', '/', { noselect: true }),
+      box('[Gmail]/Sent Mail', '/', { specialUse: '\\Sent' }),
+      box('[Gmail]/All Mail', '/', { specialUse: '\\All' }),
+      box('Work', '/'),
+    ],
+    flat: [box('INBOX', '/'), box('Archive', '/'), box('Sent', '/')],
+    'no delimiter': [box('INBOX', null), box('Some.Name', null)],
+  };
+
+  for (const [name, flat] of Object.entries(FIXTURES)) {
+    it(`holds for ${name}`, () => {
+      let checked = 0;
+      walk(buildMailboxTree(flat), (node) => {
+        checked += 1;
+        const listsABranch = mailboxDescendants(node.path, flat)
+          .filter(selectableIn(flat)).length > 1;
+        // INBOX is the one deliberate exception, and the only one: it can be
+        // drawn with children (a mixed namespace files folders under it) and
+        // still never list them.
+        if (String(node.path).toUpperCase() === 'INBOX') {
+          expect(listsABranch).toBe(false);
+          return;
+        }
+        expect(`${node.path}: ${listsABranch}`).toBe(`${node.path}: ${node.children.length > 0}`);
+      });
+      expect(checked).toBe(countMailboxes(buildMailboxTree(flat)));
+    });
+  }
 });
 
 describe('mailboxAncestors', () => {

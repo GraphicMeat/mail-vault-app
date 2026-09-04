@@ -4,7 +4,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
-import { SUBTREE_PREFIX } from '../services/workflows/mailboxTree';
+import { SUBTREE_PREFIX, mailboxDescendants } from '../services/workflows/mailboxTree';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -127,7 +127,13 @@ export function SearchBar() {
   const pickedFolder = scopedToBranch
     ? String(searchFilters.folder).slice(SUBTREE_PREFIX.length)
     : searchFilters.folder;
-  const branchable = pickedFolder !== 'all';
+  // Nothing to include, nothing to offer. 'all' is already every folder, and a
+  // folder with no folders under it — INBOX on any server, now that INBOX is
+  // never a branch root — could only be ticked into a no-op.
+  const branchable = pickedFolder !== 'all' && mailboxDescendants(
+    pickedFolder === 'current' ? activeMailbox : pickedFolder,
+    flattenMailboxes(mailboxes),
+  ).length > 1;
 
   const handleFilterChange = (key, value) => {
     setSearchFilters({ [key]: value });
@@ -296,19 +302,20 @@ export function SearchBar() {
                         ))
                       }
                     </select>
-                    <label className="mt-1.5 flex items-center gap-1.5 text-xs text-mail-text-muted
-                                      cursor-pointer has-[:disabled]:cursor-default has-[:disabled]:opacity-50">
-                      <input
-                        type="checkbox"
-                        data-testid="search-include-subfolders"
-                        checked={branchable && scopedToBranch}
-                        disabled={!branchable}
-                        onChange={(e) => handleFilterChange('folder',
-                          e.target.checked ? `${SUBTREE_PREFIX}${pickedFolder}` : pickedFolder)}
-                        className="accent-mail-accent"
-                      />
-                      {t('search.includeSubfolders')}
-                    </label>
+                    {branchable && (
+                      <label className="mt-1.5 flex items-center gap-1.5 text-xs text-mail-text-muted
+                                        cursor-pointer">
+                        <input
+                          type="checkbox"
+                          data-testid="search-include-subfolders"
+                          checked={scopedToBranch}
+                          onChange={(e) => handleFilterChange('folder',
+                            e.target.checked ? `${SUBTREE_PREFIX}${pickedFolder}` : pickedFolder)}
+                          className="accent-mail-accent"
+                        />
+                        {t('search.includeSubfolders')}
+                      </label>
+                    )}
                   </div>
 
                   {/* Sender */}

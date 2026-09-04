@@ -17,7 +17,8 @@ import { formatBytes } from '../utils/formatBytes';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
-import { buildMailboxTree, mailboxAncestors, mailboxDescendants } from '../services/workflows/mailboxTree';
+import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
+import { openFolder } from '../services/workflows/loadSubtree';
 import {
   Inbox,
   Send,
@@ -583,7 +584,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
-  const loadSubtree = useAccountStore(s => s.loadSubtree);
 
   // Single click resumes the folder you last read in that account; double click
   // is the shortcut straight to its Inbox. Bound on the row WRAPPER so all
@@ -745,13 +745,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   };
 
   // A folder with folders under it lists the whole branch; a leaf is an
-  // ordinary folder and takes the ordinary path.
-  const selectFolder = (path) => {
-    const branch = mailboxDescendants(path, mailboxes)
-      .filter(p => !mailboxes.find(m => m.path === p)?.noselect);
-    if (branch.length > 1) loadSubtree(activeAccountId, path);
-    else activateAccount(activeAccountId, path);
-  };
+  // ordinary folder and takes the ordinary path. The decision itself lives in
+  // openFolder, because a remembered folder has to be restored the same way.
+  const selectFolder = (path) => openFolder(activeAccountId, path);
 
   // Shared hover bubble (rendered in both collapsed and expanded views)
   const hoverBubble = hoverAccountId && hoverPos && (
@@ -872,7 +868,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 unreadCount={unreadPerAccount[account.id] || 0}
                 onActivate={() => {
                   const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                  activateAccount(account.id, lastMailbox || 'INBOX');
+                  openFolder(account.id, lastMailbox || 'INBOX');
                 }}
                 onOpenBackup={onOpenBackup}
               />
@@ -1051,7 +1047,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                       unreadCount={unreadPerAccount[account.id] || 0}
                       onActivate={() => {
                         const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                        activateAccount(account.id, lastMailbox || 'INBOX');
+                        openFolder(account.id, lastMailbox || 'INBOX');
                       }}
                     />
                   </div>

@@ -15,7 +15,7 @@ import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 export async function refreshCurrentView() {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
-  const { unifiedInbox, unifiedFolder, activeAccountId, activeMailbox } = get();
+  const { unifiedInbox, unifiedFolder, activeAccountId, activeMailbox, mailboxScope } = get();
 
   if (unifiedInbox || activeMailbox === 'UNIFIED') {
     const targetFolder = unifiedFolder || 'INBOX';
@@ -25,6 +25,16 @@ export async function refreshCurrentView() {
     if (state.unifiedInbox && (state.unifiedFolder || 'INBOX') === targetFolder) {
       await state.loadUnifiedInbox(null, targetFolder);
     }
+    return;
+  }
+
+  // The third kind of view: a branch listing. activateAccount would clear its
+  // scope — that is what makes an ordinary folder open ordinary — so Refresh
+  // collapsed the branch to its root folder. Same rule as loadEmails().
+  // No probe to invalidate here: loadSubtree fetches every folder of the
+  // branch outright, it has no "checked moments ago" short-circuit.
+  if (mailboxScope && activeMailbox === mailboxScope.root) {
+    await get().loadSubtree(activeAccountId, mailboxScope.root);
     return;
   }
 
