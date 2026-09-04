@@ -185,6 +185,11 @@ npx tauri build \
 APP_PATH="src-tauri/target/release/bundle/macos/${APP_NAME}.app"
 PKG_PATH="src-tauri/target/release/bundle/${APP_NAME}-${VERSION}-appstore.pkg"
 
+# Drop the default-mail helper. It only works because it is UNSANDBOXED, and
+# the Mac App Store requires every executable in the bundle to be sandboxed.
+# Without it the Settings row falls back to instructions.
+rm -rf "$APP_PATH/Contents/Helpers"
+
 # Sanity-check: Sparkle.framework should NOT be in the bundle.
 if [ -d "$APP_PATH/Contents/Frameworks/Sparkle.framework" ]; then
     echo -e "${YELLOW}⚠️  Sparkle.framework leaked into the MAS bundle. Removing.${NC}"

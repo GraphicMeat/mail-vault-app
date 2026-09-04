@@ -7,6 +7,7 @@ import { useT } from '../../i18n/index.js';
 // it reports what the OS did, this maps that to something a person can read.
 const HINT_KEYS = {
   macos_mail_app: 'settings.behavior.defaultMail.hintMacosMailApp',
+  macos_confirm: 'settings.behavior.defaultMail.hintMacosConfirm',
   windows_settings: 'settings.behavior.defaultMail.hintWindowsSettings',
   linux_manual: 'settings.behavior.defaultMail.hintLinuxManual',
 };
@@ -16,10 +17,11 @@ const UNKNOWN = { isDefault: false, canSet: false, hint: '' };
 /**
  * "Default email app" — whether mail links elsewhere on the system open here.
  *
- * The row reports only what the backend observed. macOS and Windows forbid an
- * app from claiming the default (the App Sandbox and `UserChoice` respectively),
- * so "Make default" is an *attempt*: the backend re-queries afterwards and this
- * re-renders from that answer. Nothing here flips optimistically on the click.
+ * The row reports only what the backend observed. "Make default" is always an
+ * *attempt* — on macOS it launches an unsandboxed helper and waits for
+ * LaunchServices, on Windows nothing can be done at all — and the backend
+ * re-queries afterwards. This re-renders from that answer; nothing here flips
+ * optimistically on the click.
  */
 export function DefaultMailApp() {
   const t = useT();
@@ -37,6 +39,16 @@ export function DefaultMailApp() {
   }, []);
 
   useEffect(() => { ask('mailto_default_status'); }, [ask]);
+
+  // The OS may put a consent dialog in front of the change, which takes focus.
+  // When focus comes back, ask again rather than leave a stale "no" on screen.
+  const stale = status && !status.isDefault;
+  useEffect(() => {
+    if (!stale) return undefined;
+    const onFocus = () => ask('mailto_default_status');
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [stale, ask]);
 
   if (!status) return null;
 

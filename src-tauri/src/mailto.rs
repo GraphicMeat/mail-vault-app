@@ -6,11 +6,14 @@
 //! handler, and what — if anything — we can do about it.
 //!
 //! The asymmetry that shapes the second half: an app may *register* as a mailto
-//! handler on every desktop, but may only *claim* the default on Linux. macOS
-//! blocks it from inside the App Sandbox (which our Developer ID build is in,
-//! not just the Mac App Store one) and Windows has never allowed it. So nothing
-//! here reports a success it did not observe: every setter attempts, re-queries,
-//! and returns what the re-query said.
+//! handler on every desktop, but claiming the default is a per-OS negotiation.
+//! Linux answers directly. macOS refuses the write from inside the App Sandbox
+//! (OSStatus -54, `lsd`: "Unentitled request to set default handler for URL
+//! scheme"), and our Developer ID build is sandboxed too — so the call is made
+//! by an unsandboxed helper app the bundle carries, launched through
+//! LaunchServices. Windows has never allowed it at all. So nothing here reports
+//! a success it did not observe: every setter attempts, re-queries, and returns
+//! what the re-query said.
 
 use std::sync::Mutex;
 
@@ -207,21 +210,74 @@ mod platform {
         current_handler().is_some_and(|id| id.eq_ignore_ascii_case("com.mailvault.app"))
     }
 
-    pub fn status() -> MailtoStatus {
-        MailtoStatus { is_default: is_default(), can_set: false, hint: "macos_mail_app" }
+    /// The unsandboxed helper that makes the change, when the bundle has one.
+    ///
+    /// `Contents/MacOS/<exe>` → `Contents/Helpers/…`. Absent in the Mac App
+    /// Store build (`build-appstore.sh` strips it — the store requires every
+    /// executable to be sandboxed) and in a plain `cargo build`, and the row
+    /// falls back to instructions in both.
+    fn helper_url() -> Option<std::path::PathBuf> {
+        let exe = std::env::current_exe().ok()?;
+        let contents = exe.parent()?.parent()?;
+        let helper = contents.join("Helpers/MailVault Default Mail Helper.app");
+        helper.exists().then_some(helper)
     }
 
-    /// Reads, it does not write.
+    pub fn status() -> MailtoStatus {
+        let can_set = helper_url().is_some();
+        MailtoStatus {
+            is_default: is_default(),
+            can_set,
+            hint: if can_set { "" } else { "macos_mail_app" },
+        }
+    }
+
+    /// Asks LaunchServices to run the helper, then watches for the change.
     ///
-    /// `LSSetDefaultHandlerForURLScheme` is blocked by the App Sandbox — and
-    /// our Developer ID build is sandboxed too, not only the Mac App Store one
-    /// (`entitlements.plist`). Apple names no replacement. So the attempt would
-    /// be ceremony whose only outcome is failure; the row shows the user where
-    /// the switch actually lives and this re-checks whether they flipped it.
-    // ponytail: if Apple ever ships a sanctioned API, this is the one function
-    // that changes.
+    /// The write itself is Thunderbird's — `LSSetDefaultHandlerForURLScheme`
+    /// with our bundle id (comm-central `nsMacShellService.cpp`) — but it is
+    /// refused inside the App Sandbox, so it happens over in the helper, which
+    /// is not sandboxed. A sandboxed caller's launch *arguments* are dropped by
+    /// LaunchServices too, hence a helper with one fixed job and no argv.
     pub fn make_default() -> MailtoStatus {
-        status()
+        let Some(helper) = helper_url() else { return status() };
+        launch(&helper);
+
+        // Believe the re-query, never the launch: the helper may still be
+        // waiting on a consent dialog, and older macOS shows one.
+        for _ in 0..25 {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            if is_default() {
+                return MailtoStatus { is_default: true, can_set: true, hint: "" };
+            }
+        }
+        MailtoStatus { is_default: false, can_set: true, hint: "macos_confirm" }
+    }
+
+    fn launch(helper: &std::path::Path) {
+        let _ = std::panic::catch_unwind(|| unsafe {
+            let path = nsstring(&helper.to_string_lossy());
+            if path.is_null() {
+                return;
+            }
+            let url: *const Object = msg_send![class!(NSURL), fileURLWithPath: path];
+            let cfg: *mut Object = msg_send![class!(NSWorkspaceOpenConfiguration), configuration];
+            if url.is_null() || cfg.is_null() {
+                return;
+            }
+            // No stealing focus: the helper has no UI of its own.
+            let _: () = msg_send![cfg, setActivates: objc::runtime::NO];
+            let workspace: *const Object = msg_send![class!(NSWorkspace), sharedWorkspace];
+            // The completion handler is nullable, and the poll above is the only
+            // answer worth having anyway.
+            let done: *const std::ffi::c_void = std::ptr::null();
+            let _: () = msg_send![
+                workspace,
+                openApplicationAtURL: url
+                configuration: cfg
+                completionHandler: done
+            ];
+        });
     }
 }
 

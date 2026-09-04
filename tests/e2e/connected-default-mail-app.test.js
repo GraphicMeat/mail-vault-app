@@ -4,11 +4,12 @@
  * Two halves, and only one of them can be driven honestly here.
  *
  * 1. The Settings row. It reports what the backend observed about the *real*
- *    OS. On the macOS runner that answer is "not the default, and you cannot
- *    make it so from here" — the App Sandbox blocks an app from claiming the
- *    mailto handler, and MailVault's Developer ID build is sandboxed too, not
- *    only the Mac App Store one. So the assertions below pin the honest shape
- *    (a state, an action, a hint) rather than a particular answer, which would
+ *    OS. Setting the mailto handler is refused inside the App Sandbox, so a
+ *    shipped MailVault does it from an unsandboxed helper app in
+ *    `Contents/Helpers` — but the webdriver build is a bare `cargo build`
+ *    binary with no bundle around it and therefore no helper, so on the runner
+ *    the row shows `howto`. The assertions below pin the honest shape (a
+ *    state, an action, a hint) rather than a particular answer, which would
  *    make this spec a machine-configuration test.
  *
  * 2. The handover. A genuine deep link cannot be produced under this harness:
@@ -83,8 +84,9 @@ describe('Default email app', function () {
         expect(r.action).toBe(null);
         return;
       }
-      // Not ours: exactly one of the two shapes, and the "we cannot do this
-      // for you" shape must come with instructions rather than a dead button.
+      // Not ours: exactly one of the two shapes, and the "this build cannot do
+      // it for you" shape (no helper — here, and in the Mac App Store build)
+      // must come with instructions rather than a dead button.
       expect(['set', 'howto'].includes(r.action)).toBe(true);
       if (r.action === 'howto') {
         expect(typeof r.hintText).toBe('string');
@@ -102,8 +104,8 @@ describe('Default email app', function () {
       await browser.pause(1200);
 
       const after = await row();
-      // The whole point of the design: the answer comes from a re-query, so on
-      // a machine where the OS refuses, pressing the button changes nothing.
+      // The whole point of the design: the answer comes from a re-query, so
+      // with no helper to launch, pressing the button changes nothing.
       // (If the runner ever *is* able to set it, this still holds — the state
       // would be true because the re-query said so, not because of the click.)
       expect(['true', 'false'].includes(after.isDefault)).toBe(true);

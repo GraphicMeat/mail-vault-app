@@ -213,8 +213,13 @@ fn mailto_default_status() -> mailto::MailtoStatus {
 }
 
 #[tauri::command]
-fn mailto_make_default() -> mailto::MailtoStatus {
-    mailto::make_default()
+async fn mailto_make_default() -> mailto::MailtoStatus {
+    // macOS launches a helper and then polls LaunchServices for up to five
+    // seconds; Linux shells out to `xdg-settings`. Neither belongs on the main
+    // thread — the window would freeze for the duration.
+    tauri::async_runtime::spawn_blocking(mailto::make_default)
+        .await
+        .unwrap_or_else(|_| mailto::status())
 }
 
 #[tauri::command]

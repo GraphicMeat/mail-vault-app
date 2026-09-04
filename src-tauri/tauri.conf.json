@@ -4,7 +4,7 @@
   "version": "2.11.2",
   "identifier": "com.mailvault.app",
   "build": {
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run build:mail-helper",
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:5173/app.html",
     "frontendDist": "../dist"
@@ -57,6 +57,9 @@
     },
     "macOS": {
       "entitlements": "entitlements.plist",
+      "files": {
+        "Helpers/MailVault Default Mail Helper.app": "helpers/MailVault Default Mail Helper.app"
+      },
       "exceptionDomain": "",
       "frameworks": [
         "Sparkle.framework"

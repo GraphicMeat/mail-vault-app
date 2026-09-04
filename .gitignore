@@ -11,6 +11,7 @@ src-tauri/WixTools/
 src-tauri/Cargo.lock
 src-tauri/binaries/
 !src-tauri/binaries/server-bundle.cjs
+src-tauri/helpers/
 src-tauri/Sparkle.framework/
 src-tauri/sparkle-bin/
 

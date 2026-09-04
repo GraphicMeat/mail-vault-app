@@ -17,6 +17,7 @@
     "tauri:build": "npm run build:daemon && tauri build",
     "tauri:build:debug": "npm run build:daemon && tauri build --debug",
     "build:daemon": "node scripts/build-daemon.js",
+    "build:mail-helper": "bash scripts/build-default-mail-helper.sh",
     "tauri:icon": "tauri icon",
     "build:release": "./scripts/build-developer-id.sh",
     "build:appstore": "./scripts/build-appstore.sh",

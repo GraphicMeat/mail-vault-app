@@ -324,6 +324,18 @@ if [ -f "$DAEMON_PATH" ]; then
     echo "   ✓ Signed daemon binary (with expanded daemon entitlements)"
 fi
 
+# Sign the default-mail helper WITHOUT entitlements. It exists to make a
+# LaunchServices call the App Sandbox refuses (-54), so sandboxing it would
+# defeat the whole thing — the verification below fails the build if it ever
+# picks entitlements up.
+HELPER_PATH="$APP_PATH/Contents/Helpers/MailVault Default Mail Helper.app"
+if [ -d "$HELPER_PATH" ]; then
+    codesign --force --options runtime --timestamp \
+        --sign "$SIGNING_ID" $KEYCHAIN_ARG \
+        "$HELPER_PATH"
+    echo "   ✓ Signed default mail helper (no entitlements — must stay unsandboxed)"
+fi
+
 # Sign the main app bundle (no --deep to preserve sidecar entitlements)
 echo "   Signing main app bundle..."
 codesign --force --options runtime --timestamp \
@@ -367,6 +379,15 @@ for BIN_NAME in mailvault mailvault-daemon; do
         echo "   ✓ $BIN_NAME entitlements properly expanded"
     fi
 done
+
+# The helper is useless the moment it is sandboxed.
+if [ -d "$HELPER_PATH" ]; then
+    if codesign -d --entitlements :- "$HELPER_PATH" 2>/dev/null | grep -q 'app-sandbox'; then
+        echo -e "${RED}❌ Default mail helper is sandboxed — it cannot set the mailto handler!${NC}"
+        exit 1
+    fi
+    echo "   ✓ Default mail helper is unsandboxed"
+fi
 
 echo -e "${GREEN}✅ All signatures and entitlements verified${NC}"
 
