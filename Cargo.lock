@@ -3634,7 +3634,7 @@ dependencies = [
 
 [[package]]
 name = "mailvault"
-version = "2.11.2"
+version = "2.11.3"
 dependencies = [
  "async-imap",
  "base64 0.22.1",

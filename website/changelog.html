@@ -137,11 +137,60 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.11.3">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.11.3</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 4, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Conversations can unfold in the list now, or come apart altogether.</strong> Settings → Appearance → Conversations offers three ways to show replies. <strong>Grouped</strong> collapses a conversation into the single row MailVault has always shown. <strong>Expandable</strong> keeps that row and adds a "Show replies" control that unfolds every message in the conversation underneath it, indented, without leaving the list or opening anything. <strong>Off</strong> gives every message its own row, the way a mail client did before conversations existed. A button in the message list header steps through the three, and its icon says which one you are in; it stays out of the way when you are grouping by sender, where conversations play no part. The first-run tour asks the same question.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>MailVault can make itself the default email app on your Mac.</strong> The Default email app row under Settings → Behavior used to send you to Mail → Settings → General to do it yourself. It now has a button that does it, and re-checks itself when you come back to the window, since macOS may take the window away to ask you to confirm the switch. This works in the copy downloaded from the site; the Mac App Store build still shows the instructions, because the sandbox that build runs inside refuses to make the change.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A picture inside a message is still there the second time you open the conversation.</strong> An image embedded in the message itself — a signature logo, a screenshot pasted inline — drew properly the first time you opened the thread and then showed as its filename in a grey box on every open after that. The copy MailVault keeps in memory so a message reopens instantly was dropping the image's contents on the way in, and the conversation view paints that copy as it finds it. The contents now stay for the images a message actually displays; real attachments are still fetched only when you ask for them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An account comes back to the folder you left it on.</strong> Open a folder, switch to another account, come back, and MailVault could return you to the folder you had been in before that — Archive, after you had already moved to the Inbox. The folder was written down only at the end of a full fetch, so a click MailVault answered from what it had already loaded, or a click you overtook with the next one, never recorded itself. The folder is now recorded the moment you click it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Clicking INBOX lists your inbox, not your whole account.</strong> On a server that files every folder inside the inbox — Dovecot's <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">INBOX.Sent</code>, <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">INBOX.Kunden</code> and the rest — opening INBOX matched all of them and listed the entire account: 26,000 messages where 25 belonged, mail you had moved or deleted still apparently sitting in the inbox, and the inbox's own stored list being overwritten with that mixture every time you moved a message. INBOX is never treated as a branch now, whatever a server calls its folders. Folders that do have folders inside them still list everything filed beneath them, refreshing keeps you in the branch you opened rather than collapsing it to its top folder, "Include subfolders" is offered only where there are subfolders, and the stored lists already spoiled by this repair themselves as they are read.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.11.2">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.11.2</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 3, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

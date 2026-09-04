@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [2.11.3] - 2026-09-04
+
+### Added
+- **Conversations can unfold in the list now, or come apart altogether.** Settings → Appearance → Conversations offers three ways to show replies. **Grouped** collapses a conversation into the single row MailVault has always shown. **Expandable** keeps that row and adds a "Show replies" control that unfolds every message in the conversation underneath it, indented, without leaving the list or opening anything. **Off** gives every message its own row, the way a mail client did before conversations existed. A button in the message list header steps through the three, and its icon says which one you are in; it stays out of the way when you are grouping by sender, where conversations play no part. The first-run tour asks the same question.
+- **MailVault can make itself the default email app on your Mac.** The Default email app row under Settings → Behavior used to send you to Mail → Settings → General to do it yourself. It now has a button that does it, and re-checks itself when you come back to the window, since macOS may take the window away to ask you to confirm the switch. This works in the copy downloaded from the site; the Mac App Store build still shows the instructions, because the sandbox that build runs inside refuses to make the change.
+
+### Fixed
+- **A picture inside a message is still there the second time you open the conversation.** An image embedded in the message itself — a signature logo, a screenshot pasted inline — drew properly the first time you opened the thread and then showed as its filename in a grey box on every open after that. The copy MailVault keeps in memory so a message reopens instantly was dropping the image's contents on the way in, and the conversation view paints that copy as it finds it. The contents now stay for the images a message actually displays; real attachments are still fetched only when you ask for them.
+- **An account comes back to the folder you left it on.** Open a folder, switch to another account, come back, and MailVault could return you to the folder you had been in before that — Archive, after you had already moved to the Inbox. The folder was written down only at the end of a full fetch, so a click MailVault answered from what it had already loaded, or a click you overtook with the next one, never recorded itself. The folder is now recorded the moment you click it.
+- **Clicking INBOX lists your inbox, not your whole account.** On a server that files every folder inside the inbox — Dovecot's `INBOX.Sent`, `INBOX.Kunden` and the rest — opening INBOX matched all of them and listed the entire account: 26,000 messages where 25 belonged, mail you had moved or deleted still apparently sitting in the inbox, and the inbox's own stored list being overwritten with that mixture every time you moved a message. INBOX is never treated as a branch now, whatever a server calls its folders. Folders that do have folders inside them still list everything filed beneath them, refreshing keeps you in the branch you opened rather than collapsing it to its top folder, "Include subfolders" is offered only where there are subfolders, and the stored lists already spoiled by this repair themselves as they are read.
+
 ## [2.11.2] - 2026-09-03
 
 ### Fixed
