@@ -54,6 +54,7 @@ import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
+import { registerComposeOpener } from './utils/composeOpener';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
@@ -268,6 +269,13 @@ function App() {
       openCompose(val);
     }
   }, [openCompose]);
+
+  // The list's row menus reach compose through the same kind of seam.
+  useEffect(() => {
+    registerComposeOpener(setComposeState);
+    return () => registerComposeOpener(null);
+  }, [setComposeState]);
+
   const exportTarget = useExportStore(s => s.target);
   const showExportSamples = useExportStore(s => s.showSamples);
   const closeExport = useExportStore(s => s.closeExport);

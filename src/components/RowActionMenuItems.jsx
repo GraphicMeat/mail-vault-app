@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown } from 'lucide-react';
+import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown, Reply, MailPlus } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { selectionKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
@@ -7,6 +7,9 @@ import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
 import { useExportStore } from '../stores/exportStore';
+import { openCompose } from '../utils/composeOpener';
+import { resolveMessageBody } from '../services/export/bodyResolver';
+import { getSenderName } from '../utils/emailParser';
 import { t, useT  } from '../i18n/index.js';
 
 /**
@@ -19,7 +22,9 @@ import { t, useT  } from '../i18n/index.js';
  * checking that checkbox selects. Gating is derived from the whole set the
  * same way SelectionActionBar derives Archive/Unarchive from
  * hasArchived/hasUnarchived over the bulk selection, instead of off one
- * representative message.
+ * representative message. The top section is the exception: it composes
+ * (Reply to the newest member, a new message to its sender), so it acts on
+ * `newest`, not on the whole set.
  */
 export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }) {
   const t = useT();
@@ -33,6 +38,33 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   // The key the store's bulk workflows expect — the one the checkbox writes.
   // Every message the checkbox would select, in the same order.
   const keys = emails.map(e => selectionKey(e, useMailStore.getState()));
+
+  // Reply goes to the newest message the row holds — the one the row shows —
+  // with its body loaded first so the quote is the message, not the row. A
+  // thread row's members are the folder's own messages (threadRowMembers),
+  // so an INBOX thread answers the partner, not our own Sent copy.
+  const newest = emails.reduce((a, b) => (new Date(b.date) > new Date(a.date) ? b : a));
+  const senderAddress = newest.from?.address || '';
+
+  const replyToNewest = async () => {
+    let res = null;
+    try { res = await resolveMessageBody(newest, useMailStore.getState()); } catch { res = null; }
+    // The fetched copy wins where it answers; the row keeps what it alone
+    // knows (its account in a unified list) where the copy is silent.
+    openCompose({ mode: 'reply', replyTo: res?.ok ? { ...newest, ...res.email } : newest });
+  };
+
+  const newMessageToSender = () => {
+    // A fresh conversation, not a reply: no subject, no quote, no
+    // In-Reply-To — just the address, from the account the row lives in.
+    openCompose({
+      initialData: {
+        to: senderAddress,
+        _prefill: true,
+        ...(newest._accountId ? { _accountId: newest._accountId } : {}),
+      },
+    });
+  };
 
   const hasUnread = emails.some(e => !e.flags?.includes('\\Seen'));
   const hasRead = emails.some(e => e.flags?.includes('\\Seen'));
@@ -92,6 +124,18 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
 
   return (
     <>
+      <MenuItem onClick={(e) => { e.stopPropagation(); onClose(); replyToNewest(); }}>
+        <Reply size={14} />
+        {t('emailActionBar.reply')}
+      </MenuItem>
+      {senderAddress && (
+        <MenuItem onClick={(e) => { e.stopPropagation(); onClose(); newMessageToSender(); }}>
+          <MailPlus size={14} />
+          {t('rowMenu.newMessageTo', { name: getSenderName(newest) })}
+        </MenuItem>
+      )}
+      <div role="separator" className="my-1 border-t border-mail-border" />
+
       {hasUnread && (
         <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsRead); }}>
           <MailOpen size={14} />

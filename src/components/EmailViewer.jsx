@@ -619,6 +619,7 @@ function EmailViewerComponent({ onComposeReply }) {
         variant="single"
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
+        onReply={() => onComposeReply?.('reply', selectedEmail)}
         showRaw={showRaw}
         onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}

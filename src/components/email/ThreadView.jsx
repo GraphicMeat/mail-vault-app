@@ -353,8 +353,10 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
 
   return (
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
-      {/* Header — always visible */}
-      <div data-testid="thread-email-header" onClick={() => setExpanded(!expanded)}>
+      {/* Header — always visible. A click on the message replies to it; the
+          chevron inside EmailSenderInfo is the only fold control, and it
+          stops the event before it reaches this handler. */}
+      <div data-testid="thread-email-header" onClick={() => onComposeReply?.('reply', loadedEmail || email)}>
         <EmailSenderInfo
           email={email}
           variant="thread"

@@ -17,12 +17,17 @@ import { t, useT  } from '../../i18n/index.js';
  * Shared sender info component with three variants: single, thread, chat.
  * Renders avatar, sender name, email, DKIM shield, insights button,
  * To/CC, timestamp, and "via" indicator in a unified layout.
+ *
+ * A click on the row replies to the message (`onReply`); only the chevron
+ * button folds the details (`onToggle`), and it stops the event so a thread
+ * wrapper listening for the reply click never sees it.
  */
 export const EmailSenderInfo = memo(function EmailSenderInfo({
   email,
   variant = 'single',
   expanded,
   onToggle,
+  onReply,
   showRaw,
   onToggleRaw,
   loadingRaw,
@@ -87,8 +92,9 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   // ── Single / Thread variant: full inline layout ──
   return (
     <div
+      data-testid="sender-header"
       className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
-      onClick={onToggle}
+      onClick={onReply}
     >
       {/* Avatar — click opens Sender Details (parity with chat view) */}
       <div
@@ -143,11 +149,17 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             <span className="text-[10px] text-mail-text-muted">
               {email.date ? formatDateTime(email.date) : ''}
             </span>
-            {expanded ? (
-              <ChevronUp size={14} className="text-mail-text-muted" />
-            ) : (
-              <ChevronDown size={14} className="text-mail-text-muted" />
-            )}
+            <button
+              type="button"
+              data-testid="header-toggle"
+              aria-expanded={!!expanded}
+              aria-label={expanded ? t('email.sender.hideDetails') : t('email.sender.showDetails')}
+              title={expanded ? t('email.sender.hideDetails') : t('email.sender.showDetails')}
+              onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
+              className="p-0.5 rounded text-mail-text-muted hover:text-mail-text transition-colors flex-shrink-0"
+            >
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
           </div>
         </div>
 
