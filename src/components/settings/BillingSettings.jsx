@@ -8,7 +8,7 @@ import {
   unregisterBillingClient, getClientInfo, openInBrowser,
   isBillingRateLimited, getBillingRateLimitedUntil, BillingRateLimitError,
 } from '../../services/billingApi';
-import { sendNotification } from '../../services/api';
+import { notify } from '../../stores/focusStore';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { PremiumFeatureList } from './PremiumFeatureList';
@@ -344,7 +344,7 @@ export function BillingSettings({ onNavigate }) {
       // this lands while they are looking at anything but this tab.
       setSignInNotice(dropped);
       setBillingEmail('');
-      sendNotification('MailVault Premium is no longer active', dropped).catch(() => {});
+      notify('MailVault Premium is no longer active', dropped);
       if (!IS_APPSTORE_BUILD) loadPricing(result.customerEmail || email);
       return;
     }

@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **A focus session covers MailVault until the timer runs out.** A timer in the sidebar footer runs for 15, 25, 45 or 60 minutes. While it runs, the window shows nothing but the time left; mail keeps syncing into the vault underneath, and every notification MailVault would have shown waits until the session ends, when a notification says the time is done and the held ones follow. Quitting the app does not end a session — reopening it brings the countdown back with the time that was left. A small "Unlock early" link is always there. It asks whether you are sure, and if you are, MailVault says what it thinks of that.
+
 ## [2.11.3] - 2026-09-04
 
 ### Added

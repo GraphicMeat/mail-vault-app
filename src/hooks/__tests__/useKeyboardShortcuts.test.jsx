@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, cleanup } from '@testing-library/react';
-import { useKeyboardShortcuts } from '../useKeyboardShortcuts';
-import { useSettingsStore, DEFAULT_SHORTCUTS } from '../../stores/settingsStore';
+
+// The hook now reads focusStore, which imports the notification bridge.
+vi.mock('../../services/api', () => ({
+  sendNotification: vi.fn(() => Promise.resolve()),
+}));
+
+const { useKeyboardShortcuts } = await import('../useKeyboardShortcuts');
+const { useSettingsStore, DEFAULT_SHORTCUTS } = await import('../../stores/settingsStore');
+const { useFocusStore } = await import('../../stores/focusStore');
 
 function press(target, key) {
   target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
@@ -59,5 +66,39 @@ describe('useKeyboardShortcuts — typing targets', () => {
     document.body.appendChild(input);
     press(input, 'c');
     expect(handlers.compose).not.toHaveBeenCalled();
+  });
+});
+
+// A locked window is the whole point of a focus session. Compose behind the
+// overlay would open a window nobody can see, under a dialog that traps Tab.
+describe('useKeyboardShortcuts — focus lock', () => {
+  let handlers;
+
+  beforeEach(() => {
+    useSettingsStore.setState({
+      keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
+      keyboardShortcutsEnabled: true,
+    });
+    handlers = { compose: vi.fn() };
+  });
+
+  afterEach(() => {
+    useFocusStore.setState({ endsAt: null });
+    cleanup();
+    document.body.innerHTML = '';
+  });
+
+  it('stands every app shortcut down while the app is locked', () => {
+    useFocusStore.setState({ endsAt: Date.now() + 60_000 });
+    renderHook(() => useKeyboardShortcuts(handlers));
+    press(document.body, 'c');
+    expect(handlers.compose).not.toHaveBeenCalled();
+  });
+
+  it('hands them back when the session ends', () => {
+    useFocusStore.setState({ endsAt: null });
+    renderHook(() => useKeyboardShortcuts(handlers));
+    press(document.body, 'c');
+    expect(handlers.compose).toHaveBeenCalledTimes(1);
   });
 });

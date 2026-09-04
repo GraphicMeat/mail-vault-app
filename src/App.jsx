@@ -28,6 +28,7 @@ import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
+import { FocusLock } from './components/FocusLock';
 import ShareUnlockModal from './components/ShareUnlockModal';
 import BackupUpsellModal from './components/BackupUpsellModal.jsx';
 import { ExportDialog } from './components/export/ExportDialog.jsx';
@@ -1071,6 +1072,8 @@ function App() {
         onClose={() => setShowBugModal(false)}
         onEmail={composeBugEmail}
       />
+
+      <FocusLock />
 
       {/* Pending bulk operation resume banner */}
       {pendingOperation && (

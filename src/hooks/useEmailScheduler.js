@@ -3,6 +3,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
+import { notify } from '../stores/focusStore';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -26,16 +27,6 @@ export function useEmailScheduler() {
   const hasReplayedDeletes = useRef(false);
   const lastBadgeCount = useRef(-1);
 
-  // Send notification via Tauri
-  const sendNotification = async (title, body) => {
-    if (!invoke) return;
-    try {
-      await invoke('send_notification', { title, body });
-    } catch (error) {
-      console.error('[scheduler] Failed to send notification:', error);
-    }
-  };
-
   // Dispatch per-account notifications using shouldNotify + showPreview
   const dispatchNotifications = (perAccountResults) => {
     if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
@@ -54,21 +45,21 @@ export function useEmailScheduler() {
         if (showPreview) {
           const sender = newestSender || 'Unknown sender';
           const subject = newestSubject || '(No subject)';
-          sendNotification(sender, subject);
+          notify(sender, subject);
         } else {
-          sendNotification('New Email', `New email in ${accountEmail}`);
+          notify('New Email', `New email in ${accountEmail}`);
         }
       } else {
         // Multiple new emails
         if (showPreview) {
           const sender = newestSender || 'Unknown sender';
           const subject = newestSubject || '(No subject)';
-          sendNotification(
+          notify(
             `${newCount} New Emails`,
             `${sender}: ${subject} (and ${newCount - 1} more)`
           );
         } else {
-          sendNotification('New Email', `${newCount} new emails in ${accountEmail}`);
+          notify('New Email', `${newCount} new emails in ${accountEmail}`);
         }
       }
     }

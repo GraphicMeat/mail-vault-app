@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useFocusStore } from '../stores/focusStore';
 import { t } from '../i18n/index.js';
 
 /**
@@ -79,6 +80,9 @@ const SEQUENCE_TIMEOUT = 500; // ms to wait for next key in a sequence
 export function useKeyboardShortcuts(actionHandlers) {
   const shortcuts = useSettingsStore((s) => s.keyboardShortcuts);
   const enabled = useSettingsStore((s) => s.keyboardShortcutsEnabled);
+  // A focus lock covers the whole window. Compose behind it opens a window
+  // nobody can see, under a dialog that traps Tab — so the app stands down.
+  const locked = useFocusStore((s) => !!s.endsAt);
 
   // Keep handlers in a ref so the effect closure never goes stale
   const handlersRef = useRef(actionHandlers);
@@ -97,7 +101,7 @@ export function useKeyboardShortcuts(actionHandlers) {
   }, []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || locked) return;
 
     const shortcutMap = buildShortcutMap(shortcuts);
 
@@ -175,5 +179,5 @@ export function useKeyboardShortcuts(actionHandlers) {
       window.removeEventListener('keydown', handleKeyDown);
       resetSequence();
     };
-  }, [shortcuts, enabled, resetSequence]);
+  }, [shortcuts, enabled, locked, resetSequence]);
 }

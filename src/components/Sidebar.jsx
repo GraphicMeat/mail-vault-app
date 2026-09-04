@@ -17,6 +17,7 @@ import { formatBytes } from '../utils/formatBytes';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
+import { FocusTimerButton } from './FocusTimerButton';
 import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
 import {
@@ -919,6 +920,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </Button>
           {/* Backup in progress indicator (collapsed) */}
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
+          <FocusTimerButton collapsed />
           <Button variant="ghost" icon size="sm"
             onClick={onOpenSettings}
             data-testid="open-settings"
@@ -1281,6 +1283,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {/* Footer */}
       <div className="p-3 border-t border-mail-border space-y-0.5">
+        <FocusTimerButton />
         <Button variant="ghost" fullWidth size="xs" className="justify-start"
           onClick={onOpenSettings}
           data-testid="open-settings"

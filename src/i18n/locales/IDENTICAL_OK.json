@@ -42,6 +42,7 @@
   "errors.smtpPrefixed",
   "export.dialog.formatHtmlLabel",
   "export.dialog.formatImageLabel",
+  "focus.min",
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",

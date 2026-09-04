@@ -1,4 +1,5 @@
 import * as api from './api';
+import { notify } from '../stores/focusStore';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
 import { useMailStore } from '../stores/mailStore';
@@ -386,20 +387,20 @@ class BackupCoordinator {
 
       // Send notification
       if (entry.success && !degraded && storeNow.backupNotifyOnSuccess) {
-        api.sendNotification(
+        notify(
           `Backup complete - ${account.email}`,
           `${entry.emailsBackedUp} new emails backed up.`
-        ).catch(() => {});
+        );
       } else if (degraded && storeNow.backupNotifyOnFailure) {
-        api.sendNotification(
+        notify(
           `Backup partially complete - ${account.email}`,
           partialBackupNotice(entry, result)
-        ).catch(() => {});
+        );
       } else if (!entry.success && storeNow.backupNotifyOnFailure) {
-        api.sendNotification(
+        notify(
           `Backup failed - ${account.email}`,
           `${entry.error || 'Unknown error'}. Will retry on next idle.`
-        ).catch(() => {});
+        );
       }
 
       // First manual backup ever (non-premium, non-MAS): offer to automate.
@@ -482,10 +483,10 @@ class BackupCoordinator {
           error: err.message || String(err)
         });
         if (storeNow.backupNotifyOnFailure) {
-          api.sendNotification(
+          notify(
             `Backup failed - ${account.email}`,
             `${err.message || 'Unknown error'}. Will retry on next idle.`
-          ).catch(() => {});
+          );
         }
         this._retryCount.delete(accountId);
         this._resolveManual(accountId, { status: 'failed', message: err.message || String(err) });
