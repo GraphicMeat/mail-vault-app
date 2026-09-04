@@ -67,13 +67,18 @@ async function openThread(subject) {
   );
 }
 
-/** Expand every collapsed message and report what the thread is showing. */
+/**
+ * Expand every collapsed message and report what the thread is showing.
+ *
+ * The chevron, not the header: a click on the header itself now opens a reply
+ * to that message, and would leave every body still folded behind a compose.
+ */
 async function readThread() {
   await browser.execute(() => {
     for (const header of document.querySelectorAll('[data-testid="thread-email-header"]')) {
       const item = header.parentElement;
       const busy = item.querySelector('.email-content, iframe, .animate-spin');
-      if (!busy && header.offsetHeight > 0) header.click();
+      if (!busy && header.offsetHeight > 0) header.querySelector('[data-testid="header-toggle"]')?.click();
     }
   });
   return browser.execute(() => ({

@@ -67,6 +67,9 @@ async function openThread(subject) {
  *
  * The newest message starts expanded, so this clicks only the ones showing
  * neither a body nor a loading spinner — clicking blindly would collapse it.
+ *
+ * The chevron, not the header: a click on the header itself now opens a reply
+ * to that message, and would leave every body still folded behind a compose.
  */
 async function readThreadBodies() {
   const expandAll = () => browser.execute(() => {
@@ -74,7 +77,7 @@ async function readThreadBodies() {
     for (const header of document.querySelectorAll('[data-testid="thread-email-header"]')) {
       const item = header.parentElement;
       const busy = item.querySelector('.email-content, iframe, .animate-spin');
-      if (!busy && header.offsetHeight > 0) { header.click(); clicked++; }
+      if (!busy && header.offsetHeight > 0) { header.querySelector('[data-testid="header-toggle"]')?.click(); clicked++; }
     }
     return clicked;
   });
