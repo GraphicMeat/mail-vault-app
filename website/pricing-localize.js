@@ -1,24 +1,33 @@
-/*
- * Progressive currency localization for the price copy.
- *
- * The static HTML quotes USD — that is what crawlers, the JSON-LD offers and any
- * no-JS visitor see, and it stays the canonical number. But checkout bills in the
- * currency /api/billing/pricing resolves from the request country, so a UK
- * visitor reading "$4/month" here is charged £3.50. This swaps the visible
- * amounts to that same resolved currency, which is also what the app's paywalls
- * quote (src/hooks/usePremiumPricing.js).
- *
- * Any failure — offline, rate limited, malformed payload — leaves the USD markup
- * untouched. A price on the page is never replaced by a spinner or a gap.
- *
- * Markup contract: data-mv-price holds a template over {monthly}, {yearly},
- * {monthlyEquivalent} and {zero}, e.g. data-mv-price="~{monthlyEquivalent}/month".
- * Only the annotated element's text is rewritten, so wrap the price phrase in its
- * own <span> when the sentence around it carries links.
+/* Browser-region pricing. Manual amounts and fallback mirror src/utils/pricing.js.
+ * Automatic uses billing country detection; browser region is an offline fallback.
+ * Page language controls number formatting, not the choice of currency.
  */
 (function () {
   var nodes = document.querySelectorAll('[data-mv-price]');
-  if (!nodes.length || !window.fetch) return;
+  if (!nodes.length) return;
+
+  var region = null;
+  var tags = Array.from(navigator.languages || []).concat(navigator.language || []);
+  tags.some(function (tag) {
+    try { region = new Intl.Locale(tag).region; } catch (e) { region = null; }
+    return !!region;
+  });
+  var autoCurrency = region === 'US' ? 'usd' : (region === 'GB' || region === 'UK') ? 'gbp' : 'eur';
+  var choice = 'auto';
+  var cachedCurrency;
+  try { cachedCurrency = localStorage.getItem('mv-last-auto-currency'); } catch(e) {}
+  if (['eur','usd','gbp'].includes(cachedCurrency)) autoCurrency = cachedCurrency;
+  var currency = choice === 'auto' ? autoCurrency : choice;
+  var amounts;
+  var requestVersion = 0;
+  var priceTimer;
+  function reveal() { document.documentElement.classList.remove('mv-prices-pending'); }
+  function format(minor) {
+    var digits = minor % 100 === 0 ? 0 : 2;
+    return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
+      style: 'currency', currency: currency.toUpperCase(), minimumFractionDigits: digits, maximumFractionDigits: digits
+    }).format(minor / 100);
+  }
 
   function zeroIn(currency) {
     try {
@@ -31,10 +40,8 @@
     } catch (e) { return null; }
   }
 
-  fetch('/api/billing/pricing', { headers: { Accept: 'application/json' } })
-    .then(function (res) { return res.ok ? res.json() : null; })
-    .then(function (data) {
-      if (!data || !data.plans) return;
+  function render(data) {
+      if (!data || !Array.isArray(data.plans) || data.currency !== currency) return;
 
       var monthly = null, yearly = null;
       data.plans.forEach(function (plan) {
@@ -53,13 +60,67 @@
         '{zero}': zero,
       };
 
+      // Optional English savings copy; amounts use the API's hundredths convention.
+      var annualMonthly = monthly.amount * 12;
+      var savingsValid = Number.isFinite(monthly.amount) && monthly.amount > 0 &&
+        Number.isFinite(yearly.amount) && yearly.amount >= 0 && annualMonthly > yearly.amount &&
+        (!monthly.currency || monthly.currency === data.currency) &&
+        (!yearly.currency || yearly.currency === data.currency);
+      if (savingsValid) {
+        function money(amount) {
+          var digits = amount % 100 === 0 ? 0 : 2;
+          return new Intl.NumberFormat(document.documentElement.lang || 'en-US', {
+            style: 'currency', currency: (data.currency || 'usd').toUpperCase(),
+            minimumFractionDigits: digits, maximumFractionDigits: digits
+          }).format(amount / 100);
+        }
+        values['{annualMonthly}'] = money(annualMonthly);
+        values['{annualSavings}'] = money(annualMonthly - yearly.amount);
+        values['{savingsPercent}'] = String(Math.round((1 - yearly.amount / annualMonthly) * 100));
+      }
+      document.querySelectorAll('[data-mv-saving]').forEach(function (el) { el.hidden = !savingsValid; });
+
       Array.prototype.forEach.call(nodes, function (el) {
         var text = el.getAttribute('data-mv-price');
+        if (/\{(?:annualMonthly|annualSavings|savingsPercent)\}/.test(text) && !savingsValid) return;
         Object.keys(values).forEach(function (token) {
           text = text.split(token).join(values[token]);
         });
         el.textContent = text;
       });
-    })
-    .catch(function () { /* keep the USD markup */ });
+  }
+  function update() {
+    currency = choice === 'auto' ? autoCurrency : choice;
+    amounts = { eur: [400, 2500], usd: [400, 2500], gbp: [350, 2100] }[currency];
+    var version = ++requestVersion;
+    clearTimeout(priceTimer);
+    var finished = false;
+    function finish() { if (finished) return; finished = true; clearTimeout(priceTimer); reveal(); }
+    priceTimer = setTimeout(finish, Math.max(0, Math.min(4000, (window.mvPriceDeadline || Date.now()+4000)-Date.now())));
+    window.mvPriceDeadline = null;
+    if (choice !== 'auto') reveal();
+    document.querySelectorAll('[data-currency-select]').forEach(function (select) { select.value = choice; });
+    render({ currency: currency, plans: [
+      { interval: 'month', currency: currency, amount: amounts[0], formattedAmount: format(amounts[0]) },
+      { interval: 'year', currency: currency, amount: amounts[1], formattedAmount: format(amounts[1]), monthlyEquivalent: format(Math.round(amounts[1] / 12)) }
+    ] });
+    if (window.fetch) fetch('/api/billing/pricing' + (choice === 'auto' ? '' : '?currency=' + currency), { headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (version !== requestVersion || finished) return;
+        if (choice === 'auto' && data && ['eur','usd','gbp'].includes(data.currency)) {
+          currency = data.currency;
+          autoCurrency = currency;
+          try { localStorage.setItem('mv-last-auto-currency', currency); } catch(e) {}
+          document.querySelectorAll('[data-currency-select] option[value="auto"]').forEach(function (option) {
+            option.textContent = 'Automatic (' + currency.toUpperCase() + ')';
+          });
+        }
+        render(data);
+        finish();
+      })
+      .catch(function () { finish(); });
+    else finish();
+  }
+  update();
 })();

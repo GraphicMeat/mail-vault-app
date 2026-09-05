@@ -164,7 +164,7 @@ function generateHTML(versions) {
   <meta property="og:url" content="https://mailvaultapp.com/changelog.html">
   <meta property="og:title" content="Changelog - MailVault | What's New">
   <meta property="og:description" content="See what's new in MailVault. Full changelog of features, improvements, and bug fixes for every release.">
-  <meta property="og:image" content="https://mailvaultapp.com/og-image.png">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta property="og:site_name" content="MailVault">
@@ -173,7 +173,7 @@ function generateHTML(versions) {
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Changelog - MailVault | What's New">
   <meta name="twitter:description" content="See what's new in MailVault. Full changelog of features, improvements, and bug fixes for every release.">
-  <meta name="twitter:image" content="https://mailvaultapp.com/og-image.png">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
 
   <link rel="icon" type="image/x-icon" href="favicon.ico">
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
@@ -327,4 +327,5 @@ if (versions.length === 0) {
 
 const html = generateHTML(versions);
 fs.writeFileSync(CHANGELOG_HTML, html);
+require('child_process').execFileSync('python3', [path.join(__dirname, 'style-english-pages.py')], { stdio: 'inherit' });
 console.log(`Generated website/changelog.html with ${versions.length} version(s): ${versions.map(v => 'v' + v.version).join(', ')}`);
