@@ -1,0 +1,139 @@
+name: Build macOS
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Override the app version before building (e.g. 2.11.3-nightly.abc1234). Empty = use the repo version.'
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  build-macos:
+    permissions:
+      contents: write
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Install Rust stable
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source "$HOME/.cargo/env"
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Cache Rust dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: macos-universal-cargo-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            macos-universal-cargo-
+
+      - name: Install Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Stamp version override
+        if: inputs.version != ''
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          sed -i '' -E "s/^(  \"version\": *\")[^\"]+\"/\1${VERSION}\"/" package.json src-tauri/tauri.conf.json
+          # First `version = ` line only (the [package] one).
+          awk -v new="$VERSION" '!done && /^version = "/ { sub(/^version = "[^"]+"/, "version = \"" new "\""); done=1 } 1' src-tauri/Cargo.toml > src-tauri/Cargo.toml.tmp && mv src-tauri/Cargo.toml.tmp src-tauri/Cargo.toml
+          echo "package.json:      $(grep -m1 '"version"' package.json)"
+          echo "tauri.conf.json:   $(grep -m1 '"version"' src-tauri/tauri.conf.json)"
+          echo "Cargo.toml:        $(grep -m1 '^version = ' src-tauri/Cargo.toml)"
+          for f in package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml; do
+            grep -q "$VERSION" "$f" || { echo "::error::version stamp missed $f"; exit 1; }
+          done
+
+      - name: Set up Apple certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          echo -n "$APPLE_CERTIFICATE" | base64 --decode -o $CERTIFICATE_PATH
+          security create-keychain -p "actions" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "actions" $KEYCHAIN_PATH
+          security import $CERTIFICATE_PATH -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "actions" $KEYCHAIN_PATH
+          security list-keychains -d user -s $KEYCHAIN_PATH login.keychain-db
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+
+      - name: Build universal daemon sidecar
+        run: |
+          mkdir -p src-tauri/binaries
+          # Build ARM64
+          cargo build -p mailvault-daemon --release --target aarch64-apple-darwin
+          # Build x86_64
+          cargo build -p mailvault-daemon --release --target x86_64-apple-darwin
+
+          # Stage arch-specific binaries (Tauri needs these during per-arch compilation)
+          cp target/aarch64-apple-darwin/release/mailvault-daemon src-tauri/binaries/mailvault-daemon-aarch64-apple-darwin
+          cp target/x86_64-apple-darwin/release/mailvault-daemon src-tauri/binaries/mailvault-daemon-x86_64-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-aarch64-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-x86_64-apple-darwin
+
+          # Create universal binary (used by the final app bundle)
+          lipo -create \
+            target/aarch64-apple-darwin/release/mailvault-daemon \
+            target/x86_64-apple-darwin/release/mailvault-daemon \
+            -output src-tauri/binaries/mailvault-daemon-universal-apple-darwin
+          chmod +x src-tauri/binaries/mailvault-daemon-universal-apple-darwin
+
+          echo "Daemon binaries:"
+          file src-tauri/binaries/mailvault-daemon-*
+
+      - name: Install create-dmg
+        run: brew install create-dmg
+
+      - name: Download Sparkle framework
+        run: bash scripts/download-sparkle.sh
+
+      - name: Build, sign, notarize, and package
+        env:
+          CI: 'true'
+          BUILD_TARGET: universal-apple-darwin
+          SKIP_SERVER_BUILD: 'true'
+          SPARKLE_FRAMEWORK_PATH: ${{ github.workspace }}/src-tauri
+          SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
+          SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        # Cached target/ can hold the previous release's .dmg; the upload glob
+        # would ship both.
+        run: |
+          rm -rf target/universal-apple-darwin/release/bundle
+          bash scripts/build-developer-id.sh
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: macos-artifacts
+          path: |
+            target/universal-apple-darwin/release/bundle/dmg/MailVault-*.dmg
+            target/universal-apple-darwin/release/bundle/dmg/appcast.xml
+          retention-days: 1

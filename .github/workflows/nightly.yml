@@ -1,0 +1,106 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Build even if nothing merged since the last nightly'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.gate.outputs.changed }}
+      version: ${{ steps.gate.outputs.version }}
+      last: ${{ steps.gate.outputs.last }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Compare HEAD with the last nightly
+        id: gate
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -euo pipefail
+          # The nightly tag's commit is the only record of the last nightly. The
+          # peeled ref sorts last, so tail -1 is the commit for both tag kinds.
+          LAST=$(git ls-remote origin 'refs/tags/nightly' 'refs/tags/nightly^{}' | tail -1 | cut -f1)
+          BASE=$(grep -m1 '"version"' package.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
+          SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
+          echo "last=${LAST}" >> "$GITHUB_OUTPUT"
+          echo "version=${BASE}-nightly.${SHORT}" >> "$GITHUB_OUTPUT"
+          if [ "$FORCE" = "true" ]; then
+            echo "Forced run"; echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$LAST" = "$GITHUB_SHA" ]; then
+            echo "HEAD ${GITHUB_SHA} already built as nightly; nothing to do"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Last nightly: ${LAST:-none}; HEAD: ${GITHUB_SHA}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: check
+    if: needs.check.outputs.changed == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/build-macos.yml
+    secrets: inherit
+    with:
+      version: ${{ needs.check.outputs.version }}
+
+  publish:
+    needs: [check, build]
+    if: needs.check.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: macos-artifacts
+          path: artifacts
+
+      - name: Replace the nightly prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LAST: ${{ needs.check.outputs.last }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG=$(find artifacts -name "MailVault-v${VERSION}.dmg" | head -1)
+          if [ -z "$DMG" ]; then echo "::error::No DMG for ${VERSION}"; find artifacts -type f; exit 1; fi
+          SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
+          DATE=$(date -u +%Y-%m-%d)
+          if [ -n "$LAST" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null; then
+            LOG=$(git log --oneline --no-decorate "${LAST}..${GITHUB_SHA}")
+          else
+            LOG=$(git log --oneline --no-decorate -n 20 "$GITHUB_SHA")
+          fi
+          NOTES=$(printf 'Nightly build of `%s` (%s).\n\nNot a stable release: use the latest tagged version for daily use.\n\n### Commits\n%s\n' "$GITHUB_SHA" "$VERSION" "${LOG:-none}")
+          gh release delete nightly --cleanup-tag --yes 2>/dev/null || true
+          gh release create nightly \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Nightly ${DATE} (${SHORT})" \
+            --notes "$NOTES" \
+            "$DMG"
+          echo "Published nightly ${VERSION} from ${GITHUB_SHA}"
