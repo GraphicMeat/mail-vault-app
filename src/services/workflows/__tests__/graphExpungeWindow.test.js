@@ -13,6 +13,11 @@
 // expunged it.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
+// Real, unmocked leaf module — this file is the nearest spec that drives
+// _loadEmailsViaGraph with a Graph account already wired up (see the bottom
+// describe block); loadEmailsColdPath.test.js never exercises the Graph path
+// at all (isGraphAccount: () => false there).
+import { forceMailboxRefetch } from '../helpers/mailboxRefetch';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -21,6 +26,7 @@ vi.stubGlobal('navigator', { onLine: true });
 
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockListGraphMessages = vi.fn();
+const mockGraphListFolders = vi.fn().mockResolvedValue([]);
 
 vi.mock('../../db', () => ({
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
@@ -42,7 +48,7 @@ vi.mock('../../db', () => ({
 }));
 
 vi.mock('../../api', () => ({
-  graphListFolders: vi.fn().mockResolvedValue([]),
+  graphListFolders: (...a) => mockGraphListFolders(...a),
   fetchEmails: vi.fn(),
   checkMailboxStatus: vi.fn(),
   searchAllUids: vi.fn().mockResolvedValue([]),
@@ -202,5 +208,29 @@ describe('_loadEmailsViaGraph expunge window', () => {
     await _loadEmailsViaGraph(ACCOUNT, ACCOUNT.id, 'INBOX', gen());
 
     expect(savedRemovals()).toEqual([]);
+  });
+});
+
+// Refresh's forced-refetch flag (mailboxRefetch.js) must bypass the Graph
+// copy of the freshness gate too, not just activateAccount.js's IMAP one —
+// otherwise a folder created in webmail on a Graph account stayed invisible
+// after pressing Refresh even though the IMAP side was fixed.
+describe('_loadEmailsViaGraph: a forced refetch bypasses a fresh mailbox cache', () => {
+  it('a fresh, complete cache is left alone without the force', async () => {
+    prime([row(1, '2026-08-01T00:00:00Z')]);
+    mockListGraphMessages.mockResolvedValue({ headers: [], graphMessageIds: [], nextLink: null });
+
+    await _loadEmailsViaGraph(ACCOUNT, ACCOUNT.id, 'INBOX', gen());
+
+    expect(mockGraphListFolders).not.toHaveBeenCalled();
+  });
+
+  it('forces a live folder fetch even though the cache is fresh and complete', async () => {
+    prime([row(1, '2026-08-01T00:00:00Z')]);
+    forceMailboxRefetch(ACCOUNT.id);
+
+    await _loadEmailsViaGraph(ACCOUNT, ACCOUNT.id, 'INBOX', gen());
+
+    expect(mockGraphListFolders).toHaveBeenCalled();
   });
 });

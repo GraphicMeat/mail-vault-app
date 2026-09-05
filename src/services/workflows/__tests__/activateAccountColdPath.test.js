@@ -5,6 +5,11 @@
 // task-1-report.md, "Fix round 2".
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
+// Real, unmocked leaf module — proves loadMailboxes's freshness gate actually
+// consumes the flag Refresh sets, not just that the module exists in
+// isolation (mailboxRefetch.test.js) or that refreshCurrentView calls the
+// producer (refreshCurrentViewSubtree.test.js).
+import { forceMailboxRefetch } from '../helpers/mailboxRefetch';
 
 if (!globalThis.window) {
   globalThis.window = { addEventListener: () => {}, removeEventListener: () => {} };
@@ -608,6 +613,41 @@ describe('activateAccount never discards a proven enumeration', () => {
     const state = useMailStore.getState();
     expect(state.serverUids.complete).toBe(true);
     expect([...state.serverUids.uids].sort()).toEqual([1, 2, 3]);
+  });
+});
+
+// Refresh (refreshAccounts.js) sets a one-shot flag so the folder list is
+// fetched live even though loadMailboxes's own 10-minute cache is still
+// fresh — otherwise a folder created in webmail stayed invisible until the
+// TTL ran out, even after pressing Refresh. See mailboxRefetch.js.
+describe('activateAccount: a forced refetch bypasses a fresh mailbox cache', () => {
+  function primeFreshMailboxCache() {
+    mockGetCachedMailboxEntry.mockResolvedValue({
+      fetchedAt: Date.now(),
+      mailboxes: [{ path: 'INBOX' }, { path: 'Archive' }], // >1 entry: isMailboxTreeComplete holds
+    });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 1, highestModseq: null });
+    mockFetchEmails.mockResolvedValue({ total: 0, emails: [] });
+  }
+
+  it('a fresh, complete cache is left alone without the force', async () => {
+    primeCold();
+    primeFreshMailboxCache();
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(mockFetchMailboxes).not.toHaveBeenCalled();
+  });
+
+  it('forces a live folder fetch even though the cache is fresh and complete', async () => {
+    primeCold();
+    primeFreshMailboxCache();
+    mockFetchMailboxes.mockResolvedValue([{ path: 'INBOX' }, { path: 'Archive' }]);
+    forceMailboxRefetch(ACCOUNT.id);
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX');
+
+    expect(mockFetchMailboxes).toHaveBeenCalled();
   });
 });
 
