@@ -33,6 +33,10 @@ vi.mock('../helpers/mailboxRefetch', () => ({
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ isAccountHidden: () => false, unreadPerAccount: {} }) },
 }));
+const mockRefreshFolderStatus = vi.fn().mockResolvedValue(null);
+vi.mock('../folderStatus', () => ({
+  refreshFolderStatus: (...a) => mockRefreshFolderStatus(...a),
+}));
 
 const { refreshCurrentView } = await import('../refreshAccounts');
 
@@ -41,6 +45,7 @@ beforeEach(() => {
     accounts: [{ id: 'acct-1' }],
     activeAccountId: 'acct-1',
     activeMailbox: 'Kunden',
+    mailboxes: [],
     unifiedInbox: false,
     unifiedFolder: null,
     mailboxScope: null,
@@ -73,5 +78,16 @@ describe('refreshCurrentView', () => {
     await refreshCurrentView();
 
     expect(mockForceMailboxRefetch).toHaveBeenCalledWith('acct-1');
+  });
+
+  // The sweep is throttled to one a minute per account, so a Refresh inside
+  // that minute would leave every closed folder's unread count as it was —
+  // which is exactly what the button is pressed to fix.
+  it('forces the closed folders unread sweep too', async () => {
+    await refreshCurrentView();
+
+    expect(mockRefreshFolderStatus).toHaveBeenCalledWith(
+      { id: 'acct-1' }, [], 'Kunden', expect.objectContaining({ force: true }),
+    );
   });
 });

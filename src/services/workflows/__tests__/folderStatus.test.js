@@ -59,6 +59,18 @@ describe('refreshFolderStatus', () => {
     expect(state.folderStatus.acct1.Archive.unseen).toBe(1);
   });
 
+  // One round trip per folder on one background session — an account with 59
+  // folders is on record, and the sweep holds that session for all of them.
+  it('caps the sweep at 50 folders', async () => {
+    const many = Array.from({ length: 60 }, (_, i) => (
+      { name: `F${i}`, path: `F${i}`, noselect: false, children: [] }
+    ));
+    mockFetchFolderStatus.mockResolvedValue([]);
+    await refreshFolderStatus(ACCOUNT, many, 'INBOX');
+    expect(mockFetchFolderStatus).toHaveBeenCalledWith(ACCOUNT, expect.any(Array));
+    expect(mockFetchFolderStatus.mock.calls[0][1]).toHaveLength(50);
+  });
+
   it('_flattenSelectable skips noselect nodes and the active mailbox', () => {
     expect(_flattenSelectable(FLAT, 'Archive')).toEqual(['INBOX', 'Parent/Child']);
   });
