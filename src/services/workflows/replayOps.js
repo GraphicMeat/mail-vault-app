@@ -95,7 +95,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
     // Account removed since, or a Graph account that should never have been
     // journalled: nothing here can act on it, so stop carrying it.
     if (!account || isGraphAccount(account)) {
-      await db.clearOps({ op, accountId, mailbox, uids });
+      await db.clearOps({ op, accountId, mailbox, uids, arg });
       continue;
     }
 
@@ -142,7 +142,7 @@ export async function replayOps({ reason = 'launch' } = {}) {
         else answered.push(uid);
       }
     }
-    if (answered.length) await db.clearOps({ op, accountId, mailbox, uids: answered });
+    if (answered.length) await db.clearOps({ op, accountId, mailbox, uids: answered, arg });
 
     // A replayed delete is still this app deleting the server copy, so a
     // surviving vault copy earns the same stamp the live paths write — without

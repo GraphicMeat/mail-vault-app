@@ -88,7 +88,7 @@ describe('replayOps', () => {
     expect(mockDeleteEmail).toHaveBeenCalledWith(ACCOUNT, 7, 'INBOX');
     expect(mockMarkServerDeleted).toHaveBeenCalledWith('acct1', 'INBOX', 7);
     expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [7] });
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {} });
     expect(result).toMatchObject({ attempted: 1, done: 1, failed: 0, kept: 0 });
     // The outcome is the only trace this leaves; the work happens before any UI.
     expect(mailState.opReplay).toMatchObject({ attempted: 1, done: 1 });
@@ -100,7 +100,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 3, ['\\Seen'], 'add', 'INBOX');
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [3], arg: { flags: ['\\Seen'], action: 'add' } });
     // A flag removes no uid, so nothing is pruned — but the row on screen still
     // paints the old state, so the open folder is reloaded.
     expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'INBOX', 'Archive');
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [5] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [5], arg: { target: 'Archive' } });
     expect(mockSaveEmailHeaders).toHaveBeenCalledWith('acct1', 'INBOX', [], null, { removedUids: [5] });
     // A move is not this app deleting the server copy — the message still exists.
     expect(mockMarkServerDeleted).not.toHaveBeenCalled();
@@ -137,7 +137,7 @@ describe('replayOps', () => {
 
     const dropped = await replayOps();
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {} });
     expect(dropped).toMatchObject({ failed: 1, kept: 0 });
   });
 
@@ -147,7 +147,7 @@ describe('replayOps', () => {
     await replayOps();
 
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'vanished', mailbox: 'INBOX', uids: [7] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'vanished', mailbox: 'INBOX', uids: [7], arg: {} });
   });
 });
 

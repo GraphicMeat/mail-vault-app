@@ -134,19 +134,23 @@ pub fn queue(data_dir: &Path, entry: OpEntry) -> Result<u64, String> {
     Ok(id)
 }
 
-/// Forget these uids wherever this op/account/mailbox owns them; drop entries
-/// left with nothing. An entry for a *different* op keeps its uids — the same
-/// message can be owed a flag and a move at once.
+/// Forget these uids wherever this op/account/mailbox/arg owns them; drop
+/// entries left with nothing. An entry for a *different* op keeps its uids —
+/// the same message can be owed a flag and a move at once — and so does an
+/// entry for the same op with a different `arg`: the live path writes one
+/// entry per (flag, action), so `\Seen add` and `\Flagged add` are two entries
+/// for one uid, and finishing either must leave the other owed.
 pub fn clear(
     data_dir: &Path,
     op: &str,
     account_id: &str,
     mailbox: &str,
     uids: &[u32],
+    arg: &serde_json::Value,
 ) -> Result<(), String> {
     let mut journal = load(data_dir);
     for entry in journal.ops.iter_mut() {
-        if entry.op == op && entry.account_id == account_id && entry.mailbox == mailbox {
+        if entry.op == op && entry.account_id == account_id && entry.mailbox == mailbox && entry.arg == *arg {
             entry.uids.retain(|uid| !uids.contains(uid));
         }
     }
@@ -184,18 +188,43 @@ mod tests {
     #[test]
     fn clear_removes_uids_from_matching_entries_only_and_drops_empty_ones() {
         let d = tmp();
+        let seen = serde_json::json!({"flags":["\\Seen"],"action":"add"});
         queue(d.path(), entry("delete", &[1, 2, 3], serde_json::json!({}))).unwrap();
-        queue(d.path(), entry("flag", &[2], serde_json::json!({"flags":["\\Seen"],"action":"add"}))).unwrap();
-        clear(d.path(), "delete", "acct", "INBOX", &[2, 3]).unwrap();
+        queue(d.path(), entry("flag", &[2], seen.clone())).unwrap();
+        clear(d.path(), "delete", "acct", "INBOX", &[2, 3], &serde_json::json!({})).unwrap();
         let ops = read(d.path());
         assert_eq!(ops.len(), 2);
         assert_eq!(ops[0].uids, vec![1]);
         assert_eq!(ops[1].uids, vec![2], "a flag entry is not a delete entry");
-        clear(d.path(), "delete", "acct", "INBOX", &[1]).unwrap();
+        clear(d.path(), "delete", "acct", "INBOX", &[1], &serde_json::json!({})).unwrap();
         assert_eq!(read(d.path()).len(), 1);
-        clear(d.path(), "flag", "acct", "INBOX", &[2]).unwrap();
+        clear(d.path(), "flag", "acct", "INBOX", &[2], &seen).unwrap();
         assert!(read(d.path()).is_empty());
         assert!(!journal_path(d.path()).exists(), "empty journal is removed, not written as []");
+    }
+
+    // Two flag entries for one uid differ only in their `arg` — the live path
+    // writes one per (flag, action). Clearing the one that succeeded must not
+    // take the other one's uid with it: that entry is a change the user made
+    // and the server has not heard about.
+    #[test]
+    fn clearing_one_flag_leaves_a_different_flag_for_the_same_uid() {
+        let d = tmp();
+        let seen = serde_json::json!({"flags":["\\Seen"],"action":"add"});
+        let flagged = serde_json::json!({"flags":["\\Flagged"],"action":"add"});
+        queue(d.path(), entry("flag", &[7], flagged.clone())).unwrap();
+        queue(d.path(), entry("flag", &[7], seen.clone())).unwrap();
+
+        clear(d.path(), "flag", "acct", "INBOX", &[7], &seen).unwrap();
+
+        let ops = read(d.path());
+        assert_eq!(ops.len(), 1, "the Seen entry is gone, the Flagged one is not");
+        assert_eq!(ops[0].arg, flagged);
+        assert_eq!(ops[0].uids, vec![7]);
+
+        // And an arg that matches no entry clears nothing at all.
+        clear(d.path(), "flag", "acct", "INBOX", &[7], &serde_json::json!({"flags":["\\Draft"],"action":"add"})).unwrap();
+        assert_eq!(read(d.path())[0].uids, vec![7]);
     }
 
     #[test]

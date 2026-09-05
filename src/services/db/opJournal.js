@@ -30,11 +30,19 @@ export async function queueOp({ op, accountId, mailbox, uids, arg = {} }) {
   }
 }
 
-/** Forget these uids for this op/account/mailbox — dealt with, one way or another. */
-export async function clearOps({ op, accountId, mailbox, uids }) {
+/**
+ * Forget these uids for this op/account/mailbox/arg — dealt with, one way or
+ * another.
+ *
+ * `arg` is part of the identity, not a detail: the flag path writes one entry
+ * per (flag, action), so a star and a mark-read on the same message are two
+ * entries under one (op, account, mailbox, uid). Clearing without it emptied
+ * both, and the one that had NOT been sent was silently dropped.
+ */
+export async function clearOps({ op, accountId, mailbox, uids, arg = {} }) {
   if (!op || !accountId || !mailbox || !uids?.length) return;
   try {
-    await invoke('op_journal_clear', { op, accountId, mailbox, uids });
+    await invoke('op_journal_clear', { op, accountId, mailbox, uids, arg });
   } catch (e) {
     console.warn('[db] Could not clear journal op:', op, e);
   }

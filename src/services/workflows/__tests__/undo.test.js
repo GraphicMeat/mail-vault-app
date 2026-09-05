@@ -226,7 +226,7 @@ describe('undo after a move', () => {
 
     // Offline the journal entry IS the move; dropping it is the whole undo.
     expect(mockClearOps).toHaveBeenCalledWith({
-      op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7],
+      op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7], arg: { target: 'Archive' },
     });
     expect(mockMoveEmails).not.toHaveBeenCalled();
   });

@@ -1392,8 +1392,9 @@ fn op_journal_clear(
     account_id: String,
     mailbox: String,
     uids: Vec<u32>,
+    arg: serde_json::Value,
 ) -> Result<(), String> {
-    op_journal::clear(&op_journal_dir(&app_handle)?, &op, &account_id, &mailbox, &uids)
+    op_journal::clear(&op_journal_dir(&app_handle)?, &op, &account_id, &mailbox, &uids, &arg)
 }
 
 /// Every unfinished server op, oldest first.

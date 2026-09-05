@@ -467,7 +467,7 @@ describe('deleteSelectedFromServer', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(order[0]).toEqual(['queue', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]);
-    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]);
+    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2], arg: {} }]);
     expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
   });
 
@@ -479,7 +479,7 @@ describe('deleteSelectedFromServer', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1], arg: {} });
   });
 
   // Same fact the single-row delete brings back, once per message: where each
@@ -644,7 +644,7 @@ describe('deleteEmailFromServer', () => {
     await useMailStore.getState().deleteEmailFromServer(1);
 
     expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1], arg: {} });
   });
 
   it('clears the journal when the delete fails, so no replay deletes a restored row', async () => {
@@ -653,7 +653,7 @@ describe('deleteEmailFromServer', () => {
 
     await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1], arg: {} });
   });
 
   // The bulk path stamps at its own call site; this one goes through

@@ -194,7 +194,12 @@ describe('toggleFlagged', () => {
       arg: { flags: ['\\Flagged'], action: 'add' },
     });
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'add', 'INBOX');
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7] });
+    expect(mockClearOps).toHaveBeenCalledWith({
+      op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7],
+      // The arg is part of the entry's identity: without it this clear also
+      // empties a \\Seen entry the same message is still owed.
+      arg: { flags: ['\\Flagged'], action: 'add' },
+    });
 
     // The journal has to precede the round-trip (a reload in between must not
     // lose the intent) and clearOps has to follow it (only success clears it).
@@ -246,6 +251,24 @@ describe('toggleFlagged', () => {
     expect(flagsOf(7)).toContain('\\Flagged');
     expect(mockQueueOp).toHaveBeenCalled();
     expect(mockClearOps).not.toHaveBeenCalled();
+  });
+
+  // A vault-only row's uid is a pseudo-uid no server ever issued: journalling
+  // it files an op the replay can only fail once and throw away, and the STORE
+  // it wraps would be aimed at whatever message that number names on the
+  // server. The vault write is the whole change for this row.
+  it('a vault-only row changes in the vault only — no journal entry, no server call', async () => {
+    primeStore({ emails: [] });
+    const local = { uid: 900001, messageId: 'v@mock', subject: 'Vault only', flags: [], source: 'local-only', from: { address: 'them@x' }, date: '2026-08-01T10:00:00Z' };
+    useMailStore.setState({ localEmails: [local] });
+    useMailStore.getState().updateSortedEmails();
+
+    await toggleFlagged(900001);
+
+    expect(useMailStore.getState().localEmails[0].flags).toContain('\\Flagged');
+    expect(mockVaultApplyFlags).toHaveBeenCalledWith('a1', 'INBOX', 'a1@x', [{ uid: 900001, flags: ['\\Flagged'] }]);
+    expect(mockQueueOp).not.toHaveBeenCalled();
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
   });
 
   it('a Graph account routes the star to graphSetFlagged and never journals it', async () => {

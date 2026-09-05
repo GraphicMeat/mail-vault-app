@@ -468,7 +468,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     // Drop the journal entry too: the row is back on screen, so a replay at
     // next launch would delete a message the app is currently showing as
     // present. Same call the bulk path makes for its whole group.
-    if (journalled) db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid] });
+    if (journalled) db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid], arg: {} });
     // The open thread was pruned optimistically too: put the message back, or
     // the row the reload restores counts one more than the reader shows. Only
     // while that pruned thread is still what is open — a reader the user has
@@ -530,7 +530,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     }
   }
 
-  if (journalled) await db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid] });
+  if (journalled) await db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid], arg: {} });
 
   await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
@@ -916,7 +916,9 @@ export async function markEmailReadStatus(uid, read) {
     // The one flag core: rows, vault, journal, server — in that order, so a
     // reload between the journal write and the round-trip finishes the change
     // rather than losing it.
-    await applyFlagToTargets([{ account, accountId, mailbox, uid }], '\\Seen', read);
+    // `emailObj` so the vault-only guard in there can see what kind of row
+    // this is — the viewer's toggle reaches a vault-only message too.
+    await applyFlagToTargets([{ account, accountId, mailbox, uid, emailObj: row }], '\\Seen', read);
 
     // Marking the open email unread means "not dealt with yet" — keeping it on
     // screen contradicts that, and the next open would just mark it read again.
@@ -1059,6 +1061,12 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
 
   const action = on ? 'add' : 'remove';
   for (const t of targets) {
+    // A vault-only row has no server copy, and its uid is a pseudo-uid the
+    // server would refuse — journalling it files an op that can never be
+    // finished, and the replay carries it until it has failed once. The vault
+    // write above has already landed, which for this row is the whole change.
+    // Same guard deleteEmailFromServer applies before it journals a delete.
+    if (t.emailObj?.source === 'local-only' || t.emailObj?._localStaged) continue;
     if (isGraphAccount(t.account)) {
       try {
         await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action);
@@ -1075,7 +1083,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     try {
       const account = await ensureFreshToken(t.account);
       await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action);
-      await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid] });
+      await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
     } catch (e) {
       console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);
     }
@@ -1421,7 +1429,7 @@ export async function deleteSelectedFromServer() {
   // the whole delete until replayOps sends them.
   if (!offline) {
     await Promise.all([...journalGroups.values()].map(
-      (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
+      (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: {} }),
     ));
   }
 
@@ -1856,7 +1864,7 @@ export async function moveEmails(keys, targetMailbox) {
       continue;
     }
     const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
-    await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids });
+    await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
     // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
     records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
   }
@@ -1942,7 +1950,7 @@ async function _undoMove(records) {
       // Never sent: forgetting the journal entry IS the undo. The rows come back
       // through the reload below — they were only hidden locally.
       if (r.deferred) {
-        await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids });
+        await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids, arg: { target: r.to } });
         continue;
       }
       const dst = r.dstUids ?? await _resolveDestinationUids(r.account, r.to, r.messageIds);

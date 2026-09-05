@@ -173,7 +173,7 @@ describe('moveEmails', () => {
       op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8], arg: { target: 'Archive' },
     });
     expect(mockClearOps).toHaveBeenCalledWith({
-      op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8],
+      op: 'move', accountId: 'a1', mailbox: 'INBOX', uids: [7, 8], arg: { target: 'Archive' },
     });
     // The journal has to precede the round trip (a reload in between must not
     // lose the intent) and clear only after it (only success clears it).

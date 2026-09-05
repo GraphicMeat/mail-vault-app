@@ -59,9 +59,25 @@ describe('queueOp', () => {
 
 describe('clearOps', () => {
   it('names the op as well as the mailbox — a flag entry is not a delete entry', async () => {
-    await clearOps({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [9] });
+    await clearOps({ op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [9], arg: { target: 'Archive' } });
 
-    expect(invoke).toHaveBeenCalledWith('op_journal_clear', { op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [9] });
+    expect(invoke).toHaveBeenCalledWith('op_journal_clear', { op: 'move', accountId: 'acct1', mailbox: 'INBOX', uids: [9], arg: { target: 'Archive' } });
+  });
+
+  // The flag path writes one entry per (flag, action), so a star and a
+  // mark-read on one message are two entries under the same op, account,
+  // mailbox and uid. Clearing without the arg emptied both, and the one that
+  // had not been sent was dropped without a trace.
+  it('names the arg too — a star is not a mark-read', async () => {
+    await clearOps({ op: 'flag', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: { flags: ['\\Seen'], action: 'add' } });
+
+    expect(invoke.mock.calls[0][1].arg).toEqual({ flags: ['\\Seen'], action: 'add' });
+  });
+
+  it('defaults arg to an empty object — the shape a delete was queued with', async () => {
+    await clearOps({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
+
+    expect(invoke.mock.calls[0][1].arg).toEqual({});
   });
 
   it('warns and resolves when the clear fails', async () => {
