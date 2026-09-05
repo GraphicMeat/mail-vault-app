@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Popover, MenuItem } from '../ui/Popover';
 import { Button } from '../ui/Button';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { useAccountStore } from '../../stores/accountStore';
+import { useAccountStore, getAccounts } from '../../stores/accountStore';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { useLearningStore } from '../../stores/learningStore';
 import * as classificationService from '../../services/classificationService';
@@ -373,7 +373,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
         } catch {}
         // Fall back to IMAP fetch
         if (!email) {
-          const accounts = useAccountStore.getState().accounts;
+          const accounts = getAccounts();
           const account = accounts.find(a => a.id === activeAccountId);
           if (account) {
             try {
@@ -421,7 +421,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
       .map(r => r.uid);
     if (uids.length === 0) return;
 
-    const accounts = useAccountStore.getState().accounts;
+    const accounts = getAccounts();
     const account = accounts.find(a => a.id === activeAccountId);
     if (!account) return;
 
