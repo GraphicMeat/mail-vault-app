@@ -2237,18 +2237,18 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let subject = envelope
         .subject
         .as_ref()
-        .map(|s| decode_rfc2047(s))
+        .map(|s| decode_rfc2047(&unescape_imap_quoted(s)))
         .unwrap_or_else(|| "(No Subject)".to_string());
 
     let message_id = envelope
         .message_id
         .as_ref()
-        .map(|s| String::from_utf8_lossy(s).to_string());
+        .map(|s| String::from_utf8_lossy(&unescape_imap_quoted(s)).to_string());
 
     let in_reply_to = envelope
         .in_reply_to
         .as_ref()
-        .map(|s| String::from_utf8_lossy(s).to_string());
+        .map(|s| String::from_utf8_lossy(&unescape_imap_quoted(s)).to_string());
 
     // Parse headers from BODY.PEEK[HEADER.FIELDS (...)]
     let raw_headers = fetch.header()
@@ -2282,7 +2282,7 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
     let date = envelope
         .date
         .as_ref()
-        .map(|s| String::from_utf8_lossy(s).to_string());
+        .map(|s| String::from_utf8_lossy(&unescape_imap_quoted(s)).to_string());
 
     let from = envelope
         .from
@@ -2439,20 +2439,47 @@ fn parse_email_address_from_header(val: &str) -> Option<EmailAddress> {
 // share the same implementation.
 use crate::mime::decode_rfc2047;
 
+/// Undo IMAP quoted-string escaping (RFC 3501 §4.3).
+///
+/// `imap-proto`'s `quoted()` parser *recognises* `\"` and `\\` but hands the
+/// bytes back verbatim, so every ENVELOPE field that arrived as a quoted-string
+/// keeps its backslashes. A literal (`{n}` form) is never escaped, so a
+/// backslash before any other byte is data and stays put.
+fn unescape_imap_quoted(raw: &[u8]) -> std::borrow::Cow<'_, [u8]> {
+    if !raw
+        .windows(2)
+        .any(|w| w[0] == b'\\' && (w[1] == b'"' || w[1] == b'\\'))
+    {
+        return std::borrow::Cow::Borrowed(raw);
+    }
+    let mut out = Vec::with_capacity(raw.len());
+    let mut i = 0;
+    while i < raw.len() {
+        if raw[i] == b'\\' && matches!(raw.get(i + 1), Some(b'"') | Some(b'\\')) {
+            out.push(raw[i + 1]);
+            i += 2;
+        } else {
+            out.push(raw[i]);
+            i += 1;
+        }
+    }
+    std::borrow::Cow::Owned(out)
+}
+
 fn imap_addr_to_email_address(addr: &imap_proto::types::Address) -> EmailAddress {
     let name = addr
         .name
         .as_ref()
-        .map(|n| decode_rfc2047(n));
+        .map(|n| decode_rfc2047(&unescape_imap_quoted(n)));
     let mailbox = addr
         .mailbox
         .as_ref()
-        .map(|m| String::from_utf8_lossy(m).to_string())
+        .map(|m| String::from_utf8_lossy(&unescape_imap_quoted(m)).to_string())
         .unwrap_or_default();
     let host = addr
         .host
         .as_ref()
-        .map(|h| String::from_utf8_lossy(h).to_string())
+        .map(|h| String::from_utf8_lossy(&unescape_imap_quoted(h)).to_string())
         .unwrap_or_default();
     let address = if host.is_empty() {
         mailbox
@@ -2796,6 +2823,47 @@ mod tests {
     use super::*;
 
     // ── compress_uid_ranges ─────────────────────────────────────────────
+
+    // ── unescape_imap_quoted ────────────────────────────────────────────
+
+    #[test]
+    fn unescape_quoted_leaves_plain_bytes_borrowed() {
+        let out = unescape_imap_quoted(b"Hello world");
+        assert!(matches!(out, std::borrow::Cow::Borrowed(_)));
+        assert_eq!(&*out, b"Hello world");
+    }
+
+    #[test]
+    fn unescape_quoted_drops_backslash_before_quote() {
+        assert_eq!(
+            &*unescape_imap_quoted(br#"Jonas \"JJ\" Jonaitis"#),
+            br#"Jonas "JJ" Jonaitis"#
+        );
+    }
+
+    #[test]
+    fn unescape_quoted_collapses_double_backslash() {
+        assert_eq!(&*unescape_imap_quoted(br"a\\b"), br"a\b");
+    }
+
+    #[test]
+    fn unescape_quoted_keeps_backslash_before_other_bytes() {
+        assert_eq!(&*unescape_imap_quoted(br"C:\temp\x"), br"C:\temp\x");
+    }
+
+    #[test]
+    fn unescape_quoted_keeps_trailing_backslash() {
+        assert_eq!(&*unescape_imap_quoted(br"end\"), br"end\");
+    }
+
+    #[test]
+    fn unescape_quoted_passes_non_ascii_through() {
+        let raw = r#"Pratęskite \"žurnalo\""#.as_bytes();
+        assert_eq!(
+            String::from_utf8(unescape_imap_quoted(raw).into_owned()).unwrap(),
+            r#"Pratęskite "žurnalo""#
+        );
+    }
 
     #[test]
     fn compress_empty() {

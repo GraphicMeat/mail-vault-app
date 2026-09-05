@@ -52,6 +52,33 @@ async fn decodes_rfc2047_subjects_and_utf8_bodies() {
 }
 
 #[async_std::test]
+async fn strips_quoted_string_escapes_from_envelope_fields() {
+    // A partially RFC 2047 encoded subject stays ASCII on the wire, so the
+    // server sends it as an IMAP quoted-string and escapes the inner quotes.
+    // Same for the display name. Neither backslash belongs to the value.
+    let raw = "From: \"Jonas \\\"JJ\\\" Jonaitis\" <jj@example.com>\r\n\
+               To: user@example.com\r\n\
+               Subject: =?UTF-8?Q?Prat=C4=99skite_=C5=BEurnalo?= \"Iliustruotoji istorija\" =?UTF-8?Q?prenumerat=C4=85?=\r\n\
+               Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\
+               Message-ID: <quoted@example.com>\r\n\
+               \r\n\
+               body\r\n";
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push(raw)));
+    let mut sess = session(&server).await;
+    select_mailbox(&mut sess, "INBOX").await.unwrap();
+
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
+    assert_eq!(
+        emails[0].subject,
+        "Pratęskite žurnalo \"Iliustruotoji istorija\" prenumeratą"
+    );
+    assert_eq!(
+        emails[0].from.name.as_deref(),
+        Some("Jonas \"JJ\" Jonaitis")
+    );
+}
+
+#[async_std::test]
 async fn survives_a_message_with_no_subject_and_no_references() {
     let raw = "From: bare@example.com\r\n\
                To: user@example.com\r\n\
