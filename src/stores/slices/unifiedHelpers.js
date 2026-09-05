@@ -75,6 +75,28 @@ export function _resolveUnifiedContext(key, state) {
   return { account, accountId: email._accountId, mailbox, uid: email.uid };
 }
 
+/**
+ * The context a server mutation in a spanning view may act on — or a thrown
+ * error. Every `unified?.accountId || state.activeAccountId` fallback aimed a
+ * mutation at the ACTIVE account's INBOX under the raw uid when a row could not
+ * be resolved; for a delete that is the wrong message on the wrong server. A
+ * full key still names its account and folder after the row has left the lists
+ * (evicted, already pruned), so that case proceeds on what the key says.
+ */
+export function requireUnifiedContext(key, state) {
+  const ctx = _resolveUnifiedContext(key, state);
+  if (ctx) return ctx;
+  const parsed = _parseSelKey(key);
+  if (parsed.accountId && parsed.mailbox) {
+    const account = state.accounts.find(a => a.id === parsed.accountId);
+    if (account) {
+      const mailbox = parsed.mailbox === 'UNIFIED' ? 'INBOX' : parsed.mailbox;
+      return { account, accountId: parsed.accountId, mailbox, uid: parsed.uid };
+    }
+  }
+  throw new Error(`Cannot tell which account and folder hold message ${key}; reload the list and try again`);
+}
+
 // ── Message location ───────────────────────────────────────────────────────
 // A UID identifies a message only within one (account, mailbox) pair — the same
 // number is a different message in every other folder and account. Resolve a

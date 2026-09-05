@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown, Reply, MailPlus } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
-import { selectionKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { selectionKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
@@ -201,15 +201,19 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
             const serverEmails = emails.filter(em => em.source !== 'local-only');
             onRequestDelete(
               async () => {
+                // A bare uid names a message only inside one folder of one
+                // account; a list that spans mailboxes needs the full key or
+                // the workflow refuses (see requireUnifiedContext).
+                const state = useMailStore.getState();
+                const keyOf = (em) => (spansMailboxes(state) ? selectionKey(em, state) : em.uid);
                 if (serverEmails.length === 1) {
-                  await deleteEmailFromServer(serverEmails[0].uid);
+                  await deleteEmailFromServer(keyOf(serverEmails[0]));
                   return;
                 }
                 // Multiple messages: each needs its own folder resolved — the
                 // same uid in another folder is a different message, and
                 // this delete is irreversible. skipRefresh + one trailing
                 // loadEmails avoids N redundant reloads.
-                const state = useMailStore.getState();
                 for (const em of serverEmails) {
                   const mailbox = resolveEmailLocation(em, state)?.mailbox;
                   if (!mailbox) {
@@ -217,7 +221,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
                     continue;
                   }
                   try {
-                    await deleteEmailFromServer(em.uid, { skipRefresh: true, mailboxOverride: mailbox });
+                    await deleteEmailFromServer(keyOf(em), { skipRefresh: true, mailboxOverride: mailbox });
                   } catch (err) {
                     console.error(`[RowActionMenuItems] Failed to delete email ${em.uid} from ${mailbox}:`, err);
                   }

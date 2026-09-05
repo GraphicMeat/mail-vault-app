@@ -6,7 +6,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
@@ -361,7 +361,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+  const unified = isUnified ? requireUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMb = mailboxOverride || unified?.mailbox || state.activeMailbox;
   const mailbox = rawMb === 'UNIFIED' ? 'INBOX' : rawMb;
@@ -454,20 +454,22 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     }
   } else {
     account = await ensureFreshToken(account);
-    console.log(`[deleteEmail] Deleting UID ${uid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
+    // `realUid`, not the argument: in a spanning view the caller hands us a
+    // whole selection key ("acct:INBOX:7"), and the server takes a uid.
+    console.log(`[deleteEmail] Deleting UID ${realUid} from mailbox "${mailbox}" (account: ${account.email}, isGraph: ${isGraphAccount(account)}, override: ${mailboxOverride})`);
     try {
       if (isGraphAccount(account)) {
-        const graphId = await resolveGraphMessageId(accountId, mailbox, uid, {
+        const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, {
           row: candidate, token: account.oauth2AccessToken,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
-        await api.deleteEmail(account, uid, mailbox);
+        await api.deleteEmail(account, realUid, mailbox);
       }
-      console.log(`[deleteEmail] Successfully deleted UID ${uid} from "${mailbox}"`);
+      console.log(`[deleteEmail] Successfully deleted UID ${realUid} from "${mailbox}"`);
     } catch (err) {
-      console.error(`[deleteEmail] FAILED to delete UID ${uid} from "${mailbox}":`, err);
+      console.error(`[deleteEmail] FAILED to delete UID ${realUid} from "${mailbox}":`, err);
       restoreRow();
       throw err;
     }
@@ -898,7 +900,7 @@ export const markSelectedAsUnread = () => _markSelected(false);
 
 function _resolveKeyContext(key, state, emailMap) {
   const isUnified = spansMailboxes(state);
-  const ctx = isUnified ? _resolveUnifiedContext(key, state) : null;
+  const ctx = isUnified ? requireUnifiedContext(key, state) : null;
   // A full key names its account and folder itself (a merged Sent copy in a
   // single folder's list gets one — see selectionKey); a bare uid names the
   // view's.
@@ -967,7 +969,7 @@ export async function deleteSelectedFromServer() {
   // seconds (pool checkout + one round-trip per email). The post-loop
   // loadEmails() reconcile restores anything whose server delete failed.
   const deletedKeySet = new Set(keys);
-  const realUidSet = new Set(keys.map(k => (isUnified ? _resolveUnifiedContext(k, state)?.uid : k) ?? k));
+  const realUidSet = new Set(keys.map(k => (isUnified ? requireUnifiedContext(k, state).uid : k)));
 
   const newTombstones = new Set(state.deleteTombstones);
   for (const key of keys) newTombstones.add(contextOf(key).tombstone);
