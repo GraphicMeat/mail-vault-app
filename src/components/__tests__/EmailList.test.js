@@ -15,10 +15,14 @@ import { render, screen, cleanup, fireEvent, act } from '@testing-library/react'
 
 // Track useVirtualizer calls
 let lastVirtualizerConfig = null;
+// EmailList mounts two virtualizers (chronological and sender-grouped); the
+// "last" one is whichever React rendered second, so keep them all.
+let virtualizerConfigs = [];
 
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: vi.fn((config) => {
     lastVirtualizerConfig = config;
+    virtualizerConfigs.push(config);
     return {
       getVirtualItems: () =>
         // Simulate windowing: return at most 15 items even if count is 500
@@ -213,13 +217,14 @@ vi.mock('../../utils/emailParser', async (importOriginal) => ({
     }
     return map;
   },
-  groupBySender: () => [],
+  groupBySender: vi.fn(() => []),
   getSenderName: (e) => e?.from?.[0]?.name || '',
 }));
 
 describe('EmailList virtualization', () => {
   beforeEach(() => {
     lastVirtualizerConfig = null;
+    virtualizerConfigs = [];
   });
 
   it('virtualizer renders only visible rows, not all 500 items (PERF-01)', async () => {
@@ -931,5 +936,74 @@ describe('thread modes', () => {
     fireEvent.click(chevron);
     await settle();
     expect(lastVirtualizerConfig.count).toBe(4);
+  });
+});
+
+
+// Five identical-subject contact-form messages from one sender are five separate
+// threads. Keying their topic rows by subject collapsed them onto one key, which
+// broke the virtualizer's per-key size cache and stacked the rows on top of
+// each other.
+describe('sender grouping keys topics per thread', () => {
+  afterEach(() => cleanup());
+
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+  const SUBJ = 'Contact form — Robertgat';
+  const msg = (uid) => ({
+    uid, subject: SUBJ,
+    from: [{ address: 'forms@test.com', name: 'Contact form' }],
+    to: [{ address: 'me@test.com' }],
+    date: new Date(2024, 0, uid).toISOString(),
+    flags: ['\\Seen'], source: 'server', isArchived: false,
+    _accountId: 'acc1', _mailbox: 'INBOX',
+  });
+  const topic = (topicId, emails) => ({
+    topicId, subject: SUBJ, originalSubject: SUBJ, emails,
+    participants: ['forms@test.com'], lastDate: emails[0].date, unreadCount: 0,
+  });
+
+  it('gives two same-subject topics two virtualizer keys, and renders both rows', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { groupBySender } = await import('../../utils/emailParser');
+    virtualizerConfigs = [];
+
+    const emails = [msg(1), msg(2)];
+    groupBySender.mockReturnValue([{
+      senderEmail: 'forms@test.com',
+      senderName: 'Contact form',
+      unreadCount: 0,
+      totalEmails: 2,
+      lastDate: emails[1].date,
+      topics: [topic('t1', [emails[0]]), topic('t2', [emails[1]])],
+    }]);
+    useMailStore.setState({ sortedEmails: emails, totalEmails: 2, getChatEmails: () => emails });
+    useSettingsStore.setState({ emailListGrouping: 'sender' });
+
+    try {
+      const { EmailList } = await import('../EmailList.jsx');
+      const { container } = render(React.createElement(EmailList.type));
+      await settle();
+
+      fireEvent.click(screen.getByTestId('sender-group-row'));
+      await settle();
+
+      const rows = container.querySelectorAll('[data-testid="sender-topic-row"]');
+      expect(rows.length).toBe(2);
+
+      // The real virtualizer takes its item key from here; two equal keys is
+      // the defect.
+      const senderCfg = virtualizerConfigs
+        .filter(c => String(c.getItemKey?.(0) ?? '').startsWith('s-'))
+        .pop();
+      expect(senderCfg).toBeTruthy();
+      const { getItemKey, count } = senderCfg;
+      expect(count).toBe(3); // sender + two topics
+      const keys = Array.from({ length: count }, (_, i) => getItemKey(i));
+      expect(new Set(keys).size).toBe(count);
+    } finally {
+      useSettingsStore.setState({ emailListGrouping: 'chronological' });
+      groupBySender.mockReturnValue([]);
+    }
   });
 });

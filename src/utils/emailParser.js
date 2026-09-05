@@ -276,6 +276,9 @@ export function groupBySender(emails, userEmail) {
       }
 
       group.topics.push({
+        // One topic per thread, so the row key must be the thread — several
+        // threads from one sender can normalise to the same subject.
+        topicId: thread.threadId,
         subject: normalizeSubject(thread.subject),
         originalSubject: thread.subject || topicEmails[0]?.subject || '(No subject)',
         emails: topicEmails,
@@ -336,6 +339,9 @@ export function groupBySender(emails, userEmail) {
       const normSubj = normalizeSubject(email.subject);
       if (!topicMap.has(normSubj)) {
         topicMap.set(normSubj, {
+          // This path really is one topic per normalised subject, so the
+          // subject is already the topic's identity within the sender.
+          topicId: normSubj,
           subject: normSubj,
           originalSubject: email.subject || '(No subject)',
           emails: [],

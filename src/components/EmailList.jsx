@@ -290,7 +290,7 @@ function EmailListComponent() {
           items.push({ type: 'sender', senderEmail: sender.senderEmail });
           if (expandedSenderRef.current === sender.senderEmail) {
             sender.topics.forEach((topic) => {
-              const topicKey = `${sender.senderEmail}-${topic.subject}`;
+              const topicKey = `${sender.senderEmail}-${topic.topicId}`;
               items.push({ type: 'topic', senderEmail: sender.senderEmail, topicKey });
               if (expandedTopicsRef.current.has(topicKey)) {
                 topic.emails.forEach(email => {
@@ -339,7 +339,7 @@ function EmailListComponent() {
             setExpandedEmail(fr.emailUid);
             const groups = senderGroupsRef.current;
             const sender = groups.find(s => s.senderEmail === fr.senderEmail);
-            const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.subject}` === fr.topicKey);
+            const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.topicId}` === fr.topicKey);
             const email = topic?.emails.find(e => e.uid === fr.emailUid);
             if (email) selectEmail(email.uid, email.source, email._mailbox);
           }
@@ -613,7 +613,7 @@ function EmailListComponent() {
       items.push({ type: 'sender', sender });
       if (expandedSender === sender.senderEmail) {
         for (const topic of sender.topics) {
-          const topicKey = `${sender.senderEmail}-${topic.subject}`;
+          const topicKey = `${sender.senderEmail}-${topic.topicId}`;
           items.push({ type: 'topic', topic, sender, topicKey });
           if (expandedTopics.has(topicKey)) {
             for (const email of topic.emails) {
@@ -1199,6 +1199,7 @@ function EmailListComponent() {
 
                     {item.type === 'topic' && (
                       <button
+                        data-testid="sender-topic-row"
                         onClick={() => {
                           setExpandedTopics(prev => {
                             const next = new Set(prev);
