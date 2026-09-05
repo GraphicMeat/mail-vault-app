@@ -190,3 +190,63 @@ describe('EmailActionBar — context rules', () => {
     expect(handlers.onExport).toHaveBeenCalledWith(EMAIL);
   });
 });
+
+// The star reads its state off the message itself rather than off a prop the
+// viewer has to keep in step — so the label names the next action for whatever
+// copy of the message the bar was handed.
+describe('EmailActionBar — star', () => {
+  const renderStar = (flags, extra = {}) => {
+    const email = { ...EMAIL, flags };
+    const onToggleFlag = vi.fn();
+    render(
+      <EmailActionBar
+        email={email}
+        variant="single"
+        isArchived={false}
+        isRead
+        isLocalOnly={extra.isLocalOnly ?? false}
+        isSentEmail={false}
+        singleRecipient={false}
+        emailThemeDark={false}
+        disabled={extra.disabled ?? {}}
+        onToggleFlag={onToggleFlag}
+      />
+    );
+    return { email, onToggleFlag };
+  };
+
+  it('offers "Star" for an unflagged message', () => {
+    renderStar(['\\Seen']);
+    expect(screen.getByRole('button', { name: 'Star' })).toBeTruthy();
+  });
+
+  it('offers "Remove star" once it is flagged', () => {
+    renderStar(['\\Seen', '\\Flagged']);
+    expect(screen.getByRole('button', { name: 'Remove star' })).toBeTruthy();
+  });
+
+  it('hands the open message to the handler', () => {
+    const { email, onToggleFlag } = renderStar([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Star' }));
+    expect(onToggleFlag).toHaveBeenCalledWith(email);
+  });
+
+  it('honours disabled.toggleFlag', () => {
+    const { onToggleFlag } = renderStar([], { disabled: { toggleFlag: true } });
+    fireEvent.click(screen.getByRole('button', { name: 'Star' }));
+    expect(onToggleFlag).not.toHaveBeenCalled();
+  });
+
+  // A message that exists only in the vault has no server flag to write. The
+  // star is the only handler wired here, so the bar renders no button at all.
+  it('is not offered for a local-only message', () => {
+    renderStar([], { isLocalOnly: true });
+    expect(screen.queryAllByRole('button')).toEqual([]);
+  });
+
+  // The bar renders no button the variant did not wire, star included.
+  it('is absent when no handler is passed', () => {
+    renderBar();
+    expect(labels()).not.toContain('Star');
+  });
+});

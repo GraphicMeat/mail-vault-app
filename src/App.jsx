@@ -401,6 +401,13 @@ function App() {
           .catch(err => useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) }));
       }
     },
+    // selectedEmailId IS the selection key in every view (see selectEmail's
+    // rowKey write), which is exactly what the toggle wants: a bare uid in a
+    // single folder's list, the full key in one that spans mailboxes.
+    toggleStar: () => {
+      const { selectedEmail, selectedEmailId } = useMailStore.getState();
+      if (selectedEmail || selectedEmailId) useMailStore.getState().toggleFlagged(selectedEmailId);
+    },
     // j/k walk the list the user can actually see: with the unread filter on,
     // the store still holds every loaded message, so navigating the raw
     // sortedEmails would select rows that aren't on screen.

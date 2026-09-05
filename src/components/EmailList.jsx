@@ -179,10 +179,11 @@ function EmailListComponent() {
   const removeLocalEmail = useAccountStore(s => s.removeLocalEmail);
   const deleteEmailFromServer = useAccountStore(s => s.deleteEmailFromServer);
   const saveEmailsLocally = useAccountStore(s => s.saveEmailsLocally);
+  const toggleFlagged = useAccountStore(s => s.toggleFlagged);
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const accountColors = useSettingsStore(s => s.accountColors);
   // Stable actions ref — object identity doesn't change unless actions change (they don't)
-  const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally }), [saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally]);
+  const rowActions = useMemo(() => ({ saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally, toggleFlagged }), [saveEmailLocally, removeLocalEmail, deleteEmailFromServer, saveEmailsLocally, toggleFlagged]);
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);

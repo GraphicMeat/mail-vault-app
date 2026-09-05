@@ -64,6 +64,7 @@ export const DEFAULT_SHORTCUTS = {
   replyAll: 'a',
   forward: 'f',
   archive: 'e',
+  toggleStar: 's',
   delete: '#',
   moveToFolder: 'm',
   compose: 'c',
@@ -930,7 +931,16 @@ export const useSettingsStore = create(
       version: 5,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
-      merge: (persisted, current) => ({ ...current, ...(persisted || {}) }),
+      // Shallow, EXCEPT the shortcut map: a persisted object replaces the
+      // default whole, so every binding added after a user's first launch
+      // would be missing for them for ever (rendered "—", firing nothing). A
+      // binding the user cleared is stored as an empty string, not dropped, so
+      // it survives this merge as cleared.
+      merge: (persisted, current) => ({
+        ...current,
+        ...(persisted || {}),
+        keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
+      }),
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {
         if (state && state.cacheLimitMB >= 512) {

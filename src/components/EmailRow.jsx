@@ -5,7 +5,7 @@ import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../s
 import { getSenderName } from '../utils/emailParser';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
-import { emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
@@ -19,8 +19,42 @@ import {
   RefreshCw,
   Paperclip,
   Archive,
+  Star,
 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
+
+/**
+ * The star, in both row variants.
+ *
+ * Hidden until the row is hovered unless it is lit: an empty star on every row
+ * of a long list is noise, a lit one is the information the list is for.
+ *
+ * The click carries the row's SELECTION key, not its uid — a merged Sent copy
+ * and the folder's own message share a number, and only one of them was
+ * clicked.
+ *
+ * It sits at the LEFT of the subject line, not beside the date: the row's
+ * hover actions are an absolute overlay pinned to the right edge, so a star
+ * that only appears on hover would appear underneath them.
+ */
+function StarToggle({ email, actions, size }) {
+  const t = useT();
+  const isFlagged = email.flags?.includes('\\Flagged');
+  const label = isFlagged ? t('rowMenu.unstar') : t('rowMenu.star');
+  return (
+    <button
+      type="button"
+      data-testid="star-toggle"
+      aria-pressed={!!isFlagged}
+      aria-label={label}
+      title={label}
+      className={`shrink-0 p-0.5 rounded press ${isFlagged ? '' : 'invisible group-hover:visible'}`}
+      onClick={(e) => { e.stopPropagation(); actions.toggleFlagged?.(selectionKey(email, useMailStore.getState())); }}
+    >
+      <Star size={size} className={isFlagged ? 'text-amber-400 fill-amber-400' : 'text-mail-text-muted hover:text-amber-400'} />
+    </button>
+  );
+}
 
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
@@ -109,6 +143,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         someone scans a list for and a sender name is what they can infer.
       */}
       <div className="flex-1 min-w-[120px] flex items-center gap-2">
+        <StarToggle email={email} actions={actions} size={14} />
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
         <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
@@ -219,6 +254,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
         </div>
         {/* Line 2: Subject + attachment */}
         <div className="flex items-center gap-1.5">
+          <StarToggle email={email} actions={actions} size={13} />
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />

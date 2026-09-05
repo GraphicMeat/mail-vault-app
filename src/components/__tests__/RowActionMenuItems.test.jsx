@@ -69,6 +69,9 @@ const initialStoreState = () => ({
   markSelectedAsUnread: vi.fn().mockImplementation(async () => {
     useMailStoreMock.setState({ selectedEmailIds: new Set() });
   }),
+  setSelectedFlagged: vi.fn().mockImplementation(async () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set() });
+  }),
   purgeSelectedEverywhere: vi.fn().mockImplementation(async () => {
     useMailStoreMock.setState({ selectedEmailIds: new Set() });
     return { deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 };
@@ -606,5 +609,64 @@ describe('export from a row', () => {
 
     expect(openExport).toHaveBeenCalledWith({ messages: emails });
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+// The star, gated the way every other item in this menu is: derived over the
+// WHOLE set the row stands for, so a mixed thread offers both directions.
+describe('RowActionMenuItems — star', () => {
+  beforeEach(() => {
+    useMailStoreMock.setState(initialStoreState());
+  });
+  afterEach(() => cleanup());
+
+  it('offers Star for an unflagged row and not Remove star', () => {
+    render(<RowActionMenuItems emails={[baseEmail({ flags: [] })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Star')).toBeTruthy();
+    expect(screen.queryByText('Remove star')).toBeNull();
+  });
+
+  it('offers Remove star for a flagged row and not Star', () => {
+    render(<RowActionMenuItems emails={[baseEmail({ flags: ['\\Flagged'] })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Remove star')).toBeTruthy();
+    expect(screen.queryByText('Star')).toBeNull();
+  });
+
+  it('offers both on a mixed thread', () => {
+    const emails = [baseEmail({ uid: 1, flags: [] }), baseEmail({ uid: 2, flags: ['\\Flagged'] })];
+    render(<RowActionMenuItems emails={emails} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    expect(screen.getByText('Star')).toBeTruthy();
+    expect(screen.getByText('Remove star')).toBeTruthy();
+  });
+
+  // Same contract as Mark as read: the bulk workflow acts on selectedEmailIds,
+  // so the menu scopes the selection to this row's keys first and restores
+  // whatever was selected before.
+  it('scopes Star to this row\'s keys and restores the prior selection', async () => {
+    useMailStoreMock.setState({ selectedEmailIds: new Set([1, 2, 3]) });
+    const onClose = vi.fn();
+    render(<RowActionMenuItems emails={[baseEmail({ uid: 99, flags: [] })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={onClose} />);
+
+    fireEvent.click(screen.getByText('Star'));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const calls = useMailStoreMock.getState().setSelection.mock.calls;
+    expect(calls[0][0]).toEqual([99]);
+    expect(useMailStoreMock.getState().setSelectedFlagged).toHaveBeenCalledWith(true);
+    expect(calls[calls.length - 1][0]).toEqual([1, 2, 3]);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('Remove star asks for the other direction', async () => {
+    render(<RowActionMenuItems emails={[baseEmail({ uid: 99, flags: ['\\Flagged'] })]} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Remove star'));
+    await Promise.resolve();
+
+    expect(useMailStoreMock.getState().setSelectedFlagged).toHaveBeenCalledWith(false);
   });
 });

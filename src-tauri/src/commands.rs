@@ -1038,6 +1038,18 @@ pub async fn graph_set_read(
     client.set_read_status(&message_id, is_read).await
 }
 
+// ── Graph API: Set the flag (our star) ──────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_set_flagged(
+    access_token: String,
+    message_id: String,
+    flagged: bool,
+) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.set_flag_status(&message_id, flagged).await
+}
+
 #[tauri::command]
 pub async fn graph_delete_message(
     access_token: String,

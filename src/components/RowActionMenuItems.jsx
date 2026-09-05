@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown, Reply, MailPlus } from 'lucide-react';
+import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX, ImageDown, Reply, MailPlus, Star, StarOff } from 'lucide-react';
 import { useMailStore } from '../stores/mailStore';
 import { selectionKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
@@ -32,6 +32,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
   const setSelection = useMailStore(s => s.setSelection);
   const markSelectedAsRead = useMailStore(s => s.markSelectedAsRead);
   const markSelectedAsUnread = useMailStore(s => s.markSelectedAsUnread);
+  const setSelectedFlagged = useMailStore(s => s.setSelectedFlagged);
   const purgeSelectedEverywhere = useMailStore(s => s.purgeSelectedEverywhere);
   const [showMove, setShowMove] = useState(false);
 
@@ -64,6 +65,8 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
 
   const hasUnread = emails.some(e => !e.flags?.includes('\\Seen'));
   const hasRead = emails.some(e => e.flags?.includes('\\Seen'));
+  const hasUnflagged = emails.some(e => !e.flags?.includes('\\Flagged'));
+  const hasFlagged = emails.some(e => e.flags?.includes('\\Flagged'));
   const hasUnarchived = emails.some(e => !e.isArchived);
   const hasArchived = emails.some(e => e.isArchived);
   const hasServerBacked = emails.some(e => e.source !== 'local-only');
@@ -144,6 +147,19 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(markSelectedAsUnread); }}>
           <Mail size={14} />
           {t('rowMenu.markUnread')}
+        </MenuItem>
+      )}
+
+      {hasUnflagged && (
+        <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(() => setSelectedFlagged(true)); }}>
+          <Star size={14} />
+          {t('rowMenu.star')}
+        </MenuItem>
+      )}
+      {hasFlagged && (
+        <MenuItem onClick={(e) => { e.stopPropagation(); runOnThisRow(() => setSelectedFlagged(false)); }}>
+          <StarOff size={14} />
+          {t('rowMenu.unstar')}
         </MenuItem>
       )}
 

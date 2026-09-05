@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code, Sun, Moon, ImageDown } from 'lucide-react';
+import { Reply, ReplyAll, Forward, Archive, Trash2, FolderInput, MailOpen, Mail, ExternalLink, Code, Sun, Moon, ImageDown, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useT, t  } from '../../i18n/index.js';
@@ -36,6 +36,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   onDelete,
   onMove,
   onToggleRead,
+  onToggleFlag,
   onOpenInWindow,
   onViewSource,
   onExport,
@@ -51,6 +52,9 @@ export const EmailActionBar = memo(function EmailActionBar({
   moveButtonRef,
 }) {
   const t = useT();
+  // Read state arrives as a prop (the viewer derives it); the star is on the
+  // message itself, so it is read here — one less prop to keep in step.
+  const isFlagged = email?.flags?.includes('\\Flagged');
   const isChat = variant === 'chat';
   const isThread = variant === 'thread';
   const compact = isChat;
@@ -131,6 +135,17 @@ export const EmailActionBar = memo(function EmailActionBar({
           label={isRead ? t('emailActionBar.markUnread') : t('emailActionBar.markRead')}
           onClick={() => onToggleRead?.(email)}
           disabled={disabled.toggleRead}
+          compact={compact}
+        />
+      )}
+
+      {/* Star */}
+      {!isLocalOnly && onToggleFlag && (
+        <ActionButton
+          icon={Star}
+          label={isFlagged ? t('emailActionBar.unstar') : t('emailActionBar.star')}
+          onClick={() => onToggleFlag?.(email)}
+          disabled={disabled.toggleFlag}
           compact={compact}
         />
       )}

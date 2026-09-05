@@ -391,6 +391,46 @@ impl GraphClient {
         Ok(())
     }
 
+    /// Outlook's flag is MailVault's star: `flag.flagStatus` flagged / notFlagged.
+    ///
+    /// Graph has exactly two of our flags — `isRead` above and this one.
+    /// \Answered and keywords have no equivalent and never reach here.
+    pub async fn set_flag_status(&self, message_id: &str, flagged: bool) -> Result<(), String> {
+        let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);
+
+        let resp = self
+            .client
+            .patch(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({
+                "flag": { "flagStatus": if flagged { "flagged" } else { "notFlagged" } }
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph set_flag_status request failed: {}", e))?;
+
+        let status = resp.status();
+        if !status.is_success() {
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                let retry_after = resp.headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(30);
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph set_flag_status failed (429:retry_after={}) {}", retry_after, body));
+            }
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph set_flag_status failed ({}) {}",
+                status.as_u16(),
+                body
+            ));
+        }
+
+        Ok(())
+    }
+
     /// Delete a message (moves to Deleted Items by default in Graph API).
     pub async fn delete_message(&self, message_id: &str) -> Result<(), String> {
         let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);

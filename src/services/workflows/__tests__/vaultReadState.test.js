@@ -40,6 +40,9 @@ vi.mock('../../db', () => ({
   getAccounts: vi.fn().mockResolvedValue([]),
   ensureAccountsInFile: vi.fn().mockResolvedValue(undefined),
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
+  // The flag core journals every write and clears it on success.
+  queueOp: vi.fn().mockResolvedValue(1),
+  clearOps: vi.fn().mockResolvedValue(undefined),
 }));
 
 const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });

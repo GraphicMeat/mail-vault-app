@@ -5209,6 +5209,7 @@ fn main() {
             commands::graph_get_mime,
             commands::graph_cache_mime,
             commands::graph_set_read,
+            commands::graph_set_flagged,
             commands::graph_delete_message,
             commands::graph_move_emails,
             commands::imap_move_emails,

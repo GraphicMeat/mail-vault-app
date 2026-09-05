@@ -57,7 +57,12 @@ vi.mock('../../stores/mailStore', () => {
   hook.getState = () => state;
   return { useMailStore: hook };
 });
-vi.mock('../../stores/slices/unifiedHelpers', () => ({ emailScopeKey: (e) => `acct-1:INBOX:${e.uid}` }));
+vi.mock('../../stores/slices/unifiedHelpers', () => ({
+  emailScopeKey: (e) => `acct-1:INBOX:${e.uid}`,
+  // The row's star hands this to the toggle; a named export the mock
+  // omits is a load-time failure for the whole file, not a runtime one.
+  selectionKey: (e) => e.uid,
+}));
 
 const { ThreadRow, CompactThreadRow } = await import('../ThreadRow');
 const { EmailRow, CompactEmailRow } = await import('../EmailRow');

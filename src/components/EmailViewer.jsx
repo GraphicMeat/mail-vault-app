@@ -68,6 +68,7 @@ function EmailViewerComponent({ onComposeReply }) {
   const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
   const exportEmail = useSelectionStore(s => s.exportEmail);
   const markEmailReadStatus = useSelectionStore(s => s.markEmailReadStatus);
+  const toggleFlagged = useSelectionStore(s => s.toggleFlagged);
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -277,6 +278,14 @@ function EmailViewerComponent({ onComposeReply }) {
     } finally {
       setTogglingRead(false);
     }
+  };
+
+  // The open message's own selection key: a merged Sent copy, or a message
+  // opened from a branch listing, is not the view's folder's — and a bare uid
+  // there names another folder's message just as readily.
+  const handleToggleFlag = () => {
+    if (!selectedEmail) return;
+    toggleFlagged(selectionKey(selectedEmail, useMailStore.getState()));
   };
 
   const handleDelete = () => {
@@ -645,6 +654,7 @@ function EmailViewerComponent({ onComposeReply }) {
             onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
             onMove={() => setShowMoveDropdown(v => !v)}
             onToggleRead={handleToggleReadStatus}
+            onToggleFlag={handleToggleFlag}
             onOpenInWindow={() => {
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke || !selectedEmail?.html) return;

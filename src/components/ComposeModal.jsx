@@ -17,6 +17,7 @@ import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
+import { markAnswered, markForwarded } from '../services/workflows/messageMutations';
 import { t, useT  } from '../i18n/index.js';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -734,6 +735,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             account: freshAccount.email,
             smtpMessageId: sendResult?.messageId,
           });
+          // Tell the server the original was answered / forwarded, the way
+          // every other client on the account does. Fire-and-forget: the send
+          // has already happened and a flag must never fail it.
+          if (mode === 'reply' || mode === 'replyAll') markAnswered(replyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
+          else if (mode === 'forward') markForwarded(replyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
+
           // New composes default to the identity that actually sent last.
           useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
           // It left the building: the Drafts copy is not a draft any more.

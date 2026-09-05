@@ -11,6 +11,8 @@ import {
 import {
   markSelectedAsRead as _markSelectedAsRead,
   markSelectedAsUnread as _markSelectedAsUnread,
+  setSelectedFlagged as _setSelectedFlagged,
+  toggleFlagged as _toggleFlagged,
   deleteSelectedFromServer as _deleteSelectedFromServer,
   moveEmails as _moveEmails,
   purgeEverywhere as _purgeEverywhere,
@@ -168,6 +170,8 @@ export const createSelectionSlice = (set, get) => ({
 
   markSelectedAsRead: () => _markSelectedAsRead(),
   markSelectedAsUnread: () => _markSelectedAsUnread(),
+  setSelectedFlagged: (on) => _setSelectedFlagged(on),
+  toggleFlagged: (key) => _toggleFlagged(key),
   deleteSelectedFromServer: () => _deleteSelectedFromServer(),
   moveEmails: (uids, targetMailbox) => _moveEmails(uids, targetMailbox),
   purgeSelectedEverywhere: (opts) => _purgeEverywhere([...get().selectedEmailIds], opts),

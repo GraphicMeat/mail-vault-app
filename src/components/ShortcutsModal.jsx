@@ -15,6 +15,7 @@ const ACTION_LABELS = () => ({
   replyAll: tr('settings.shortcuts.replyAll'),
   forward: tr('settings.shortcuts.forward'),
   archive: tr('common.archive'),
+  toggleStar: tr('settings.shortcuts.toggleStar'),
   delete: tr('common.delete'),
   moveToFolder: tr('rowMenu.moveFolder'),
   compose: tr('sidebar.compose'),
@@ -32,7 +33,7 @@ const CATEGORIES = () => ([
   },
   {
     title: tr('settings.shortcuts.actions'),
-    actions: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'moveToFolder', 'compose'],
+    actions: ['reply', 'replyAll', 'forward', 'archive', 'toggleStar', 'delete', 'moveToFolder', 'compose'],
   },
   {
     title: tr('settings.shortcuts.selection'),

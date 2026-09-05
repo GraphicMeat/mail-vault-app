@@ -457,6 +457,10 @@ export async function graphSetRead(accessToken, messageId, isRead) {
   return await tauriInvoke('graph_set_read', { accessToken, messageId, isRead });
 }
 
+export async function graphSetFlagged(accessToken, messageId, flagged) {
+  return await tauriInvoke('graph_set_flagged', { accessToken, messageId, flagged });
+}
+
 export async function graphDeleteMessage(accessToken, messageId) {
   return await tauriInvoke('graph_delete_message', { accessToken, messageId });
 }

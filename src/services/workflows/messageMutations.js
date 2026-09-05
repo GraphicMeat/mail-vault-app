@@ -8,6 +8,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread } from '../../stores/slices/unifiedHelpers';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
+import { useConnectivityStore } from '../../stores/connectivityStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
@@ -643,26 +644,39 @@ export async function applyServerRemoval(uid, {
 }
 
 
-// ── read-flag helpers (shared by the single-email and bulk paths) ──
+// ── flag helpers (shared by read state, the star, \Answered and $Forwarded) ──
 
-const _withSeen = (flags, read) => read
-  ? [...(flags || []), '\\Seen'].filter((f, i, a) => a.indexOf(f) === i)
-  : (flags || []).filter(f => f !== '\\Seen');
+// Add or remove one flag, deduped. Read state is just this with '\\Seen'.
+export const withFlag = (flags, flag, on) => on
+  ? [...(flags || []), flag].filter((f, i, a) => a.indexOf(f) === i)
+  : (flags || []).filter(f => f !== flag);
 
-// One message's \Seen change on the server. Graph accounts have no IMAP flags —
-// the bulk path used to skip this branch, so mark-as-read silently failed there.
-export async function _setSeenOnServer(account, accountId, mailbox, uid, read) {
+const _withSeen = (flags, read) => withFlag(flags, '\\Seen', read);
+
+// One message's flag change on the server. Graph accounts have no IMAP flags —
+// the bulk path used to skip this branch, so mark-as-read silently failed there
+// — and only two of ours map onto anything Graph understands: isRead and its
+// own flag, which is our star. \Answered and keywords have no equivalent, so
+// they are dropped with a line rather than sent as something else.
+export async function _setFlagOnServer(account, accountId, mailbox, uid, flags, action) {
   if (isGraphAccount(account)) {
     const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { token: account.oauth2AccessToken });
     if (!graphId) {
-      console.warn('[setSeenOnServer] No Graph message ID for UID', uid);
+      console.warn('[setFlagOnServer] No Graph message ID for UID', uid);
       return;
     }
-    await api.graphSetRead(account.oauth2AccessToken, graphId, read);
+    const on = action === 'add';
+    if (flags.includes('\\Seen')) await api.graphSetRead(account.oauth2AccessToken, graphId, on);
+    if (flags.includes('\\Flagged')) await api.graphSetFlagged(account.oauth2AccessToken, graphId, on);
+    const rest = flags.filter(f => f !== '\\Seen' && f !== '\\Flagged');
+    if (rest.length) console.log('[setFlagOnServer] Graph has no equivalent for', rest);
     return;
   }
-  await api.updateEmailFlags(account, uid, ['\\Seen'], read ? 'add' : 'remove', mailbox);
+  await api.updateEmailFlags(account, uid, flags, action, mailbox);
 }
+
+export const _setSeenOnServer = (account, accountId, mailbox, uid, read) =>
+  _setFlagOnServer(account, accountId, mailbox, uid, ['\\Seen'], read ? 'add' : 'remove');
 
 // Re-derive everything the list renders from after a flag-only change.
 // A flag change moves no message in or out of the list, so it is invisible to
@@ -681,7 +695,7 @@ function _syncUnreadBadge(useMailStore, accountId, mailbox) {
   useSettingsStore.getState().setUnreadForAccount(accountId, unread);
 }
 
-// The vault half of a read-state change.
+// The vault half of a flag change.
 //
 // `localEmails` holds the rows the list gets from the vault, and `sentEmails`
 // the Sent copies an INBOX list merges in; a row in one of those is in NO
@@ -689,12 +703,12 @@ function _syncUnreadBadge(useMailStore, accountId, mailbox) {
 // the change never reaches the screen. Identity matters too: the array is
 // replaced only when a row actually changed, because updateSortedEmails
 // memoises on it.
-function _mapLocalSeen(localEmails, matches, read) {
+function _mapLocalFlags(localEmails, matches, map) {
   if (!localEmails?.length || !localEmails.some(matches)) return localEmails;
-  return localEmails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e);
+  return localEmails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e);
 }
 
-// The durable half of a read-state change.
+// The durable half of a flag change.
 //
 // One Rust call lands it on every copy the vault keeps: the Maildir file name
 // (which restore and the external mirror read the flags off), the mirror's
@@ -707,8 +721,8 @@ function _mapLocalSeen(localEmails, matches, read) {
 //
 // Best-effort, and silent for a message the vault does not hold: Rust finds
 // nothing to rename or patch and says so in its counts. The rows' flags are
-// read after applySeenLocally / _markSelected mapped them, so `_withSeen` here
-// is a no-op that keeps the call honest if the order ever changes.
+// read after the caller mapped them, so `mapFlags` here is a no-op that keeps
+// the call honest if the order ever changes.
 //
 // One call for all of `uids`: the writer rewrites the whole index file, so a
 // call per message would race itself and the losers' flags would vanish.
@@ -719,7 +733,7 @@ function _mapLocalSeen(localEmails, matches, read) {
 // is a different file — the one restore uploads. So the row read here is the
 // one of THIS folder, and no row at all (a flag list rebuilt from nothing
 // would strip \Flagged and \Answered) is skipped rather than guessed at.
-async function _persistVaultSeen(useMailStore, accountId, mailbox, uids, read, isUnified = false) {
+async function _persistVaultFlags(useMailStore, accountId, mailbox, uids, mapFlags, isUnified = false) {
   try {
     const s = useMailStore.getState();
     const pool = [s.selectedEmail, ...(s.emails || []), ...(s.localEmails || []), ...(s.sentEmails || [])];
@@ -729,18 +743,21 @@ async function _persistVaultSeen(useMailStore, accountId, mailbox, uids, read, i
         && (!isUnified || !e._accountId || e._accountId === accountId)
         && (resolveEmailLocation(e, s)?.mailbox ?? mailbox) === mailbox);
       if (!row) {
-        console.warn('[applySeenLocally] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
+        console.warn('[persistVaultFlags] No row of %s/%s for uid %s — vault copy left as it was', accountId, mailbox, uid);
         continue;
       }
-      changes.push({ uid, flags: _withSeen(row.flags, read) });
+      changes.push({ uid, flags: mapFlags(row.flags) });
     }
     if (!changes.length) return;
     const accountEmail = s.accounts?.find(a => a.id === accountId)?.email || null;
     await api.vaultApplyFlags(accountId, mailbox, accountEmail, changes);
   } catch (e) {
-    console.warn('[applySeenLocally] Failed to persist vault read state for', accountId, mailbox, uids, e);
+    console.warn('[persistVaultFlags] Failed to persist flags for', accountId, mailbox, uids, e);
   }
 }
+
+const _persistVaultSeen = (useMailStore, accountId, mailbox, uids, read, isUnified = false) =>
+  _persistVaultFlags(useMailStore, accountId, mailbox, uids, (f) => _withSeen(f, read), isUnified);
 
 // Land one message's \Seen change on every surface that renders read state:
 // the list row, the open viewer copy, the cached body, the derived lists and
@@ -760,9 +777,9 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
     // A vault-only row lives in `localEmails` and never in `emails` — see
     // deriveDisplayRows, which pushes it into the list from there. Mapping
     // only `emails` is why marking one read did nothing at all on screen.
-    localEmails: _mapLocalSeen(state.localEmails, matches, read),
+    localEmails: _mapLocalFlags(state.localEmails, matches, (f) => _withSeen(f, read)),
     // And a Sent copy merged into the INBOX list lives in `sentEmails`.
-    sentEmails: _mapLocalSeen(state.sentEmails, matches, read),
+    sentEmails: _mapLocalFlags(state.sentEmails, matches, (f) => _withSeen(f, read)),
     selectedEmail: state.selectedEmail && matches(state.selectedEmail)
       ? { ...state.selectedEmail, flags: _withSeen(state.selectedEmail.flags, read) }
       : state.selectedEmail,
@@ -784,7 +801,6 @@ export async function markEmailReadStatus(uid, read) {
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = spansMailboxes(state);
   // The message this uid names — account and folder from the row, not from
   // the view: the INBOX list merges the account's Sent copies in, and INBOX
   // has its own message under a merged copy's number. The viewer's toggle is
@@ -797,14 +813,14 @@ export async function markEmailReadStatus(uid, read) {
   const accountId = loc?.accountId || state.activeAccountId;
   const rawMailbox = loc?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
-  let account = state.accounts.find(a => a.id === accountId);
+  const account = state.accounts.find(a => a.id === accountId);
   if (!account) return;
-  account = await ensureFreshToken(account);
 
   try {
-    await _setSeenOnServer(account, accountId, mailbox, uid, read);
-
-    applySeenLocally(useMailStore, { accountId, mailbox, uid, read, isUnified });
+    // The one flag core: rows, vault, journal, server — in that order, so a
+    // reload between the journal write and the round-trip finishes the change
+    // rather than losing it.
+    await applyFlagToTargets([{ account, accountId, mailbox, uid }], '\\Seen', read);
 
     // Marking the open email unread means "not dealt with yet" — keeping it on
     // screen contradicts that, and the next open would just mark it read again.
@@ -838,74 +854,69 @@ export async function exportEmail(uid) {
 }
 
 
-// ── bulk mark read/unread workflow ──
+// ── the one flag workflow (read state, the star, \Answered, $Forwarded) ──
 
-async function _markSelected(read) {
+/**
+ * Land one flag change for `targets` everywhere it renders, in the vault, in
+ * the journal and on the server — in that order.
+ *
+ * Rows first because the user is watching them; the journal before the server,
+ * because a reload between the two must not lose the intent; the server last,
+ * and one message at a time.
+ *
+ * Offline (the connectivity store's verdict) the journal entry is left in
+ * place and the round-trip skipped — replayOps sends it once the link is back.
+ * A server failure leaves the entry too: only success clears it, for the same
+ * reason. Graph accounts are the exception at both ends — replayOps cannot
+ * replay one, so those go straight out and are never journalled.
+ *
+ * `targets` are already-resolved locations: [{ account, accountId, mailbox, uid }].
+ * `undoable` is the slot the undo workflow reads; nothing here needs it yet.
+ */
+export async function applyFlagToTargets(targets, flag, on, { undoable = true } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
   const state = get();
-  const { selectedEmailIds } = state;
   const isUnified = spansMailboxes(state);
-  if (selectedEmailIds.size === 0) return;
+  if (!targets.length) return;
 
-  const keys = Array.from(selectedEmailIds);
-  const selKeyOf = (e) => selectionKey(e, state);
-
-  // Which message each key names — account, folder, uid — resolved once, up
-  // front, so that every write below follows it: the rows on screen, the
-  // vault copies and the server. The folder comes from the row, not the view
-  // (the resolver the delete workflows use): the INBOX list merges the
-  // account's Sent copies in, and a uid names a message only inside one
-  // folder, so a `UID STORE` against INBOX for a merged Sent row would flag
-  // INBOX's own message under that number.
-  //
-  // In-folder rows first. A single folder's list keys its selection by bare
-  // uid, which cannot say which of two same-numbered rows was ticked; the
-  // folder on screen owns the number, and a merged Sent copy answers only
-  // when no in-folder row carries it. ponytail: the key itself naming the
-  // folder, as the unified list's does, is the real fix for that ambiguity.
-  const emailMap = new Map();
-  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]) {
-    const k = selKeyOf(e);
-    if (!emailMap.has(k)) emailMap.set(k, e);
-  }
-  const targets = [];
-  for (const key of keys) {
-    const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
-    if (!ctx) {
-      console.warn('[markSelected] skipped a row that names no account:', key);
-      continue;
-    }
-    targets.push({ key, ...ctx });
-  }
   const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
   const matches = (e) => targetKeys.has(emailScopeKey(e, state));
+  const map = (flags) => withFlag(flags, flag, on);
 
   useMailStore.setState(s => ({
-    emails: s.emails.map(e => matches(e) ? { ...e, flags: _withSeen(e.flags, read) } : e),
+    emails: s.emails.map(e => matches(e) ? { ...e, flags: map(e.flags) } : e),
     // Vault-only rows are reached through `localEmails`, not `emails` — and
     // the INBOX list's merged Sent copies through `sentEmails`.
-    localEmails: _mapLocalSeen(s.localEmails, matches, read),
-    sentEmails: _mapLocalSeen(s.sentEmails, matches, read),
+    localEmails: _mapLocalFlags(s.localEmails, matches, map),
+    sentEmails: _mapLocalFlags(s.sentEmails, matches, map),
     selectedEmail: s.selectedEmail && matches(s.selectedEmail)
-      ? { ...s.selectedEmail, flags: _withSeen(s.selectedEmail.flags, read) }
+      ? { ...s.selectedEmail, flags: map(s.selectedEmail.flags) }
       : s.selectedEmail,
-    selectedEmailIds: new Set(),
   }));
+
+  // The body cache freezes the flags a message had when it was fetched, so a
+  // reopen of an uncorrected entry paints the state from before this change.
+  for (const t of targets) {
+    const entry = get().emailCache.get(`${t.accountId}-${t.mailbox}-${t.uid}`);
+    if (entry) entry.email = { ...entry.email, flags: map(entry.email.flags) };
+  }
   _refreshAfterFlagChange(useMailStore);
 
-  if (isUnified) {
-    // Unified rows span accounts, so the sidebar badges have to be counted per
-    // account. The unified list is INBOX-only, so no mailbox check here.
-    const byAccount = new Map();
-    for (const e of get().emails) {
-      if (!e._accountId) continue;
-      byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
+  if (flag === '\\Seen') {
+    if (isUnified) {
+      // Unified rows span accounts, so the sidebar badges have to be counted
+      // per account. The unified list is INBOX-only, so no mailbox check here.
+      const byAccount = new Map();
+      for (const e of get().emails) {
+        if (!e._accountId) continue;
+        byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
+      }
+      for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
+    } else {
+      _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
     }
-    for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
-  } else {
-    _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
   }
 
   // The vault copies are written whatever the server says — a vault-only
@@ -918,21 +929,146 @@ async function _markSelected(read) {
     byFolder.get(k).uids.push(t.uid);
   }
   for (const f of byFolder.values()) {
-    _persistVaultSeen(useMailStore, f.accountId, f.mailbox, f.uids, read, isUnified);
+    _persistVaultFlags(useMailStore, f.accountId, f.mailbox, f.uids, map, isUnified);
   }
 
+  const action = on ? 'add' : 'remove';
   for (const t of targets) {
+    if (isGraphAccount(t.account)) {
+      try {
+        await _setFlagOnServer(await ensureFreshToken(t.account), t.accountId, t.mailbox, t.uid, [flag], action);
+      } catch (e) {
+        // The one branch with no journal behind it — replayOps cannot replay a
+        // Graph op — so a failure here is the end of the road and has to say so.
+        console.error('[applyFlag] Graph write failed:', e);
+        useMailStore.setState({ error: tr('svc.messageMutations.couldChangeFlagServer', { error: e.message }) });
+      }
+      continue;
+    }
+    await db.queueOp({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid], arg: { flags: [flag], action } });
+    if (!useConnectivityStore.getState().online) continue;   // replayOps finishes it
     try {
       const account = await ensureFreshToken(t.account);
-      await _setSeenOnServer(account, t.accountId, t.mailbox, t.uid, read);
+      await _setFlagOnServer(account, t.accountId, t.mailbox, t.uid, [flag], action);
+      await db.clearOps({ op: 'flag', accountId: t.accountId, mailbox: t.mailbox, uids: [t.uid] });
     } catch (e) {
-      console.error(`Failed to mark email ${t.key} as ${read ? 'read' : 'unread'}:`, e);
+      console.error(`[applyFlag] ${flag} ${action} failed for ${t.accountId}/${t.mailbox}/${t.uid} — left in the journal:`, e);
     }
   }
 }
 
+/**
+ * The same change, addressed by selection key.
+ *
+ * Which message each key names — account, folder, uid — is resolved once, up
+ * front, so that every write below follows it: the rows on screen, the vault
+ * copies, the journal and the server. The folder comes from the row, not the
+ * view (the resolver the delete workflows use): the INBOX list merges the
+ * account's Sent copies in, and a uid names a message only inside one folder,
+ * so a `UID STORE` against INBOX for a merged Sent row would flag INBOX's own
+ * message under that number.
+ *
+ * In-folder rows first. A single folder's list keys its selection by bare uid,
+ * which cannot say which of two same-numbered rows was ticked; the folder on
+ * screen owns the number, and a merged Sent copy answers only when no
+ * in-folder row carries it. ponytail: the key itself naming the folder, as the
+ * unified list's does, is the real fix for that ambiguity.
+ */
+export async function applyFlagToKeys(keys, flag, on, opts) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const state = useMailStore.getState();
+
+  const emailMap = new Map();
+  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]) {
+    const k = selectionKey(e, state);
+    if (!emailMap.has(k)) emailMap.set(k, e);
+  }
+  const targets = [];
+  for (const key of keys) {
+    const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
+    if (!ctx) {
+      console.warn('[applyFlag] skipped a row that names no account:', key);
+      continue;
+    }
+    targets.push({ key, ...ctx });
+  }
+
+  // A bulk path hands the selection back empty, as mark read always has. A
+  // single row acted on while an unrelated bulk selection is live is NOT that,
+  // so the selection is only cleared when these keys ARE the selection.
+  const selected = state.selectedEmailIds;
+  if (keys.length && new Set(keys).size === selected.size && keys.every(k => selected.has(k))) {
+    useMailStore.setState({ selectedEmailIds: new Set() });
+  }
+
+  return applyFlagToTargets(targets, flag, on, opts);
+}
+
+
+// ── bulk mark read/unread workflow ──
+
+async function _markSelected(read) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const { selectedEmailIds } = useMailStore.getState();
+  if (selectedEmailIds.size === 0) return;
+  return applyFlagToKeys([...selectedEmailIds], '\\Seen', read);
+}
+
 export const markSelectedAsRead = () => _markSelected(true);
 export const markSelectedAsUnread = () => _markSelected(false);
+
+
+// ── star (\Flagged) ──
+
+export async function setSelectedFlagged(on) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const { selectedEmailIds } = useMailStore.getState();
+  if (selectedEmailIds.size === 0) return;
+  return applyFlagToKeys([...selectedEmailIds], '\\Flagged', on);
+}
+
+/**
+ * Flip one row's star. `key` is that row's selection key — a bare uid in a
+ * single folder's list, the full `account:mailbox:uid` in a spanning one.
+ *
+ * The current state is read off the row (or the open copy, for a message whose
+ * row has scrolled out of the loaded window), and compared as a string: a bare
+ * uid key arrives as a number from the row and as a string from a data
+ * attribute, and `7 === '7'` is false.
+ */
+export async function toggleFlagged(key) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const state = useMailStore.getState();
+  const sameKey = (e) => String(selectionKey(e, state)) === String(key);
+  const row = [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])].find(sameKey)
+    || (state.selectedEmail && sameKey(state.selectedEmail) ? state.selectedEmail : null);
+  const on = !row?.flags?.includes('\\Flagged');
+  return applyFlagToKeys([key], '\\Flagged', on);
+}
+
+
+// ── \Answered / $Forwarded — the message a reply or forward answered ──
+
+// `replyTo` is the open copy the viewer handed compose, stamped
+// _accountId/_mailbox by selectEmail. A copy without the stamp, or a message
+// that never reached a server, is left alone: there is nothing to write to,
+// and guessing the folder would flag another message under the same number.
+// Not undoable — the user asked to send, not to set a flag.
+async function _flagRepliedTo(replyTo, flag) {
+  if (!replyTo?._accountId || !replyTo?._mailbox || typeof replyTo.uid !== 'number'
+    || replyTo._localStaged || replyTo.source === 'local-only') return;
+  const { useMailStore } = await import('../../stores/mailStore');
+  const account = useMailStore.getState().accounts.find(a => a.id === replyTo._accountId);
+  if (!account) return;
+  const mailbox = replyTo._mailbox === 'UNIFIED' ? 'INBOX' : replyTo._mailbox;
+  return applyFlagToTargets(
+    [{ account, accountId: replyTo._accountId, mailbox, uid: replyTo.uid }],
+    flag, true, { undoable: false },
+  );
+}
+
+export const markAnswered = (replyTo) => _flagRepliedTo(replyTo, '\\Answered');
+export const markForwarded = (replyTo) => _flagRepliedTo(replyTo, '$Forwarded');
 
 
 // ── shared per-key context resolution ──
