@@ -125,9 +125,11 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
         {t('emailActionBar.reply')}
       </MenuItem>
       {senderAddress && (
-        <MenuItem onClick={(e) => { e.stopPropagation(); onClose(); newMessageToSender(); }}>
+        <MenuItem className="max-w-[300px]" onClick={(e) => { e.stopPropagation(); onClose(); newMessageToSender(); }}>
           <MailPlus size={14} />
-          {t('rowMenu.newMessageTo', { name: getSenderName(newest) })}
+          {/* A long display name is the sender's to choose: clip it, do not let
+              it set the width of the whole row menu. */}
+          <span className="truncate">{t('rowMenu.newMessageTo', { name: getSenderName(newest) })}</span>
         </MenuItem>
       )}
       <div role="separator" className="my-1 border-t border-mail-border" />

@@ -94,7 +94,11 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
     <div
       data-testid="sender-header"
       className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
-      onClick={onReply}
+      onClick={(e) => {
+        // Dragging over the address to copy it ends in a click on this row.
+        if (!window.getSelection?.()?.isCollapsed) { e.stopPropagation(); return; }
+        onReply?.(e);
+      }}
     >
       {/* Avatar — click opens Sender Details (parity with chat view) */}
       <div

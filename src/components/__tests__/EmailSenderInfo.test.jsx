@@ -89,4 +89,19 @@ describe('EmailSenderInfo click targets', () => {
     fireEvent.click(screen.getByTestId('sender-header'));
     expect(wrapper).toHaveBeenCalledTimes(1);
   });
+
+  it('a click that ends a text selection copies, it does not reply', () => {
+    const onReply = vi.fn();
+    const wrapper = vi.fn();
+    const spy = vi.spyOn(window, 'getSelection').mockReturnValue({ isCollapsed: false });
+    render(
+      <div onClick={wrapper}>
+        <EmailSenderInfo email={EMAIL} variant="single" expanded={false} onReply={onReply} onToggle={vi.fn()} />
+      </div>,
+    );
+    fireEvent.click(screen.getByTestId('sender-header'));
+    expect(onReply).not.toHaveBeenCalled();
+    expect(wrapper).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
 });

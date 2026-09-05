@@ -260,6 +260,39 @@ describe('Reply entry points — header, thread message, row menu', function () 
     expect(compose.subject).toBe(`Re: ${SUBJECT}`);
   });
 
+  it('two quick clicks on the header open one compose', async function () {
+    // The whole header row is a compose trigger, so a double-click — or a drag
+    // over the address that ends in a click — calls the reply handler twice.
+    // Both clicks go in ONE execute: back to back, with no runner pause in
+    // between, which is what a real double-click looks like to the page.
+    await openSingleRow(SUBJECT);
+    await waitFor(
+      senderHeader,
+      (h) => !!h && h.visible,
+      'the viewer showed no [data-testid="sender-header"] before the double click',
+      15_000,
+      300,
+    );
+
+    const clicked = await browser.execute(() => {
+      const row = document.querySelector('[data-testid="sender-header"]');
+      if (!row || row.offsetHeight === 0) return false;
+      row.click();
+      row.click();
+      return true;
+    });
+    expect(clicked).toBe(true);
+
+    await prefilledCompose(
+      'two clicks on the sender header opened no compose window addressed to the sender',
+    );
+    // A second window would mount in a later frame: settle before counting, or
+    // a green here only means the poll was early.
+    await browser.pause(1000);
+    expect(await modalCount()).toBe(1);
+    expect(await fieldValue('compose-subject')).toBe(`Re: ${SUBJECT}`);
+  });
+
   it('the chevron unfolds the details and opens nothing', async function () {
     // The same message, still open — case 1's compose was closed in afterEach.
     expect(await selectedSubject()).toBe(SUBJECT);

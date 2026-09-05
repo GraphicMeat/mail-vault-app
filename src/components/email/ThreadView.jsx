@@ -361,8 +361,9 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
       {/* Header — always visible. A click on the message replies to it; the
           chevron inside EmailSenderInfo is the only fold control, and it
-          stops the event before it reaches this handler. */}
-      <div data-testid="thread-email-header" onClick={() => compose('reply')}>
+          stops the event before it reaches this handler. A click that ends a
+          drag over the snippet line is a copy, not a reply. */}
+      <div data-testid="thread-email-header" onClick={() => { if (!window.getSelection?.()?.isCollapsed) return; compose('reply'); }}>
         <EmailSenderInfo
           email={email}
           variant="thread"

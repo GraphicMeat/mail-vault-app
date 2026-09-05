@@ -55,6 +55,7 @@ import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { registerComposeOpener } from './utils/composeOpener';
+import { sameReply } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
 import { version } from '../package.json';
@@ -208,9 +209,15 @@ function App() {
   const [composeWindows, setComposeWindows] = useState([]);
   const composeIdRef = useRef(0);
 
+  // A reply already open on this message comes forward instead of stacking —
+  // see utils/sameReply.js for why the header made that necessary.
   const openCompose = useCallback((state = {}) => {
-    composeIdRef.current += 1;
-    setComposeWindows(prev => [...prev, { id: composeIdRef.current, minimized: false, ...state }]);
+    setComposeWindows(prev => {
+      const already = prev.find(w => sameReply(w, state));
+      if (already) return prev.map(w => w.id === already.id ? { ...w, minimized: false } : w);
+      composeIdRef.current += 1;
+      return [...prev, { id: composeIdRef.current, minimized: false, ...state }];
+    });
   }, []);
 
   const closeCompose = useCallback((id) => {
