@@ -104,6 +104,12 @@ impl MockImap {
         self.state.lock().unwrap().clone()
     }
 
+    /// Change server state from the test while a client is connected — new mail
+    /// arriving, a flag set by another client. An IDLE'd connection reports it.
+    pub fn mutate(&self, f: impl FnOnce(&mut ServerState)) {
+        f(&mut self.state.lock().unwrap());
+    }
+
     /// Every command line received, in order.
     pub fn commands(&self) -> Vec<String> {
         self.log.lock().unwrap().clone()
@@ -218,6 +224,14 @@ fn handle_conn(
             }
         }
 
+        // IDLE parks this connection's thread instead of answering once, so it
+        // cannot go through `dispatch`. It sits below fault matching on purpose:
+        // a `Trigger::nth("IDLE", 1)` drop is how the reconnect path gets tested.
+        if cmd.name == "IDLE" {
+            idle_loop(&mut reader, &mut out, &state, &sess, &cmd.tag, &log)?;
+            continue;
+        }
+
         let response = {
             let mut st = state.lock().unwrap();
             commands::dispatch(&cmd, &mut st, &mut sess, &actions)
@@ -237,6 +251,61 @@ fn handle_conn(
             return Ok(());
         }
     }
+}
+
+/// RFC 2177. Blocks this connection's thread until DONE, polling the shared
+/// state every 50 ms and reporting what changed in the selected mailbox as a
+/// real server would: EXISTS for new mail, FETCH FLAGS for a flag change.
+fn idle_loop(
+    reader: &mut BufReader<TcpStream>,
+    out: &mut TcpStream,
+    state: &Arc<Mutex<ServerState>>,
+    sess: &Session,
+    tag: &str,
+    log: &Arc<Mutex<Vec<String>>>,
+) -> std::io::Result<()> {
+    let Some(name) = sess.selected.clone() else {
+        return write_line(out, format!("{} BAD No mailbox selected", tag).as_bytes());
+    };
+    write_line(out, b"+ idling")?;
+    let snapshot =
+        |st: &ServerState| st.find(&name).map(|mb| (mb.messages.len(), mb.highest_modseq)).unwrap_or((0, 0));
+    let (mut count, mut modseq) = snapshot(&state.lock().unwrap());
+    reader.get_ref().set_read_timeout(Some(Duration::from_millis(50)))?;
+    let result = loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => break Ok(()),
+            Ok(_) => {
+                let l = line.trim_end_matches(['\r', '\n']).to_string();
+                if l.is_empty() {
+                    continue;
+                }
+                log.lock().unwrap().push(l.clone());
+                if l.eq_ignore_ascii_case("DONE") {
+                    break write_line(out, format!("{} OK IDLE terminated", tag).as_bytes());
+                }
+            }
+            Err(e) if matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => {
+                let st = state.lock().unwrap();
+                let (c, m) = snapshot(&st);
+                if c != count {
+                    write_line(out, format!("* {} EXISTS", c).as_bytes())?;
+                    count = c;
+                }
+                if m != modseq {
+                    if let Some(msg) = st.find(&name).and_then(|mb| mb.messages.iter().find(|x| x.modseq == m)) {
+                        let seq = st.find(&name).unwrap().seq_of(msg.uid).unwrap_or(0);
+                        write_line(out, format!("* {} FETCH (FLAGS ({}))", seq, msg.flags.join(" ")).as_bytes())?;
+                    }
+                    modseq = m;
+                }
+            }
+            Err(e) => break Err(e),
+        }
+    };
+    reader.get_ref().set_read_timeout(None)?;
+    result
 }
 
 /// If the command line ends in `{n}` or `{n+}`, read the literal.

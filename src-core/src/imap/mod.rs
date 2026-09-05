@@ -11,6 +11,10 @@ use crate::transfer_stats::CountingStream;
 
 pub use pool::{ImapPool, ImapSession, ImapTransport};
 
+/// The IMAP client itself, so the daemon can name `IdleResponse` without a
+/// second copy of the dependency (and a second version to keep in step).
+pub use async_imap;
+
 // ── Config ──────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Deserialize)]

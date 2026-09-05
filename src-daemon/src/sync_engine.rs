@@ -33,6 +33,24 @@ pub struct SyncResult {
     pub offline: bool,
 }
 
+/// One "something changed on the server" event, as the app reads it.
+///
+/// `gen` is a process-wide counter: the app long-polls with the last one it
+/// saw, so a client that was away — or asleep — collects everything it missed
+/// in one answer instead of racing a broadcast it was not listening for.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChangeRecord {
+    pub gen: u64,
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+    pub mailbox: String,
+    #[serde(rename = "newEmails")]
+    pub new_emails: usize,
+    #[serde(rename = "updatedFlags")]
+    pub updated_flags: usize,
+    pub at: u64,
+}
+
 /// Account configuration for sync (loaded from keychain/settings).
 #[derive(Debug, Clone, Deserialize)]
 pub struct SyncAccount {
@@ -91,6 +109,15 @@ pub struct SyncEngine {
     /// Shut while the host has no connectivity — every sync short-circuits
     /// rather than dialling nine accounts into a dead socket.
     net: Arc<NetGate>,
+    /// Change feed: the generation counter the IDLE watchers bump and the app
+    /// long-polls (`sync.events`).
+    changes: tokio::sync::watch::Sender<u64>,
+    /// A watch sender with no receivers drops its sends, so the engine keeps
+    /// one alive for the life of the process.
+    _changes_rx: tokio::sync::watch::Receiver<u64>,
+    /// The last 64 changes, so a client that missed a notification still gets
+    /// the detail instead of only the new generation number.
+    recent: std::sync::Mutex<std::collections::VecDeque<ChangeRecord>>,
     /// `account_id\x01requested` → the path this server actually serves.
     /// Filled the first time a SELECT comes back "no such mailbox", so the
     /// LIST that resolves it costs one round trip per process, not per tick.
@@ -105,7 +132,11 @@ impl SyncEngine {
         contacts: Arc<ContactsState>,
         net: Arc<NetGate>,
     ) -> Self {
+        let (changes, _changes_rx) = tokio::sync::watch::channel(0u64);
         Self {
+            changes,
+            _changes_rx,
+            recent: std::sync::Mutex::new(std::collections::VecDeque::new()),
             pool,
             data_dir,
             app_dir,
@@ -119,6 +150,70 @@ impl SyncEngine {
             cap_logged: Mutex::new(HashMap::new()),
             mailbox_aliases: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// Current change generation. A client passes the last one it saw back to
+    /// `wait_changes`.
+    pub fn change_gen(&self) -> u64 {
+        *self.changes.borrow()
+    }
+
+    /// Record what a sync found and wake every long-poll. Returns the new gen.
+    pub fn note_change(
+        &self,
+        account_id: &str,
+        mailbox: &str,
+        new_emails: usize,
+        updated_flags: usize,
+    ) -> u64 {
+        // The counter is bumped under `recent`'s lock: nine accounts can idle
+        // at once, and two watchers reading the same gen would hand one of the
+        // two changes a number a waiter has already been told it has seen.
+        let gen = {
+            let mut recent = self.recent.lock().unwrap();
+            let gen = *self.changes.borrow() + 1;
+            recent.push_back(ChangeRecord {
+                gen,
+                account_id: account_id.to_string(),
+                mailbox: mailbox.to_string(),
+                new_emails,
+                updated_flags,
+                at: unix_now(),
+            });
+            while recent.len() > 64 {
+                recent.pop_front();
+            }
+            // Published while still holding the lock, or the next caller reads
+            // the old value back and issues the same gen twice.
+            self.changes.send_replace(gen);
+            gen
+        };
+        gen
+    }
+
+    /// Long-poll: everything newer than `since`, or nothing after `timeout_ms`.
+    /// Returns at once when the caller is already behind — the app reconnects
+    /// with the gen it last saw and must not be parked for another 25 seconds.
+    pub async fn wait_changes(&self, since: u64, timeout_ms: u64) -> (u64, Vec<ChangeRecord>) {
+        let mut rx = self.changes.subscribe();
+        let current = *rx.borrow();
+        if current <= since {
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_millis(timeout_ms),
+                rx.changed(),
+            )
+            .await;
+        }
+        let gen = *rx.borrow();
+        let records = self
+            .recent
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r.gen > since)
+            .cloned()
+            .collect();
+        (gen, records)
     }
 
     /// `Some(reason)` when this account has spent its daily transfer allowance
@@ -2141,6 +2236,36 @@ mod tests {
 
         engine.backfill_mailbox(&account, "INBOX").await;
         assert_eq!(count_sidecars(&cache), 700, "backfill must finish what the page started");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    // ── The change feed ─────────────────────────────────────────────────
+    // What the IDLE watchers push into and the app long-polls out of. A caller
+    // that is already behind must not be parked for 25 seconds.
+
+    #[tokio::test]
+    async fn wait_changes_returns_at_once_when_behind_and_waits_when_current() {
+        let dir = scratch_dir("changes");
+        let engine = engine_for(&dir);
+        let g0 = engine.change_gen();
+        let (g, recs) = engine.wait_changes(g0, 50).await;          // nothing yet → times out
+        assert_eq!((g, recs.len()), (g0, 0));
+
+        let g1 = engine.note_change("acc1", "INBOX", 2, 0);
+        let (g, recs) = engine.wait_changes(g0, 10_000).await;      // already behind → immediate
+        assert_eq!(g, g1);
+        assert_eq!(recs.len(), 1);
+        assert_eq!(recs[0].new_emails, 2);
+
+        let engine = Arc::new(engine);
+        let e2 = Arc::clone(&engine);
+        let waiter = tokio::spawn(async move { e2.wait_changes(g1, 10_000).await });
+        tokio::time::sleep(Duration::from_millis(30)).await;
+        engine.note_change("acc1", "INBOX", 1, 3);
+        let (g, recs) = waiter.await.unwrap();
+        assert_eq!(g, g1 + 1);
+        assert_eq!(recs[0].updated_flags, 3);
 
         fs::remove_dir_all(&dir).unwrap();
     }

@@ -204,6 +204,7 @@ impl Default for ServerState {
                 "UIDPLUS".to_string(),
                 "MOVE".to_string(),
                 "CONDSTORE".to_string(),
+                "IDLE".to_string(),
                 "SPECIAL-USE".to_string(),
                 "AUTH=XOAUTH2".to_string(),
             ],

@@ -2,6 +2,7 @@ use crate::auth;
 use crate::classification;
 use crate::contacts_index;
 use crate::handlers::*;
+use crate::idle_watch;
 use crate::imap;
 use crate::inference;
 use crate::ipc::{self, AuthHandshake, RpcRequest, RpcResponse};
@@ -30,6 +31,9 @@ pub struct DaemonState {
     pub classification: classification::ClassificationState,
     pub imap_pool: Arc<imap::ImapPool>,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
+    /// One IDLE watcher per registered account. The app registers them
+    /// (`sync.watch`) — the daemon holds no account list of its own.
+    pub idle: Arc<idle_watch::IdleWatchers>,
     pub contacts: Arc<contacts_index::ContactsState>,
     /// Shut while the host has no connectivity. Sync consults it; user-initiated
     /// IMAP ops only *feed* it — a captive portal must never lock the user out
@@ -198,6 +202,15 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         "sync.wait" => handle_sync_wait(Arc::clone(&state.sync_engine), req.params, id).await,
         "sync.status" => handle_sync_status(&state.sync_engine, req.params, id).await,
 
+        // ── IDLE watchers + the change feed they push into ──────────
+        "sync.watch" => handle_sync_watch(Arc::clone(state), req.params, id).await,
+        "sync.unwatch" => handle_sync_unwatch(Arc::clone(state), req.params, id).await,
+        "sync.events" => handle_sync_events(Arc::clone(&state.sync_engine), req.params, id).await,
+        "sync.watch_status" => RpcResponse::success(
+            id,
+            serde_json::to_value(state.idle.status().await).unwrap_or_default(),
+        ),
+
         // Cache / local index / Graph ID map RPCs removed: they were backed by
         // mailvault_core::cache, a second cache format at a different path that
         // nothing ever read. transport.js routes every cache operation to the
@@ -252,8 +265,15 @@ impl DaemonState {
             Arc::clone(&contacts),
             Arc::clone(&net),
         ));
+        let idle = idle_watch::IdleWatchers::new(
+            Arc::clone(&sync_engine),
+            Arc::clone(&imap_pool),
+            Arc::clone(&net),
+            std::time::Duration::from_millis(50),
+        );
         Arc::new(DaemonState {
             net,
+            idle,
             token: "a".repeat(64),
             data_dir: mail_dir,
             app_dir: app_dir.clone(),
@@ -317,6 +337,10 @@ mod tests {
 
         for (method, params) in [
             ("sync.status", json!({"accountId": "a"})),
+            ("sync.watch", json!({})),
+            ("sync.unwatch", json!({})),
+            ("sync.events", json!({})),
+            ("sync.watch_status", json!({})),
             ("snapshot.list", json!({"accountId": "a"})),
             ("contacts_index.get", json!({"accountIds": ["a"]})),
         ] {
@@ -386,6 +410,32 @@ mod tests {
         let resp = handle_request(&state, req("sync.wait", json!({}))).await;
 
         assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn sync_watch_without_an_account_is_invalid_params() {
+        let dir = scratch("syncwatch");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+
+        let resp = handle_request(&state, req("sync.watch", json!({}))).await;
+
+        assert_eq!(resp.error.expect("must be an error").code, ipc::INVALID_PARAMS);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The long-poll answers with the current generation even when nothing has
+    /// happened — the app needs a number to come back with.
+    #[tokio::test]
+    async fn sync_events_answers_the_current_generation_when_nothing_changed() {
+        let dir = scratch("syncevents");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+
+        let resp = handle_request(&state, req("sync.events", json!({"timeoutMs": 10}))).await;
+
+        let result = resp.result.expect("must succeed");
+        assert_eq!(result["gen"], json!(0));
+        assert_eq!(result["changes"], json!([]));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

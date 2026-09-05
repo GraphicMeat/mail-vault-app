@@ -5,6 +5,7 @@ pub mod contacts_index;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::imap;
 mod handlers;
+mod idle_watch;
 mod inference;
 mod ipc;
 mod learning;
@@ -221,6 +222,15 @@ async fn main() {
         Arc::clone(&net),
     ));
 
+    // IDLE watchers. 30 s first backoff, doubling — a provider that refuses
+    // connections must not be dialled every second by nine accounts.
+    let idle = idle_watch::IdleWatchers::new(
+        Arc::clone(&sync_eng),
+        Arc::clone(&imap_pool),
+        Arc::clone(&net),
+        std::time::Duration::from_secs(30),
+    );
+
     let state = Arc::new(server::DaemonState {
         token,
         data_dir: mail_dir.clone(),
@@ -232,6 +242,7 @@ async fn main() {
         classification: classification::ClassificationState::new(data_dir.clone()),
         imap_pool,
         sync_engine: sync_eng,
+        idle,
         contacts: Arc::clone(&contacts),
         net,
     });
@@ -272,6 +283,7 @@ async fn main() {
     let data_dir_cleanup = data_dir.clone();
     let socket_cleanup = socket_path.clone();
     let pool_cleanup = Arc::clone(&state.imap_pool);
+    let idle_cleanup = Arc::clone(&state.idle);
     tokio::spawn(async move {
         let ctrl_c = tokio::signal::ctrl_c();
 
@@ -291,6 +303,10 @@ async fn main() {
             ctrl_c.await.ok();
             info!("Received shutdown signal");
         }
+
+        // Stop the IDLE watchers first: a session parked in IDLE answers
+        // nothing, so it would eat the whole 2s LOGOUT budget below.
+        idle_cleanup.shutdown().await;
 
         // LOGOUT every pooled IMAP session so servers drop them now instead of
         // holding them open until their idle timeout. Bounded — a hung server

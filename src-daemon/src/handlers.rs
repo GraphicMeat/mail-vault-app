@@ -108,6 +108,43 @@ pub(crate) async fn handle_sync_status(engine: &sync_engine::SyncEngine, params:
     }
 }
 
+// ── IDLE watchers + the change feed (Phase 2 parity) ────────────────────────
+
+/// Register an account for IDLE. The app calls this for every account it has,
+/// on every reconnect; an unchanged account is a no-op inside `watch`.
+pub(crate) async fn handle_sync_watch(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
+    let account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+        Some(a) => a,
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing account"),
+    };
+    // 29 minutes: RFC 2177 tells clients to re-issue IDLE at least that often
+    // or the server may log them off.
+    state.idle.watch(account, std::time::Duration::from_secs(29 * 60)).await;
+    RpcResponse::success(id, serde_json::json!({"watching": true}))
+}
+
+pub(crate) async fn handle_sync_unwatch(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
+    let account_id = match params.get("accountId").and_then(|v| v.as_str()) {
+        Some(a) => a,
+        None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing accountId"),
+    };
+    state.idle.unwatch(account_id).await;
+    RpcResponse::success(id, serde_json::json!({"watching": false}))
+}
+
+/// Long-poll for changes newer than `since`. The app re-issues it with the gen
+/// it was handed, so nothing is lost between polls.
+pub(crate) async fn handle_sync_events(engine: Arc<sync_engine::SyncEngine>, params: Value, id: Value) -> RpcResponse {
+    let since = params.get("since").and_then(|v| v.as_u64()).unwrap_or(0);
+    let timeout_ms = params
+        .get("timeoutMs")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(25_000)
+        .min(60_000);
+    let (gen, changes) = engine.wait_changes(since, timeout_ms).await;
+    RpcResponse::success(id, serde_json::json!({"gen": gen, "changes": changes}))
+}
+
 /// Create a snapshot from provided email data (sent by frontend after backup).
 pub(crate) fn handle_snapshot_create(data_dir: &Path, params: Value, id: Value) -> RpcResponse {
     let account_id = params.get("accountId").and_then(|v| v.as_str()).unwrap_or("");
