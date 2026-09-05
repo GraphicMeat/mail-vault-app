@@ -5,6 +5,9 @@
 ### Added
 - **A focus session covers MailVault until the timer runs out.** A timer in the sidebar footer runs for 15, 25, 45 or 60 minutes. While it runs, the window shows nothing but the time left; mail keeps syncing into the vault underneath, and every notification MailVault would have shown waits until the session ends, when a notification says the time is done and the held ones follow. Quitting the app does not end a session — reopening it brings the countdown back with the time that was left. A small "Unlock early" link is always there. It asks whether you are sure, and if you are, MailVault says what it thinks of that.
 
+### Fixed
+- **A message that was read or flagged now goes back to the server.** Restoring a message from the vault, or moving one between accounts, sent its flags in a form some servers refuse — so an unread, unflagged message went through and everything else was turned away. Every message uploads now, and it arrives carrying the date it was written rather than the day it was put back. Run a restore twice and the second run skips what is already there.
+
 ## [2.11.3] - 2026-09-04
 
 ### Added
