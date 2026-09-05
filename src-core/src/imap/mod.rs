@@ -1282,6 +1282,85 @@ async fn run_checked(session: &mut ImapSession, command: String, what: &str) -> 
         .map_err(|e| format!("{} failed: {}", what, e))
 }
 
+/// A mailbox name as an IMAP quoted string. Routinely namespaced and UTF-7
+/// encoded, so never an atom.
+pub fn quote_mailbox(name: &str) -> String {
+    format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+fn uids_of(set: &[imap_proto::UidSetMember]) -> Vec<u32> {
+    let mut out = Vec::new();
+    for m in set {
+        match m {
+            imap_proto::UidSetMember::Uid(u) => out.push(*u),
+            imap_proto::UidSetMember::UidRange(r) => out.extend(r.clone()),
+        }
+    }
+    out
+}
+
+/// What a move landed on: how many messages, and the uids they now carry in the
+/// destination when the server said so.
+#[derive(Debug, Serialize, Default, PartialEq)]
+pub struct MoveOutcome {
+    pub moved: u32,
+    #[serde(rename = "newUids")]
+    pub new_uids: Option<Vec<u32>>,
+}
+
+/// Where a delete put the message: the resolved Trash path and the uid it has
+/// there. Both `None` for a permanent delete — nothing survives to address.
+#[derive(Debug, Serialize, Default, PartialEq)]
+pub struct DeleteOutcome {
+    pub trash: Option<String>,
+    #[serde(rename = "trashUid")]
+    pub trash_uid: Option<u32>,
+}
+
+/// Run a COPY/MOVE-shaped command and keep the COPYUID the server reports
+/// (RFC 4315 puts it in the tagged OK for COPY, RFC 6851 in an untagged OK for
+/// MOVE — this reads both). `None` when the server sent none (no UIDPLUS).
+/// A tagged NO/BAD or a socket that ends first is an error: same rule as
+/// `run_checked`, a dead socket must not read as a move that happened.
+pub async fn run_collecting_copyuid(
+    session: &mut ImapSession,
+    command: String,
+) -> Result<Option<Vec<u32>>, String> {
+    use imap_proto::{Response, ResponseCode, Status};
+    let id = session
+        .run_command(&command)
+        .await
+        .map_err(|e| format!("{} failed: {}", command, e))?;
+    let mut dst: Option<Vec<u32>> = None;
+    loop {
+        let rd = session
+            .read_response()
+            .await
+            .map_err(|e| format!("{} failed: {}", command, e))?
+            .ok_or_else(|| format!("{} failed: connection lost", command))?;
+        match rd.parsed() {
+            Response::Done { tag, status, code, information } if *tag == id => {
+                if let Some(ResponseCode::CopyUid(_, _, d)) = code {
+                    dst = Some(uids_of(d));
+                }
+                return match status {
+                    Status::Ok => Ok(dst),
+                    _ => Err(format!(
+                        "{} failed: {:?} {}",
+                        command,
+                        status,
+                        information.as_deref().unwrap_or("")
+                    )),
+                };
+            }
+            Response::Data { code: Some(ResponseCode::CopyUid(_, _, d)), .. } => {
+                dst = Some(uids_of(d))
+            }
+            _ => {} // EXPUNGE / EXISTS / keepalives between the command and its tag
+        }
+    }
+}
+
 /// Collect a FETCH stream, making what a parse error dropped visible.
 ///
 /// async-imap's decoder stops advancing after a line it cannot parse, so
@@ -1341,13 +1420,17 @@ async fn expunge_scoped(
 /// Servers without UIDPLUS reject `UID EXPUNGE` outright, which used to fail
 /// the whole delete after the message was already flagged — same rule as
 /// `move_uids`.
+///
+/// Returns where the message ended up: the resolved Trash path and the uid it
+/// has there when the server reports (COPYUID) — what an undo moves back. A
+/// permanent delete has nothing left to address, so it returns the default.
 pub async fn delete_email(
     session: &mut ImapSession,
     mailbox: &str,
     uid: u32,
     permanent: bool,
     has_uidplus: bool,
-) -> Result<(), String> {
+) -> Result<DeleteOutcome, String> {
     info!(
         "[delete_email] start uid={} mailbox={} permanent={} uidplus={}",
         uid, mailbox, permanent, has_uidplus
@@ -1357,6 +1440,7 @@ pub async fn delete_email(
     if permanent {
         run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
         expunge_scoped(session, &uid.to_string(), has_uidplus).await?;
+        Ok(DeleteOutcome::default())
     } else {
         // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
         // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
@@ -1370,19 +1454,24 @@ pub async fn delete_email(
         .await?;
         info!("[delete_email] uid={} resolved trash='{}'", uid, trash);
 
-        match session.uid_mv(uid.to_string(), &trash).await {
-            // Not proof on its own — see `run_checked`: a dead socket answers
-            // this Ok too. `uid_mv` keeps the crate's mailbox quoting (Trash is
-            // routinely namespaced and UTF-7 encoded), so it stays, and the
-            // tagged-OK question is asked separately below.
-            Ok(_) => info!("[delete_email] uid={} moved to '{}'", uid, trash),
+        // `run_collecting_copyuid` asks the tagged-OK question the old `uid_mv`
+        // did not (a dead socket answered that one Ok too) and keeps the
+        // destination uid on the way past. The mailbox quoting `uid_mv` used to
+        // supply is `quote_mailbox` now — Trash is routinely namespaced and
+        // UTF-7 encoded, so it is never an atom.
+        let trash_uid;
+        match run_collecting_copyuid(session, format!("UID MOVE {} {}", uid, quote_mailbox(&trash))).await {
+            Ok(new) => {
+                trash_uid = new.and_then(|v| v.first().copied());
+                info!("[delete_email] uid={} moved to '{}' (trash uid {:?})", uid, trash, trash_uid);
+            }
             Err(e) => {
                 // No MOVE capability: COPY + \Deleted + UID EXPUNGE.
                 tracing::warn!("[delete_email] UID MOVE to '{}' failed ({}), falling back to COPY+EXPUNGE", trash, e);
-                session
-                    .uid_copy(uid.to_string(), &trash)
+                let new = run_collecting_copyuid(session, format!("UID COPY {} {}", uid, quote_mailbox(&trash)))
                     .await
                     .map_err(|e| format!("UID COPY to '{}' failed: {}", trash, e))?;
+                trash_uid = new.and_then(|v| v.first().copied());
                 run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
                 expunge_scoped(session, &uid.to_string(), has_uidplus).await?;
             }
@@ -1404,9 +1493,8 @@ pub async fn delete_email(
         // The permanent path above pays nothing for its check (the tagged OK
         // is on the wire regardless), which is where every bulk purge and
         // every non-INBOX delete goes.
+        Ok(DeleteOutcome { trash: Some(trash), trash_uid })
     }
-
-    Ok(())
 }
 
 async fn ensure_role_mailbox(
@@ -1461,6 +1549,10 @@ async fn ensure_role_mailbox(
 /// success on a dead socket, and the app's move fallback did exactly that until
 /// 2026-09-05 (the old src-tauri/move_emails.rs), leaving the message in both
 /// folders while the list said it had moved.
+///
+/// Returns the uids the messages have in the destination when the server says
+/// (COPYUID) — what an undo moves back. `None` when it said nothing, which is
+/// every server without UIDPLUS: a guessed uid addresses the wrong message.
 pub async fn move_uids(
     session: &mut ImapSession,
     source_mailbox: &str,
@@ -1468,9 +1560,9 @@ pub async fn move_uids(
     uids: &[u32],
     has_move: bool,
     has_uidplus: bool,
-) -> Result<u32, String> {
+) -> Result<MoveOutcome, String> {
     if uids.is_empty() {
-        return Ok(0);
+        return Ok(MoveOutcome::default());
     }
     let _mbox = select_mailbox(session, source_mailbox).await?;
     let uid_set = compress_uid_ranges(uids);
@@ -1478,24 +1570,26 @@ pub async fn move_uids(
 
     if has_move {
         info!("[move] UID MOVE {} '{}' -> '{}'", uid_set, source_mailbox, target_mailbox);
-        session
-            .uid_mv(&uid_set, target_mailbox)
-            .await
-            .map_err(|e| format!("UID MOVE failed: {}", e))?;
-        return Ok(count);
+        let new_uids = run_collecting_copyuid(
+            session,
+            format!("UID MOVE {} {}", uid_set, quote_mailbox(target_mailbox)),
+        )
+        .await?;
+        return Ok(MoveOutcome { moved: count, new_uids });
     }
 
     info!(
         "[move] COPY+DELETE fallback {} '{}' -> '{}' (uidplus={})",
         uid_set, source_mailbox, target_mailbox, has_uidplus
     );
-    session
-        .uid_copy(&uid_set, target_mailbox)
-        .await
-        .map_err(|e| format!("UID COPY failed: {}", e))?;
+    let new_uids = run_collecting_copyuid(
+        session,
+        format!("UID COPY {} {}", uid_set, quote_mailbox(target_mailbox)),
+    )
+    .await?;
     run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid_set), "STORE \\Deleted").await?;
     expunge_scoped(session, &uid_set, has_uidplus).await?;
-    Ok(count)
+    Ok(MoveOutcome { moved: count, new_uids })
 }
 
 /// Resolve or auto-create the Sent mailbox for this account.
@@ -1610,7 +1704,7 @@ pub async fn append_email_verified(
     // Raw bytes are embedded via `from_utf8_unchecked`; the encoder does not
     // rely on UTF-8 validity, just copies the bytes to the wire. For plain
     // test emails the bytes are ASCII anyway.
-    let quoted_mailbox = format!("\"{}\"", mailbox.replace('\\', "\\\\").replace('"', "\\\""));
+    let quoted_mailbox = quote_mailbox(mailbox);
     let flags_clause: String = if flags.is_empty() {
         String::new()
     } else {

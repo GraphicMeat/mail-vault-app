@@ -256,7 +256,7 @@ async fn move_uids_uses_uid_move_when_the_server_has_it() {
 
     let moved = move_uids(&mut sess, "INBOX", "Archive", &[1], true, true).await.expect("move");
 
-    assert_eq!(moved, 1);
+    assert_eq!(moved.moved, 1);
     let state = server.state();
     assert!(state.find("INBOX").unwrap().by_uid(1).is_none(), "source still holds uid 1");
     assert_eq!(state.find("Archive").unwrap().messages.len(), 1);
@@ -271,7 +271,7 @@ async fn move_uids_falls_back_to_copy_delete_expunge_without_move() {
 
     let moved = move_uids(&mut sess, "INBOX", "Archive", &[1, 2], false, true).await.expect("move");
 
-    assert_eq!(moved, 2);
+    assert_eq!(moved.moved, 2);
     let state = server.state();
     assert!(state.find("INBOX").unwrap().messages.is_empty(), "source still holds the messages");
     assert_eq!(state.find("Archive").unwrap().messages.len(), 2);
@@ -314,6 +314,61 @@ async fn a_move_whose_socket_dies_after_copy_is_an_error_not_a_success() {
 
     assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
     assert!(server.state().find("INBOX").unwrap().by_uid(1).is_some(), "the source copy is still there");
+}
+
+// ── COPYUID ────────────────────────────────────────────────────────────────
+// The destination uids a move or a trash-delete lands on. Without them an undo
+// has nothing to address the moved copy by, and re-finding it means a search
+// per message.
+
+#[async_std::test]
+async fn move_uids_reports_the_destination_uids_from_the_untagged_copyuid() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox_with(3)).mailbox(Mailbox::new("Archive")));
+    let mut sess = session(&server).await;
+    let out = move_uids(&mut sess, "INBOX", "Archive", &[1, 3], true, true).await.expect("move");
+    assert_eq!(out.moved, 2);
+    assert_eq!(out.new_uids, Some(vec![1, 2]), "Archive was empty: uids 1 and 2");
+}
+
+/// RFC 4315 puts COPY's COPYUID in the TAGGED OK, not an untagged line — a
+/// reader that only watches untagged responses sees none on the fallback path.
+#[async_std::test]
+async fn move_fallback_reads_copyuid_from_the_tagged_ok() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(inbox_with(2)).mailbox(Mailbox::new("Archive"))
+            .without_cap("MOVE").fault(Trigger::on("MOVE"), Action::Respond("NO".into(), "MOVE not supported".into())),
+    );
+    let mut sess = session(&server).await;
+    let out = move_uids(&mut sess, "INBOX", "Archive", &[2], false, true).await.expect("copy fallback");
+    assert_eq!(out.new_uids, Some(vec![1]));
+    assert_eq!(server.count_commands("UID COPY"), 1);
+}
+
+#[async_std::test]
+async fn move_without_uidplus_reports_no_destination_uids() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox_with(2)).mailbox(Mailbox::new("Archive")).without_cap("UIDPLUS"));
+    let mut sess = session(&server).await;
+    let out = move_uids(&mut sess, "INBOX", "Archive", &[1], true, false).await.expect("move");
+    assert_eq!(out.moved, 1);
+    assert_eq!(out.new_uids, None, "no UIDPLUS → the server sends no COPYUID → None, never a guess");
+}
+
+#[async_std::test]
+async fn delete_to_trash_reports_where_the_message_went() {
+    let server = MockImap::start(
+        Scenario::new().mailbox(inbox_with(2)).mailbox(Mailbox::new("INBOX.Trash").with_attrs(&["\\HasNoChildren", "\\Trash"])),
+    );
+    let mut sess = session(&server).await;
+    let out = delete_email(&mut sess, "INBOX", 2, false, true).await.expect("delete");
+    assert_eq!(out, DeleteOutcome { trash: Some("INBOX.Trash".into()), trash_uid: Some(1) });
+    let out = delete_email(&mut sess, "INBOX", 1, true, true).await.expect("permanent");
+    assert_eq!(out, DeleteOutcome::default());
+}
+
+#[test]
+fn quote_mailbox_escapes_what_imap_needs() {
+    assert_eq!(quote_mailbox("INBOX.Trash"), "\"INBOX.Trash\"");
+    assert_eq!(quote_mailbox("Say \"hi\"\\x"), "\"Say \\\"hi\\\"\\\\x\"");
 }
 
 // ── APPEND date ────────────────────────────────────────────────────────────

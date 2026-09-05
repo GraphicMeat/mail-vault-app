@@ -27,6 +27,14 @@ const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 
+// The connectivity verdict the delete reads. Offline is not a failure — the
+// journal entry stays and replayOps sends it when the link is back.
+let netOnline = true;
+
+vi.mock('../../../stores/connectivityStore', () => ({
+  useConnectivityStore: { getState: () => ({ online: netOnline }) },
+}));
+
 vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
@@ -158,6 +166,8 @@ const seenOf = (uid) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  netOnline = true;
+  mockDeleteEmail.mockResolvedValue(undefined);
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
   mockGraphDeleteMessage.mockResolvedValue(undefined);
@@ -430,6 +440,36 @@ describe('deleteSelectedFromServer', () => {
     await useMailStore.getState().deleteSelectedFromServer();
 
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] });
+  });
+
+  // Same fact the single-row delete brings back, once per message: where each
+  // one went, so a caller can offer an undo instead of a SEARCH per uid.
+  it('reports the trash folder and uid for every message it deleted', async () => {
+    mockDeleteEmail.mockResolvedValue({ success: true, trash: 'Trash', trashUid: 5 });
+    primeStore(seedThread(), [1, 2]);
+
+    const out = await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(out.deleted).toHaveLength(2);
+    expect(out.deleted[0]).toMatchObject({ accountId: ACCOUNT.id, mailbox: 'INBOX', uid: 1, trash: 'Trash', trashUid: 5 });
+    expect(out.deleted.map(d => d.uid)).toEqual([1, 2]);
+  });
+
+  it('offline: the rows go, the ops stay journalled, the server is not called', async () => {
+    netOnline = false;
+    primeStore(seedThread(), [1]);
+
+    const out = await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] });
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    // Nothing was deleted, so nothing may be cleared or pruned — replayOps
+    // finishes the job, and the tombstone keeps the row off the list meanwhile.
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
+    expect(useMailStore.getState().deleteTombstones.size).toBe(1);
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
+    expect(out.deleted).toEqual([]);
   });
 
   it('does not prune a uid whose server delete failed', async () => {

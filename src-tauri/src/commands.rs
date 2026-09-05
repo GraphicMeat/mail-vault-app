@@ -510,20 +510,26 @@ pub async fn imap_delete_email(
     // the closure, after checkout — exactly like imap_move_emails.
     let pool_ref: &ImapPool = &pool;
     let acct = &account;
-    pool.run_uid_delete(&account, true, |mut session| {
+    let outcome = pool.run_uid_delete(&account, true, |mut session| {
         let mailbox = mailbox.clone();
         async move {
             let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-            imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus).await
+            let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus).await
                 .map_err(|e| format!("Failed to delete email: {}", e))?;
-            Ok(((), session, Some(mailbox)))
+            Ok((outcome, session, Some(mailbox)))
         }
     }).await.map_err(|e| {
         tracing::error!("[delete_email] uid={} failed: {}", uid, e);
         e
     })?;
 
-    Ok(serde_json::json!({ "success": true }))
+    // Where the message went, so the caller can offer an undo instead of a
+    // search: both null for a permanent delete.
+    Ok(serde_json::json!({
+        "success": true,
+        "trash": outcome.trash,
+        "trashUid": outcome.trash_uid,
+    }))
 }
 
 // ── Ensure Sent mailbox (auto-create if missing) ──────────────────────────
@@ -1096,7 +1102,7 @@ pub async fn imap_move_emails(
     // map on the first call of a process and takes the slow COPY path.
     let pool_ref: &ImapPool = &pool;
     let acct = &account;
-    let moved = with_priority(&pool, &account, |mut session| async move {
+    let outcome = with_priority(&pool, &account, |mut session| async move {
         let has_move = pool_ref.has_capability(acct, "MOVE").await;
         let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
         let result = imap::move_uids(
@@ -1111,9 +1117,12 @@ pub async fn imap_move_emails(
         Ok((result, session, Some(source_mailbox)))
     })
     .await?;
+    // `newUids` is null on a server without UIDPLUS: it reported no COPYUID, and
+    // a guessed destination uid addresses the wrong message.
     Ok(serde_json::json!({
         "success": true,
-        "moved": moved
+        "moved": outcome.moved,
+        "newUids": outcome.new_uids,
     }))
 }
 

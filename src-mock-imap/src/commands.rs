@@ -652,14 +652,26 @@ fn do_copy(cmd: &Command, state: &mut ServerState, sess: &Session, is_move: bool
         dest.add(m);
     }
 
-    let mut r = Response::ok(if is_move { "MOVE completed" } else { "COPY completed" }).line(
+    // COPYUID is RFC 4315 (UIDPLUS). A server without it says nothing about the
+    // destination uids, and a client that guesses them addresses the wrong
+    // message — so the mock stays silent too when the cap is off.
+    //
+    // Where it goes differs by command: RFC 4315 puts COPY's in the TAGGED OK,
+    // RFC 6851 puts MOVE's in an untagged OK ahead of the EXPUNGEs.
+    let copyuid = state.has_cap("UIDPLUS").then(|| {
         format!(
-            "* OK [COPYUID {} {} {}] Copied",
+            "COPYUID {} {} {}",
             dest_validity,
             targets.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","),
             new_uids.iter().map(|u| u.to_string()).collect::<Vec<_>>().join(","),
-        ),
-    );
+        )
+    });
+
+    let mut r = match (&copyuid, is_move) {
+        (Some(c), false) => Response::ok(&format!("[{}] COPY completed", c)),
+        (Some(c), true) => Response::ok("MOVE completed").line(format!("* OK [{}] Copied", c)),
+        (None, m) => Response::ok(if m { "MOVE completed" } else { "COPY completed" }),
+    };
 
     if is_move {
         let src = state.find_mut(&src_name).unwrap();

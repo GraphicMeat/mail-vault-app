@@ -403,6 +403,10 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true;
 
   const invoke = window.__TAURI__?.core?.invoke;
+  // Where the message ended up, for a caller that wants to offer an undo.
+  // Stays undefined for the paths that have nothing to address: local-only,
+  // Graph (no uid the server would take back), and an offline journalled row.
+  let outcome;
 
   // Journal the intent first, and await it — same reason and same ordering as
   // deleteSelectedFromServer: the row is about to vanish from the list, so a
@@ -412,6 +416,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // (no server delete to replay).
   const journalled = !isLocalOnly && !isGraphAccount(account);
   if (journalled) await db.queueOp({ op: 'delete', accountId, mailbox, uids: [realUid] });
+  // Offline the journal entry IS the delete: replayOps sends it when the link
+  // is back, and its completion path prunes the sidecar and stamps custody.
+  const offline = journalled && !useConnectivityStore.getState().online;
 
   // ── Optimistic removal ──
   // Take the row out now. Everything below is a network round trip (pool
@@ -485,6 +492,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       }
     }
   } else {
+    // The row is already hidden by its tombstone, which is what the user was
+    // promised. Stop here: the journal entry carries the rest, and the replay's
+    // completion path owns the sidecar prune and the custody stamp — running
+    // applyServerRemoval now would claim a server delete that has not happened.
+    if (offline) {
+      console.log(`[deleteEmail] offline — UID ${realUid} journalled, replayOps will finish it`);
+      return undefined;
+    }
     account = await ensureFreshToken(account);
     // `realUid`, not the argument: in a spanning view the caller hands us a
     // whole selection key ("acct:INBOX:7"), and the server takes a uid.
@@ -497,7 +512,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
         if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
-        await api.deleteEmail(account, realUid, mailbox);
+        const res = await api.deleteEmail(account, realUid, mailbox);
+        // Where it went, so a caller can offer an undo instead of a SEARCH:
+        // both null for a permanent delete, and for a server that reported no
+        // COPYUID — never a guessed uid.
+        outcome = {
+          account, accountId, mailbox, uid: realUid,
+          trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+        };
       }
       console.log(`[deleteEmail] Successfully deleted UID ${realUid} from "${mailbox}"`);
     } catch (err) {
@@ -514,6 +536,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     clearSelection: !threadUpdate && selectedEmailId === uid,
     deletedByUs: true,
   });
+
+  return outcome;
 }
 
 
@@ -1132,7 +1156,7 @@ export async function deleteSelectedFromServer() {
   const state = get();
   const { selectedEmailIds } = state;
   const isUnified = spansMailboxes(state);
-  if (selectedEmailIds.size === 0) return;
+  if (selectedEmailIds.size === 0) return { deleted: [] };
 
   const keys = Array.from(selectedEmailIds);
 
@@ -1170,6 +1194,12 @@ export async function deleteSelectedFromServer() {
     (g) => db.queueOp({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
   ));
 
+  // Offline the journal entries ARE the deletes: replayOps sends them when the
+  // link is back, and its completion path prunes the sidecar and stamps
+  // custody. So the rows go (their tombstones hold), but nothing below may
+  // claim a server delete that has not happened.
+  const offline = !useConnectivityStore.getState().online;
+
   // Remove from the UI immediately — the server/maildir deletes below can take
   // seconds (pool checkout + one round-trip per email). The post-loop
   // loadEmails() reconcile restores anything whose server delete failed.
@@ -1204,6 +1234,9 @@ export async function deleteSelectedFromServer() {
   // A message with no local copy keeps its tombstone forever (see the
   // comment on the tombstone block above for why that half is load-bearing).
   const survivingLocalTombstones = new Set();
+  // Where each deleted message went, so a caller can offer an undo instead of
+  // a SEARCH per uid. Same record shape as deleteEmailFromServer's.
+  const deleted = [];
 
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -1230,6 +1263,14 @@ export async function deleteSelectedFromServer() {
         continue;
       }
 
+      // The row is already hidden by its tombstone; the journal entry carries
+      // the rest. Nothing below this line may run — the prune, the custody
+      // stamp and the clear all assert a delete that has not happened yet.
+      if (offline) {
+        console.log(`[deleteSelectedFromServer] offline — UID ${realUid} journalled, replayOps will finish it`);
+        continue;
+      }
+
       const account = await ensureFreshToken(ctxAccount);
 
       if (isGraphAccount(account)) {
@@ -1245,7 +1286,11 @@ export async function deleteSelectedFromServer() {
         if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: realUid }));
         await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
       } else {
-        await api.deleteEmail(account, realUid, mailbox);
+        const res = await api.deleteEmail(account, realUid, mailbox);
+        deleted.push({
+          account, accountId, mailbox, uid: realUid,
+          trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+        });
       }
       deletedRealUids.add(realUid);
       if (!isUnified && mailbox === state.activeMailbox) deletedInActiveMailbox.add(realUid);
@@ -1270,9 +1315,14 @@ export async function deleteSelectedFromServer() {
   // than a uid at a time) keeps this to one small write instead of one per
   // message, and the only thing it gives up is that a crash mid-loop replays a
   // few already-deleted uids at launch, which the replay is written to shrug off.
-  await Promise.all([...journalGroups.values()].map(
-    (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
-  ));
+  //
+  // Offline nothing was attempted, so nothing may be cleared: the entries are
+  // the whole delete until replayOps sends them.
+  if (!offline) {
+    await Promise.all([...journalGroups.values()].map(
+      (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
+    ));
+  }
 
   // Prune the header sidecar for the rows just deleted.
   //
@@ -1346,6 +1396,8 @@ export async function deleteSelectedFromServer() {
       get().updateSortedEmails();
     }
   }
+
+  return { deleted };
 }
 
 
@@ -1635,6 +1687,13 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
 // uid, is skipped — the rest of the selection still moves. A guessed folder
 // moves a different message under that uid, and refusing the whole batch over
 // one unstamped row would strand a move that is not destroying anything.
+//
+// Resolves `{ moved: [{ account, accountId, from, to, srcUids, dstUids,
+// messageIds, deferred? }] }` — one record per group that reached the server or
+// was journalled for one, carrying the destination uids (COPYUID) an undo needs.
+// `dstUids` is null when the server reported none; `deferred` marks a group the
+// journal is still holding because the app is offline. Graph groups get no
+// record: their move is addressed by a per-session id, not a uid.
 
 export async function moveEmails(keys, targetMailbox) {
   const { useMailStore } = await import('../../stores/mailStore');
@@ -1655,28 +1714,55 @@ export async function moveEmails(keys, targetMailbox) {
     }
     if (!ctx.account || typeof ctx.uid !== 'number') continue;
     const gk = `${ctx.accountId}|${ctx.mailbox}`;
-    if (!groups.has(gk)) groups.set(gk, { account: ctx.account, accountId: ctx.accountId, mailbox: ctx.mailbox, uids: [], rows: [] });
+    if (!groups.has(gk)) groups.set(gk, { account: ctx.account, accountId: ctx.accountId, mailbox: ctx.mailbox, uids: [], rows: [], keys: [] });
     groups.get(gk).uids.push(ctx.uid);
     groups.get(gk).rows.push(ctx.emailObj);
+    groups.get(gk).keys.push(key);
   }
 
+  // Where each group came from and where it landed — the destination uids
+  // (COPYUID) included, which is what an undo addresses the moved copy by.
+  const records = [];
   for (const group of groups.values()) {
     const account = await ensureFreshToken(group.account);
+    const record = (dstUids, extra) => ({
+      account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
+      srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
+      ...extra,
+    });
     if (isGraphAccount(account)) {
+      // Addressed by a per-session message id, not a replayable uid: a
+      // journalled entry is something no later launch could act on, and there
+      // is no destination uid to hand an undo either.
       await _graphMoveGroup(state, account, group, targetMailbox);
-    } else {
-      await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
+      continue;
     }
+    // Same ordering as every other mutation: the journal is written before the
+    // round trip (the rows are about to leave the list, so a reload or a quit
+    // in between must not lose the intent) and cleared only after it.
+    await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+    if (!useConnectivityStore.getState().online) {
+      console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
+      records.push(record(null, { deferred: true }));
+      continue;
+    }
+    const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
+    await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids });
+    // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
+    records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
   }
 
-  const keySet = new Set(keys);
+  // Resolved rows only. A key nothing could place named no folder, so nothing
+  // moved for it: taking its row off the list (or its tick off the selection)
+  // would show the user a move that did not happen.
+  const keySet = new Set([...groups.values()].flatMap(g => g.keys));
   const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
   const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));
   const updates = {
     emails: filteredEmails,
     sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
     totalEmails: newTotal,
-    selectedEmailIds: new Set(),
+    selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => !keySet.has(k))),
   };
 
   if (keySet.has(selectedEmailId)) {
@@ -1717,6 +1803,8 @@ export async function moveEmails(keys, targetMailbox) {
   _invalidateRestore(activeAccountId);
 
   get().loadEmails();
+
+  return { moved: records };
 }
 
 // One (account, mailbox) of a move on a Graph account: every uid must resolve

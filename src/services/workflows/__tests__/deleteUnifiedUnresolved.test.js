@@ -26,6 +26,10 @@ const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockGetLocalIndexEntry = vi.fn().mockResolvedValue(null);
 const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 
+// The connectivity verdict the workflow reads. Offline is not a failure — the
+// journal entry stays and replayOps sends it when the link is back.
+let netOnline = true;
+
 vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
@@ -78,6 +82,9 @@ vi.mock('../../cacheManager', () => ({
   getGraphMessageId: (...a) => mockGetGraphMessageId(...a),
   resolveGraphMessageId: async (acct, mb, uid, opts) => opts?.row?._graphId || mockGetGraphMessageId(acct, mb, uid),
   clearGraphIdMap: () => {},
+}));
+vi.mock('../../../stores/connectivityStore', () => ({
+  useConnectivityStore: { getState: () => ({ online: netOnline }) },
 }));
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: {
@@ -136,6 +143,8 @@ function primeUnified(emails, selected = []) {
 describe('deleting from a unified list', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    netOnline = true;
+    mockDeleteEmail.mockResolvedValue(undefined);
     mockGetLocalIndexEntry.mockResolvedValue(null);
   });
 
@@ -220,6 +229,48 @@ describe('deleting from a unified list', () => {
 
     expect(useMailStore.getState().emails.map(e => e._mailbox)).toEqual(['Sent']);
   });
+
+  // Where the message went. A delete to Trash is a move, and an undo has to
+  // address the copy that now sits there — re-finding it otherwise costs a
+  // SEARCH per message, against a folder that may hold thousands.
+  it('reports the trash folder and the uid the message has there', async () => {
+    mockDeleteEmail.mockResolvedValue({ success: true, trash: 'Trash', trashUid: 5 });
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([r]);
+
+    const out = await useMailStore.getState().deleteEmailFromServer(_selKey(r));
+
+    expect(out).toMatchObject({ accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7, trash: 'Trash', trashUid: 5 });
+  });
+
+  // A permanent delete destroys the message: there is nothing left to address,
+  // and a caller that offered an undo for it would be lying.
+  it('reports no trash for a permanent delete', async () => {
+    mockDeleteEmail.mockResolvedValue({ success: true, trash: null, trashUid: null });
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([r]);
+
+    const out = await useMailStore.getState().deleteEmailFromServer(_selKey(r));
+
+    expect(out).toMatchObject({ uid: 7, trash: null, trashUid: null });
+  });
+
+  it('offline: the row goes, the op stays journalled, the server is not called', async () => {
+    netOnline = false;
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([r]);
+
+    const out = await useMailStore.getState().deleteEmailFromServer(_selKey(r));
+
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: ACCT_B.id, mailbox: 'INBOX', uids: [7] });
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    // Nothing to clear and nothing to stamp: replayOps finishes both when the
+    // link is back. The tombstone is what keeps the row off the list meanwhile.
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+    expect(useMailStore.getState().emails).toEqual([]);
+    expect(out).toBeUndefined();
+  });
 });
 
 // The refusal belongs to the actions that DESTROY a message. Save, mark and
@@ -228,6 +279,7 @@ describe('deleting from a unified list', () => {
 describe('a bulk action that destroys nothing skips the row it cannot place', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    netOnline = true;
     mockGetLocalIndexEntry.mockResolvedValue(null);
   });
 
