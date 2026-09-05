@@ -585,7 +585,11 @@ jobs:
             UPLOAD_FILES="$UPLOAD_FILES $f"
           done
 
+          # --draft never creates the git tag; GitHub creates it when the draft is
+          # published, at --target. Pin the target to the commit CI built so a
+          # publish after main moves on still tags the right commit.
           gh release create "$VERSION" \
+            --target "${{ github.sha }}" \
             --title "MailVault v${VERSION_NUM}" \
             --notes "${CHANGELOG_NOTES:-See the assets to download and install this version.}" \
             --draft \
