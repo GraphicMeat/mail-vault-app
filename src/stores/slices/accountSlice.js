@@ -99,6 +99,9 @@ export const createAccountSlice = (set, get) => ({
   // Mailboxes
   mailboxes: [],
   mailboxesFetchedAt: null,
+  // Per-account STATUS counts for folders that are not open:
+  // { [accountId]: { [path]: { path, messages, unseen, uidNext, uidValidity } } }
+  folderStatus: {},
   activeMailbox: 'INBOX',
   // Set while the list shows a whole branch: { root, paths }. activeMailbox
   // stays the branch root — a real, SELECT-able path — so nothing that treats

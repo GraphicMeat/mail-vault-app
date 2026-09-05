@@ -574,6 +574,9 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const mailboxes = useAccountStore(s => s.mailboxes);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+  // STATUS counts for the folders that are not open. Keyed by account, and
+  // `mailboxes` is the ACTIVE account's list, so that is the key to read.
+  const folderStatus = useAccountStore(s => s.folderStatus);
   const viewMode = useUiStore(s => s.viewMode);
   const connectionStatus = useAccountStore(s => s.connectionStatus);
   const connectionError = useAccountStore(s => s.connectionError);
@@ -897,6 +900,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             expanded={expandedFolders}
             onToggle={toggleFolder}
             onSelect={selectFolder}
+            counts={folderStatus?.[activeAccountId]}
           />
         </div>}
 
@@ -1277,6 +1281,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             expanded={expandedFolders}
             onToggle={toggleFolder}
             onSelect={selectFolder}
+            counts={folderStatus?.[activeAccountId]}
           />
         </div>
       )}

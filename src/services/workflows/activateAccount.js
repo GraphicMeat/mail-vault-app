@@ -20,6 +20,7 @@ import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { openFolder } from './loadSubtree';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
+import { refreshFolderStatus } from './folderStatus';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
@@ -1284,6 +1285,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   if (!isBackgroundRefresh && !signal.aborted && get().activeAccountId === accountId) {
     const detectAccount = get().accounts.find(a => a.id === accountId) || account;
     Promise.resolve().then(() => checkRestoreNeeded(detectAccount)).catch(() => {});
+    // Unread badges for the folders that are not open — fire-and-forget,
+    // throttled inside, never allowed to break activation.
+    refreshFolderStatus(detectAccount, get().mailboxes, get().activeMailbox)
+      .catch(e => console.warn('[folderStatus] STATUS sweep failed:', e));
   }
 
   activationTrace.end('done', { emailCount: get().emails.length });

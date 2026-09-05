@@ -54,12 +54,15 @@ function activate(node, onToggle, onSelect) {
   else onSelect(node.path);
 }
 
-function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact }) {
+function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
   const isActive = !node.noselect && activeMailbox === node.path;
   const label = mailboxLabel(node.name);
+  // The open folder's own list is the live count; STATUS is for the rest.
+  const unseen = counts?.[node.path]?.unseen || 0;
+  const showCount = unseen > 0 && !isActive;
 
   return (
     <>
@@ -70,7 +73,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
         aria-current={isActive ? 'true' : undefined}
         title={label}
         style={{ paddingLeft: 8 + node.depth * (compact ? INDENT / 2 : INDENT) }}
-        className={`flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
+        className={`relative flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
                    ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                    ${isActive
                      ? 'bg-mail-accent/10 text-mail-accent-text'
@@ -84,6 +87,16 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
         )}
         <Icon size={compact ? 14 : 16} className="shrink-0" />
         {!compact && <span className="text-sm flex-1 truncate">{label}</span>}
+        {showCount && (
+          <span
+            data-testid="folder-unseen"
+            className={compact
+              ? 'absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white leading-none flex items-center justify-center'
+              : 'ml-auto text-xs tabular-nums text-mail-text-muted'}
+          >
+            {unseen > 99 ? '99+' : unseen}
+          </span>
+        )}
       </div>
 
       {hasChildren && isOpen && node.children.map(child => (
@@ -95,6 +108,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
           onToggle={onToggle}
           onSelect={onSelect}
           compact={compact}
+          counts={counts}
         />
       ))}
     </>
@@ -108,7 +122,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact 
  * see mailboxTree.js for why the stored list must stay flat.
  */
 export function FolderTree({
-  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false,
+  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts,
 }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
 
@@ -121,6 +135,7 @@ export function FolderTree({
       onToggle={onToggle}
       onSelect={onSelect}
       compact={compact}
+      counts={counts}
     />
   ));
 }

@@ -57,6 +57,8 @@ vi.mock('../../api', () => ({
   searchAllUids: (...a) => mockSearchAllUids(...a),
   fetchHeadersByUids: vi.fn().mockResolvedValue({ emails: [] }),
   fetchChangedFlags: vi.fn().mockResolvedValue([]),
+  // activateAccount's tail sweeps STATUS for the closed folders.
+  fetchFolderStatus: vi.fn().mockResolvedValue([]),
   graphListFolders: vi.fn().mockResolvedValue([]),
   graphListMessages: vi.fn().mockResolvedValue({ headers: [], graphMessageIds: [] }),
 }));
