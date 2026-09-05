@@ -518,11 +518,13 @@ impl async_imap::Authenticator for XOAuth2Authenticator {
     }
 }
 
-// ── Fetch spec constants ────────────────────────────────────────────────────
-// Lean spec: no BODYSTRUCTURE/RFC822.SIZE — used for header loading (pages, ranges, delta-sync)
-const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
-// Full spec: includes BODYSTRUCTURE + RFC822.SIZE — used for search results (smaller sets, full info)
-const HEADER_FETCH_SPEC_FULL: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
+// ── Fetch spec ──────────────────────────────────────────────────────────────
+// Every header pass carries RFC822.SIZE and BODYSTRUCTURE: a row shows its
+// size and paperclip without being opened, and the daemon's sidecars carry
+// both. Thunderbird fetches the size on every pass; BODYSTRUCTURE is a few
+// hundred bytes per multipart message under DEFLATE, and this exact spec has
+// served search results in production since the search feature shipped.
+const HEADER_FETCH_SPEC: &str = "(UID FLAGS ENVELOPE INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS (References Authentication-Results Return-Path Reply-To List-Unsubscribe List-Id Precedence)])";
 
 /// Gmail suspends accounts that exceed daily IMAP bandwidth caps (2500 MB down,
 /// 500 MB up) — the suspension can last up to 24h and locks webmail sign-in too.
@@ -1584,7 +1586,7 @@ pub async fn search_emails(
     let uid_range = compress_uid_ranges(&limited);
 
     let fetch_stream = session
-        .uid_fetch(&uid_range, HEADER_FETCH_SPEC_FULL)
+        .uid_fetch(&uid_range, HEADER_FETCH_SPEC)
         .await
         .map_err(|e| format!("FETCH search results failed: {}", e))?;
 

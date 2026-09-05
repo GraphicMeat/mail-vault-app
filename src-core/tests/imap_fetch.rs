@@ -287,3 +287,45 @@ async fn a_uid_the_server_really_does_not_have_is_reported_absent() {
         .expect("an honest empty answer is not an error");
     assert!(missing.is_none(), "uid 4242 was never in this mailbox");
 }
+
+/// A list page must say what the row will show — size and paperclip — without
+/// the message being opened. The lean spec used to omit both, so every row off
+/// the search path said "no attachments" until it was clicked.
+const WITH_PDF: &str = "From: billing@example.com\r\n\
+To: user@example.com\r\n\
+Subject: Invoice\r\n\
+Date: Thu, 01 Jan 2026 12:00:00 +0000\r\n\
+Message-ID: <invoice@example.com>\r\n\
+Content-Type: multipart/mixed; boundary=\"B\"\r\n\
+\r\n\
+--B\r\n\
+Content-Type: text/plain; charset=UTF-8\r\n\
+\r\n\
+See attached.\r\n\
+--B\r\n\
+Content-Type: application/pdf; name=\"invoice.pdf\"\r\n\
+Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\
+Content-Transfer-Encoding: base64\r\n\
+\r\n\
+JVBERi0xLjQK\r\n\
+--B--\r\n";
+
+#[async_std::test]
+async fn list_pages_carry_size_and_attachment_presence() {
+    let mut inbox = Mailbox::new("INBOX");
+    inbox.add(Message::new(1, WITH_PDF));
+    inbox.add(Message::new(2, eml("Plain", "a@example.com", "hello")));
+    let server = MockImap::start(Scenario::new().mailbox(inbox));
+    let mut sess = session(&server).await;
+
+    let (page, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.expect("page");
+    let invoice = page.iter().find(|e| e.uid == 1).expect("invoice row");
+    let plain = page.iter().find(|e| e.uid == 2).expect("plain row");
+    assert!(invoice.has_attachments, "the paperclip must come from the list fetch, not from opening");
+    assert!(!plain.has_attachments);
+    assert_eq!(invoice.size, Some(WITH_PDF.len() as u32));
+
+    let (by_uid, _) = fetch_headers_by_uids(&mut sess, "INBOX", &[1]).await.expect("by uid");
+    assert!(by_uid[0].has_attachments, "the daemon's cold sync and backfill use this path");
+    assert_eq!(by_uid[0].size, Some(WITH_PDF.len() as u32));
+}
