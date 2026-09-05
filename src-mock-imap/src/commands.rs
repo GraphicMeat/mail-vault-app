@@ -232,6 +232,18 @@ fn do_list(cmd: &Command, state: &ServerState) -> Response {
     r
 }
 
+/// PERMANENTFLAGS this server advertises — and enforces in STORE.
+/// The default is what a permissive server (Dovecot with keywords enabled)
+/// announces; a scenario can shrink it to model one that keeps fewer.
+fn permanent_flags(state: &ServerState) -> Vec<String> {
+    state.permanent_flags.clone().unwrap_or_else(|| {
+        ["\\Answered", "\\Flagged", "\\Deleted", "\\Seen", "\\Draft", "\\*"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    })
+}
+
 fn do_select(cmd: &Command, state: &ServerState, sess: &mut Session, faults: &[Action]) -> Response {
     let mut args = cmd.args.as_str();
     let name = next_arg(&mut args).unwrap_or_default();
@@ -258,13 +270,15 @@ fn do_select(cmd: &Command, state: &ServerState, sess: &mut Session, faults: &[A
     sess.selected = Some(mb.name.clone());
     sess.read_only = cmd.name == "EXAMINE";
 
+    let perm = permanent_flags(state);
+
     let mut r = Response::ok(if sess.read_only {
         "[READ-ONLY] EXAMINE completed"
     } else {
         "[READ-WRITE] SELECT completed"
     })
     .line("* FLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft)")
-    .line("* OK [PERMANENTFLAGS (\\Answered \\Flagged \\Deleted \\Seen \\Draft \\*)] Limited")
+    .line(format!("* OK [PERMANENTFLAGS ({})] Limited", perm.join(" ")))
     .line(format!("* {} EXISTS", mb.messages.len()))
     .line("* 0 RECENT")
     .line(format!("* OK [UIDVALIDITY {}] UIDs valid", uid_validity))
@@ -540,8 +554,20 @@ fn do_store(cmd: &Command, state: &mut ServerState, sess: &Session) -> Response 
     let set = next_arg(&mut args).unwrap_or_default();
     let op = next_arg(&mut args).unwrap_or_default().to_uppercase();
     let flags_raw = next_group(&mut args).unwrap_or_else(|| args.trim().to_string());
-    let flags: Vec<String> = flags_raw.split_whitespace().map(|s| s.to_string()).collect();
+    let mut flags: Vec<String> = flags_raw.split_whitespace().map(|s| s.to_string()).collect();
     let silent = op.ends_with(".SILENT");
+
+    // A real server silently drops a flag its PERMANENTFLAGS does not cover
+    // (`\*` covers keywords only). Without this the mock would accept anything
+    // and a test asserting the client's gate would pass for the wrong reason.
+    if state.permanent_flags.is_some() {
+        let permitted = permanent_flags(state);
+        let any_keyword = permitted.iter().any(|p| p == "\\*");
+        flags.retain(|f| {
+            permitted.iter().any(|p| p.eq_ignore_ascii_case(f))
+                || (any_keyword && !f.starts_with('\\'))
+        });
+    }
 
     let Some(mb) = selected_mut(state, sess) else {
         return Response::bad("No mailbox selected");

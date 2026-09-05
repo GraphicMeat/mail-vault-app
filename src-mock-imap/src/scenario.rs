@@ -129,6 +129,14 @@ impl Scenario {
         self
     }
 
+    /// What SELECT advertises as PERMANENTFLAGS. Default (None): the five
+    /// system flags plus `\*`. A server that keeps fewer is what the
+    /// flag-writing gate exists for.
+    pub fn permanent_flags(mut self, flags: &[&str]) -> Self {
+        self.state.permanent_flags = Some(flags.iter().map(|f| f.to_string()).collect());
+        self
+    }
+
     /// Drop a capability — the point is exercising our fallback paths.
     pub fn without_cap(mut self, cap: &str) -> Self {
         self.state.capabilities.retain(|c| !c.eq_ignore_ascii_case(cap));

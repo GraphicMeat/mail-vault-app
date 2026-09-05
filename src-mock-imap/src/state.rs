@@ -188,6 +188,10 @@ pub struct ServerState {
     pub capabilities: Vec<String>,
     /// Credentials the server accepts. `None` accepts anything.
     pub expect_login: Option<(String, String)>,
+    /// What SELECT advertises as PERMANENTFLAGS, and what STORE will keep.
+    /// `None` = the five system flags plus `\*` (the container is already
+    /// `#[serde(default)]`, so an omitted field lands here).
+    pub permanent_flags: Option<Vec<String>>,
 }
 
 impl Default for ServerState {
@@ -204,6 +208,7 @@ impl Default for ServerState {
                 "AUTH=XOAUTH2".to_string(),
             ],
             expect_login: None,
+            permanent_flags: None,
         }
     }
 }

@@ -1177,37 +1177,83 @@ pub async fn fetch_email_by_uid(
     }))
 }
 
-/// Set flags on a message by UID
+/// The wire form of a flag the app names. System flags get their backslash
+/// (`Seen` -> `\Seen`); a keyword (`$Forwarded`, a Thunderbird tag) goes as is.
+/// The old rule backslashed everything it did not recognise, so `$Forwarded`
+/// went out as `\$Forwarded` — B12 in the parity audit.
+pub fn wire_flag(f: &str) -> String {
+    match f {
+        "Seen" | "Answered" | "Flagged" | "Deleted" | "Draft" => format!("\\{}", f),
+        _ => f.to_string(),
+    }
+}
+
+/// `requested` filtered by what the mailbox's PERMANENTFLAGS lets a client
+/// keep (RFC 3501 §7.1). An empty list means the server announced nothing,
+/// which is not a refusal. `\*` admits any keyword, never a system flag that
+/// was left off the list. `\Recent` is read-only by definition.
+pub fn permitted_flags(requested: &[String], permanent: &[Flag<'static>]) -> Vec<String> {
+    let names: Vec<String> = permanent
+        .iter()
+        .map(|f| match f {
+            Flag::Seen => "\\Seen".into(),
+            Flag::Answered => "\\Answered".into(),
+            Flag::Flagged => "\\Flagged".into(),
+            Flag::Deleted => "\\Deleted".into(),
+            Flag::Draft => "\\Draft".into(),
+            Flag::Recent => "\\Recent".into(),
+            Flag::MayCreate => "\\*".into(),
+            Flag::Custom(c) => c.to_string(),
+        })
+        .collect();
+    let any_keyword = names.iter().any(|n| n == "\\*");
+    requested
+        .iter()
+        .map(|f| wire_flag(f))
+        .filter(|f| {
+            if f == "\\Recent" {
+                return false;
+            }
+            if names.is_empty() {
+                return true;
+            }
+            if names.iter().any(|n| n.eq_ignore_ascii_case(f)) {
+                return true;
+            }
+            any_keyword && !f.starts_with('\\')
+        })
+        .collect()
+}
+
+/// `UID STORE` the flags the server will keep. Returns what was written —
+/// empty when PERMANENTFLAGS admitted none of them, which is logged, not an
+/// error: a reply must not fail because its server cannot store `\Answered`.
 pub async fn set_flags(
     session: &mut ImapSession,
     mailbox: &str,
     uid: u32,
     flags: &[String],
     action: &str,
-) -> Result<(), String> {
-    let _mbox = select_mailbox(session, mailbox).await?;
+) -> Result<Vec<String>, String> {
+    let mbox = select_mailbox(session, mailbox).await?;
+    let written = permitted_flags(flags, &mbox.permanent_flags);
+    if written.is_empty() {
+        info!(
+            "[set_flags] uid={} mailbox={} none of {:?} permitted by PERMANENTFLAGS {:?}",
+            uid, mailbox, flags, mbox.permanent_flags
+        );
+        return Ok(written);
+    }
 
-    let flag_str = flags
-        .iter()
-        .map(|f| {
-            match f.as_str() {
-                "\\Seen" | "\\Answered" | "\\Flagged" | "\\Deleted" | "\\Draft" => f.clone(),
-                s if s.starts_with('\\') => f.clone(),
-                _ => format!("\\{}", f), // try adding backslash
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ");
+    let op = if action == "add" { "+FLAGS" } else { "-FLAGS" };
+    run_checked(
+        session,
+        format!("UID STORE {} {} ({})", uid, op, written.join(" ")),
+        "STORE flags",
+    )
+    .await?;
 
-    let store_cmd = if action == "add" {
-        format!("+FLAGS ({})", flag_str)
-    } else {
-        format!("-FLAGS ({})", flag_str)
-    };
-
-    run_checked(session, format!("UID STORE {} {}", uid, store_cmd), "STORE flags").await?;
-
-    Ok(())
+    Ok(written)
 }
 
 /// Run a mutation and require the server's tagged `OK`.

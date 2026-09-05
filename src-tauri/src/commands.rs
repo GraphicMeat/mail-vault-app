@@ -477,13 +477,15 @@ pub async fn imap_set_flags(
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
     let action = action.unwrap_or_else(|| "add".to_string());
 
-    with_priority(&pool, &account, |mut session| async move {
-        imap::set_flags(&mut session, &mailbox, uid, &flags, &action).await
+    // `written` is what PERMANENTFLAGS let through — empty is a success the
+    // caller has to see, not an error: the server simply cannot keep the flag.
+    let written = with_priority(&pool, &account, |mut session| async move {
+        let written = imap::set_flags(&mut session, &mailbox, uid, &flags, &action).await
             .map_err(|e| format!("Failed to update flags: {}", e))?;
-        Ok(((), session, Some(mailbox)))
+        Ok((written, session, Some(mailbox)))
     }).await?;
 
-    Ok(serde_json::json!({ "success": true }))
+    Ok(serde_json::json!({ "success": true, "written": written }))
 }
 
 // ── Delete email ────────────────────────────────────────────────────────────

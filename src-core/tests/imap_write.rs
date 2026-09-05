@@ -29,9 +29,10 @@ async fn set_flags_adds_and_removes() {
     let server = MockImap::start(Scenario::new().mailbox(inbox_with(2)));
     let mut sess = session(&server).await;
 
-    set_flags(&mut sess, "INBOX", 1, &["\\Seen".into()], "add")
+    let written = set_flags(&mut sess, "INBOX", 1, &["\\Seen".into()], "add")
         .await
         .expect("add flag");
+    assert_eq!(written, vec!["\\Seen".to_string()]);
     assert!(server.state().find("INBOX").unwrap().by_uid(1).unwrap().has_flag("\\Seen"));
 
     set_flags(&mut sess, "INBOX", 1, &["\\Seen".into()], "remove")
@@ -380,4 +381,75 @@ fn imap_date_time_renders_the_rfc_3501_form() {
         .with_ymd_and_hms(2019, 3, 5, 8, 15, 0)
         .unwrap();
     assert_eq!(imap_date_time(&dt), "05-Mar-2019 08:15:00 +0100");
+}
+
+#[async_std::test]
+async fn set_flags_sends_keywords_without_a_backslash() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox_with(1)));
+    let mut sess = session(&server).await;
+    let written = set_flags(&mut sess, "INBOX", 1, &["$Forwarded".into(), "\\Flagged".into()], "add")
+        .await.expect("store");
+    assert_eq!(written, vec!["$Forwarded".to_string(), "\\Flagged".to_string()]);
+    let store = server.commands().into_iter().find(|c| c.to_uppercase().contains("UID STORE")).unwrap();
+    assert!(store.contains("+FLAGS ($Forwarded \\Flagged)"), "B12: keyword mangled: {store}");
+    assert!(!store.contains("\\$Forwarded"), "{store}");
+    let msg = server.state().find("INBOX").unwrap().by_uid(1).unwrap().clone();
+    assert!(msg.has_flag("$Forwarded") && msg.has_flag("\\Flagged"));
+}
+
+#[async_std::test]
+async fn set_flags_skips_what_permanentflags_forbids_and_never_errors() {
+    // A server that keeps only \Seen and \Deleted: star and keywords are refused.
+    let server = MockImap::start(
+        Scenario::new().mailbox(inbox_with(1)).permanent_flags(&["\\Seen", "\\Deleted"]),
+    );
+    let mut sess = session(&server).await;
+    let written = set_flags(&mut sess, "INBOX", 1, &["\\Flagged".into(), "$Forwarded".into()], "add")
+        .await.expect("must not fail a reply over a flag the server cannot keep");
+    assert!(written.is_empty());
+    assert_eq!(server.count_commands("UID STORE"), 0, "nothing permitted → nothing sent");
+
+    let written = set_flags(&mut sess, "INBOX", 1, &["\\Seen".into(), "\\Flagged".into()], "add")
+        .await.expect("store");
+    assert_eq!(written, vec!["\\Seen".to_string()]);
+    let store = server.commands().into_iter().filter(|c| c.to_uppercase().contains("UID STORE")).last().unwrap();
+    assert!(store.contains("+FLAGS (\\Seen)") && !store.contains("Flagged"), "{store}");
+}
+
+#[test]
+fn permitted_flags_pure_rules() {
+    use async_imap::types::Flag;
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    // \* = any keyword; system flags still need to be listed.
+    let perm = vec![Flag::Seen, Flag::MayCreate];
+    assert_eq!(permitted_flags(&s(&["\\Seen", "\\Flagged", "$Forwarded"]), &perm), s(&["\\Seen", "$Forwarded"]));
+    // An empty PERMANENTFLAGS (server said nothing) permits everything — RFC 3501 §7.1: absence means no restriction announced.
+    assert_eq!(permitted_flags(&s(&["\\Flagged", "$Junk"]), &[]), s(&["\\Flagged", "$Junk"]));
+    // \Recent is never writable.
+    assert_eq!(permitted_flags(&s(&["\\Recent"]), &[Flag::MayCreate]), Vec::<String>::new());
+    assert_eq!(wire_flag("Seen"), "\\Seen");
+    assert_eq!(wire_flag("\\Answered"), "\\Answered");
+    assert_eq!(wire_flag("$Forwarded"), "$Forwarded");
+    assert_eq!(wire_flag("MyTag"), "MyTag");
+}
+
+/// The gate above is only meaningful against a mock that behaves like a real
+/// server: what PERMANENTFLAGS forbids is dropped silently, not stored. Sent
+/// raw, because `set_flags` will never put a forbidden flag on the wire.
+#[async_std::test]
+async fn mock_drops_a_stored_flag_permanentflags_forbids() {
+    let server =
+        MockImap::start(Scenario::new().mailbox(inbox_with(1)).permanent_flags(&["\\Seen"]));
+    let mut sess = session(&server).await;
+    sess.select("INBOX").await.expect("select");
+    sess.run_command_and_check_ok("UID STORE 1 +FLAGS (\\Seen \\Flagged $Forwarded)")
+        .await
+        .expect("store");
+    let msg = server.state().find("INBOX").unwrap().by_uid(1).unwrap().clone();
+    assert!(msg.has_flag("\\Seen"), "{:?}", msg.flags);
+    assert!(
+        !msg.has_flag("\\Flagged") && !msg.has_flag("$Forwarded"),
+        "mock kept a flag PERMANENTFLAGS forbids: {:?}",
+        msg.flags
+    );
 }
