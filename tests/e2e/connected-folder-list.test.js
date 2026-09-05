@@ -24,12 +24,20 @@ describe('Folder list', function () {
     await waitForEmails();
   });
 
-  /** Folder names the sidebar lists under its FOLDERS heading. */
-  const folders = () => browser.execute(() => {
-    const text = document.querySelector('[data-testid="sidebar"]')?.innerText || '';
-    const section = text.match(/FOLDERS\n([\s\S]*?)\n(?:Settings|Report a bug)/);
-    return section ? section[1].split('\n').map(s => s.trim()).filter(Boolean) : [];
-  });
+  /**
+   * Folder paths the sidebar's folder tree currently draws.
+   *
+   * Read from the rows, not from the sidebar's innerText: this used to slice
+   * the text between the FOLDERS heading and the "Settings" footer line, and
+   * a new footer button (the focus-session row) glued itself onto the front
+   * of that line — the anchor stopped starting a line, the regex stopped
+   * matching, and the spec reported an empty folder list for a sidebar that
+   * was drawing all twelve folders.
+   */
+  const folders = () => browser.execute(() =>
+    [...document.querySelectorAll('[data-testid="sidebar"] [data-testid="folder-row"]')]
+      .map(r => r.getAttribute('data-path'))
+      .filter(Boolean));
 
   const waitForFolders = (msg) => browser.waitUntil(
     async () => (await folders()).length > 1,
