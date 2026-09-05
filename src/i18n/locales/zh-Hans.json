@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "包含附件",
   "export.dialog.includeAttachmentsHint": "保存在图片旁边，或嵌入 HTML 文件中。",
   "export.dialog.attachmentsFailed_one": "有 {{count}} 个附件无法包含：{{failed}}",
-  "export.dialog.attachmentsFailed_other": "有 {{count}} 个附件无法包含：{{failed}}"
+  "export.dialog.attachmentsFailed_other": "有 {{count}} 个附件无法包含：{{failed}}",
+  "undo.action": "撤销",
+  "undo.failed": "撤销失败：{{err}}",
+  "undo.markedRead_one": "已将 {{count}} 封标为已读",
+  "undo.markedRead_other": "已将 {{count}} 封标为已读",
+  "undo.markedUnread_one": "已将 {{count}} 封标为未读",
+  "undo.markedUnread_other": "已将 {{count}} 封标为未读",
+  "undo.starred_one": "已为 {{count}} 封加星标",
+  "undo.starred_other": "已为 {{count}} 封加星标",
+  "undo.unstarred_one": "已取消 {{count}} 封的星标",
+  "undo.unstarred_other": "已取消 {{count}} 封的星标",
+  "undo.moved_one": "已将 {{count}} 封移动到 {{folder}}",
+  "undo.moved_other": "已将 {{count}} 封移动到 {{folder}}",
+  "undo.deleted_one": "已将 {{count}} 封移到废纸篓",
+  "undo.deleted_other": "已将 {{count}} 封移到废纸篓",
+  "undo.deletedPermanently_one": "已永久删除 {{count}} 封",
+  "undo.deletedPermanently_other": "已永久删除 {{count}} 封",
+  "settings.shortcuts.undo": "撤销上一步操作"
 }

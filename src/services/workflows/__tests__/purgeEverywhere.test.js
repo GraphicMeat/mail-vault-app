@@ -353,6 +353,17 @@ describe('purgeEverywhere — storage matrix', () => {
     const ts = useMailStore.getState().deleteTombstones;
     expect([...ts].some(k => k.endsWith('|1'))).toBe(false);
   });
+
+  // A purge destroys every copy. Leaving the last delete's "Moved 1 to Trash"
+  // in the undo slot would offer to restore messages this call just erased.
+  it('clears the undo slot — nothing a purge touched can come back', async () => {
+    prime({ emails: [serverMsg(1)] });
+    useMailStore.getState().setUndo({ labelKey: 'undo.deleted', labelParams: { count: 1 }, run: vi.fn() });
+
+    await purgeEverywhere([1]);
+
+    expect(useMailStore.getState().undo).toBeNull();
+  });
 });
 
 describe('purgeEverywhere — positive local-only proof', () => {

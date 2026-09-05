@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "Incluir anexos",
   "export.dialog.includeAttachmentsHint": "Salvos ao lado da imagem ou incorporados no arquivo HTML.",
   "export.dialog.attachmentsFailed_one": "{{count}} anexo não pôde ser incluído: {{failed}}",
-  "export.dialog.attachmentsFailed_other": "{{count}} anexos não puderam ser incluídos: {{failed}}"
+  "export.dialog.attachmentsFailed_other": "{{count}} anexos não puderam ser incluídos: {{failed}}",
+  "undo.action": "Desfazer",
+  "undo.failed": "Falha ao desfazer: {{err}}",
+  "undo.markedRead_one": "{{count}} mensagem marcada como lida",
+  "undo.markedRead_other": "{{count}} mensagens marcadas como lidas",
+  "undo.markedUnread_one": "{{count}} mensagem marcada como não lida",
+  "undo.markedUnread_other": "{{count}} mensagens marcadas como não lidas",
+  "undo.starred_one": "{{count}} mensagem com estrela",
+  "undo.starred_other": "{{count}} mensagens com estrela",
+  "undo.unstarred_one": "Estrela removida de {{count}} mensagem",
+  "undo.unstarred_other": "Estrela removida de {{count}} mensagens",
+  "undo.moved_one": "{{count}} mensagem movida para {{folder}}",
+  "undo.moved_other": "{{count}} mensagens movidas para {{folder}}",
+  "undo.deleted_one": "{{count}} mensagem movida para a Lixeira",
+  "undo.deleted_other": "{{count}} mensagens movidas para a Lixeira",
+  "undo.deletedPermanently_one": "{{count}} mensagem excluída permanentemente",
+  "undo.deletedPermanently_other": "{{count}} mensagens excluídas permanentemente",
+  "settings.shortcuts.undo": "Desfazer a última ação"
 }

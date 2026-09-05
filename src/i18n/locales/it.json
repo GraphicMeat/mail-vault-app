@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "Includi allegati",
   "export.dialog.includeAttachmentsHint": "Salvati accanto all'immagine o incorporati nel file HTML.",
   "export.dialog.attachmentsFailed_one": "{{count}} allegato non è stato incluso: {{failed}}",
-  "export.dialog.attachmentsFailed_other": "{{count}} allegati non sono stati inclusi: {{failed}}"
+  "export.dialog.attachmentsFailed_other": "{{count}} allegati non sono stati inclusi: {{failed}}",
+  "undo.action": "Annulla",
+  "undo.failed": "Annullamento non riuscito: {{err}}",
+  "undo.markedRead_one": "{{count}} messaggio segnato come letto",
+  "undo.markedRead_other": "{{count}} messaggi segnati come letti",
+  "undo.markedUnread_one": "{{count}} messaggio segnato come non letto",
+  "undo.markedUnread_other": "{{count}} messaggi segnati come non letti",
+  "undo.starred_one": "{{count}} messaggio aggiunto a speciali",
+  "undo.starred_other": "{{count}} messaggi aggiunti a speciali",
+  "undo.unstarred_one": "{{count}} messaggio tolto da speciali",
+  "undo.unstarred_other": "{{count}} messaggi tolti da speciali",
+  "undo.moved_one": "{{count}} messaggio spostato in {{folder}}",
+  "undo.moved_other": "{{count}} messaggi spostati in {{folder}}",
+  "undo.deleted_one": "{{count}} messaggio spostato nel Cestino",
+  "undo.deleted_other": "{{count}} messaggi spostati nel Cestino",
+  "undo.deletedPermanently_one": "{{count}} messaggio eliminato definitivamente",
+  "undo.deletedPermanently_other": "{{count}} messaggi eliminati definitivamente",
+  "settings.shortcuts.undo": "Annulla l'ultima azione"
 }

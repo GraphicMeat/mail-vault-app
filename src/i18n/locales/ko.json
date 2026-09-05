@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "첨부파일 포함",
   "export.dialog.includeAttachmentsHint": "이미지 옆에 저장하거나 HTML 파일에 포함합니다.",
   "export.dialog.attachmentsFailed_one": "{{count}}개의 첨부파일을 포함하지 못했습니다: {{failed}}",
-  "export.dialog.attachmentsFailed_other": "{{count}}개의 첨부파일을 포함하지 못했습니다: {{failed}}"
+  "export.dialog.attachmentsFailed_other": "{{count}}개의 첨부파일을 포함하지 못했습니다: {{failed}}",
+  "undo.action": "실행 취소",
+  "undo.failed": "실행 취소하지 못했습니다: {{err}}",
+  "undo.markedRead_one": "{{count}}건을 읽음으로 표시했습니다",
+  "undo.markedRead_other": "{{count}}건을 읽음으로 표시했습니다",
+  "undo.markedUnread_one": "{{count}}건을 읽지 않음으로 표시했습니다",
+  "undo.markedUnread_other": "{{count}}건을 읽지 않음으로 표시했습니다",
+  "undo.starred_one": "{{count}}건에 별표를 표시했습니다",
+  "undo.starred_other": "{{count}}건에 별표를 표시했습니다",
+  "undo.unstarred_one": "{{count}}건의 별표를 해제했습니다",
+  "undo.unstarred_other": "{{count}}건의 별표를 해제했습니다",
+  "undo.moved_one": "{{count}}건을 {{folder}}(으)로 옮겼습니다",
+  "undo.moved_other": "{{count}}건을 {{folder}}(으)로 옮겼습니다",
+  "undo.deleted_one": "{{count}}건을 휴지통으로 옮겼습니다",
+  "undo.deleted_other": "{{count}}건을 휴지통으로 옮겼습니다",
+  "undo.deletedPermanently_one": "{{count}}건을 완전히 삭제했습니다",
+  "undo.deletedPermanently_other": "{{count}}건을 완전히 삭제했습니다",
+  "settings.shortcuts.undo": "마지막 작업 실행 취소"
 }

@@ -73,6 +73,7 @@ export const DEFAULT_SHORTCUTS = {
   focusSearch: '/',
   showShortcuts: '?',
   openSettings: 'Meta+,',
+  undo: 'Meta+z',
 };
 
 // Shallow, EXCEPT the shortcut map: a persisted object replaces the default

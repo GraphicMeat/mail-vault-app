@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "Incluir adjuntos",
   "export.dialog.includeAttachmentsHint": "Se guardan junto a la imagen o se incrustan en el archivo HTML.",
   "export.dialog.attachmentsFailed_one": "No se pudo incluir {{count}} adjunto: {{failed}}",
-  "export.dialog.attachmentsFailed_other": "No se pudieron incluir {{count}} adjuntos: {{failed}}"
+  "export.dialog.attachmentsFailed_other": "No se pudieron incluir {{count}} adjuntos: {{failed}}",
+  "undo.action": "Deshacer",
+  "undo.failed": "No se pudo deshacer: {{err}}",
+  "undo.markedRead_one": "{{count}} mensaje marcado como leído",
+  "undo.markedRead_other": "{{count}} mensajes marcados como leídos",
+  "undo.markedUnread_one": "{{count}} mensaje marcado como no leído",
+  "undo.markedUnread_other": "{{count}} mensajes marcados como no leídos",
+  "undo.starred_one": "{{count}} mensaje destacado",
+  "undo.starred_other": "{{count}} mensajes destacados",
+  "undo.unstarred_one": "Destacado quitado de {{count}} mensaje",
+  "undo.unstarred_other": "Destacado quitado de {{count}} mensajes",
+  "undo.moved_one": "{{count}} mensaje movido a {{folder}}",
+  "undo.moved_other": "{{count}} mensajes movidos a {{folder}}",
+  "undo.deleted_one": "{{count}} mensaje movido a la Papelera",
+  "undo.deleted_other": "{{count}} mensajes movidos a la Papelera",
+  "undo.deletedPermanently_one": "{{count}} mensaje eliminado permanentemente",
+  "undo.deletedPermanently_other": "{{count}} mensajes eliminados permanentemente",
+  "settings.shortcuts.undo": "Deshacer la última acción"
 }

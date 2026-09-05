@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "Inclure les pièces jointes",
   "export.dialog.includeAttachmentsHint": "Enregistrées à côté de l'image ou intégrées au fichier HTML.",
   "export.dialog.attachmentsFailed_one": "{{count}} pièce jointe n'a pas pu être incluse : {{failed}}",
-  "export.dialog.attachmentsFailed_other": "{{count}} pièces jointes n'ont pas pu être incluses : {{failed}}"
+  "export.dialog.attachmentsFailed_other": "{{count}} pièces jointes n'ont pas pu être incluses : {{failed}}",
+  "undo.action": "Annuler",
+  "undo.failed": "Échec de l'annulation : {{err}}",
+  "undo.markedRead_one": "{{count}} message marqué comme lu",
+  "undo.markedRead_other": "{{count}} messages marqués comme lus",
+  "undo.markedUnread_one": "{{count}} message marqué comme non lu",
+  "undo.markedUnread_other": "{{count}} messages marqués comme non lus",
+  "undo.starred_one": "{{count}} message suivi",
+  "undo.starred_other": "{{count}} messages suivis",
+  "undo.unstarred_one": "{{count}} message n'est plus suivi",
+  "undo.unstarred_other": "{{count}} messages ne sont plus suivis",
+  "undo.moved_one": "{{count}} message déplacé vers {{folder}}",
+  "undo.moved_other": "{{count}} messages déplacés vers {{folder}}",
+  "undo.deleted_one": "{{count}} message déplacé vers la Corbeille",
+  "undo.deleted_other": "{{count}} messages déplacés vers la Corbeille",
+  "undo.deletedPermanently_one": "{{count}} message supprimé définitivement",
+  "undo.deletedPermanently_other": "{{count}} messages supprimés définitivement",
+  "settings.shortcuts.undo": "Annuler la dernière action"
 }

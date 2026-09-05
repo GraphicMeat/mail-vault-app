@@ -1938,5 +1938,22 @@
   "export.dialog.includeAttachments": "Include attachments",
   "export.dialog.includeAttachmentsHint": "Saved beside the image, or embedded in the HTML file.",
   "export.dialog.attachmentsFailed_one": "{{count}} attachment could not be included: {{failed}}",
-  "export.dialog.attachmentsFailed_other": "{{count}} attachments could not be included: {{failed}}"
+  "export.dialog.attachmentsFailed_other": "{{count}} attachments could not be included: {{failed}}",
+  "undo.action": "Undo",
+  "undo.failed": "Undo failed: {{err}}",
+  "undo.markedRead_one": "Marked {{count}} message as read",
+  "undo.markedRead_other": "Marked {{count}} messages as read",
+  "undo.markedUnread_one": "Marked {{count}} message as unread",
+  "undo.markedUnread_other": "Marked {{count}} messages as unread",
+  "undo.starred_one": "Starred {{count}} message",
+  "undo.starred_other": "Starred {{count}} messages",
+  "undo.unstarred_one": "Unstarred {{count}} message",
+  "undo.unstarred_other": "Unstarred {{count}} messages",
+  "undo.moved_one": "Moved {{count}} message to {{folder}}",
+  "undo.moved_other": "Moved {{count}} messages to {{folder}}",
+  "undo.deleted_one": "Moved {{count}} message to Trash",
+  "undo.deleted_other": "Moved {{count}} messages to Trash",
+  "undo.deletedPermanently_one": "Deleted {{count}} message permanently",
+  "undo.deletedPermanently_other": "Deleted {{count}} messages permanently",
+  "settings.shortcuts.undo": "Undo last action"
 }

@@ -10,6 +10,7 @@ import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, s
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { withoutUids } from '../../stores/slices/serverUids';
+import { mailboxLabel } from '../../utils/imapUtf7';
 // Aliased: this module binds `t` locally (tombstone loop vars), which
 // would shadow the catalog lookup inside those callbacks.
 import { t as tr } from '../../i18n/index.js';
@@ -537,7 +538,47 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     deletedByUs: true,
   });
 
+  // Where it went decides whether there is anything to offer. A message that
+  // landed in Trash comes back; one the server destroyed (no Trash, or the
+  // Trash delete itself) is said out loud with no button, because a button
+  // that cannot work is worse than none.
+  if (outcome?.trashUid != null) {
+    get().setUndo({ labelKey: 'undo.deleted', labelParams: { count: 1 }, run: () => _restoreFromTrash([outcome]) });
+  } else if (!offline && !isLocalOnly && !isGraphAccount(account)) {
+    // Graph is excluded, as it is from `deleted` in the bulk path: its delete
+    // lands in Deleted Items, so "deleted permanently" would be a false claim
+    // — and there is no uid to offer a restore by either.
+    get().setUndo({ labelKey: 'undo.deletedPermanently', labelParams: { count: 1 }, canUndo: false });
+  }
+
   return outcome;
+}
+
+// Put the messages back where they were deleted from — one IMAP move per
+// (account, Trash, source folder), not one per message.
+async function _restoreFromTrash(outcomes) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const groups = new Map();
+  for (const o of outcomes) {
+    const k = `${o.accountId}|${o.trash}|${o.mailbox}`;
+    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [] });
+    groups.get(k).trashUids.push(o.trashUid);
+    groups.get(k).uids.push(o.uid);
+  }
+  for (const g of groups.values()) {
+    await api.moveEmails(await ensureFreshToken(g.account), g.trashUids, g.trash, g.mailbox);
+    // The vault copy was stamped "we deleted the server copy" a moment ago
+    // (markServerDeleted / applyServerRemoval); it is back, so custody must
+    // stop claiming this is the only copy left. See stores/slices/custody.js.
+    for (const uid of g.uids) await stampVaultEntry(g.accountId, g.mailbox, uid, { serverDeleted: false });
+    // The restored message gets a NEW uid in the source folder, so the old
+    // tombstone would not hide it — but a tombstone naming a uid that is no
+    // longer deleted is a lie the next reconcile has to work around.
+    const ts = new Set(useMailStore.getState().deleteTombstones);
+    for (const uid of g.uids) ts.delete(`${g.accountId}|${g.mailbox}|${uid}`);
+    useMailStore.setState({ deleteTombstones: ts });
+  }
+  useMailStore.getState().loadEmails();
 }
 
 
@@ -927,6 +968,20 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     if (entry) entry.email = { ...entry.email, flags: map(entry.email.flags) };
   }
   _refreshAfterFlagChange(useMailStore);
+
+  // The rows have changed; offer the change back. Only the two flags the user
+  // sets deliberately — \Answered and $Forwarded are stamped BY sending, and
+  // their callers pass `undoable: false` anyway. The reverse is not itself an
+  // action to undo, or Cmd+Z would ping-pong forever.
+  if (undoable && (flag === '\\Seen' || flag === '\\Flagged')) {
+    get().setUndo({
+      labelKey: flag === '\\Seen'
+        ? (on ? 'undo.markedRead' : 'undo.markedUnread')
+        : (on ? 'undo.starred' : 'undo.unstarred'),
+      labelParams: { count: targets.length },
+      run: () => applyFlagToTargets(targets, flag, !on, { undoable: false }),
+    });
+  }
 
   if (flag === '\\Seen') {
     if (isUnified) {
@@ -1397,6 +1452,24 @@ export async function deleteSelectedFromServer() {
     }
   }
 
+  // One slot for the whole batch. Restorable wins over permanent: a mixed
+  // selection offers the undo for what CAN come back rather than reporting the
+  // half that cannot and leaving the rest stranded.
+  const restorable = deleted.filter(d => d.trashUid != null);
+  if (restorable.length) {
+    get().setUndo({
+      labelKey: 'undo.deleted',
+      labelParams: { count: restorable.length },
+      run: () => _restoreFromTrash(restorable),
+    });
+  } else if (deleted.length) {
+    get().setUndo({
+      labelKey: 'undo.deletedPermanently',
+      labelParams: { count: deleted.length },
+      canUndo: false,
+    });
+  }
+
   return { deleted };
 }
 
@@ -1420,6 +1493,11 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   const state = get();
   const isUnified = spansMailboxes(state);
   if (!keys?.length) return { deleted: 0, failed: 0, queuedBackup: 0, needsResync: 0 };
+
+  // A purge destroys every copy — nothing here can be undone, and a stale
+  // "Moved 3 to Trash" left in the slot would offer to restore messages this
+  // call is about to erase.
+  get().clearUndo();
 
   // Includes localEmails (unlike deleteSelectedFromServer's emailMap) because
   // that's where a genuinely local-only row actually lives. localEmails goes
@@ -1806,7 +1884,52 @@ export async function moveEmails(keys, targetMailbox) {
 
   get().loadEmails();
 
+  // Graph groups produce no record — no replayable uid, no COPYUID — so a
+  // Graph-only move leaves the previous slot alone rather than offering an
+  // undo it could not perform.
+  if (records.length) {
+    get().setUndo({
+      labelKey: 'undo.moved',
+      labelParams: {
+        count: records.reduce((n, r) => n + r.srcUids.length, 0),
+        folder: mailboxLabel(targetMailbox.split(/[./]/).pop()),
+      },
+      run: () => _undoMove(records),
+    });
+  }
+
   return { moved: records };
+}
+
+// Move the messages back. The destination uids came with COPYUID; without
+// UIDPLUS they are found by Message-ID in the destination folder.
+async function _undoMove(records) {
+  const { useMailStore } = await import('../../stores/mailStore');
+  for (const r of records) {
+    // Never sent: forgetting the journal entry IS the undo. The rows come back
+    // through the reload below — they were only hidden locally.
+    if (r.deferred) {
+      await db.clearOps({ op: 'move', accountId: r.accountId, mailbox: r.from, uids: r.srcUids });
+      continue;
+    }
+    const dst = r.dstUids ?? await _resolveDestinationUids(r.account, r.to, r.messageIds);
+    if (!dst.length) throw new Error(tr('undo.failed', { err: r.to }));
+    await api.moveEmails(r.account, dst, r.to, r.from);
+  }
+  useMailStore.getState().loadEmails();
+}
+
+// What a server with no UIDPLUS never told us: which uids the copies got. The
+// Message-ID is the only handle left, and only the hit in the destination
+// folder is this move's — the same id can sit in Sent or in the source.
+async function _resolveDestinationUids(account, mailbox, messageIds) {
+  const uids = [];
+  for (const mid of messageIds) {
+    if (!mid) continue;
+    const probe = await api.findMessageId(account, mid, { stopOnFirst: false });
+    for (const loc of probe?.found || []) if (loc.mailbox === mailbox) uids.push(loc.uid);
+  }
+  return uids;
 }
 
 // One (account, mailbox) of a move on a Graph account: every uid must resolve

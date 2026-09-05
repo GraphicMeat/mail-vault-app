@@ -20,6 +20,7 @@ import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
+import { UndoToast } from './components/UndoToast';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
@@ -408,6 +409,11 @@ function App() {
       const { selectedEmail, selectedEmailId } = useMailStore.getState();
       if (selectedEmail || selectedEmailId) useMailStore.getState().toggleFlagged(selectedEmailId);
     },
+    // One slot, not a stack: whatever the last mutation left there. The slot
+    // outlives its toast, so this still works long after the toast has gone.
+    // useKeyboardShortcuts ignores typing targets, so a text field's own Cmd+Z
+    // never reaches here.
+    undo: () => { useMailStore.getState().runUndo(); },
     // j/k walk the list the user can actually see: with the unread filter on,
     // the store still holds every loaded message, so navigating the raw
     // sortedEmails would select rows that aren't on screen.
@@ -1032,6 +1038,7 @@ function App() {
         onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
       />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
+      <UndoToast />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
       <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />

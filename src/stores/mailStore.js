@@ -6,6 +6,7 @@ import { createMessageListSlice, _resetNetworkRetry, _scheduleNetworkRetry } fro
 import { createSelectionSlice } from './slices/selectionSlice';
 import { createCacheSlice } from './slices/cacheSlice';
 import { createComposeSlice } from './slices/composeSlice';
+import { createUndoSlice } from './slices/undoSlice';
 import { createSyncSlice } from './slices/syncSlice';
 import { createUiSlice } from './slices/uiSlice';
 
@@ -36,6 +37,7 @@ export const useMailStore = create((...a) => ({
   ...createSelectionSlice(...a),
   ...createCacheSlice(...a),
   ...createComposeSlice(...a),
+  ...createUndoSlice(...a),
   ...createSyncSlice(...a),
   ...createUiSlice(...a),
 }));
