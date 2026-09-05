@@ -514,6 +514,22 @@ function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
 // is not the one on screen, so a body resolved against the active view instead
 // of the message's own folder renders visibly wrong content.
 
+/**
+ * A subject the way real mail carries one: partly RFC 2047 encoded, with plain
+ * quotes between the encoded words. That keeps the whole header ASCII, so the
+ * server sends it as an IMAP quoted-string and escapes the quotes — the shape
+ * that leaked `\"` into the list. A raw UTF-8 subject would travel as a literal
+ * and never be escaped at all.
+ */
+export const QUOTED_SUBJECT_WIRE =
+  '=?UTF-8?Q?Prat=C4=99skite_=C5=BEurnalo?= "Iliustruotoji istorija" =?UTF-8?Q?prenumerat=C4=85?=';
+/** What the list must show for QUOTED_SUBJECT_WIRE. */
+export const QUOTED_SUBJECT = 'Pratęskite žurnalo "Iliustruotoji istorija" prenumeratą';
+/** Two separate threads share it — same sender, same subject, no References. */
+export const QUOTED_SUBJECT_SENDER = 'Prenumerata <prenumerata@example.com>';
+export const QUOTED_SUBJECT_SENDER_NAME = 'Prenumerata';
+export const QUOTED_SUBJECT_COUNT = 2;
+
 export const SENT_THREAD_SUBJECT = 'Sent folder thread check';
 export const SENT_THREAD_BODY = 'Sent folder thread body';
 export const CROSS_FOLDER_SUBJECT = 'Cross folder thread check';
@@ -670,6 +686,26 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
       // mail. The tracker stays the first single-message row, which is the one
       // connected-export opens when it does not ask for a subject by name.
       append(inboxBox, [exportAttachmentMessage({ uid: rootUid + 7, owner, day: 54 })]);
+
+      // Two same-sender, same-subject, unrelated messages — the sender-group
+      // key collision, and the quoted-string escape, in one fixture.
+      //
+      // luke only: every other account's folder counts are read by a
+      // skipFolders spec. Days 42/43 sit above the generic mail (day == uid,
+      // <= 41) and below the attachment (54) and tracker (55) fixtures, so no
+      // spec's top rows and no spec's "first single-message row" move.
+      if (owner === 'luke@mock.test') {
+        append(inboxBox, [
+          threadMessage({
+            uid: 9501, owner, from: QUOTED_SUBJECT_SENDER, subject: QUOTED_SUBJECT_WIRE,
+            body: 'Subscription reminder one.', messageId: `quoted-subject-1@${owner}`, day: 42,
+          }),
+          threadMessage({
+            uid: 9502, owner, from: QUOTED_SUBJECT_SENDER, subject: QUOTED_SUBJECT_WIRE,
+            body: 'Subscription reminder two.', messageId: `quoted-subject-2@${owner}`, day: 43,
+          }),
+        ]);
+      }
 
       append(sentBox, [
         threadMessage({

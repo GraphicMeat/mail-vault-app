@@ -1242,6 +1242,7 @@ function EmailListComponent() {
 
                     {item.type === 'sender-email' && (
                       <button
+                        data-testid="sender-email-row"
                         onClick={() => {
                           // The message's own tag first — `_fromSentFolder` is a
                           // guess about which folder a Sent row came from, and a

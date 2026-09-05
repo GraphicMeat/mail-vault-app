@@ -15,6 +15,9 @@
 - **A message MailVault cannot place is refused, not fetched from the wrong account.** In All Inboxes, opening a row whose account could not be determined used to guess the active account and could show a stranger's message under that number; it now says so and shows nothing.
 - **A damaged header page fails and is retried instead of showing a short list.** When a server sends a header MailVault cannot parse, the page used to come back silently shorter; it is now reported and fetched again on the next pass, and the background backfill no longer gives up on the whole folder over one bad line.
 - **Moving a message no longer clears an unrelated selection.** Moving one row from its menu used to deselect everything you had ticked elsewhere in the list; it now clears only what it moved.
+- **Quotation marks in a subject or a name are no longer shown with backslashes.** A subject like Pratęskite žurnalo "Iliustruotoji istorija" prenumeratą arrived with the server's own escaping still in it, and the list drew the backslashes; so did the To: line in a thread. Messages already in the list keep them until they are fetched again.
+- **Grouping by sender no longer stacks rows on top of each other.** Several conversations from one sender that happen to share a subject — five identical contact-form notifications, say — were treated as one row and drew over each other, and a conversation from elsewhere appeared at the wrong place in the list. Each conversation is now its own row.
+- **The message you are reading is visible in the list.** Selection was a thin line down the left edge, easy to lose next to an unread message's own background; the open message now has a filled background as well.
 
 ## [2.11.3] - 2026-09-04
 
