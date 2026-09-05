@@ -122,6 +122,13 @@ pub struct SyncEngine {
     /// Filled the first time a SELECT comes back "no such mailbox", so the
     /// LIST that resolves it costs one round trip per process, not per tick.
     mailbox_aliases: Mutex<HashMap<String, String>>,
+    /// One lock per `account_id\x01mailbox`, held for the working part of
+    /// `sync_account`. An IDLE wake-up and the app's own `sync.now` can ask for
+    /// the same folder in the same instant: without this they both FETCH the
+    /// same headers — twice the bytes against the daily transfer cap — and both
+    /// publish a ChangeRecord for one message. Keyed by mailbox and not by
+    /// account on purpose: INBOX and Sent are meant to sync concurrently.
+    sync_locks: Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>,
 }
 
 impl SyncEngine {
@@ -149,6 +156,7 @@ impl SyncEngine {
             net,
             cap_logged: Mutex::new(HashMap::new()),
             mailbox_aliases: Mutex::new(HashMap::new()),
+            sync_locks: Mutex::new(HashMap::new()),
         }
     }
 
@@ -180,6 +188,9 @@ impl SyncEngine {
                 updated_flags,
                 at: unix_now(),
             });
+            // ponytail: 64 records. A client more than 64 changes behind still
+            // gets the new gen, but with incomplete detail — it must fall back
+            // to a full resync, which is the upgrade path if that ever bites.
             while recent.len() > 64 {
                 recent.pop_front();
             }
@@ -197,7 +208,14 @@ impl SyncEngine {
     pub async fn wait_changes(&self, since: u64, timeout_ms: u64) -> (u64, Vec<ChangeRecord>) {
         let mut rx = self.changes.subscribe();
         let current = *rx.borrow();
-        if current <= since {
+        // A cursor from a *previous* daemon process: `gen` restarts at 0 on
+        // every launch, so after a restart the app polls with a number we will
+        // never reach and every poll would time out, for ever. Answer at once
+        // with the generation we actually have and let it re-adopt ours.
+        if since > current {
+            return (current, Vec::new());
+        }
+        if current == since {
             let _ = tokio::time::timeout(
                 std::time::Duration::from_millis(timeout_ms),
                 rx.changed(),
@@ -339,6 +357,19 @@ impl SyncEngine {
                 success: false, error: Some(reason), offline: false,
             };
         }
+
+        // One sync at a time per (account, mailbox) — see `sync_locks`. Taken
+        // after the two early returns so an offline or capped account answers
+        // straight away instead of queueing behind a live fetch.
+        let folder_lock = {
+            let mut locks = self.sync_locks.lock().await;
+            Arc::clone(
+                locks
+                    .entry(format!("{}\x01{}", account_id, mailbox))
+                    .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
+            )
+        };
+        let _folder_guard = folder_lock.lock().await;
 
         // Update state to syncing. Carry the last result forward — `sync.status`
         // is what the app shows *while* the sync runs, and blanking it flashed
@@ -2266,6 +2297,28 @@ mod tests {
         let (g, recs) = waiter.await.unwrap();
         assert_eq!(g, g1 + 1);
         assert_eq!(recs[0].updated_flags, 3);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// `gen` restarts at 0 in every new process, so after a daemon restart the
+    /// app comes back holding a cursor from the *previous* one. Parking it for
+    /// the full timeout — for ever, poll after poll — is the bug; answering
+    /// with the generation we actually have lets it re-adopt ours.
+    #[tokio::test]
+    async fn wait_changes_answers_at_once_when_the_cursor_is_ahead_of_a_restarted_daemon() {
+        let dir = scratch_dir("changes_restart");
+        let engine = engine_for(&dir);
+
+        let started = std::time::Instant::now();
+        let (g, recs) = engine.wait_changes(1_000_000, 5_000).await;
+        assert_eq!(g, engine.change_gen());
+        assert!(recs.is_empty(), "nothing happened, so there is nothing to report");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "a cursor from a dead process must not park the poll: took {:?}",
+            started.elapsed()
+        );
 
         fs::remove_dir_all(&dir).unwrap();
     }

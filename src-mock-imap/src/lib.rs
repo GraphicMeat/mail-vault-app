@@ -184,7 +184,13 @@ fn handle_conn(
         if line.is_empty() {
             continue;
         }
-        log.lock().unwrap().push(line.clone());
+        // Everything but IDLE is logged here. IDLE logs itself, inside
+        // `idle_loop` and AFTER its baseline snapshot: a test that waits for
+        // the IDLE line and then mutates the mailbox must not be able to slip
+        // its change in between the two, or the change is never reported.
+        if !commands::parse_command(&line).is_some_and(|c| c.name == "IDLE") {
+            log.lock().unwrap().push(line.clone());
+        }
 
         // A trailing {n} / {n+} means a literal follows.
         let (line, literal) = read_literal(&line, &mut reader, &mut out)?;
@@ -228,7 +234,7 @@ fn handle_conn(
         // cannot go through `dispatch`. It sits below fault matching on purpose:
         // a `Trigger::nth("IDLE", 1)` drop is how the reconnect path gets tested.
         if cmd.name == "IDLE" {
-            idle_loop(&mut reader, &mut out, &state, &sess, &cmd.tag, &log)?;
+            idle_loop(&mut reader, &mut out, &state, &sess, &cmd.tag, &line, &log)?;
             continue;
         }
 
@@ -256,28 +262,48 @@ fn handle_conn(
 /// RFC 2177. Blocks this connection's thread until DONE, polling the shared
 /// state every 50 ms and reporting what changed in the selected mailbox as a
 /// real server would: EXISTS for new mail, FETCH FLAGS for a flag change.
+///
+/// ponytail: two known ceilings, both fine for what this mock is for — proving
+/// the daemon's watcher wakes up and re-syncs the folder, which it does for
+/// either shape.
+///   1. A message count that DECREASES is reported as `* N EXISTS` too, where a
+///      real server sends `* n EXPUNGE`. Track per-message removals and emit
+///      EXPUNGE if a test ever has to tell the two apart.
+///   2. Only the single message whose `modseq` equals the new highest is
+///      reported as FETCH, so two STOREs inside one 50 ms window surface as
+///      one. Remember the previous highest and report every message above it if
+///      a test needs both.
 fn idle_loop(
     reader: &mut BufReader<TcpStream>,
     out: &mut TcpStream,
     state: &Arc<Mutex<ServerState>>,
     sess: &Session,
     tag: &str,
+    raw: &str,
     log: &Arc<Mutex<Vec<String>>>,
 ) -> std::io::Result<()> {
     let Some(name) = sess.selected.clone() else {
+        log.lock().unwrap().push(raw.to_string());
         return write_line(out, format!("{} BAD No mailbox selected", tag).as_bytes());
     };
     write_line(out, b"+ idling")?;
     let snapshot =
         |st: &ServerState| st.find(&name).map(|mb| (mb.messages.len(), mb.highest_modseq)).unwrap_or((0, 0));
     let (mut count, mut modseq) = snapshot(&state.lock().unwrap());
+    // Logged only now, with the baseline already taken: a test that waits for
+    // this line and then mutates the mailbox is guaranteed to be seen.
+    log.lock().unwrap().push(raw.to_string());
     reader.get_ref().set_read_timeout(Some(Duration::from_millis(50)))?;
+    // `line` outlives the iteration on purpose. `read_line` APPENDS what it
+    // read and keeps it on a WouldBlock, so a client whose DONE straddles the
+    // 50 ms poll boundary would lose its first bytes to a fresh String.
+    let mut line = String::new();
     let result = loop {
-        let mut line = String::new();
         match reader.read_line(&mut line) {
             Ok(0) => break Ok(()),
             Ok(_) => {
                 let l = line.trim_end_matches(['\r', '\n']).to_string();
+                line.clear();
                 if l.is_empty() {
                     continue;
                 }

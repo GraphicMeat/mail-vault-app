@@ -78,10 +78,20 @@ impl IdleWatchers {
         let fingerprint = format!("{:?}", account.imap_config);
         let mut tasks = self.tasks.lock().await;
         if let Some(existing) = tasks.get(&account.id) {
-            if existing.fingerprint == fingerprint {
+            // A task that ended without recording a `reason` did not choose to:
+            // it panicked, or something aborted it. Respawn. One that DID set a
+            // reason ("no IDLE capability") stays dead, or the app's
+            // re-registration would redial that server every tick.
+            let died = existing.handle.is_finished()
+                && existing.state.lock().unwrap().reason.is_none();
+            if existing.fingerprint == fingerprint && !died {
                 return;
             }
-            info!("[idle] {} config changed — replacing its watcher", account.id);
+            info!(
+                "[idle] {} — replacing its watcher ({})",
+                account.id,
+                if died { "the task ended" } else { "config changed" }
+            );
             existing.handle.abort();
         }
 
@@ -190,8 +200,6 @@ impl IdleWatchers {
                         break;
                     }
                 };
-                // A full IDLE round is proof the connection is healthy.
-                backoff = self.backoff_base;
 
                 match response {
                     Ok(IdleResponse::NewData(_)) => {
@@ -221,6 +229,12 @@ impl IdleWatchers {
                         break;
                     }
                 }
+                // Only here: a round that ended in data or a timeout is proof
+                // the connection is healthy. Every failing arm above breaks out
+                // to reconnect and must keep the backoff it had, or a server
+                // that fails one round in every two is dialled at full speed
+                // for ever.
+                backoff = self.backoff_base;
             }
 
             state.lock().unwrap().idling = false;
@@ -414,8 +428,11 @@ mod tests {
         );
 
         watchers.watch(account_for(&server), Duration::from_secs(60)).await;
+        // The dropped IDLE never reaches `idle_loop`, which is what logs it —
+        // so the one logged line IS the second connection's, and the connection
+        // count is what proves the first one died.
         wait_until(
-            || server.connection_count() >= 2 && server.count_commands("IDLE") >= 2,
+            || server.connection_count() >= 2 && server.count_commands("IDLE") >= 1,
             5_000,
             "a second connection that idles again",
         )
@@ -480,6 +497,51 @@ mod tests {
 
         watchers.unwatch("acc1").await;
         assert!(watchers.status().await.is_empty());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A task that died without recording a `reason` (a panic, a stray abort)
+    /// left the map entry behind, and every later `watch()` matched its
+    /// fingerprint and returned — the account stopped noticing new mail until
+    /// the daemon restarted.
+    #[tokio::test]
+    async fn watch_respawns_a_watcher_whose_task_died_without_a_reason() {
+        let dir = scratch_dir("idle_respawn");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+        let engine = Arc::new(engine_for(&dir));
+        let watchers = IdleWatchers::new(
+            Arc::clone(&engine),
+            Arc::new(imap::ImapPool::new()),
+            gate(true),
+            Duration::from_millis(50),
+        );
+        let account = account_for(&server);
+
+        watchers.watch(account.clone(), Duration::from_secs(60)).await;
+        wait_until(|| server.count_commands("IDLE") >= 1, 5_000, "the first IDLE").await;
+        let before = server.connection_count();
+
+        // Kill it the way a panic would: the task ends, no reason recorded.
+        watchers.tasks.lock().await.get("acc1").unwrap().handle.abort();
+        for _ in 0..250 {
+            if watchers.tasks.lock().await["acc1"].handle.is_finished() {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        assert!(watchers.status().await[0].reason.is_none(), "it did not choose to stop");
+
+        watchers.watch(account, Duration::from_secs(60)).await;
+        wait_until(
+            || server.connection_count() > before && server.count_commands("IDLE") >= 2,
+            5_000,
+            "a fresh task on a fresh connection",
+        )
+        .await;
+        assert_eq!(server.connection_count(), before + 1, "one replacement, not a storm");
+        assert_eq!(watchers.status().await.len(), 1);
+
+        watchers.shutdown().await;
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }
