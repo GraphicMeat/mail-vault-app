@@ -1253,9 +1253,11 @@ function EmailListComponent() {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }
                         }}
-                        className={`w-full h-full flex items-center gap-3 pl-16 pr-4 text-left hover:bg-mail-surface-hover bg-mail-surface border-b border-mail-border ${
-                          expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : ''
-                        } ${selectedEmailId === selKey(item.email) ? 'ring-1 ring-mail-accent/50' : ''} ${focusedRow?.type === 'email' && focusedRow?.emailUid === item.email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
+                        className={`w-full h-full flex items-center gap-3 pl-16 pr-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                          selectedEmailId === selKey(item.email)
+                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent'
+                            : expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : 'bg-mail-surface'
+                        } ${focusedRow?.type === 'email' && focusedRow?.emailUid === item.email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">

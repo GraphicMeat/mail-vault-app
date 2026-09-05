@@ -98,8 +98,8 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${isUnread && !(isSelected && !isChecked) ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
@@ -220,8 +220,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !isChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${isUnread && !(isSelected && !isChecked) ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>

@@ -105,8 +105,8 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !anyChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !anyChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${hasUnread && !(isSelected && !anyChecked) ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
@@ -240,8 +240,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !anyChecked ? 'border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread ? 'bg-mail-surface' : ''}`}
+                 ${isSelected && !anyChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
+                 ${hasUnread && !(isSelected && !anyChecked) ? 'bg-mail-surface' : ''}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
