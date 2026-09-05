@@ -1390,8 +1390,13 @@ pub fn internal_date_from_raw(raw: &[u8]) -> Option<String> {
     use chrono::TimeZone;
     use mailparse::MailHeaderMap;
     let parsed = mailparse::parse_mail(raw).ok()?;
-    let date = parsed.headers.get_first_value("Date")?;
-    let secs = mailparse::dateparse(&date).ok()?;
+    let date = parsed.headers.get_first_value("Date");
+    let Some(secs) = date.as_deref().and_then(|d| mailparse::dateparse(d).ok()) else {
+        // Never fail an append over a date, but a restore that silently keeps
+        // "now" here reproduces the exact bug this function exists to fix.
+        tracing::debug!("internal_date_from_raw: no usable Date header ({:?})", date);
+        return None;
+    };
     let utc = chrono::Utc.timestamp_opt(secs, 0).single()?;
     Some(imap_date_time(&utc.with_timezone(&chrono::FixedOffset::east_opt(0)?)))
 }

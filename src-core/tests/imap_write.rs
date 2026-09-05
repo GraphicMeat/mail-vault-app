@@ -327,3 +327,16 @@ fn internal_date_comes_from_the_date_header() {
     assert_eq!(internal_date_from_raw(raw.as_bytes()).as_deref(), Some("01-Jan-2026 12:00:00 +0000"));
     assert_eq!(internal_date_from_raw(b"Subject: no date\r\n\r\nx"), None);
 }
+
+/// `internal_date_from_raw`'s only other test exposure hands it a fixed UTC
+/// offset, so `%z` never renders a non-zero offset from this function's own
+/// output. Pin the RFC 3501 form directly against a non-zero offset.
+#[test]
+fn imap_date_time_renders_the_rfc_3501_form() {
+    use chrono::TimeZone;
+    let dt = chrono::FixedOffset::east_opt(3600)
+        .unwrap()
+        .with_ymd_and_hms(2019, 3, 5, 8, 15, 0)
+        .unwrap();
+    assert_eq!(imap_date_time(&dt), "05-Mar-2019 08:15:00 +0100");
+}
