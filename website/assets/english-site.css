@@ -354,3 +354,16 @@ main>.mv-currency-control { max-width:1128px; margin:0 auto 24px; padding-inline
 .mv-portable-note strong { font-size:1.35rem; line-height:1.4; display:block; margin-bottom:12px; }
 .mv-portable-note p { max-width:78ch; color:var(--mv-muted); }
 @media(max-width:760px) { .mv-pixel-banner { gap:12px; padding:16px 12px; }.mv-pixel-banner img { width:56px; height:56px; }.mv-pixel-grill p { font-size:1rem; }.mv-portable-note { margin-inline:22px; padding:24px; } }
+
+/* Lightweight community support below the primary download action. */
+.mv-community-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
+.mv-community-actions :is(button,a) { display:inline-flex; align-items:center; gap:8px; min-height:44px; padding:9px 12px; border:1px solid var(--mv-line); border-radius:8px; background:var(--mv-card); color:var(--mv-ink); font:inherit; font-size:.85rem; font-weight:550; cursor:pointer; }
+.mv-community-actions :is(button,a):hover { background:var(--mv-tint); }
+.mv-community-actions button[aria-pressed="true"] { border-color:var(--mv-accent); }
+.mv-community-actions button:disabled { opacity:.65; cursor:wait; }
+.mv-heart { color:#dc477b; font-size:1.3rem; line-height:1; }
+.mv-star { color:#ac7916; font-size:1.3rem; line-height:1; }
+.dark .mv-star { color:#efc468; }
+.mv-community-count { font-variant-numeric:tabular-nums; padding-left:8px; border-left:1px solid var(--mv-line); }
+.mv-site .mv-community-status { font-size:.8rem; color:var(--mv-muted); margin:8px 0 0; }
+.mv-community-status:empty { display:none; }

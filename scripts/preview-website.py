@@ -2,7 +2,7 @@
 """Serve a review copy without billing, signup, or analytics side effects.
 
 Usage: python3 scripts/preview-website.py --directory website --port 3080
-Only the public pricing GET is proxied. All POST requests are rejected.
+Public pricing and vote-count GETs are proxied. All POST requests are rejected.
 """
 import argparse
 import json
@@ -30,6 +30,17 @@ class PreviewHandler(SimpleHTTPRequestHandler):
         path = unquote(urlsplit(self.path).path)
         if path == '/gm.js':
             return self.reply(200, b'/* Analytics disabled in review preview. */', 'text/javascript')
+        if path == '/api/votes':
+            try:
+                req = Request('https://mailvaultapp.com/api/votes', headers={'Accept': 'application/json', 'User-Agent': 'MailVaultPreview/1.0'})
+                with urlopen(req, timeout=8) as res:
+                    data = json.loads(res.read())
+                count = data.get('count')
+                if type(count) is not int or count < 0:
+                    raise ValueError('Invalid vote count')
+                return self.reply(200, json.dumps({'count': count}).encode())
+            except Exception:
+                return self.reply(503, b'{"error":"votes_unavailable"}')
         if path == '/api/billing/pricing':
             try:
                 currency = parse_qs(urlsplit(self.path).query).get('currency', [''])[0]
