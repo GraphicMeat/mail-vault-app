@@ -418,6 +418,65 @@ async fn verified_append_carries_the_internal_date_too() {
     assert_eq!(state.find("INBOX").unwrap().messages.last().unwrap().internal_date, "05-Mar-2019 08:15:00 +0100");
 }
 
+/// The verified path is what a migration and a restore both append through, and
+/// it hand-rolls its command line to get LITERAL+ (`{n+}`) — Hostinger never
+/// answered the `+ Ready` of a synchronous literal. Hand-rolled means the RFC
+/// 3501 order is ours to get wrong: `APPEND mailbox (flags) "date-time" {n+}`.
+/// Flags and a date have never been sent together on this path before, and a
+/// date in the flags' position is a message dated "now" on every server that
+/// parses it at all.
+///
+/// Runs under tokio, not async-std: `append_email_verified` wraps its APPEND in
+/// `tokio::time::timeout` (see `append_verified_survives_a_slow_server`).
+#[tokio::test]
+async fn verified_append_sends_flags_then_date_then_a_non_sync_literal() {
+    let server = MockImap::start(
+        Scenario::new()
+            .capabilities(&[
+                "IMAP4rev1", "UIDPLUS", "MOVE", "CONDSTORE", "IDLE", "SPECIAL-USE",
+                "AUTH=XOAUTH2", "LITERAL+",
+            ])
+            .mailbox(Mailbox::new("INBOX")),
+    );
+    let config = common::config_for(&server);
+    let mut sess = create_imap_session_no_compress(&config).await.expect("session");
+    let raw = eml("Migrated", "a@example.com", "body");
+
+    let (before, after, found) = append_email_verified(
+        &mut sess,
+        "INBOX",
+        raw.as_bytes(),
+        "\\Seen \\Flagged",
+        Some("<migrated@example.com>"),
+        Some("05-Mar-2019 08:15:00 +0000"),
+    )
+    .await
+    .expect("verified append");
+    assert_eq!((before, after, found), (0, 1, Some(1)));
+
+    // The whole line after the tag, not a `contains`: the defect this guards is
+    // an argument in the wrong PLACE, which every substring check still passes.
+    let append = server
+        .commands()
+        .into_iter()
+        .find(|c| c.contains("APPEND"))
+        .expect("an APPEND line");
+    let (_tag, rest) = append.split_once(' ').expect("tag and command");
+    assert_eq!(
+        rest,
+        format!(
+            "APPEND \"INBOX\" (\\Seen \\Flagged) \"05-Mar-2019 08:15:00 +0000\" {{{}+}}",
+            raw.len()
+        ),
+        "RFC 3501 order is mailbox, (flags), \"date-time\", literal: {append}"
+    );
+
+    let state = server.state();
+    let msg = state.find("INBOX").unwrap().messages.last().expect("appended");
+    assert!(msg.has_flag("\\Seen") && msg.has_flag("\\Flagged"), "flags dropped: {:?}", msg.flags);
+    assert_eq!(msg.internal_date, "05-Mar-2019 08:15:00 +0000");
+}
+
 #[test]
 fn internal_date_comes_from_the_date_header() {
     // eml() writes `Date: Thu, 01 Jan 2026 12:00:00 +0000`.

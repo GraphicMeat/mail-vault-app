@@ -748,7 +748,7 @@ pub async fn fetch_emails_page(
         .await
         .map_err(|e| format!("FETCH failed: {}", e))?;
 
-    let fetches = collect_fetches(fetch_stream, "fetch_emails_page").await;
+    let fetches = collect_fetches_strict(fetch_stream, "fetch_emails_page").await?;
 
     let mut emails = Vec::new();
     let mut skipped_uids = Vec::new();
@@ -798,7 +798,7 @@ pub async fn fetch_emails_range(
         .await
         .map_err(|e| format!("FETCH range failed: {}", e))?;
 
-    let fetches = collect_fetches(fetch_stream, "fetch_emails_range").await;
+    let fetches = collect_fetches_strict(fetch_stream, "fetch_emails_range").await?;
 
     let mut emails = Vec::new();
     let mut skipped_uids = Vec::new();
@@ -1057,7 +1057,7 @@ pub async fn fetch_headers_by_uids(
             .await
             .map_err(|e| format!("UID FETCH {} failed: {}", uid_set, e))?;
 
-        let fetches = collect_fetches(fetch_stream, "fetch_headers_by_uids").await;
+        let fetches = collect_fetches_strict(fetch_stream, "fetch_headers_by_uids").await?;
 
         for fetch in &fetches {
             match parse_header_from_fetch(fetch) {
@@ -1377,8 +1377,12 @@ pub async fn run_collecting_copyuid(
 /// every item after it is lost and the page that comes back is short. The
 /// callers' completeness checks (EXISTS on the Rust side, provedComplete on
 /// the JS side) keep a short page from being read as the whole mailbox; this
-/// makes the shortfall diagnosable from the logs instead of silent. Proper
-/// propagation of the error is B4 in the parity audit.
+/// makes the shortfall diagnosable from the logs instead of silent.
+///
+/// For a caller that lists — a page, a range, a uid set — use the strict twin
+/// `collect_fetches_strict`, which fails instead of returning a short answer
+/// (B4 in the parity audit). This one is for `search_emails`, whose rows are a
+/// filtered view the user asked for and are reconciled against nothing.
 async fn collect_fetches<S>(stream: S, what: &str) -> Vec<Fetch>
 where
     S: futures::Stream<Item = async_imap::error::Result<Fetch>> + Unpin,
@@ -1405,6 +1409,46 @@ where
         );
     }
     out
+}
+
+/// Collect a FETCH stream, or fail if any item did not parse.
+///
+/// B4. A listing path cannot return a short page: the decoder stops advancing
+/// after the line it choked on, so the rows behind it are gone too, and what
+/// comes back is indistinguishable from a mailbox that really holds that many.
+/// Downstream that is a header cache pruned against a partial answer. An error
+/// leaves the previous contents alone and lets the caller retry.
+async fn collect_fetches_strict<S>(stream: S, what: &str) -> Result<Vec<Fetch>, String>
+where
+    S: futures::Stream<Item = async_imap::error::Result<Fetch>> + Unpin,
+{
+    let mut out = Vec::new();
+    let mut dropped = 0usize;
+    let mut first_err: Option<String> = None;
+    let mut stream = stream;
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(f) => out.push(f),
+            Err(e) => {
+                dropped += 1;
+                if first_err.is_none() {
+                    first_err = Some(e.to_string());
+                }
+            }
+        }
+    }
+    if dropped > 0 {
+        let first = first_err.unwrap_or_default();
+        warn!(
+            "[{}] {} FETCH item(s) unparseable (first: {}); failing the page",
+            what, dropped, first
+        );
+        return Err(format!(
+            "{}: {} FETCH item(s) unparseable ({}); page incomplete",
+            what, dropped, first
+        ));
+    }
+    Ok(out)
 }
 
 /// Expunge `uid_set` — `UID EXPUNGE` (RFC 4315 UIDPLUS) when the server has

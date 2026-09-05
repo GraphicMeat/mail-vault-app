@@ -765,7 +765,7 @@ fn do_append(cmd: &Command, state: &mut ServerState) -> Response {
     let mut args = cmd.args.as_str();
     let name = next_arg(&mut args).unwrap_or_default();
     // Optional flag list and optional date-time precede the literal marker.
-    let _flags = next_group(&mut args);
+    let flags = next_group(&mut args);
     let date = if args.trim_start().starts_with('"') { next_arg(&mut args) } else { None };
 
     let Some(mb) = state.find_mut(&name) else {
@@ -775,6 +775,11 @@ fn do_append(cmd: &Command, state: &mut ServerState) -> Response {
     let validity = mb.uid_validity;
     let modseq = mb.highest_modseq + 1;
     let mut msg = Message::new(uid, cmd.literal.clone());
+    // A real server keeps what APPEND was given: a migrated message arriving
+    // unread and unflagged is the whole point of sending the flag list.
+    if let Some(f) = flags {
+        msg.flags = f.split_whitespace().map(|s| s.to_string()).collect();
+    }
     if let Some(d) = date {
         msg.internal_date = d;
     }

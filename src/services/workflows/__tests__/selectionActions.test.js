@@ -26,6 +26,12 @@ const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+// The vault's index entry for the message being deleted, and the write that
+// stamps it. Absent from this file's mocks, `stampVaultEntry` threw on
+// `db.getLocalIndexEntry is not a function`, its own catch swallowed that, and
+// the custody stamp every delete here is supposed to write was never exercised.
+const mockGetLocalIndexEntry = vi.fn();
+const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 
 // The connectivity verdict the delete reads. Offline is not a failure — the
 // journal entry stays and replayOps sends it when the link is back.
@@ -47,6 +53,7 @@ vi.mock('../../db', () => ({
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
+  getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   queueOp: (...a) => mockQueueOp(...a),
   clearOps: (...a) => mockClearOps(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
@@ -64,6 +71,7 @@ vi.mock('../../api', () => ({
   deleteEmail: (...a) => mockDeleteEmail(...a),
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
+  appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -167,6 +175,9 @@ const seenOf = (uid) =>
 beforeEach(() => {
   vi.clearAllMocks();
   netOnline = true;
+  // uid 1 is the message every delete case here removes; the vault holds it.
+  mockGetLocalIndexEntry.mockResolvedValue({ uid: 1, subject: 'General', flags: ['archived'], source: 'local' });
+  mockAppendLocalIndex.mockResolvedValue(undefined);
   mockDeleteEmail.mockResolvedValue(undefined);
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
@@ -340,6 +351,35 @@ describe('deleteSelectedFromServer', () => {
 
     // The tombstone is lifted so the loadEmails() reconcile can restore it.
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+  });
+
+  // Custody's gold claim — "the vault copy is the only one left because WE
+  // removed the server copy" — has to survive a reload, so it is written onto
+  // the vault's index entry, not held in memory. Derivation used to infer it
+  // from "uid missing from the active mailbox's set", which is a mailbox fact
+  // wearing a server fact's clothes.
+  it('stamps the vault entry serverDeleted once the server confirms', async () => {
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockGetLocalIndexEntry).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', 1);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX',
+      [expect.objectContaining({ uid: 1, serverDeleted: true })],
+    );
+    // The entry is re-appended, not replaced: local_index_append upserts by
+    // uid, so anything the vault already knew has to ride along.
+    expect(mockAppendLocalIndex.mock.calls[0][2][0].source).toBe('local');
+  });
+
+  it('writes no such stamp when the server delete failed', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), [1]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
   // A Graph "uid" is the message's POSITION in the folder listing, so the
@@ -614,6 +654,29 @@ describe('deleteEmailFromServer', () => {
     await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
 
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
+  });
+
+  // The bulk path stamps at its own call site; this one goes through
+  // applyServerRemoval's `deletedByUs`. Two call sites, so two assertions —
+  // commenting either one out has to turn something red.
+  it('stamps the vault entry serverDeleted through applyServerRemoval', async () => {
+    primeStore(seedThread(), []);
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX',
+      [expect.objectContaining({ uid: 1, serverDeleted: true })],
+    );
+  });
+
+  it('leaves the vault entry unstamped when the server refuses', async () => {
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    primeStore(seedThread(), []);
+
+    await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
+
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
   it('clears the viewer when the deleted row was the open email', async () => {

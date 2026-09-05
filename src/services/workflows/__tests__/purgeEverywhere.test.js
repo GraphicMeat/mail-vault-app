@@ -24,6 +24,7 @@ vi.mock('../../api', () => ({
   maildirDeleteMany: (...a) => mockMaildirDeleteMany(...a),
   backupPurgeUids: (...a) => mockBackupPurgeUids(...a),
   checkMailboxStatus: (...a) => mockCheckMailboxStatus(...a),
+  appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
   fetchEmailLight: vi.fn(),
   updateEmailFlags: vi.fn().mockResolvedValue(undefined),
@@ -31,6 +32,12 @@ vi.mock('../../api', () => ({
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   graphSetRead: vi.fn().mockResolvedValue(undefined),
 }));
+
+// The vault index read/write pair `stampVaultEntry` uses. Mocked here so a
+// stamp on this path would be a visible call rather than a TypeError the
+// helper's own catch swallows.
+const mockGetLocalIndexEntry = vi.fn().mockResolvedValue({ uid: 1, flags: ['archived'], source: 'local' });
+const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 
 const mockGetLocalIndexProvenance = vi.fn().mockResolvedValue(new Map());
 const mockGetEmailHeadersMeta = vi.fn().mockResolvedValue({ uidValidity: 1 });
@@ -43,6 +50,7 @@ vi.mock('../../db', () => ({
   getLocalEmails: vi.fn().mockResolvedValue([]),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
   getLocalIndexProvenance: (...a) => mockGetLocalIndexProvenance(...a),
+  getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
   getEmailHeadersMeta: (...a) => mockGetEmailHeadersMeta(...a),
@@ -134,6 +142,8 @@ beforeEach(() => {
   mockMaildirDeleteMany.mockReset().mockResolvedValue({ removed: 0 });
   mockBackupPurgeUids.mockReset().mockResolvedValue({ removed: 0, queued: 0 });
   mockGetLocalIndexProvenance.mockReset().mockResolvedValue(new Map());
+  mockGetLocalIndexEntry.mockReset().mockResolvedValue({ uid: 1, flags: ['archived'], source: 'local' });
+  mockAppendLocalIndex.mockReset().mockResolvedValue(undefined);
   // Without this, prune assertions match a previous test's call and pass (or
   // fail) for the wrong reason.
   mockSaveEmailHeaders.mockReset().mockResolvedValue(undefined);
@@ -183,6 +193,20 @@ describe('purgeEverywhere — storage matrix', () => {
     await purgeEverywhere([1]);
 
     expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(1))).toBe(false);
+  });
+
+  // The server-only delete stamps the vault entry `serverDeleted: true` — the
+  // durable proof behind custody's gold claim. A purge must not: it destroys
+  // the vault copy in the same breath, so the stamp would leave an index entry
+  // claiming custody of bytes that are gone, and a row on screen with nothing
+  // behind it after the next reload.
+  it('writes no custody stamp — the vault copy is going too', async () => {
+    prime({ emails: [serverMsg(1)], archived: [1] });
+
+    await purgeEverywhere([1]);
+
+    expect(mockMaildirDeleteMany).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX.Spam', [1]);
+    expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
   it('server + vault: purges the archived local copy', async () => {

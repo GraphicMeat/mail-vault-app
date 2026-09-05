@@ -7,8 +7,9 @@
 // `deleteMode` rather than the old boolean `showDeleteConfirm`.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { create } from 'zustand';
+import { t as tr } from '../../i18n/index.js';
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -59,10 +60,15 @@ const useMailStoreMock = create(() => ({
 // getState as well as the hook: the Export button resolves selection keys back
 // to rows imperatively, and a double that is only callable as a hook throws the
 // moment someone clicks it — while every render-only test stays green.
+// setState too: the bar writes its own refusal toast into `error`, and a
+// double without it turns "the toast is missing" into "the click threw".
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: Object.assign(
     (selector) => useMailStoreMock(selector),
-    { getState: () => useMailStoreMock.getState() },
+    {
+      getState: () => useMailStoreMock.getState(),
+      setState: (patch) => useMailStoreMock.setState(patch),
+    },
   ),
 }));
 
@@ -164,6 +170,66 @@ describe('SelectionActionBar delete confirmation', () => {
 
     expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1);
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
+  });
+});
+
+// W6. The destroying actions refuse a row they cannot place — which account,
+// which folder — and the whole selection stays put. That refusal used to reach
+// the console only, so pressing Delete looked like pressing nothing: the rows
+// sat there, the bar sat there, no message anywhere.
+describe('SelectionActionBar refusal reporting', () => {
+  const REFUSAL = 'Cannot tell which account and folder hold message acct-1:INBOX:7.';
+  let consoleError;
+
+  beforeEach(() => {
+    consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    useMailStoreMock.setState({
+      selectedEmailIds: new Set([1, 2]),
+      archivedEmailIds: new Set(),
+      error: null,
+      clearSelection: vi.fn(),
+      saveSelectedLocally: vi.fn(),
+      markSelectedAsRead: vi.fn().mockRejectedValue(new Error(REFUSAL)),
+      markSelectedAsUnread: vi.fn(),
+      deleteSelectedFromServer: vi.fn().mockRejectedValue(new Error(REFUSAL)),
+      purgeSelectedEverywhere: vi.fn().mockRejectedValue(new Error(REFUSAL)),
+      removeLocalEmail: vi.fn(),
+      getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+    });
+  });
+  afterEach(() => { consoleError.mockRestore(); cleanup(); });
+
+  const confirmVia = (trigger, confirmLabel) => {
+    fireEvent.click(screen.getByTitle(trigger));
+    const buttons = screen.getAllByRole('button', { name: confirmLabel });
+    fireEvent.click(buttons[buttons.length - 1]);
+  };
+
+  it('puts a refused server delete on screen', async () => {
+    render(<SelectionActionBar />);
+    confirmVia('Delete from server', 'Delete from server');
+
+    await waitFor(() =>
+      expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
+  });
+
+  it('puts a refused purge on screen too', async () => {
+    render(<SelectionActionBar />);
+    confirmVia('Delete everywhere', 'Delete everywhere');
+
+    await waitFor(() =>
+      expect(useMailStoreMock.getState().error).toBe(tr('list.deleteFailed', { err: REFUSAL })));
+  });
+
+  // Mark and save SKIP a row they cannot place and carry on with the rest, so
+  // there is nothing to report: a toast over a partial success would be the
+  // wrong message, and the log line is the record.
+  it('says nothing when a mark action fails', async () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Mark as read'));
+
+    await waitFor(() => expect(consoleError).toHaveBeenCalled());
+    expect(useMailStoreMock.getState().error).toBe(null);
   });
 });
 

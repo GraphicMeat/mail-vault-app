@@ -14,7 +14,7 @@ vi.mock('lucide-react', () => {
   });
 });
 
-import { FolderTree } from '../FolderTree';
+import { FolderTree, FolderBubbles } from '../FolderTree';
 
 const box = (path) => ({ path, name: path, delimiter: '/', specialUse: null, noselect: false, children: [] });
 
@@ -43,5 +43,29 @@ describe('FolderTree counts', () => {
         onToggle={() => {}} onSelect={() => {}} counts={{ Bulk: { unseen: 250 } }} compact />
     );
     expect(getByTestId('folder-unseen').textContent).toBe('99+');
+  });
+});
+
+// The chip sidebar is the same tree in the other skin, and it was reached by
+// the same STATUS sweep — but the count stopped at the chip: `counts` arrived
+// on FolderBubbles and was dropped on the floor, so choosing the tag-cloud
+// style silently gave up every unread badge in the sidebar.
+describe('FolderBubbles counts', () => {
+  it('draws the unseen count on a chip that is not the open folder', () => {
+    const { getAllByTestId } = render(
+      <FolderBubbles
+        mailboxes={[box('INBOX'), box('Archive'), box('Drafts')]}
+        activeMailbox="INBOX"
+        expanded={new Set()}
+        onToggle={() => {}}
+        onSelect={() => {}}
+        counts={{ Archive: { unseen: 2 }, Drafts: { unseen: 0 }, INBOX: { unseen: 9 } }}
+      />
+    );
+    const badges = getAllByTestId('folder-unseen');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].textContent).toBe('2');
+    // On the Archive chip, not floating beside the row.
+    expect(badges[0].closest('[data-testid="folder-row"]').dataset.path).toBe('Archive');
   });
 });

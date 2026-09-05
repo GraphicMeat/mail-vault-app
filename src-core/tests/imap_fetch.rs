@@ -329,3 +329,63 @@ async fn list_pages_carry_size_and_attachment_presence() {
     assert!(by_uid[0].has_attachments, "the daemon's cold sync and backfill use this path");
     assert_eq!(by_uid[0].size, Some(WITH_PDF.len() as u32));
 }
+
+// ── B4: a poisoned FETCH stream ────────────────────────────────────────────
+//
+// async-imap's decoder stops advancing after a line it cannot parse, so one
+// bad item costs every item behind it and the page comes back SHORT — the same
+// shape as a mailbox that really holds that many. The lenient collector logged
+// the shortfall and returned what it had; a listing path must fail instead, and
+// let the caller's retry decide.
+
+#[async_std::test]
+async fn a_poisoned_item_fails_the_page_instead_of_shortening_it() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("FETCH"), Action::CorruptFetchItem(2)),
+    );
+    let mut sess = session(&server).await;
+
+    let err = fetch_emails_page(&mut sess, "INBOX", 1, 10)
+        .await
+        .expect_err("a page missing items it never saw is not a page");
+    assert!(err.contains("unparseable"), "unhelpful error: {err}");
+    assert!(err.contains("fetch_emails_page"), "the error must name the path: {err}");
+}
+
+#[async_std::test]
+async fn a_poisoned_item_fails_a_uid_header_fetch_too() {
+    // The daemon's cold sync and every backfill run through this one.
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("FETCH"), Action::CorruptFetchItem(2)),
+    );
+    let mut sess = session(&server).await;
+
+    let err = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3])
+        .await
+        .expect_err("a short UID fetch must not read as the whole answer");
+    assert!(err.contains("unparseable"), "unhelpful error: {err}");
+}
+
+#[async_std::test]
+async fn search_still_returns_what_parsed() {
+    // Search stays lenient on purpose: its rows are a filtered view the user
+    // asked for, not an enumeration anything downstream reconciles against, so
+    // half the hits beats an error with no hits at all.
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::on("FETCH"), Action::CorruptFetchItem(2)),
+    );
+    let mut sess = session(&server).await;
+
+    let (rows, total) = search_emails(&mut sess, "INBOX", Some("Message"), None, None, None, None)
+        .await
+        .expect("search must not fail over a poisoned item");
+    assert_eq!(total, 3, "the SEARCH itself matched all three");
+    assert!(!rows.is_empty(), "the rows that parsed must survive");
+    assert!(rows.len() < 3, "the fault must actually poison an item: {rows:?}");
+}

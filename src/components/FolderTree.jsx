@@ -101,7 +101,10 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
           <span
             data-testid="folder-unseen"
             className={compact
-              ? 'absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white leading-none flex items-center justify-center'
+              // `right-0`, not `-right-0.5`: the compact strip already sits
+              // 1 px into its own overflow, and a badge hanging 2 px further
+              // clipped against the edge.
+              ? 'absolute -top-0.5 right-0 min-w-[14px] h-3.5 px-0.5 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white leading-none flex items-center justify-center'
               : 'ml-auto text-xs tabular-nums text-mail-text-muted'}
           >
             {unseen > 99 ? '99+' : unseen}
@@ -152,11 +155,14 @@ export function FolderTree({
   ));
 }
 
-function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, onContextMenu }) {
+function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isActive = !node.noselect && activeMailbox === node.path;
   const label = mailboxLabel(node.name);
+  // Same rule as the row: the open folder's own list is the live count.
+  const unseen = counts?.[node.path]?.unseen || 0;
+  const showCount = unseen > 0 && !isActive;
 
   return (
     <div
@@ -176,6 +182,11 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, 
     >
       <Icon size={12} />
       <span className="truncate max-w-[180px]">{label}</span>
+      {showCount && (
+        <span data-testid="folder-unseen" className="ml-1 text-[10px] tabular-nums opacity-80">
+          {unseen > 99 ? '99+' : unseen}
+        </span>
+      )}
       {hasChildren && (
         <FolderToggle node={node} isOpen={expanded.has(node.path)} onToggle={onToggle} size={12} />
       )}

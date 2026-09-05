@@ -8,7 +8,7 @@ import { isGraphAccount, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName } fro
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
 import { invalidate as _invalidateProbe } from '../syncProbe';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
-import { refreshFolderStatus } from './folderStatus';
+import { invalidateFolderStatus } from './folderStatus';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
 
@@ -49,14 +49,11 @@ export async function refreshCurrentView() {
     // Same rule for the folder list: Refresh must show a folder created
     // elsewhere now, not when the 10-minute cache runs out.
     forceMailboxRefetch(activeAccountId);
+    // …and the closed folders' unread counts: activateAccount's own sweep is
+    // throttled to one a minute; dropping its timestamp lets that one sweep run
+    // instead of adding a second forced one.
+    invalidateFolderStatus(activeAccountId);
     await get().activateAccount(activeAccountId, activeMailbox);
-    // And the same for the closed folders' unread counts: activateAccount's own
-    // sweep is throttled to one a minute, so without `force` a Refresh inside
-    // that minute leaves every sidebar count as it was. Not awaited — it is one
-    // background round trip per folder and the list is already on screen.
-    const acct = get().accounts.find(a => a.id === activeAccountId);
-    refreshFolderStatus(acct, get().mailboxes, get().activeMailbox, { force: true })
-      .catch(e => console.warn('[folderStatus] forced sweep failed:', e));
   }
 }
 

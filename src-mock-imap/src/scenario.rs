@@ -86,6 +86,16 @@ pub enum Action {
 
     /// After N responses, delay every subsequent one — bulk-operation throttling.
     ThrottleAfter(usize, Duration),
+
+    /// Replace the nth (1-based) untagged FETCH item with a line the client's
+    /// decoder cannot parse.
+    ///
+    /// B4 in the parity audit. async-imap's decoder stops advancing after a
+    /// line it fails on, so one poisoned item costs every item behind it and
+    /// the page that comes back is SHORT — indistinguishable from a mailbox
+    /// that really holds that many. This is the only way to produce an `Err`
+    /// item in the FETCH stream on demand; no real server can be asked for one.
+    CorruptFetchItem(usize),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

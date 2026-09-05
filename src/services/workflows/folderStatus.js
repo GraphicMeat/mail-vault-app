@@ -51,6 +51,17 @@ export async function refreshFolderStatus(account, mailboxes, activeMailbox, { f
   return byPath;
 }
 
+/**
+ * Forget when this account was last swept, so the next ordinary call runs.
+ *
+ * What Refresh wants. Forcing a sweep of its own got the counts refreshed and
+ * cost a second STATUS per folder — up to 50 round trips on the one background
+ * session — because activateAccount runs a sweep a few lines later anyway.
+ */
+export function invalidateFolderStatus(accountId) {
+  _lastRun.delete(accountId);
+}
+
 /** Tests only. */
 export function _resetFolderStatusThrottle() {
   _lastRun.clear();

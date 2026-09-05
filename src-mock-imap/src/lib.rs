@@ -414,6 +414,19 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
         untagged.clear();
     }
 
+    // CorruptFetchItem: one FETCH item the decoder cannot parse. Before
+    // InjectUntagged, which prepends and would shift the index the test named.
+    if let Some(Action::CorruptFetchItem(n)) = actions
+        .iter()
+        .find(|a| matches!(a, Action::CorruptFetchItem(_)))
+    {
+        if cmd.name == "FETCH" {
+            if let Some(line) = untagged.get_mut(n.saturating_sub(1)) {
+                *line = b"* 999 FETCH (UID notanumber FLAGS ())".to_vec();
+            }
+        }
+    }
+
     // InjectUntagged: a well-formed extra line before the data.
     for a in actions {
         if let Action::InjectUntagged(l) = a {

@@ -34,8 +34,10 @@ vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ isAccountHidden: () => false, unreadPerAccount: {} }) },
 }));
 const mockRefreshFolderStatus = vi.fn().mockResolvedValue(null);
+const mockInvalidateFolderStatus = vi.fn();
 vi.mock('../folderStatus', () => ({
   refreshFolderStatus: (...a) => mockRefreshFolderStatus(...a),
+  invalidateFolderStatus: (...a) => mockInvalidateFolderStatus(...a),
 }));
 
 const { refreshCurrentView } = await import('../refreshAccounts');
@@ -82,12 +84,14 @@ describe('refreshCurrentView', () => {
 
   // The sweep is throttled to one a minute per account, so a Refresh inside
   // that minute would leave every closed folder's unread count as it was —
-  // which is exactly what the button is pressed to fix.
-  it('forces the closed folders unread sweep too', async () => {
+  // which is exactly what the button is pressed to fix. Refresh drops the
+  // timestamp instead of adding a second sweep: activateAccount runs one of
+  // its own a few lines later, and forcing meant every Refresh sent STATUS for
+  // up to 50 folders TWICE on one background session.
+  it('invalidates the closed folders unread sweep instead of forcing a second one', async () => {
     await refreshCurrentView();
 
-    expect(mockRefreshFolderStatus).toHaveBeenCalledWith(
-      { id: 'acct-1' }, [], 'Kunden', expect.objectContaining({ force: true }),
-    );
+    expect(mockInvalidateFolderStatus).toHaveBeenCalledWith('acct-1');
+    expect(mockRefreshFolderStatus).not.toHaveBeenCalled();
   });
 });

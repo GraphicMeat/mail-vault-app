@@ -168,6 +168,16 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const state = get();
   const isUnified = spansMailboxes(state);
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
+
+  // A spanning view's key must name its account and folder. Guessing the
+  // active account here is what aimed reply, mark-unread and delete at a
+  // stranger's message under the same uid — the delete side was closed in
+  // Phase 1 (requireUnifiedContext); this closes the viewer's.
+  if (isUnified && !unified) {
+    useMailStore.setState({ loadingEmail: false, selectedEmail: null, selectedThread: null, error: t('errors.unresolvedUnifiedRow', { key: String(uid) }) });
+    return;
+  }
+
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
