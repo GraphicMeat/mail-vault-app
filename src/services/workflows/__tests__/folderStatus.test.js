@@ -46,13 +46,11 @@ describe('refreshFolderStatus', () => {
     expect(state.folderStatus.acct1['Parent/Child'].messages).toBe(1);
   });
 
-  it('is throttled to one sweep per minute per account unless forced', async () => {
+  it('is throttled to one sweep per minute per account', async () => {
     mockFetchFolderStatus.mockResolvedValue([]);
     await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
     await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX');
     expect(mockFetchFolderStatus).toHaveBeenCalledTimes(1);
-    await refreshFolderStatus(ACCOUNT, FLAT, 'INBOX', { force: true });
-    expect(mockFetchFolderStatus).toHaveBeenCalledTimes(2);
   });
 
   it('keeps counts of other accounts when one account updates', async () => {

@@ -30,10 +30,10 @@ export function _flattenSelectable(mailboxes, activeMailbox) {
   return out;
 }
 
-export async function refreshFolderStatus(account, mailboxes, activeMailbox, { force = false } = {}) {
+export async function refreshFolderStatus(account, mailboxes, activeMailbox) {
   if (!account || isGraphAccount(account)) return null;
   const last = _lastRun.get(account.id) || 0;
-  if (!force && Date.now() - last < STATUS_FRESH_MS) return null;
+  if (Date.now() - last < STATUS_FRESH_MS) return null;
   const paths = _flattenSelectable(mailboxes, activeMailbox).slice(0, MAX_STATUS_FOLDERS);
   if (paths.length === 0) return null;
   _lastRun.set(account.id, Date.now());

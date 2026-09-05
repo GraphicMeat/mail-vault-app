@@ -790,7 +790,18 @@ impl SyncEngine {
             }
             Err(e) => {
                 warn!("[backfill] Failed for {} ({}): {}", account.email, mailbox, e);
-                self.backfill_gave_up.lock().await.insert(key);
+                // collect_fetches_strict (B4) fails a page rather than silently
+                // shortening it when one FETCH item didn't parse — a real-provider
+                // quirk (this codebase's history has several: Purelymail's
+                // mid-line keepalive, odd Dovecot/Gmail lines), not proof the
+                // mailbox itself can't be fetched. A poisoned page is a page, not
+                // an unfetchable mailbox: leave it out of `backfill_gave_up` so
+                // the next sync tick's backfill retries it. Every other error
+                // (dead socket, server refusal, ...) still gives up, since that
+                // set is never cleared except by a process restart.
+                if !e.contains("unparseable") {
+                    self.backfill_gave_up.lock().await.insert(key);
+                }
             }
         }
     }
@@ -1810,6 +1821,120 @@ mod tests {
         assert!(
             !engine.is_backfilling("acc1").await,
             "a failed backfill that keeps reporting in-flight strands the mailbox"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// How many FETCH-family commands one backfill of two missing UIDs sends,
+    /// on a fresh connection — measured, not assumed, the way
+    /// `selects_per_cold_sync` measures SELECTs. `backfill_with_session`
+    /// issues its OWN `UID FETCH 1:*` listing (`search_all_uids`) before the
+    /// targeted chunk fetch (`fetch_headers_by_uids`, the one
+    /// `collect_fetches_strict` guards) — that listing is actually the first
+    /// FETCH the wire sees, and corrupting it fails a completely different,
+    /// unrelated way. The LAST FETCH in this count is the one under test.
+    async fn fetches_in_a_two_uid_backfill() -> usize {
+        let dir = scratch_dir("backfill_fetch_count_probe");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let account = account_for(&server);
+        let engine = engine_for(&dir);
+        engine.sync_account(&account, "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        fs::remove_file(cache.join("2.json")).unwrap();
+        fs::remove_file(cache.join("3.json")).unwrap();
+
+        // Snapshot around JUST the backfill call — the priming sync_account
+        // above already spent FETCH commands of its own, and those must not
+        // be counted here.
+        let before = server.count_commands("FETCH");
+        engine.backfill_mailbox(&account, "INBOX").await;
+        assert_eq!(count_sidecars(&cache), 3, "probe backfill must actually succeed");
+
+        fs::remove_dir_all(&dir).unwrap();
+        server.count_commands("FETCH") - before
+    }
+
+    /// `collect_fetches_strict` (B4) fails a FETCH page instead of shortening
+    /// it — but a poisoned PAGE is not proof the mailbox is unfetchable.
+    /// `backfill_gave_up` is never cleared except by a process restart, so
+    /// latching one malformed line in there would silently stop backfilling
+    /// that mailbox for the life of the daemon. This codebase's own history
+    /// has several real-provider items that would trip it (Purelymail's
+    /// mid-line keepalive, odd Dovecot/Gmail lines) — the give-up path must
+    /// tell those apart from a genuinely unfetchable mailbox and let the next
+    /// tick retry.
+    #[tokio::test]
+    async fn a_poisoned_fetch_page_is_retried_not_given_up() {
+        let dir = scratch_dir("backfill_poisoned_fetch");
+        let key = format!("acc1\u{1}INBOX");
+        let target_fetch = fetches_in_a_two_uid_backfill().await;
+
+        // Prime a fully cached 3-message mailbox, then let two sidecars go
+        // missing — a backfill is needed for exactly those two UIDs.
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        let cache = cache_dir_for(&dir);
+        assert_eq!(count_sidecars(&cache), 3, "precondition: a fully cached mailbox");
+        drop(warm);
+        fs::remove_file(cache.join("2.json")).unwrap();
+        fs::remove_file(cache.join("3.json")).unwrap();
+
+        // Same mailbox on a fresh server whose header-chunk FETCH (not the
+        // UID listing ahead of it) is corrupted. The mock's command counter
+        // is shared across every connection to this server (not reset per
+        // connection), so `nth("FETCH", target_fetch)` fires once, ever, no
+        // matter how many backfill_mailbox calls follow — which is exactly
+        // what lets the second call below prove the retry.
+        let poisoned = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 3))
+                .fault(Trigger::nth("FETCH", target_fetch), Action::CorruptFetchItem(1)),
+        );
+        let account = account_for(&poisoned);
+
+        engine.backfill_mailbox(&account, "INBOX").await;
+
+        assert_eq!(
+            count_sidecars(&cache),
+            1,
+            "the poisoned page must not silently deliver a subset of headers"
+        );
+        assert!(
+            !engine.backfill_gave_up.lock().await.contains(&key),
+            "a poisoned FETCH item is a retryable page, not proof the mailbox is unfetchable"
+        );
+
+        // The fault is spent — the next tick's backfill (this call) retries
+        // on a clean connection and actually fills the cache back in.
+        engine.backfill_mailbox(&account, "INBOX").await;
+
+        assert_eq!(count_sidecars(&cache), 3, "the retry must fetch the still-missing headers");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Negative control for the test above: an error that is NOT the strict
+    /// collector's "unparseable" page — a dropped connection — must still
+    /// give the mailbox up, exactly as before this fix. Without this, the
+    /// retryable carve-out could swallow every backfill failure, not just a
+    /// poisoned page.
+    #[tokio::test]
+    async fn a_dropped_connection_still_gives_up_the_backfill() {
+        let dir = scratch_dir("backfill_gives_up_control");
+        let server = MockImap::start(
+            Scenario::new()
+                .mailbox(synthetic_mailbox("INBOX", 30))
+                .fault(Trigger::on("FETCH"), Action::DropConnection),
+        );
+        let engine = engine_for(&dir);
+
+        engine.backfill_mailbox(&account_for(&server), "INBOX").await;
+
+        assert!(
+            engine.backfill_gave_up.lock().await.contains(&format!("acc1\u{1}INBOX")),
+            "a dropped connection is not a poisoned page — it must still give up"
         );
 
         fs::remove_dir_all(&dir).unwrap();
