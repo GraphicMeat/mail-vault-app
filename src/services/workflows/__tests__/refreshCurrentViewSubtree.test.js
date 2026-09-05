@@ -25,6 +25,11 @@ vi.mock('../../cacheManager', () => ({
   listGraphMessages: vi.fn(),
 }));
 vi.mock('../../syncProbe', () => ({ invalidate: vi.fn() }));
+const mockForceMailboxRefetch = vi.fn();
+vi.mock('../helpers/mailboxRefetch', () => ({
+  forceMailboxRefetch: (...a) => mockForceMailboxRefetch(...a),
+  takeForcedMailboxRefetch: () => false,
+}));
 vi.mock('../../../stores/settingsStore', () => ({
   useSettingsStore: { getState: () => ({ isAccountHidden: () => false, unreadPerAccount: {} }) },
 }));
@@ -62,5 +67,11 @@ describe('refreshCurrentView', () => {
 
     expect(state.activateAccount).toHaveBeenCalledWith('acct-1', 'Kunden');
     expect(state.loadSubtree).not.toHaveBeenCalled();
+  });
+
+  it('forces the folder list to be refetched for the active account', async () => {
+    await refreshCurrentView();
+
+    expect(mockForceMailboxRefetch).toHaveBeenCalledWith('acct-1');
   });
 });

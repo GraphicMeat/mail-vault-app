@@ -7,6 +7,7 @@ import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName } from '../graphConfig';
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
 import { invalidate as _invalidateProbe } from '../syncProbe';
+import { forceMailboxRefetch } from './helpers/mailboxRefetch';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
 
@@ -44,6 +45,9 @@ export async function refreshCurrentView() {
     // broken. The probe itself still runs — if nothing changed there is
     // genuinely nothing to show, and it costs one round trip instead of a sync.
     _invalidateProbe(activeAccountId, activeMailbox);
+    // Same rule for the folder list: Refresh must show a folder created
+    // elsewhere now, not when the 10-minute cache runs out.
+    forceMailboxRefetch(activeAccountId);
     await get().activateAccount(activeAccountId, activeMailbox);
   }
 }

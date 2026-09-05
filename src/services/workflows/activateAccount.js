@@ -19,6 +19,7 @@ import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRest
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { openFolder } from './loadSubtree';
+import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
@@ -99,7 +100,7 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
     }
   }
 
-  const isFresh = shouldUseFreshMailboxCache(cachedEntry);
+  const isFresh = !takeForcedMailboxRefetch(accountId) && shouldUseFreshMailboxCache(cachedEntry);
   const serverMailboxesPromise = isFresh
     ? Promise.resolve(null)
     // One retry: the first fetch of a session races credential loading and

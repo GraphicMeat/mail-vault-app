@@ -11,6 +11,7 @@ import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { waitForSentMailboxPath } from '../../utils/sentFolder';
+import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -788,7 +789,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
       return isMailboxCacheFresh(entry?.fetchedAt) && isMailboxTreeComplete(entry?.mailboxes);
     };
 
-    const shouldRefreshMailboxes = !shouldUseFreshMailboxCacheLocal(cachedMailboxEntry) || !cachedTarget;
+    const shouldRefreshMailboxes = takeForcedMailboxRefetch(activeAccountId) || !shouldUseFreshMailboxCacheLocal(cachedMailboxEntry) || !cachedTarget;
 
     if (shouldRefreshMailboxes) {
       const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
