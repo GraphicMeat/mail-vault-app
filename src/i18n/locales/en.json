@@ -789,6 +789,7 @@
   "errors.imapPrefixed": "IMAP: {{msg}}",
   "errors.smtpPrefixed": "SMTP: {{msg}}",
   "errors.noLocalCopyUidMismatch": "No local copy for this message (the vault entry under this UID is another message)",
+  "errors.unresolvedUnifiedRow": "Cannot tell which account and folder hold message {{key}}. Reload the list and try again.",
   "errors.noRawSource": "Email has no raw source data",
   "errors.noGraphIdDelete": "Cannot delete: no Graph message ID found for this email.",
   "errors.noGraphIdForUid": "No Graph message ID for UID {{uid}}",

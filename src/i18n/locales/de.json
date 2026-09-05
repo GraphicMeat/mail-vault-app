@@ -388,6 +388,7 @@
   "errors.noGraphIdForUid": "Keine Graph-Nachrichten-ID für UID {{uid}}",
   "errors.noGraphIdMove": "Verschieben nicht möglich: für einige der ausgewählten E-Mails fehlt die Graph-Nachrichten-ID.",
   "errors.noLocalCopyUidMismatch": "Keine lokale Kopie dieser Nachricht (der Tresoreintrag unter dieser UID ist eine andere Nachricht)",
+  "errors.unresolvedUnifiedRow": "Es lässt sich nicht feststellen, in welchem Konto und Ordner die Nachricht {{key}} liegt. Lade die Liste neu und versuche es erneut.",
   "errors.noRawSource": "Die E-Mail hat keine Rohdaten",
   "errors.operationRunning": "Es läuft bereits ein Vorgang",
   "errors.removalPartiallyFailed": "Entfernen teilweise fehlgeschlagen: {{errors}}. Einige E-Mails können am Ziel verbleiben.",

@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "Aucun ID de message Graph pour l'UID {{uid}}",
   "errors.noGraphIdMove": "Déplacement impossible : ID de message Graph manquant pour certains e-mails sélectionnés.",
   "errors.noLocalCopyUidMismatch": "Aucune copie locale de ce message (l'entrée du coffre sous cet UID est un autre message)",
+  "errors.unresolvedUnifiedRow": "Impossible de savoir dans quel compte et quel dossier se trouve le message {{key}}. Rechargez la liste et réessayez.",
   "errors.noRawSource": "L'e-mail n'a pas de source brute",
   "errors.operationRunning": "Une opération est déjà en cours",
   "errors.removalPartiallyFailed": "Suppression partiellement échouée : {{errors}}. Certains e-mails peuvent rester à destination.",

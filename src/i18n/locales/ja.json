@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "UID {{uid}} の Graph メッセージ ID がありません",
   "errors.noGraphIdMove": "移動できません: 選択したメールの一部に Graph メッセージ ID がありません。",
   "errors.noLocalCopyUidMismatch": "このメッセージのローカルコピーがありません（この UID の保管庫エントリは別のメッセージです）",
+  "errors.unresolvedUnifiedRow": "メッセージ {{key}} がどのアカウントとフォルダーにあるか判別できません。リストを再読み込みしてからもう一度お試しください。",
   "errors.noRawSource": "このメールには生のソースデータがありません",
   "errors.operationRunning": "すでに操作が実行中です",
   "errors.removalPartiallyFailed": "削除が一部失敗しました: {{errors}}。一部のメールが移動先に残る可能性があります。",

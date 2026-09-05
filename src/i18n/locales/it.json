@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "Nessun ID messaggio Graph per l'UID {{uid}}",
   "errors.noGraphIdMove": "Impossibile spostare: manca l'ID messaggio Graph per alcune email selezionate.",
   "errors.noLocalCopyUidMismatch": "Nessuna copia locale di questo messaggio (la voce in cassaforte con questo UID è un altro messaggio)",
+  "errors.unresolvedUnifiedRow": "Impossibile stabilire in quale account e cartella si trovi il messaggio {{key}}. Ricarica l'elenco e riprova.",
   "errors.noRawSource": "L'email non ha dati sorgente grezzi",
   "errors.operationRunning": "Un'operazione è già in corso",
   "errors.removalPartiallyFailed": "Rimozione parzialmente non riuscita: {{errors}}. Alcune email potrebbero restare a destinazione.",

@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "UID {{uid}}의 Graph 메시지 ID가 없습니다",
   "errors.noGraphIdMove": "이동할 수 없습니다: 선택한 메일 일부에 Graph 메시지 ID가 없습니다.",
   "errors.noLocalCopyUidMismatch": "이 메시지의 로컬 사본이 없습니다 (해당 UID의 보관함 항목은 다른 메시지입니다)",
+  "errors.unresolvedUnifiedRow": "메시지 {{key}}이(가) 어느 계정과 폴더에 있는지 알 수 없습니다. 목록을 다시 불러온 뒤 다시 시도하세요.",
   "errors.noRawSource": "이 메일에는 원본 소스 데이터가 없습니다",
   "errors.operationRunning": "이미 실행 중인 작업이 있습니다",
   "errors.removalPartiallyFailed": "제거가 일부 실패했습니다: {{errors}}. 일부 메일이 대상에 남을 수 있습니다.",

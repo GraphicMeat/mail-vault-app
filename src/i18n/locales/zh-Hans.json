@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "UID {{uid}} 没有对应的 Graph 消息 ID",
   "errors.noGraphIdMove": "无法移动：部分所选邮件缺少 Graph 消息 ID。",
   "errors.noLocalCopyUidMismatch": "该邮件没有本地副本（此 UID 下的保险库条目是另一封邮件）",
+  "errors.unresolvedUnifiedRow": "无法确定邮件 {{key}} 所在的账户和文件夹。请重新加载列表后再试。",
   "errors.noRawSource": "该邮件没有原始源数据",
   "errors.operationRunning": "已有操作正在进行",
   "errors.removalPartiallyFailed": "移除部分失败：{{errors}}。部分邮件可能仍留在目标位置。",

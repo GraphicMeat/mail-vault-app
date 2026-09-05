@@ -387,6 +387,7 @@
   "errors.noGraphIdForUid": "Nenhum ID de mensagem do Graph para o UID {{uid}}",
   "errors.noGraphIdMove": "Não é possível mover: falta o ID de mensagem do Graph em alguns e-mails selecionados.",
   "errors.noLocalCopyUidMismatch": "Sem cópia local desta mensagem (a entrada do cofre neste UID é outra mensagem)",
+  "errors.unresolvedUnifiedRow": "Não é possível saber em qual conta e pasta está a mensagem {{key}}. Recarregue a lista e tente novamente.",
   "errors.noRawSource": "O e-mail não tem dados de origem brutos",
   "errors.operationRunning": "Já há uma operação em andamento",
   "errors.removalPartiallyFailed": "A remoção falhou parcialmente: {{errors}}. Alguns e-mails podem permanecer no destino.",

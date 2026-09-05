@@ -94,7 +94,7 @@ export function requireUnifiedContext(key, state) {
       return { account, accountId: parsed.accountId, mailbox, uid: parsed.uid };
     }
   }
-  throw new Error(`Cannot tell which account and folder hold message ${key}; reload the list and try again`);
+  throw new Error(t('errors.unresolvedUnifiedRow', { key }));
 }
 
 // ── Message location ───────────────────────────────────────────────────────
