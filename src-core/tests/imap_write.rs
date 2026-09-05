@@ -50,7 +50,7 @@ async fn delete_resolves_a_namespaced_trash_folder() {
     );
     let mut sess = session(&server).await;
 
-    delete_email(&mut sess, "INBOX", 2, false).await.expect("delete");
+    delete_email(&mut sess, "INBOX", 2, false, true).await.expect("delete");
 
     let state = server.state();
     assert!(state.find("INBOX").unwrap().by_uid(2).is_none(), "message left in INBOX");
@@ -72,7 +72,7 @@ async fn delete_falls_back_to_a_named_trash_without_special_use() {
     );
     let mut sess = session(&server).await;
 
-    delete_email(&mut sess, "INBOX", 1, false).await.expect("delete");
+    delete_email(&mut sess, "INBOX", 1, false, true).await.expect("delete");
     assert_eq!(server.state().find("Deleted Items").unwrap().messages.len(), 1);
 }
 
@@ -90,7 +90,7 @@ async fn delete_falls_back_to_copy_expunge_without_move() {
     );
     let mut sess = session(&server).await;
 
-    delete_email(&mut sess, "INBOX", 1, false).await.expect("delete");
+    delete_email(&mut sess, "INBOX", 1, false, true).await.expect("delete");
 
     let state = server.state();
     assert!(state.find("INBOX").unwrap().by_uid(1).is_none(), "source copy not expunged");
@@ -106,7 +106,7 @@ async fn permanent_delete_expunges_only_the_target_uid() {
     let server = MockImap::start(Scenario::new().mailbox(mb));
     let mut sess = session(&server).await;
 
-    delete_email(&mut sess, "INBOX", 1, true).await.expect("permanent delete");
+    delete_email(&mut sess, "INBOX", 1, true, true).await.expect("permanent delete");
 
     let inbox = server.state().find("INBOX").unwrap().clone();
     assert!(inbox.by_uid(1).is_none(), "uid 1 should be gone");
@@ -114,6 +114,47 @@ async fn permanent_delete_expunges_only_the_target_uid() {
         inbox.by_uid(3).is_some(),
         "an unrelated \\Deleted message must survive a scoped UID EXPUNGE"
     );
+}
+
+/// Without UIDPLUS there is no `UID EXPUNGE` to scope the delete with — the
+/// server rejects it, which failed the whole delete after the message was
+/// already flagged. A plain `EXPUNGE` is what Thunderbird sends there.
+#[async_std::test]
+async fn permanent_delete_without_uidplus_expunges_the_mailbox() {
+    let server = MockImap::start(Scenario::new().mailbox(inbox_with(2)).without_cap("UIDPLUS"));
+    let mut sess = session(&server).await;
+
+    delete_email(&mut sess, "INBOX", 2, true, false).await.expect("permanent delete");
+
+    assert_eq!(server.count_commands("UID EXPUNGE"), 0, "UID EXPUNGE needs UIDPLUS");
+    assert_eq!(server.count_commands("EXPUNGE"), 1);
+    let inbox = server.state().find("INBOX").unwrap().clone();
+    assert!(inbox.by_uid(2).is_none(), "uid 2 should be gone");
+    assert!(inbox.by_uid(1).is_some(), "an unflagged message must survive a plain EXPUNGE");
+}
+
+/// The trash branch's COPY fallback expunges too, and needs the same gate.
+#[async_std::test]
+async fn trash_fallback_without_uidplus_uses_plain_expunge() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(inbox_with(2))
+            .mailbox(Mailbox::new("INBOX.Trash").with_attrs(&["\\HasNoChildren", "\\Trash"]))
+            .without_cap("MOVE")
+            .without_cap("UIDPLUS")
+            // The mock runs MOVE whatever it advertises; refuse it outright so
+            // the COPY fallback is the path under test.
+            .fault(Trigger::on("MOVE"), Action::Respond("NO".into(), "MOVE unsupported".into())),
+    );
+    let mut sess = session(&server).await;
+
+    delete_email(&mut sess, "INBOX", 1, false, false).await.expect("delete");
+
+    assert_eq!(server.count_commands("UID EXPUNGE"), 0, "UID EXPUNGE needs UIDPLUS");
+    assert_eq!(server.count_commands("EXPUNGE"), 1);
+    let state = server.state();
+    assert!(state.find("INBOX").unwrap().by_uid(1).is_none(), "source copy not expunged");
+    assert_eq!(state.find("INBOX.Trash").unwrap().messages.len(), 1);
 }
 
 #[async_std::test]

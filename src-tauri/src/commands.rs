@@ -504,10 +504,15 @@ pub async fn imap_delete_email(
     // restores the row it had already taken out — a delete that reads as a
     // message coming back from the dead. See the pool's own doc for why a
     // uid-addressed delete is the one mutation safe to re-send.
+    // Capabilities are cached when a session is CREATED, so read them inside
+    // the closure, after checkout — exactly like imap_move_emails.
+    let pool_ref: &ImapPool = &pool;
+    let acct = &account;
     pool.run_uid_delete(&account, true, |mut session| {
         let mailbox = mailbox.clone();
         async move {
-            imap::delete_email(&mut session, &mailbox, uid, permanent).await
+            let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
+            imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus).await
                 .map_err(|e| format!("Failed to delete email: {}", e))?;
             Ok(((), session, Some(mailbox)))
         }

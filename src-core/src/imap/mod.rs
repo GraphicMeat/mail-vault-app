@@ -744,12 +744,7 @@ pub async fn fetch_emails_page(
         .await
         .map_err(|e| format!("FETCH failed: {}", e))?;
 
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    let fetches = collect_fetches(fetch_stream, "fetch_emails_page").await;
 
     let mut emails = Vec::new();
     let mut skipped_uids = Vec::new();
@@ -799,12 +794,7 @@ pub async fn fetch_emails_range(
         .await
         .map_err(|e| format!("FETCH range failed: {}", e))?;
 
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    let fetches = collect_fetches(fetch_stream, "fetch_emails_range").await;
 
     let mut emails = Vec::new();
     let mut skipped_uids = Vec::new();
@@ -1063,12 +1053,7 @@ pub async fn fetch_headers_by_uids(
             .await
             .map_err(|e| format!("UID FETCH {} failed: {}", uid_set, e))?;
 
-        let fetches: Vec<Fetch> = fetch_stream
-            .collect::<Vec<_>>()
-            .await
-            .into_iter()
-            .filter_map(|r| r.ok())
-            .collect();
+        let fetches = collect_fetches(fetch_stream, "fetch_headers_by_uids").await;
 
         for fetch in &fetches {
             match parse_header_from_fetch(fetch) {
@@ -1251,20 +1236,81 @@ async fn run_checked(session: &mut ImapSession, command: String, what: &str) -> 
         .map_err(|e| format!("{} failed: {}", what, e))
 }
 
+/// Collect a FETCH stream, making what a parse error dropped visible.
+///
+/// async-imap's decoder stops advancing after a line it cannot parse, so
+/// every item after it is lost and the page that comes back is short. The
+/// callers' completeness checks (EXISTS on the Rust side, provedComplete on
+/// the JS side) keep a short page from being read as the whole mailbox; this
+/// makes the shortfall diagnosable from the logs instead of silent. Proper
+/// propagation of the error is B4 in the parity audit.
+async fn collect_fetches<S>(stream: S, what: &str) -> Vec<Fetch>
+where
+    S: futures::Stream<Item = async_imap::error::Result<Fetch>> + Unpin,
+{
+    let mut out = Vec::new();
+    let mut dropped = 0usize;
+    let mut first_err: Option<String> = None;
+    let mut stream = stream;
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(f) => out.push(f),
+            Err(e) => {
+                dropped += 1;
+                if first_err.is_none() {
+                    first_err = Some(e.to_string());
+                }
+            }
+        }
+    }
+    if dropped > 0 {
+        warn!(
+            "[{}] {} FETCH item(s) dropped on a parse error (first: {:?}); the page is SHORT",
+            what, dropped, first_err
+        );
+    }
+    out
+}
+
+/// Expunge `uid_set` — `UID EXPUNGE` (RFC 4315 UIDPLUS) when the server has
+/// it, otherwise a plain `EXPUNGE`, which takes every `\Deleted` message in the
+/// mailbox and leaves the rest. That is what Thunderbird does on the same
+/// servers, and it is the only expunge a non-UIDPLUS server accepts at all.
+async fn expunge_scoped(
+    session: &mut ImapSession,
+    uid_set: &str,
+    has_uidplus: bool,
+) -> Result<(), String> {
+    if has_uidplus {
+        run_checked(session, format!("UID EXPUNGE {}", uid_set), "UID EXPUNGE").await
+    } else {
+        run_checked(session, "EXPUNGE".to_string(), "EXPUNGE").await
+    }
+}
+
 /// Delete an email by UID
+///
+/// `has_uidplus` picks the expunge: `UID EXPUNGE` (RFC 4315) takes only this
+/// message, a plain `EXPUNGE` takes every `\Deleted` message in the mailbox.
+/// Servers without UIDPLUS reject `UID EXPUNGE` outright, which used to fail
+/// the whole delete after the message was already flagged — same rule as
+/// `move_uids`.
 pub async fn delete_email(
     session: &mut ImapSession,
     mailbox: &str,
     uid: u32,
     permanent: bool,
+    has_uidplus: bool,
 ) -> Result<(), String> {
-    info!("[delete_email] start uid={} mailbox={} permanent={}", uid, mailbox, permanent);
+    info!(
+        "[delete_email] start uid={} mailbox={} permanent={} uidplus={}",
+        uid, mailbox, permanent, has_uidplus
+    );
     let _mbox = select_mailbox(session, mailbox).await?;
 
     if permanent {
         run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
-        // Use UID EXPUNGE to only expunge this specific UID (RFC 4315 UIDPLUS)
-        run_checked(session, format!("UID EXPUNGE {}", uid), "UID EXPUNGE").await?;
+        expunge_scoped(session, &uid.to_string(), has_uidplus).await?;
     } else {
         // Resolve the real Trash path via SPECIAL-USE/LIST — hardcoded names
         // miss namespaced servers (Dovecot/Hostinger use INBOX.Trash), which
@@ -1292,7 +1338,7 @@ pub async fn delete_email(
                     .await
                     .map_err(|e| format!("UID COPY to '{}' failed: {}", trash, e))?;
                 run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid), "STORE \\Deleted").await?;
-                run_checked(session, format!("UID EXPUNGE {}", uid), "UID EXPUNGE").await?;
+                expunge_scoped(session, &uid.to_string(), has_uidplus).await?;
             }
         }
         // No `uid_still_present` postcondition here, deliberately.
@@ -1402,13 +1448,7 @@ pub async fn move_uids(
         .await
         .map_err(|e| format!("UID COPY failed: {}", e))?;
     run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid_set), "STORE \\Deleted").await?;
-    if has_uidplus {
-        run_checked(session, format!("UID EXPUNGE {}", uid_set), "UID EXPUNGE").await?;
-    } else {
-        // No UIDPLUS: EXPUNGE takes every \Deleted message in the mailbox,
-        // which is what Thunderbird does on the same servers.
-        run_checked(session, "EXPUNGE".to_string(), "EXPUNGE").await?;
-    }
+    expunge_scoped(session, &uid_set, has_uidplus).await?;
     Ok(count)
 }
 
@@ -1675,12 +1715,7 @@ pub async fn search_emails(
         .await
         .map_err(|e| format!("FETCH search results failed: {}", e))?;
 
-    let fetches: Vec<Fetch> = fetch_stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .filter_map(|r| r.ok())
-        .collect();
+    let fetches = collect_fetches(fetch_stream, "search_emails").await;
 
     let mut emails = Vec::new();
     for fetch in &fetches {

@@ -352,7 +352,7 @@ async fn a_delete_whose_socket_dies_retries_once_on_a_new_connection() {
     let pool = pool();
 
     pool.run_uid_delete(&config, true, |mut session| async move {
-        delete_email(&mut session, "INBOX", 1, true).await?;
+        delete_email(&mut session, "INBOX", 1, true, true).await?;
         Ok(((), session, Some("INBOX".to_string())))
     })
     .await
@@ -384,7 +384,7 @@ async fn a_delete_that_keeps_losing_the_socket_fails_after_exactly_one_retry() {
 
     let err = pool
         .run_uid_delete(&config, true, |mut session| async move {
-            delete_email(&mut session, "INBOX", 1, true).await?;
+            delete_email(&mut session, "INBOX", 1, true, true).await?;
             Ok(((), session, Some("INBOX".to_string())))
         })
         .await

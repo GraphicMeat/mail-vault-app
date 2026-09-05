@@ -502,7 +502,9 @@ async fn delete_single_email(
     // uid out of a bulk run and is reported as an error count nobody can act
     // on. See ImapPool::run_uid_delete for why re-sending this is safe.
     pool.run_uid_delete(account, true, |mut session| async move {
-        imap::delete_email(&mut session, mailbox, uid, true).await?;
+        // Cached at session creation — read after checkout, like the move path.
+        let has_uidplus = pool.has_capability(account, "UIDPLUS").await;
+        imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
         Ok(((), session, Some(mailbox.to_string())))
     }).await
 }
