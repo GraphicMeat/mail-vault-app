@@ -37,6 +37,8 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
+import { ConnectedStateIcon } from './MessageStateIcon';
+import { formatEmailDate } from '../../utils/dateFormat';
 import { AddressText } from './AddressText';
 import { t as tr, useT  } from '../../i18n/index.js';
 
@@ -298,9 +300,9 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, expanded, onToggle, compact = false }) {
   const t = useT();
-  const [expanded, setExpanded] = useState(isNewest);
+
   const [, forceUpdate] = useState(0);
   const [headerExpanded, setHeaderExpanded] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
@@ -316,6 +318,8 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
   const effectiveTheme = emailThemeOverride ?? defaultEmailTheme;
   const emailDarkMode = effectiveTheme === 'dark';
   const key = emailKey(email);
+  const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  const scopeKey = emailScopeKey(email, useMailStore.getState());
   // Where this message actually lives. A thread mixes INBOX and Sent, so the
   // active view is not it — reading a UID from the wrong folder returns a
   // different message (raw source, attachments).
@@ -364,19 +368,28 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, isNewest, arch
           stops the event before it reaches this handler. A click that ends a
           drag over the snippet line is a copy, not a reply. */}
       <div data-testid="thread-email-header" onClick={() => { if (!window.getSelection?.()?.isCollapsed) return; compose('reply'); }}>
-        <EmailSenderInfo
+        {compact && !expanded ? (
+          <button type="button" onClick={e => { e.stopPropagation(); onToggle(); }} aria-expanded={false}
+            className="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-mail-surface-hover">
+            <ConnectedStateIcon email={email} size={14} />
+            <span className="flex-1 min-w-0">
+              <span className="flex justify-between gap-2"><span className="truncate text-sm font-semibold">{getSenderName(email)}</span><span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span></span>
+              <span className="block truncate text-xs text-mail-text-muted">{loadedEmail?.text?.substring(0, 200) || email.subject}</span>
+            </span>
+          </button>
+        ) : <EmailSenderInfo
           email={email}
           variant="thread"
           expanded={expanded}
-          onToggle={() => setExpanded(!expanded)}
+          onToggle={onToggle}
           showRaw={showRaw}
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}
           showInsights={showInsights}
           onToggleInsights={() => setShowInsights(!showInsights)}
           archivedEmailIds={archivedEmailIds}
-        />
-        {!expanded && (
+        />}
+        {!expanded && !compact && (
           <p className="text-xs text-mail-text-muted truncate mt-0.5 pl-12 pb-1">
             {loadedEmail?.text?.substring(0, 200) || email.subject || ''}
           </p>
@@ -486,6 +499,10 @@ export function ThreadView({ thread, onComposeReply }) {
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
+  const readerLayout = useSettingsStore(s => s.threadReaderLayout) || 'timeline';
+  const setReaderLayout = useSettingsStore(s => s.setThreadReaderLayout);
+  const [expandedMessages, setExpandedMessages] = useState({});
+  const [selectedMessage, setSelectedMessage] = useState(null);
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const scrollContainerRef = useRef(null);
@@ -522,11 +539,11 @@ export function ThreadView({ thread, onComposeReply }) {
   );
 
   // Determine newest email by date (sort-order independent)
-  const newestUid = useMemo(() => {
+  const newestKey = useMemo(() => {
     if (!thread.emails.length) return null;
-    return thread.emails.reduce((newest, email) =>
+    return emailKey(thread.emails.reduce((newest, email) =>
       new Date(email.date) > new Date(newest.date) ? email : newest
-    ).uid;
+    ));
   }, [thread.emails]);
 
   const { bodiesMapRef, registerListener } = useChatBodyLoader(sortedEmails);
@@ -557,25 +574,29 @@ export function ThreadView({ thread, onComposeReply }) {
     return result;
   }, [sortedEmails, signatureDisplay]);
 
-  const THREAD_ROW_HEIGHT = 72;
+  const selectedEmail = sortedEmails.find(email => emailKey(email) === selectedMessage)
+    || sortedEmails.find(email => emailKey(email) === newestKey);
+  const THREAD_ROW_HEIGHT = readerLayout === 'timeline' ? 72 : 56;
   const virtualizer = useVirtualizer({
     count: sortedEmails.length,
+    getItemKey: index => emailKey(sortedEmails[index]),
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => THREAD_ROW_HEIGHT,
     overscan: 8,
     measureElement: (el) => el?.getBoundingClientRect().height ?? THREAD_ROW_HEIGHT,
   });
 
-  // Scroll to the newest (last) email on mount — scoped to the scroll container
+  // Resolve by full message identity: different folders may reuse the same UID.
   const threadId = thread.threadId;
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (sortedEmails.length > 0) {
-        virtualizer.scrollToIndex(sortedEmails.length - 1, { align: 'end' });
-      }
-    }, 50);
-    return () => clearTimeout(timer);
+    setExpandedMessages({});
+    setSelectedMessage(null);
   }, [threadId]);
+  useEffect(() => {
+    virtualizer.measure();
+    const index = sortedEmails.findIndex(email => emailKey(email) === newestKey);
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: 'start' });
+  }, [threadId, threadSortOrder, readerLayout, newestKey]);
 
   // Archive All acts on the part of the thread that lives in the folder on
   // screen — the same rule as the row's archive button (see threadRowMembers).
@@ -596,7 +617,7 @@ export function ThreadView({ thread, onComposeReply }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full">
+    <div className="thread-reader flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full">
       {/* Thread header */}
       <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
         <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">
@@ -636,13 +657,21 @@ export function ThreadView({ thread, onComposeReply }) {
         <CloseViewerButton className="ml-2" />
       </div>
 
+      <div className="px-3 py-2 border-b border-mail-border flex items-center gap-2">
+        <label htmlFor="thread-reader-layout" className="text-xs text-mail-text-muted">{t('email.thread.layout')}</label>
+        <select id="thread-reader-layout" value={readerLayout} onChange={e => setReaderLayout(e.target.value)}
+          className="bg-mail-surface text-mail-text text-xs border border-mail-border rounded px-2 py-1">
+          {['timeline', 'compact', 'split'].map(layout => <option key={layout} value={layout}>{t(`email.thread.layout.${layout}`)}</option>)}
+        </select>
+      </div>
+      <div className={`thread-reader-content flex-1 min-h-0 min-w-0 ${readerLayout === 'split' ? 'thread-reader-split' : 'flex flex-col'}`}>
       {/* Thread emails — virtualized */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 w-full" style={{ contain: 'inline-size' }}>
         <div style={{ height: virtualizer.getTotalSize() + 'px', position: 'relative', width: '100%' }}>
           {virtualizer.getVirtualItems().map((vr) => {
             const email = sortedEmails[vr.index];
             if (!email) return null;
-            const isNewest = email.uid === newestUid;
+            const isNewest = emailKey(email) === newestKey;
             return (
               <div
                 key={vr.key}
@@ -655,23 +684,43 @@ export function ThreadView({ thread, onComposeReply }) {
                   transform: `translateY(${vr.start}px)`,
                 }}
               >
-                <ThreadEmailItem
+                {readerLayout === 'split' ? (
+                  <button type="button" aria-pressed={emailKey(selectedEmail) === emailKey(email)}
+                    onClick={() => { setSelectedMessage(emailKey(email)); setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: true })); }}
+                    className={`w-full h-14 text-left px-3 flex items-center gap-2 border-b border-mail-border ${emailKey(selectedEmail) === emailKey(email) ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}>
+                    <ConnectedStateIcon email={email} size={14} />
+                    <span className="flex-1 min-w-0"><span className="block truncate text-sm font-semibold">{getSenderName(email)}</span><span className="block truncate text-xs text-mail-text-muted">{email.subject}</span></span>
+                    <span className="text-xs text-mail-text-muted shrink-0">{formatEmailDate(email.date)}</span>
+                  </button>
+                ) : <ThreadEmailItem
+                  expanded={expandedMessages[emailKey(email)] ?? isNewest}
+                  onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: !(previous[emailKey(email)] ?? isNewest) }))}
+                  compact={readerLayout === 'compact'}
                   email={email}
                   bodiesMapRef={bodiesMapRef}
                   registerListener={registerListener}
-                  isNewest={isNewest}
                   archivedEmailIds={archivedEmailIds}
                   signatureDisplay={signatureDisplay}
                   shouldShowSignature={sigVisMap[email.uid] !== false}
                   onComposeReply={onComposeReply}
                   onDelete={requestDelete}
-                />
+                />}
               </div>
             );
           })}
         </div>
       </div>
 
+      {readerLayout === 'split' && selectedEmail && (
+        <div className="min-w-0 min-h-0 overflow-auto border-mail-border thread-reader-detail">
+          <ThreadEmailItem key={emailKey(selectedEmail)} email={selectedEmail} expanded={expandedMessages[emailKey(selectedEmail)] ?? true}
+            onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(selectedEmail)]: !(previous[emailKey(selectedEmail)] ?? true) }))}
+            bodiesMapRef={bodiesMapRef} registerListener={registerListener} archivedEmailIds={archivedEmailIds}
+            signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}
+            onComposeReply={onComposeReply} onDelete={requestDelete} />
+        </div>
+      )}
+      </div>
       <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
     </div>
   );

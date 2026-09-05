@@ -221,6 +221,7 @@ export const useSettingsStore = create(
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'default', // 'default' | 'compact'
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
+      threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
@@ -707,6 +708,7 @@ export const useSettingsStore = create(
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
+      setThreadReaderLayout: (layout) => set({ threadReaderLayout: layout }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setThreadMode: (mode) => set({ threadMode: mode }),
       setDateFormat: (value) => set({ dateFormat: value }),
@@ -899,6 +901,7 @@ export const useSettingsStore = create(
           viewStyle: 'list',
           emailListStyle: 'default',
           emailListGrouping: 'chronological',
+          threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
           threadMode: 'grouped',
           dateFormat: 'auto',

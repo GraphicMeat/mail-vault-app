@@ -859,3 +859,13 @@ input[type="range"]::-moz-range-thumb:hover {
     display: none;
   }
 }
+
+/* Follow the reader pane width, including when the mailbox list is resized. */
+.thread-reader { container-type: inline-size; }
+.thread-reader-split { display: grid; grid-template-rows: minmax(112px, 30%) minmax(0, 1fr); }
+.thread-reader-detail { border-top-width: 1px; }
+@container (min-width: 640px) {
+  .thread-reader-split { grid-template-columns: 240px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .thread-reader-split > :first-child { grid-column: 1; grid-row: 1; }
+  .thread-reader-split > .thread-reader-detail { grid-column: 2; grid-row: 1; border-top-width: 0; border-left-width: 1px; }
+}
