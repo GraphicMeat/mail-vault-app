@@ -247,4 +247,85 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
     expect(methods('sync.watch')).toHaveLength(2);
   });
+
+  // A folder-subtree view (mailboxScope) lists every folder under its root;
+  // spansMailboxes(state) already treats a mailboxScope the same as UNIFIED,
+  // but the change-feed predicate did not, so a change to a folder under the
+  // open branch (not the root itself) drew no repaint.
+  it('repaints a subtree view for a change under the scope root', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'Projects',
+      mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] },
+    });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Projects/Alpha', newEmails: 0, updatedFlags: 3, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not repaint a subtree view for a folder outside the scope', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'Projects',
+      mailboxScope: { root: 'Projects', paths: ['Projects', 'Projects/Alpha'] },
+    });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Archive', newEmails: 0, updatedFlags: 3, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadEmails).not.toHaveBeenCalled();
+  });
+
+  // `stopped` was checked before the for-of loop over a reply's changes, but
+  // not between iterations — each iteration awaits db.getEmailHeadersPartial,
+  // so an unmount between change 1 and change 2 still let change 2 fire.
+  it('stops between changes in the same reply on unmount', async () => {
+    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+    let land;
+    mockGetHeaders.mockImplementation(() => new Promise(r => { land = r; }));
+    eventReplies = [reply({
+      gen: 1,
+      changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+      ],
+    })];
+
+    const { unmount } = renderHook(() => useEmailScheduler());
+    await flush();
+
+    // The first change's onSyncChange is parked awaiting getEmailHeadersPartial.
+    unmount();
+    land({ emails: [{ from: { name: 'Ada' }, subject: 'One' }] });
+    await flush();
+
+    expect(mockNotify.mock.calls.length).toBeLessThanOrEqual(1);
+    expect(mockLoadEmails.mock.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  // One reload per distinct (accountId, mailbox) pair per reply, even when the
+  // reply names it twice — notifications still fire once per change.
+  it('reloads once per distinct on-screen folder even when a reply names it twice', async () => {
+    mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
+    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Difference engine' }] });
+    eventReplies = [reply({
+      gen: 1,
+      changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+      ],
+    })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+  });
 });
