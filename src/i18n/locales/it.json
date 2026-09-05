@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "«{{name}}» spostata nel cestino",
   "errors.noTrashFolder": "Questo account non ha un cestino in cui spostare la cartella.",
   "errors.folderNameInvalid": "I nomi delle cartelle non possono essere vuoti né contenere «{{delimiter}}».",
+  "errors.folderLocked": "La posta in arrivo e le cartelle speciali non possono essere rinominate né eliminate.",
   "common.create": "Crea",
   "common.rename": "Rinomina"
 }

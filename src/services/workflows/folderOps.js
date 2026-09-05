@@ -9,7 +9,7 @@
 // own never moves.
 import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
-import { isGraphAccount } from '../graphConfig';
+import { isGraphAccount, normalizeGraphFolderName } from '../graphConfig';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
 import { encodeImapUtf7 } from '../../utils/imapUtf7';
 import { t as tr } from '../../i18n/index.js';
@@ -69,15 +69,28 @@ async function _moveVaultDirs(accountId, email, pairs) {
   }
 }
 
-const graphIdOf = (mailboxes, path) => mailboxes.find(m => m.path === path)?._graphFolderId;
+const nodeAt = (mailboxes, path) => mailboxes.find(m => m.path === path);
+const graphIdOf = (mailboxes, path) => nodeAt(mailboxes, path)?._graphFolderId;
+
+// INBOX and every special-use folder are undeletable/unrenamable — the
+// context menu already disables those actions, but this is the workflow
+// itself, reachable from anywhere (or a stale menu). A caller who reaches
+// `deleteFolder(trashPathOf(mailboxes))` must be refused here, not fall into
+// "already under Trash" and issue a real DELETE of Trash itself.
+function guardLocked(mailboxes, path) {
+  const node = nodeAt(mailboxes, path);
+  if (node && specialOrInbox(node)) throw new Error(tr('errors.folderLocked'));
+}
 
 export async function createFolder(accountId, parentPath, displayName) {
   const { s, account, mailboxes, d } = await _ctx(accountId);
   const leaf = validName(displayName, d);
-  const path = parentPath ? `${parentPath}${d}${leaf}` : leaf;
-  if (isGraphAccount(account)) {
-    // Graph names folders, it does not path them: the display name goes over
-    // as the user typed it and the parent is an id.
+  const graph = isGraphAccount(account);
+  // Graph names folders, it does not path them: a subfolder's path is just
+  // normalizeGraphFolderName(displayName), flat, the same shape the refetch
+  // will list it under — never the IMAP-shaped `parent + delimiter + leaf`.
+  const path = graph ? normalizeGraphFolderName(displayName.trim()) : (parentPath ? `${parentPath}${d}${leaf}` : leaf);
+  if (graph) {
     await api.graphCreateFolder(account.oauth2AccessToken, displayName.trim(), parentPath ? graphIdOf(mailboxes, parentPath) || null : null);
   } else {
     await api.createMailbox(account, path);
@@ -88,10 +101,17 @@ export async function createFolder(accountId, parentPath, displayName) {
 
 export async function renameFolder(accountId, path, displayName) {
   const { s, account, mailboxes, d, email } = await _ctx(accountId);
+  guardLocked(mailboxes, path);
   const leaf = validName(displayName, d);
-  const parent = path.includes(d) ? path.slice(0, path.lastIndexOf(d) + 1) : '';
-  const to = parent + leaf;
-  if (isGraphAccount(account)) {
+  const graph = isGraphAccount(account);
+  // Same reasoning as createFolder: a Graph folder's path is its normalized
+  // display name, flat. Using the IMAP-shaped `to` here would move the vault
+  // directories to a path Graph's refetch never produces, silently orphaning
+  // the Maildir, the index, the sidecar cache and the mirror.
+  const to = graph
+    ? normalizeGraphFolderName(displayName.trim())
+    : (path.includes(d) ? path.slice(0, path.lastIndexOf(d) + 1) : '') + leaf;
+  if (graph) {
     await api.graphRenameFolder(account.oauth2AccessToken, graphIdOf(mailboxes, path), displayName.trim());
   } else {
     await api.renameMailbox(account, path, to);
@@ -105,16 +125,18 @@ export async function renameFolder(accountId, path, displayName) {
 
 export async function deleteFolder(accountId, path) {
   const { s, account, mailboxes, d, email } = await _ctx(accountId);
+  guardLocked(mailboxes, path);
   const trash = trashPathOf(mailboxes);
   if (!trash || !hasHierarchy(mailboxes)) throw new Error(tr('errors.noTrashFolder'));
   const active = s.activeMailbox;
   const next = isUnder(active, path, d) ? 'INBOX' : active;
+  const graph = isGraphAccount(account);
 
   if (isUnder(path, trash, d)) {
     // Already in the bin — this is the real DELETE, and the vault directories
     // go with the folder rather than following it somewhere.
     const paths = [path, ...descendantsOf(mailboxes, path, d)];
-    if (isGraphAccount(account)) {
+    if (graph) {
       for (const p of paths.slice().reverse()) {
         await api.graphDeleteFolder(account.oauth2AccessToken, graphIdOf(mailboxes, p));
       }
@@ -125,14 +147,18 @@ export async function deleteFolder(accountId, path) {
     return { deleted: paths.length };
   }
 
-  const to = `${trash}${d}${path.split(d).pop()}`;
-  if (isGraphAccount(account)) {
-    // Graph's own DELETE on a folder outside Deleted Items is a move anyway;
-    // saying so explicitly keeps the two cases apart.
+  if (graph) {
+    // Graph's own "move to Deleted Items" does not rename the folder — its
+    // display name, and the vault directory that matches it, never change.
+    // Moving the vault directory to an IMAP-shaped Trash path here would
+    // orphan it: nothing on the server ever produces that path.
     await api.graphMoveFolder(account.oauth2AccessToken, graphIdOf(mailboxes, path), 'deleteditems');
-  } else {
-    await api.renameMailbox(account, path, to);
+    await _settle(s, accountId, next);
+    return { movedTo: path };
   }
+
+  const to = `${trash}${d}${path.split(d).pop()}`;
+  await api.renameMailbox(account, path, to);
   const vaultError = await _moveVaultDirs(accountId, email, renamePairs(mailboxes, path, to, d));
   await _settle(s, accountId, next);
   if (vaultError) throw vaultError;

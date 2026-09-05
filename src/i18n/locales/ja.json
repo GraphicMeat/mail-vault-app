@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "「{{name}}」をゴミ箱へ移動しました",
   "errors.noTrashFolder": "このアカウントには、フォルダの移動先となるゴミ箱がありません。",
   "errors.folderNameInvalid": "フォルダ名を空にすることはできません。「{{delimiter}}」も使用できません。",
+  "errors.folderLocked": "受信トレイと特殊フォルダは名前の変更や削除ができません。",
   "common.create": "作成",
   "common.rename": "名前を変更"
 }

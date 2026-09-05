@@ -19,6 +19,10 @@ vi.mock('../../api', () => api);
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (a) => a?.oauth2Transport === 'graph',
+  // None of these fixtures use a display name from GRAPH_FOLDER_NAME_MAP
+  // (Inbox, Sent Items, …), so a passthrough is the real function's behaviour
+  // for every name these tests exercise.
+  normalizeGraphFolderName: (name) => name,
 }));
 const mockForce = vi.fn();
 vi.mock('../helpers/mailboxRefetch', () => ({ forceMailboxRefetch: (...a) => mockForce(...a) }));
@@ -154,6 +158,37 @@ describe('deleteFolder', () => {
   });
 });
 
+describe('locked folders', () => {
+  // The context menu already disables these actions on INBOX and any
+  // special-use folder, but the workflow is reachable from other callers too
+  // (or a stale menu) — it must refuse on its own, not just look disabled.
+  it('renameFolder refuses INBOX', async () => {
+    store(SLASHED, 'INBOX');
+    await expect(renameFolder('a1', 'INBOX', 'X')).rejects.toThrow(tr('errors.folderLocked'));
+    expect(api.renameMailbox).not.toHaveBeenCalled();
+    expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
+  });
+
+  it('renameFolder refuses a special-use folder', async () => {
+    store(SLASHED, 'INBOX');
+    await expect(renameFolder('a1', 'Trash', 'X')).rejects.toThrow(tr('errors.folderLocked'));
+    expect(api.renameMailbox).not.toHaveBeenCalled();
+  });
+
+  it('deleteFolder refuses the Trash folder itself, rather than DELETEing it as "already under Trash"', async () => {
+    store(SLASHED, 'INBOX');
+    await expect(deleteFolder('a1', trashPathOf(SLASHED))).rejects.toThrow(tr('errors.folderLocked'));
+    expect(api.deleteMailbox).not.toHaveBeenCalled();
+    expect(api.renameMailbox).not.toHaveBeenCalled();
+  });
+
+  it('deleteFolder refuses INBOX', async () => {
+    store(SLASHED, 'INBOX');
+    await expect(deleteFolder('a1', 'INBOX')).rejects.toThrow(tr('errors.folderLocked'));
+    expect(api.renameMailbox).not.toHaveBeenCalled();
+  });
+});
+
 describe('the name the user typed', () => {
   it('is refused when it contains the delimiter', async () => {
     store(SLASHED);
@@ -191,7 +226,7 @@ describe('Graph', () => {
 
   it('create/rename/delete go through the Graph commands with folder ids', async () => {
     store(GRAPH_BOXES, 'Inbox', GRAPH_ACCOUNT);
-    await createFolder('a1', 'Projects', 'Kunden');
+    expect(await createFolder('a1', 'Projects', 'Kunden')).toBe('Kunden');
     expect(api.graphCreateFolder).toHaveBeenCalledWith('tok', 'Kunden', 'id-projects');
     expect(api.createMailbox).not.toHaveBeenCalled();
 
@@ -202,9 +237,12 @@ describe('Graph', () => {
       { from: 'Projects', to: 'Work' },
     ]);
 
+    api.vaultRenameMailbox.mockClear();
     await deleteFolder('a1', 'Projects');
     expect(api.graphMoveFolder).toHaveBeenCalledWith('tok', 'id-projects', 'deleteditems');
     expect(api.graphDeleteFolder).not.toHaveBeenCalled();
+    // Graph's move doesn't rename the folder, so no local directory follows it.
+    expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
   });
 
   it('deletes a folder already in Deleted Items for real', async () => {
@@ -212,6 +250,19 @@ describe('Graph', () => {
     expect(await deleteFolder('a1', 'Deleted Items/Old')).toEqual({ deleted: 1 });
     expect(api.graphDeleteFolder).toHaveBeenCalledWith('tok', 'id-old');
     expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
+  });
+
+  it('maps the vault path through normalizeGraphFolderName, not the IMAP-shaped path a real hierarchy would use', async () => {
+    // Graph paths are flat display names — never `parent + delimiter + leaf`.
+    // A rename whose vault "to" used the IMAP shape would move the Maildir to
+    // a path Graph's own refetch never produces, orphaning it.
+    store(GRAPH_BOXES, 'Inbox', GRAPH_ACCOUNT);
+    const to = await renameFolder('a1', 'Projects', 'Wörk');
+    expect(api.graphRenameFolder).toHaveBeenCalledWith('tok', 'id-projects', 'Wörk');
+    expect(api.vaultRenameMailbox).toHaveBeenCalledWith('a1', 'a1@x', [
+      { from: 'Projects', to: 'Wörk' },
+    ]);
+    expect(to).toBe('Wörk');
   });
 });
 

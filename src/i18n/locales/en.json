@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "\"{{name}}\" moved to Trash",
   "errors.noTrashFolder": "This account has no Trash folder to move the folder into.",
   "errors.folderNameInvalid": "Folder names cannot be empty or contain \"{{delimiter}}\".",
+  "errors.folderLocked": "INBOX and special folders cannot be renamed or deleted.",
   "common.create": "Create",
   "common.rename": "Rename"
 }

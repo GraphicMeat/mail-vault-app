@@ -23,6 +23,10 @@ describe('encodeImapUtf7', () => {
     expect(decodeImapUtf7(encodeImapUtf7(s))).toBe(s);
   });
 
+  it('round-trips an astral-plane character (a surrogate pair)', () => {
+    expect(decodeImapUtf7(encodeImapUtf7('Fun 😀'))).toBe('Fun 😀');
+  });
+
   it('keeps one run per stretch of non-ASCII, not one per character', () => {
     // "&AMQ-&ANY-" would decode the same but is not what a server writes.
     expect(encodeImapUtf7('ÄÖ')).toBe('&AMQA1g-');

@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "« {{name}} » a été mis à la corbeille",
   "errors.noTrashFolder": "Ce compte n’a pas de corbeille où déplacer le dossier.",
   "errors.folderNameInvalid": "Un nom de dossier ne peut pas être vide ni contenir « {{delimiter}} ».",
+  "errors.folderLocked": "La boîte de réception et les dossiers spéciaux ne peuvent pas être renommés ni supprimés.",
   "common.create": "Créer",
   "common.rename": "Renommer"
 }

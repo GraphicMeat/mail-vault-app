@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "„{{name}}“ in den Papierkorb verschoben",
   "errors.noTrashFolder": "Dieses Konto hat keinen Papierkorb, in den der Ordner verschoben werden könnte.",
   "errors.folderNameInvalid": "Ordnernamen dürfen nicht leer sein und kein „{{delimiter}}“ enthalten.",
+  "errors.folderLocked": "Der Posteingang und besondere Ordner können nicht umbenannt oder gelöscht werden.",
   "common.create": "Erstellen",
   "common.rename": "Umbenennen"
 }

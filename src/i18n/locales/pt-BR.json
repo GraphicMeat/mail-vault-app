@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "\"{{name}}\" foi movida para a lixeira",
   "errors.noTrashFolder": "Esta conta não tem uma lixeira para onde mover a pasta.",
   "errors.folderNameInvalid": "Nomes de pasta não podem ficar vazios nem conter \"{{delimiter}}\".",
+  "errors.folderLocked": "A Caixa de Entrada e as pastas especiais não podem ser renomeadas nem excluídas.",
   "common.create": "Criar",
   "common.rename": "Renomear"
 }

@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "«{{name}}» se movió a la papelera",
   "errors.noTrashFolder": "Esta cuenta no tiene una papelera a la que mover la carpeta.",
   "errors.folderNameInvalid": "Los nombres de carpeta no pueden estar vacíos ni contener «{{delimiter}}».",
+  "errors.folderLocked": "La bandeja de entrada y las carpetas especiales no se pueden renombrar ni eliminar.",
   "common.create": "Crear",
   "common.rename": "Cambiar nombre"
 }

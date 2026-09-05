@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "\"{{name}}\"을(를) 휴지통으로 옮겼습니다",
   "errors.noTrashFolder": "이 계정에는 폴더를 옮길 휴지통이 없습니다.",
   "errors.folderNameInvalid": "폴더 이름은 비워 둘 수 없으며 \"{{delimiter}}\"을(를) 포함할 수 없습니다.",
+  "errors.folderLocked": "받은 편지함과 특수 폴더는 이름을 바꾸거나 삭제할 수 없습니다.",
   "common.create": "만들기",
   "common.rename": "이름 변경"
 }

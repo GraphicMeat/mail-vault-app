@@ -1968,6 +1968,7 @@
   "sidebar.folderMovedToTrash": "已将“{{name}}”移到废纸篓",
   "errors.noTrashFolder": "此账户没有可供移入该文件夹的废纸篓。",
   "errors.folderNameInvalid": "文件夹名称不能为空，也不能包含“{{delimiter}}”。",
+  "errors.folderLocked": "收件箱和特殊文件夹无法重命名或删除。",
   "common.create": "新建",
   "common.rename": "重命名"
 }
