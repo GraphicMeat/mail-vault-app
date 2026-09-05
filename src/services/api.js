@@ -141,6 +141,15 @@ export async function checkMailboxStatus(account, mailbox = 'INBOX') {
   });
 }
 
+export async function fetchFolderStatus(account, mailboxes) {
+  if (IS_TAURI) {
+    // [{ path, messages, unseen, uidNext, uidValidity }] — a folder the
+    // server refused STATUS for is absent.
+    return tauriInvoke('imap_folder_status', { account, mailboxes });
+  }
+  return [];
+}
+
 export async function fetchChangedFlags(account, mailbox = 'INBOX', sinceModseq) {
   if (IS_TAURI) {
     const data = await tauriInvoke('imap_fetch_changed_flags', { account, mailbox, sinceModseq });

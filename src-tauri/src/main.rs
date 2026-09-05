@@ -5198,6 +5198,7 @@ fn main() {
             commands::imap_get_emails,
             commands::imap_get_emails_range,
             commands::imap_check_mailbox_status,
+            commands::imap_folder_status,
             commands::imap_fetch_changed_flags,
             commands::imap_search_all_uids,
             commands::imap_fetch_headers_by_uids,

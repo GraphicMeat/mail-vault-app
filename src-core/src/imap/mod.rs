@@ -846,6 +846,41 @@ pub async fn check_mailbox_status(
     }
 }
 
+/// What `STATUS` says about a folder that is not open.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MailboxStatus {
+    pub path: String,
+    pub messages: u32,
+    pub unseen: Option<u32>,
+    pub uid_next: Option<u32>,
+    pub uid_validity: Option<u32>,
+}
+
+/// `STATUS <mailbox> (MESSAGES UNSEEN UIDNEXT UIDVALIDITY)` — counts without a
+/// SELECT, so a closed folder can show its unread badge. Thunderbird polls this
+/// for every folder it watches. Do not send it for the mailbox that IS selected
+/// on this session (RFC 3501 §6.3.10); read that one's counts from SELECT.
+///
+/// A reply that carries no UIDVALIDITY is a dead socket, not a folder with
+/// zero messages — the same rule `selected()` applies to SELECT.
+pub async fn mailbox_status(session: &mut ImapSession, mailbox: &str) -> Result<MailboxStatus, String> {
+    let mb = session
+        .status(mailbox, "(MESSAGES UNSEEN UIDNEXT UIDVALIDITY)")
+        .await
+        .map_err(|e| format!("STATUS {} failed: {}", mailbox, e))?;
+    if mb.uid_validity.is_none() {
+        return Err(format!("STATUS {} failed: connection lost", mailbox));
+    }
+    Ok(MailboxStatus {
+        path: mailbox.to_string(),
+        messages: mb.exists,
+        unseen: mb.unseen,
+        uid_next: mb.uid_next,
+        uid_validity: mb.uid_validity,
+    })
+}
+
 /// Fetch UIDs with changed flags since a given MODSEQ (CONDSTORE).
 /// Returns Vec of (uid, flags) for emails whose flags changed.
 pub async fn fetch_changed_flags(
