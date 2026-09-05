@@ -238,6 +238,18 @@ describe('moveEmails', () => {
     expect([...useMailStore.getState().selectedEmailIds]).toEqual([7]);
   });
 
+  it('a row-menu move clears only its own keys, leaving an unrelated bulk selection intact', async () => {
+    // selectedEmailIds holds 9 from an unrelated bulk-select elsewhere in the
+    // list; this move targets only row 7 (e.g. via that row's own menu). It
+    // must clear 7 from the selection without touching 9.
+    primeStore({ emails: [row(7), row(9)], selected: [9] });
+
+    await useMailStore.getState().moveEmails([7], 'Archive');
+
+    expect(useMailStore.getState().emails.map(e => e.uid)).toEqual([9]);
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([9]);
+  });
+
   it('a Graph group is not journalled', async () => {
     const graphAccount = { id: 'a1', email: 'a1@x', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
     graphId = 'gid';

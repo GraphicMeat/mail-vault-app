@@ -1284,8 +1284,14 @@ async fn run_checked(session: &mut ImapSession, command: String, what: &str) -> 
 
 /// A mailbox name as an IMAP quoted string. Routinely namespaced and UTF-7
 /// encoded, so never an atom.
-pub fn quote_mailbox(name: &str) -> String {
-    format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\""))
+///
+/// RFC 3501 forbids CR/LF in a mailbox name; refusing here is what keeps a
+/// later user-typed folder name from splicing a second command onto the wire.
+pub fn quote_mailbox(name: &str) -> Result<String, String> {
+    if name.contains('\r') || name.contains('\n') {
+        return Err(format!("mailbox name contains CR/LF: {:?}", name));
+    }
+    Ok(format!("\"{}\"", name.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
 fn uids_of(set: &[imap_proto::UidSetMember]) -> Vec<u32> {
@@ -1460,7 +1466,7 @@ pub async fn delete_email(
         // supply is `quote_mailbox` now — Trash is routinely namespaced and
         // UTF-7 encoded, so it is never an atom.
         let trash_uid;
-        match run_collecting_copyuid(session, format!("UID MOVE {} {}", uid, quote_mailbox(&trash))).await {
+        match run_collecting_copyuid(session, format!("UID MOVE {} {}", uid, quote_mailbox(&trash)?)).await {
             Ok(new) => {
                 trash_uid = new.and_then(|v| v.first().copied());
                 info!("[delete_email] uid={} moved to '{}' (trash uid {:?})", uid, trash, trash_uid);
@@ -1468,7 +1474,7 @@ pub async fn delete_email(
             Err(e) => {
                 // No MOVE capability: COPY + \Deleted + UID EXPUNGE.
                 tracing::warn!("[delete_email] UID MOVE to '{}' failed ({}), falling back to COPY+EXPUNGE", trash, e);
-                let new = run_collecting_copyuid(session, format!("UID COPY {} {}", uid, quote_mailbox(&trash)))
+                let new = run_collecting_copyuid(session, format!("UID COPY {} {}", uid, quote_mailbox(&trash)?))
                     .await
                     .map_err(|e| format!("UID COPY to '{}' failed: {}", trash, e))?;
                 trash_uid = new.and_then(|v| v.first().copied());
@@ -1572,7 +1578,7 @@ pub async fn move_uids(
         info!("[move] UID MOVE {} '{}' -> '{}'", uid_set, source_mailbox, target_mailbox);
         let new_uids = run_collecting_copyuid(
             session,
-            format!("UID MOVE {} {}", uid_set, quote_mailbox(target_mailbox)),
+            format!("UID MOVE {} {}", uid_set, quote_mailbox(target_mailbox)?),
         )
         .await?;
         return Ok(MoveOutcome { moved: count, new_uids });
@@ -1584,7 +1590,7 @@ pub async fn move_uids(
     );
     let new_uids = run_collecting_copyuid(
         session,
-        format!("UID COPY {} {}", uid_set, quote_mailbox(target_mailbox)),
+        format!("UID COPY {} {}", uid_set, quote_mailbox(target_mailbox)?),
     )
     .await?;
     run_checked(session, format!("UID STORE {} +FLAGS (\\Deleted)", uid_set), "STORE \\Deleted").await?;
@@ -1704,7 +1710,7 @@ pub async fn append_email_verified(
     // Raw bytes are embedded via `from_utf8_unchecked`; the encoder does not
     // rely on UTF-8 validity, just copies the bytes to the wire. For plain
     // test emails the bytes are ASCII anyway.
-    let quoted_mailbox = quote_mailbox(mailbox);
+    let quoted_mailbox = quote_mailbox(mailbox)?;
     let flags_clause: String = if flags.is_empty() {
         String::new()
     } else {

@@ -1754,7 +1754,9 @@ export async function moveEmails(keys, targetMailbox) {
 
   // Resolved rows only. A key nothing could place named no folder, so nothing
   // moved for it: taking its row off the list (or its tick off the selection)
-  // would show the user a move that did not happen.
+  // would show the user a move that did not happen. Clearing only the keys
+  // this move resolved — not the whole selectedEmailIds set — means a single
+  // row-menu move leaves an unrelated bulk selection intact.
   const keySet = new Set([...groups.values()].flatMap(g => g.keys));
   const filteredEmails = get().emails.filter(e => !keySet.has(selectionKey(e, state)));
   const newTotal = Math.max(0, (get().totalEmails || 0) - (get().emails.length - filteredEmails.length));

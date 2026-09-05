@@ -367,8 +367,9 @@ async fn delete_to_trash_reports_where_the_message_went() {
 
 #[test]
 fn quote_mailbox_escapes_what_imap_needs() {
-    assert_eq!(quote_mailbox("INBOX.Trash"), "\"INBOX.Trash\"");
-    assert_eq!(quote_mailbox("Say \"hi\"\\x"), "\"Say \\\"hi\\\"\\\\x\"");
+    assert_eq!(quote_mailbox("INBOX.Trash").unwrap(), "\"INBOX.Trash\"");
+    assert_eq!(quote_mailbox("Say \"hi\"\\x").unwrap(), "\"Say \\\"hi\\\"\\\\x\"");
+    assert!(quote_mailbox("bad\r\nname").is_err());
 }
 
 // ── APPEND date ────────────────────────────────────────────────────────────
