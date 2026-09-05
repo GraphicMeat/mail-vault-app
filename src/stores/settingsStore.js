@@ -75,6 +75,20 @@ export const DEFAULT_SHORTCUTS = {
   openSettings: 'Meta+,',
 };
 
+// Shallow, EXCEPT the shortcut map: a persisted object replaces the default
+// whole, so every binding added after a user's first launch would be missing
+// for them for ever (rendered "—", firing nothing). A binding the user
+// cleared is stored as an empty string, not dropped, so it survives this
+// merge as cleared.
+//
+// Exported (test-only name) so a spec can exercise the shortcut-merge
+// behaviour directly, without standing up zustand/persist's storage plumbing.
+export const _mergePersistedSettings = (persisted, current) => ({
+  ...current,
+  ...(persisted || {}),
+  keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
+});
+
 /**
  * One canonical cleanup-rule shape: the one the add/edit form writes.
  * Also accepts the engine's old never-written spec, so a rule that was
@@ -931,16 +945,9 @@ export const useSettingsStore = create(
       version: 5,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
-      // Shallow, EXCEPT the shortcut map: a persisted object replaces the
-      // default whole, so every binding added after a user's first launch
-      // would be missing for them for ever (rendered "—", firing nothing). A
-      // binding the user cleared is stored as an empty string, not dropped, so
-      // it survives this merge as cleared.
-      merge: (persisted, current) => ({
-        ...current,
-        ...(persisted || {}),
-        keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
-      }),
+      // See _mergePersistedSettings above for why the shortcut map gets its
+      // own merge instead of the shallow spread everything else gets.
+      merge: _mergePersistedSettings,
       // Migrate existing users from old defaults (5GB or 512MB) down to 128MB
       onRehydrateStorage: () => (state) => {
         if (state && state.cacheLimitMB >= 512) {

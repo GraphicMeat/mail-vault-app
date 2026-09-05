@@ -1049,20 +1049,27 @@ export async function toggleFlagged(key) {
 
 // ── \Answered / $Forwarded — the message a reply or forward answered ──
 
-// `replyTo` is the open copy the viewer handed compose, stamped
-// _accountId/_mailbox by selectEmail. A copy without the stamp, or a message
-// that never reached a server, is left alone: there is nothing to write to,
-// and guessing the folder would flag another message under the same number.
+// `replyTo` is the open copy the viewer handed compose — stamped
+// _accountId/_mailbox by selectEmail when the reply started from the reading
+// pane, but NOT when it started from a row menu: `replyTarget` there merges a
+// plain list row with its resolved body, and a single-folder list's rows
+// carry no such stamp. `resolveEmailLocation` is the same fallback every other
+// flag path uses for an unstamped row — the active account/mailbox, which for
+// a row menu action is exactly where that row lives. A message that never
+// reached a server, or whose location cannot be resolved at all (a foreign
+// account's untagged row), is left alone: there is nothing to write to, and
+// guessing the folder would flag another message under the same number.
 // Not undoable — the user asked to send, not to set a flag.
 async function _flagRepliedTo(replyTo, flag) {
-  if (!replyTo?._accountId || !replyTo?._mailbox || typeof replyTo.uid !== 'number'
-    || replyTo._localStaged || replyTo.source === 'local-only') return;
+  if (!replyTo || typeof replyTo.uid !== 'number' || replyTo._localStaged || replyTo.source === 'local-only') return;
   const { useMailStore } = await import('../../stores/mailStore');
-  const account = useMailStore.getState().accounts.find(a => a.id === replyTo._accountId);
+  const state = useMailStore.getState();
+  const loc = resolveEmailLocation(replyTo, state);
+  if (!loc) return;
+  const account = state.accounts.find(a => a.id === loc.accountId);
   if (!account) return;
-  const mailbox = replyTo._mailbox === 'UNIFIED' ? 'INBOX' : replyTo._mailbox;
   return applyFlagToTargets(
-    [{ account, accountId: replyTo._accountId, mailbox, uid: replyTo.uid }],
+    [{ account, accountId: loc.accountId, mailbox: loc.mailbox, uid: replyTo.uid }],
     flag, true, { undoable: false },
   );
 }

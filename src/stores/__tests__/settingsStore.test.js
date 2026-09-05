@@ -12,7 +12,7 @@ vi.mock('../safeStorage', () => {
   };
 });
 
-const { useSettingsStore, isTrackerBlockingActive } = await import('../settingsStore');
+const { useSettingsStore, isTrackerBlockingActive, DEFAULT_SHORTCUTS, _mergePersistedSettings } = await import('../settingsStore');
 
 describe('settingsStore defaults', () => {
   it('has cacheLimitMB default of 128', () => {
@@ -232,5 +232,42 @@ describe('autoDownloadAttachments', () => {
     useSettingsStore.getState().setAutoDownloadAttachments(true);
     expect(useSettingsStore.getState().autoDownloadAttachments).toBe(true);
     useSettingsStore.getState().setAutoDownloadAttachments(false);
+  });
+});
+
+// persist's `merge` option, exercised directly: a persisted install that
+// predates a new shortcut binding must gain it rather than render "—" for
+// ever, while a binding the user did customise must survive the merge.
+describe('_mergePersistedSettings (persist merge for keyboardShortcuts)', () => {
+  it('backfills a shortcut missing from the persisted map while keeping a customised one', () => {
+    const current = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } };
+    const persisted = {
+      keyboardShortcuts: (() => {
+        const { toggleStar, ...rest } = DEFAULT_SHORTCUTS;
+        return { ...rest, archive: 'y' };
+      })(),
+    };
+
+    const merged = _mergePersistedSettings(persisted, current);
+
+    expect(merged.keyboardShortcuts.toggleStar).toBe('s');
+    expect(merged.keyboardShortcuts.archive).toBe('y');
+  });
+
+  it('keeps a shortcut the user explicitly cleared (empty string) rather than backfilling it', () => {
+    const current = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } };
+    const persisted = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS, archive: '' } };
+
+    const merged = _mergePersistedSettings(persisted, current);
+
+    expect(merged.keyboardShortcuts.archive).toBe('');
+  });
+
+  it('falls back to the defaults whole when nothing has been persisted yet', () => {
+    const current = { keyboardShortcuts: { ...DEFAULT_SHORTCUTS } };
+
+    const merged = _mergePersistedSettings(undefined, current);
+
+    expect(merged.keyboardShortcuts).toEqual(DEFAULT_SHORTCUTS);
   });
 });

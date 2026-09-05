@@ -195,6 +195,11 @@ describe('toggleFlagged', () => {
     });
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Flagged'], 'add', 'INBOX');
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'flag', accountId: 'a1', mailbox: 'INBOX', uids: [7] });
+
+    // The journal has to precede the round-trip (a reload in between must not
+    // lose the intent) and clearOps has to follow it (only success clears it).
+    expect(mockQueueOp.mock.invocationCallOrder[0]).toBeLessThan(mockUpdateEmailFlags.mock.invocationCallOrder[0]);
+    expect(mockClearOps.mock.invocationCallOrder[0]).toBeGreaterThan(mockUpdateEmailFlags.mock.invocationCallOrder[0]);
   });
 
   it('leaves every other row alone', async () => {
@@ -286,17 +291,38 @@ describe('setSelectedFlagged', () => {
 });
 
 describe('markAnswered / markForwarded', () => {
-  it('writes \\Answered for a stamped replyTo and does nothing for an unstamped one', async () => {
+  it('writes \\Answered for a stamped replyTo', async () => {
     primeInbox();
 
     await markAnswered({ uid: 7, _accountId: 'a1', _mailbox: 'INBOX' });
 
     expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Answered'], 'add', 'INBOX');
     expect(flagsOf(7)).toContain('\\Answered');
+  });
 
-    mockUpdateEmailFlags.mockClear();
-    await markAnswered({ uid: 9 });                                                     // no _accountId
+  // The row-menu reply: RowActionMenuItems hands replyTarget() a plain
+  // single-folder list row, which carries neither _accountId nor _mailbox —
+  // only the viewer's reply (selectEmail's stamp) has those. _flagRepliedTo
+  // has to resolve the location the way every other flag path does instead
+  // of demanding the stamp, or a reply started from the row menu never marks
+  // the original \Answered.
+  it('resolves an unstamped replyTo (the row-menu shape) through the active account/mailbox', async () => {
+    primeInbox();
+
+    await markAnswered({ uid: 7 });
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Answered'], 'add', 'INBOX');
+    expect(flagsOf(7)).toContain('\\Answered');
+  });
+
+  it('still refuses a local-only row, a staged row, a non-numeric uid, and a row whose account does not resolve', async () => {
+    primeInbox();
+
+    await markAnswered({ uid: 9, _accountId: 'a1', _mailbox: 'INBOX', source: 'local-only' });
     await markAnswered({ uid: 9, _accountId: 'a1', _mailbox: 'INBOX', _localStaged: true });
+    await markAnswered({ uid: '9', _accountId: 'a1', _mailbox: 'INBOX' });   // non-numeric uid
+    await markAnswered({ uid: 9, _accountId: 'no-such-account', _mailbox: 'INBOX' });
+
     expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
   });
 
