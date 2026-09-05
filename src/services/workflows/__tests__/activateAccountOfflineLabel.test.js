@@ -55,6 +55,8 @@ vi.mock('../../api', () => ({
 vi.mock('../../authUtils', () => ({
   ensureFreshToken: (a) => Promise.resolve(a),
   resolveServerAccount: (id, account) => Promise.resolve({ ok: true, account }),
+  // The tail registers this account's IDLE watcher.
+  hasValidCredentials: (a) => !!(a?.password || a?.oauth2AccessToken),
 }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: () => false,
@@ -99,6 +101,9 @@ vi.mock('../../syncProbe', () => ({
 vi.mock('../../syncService', () => ({
   syncNow: (...a) => mockSyncNow(...a),
   waitForSync: (...a) => mockWaitForSync(...a),
+  toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
+  watchAccount: vi.fn(),
+  unwatchAccount: vi.fn(),
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');

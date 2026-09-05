@@ -4,12 +4,12 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
-import { ensureFreshToken, resolveServerAccount } from '../authUtils';
+import { ensureFreshToken, resolveServerAccount, hasValidCredentials } from '../authUtils';
 import { buildThreads } from '../../utils/emailParser';
 import { describeConnectionError } from '../../utils/connectionError';
 import { UidMap } from '../UidMap';
 import { getDaemonHealth } from '../transport';
-import { syncNow, waitForSync } from '../syncService';
+import { syncNow, waitForSync, toSyncAccount, watchAccount } from '../syncService';
 import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven } from './loadEmails';
 import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
@@ -761,19 +761,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       const daemonHealth = getDaemonHealth();
       if (daemonHealth.alive) {
         try {
-          const syncAccount = {
-            id: accountId,
-            email: account.email,
-            imapConfig: {
-              email: account.email, password: account.password,
-              imapHost: account.imapHost, imapPort: account.imapPort,
-              imapSecure: account.imapSecure, authType: account.authType,
-              oauth2AccessToken: account.oauth2AccessToken,
-              smtpHost: account.smtpHost, smtpPort: account.smtpPort,
-              smtpSecure: account.smtpSecure, name: account.name,
-              oauth2Transport: account.oauth2Transport,
-            },
-          };
+          const syncAccount = toSyncAccount(account, accountId);
 
           // Ask the cheap question first: has anything actually changed since
           // the cache was written? One SELECT beats `sync.now` plus a blocking
@@ -1289,6 +1277,10 @@ export async function activateAccount(accountId, mailbox, options = {}) {
     // throttled inside, never allowed to break activation.
     refreshFolderStatus(detectAccount, get().mailboxes, get().activeMailbox)
       .catch(e => console.warn('[folderStatus] STATUS sweep failed:', e));
+    // Hold this account's INBOX in IDLE. Done here as well as in the scheduler
+    // so a freshly added account is watched the moment it is opened, rather
+    // than whenever the scheduler's effect next notices it.
+    if (!isGraphAccount(detectAccount) && hasValidCredentials(detectAccount)) watchAccount(detectAccount);
   }
 
   activationTrace.end('done', { emailCount: get().emails.length });

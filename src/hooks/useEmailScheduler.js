@@ -4,6 +4,10 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { notify } from '../stores/focusStore';
+import * as db from '../services/db';
+import { watchAccount, waitForSyncChanges } from '../services/syncService';
+import { hasValidCredentials } from '../services/authUtils';
+import { isGraphAccount } from '../services/graphConfig';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -65,6 +69,77 @@ export function useEmailScheduler() {
     }
   };
 
+  // ── IDLE: register watchers, then follow the daemon's change feed ──
+  //
+  // The daemon idles each account's INBOX and bumps a generation counter when
+  // a wake-up sync found something. One long poll at a time; the reply names
+  // the account and the folder, and the app repaints only what is on screen
+  // and tells the user about the rest the way a scheduled refresh does.
+  const registerWatchers = () => {
+    for (const a of useMailStore.getState().accounts) {
+      if (!isGraphAccount(a) && hasValidCredentials(a)) watchAccount(a);
+    }
+  };
+
+  // Re-register when an account appears, disappears, or gets fresh credentials.
+  // An OAuth token the daemon never heard about is a watcher that keeps failing
+  // to authenticate until the next app launch.
+  const watchSignature = accounts
+    .map(a => `${a.id}:${a.password ? 1 : 0}:${(a.oauth2AccessToken || '').slice(-8)}`)
+    .join('|');
+  useEffect(() => { registerWatchers(); }, [watchSignature]);
+
+  const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
+    const s = useMailStore.getState();
+    const onScreen =
+      (s.activeAccountId === accountId && (s.activeMailbox === mailbox || s.activeMailbox === 'UNIFIED'))
+      || (s.unifiedInbox && (s.unifiedFolder || 'INBOX') === mailbox);
+    if (onScreen) s.loadEmails?.();
+
+    if (newEmails > 0) {
+      const account = s.accounts.find(a => a.id === accountId);
+      let newest = null;
+      // A missing preview is not worth losing the notification over.
+      try {
+        newest = (await db.getEmailHeadersPartial(accountId, mailbox, 1))?.emails?.[0] || null;
+      } catch { /* no preview, still notify */ }
+      dispatchNotifications([{
+        accountId, accountEmail: account?.email, folder: mailbox, newCount: newEmails,
+        newestSender: newest?.from?.name || newest?.from?.address,
+        newestSubject: newest?.subject,
+      }]);
+    }
+  };
+
+  // Each daemonCall is its own socket connection — the Tauri forwarder connects,
+  // authenticates, sends one request and reads one reply — so a parked long poll
+  // pins only its own connection. Nothing else needs a dedicated one.
+  useEffect(() => {
+    let stopped = false;
+    let since = 0;
+    (async () => {
+      while (!stopped) {
+        let reply;
+        try {
+          reply = await waitForSyncChanges(since, 25000);
+        } catch (e) {
+          // No Tauri means no daemon for the life of this session (the web
+          // build) — retrying that is a spin, not a recovery.
+          if (stopped || e?.code === 'NO_TAURI') return;
+          await new Promise(r => setTimeout(r, e?.code === 'DAEMON_OFFLINE' ? 30000 : 5000));
+          continue;
+        }
+        if (stopped) return;
+        // Adopt the generation the daemon reports, even a lower one: its
+        // counter restarts at 0 when the daemon does, and it answers a cursor
+        // from the future at once with where it actually is.
+        since = reply?.gen ?? since;
+        for (const c of reply?.changes || []) await onSyncChange(c);
+      }
+    })();
+    return () => { stopped = true; };
+  }, []);
+
   // Update badge count
   const updateBadge = async (count) => {
     if (!invoke) return;
@@ -91,6 +166,8 @@ export function useEmailScheduler() {
   // Refresh function that also updates last refresh time
   const doRefresh = async () => {
     console.log('[scheduler] Starting scheduled refresh...');
+    // A token refreshed in the last tick reaches the daemon's watcher here.
+    registerWatchers();
 
     try {
       const result = await refreshAllAccounts();

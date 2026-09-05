@@ -4,6 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { isGraphAccount } from '../graphConfig';
+import { unwatchAccount } from '../syncService';
 import { invalidateRestoreDescriptors as _invalidateRestore, clearGraphIdMap as _clearGraphIdMap } from '../cacheManager';
 
 
@@ -21,6 +22,10 @@ export async function removeAccount(accountId) {
       // Ignore disconnect errors
     }
   }
+
+  // Drop the daemon's IDLE watcher before the row goes: it holds this
+  // account's credentials open on a connection nobody will own any more.
+  unwatchAccount(accountId);
 
   await db.deleteAccount(accountId);
   _invalidateRestore(accountId);

@@ -68,6 +68,8 @@ const mockResolveServerAccount = vi.fn(resolveNow);
 vi.mock('../../authUtils', () => ({
   ensureFreshToken: (a) => Promise.resolve(a),
   resolveServerAccount: (...a) => mockResolveServerAccount(...a),
+  // The tail registers this account's IDLE watcher.
+  hasValidCredentials: (a) => !!(a?.password || a?.oauth2AccessToken),
 }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: () => false,
@@ -108,9 +110,16 @@ vi.mock('../../syncProbe', () => ({
   markVerified: vi.fn(),
   invalidate: vi.fn(),
 }));
+const mockWatchAccount = vi.fn();
 vi.mock('../../syncService', () => ({
   syncNow: (...a) => mockSyncNow(...a),
   waitForSync: (...a) => mockWaitForSync(...a),
+  // The daemon-alive branch builds its sync account through this; the tail
+  // hands the same account to the IDLE watcher. The twelve-field shape itself
+  // is pinned in syncService.test.js, not here.
+  toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
+  watchAccount: (...a) => mockWatchAccount(...a),
+  unwatchAccount: vi.fn(),
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');

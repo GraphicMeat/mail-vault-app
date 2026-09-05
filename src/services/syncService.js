@@ -55,3 +55,68 @@ export async function getSyncStatus(accountId) {
   return daemonCall('sync.status', { accountId });
 }
 
+// ── IDLE watchers and the change feed ───────────────────────────────────────
+
+/**
+ * The account shape the daemon's sync RPCs take: id, email and the IMAP half
+ * of the config. The daemon deserializes these twelve names — a store account
+ * carries a pile of UI-only keys besides, and none of them belong on a socket.
+ *
+ * @param {object} account - a store account row
+ * @param {string} [id=account.id] - explicit id, for callers that know it first
+ */
+export function toSyncAccount(account, id = account.id) {
+  return {
+    id, email: account.email,
+    imapConfig: {
+      email: account.email, password: account.password,
+      imapHost: account.imapHost, imapPort: account.imapPort,
+      imapSecure: account.imapSecure, authType: account.authType,
+      oauth2AccessToken: account.oauth2AccessToken,
+      smtpHost: account.smtpHost, smtpPort: account.smtpPort,
+      smtpSecure: account.smtpSecure, name: account.name,
+      oauth2Transport: account.oauth2Transport,
+    },
+  };
+}
+
+/**
+ * Ask the daemon to hold this account's INBOX in IDLE. Idempotent — the app
+ * re-registers on every refresh so a freshly minted OAuth token reaches the
+ * watcher, and an unchanged account is a no-op inside the daemon.
+ *
+ * No daemon means no IDLE, not a broken app: a missing daemon is swallowed
+ * silently rather than warned about once per account per refresh.
+ */
+export async function watchAccount(account) {
+  try {
+    return await daemonCall('sync.watch', { account: toSyncAccount(account) });
+  } catch (e) {
+    if (e?.code !== 'DAEMON_OFFLINE' && e?.code !== 'NO_TAURI') {
+      console.warn('[sync] watch failed:', e?.message || e);
+    }
+    return null;
+  }
+}
+
+/** Drop an account's watcher. Best-effort — a removed account is gone either way. */
+export async function unwatchAccount(accountId) {
+  try { return await daemonCall('sync.unwatch', { accountId }); } catch { return null; }
+}
+
+/**
+ * Long-poll the daemon's change feed: resolves when its generation passes
+ * `since`, or after `timeoutMs` with `changes: []`.
+ *
+ * The reply's `gen` is the only cursor — adopt it as-is. The daemon's counter
+ * restarts at 0 when the daemon does, and it answers a cursor from the future
+ * at once with where it actually is; clamping upward parks the app on a
+ * generation that will never come round again.
+ *
+ * @param {number} since
+ * @param {number} [timeoutMs=25000] - the daemon clamps this to 60s
+ * @returns {Promise<{ gen: number, changes: Array<{ gen, accountId, mailbox, newEmails, updatedFlags, at }> }>}
+ */
+export function waitForSyncChanges(since, timeoutMs = 25000) {
+  return daemonCall('sync.events', { since, timeoutMs });
+}

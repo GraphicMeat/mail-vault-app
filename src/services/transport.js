@@ -60,6 +60,9 @@ const DAEMON_COMMANDS = {
   'sync_now': 'sync.now',
   'sync_wait': 'sync.wait',
   'sync_status': 'sync.status',
+  'sync_watch': 'sync.watch',
+  'sync_unwatch': 'sync.unwatch',
+  'sync_events': 'sync.events',
 
   // IMAP, SMTP, DNS, Graph, OAuth2, Credentials — NOT routed through daemon.
   // These fall through to Tauri invoke. The daemon will own sync as a background
