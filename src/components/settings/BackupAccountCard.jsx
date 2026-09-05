@@ -122,7 +122,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         unlistenArchive = await listen('archive-progress', (event) => {
           const p = event.payload;
           if (isBackupActive) {
-            setArchiveProgress(p.active ? { total: p.total, completed: p.completed } : null);
+            // An event without the field means the drive recovered — clear the notice.
+            setArchiveProgress(p.active ? { total: p.total, completed: p.completed, slowDriveMs: p.slow_drive_ms ?? null } : null);
           }
         });
       } catch {}
@@ -368,6 +369,11 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
                   <div className="h-1 rounded-full bg-mail-success transition-all" style={{ width: `${Math.round((archiveProgress.completed / archiveProgress.total) * 100)}%` }} />
                 </div>
+                {archiveProgress.slowDriveMs ? (
+                  <p className="text-xs text-mail-warning mt-1">
+                    {t('settings.backup.account.slowDrive', { secs: (archiveProgress.slowDriveMs / 1000).toFixed(1), pause: 30 })}
+                  </p>
+                ) : null}
               </div>
             )}
           </div>

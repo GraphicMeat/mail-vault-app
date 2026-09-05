@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, Manager};
 use tokio::sync::Semaphore;
@@ -28,6 +28,49 @@ pub struct ArchiveProgress {
     /// bandwidth suspension (e.g. Gmail's 2500 MB/day IMAP download cap)
     #[serde(default)]
     pub bandwidth_limited: bool,
+    /// How long the last slow write took, on the events emitted while the run
+    /// is deliberately waiting for a struggling backup drive. Absent otherwise,
+    /// which is what tells the UI the drive recovered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slow_drive_ms: Option<u64>,
+}
+
+// ── Slow-drive pacing ─────────────────────────────────────────────────────────
+
+/// A .eml write that takes this long is not a normal write.
+const SLOW_WRITE_MS: u64 = 2_000;
+/// This many slow writes in a row means the drive, not one file.
+const SLOW_STREAK: u32 = 3;
+/// How long every in-flight task waits before its next fetch while the drive is struggling.
+const SLOW_DRIVE_PAUSE_SECS: u64 = 30;
+
+/// Shared across the run's tasks. The first fast write clears it.
+// ponytail: one streak counter and a fixed pause; make the pause grow with the
+// streak if 30s turns out too short on a drive that stays slow for minutes.
+#[derive(Default)]
+struct DrivePace {
+    slow_streak: AtomicU32,
+    last_slow_ms: AtomicU64,
+}
+
+impl DrivePace {
+    fn record(&self, write_ms: u64) {
+        if write_ms >= SLOW_WRITE_MS {
+            self.last_slow_ms.store(write_ms, Ordering::Relaxed);
+            self.slow_streak.fetch_add(1, Ordering::Relaxed);
+        } else {
+            self.slow_streak.store(0, Ordering::Relaxed);
+        }
+    }
+
+    /// The last slow write's duration, once enough of them ran back to back.
+    fn slow(&self) -> Option<u64> {
+        if self.slow_streak.load(Ordering::Relaxed) >= SLOW_STREAK {
+            Some(self.last_slow_ms.load(Ordering::Relaxed))
+        } else {
+            None
+        }
+    }
 }
 
 // ── Cancellation token (shared app state) ─────────────────────────────────────
@@ -77,6 +120,7 @@ pub async fn run_with_backup(
 
     let _ = app_handle.emit("archive-progress", ArchiveProgress {
         total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0, bandwidth_limited: false,
+        slow_drive_ms: None,
     });
 
     let sem = Arc::new(Semaphore::new(5));
@@ -87,6 +131,8 @@ pub async fn run_with_backup(
     // The server's own words for the last message that failed. Without it a
     // run that lost one message reports a count and nothing to act on.
     let last_err_msg: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
+    // How the backup drive is actually behaving, shared by every task in this run.
+    let pace = Arc::new(DrivePace::default());
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
     // Get the IMAP pool from managed state
@@ -112,6 +158,7 @@ pub async fn run_with_backup(
         let ae = account_email.clone();
         let ext_failures = Arc::clone(&ext_failures);
         let last_err_msg = Arc::clone(&last_err_msg);
+        let pace = Arc::clone(&pace);
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -120,9 +167,32 @@ pub async fn run_with_backup(
                 return None;
             }
 
+            // The drive is struggling. Hammering it harder is how a backup ends
+            // up dropping its sockets; back off, and say so instead of looking
+            // frozen.
+            if let Some(ms) = pace.slow() {
+                let c = completed.load(Ordering::Relaxed);
+                let e = errors.load(Ordering::Relaxed);
+                let _ = app.emit("archive-progress", ArchiveProgress {
+                    total,
+                    completed: c,
+                    errors: e,
+                    active: true,
+                    last_error: None,
+                    last_uid: None,
+                    external_copy_failures: ext_failures.load(Ordering::Relaxed),
+                    bandwidth_limited: false,
+                    slow_drive_ms: Some(ms),
+                });
+                tokio::time::sleep(std::time::Duration::from_secs(SLOW_DRIVE_PAUSE_SECS)).await;
+                if cancel.load(Ordering::Relaxed) {
+                    return None;
+                }
+            }
+
             match fetch_and_store(
                 &pool, &app, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                remove_existing,
+                remove_existing, &pace,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -142,6 +212,7 @@ pub async fn run_with_backup(
                         last_uid: Some(uid),
                         external_copy_failures: ext_failures.load(Ordering::Relaxed),
                         bandwidth_limited: false,
+                        slow_drive_ms: None,
                     });
                     Some(index_entry)
                 }
@@ -176,6 +247,7 @@ pub async fn run_with_backup(
                         // Per-event flag: true only for the error that hit the limit,
                         // so late in-flight failures can't overwrite the friendly message
                         bandwidth_limited: is_bw,
+                        slow_drive_ms: None,
                     });
                     None
                 }
@@ -248,6 +320,7 @@ pub async fn run_with_backup(
         last_uid: None,
         external_copy_failures: final_ext_failures,
         bandwidth_limited,
+        slow_drive_ms: None,
     };
 
     let _ = app_handle.emit("archive-progress", result.clone());
@@ -266,6 +339,7 @@ async fn fetch_and_store(
     backup_path: Option<&str>,
     account_email: Option<&str>,
     remove_existing: bool,
+    pace: &DrivePace,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
 
@@ -320,8 +394,8 @@ async fn fetch_and_store(
     let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
         std::path::PathBuf::from(bp).join(addr).join(&mailbox_owned).join("cur")
     });
-    let (_filename, external_copy_failed) = tokio::task::spawn_blocking(
-        move || -> Result<(String, bool), String> {
+    let (_filename, external_copy_failed, write_ms) = tokio::task::spawn_blocking(
+        move || -> Result<(String, bool, u64), String> {
             use std::fs;
 
             fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
@@ -333,6 +407,10 @@ async fn fetch_and_store(
             }
 
             let filename = super::build_maildir_filename(uid, &flags);
+            // Both writes together: the mirror is the external drive, and how
+            // long the pair takes is the only honest reading of how the drive
+            // the user is backing up to is actually behaving.
+            let started = std::time::Instant::now();
             // Atomic: a kill (or a drive that vanishes) mid-write must not leave
             // a half file behind for the next run's resume scan to trust.
             mailvault_core::fsx::write_atomic(&cur_dir.join(&filename), &raw_bytes)
@@ -360,11 +438,16 @@ async fn fetch_and_store(
                 }
             }
 
-            Ok((filename, external_copy_failed))
+            Ok((filename, external_copy_failed, started.elapsed().as_millis() as u64))
         },
     )
     .await
     .map_err(|e| format!("store UID {} panicked: {}", uid, e))??;
+
+    pace.record(write_ms);
+    if write_ms >= SLOW_WRITE_MS {
+        info!("archive_emails: slow write for UID {} — {} ms", uid, write_ms);
+    }
 
     info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_len,
         if external_copy_failed { ", external copy FAILED" } else { "" });
@@ -521,6 +604,7 @@ pub async fn bulk_delete(
         last_uid: None,
         external_copy_failures: 0,
         bandwidth_limited: false,
+        slow_drive_ms: None,
     })
 }
 
@@ -541,4 +625,51 @@ async fn delete_single_email(
         imap::delete_email(&mut session, mailbox, uid, true, has_uidplus).await?;
         Ok(((), session, Some(mailbox.to_string())))
     }).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DrivePace, SLOW_WRITE_MS};
+
+    #[test]
+    fn three_slow_writes_report_the_drive_as_slow() {
+        let pace = DrivePace::default();
+        pace.record(5_000);
+        pace.record(4_000);
+        assert_eq!(pace.slow(), None, "two slow writes is a file, not a drive");
+        pace.record(3_000);
+        assert_eq!(pace.slow(), Some(3_000), "the last slow write's duration is reported");
+    }
+
+    #[test]
+    fn a_fast_write_clears_the_streak() {
+        let pace = DrivePace::default();
+        pace.record(5_000);
+        pace.record(5_000);
+        pace.record(10);
+        assert_eq!(pace.slow(), None);
+        pace.record(5_000);
+        pace.record(5_000);
+        assert_eq!(pace.slow(), None, "the streak restarted from the fast write");
+    }
+
+    #[test]
+    fn a_fast_write_after_a_slow_run_clears_it_again() {
+        let pace = DrivePace::default();
+        for _ in 0..5 {
+            pace.record(9_000);
+        }
+        assert_eq!(pace.slow(), Some(9_000));
+        pace.record(0);
+        assert_eq!(pace.slow(), None);
+    }
+
+    #[test]
+    fn a_write_exactly_at_the_threshold_counts_as_slow() {
+        let pace = DrivePace::default();
+        for _ in 0..3 {
+            pace.record(SLOW_WRITE_MS);
+        }
+        assert_eq!(pace.slow(), Some(SLOW_WRITE_MS));
+    }
 }

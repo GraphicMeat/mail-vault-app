@@ -1763,6 +1763,7 @@
   "settings.backup.account.emailsBackedUp": "{{count}} emails backed up",
   "settings.backup.account.toDownloadSuffix": " · {{count}} to download",
   "settings.backup.account.downloadingEmails": "Downloading: {{completed}}/{{total}} emails",
+  "settings.backup.account.slowDrive": "Backup drive is slow ({{secs}}s per file). Waiting {{pause}}s before continuing.",
   "settings.dataUsage.account.dailyDownloadLimitMb": "Daily download limit (MB)",
   "settings.dataUsage.account.dailyUploadLimitMb": "Daily upload limit (MB)",
   "settings.sendAs.sendsTestMessageSignedInAs": "Sends one test message to <0>{{address}}</0> so you can see whether your server accepts it. Signed in as <1>{{email}}</1>.",

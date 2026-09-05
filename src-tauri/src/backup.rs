@@ -251,7 +251,12 @@ pub fn drain_purge_queue(data_dir: &std::path::Path, root: &std::path::Path) -> 
 }
 
 /// Build a FolderBackupStatus for one folder.
-fn build_folder_status(
+///
+/// Both counts are `read_dir`s — one on the app dir, one on the backup drive.
+/// On a drive another process is hammering they stall for seconds, and on a
+/// runtime worker that stall is paid by every IMAP socket the runtime is meant
+/// to be polling, so they run on the blocking pool.
+async fn build_folder_status(
     path: &str,
     name: &str,
     server_count: usize,
@@ -261,10 +266,25 @@ fn build_folder_status(
     email: &str,
     children: Vec<FolderBackupStatus>,
 ) -> FolderBackupStatus {
-    let app_count = scan_local_uids(app_handle, account_id, path).unwrap_or_default().len();
-    let external_count = match backup_path {
-        Some(bp) => scan_external_uids(bp, email, path).len(),
-        None => 0,
+    let (app_count, external_count) = {
+        let app = app_handle.clone();
+        let acct = account_id.to_string();
+        let mbox = path.to_string();
+        let bp = backup_path.map(|s| s.to_string());
+        let email = email.to_string();
+        tokio::task::spawn_blocking(move || {
+            let app_count = scan_local_uids(&app, &acct, &mbox).unwrap_or_default().len();
+            let external_count = match bp {
+                Some(bp) => scan_external_uids(&bp, &email, &mbox).len(),
+                None => 0,
+            };
+            (app_count, external_count)
+        })
+        .await
+        .unwrap_or_else(|e| {
+            warn!("build_folder_status: folder scan panicked: {}", e);
+            (0, 0)
+        })
     };
     FolderBackupStatus {
         path: path.to_string(),
@@ -407,7 +427,7 @@ async fn get_imap_backup_status(
                 &mbox.path, &mbox.name, sc,
                 app_handle, account_id, backup_path, &account.email,
                 children,
-            );
+            ).await;
 
             *total_server += sc;
             *total_app += status.app_count;
@@ -458,37 +478,51 @@ async fn get_graph_backup_status(
     let client = crate::graph::GraphClient::new(access_token);
     let graph_folders = client.list_folders().await?;
 
-    let mut folders = Vec::new();
-    let mut total_server = 0usize;
-    let mut total_app = 0usize;
-    let mut total_external = 0usize;
+    // One `read_dir` per folder on the app dir and on the backup drive, and no
+    // await anywhere in the loop — so the whole loop goes to the blocking pool
+    // rather than stalling the runtime workers on a struggling drive.
+    let (folders, total_server, total_app, total_external) = {
+        let app = app_handle.clone();
+        let acct = account_id.clone();
+        let bp = backup_path.clone();
+        let email = email.to_string();
+        tokio::task::spawn_blocking(move || {
+            let mut folders = Vec::new();
+            let mut total_server = 0usize;
+            let mut total_app = 0usize;
+            let mut total_external = 0usize;
 
-    for gf in &graph_folders {
-        let mailbox_path = normalize_graph_folder_name(&gf.display_name);
-        let sc = gf.total_item_count.max(0) as usize;
-        let app_count = scan_local_uids(&app_handle, &account_id, &mailbox_path).unwrap_or_default().len();
-        let ext_count = match backup_path.as_deref() {
-            Some(bp) => scan_external_uids(bp, email, &mailbox_path).len(),
-            None => 0,
-        };
+            for gf in &graph_folders {
+                let mailbox_path = normalize_graph_folder_name(&gf.display_name);
+                let sc = gf.total_item_count.max(0) as usize;
+                let app_count = scan_local_uids(&app, &acct, &mailbox_path).unwrap_or_default().len();
+                let ext_count = match bp.as_deref() {
+                    Some(bp) => scan_external_uids(bp, &email, &mailbox_path).len(),
+                    None => 0,
+                };
 
-        total_server += sc;
-        total_app += app_count;
-        total_external += ext_count;
+                total_server += sc;
+                total_app += app_count;
+                total_external += ext_count;
 
-        if sc > 0 || app_count > 0 || ext_count > 0 {
-            folders.push(FolderBackupStatus {
-                path: mailbox_path.clone(),
-                name: gf.display_name.clone(),
-                server_count: sc,
-                app_count,
-                external_count: ext_count,
-                children: vec![],
-                folder_alias: mailbox_path,
-                local_count_alias: app_count,
-            });
-        }
-    }
+                if sc > 0 || app_count > 0 || ext_count > 0 {
+                    folders.push(FolderBackupStatus {
+                        path: mailbox_path.clone(),
+                        name: gf.display_name.clone(),
+                        server_count: sc,
+                        app_count,
+                        external_count: ext_count,
+                        children: vec![],
+                        folder_alias: mailbox_path,
+                        local_count_alias: app_count,
+                    });
+                }
+            }
+            (folders, total_server, total_app, total_external)
+        })
+        .await
+        .map_err(|e| format!("graph folder scan panicked: {}", e))?
+    };
 
     let external_available = backup_path.is_some();
 
@@ -1047,8 +1081,17 @@ async fn run_graph_backup(
         // Normalize folder name for Maildir path (same as frontend mapping)
         let mailbox_path = normalize_graph_folder_name(folder_name);
 
-        // Get local UIDs
-        let local_uids = scan_local_uids(&app_handle, &account_id, &mailbox_path)?;
+        // Get local UIDs. A read_dir of a folder on a drive another process is
+        // hammering can stall for seconds; on a runtime worker that stall is
+        // paid by every socket the runtime is meant to be polling.
+        let local_uids = {
+            let app = app_handle.clone();
+            let acct = account_id.clone();
+            let mbox = mailbox_path.clone();
+            tokio::task::spawn_blocking(move || scan_local_uids(&app, &acct, &mbox))
+                .await
+                .map_err(|e| format!("local uid scan panicked: {}", e))??
+        };
 
         // Pre-sync: copy files between app and external backup (bidirectional)
         if let Some(ref custom_path) = backup_path {
@@ -1057,7 +1100,10 @@ async fn run_graph_backup(
                 .join(&account.email)
                 .join(&mailbox_path)
                 .join("cur");
-            let synced = sync_locations(&app_dir, &backup_dir);
+            // Whole-directory scan plus file copies, on the external drive.
+            let synced = tokio::task::spawn_blocking(move || sync_locations(&app_dir, &backup_dir))
+                .await
+                .map_err(|e| format!("pre-sync panicked: {}", e))?;
             if synced > 0 {
                 info!("backup(graph): pre-synced {} files between app and backup for {}", synced, mailbox_path);
             }

@@ -1763,6 +1763,7 @@
   "settings.backup.account.emailsBackedUp": "{{count}} 件のメールをバックアップ済み",
   "settings.backup.account.toDownloadSuffix": "・未取得 {{count}} 件",
   "settings.backup.account.downloadingEmails": "取得中: {{completed}}/{{total}} 件",
+  "settings.backup.account.slowDrive": "バックアップ先のドライブが遅くなっています（1 ファイルあたり {{secs}} 秒）。{{pause}} 秒待ってから続行します。",
   "settings.dataUsage.account.dailyDownloadLimitMb": "1 日のダウンロード上限 (MB)",
   "settings.dataUsage.account.dailyUploadLimitMb": "1 日のアップロード上限 (MB)",
   "settings.sendAs.sendsTestMessageSignedInAs": "<0>{{address}}</0> にテストメッセージを 1 通送り、サーバーが受け付けるか確認します。ログイン中: <1>{{email}}</1>。",

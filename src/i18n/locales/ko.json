@@ -1763,6 +1763,7 @@
   "settings.backup.account.emailsBackedUp": "{{count}}개 메일 백업됨",
   "settings.backup.account.toDownloadSuffix": " · 내려받을 {{count}}개",
   "settings.backup.account.downloadingEmails": "내려받는 중: {{completed}}/{{total}}개",
+  "settings.backup.account.slowDrive": "백업 드라이브가 느립니다(파일당 {{secs}}초). {{pause}}초 기다린 후 계속합니다.",
   "settings.dataUsage.account.dailyDownloadLimitMb": "일일 다운로드 한도 (MB)",
   "settings.dataUsage.account.dailyUploadLimitMb": "일일 업로드 한도 (MB)",
   "settings.sendAs.sendsTestMessageSignedInAs": "<0>{{address}}</0>(으)로 테스트 메시지를 한 통 보내 서버가 받아들이는지 확인합니다. 로그인 계정: <1>{{email}}</1>.",

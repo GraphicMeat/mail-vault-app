@@ -1763,6 +1763,7 @@
   "settings.backup.account.emailsBackedUp": "{{count}} correos copiados",
   "settings.backup.account.toDownloadSuffix": " · {{count}} por descargar",
   "settings.backup.account.downloadingEmails": "Descargando: {{completed}}/{{total}} correos",
+  "settings.backup.account.slowDrive": "La unidad de copia de seguridad es lenta ({{secs}} s por archivo). Esperando {{pause}} s antes de continuar.",
   "settings.dataUsage.account.dailyDownloadLimitMb": "Límite diario de descarga (MB)",
   "settings.dataUsage.account.dailyUploadLimitMb": "Límite diario de subida (MB)",
   "settings.sendAs.sendsTestMessageSignedInAs": "Envía un mensaje de prueba a <0>{{address}}</0> para que veas si tu servidor lo acepta. Sesión iniciada como <1>{{email}}</1>.",

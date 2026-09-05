@@ -1763,6 +1763,7 @@
   "settings.backup.account.emailsBackedUp": "已备份 {{count}} 封邮件",
   "settings.backup.account.toDownloadSuffix": "· 待下载 {{count}} 封",
   "settings.backup.account.downloadingEmails": "正在下载：{{completed}}/{{total}} 封",
+  "settings.backup.account.slowDrive": "备份驱动器速度较慢（每个文件 {{secs}} 秒）。等待 {{pause}} 秒后继续。",
   "settings.dataUsage.account.dailyDownloadLimitMb": "每日下载限额（MB）",
   "settings.dataUsage.account.dailyUploadLimitMb": "每日上传限额（MB）",
   "settings.sendAs.sendsTestMessageSignedInAs": "向 <0>{{address}}</0> 发送一封测试邮件，看你的服务器是否接受。当前登录：<1>{{email}}</1>。",
