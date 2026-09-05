@@ -635,7 +635,7 @@ async fn run_imap_backup_inner(
     // List all mailboxes
     let mailboxes = {
         let mut guard = pool.get_background(&account).await?;
-        let result = imap::list_mailboxes(&mut guard.session).await?;
+        let result = imap::bounded("LIST", 60, imap::list_mailboxes(&mut guard.session)).await?;
         pool.return_background(&account, guard).await;
         result
     };
@@ -699,7 +699,14 @@ async fn run_imap_backup_inner(
         // session if it fails, so nothing inherits a dirty read buffer.
         let server_flags = {
             let mut guard = pool.get_background(&account).await?;
-            let result = imap::search_all_uid_flags(&mut guard.session, mailbox_path).await;
+            // Generous: a 1:* listing of a 40k folder is a big response. Bounded
+            // all the same — a session the server dropped answers no faster than
+            // never, and the discard path below is exactly what should happen.
+            let result = imap::bounded(
+                &format!("UID FETCH 1:* {}", mailbox_path),
+                600,
+                imap::search_all_uid_flags(&mut guard.session, mailbox_path),
+            ).await;
             match &result {
                 Ok(_) => pool.return_background(&account, guard).await,
                 Err(_) => pool.discard(&account, guard).await,
@@ -708,8 +715,17 @@ async fn run_imap_backup_inner(
         };
         let server_uids: Vec<u32> = server_flags.iter().map(|(uid, _)| *uid).collect();
 
-        // Get local UIDs
-        let local_uids = scan_local_uids(&app_handle, &account_id, mailbox_path)?;
+        // Get local UIDs. A read_dir of a folder on a drive another process is
+        // hammering can stall for seconds; on a runtime worker that stall is
+        // paid by every IMAP socket the runtime is meant to be polling.
+        let local_uids = {
+            let app = app_handle.clone();
+            let acct = account_id.clone();
+            let mbox = mailbox_path.clone();
+            tokio::task::spawn_blocking(move || scan_local_uids(&app, &acct, &mbox))
+                .await
+                .map_err(|e| format!("local uid scan panicked: {}", e))??
+        };
 
         // Compute delta
         let missing: Vec<u32> = server_uids
@@ -755,7 +771,10 @@ async fn run_imap_backup_inner(
                 .join(&account.email)
                 .join(mailbox_path)
                 .join("cur");
-            let synced = sync_locations(&app_dir, &backup_dir);
+            // Whole-directory scan plus file copies, on the external drive.
+            let synced = tokio::task::spawn_blocking(move || sync_locations(&app_dir, &backup_dir))
+                .await
+                .map_err(|e| format!("pre-sync panicked: {}", e))?;
             if synced > 0 {
                 info!("backup: pre-synced {} files between app and backup for {}", synced, mailbox_path);
             }
@@ -772,6 +791,7 @@ async fn run_imap_backup_inner(
                 Arc::clone(&cancel),
                 backup_path.clone(),
                 Some(account.email.clone()),
+                false,
             )
             .await?;
 
@@ -805,7 +825,13 @@ async fn run_imap_backup_inner(
             let dirs = crate::vault_flags::dirs_for(
                 &app_handle, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
             )?;
-            let applied = crate::vault_flags::apply_in(&dirs, &changes, false);
+            // Renames every stale file in both locations — disk work, and it
+            // takes a process-wide writer lock while it does it.
+            let applied = tokio::task::spawn_blocking(move || {
+                crate::vault_flags::apply_in(&dirs, &changes, false)
+            })
+                .await
+                .map_err(|e| format!("flag catch-up panicked: {}", e))?;
             if applied.total() > 0 {
                 info!(
                     "backup: {} — read state caught up on {} vault files, {} mirror files, {} index entries",

@@ -20,9 +20,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     // rename could install the other's half-written temp.
     static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut tmp_name = name.to_os_string();
-    tmp_name.push(format!(".tmp-{}-{}", std::process::id(), seq));
-    let tmp = path.with_file_name(tmp_name);
+    let tmp = path.with_file_name(temp_name(name, seq));
 
     fs::write(&tmp, bytes)?;
     if let Err(e) = fs::rename(&tmp, path) {
@@ -32,9 +30,31 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+/// `.<name>.tmp-<pid>-<seq>`. The leading dot matters: Maildir readers parse the
+/// uid off the FRONT of a filename (`<uid>:2,S.eml`, `<uid>.eml`), so a temp
+/// named `<uid>:2,S.eml.tmp-…` left by a kill mid-write would read as "uid
+/// already stored" and the message would be skipped on every later run. A
+/// dot-prefixed name parses as no uid at all and is ignored.
+fn temp_name(name: &std::ffi::OsStr, seq: u64) -> std::ffi::OsString {
+    let mut tmp = std::ffi::OsString::from(".");
+    tmp.push(name);
+    tmp.push(format!(".tmp-{}-{}", std::process::id(), seq));
+    tmp
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_temp_name_never_parses_as_a_maildir_uid() {
+        let tmp = temp_name(std::ffi::OsStr::new("4711:2,S.eml"), 3).to_string_lossy().to_string();
+        assert!(tmp.starts_with('.'), "temp must be a dotfile: {tmp}");
+        // The rule every uid scanner uses: split on the first ':' '.' '_' and parse.
+        let head = tmp.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+        assert!(head.parse::<u32>().is_err(), "an orphaned temp read as uid {head}");
+        assert!(!tmp.starts_with("4711:"), "find_file_by_uid would match it: {tmp}");
+    }
 
     fn scratch(name: &str) -> std::path::PathBuf {
         let p = std::env::temp_dir().join(format!("mv-fsx-{name}-{}", uuid::Uuid::new_v4()));

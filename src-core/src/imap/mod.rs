@@ -1791,6 +1791,24 @@ pub async fn create_imap_session_no_compress(config: &ImapConfig) -> Result<Imap
     Ok(session)
 }
 
+/// Bound an IMAP await. A socket the server or NAT dropped while this
+/// process was busy elsewhere never answers; without a bound the caller
+/// waits for ever with nothing logged. Returns the inner error unchanged,
+/// or "<what> timed out after Ns" on expiry.
+pub async fn bounded<T>(
+    what: &str,
+    secs: u64,
+    fut: impl std::future::Future<Output = Result<T, String>>,
+) -> Result<T, String> {
+    match tokio::time::timeout(std::time::Duration::from_secs(secs), fut).await {
+        Ok(inner) => inner,
+        Err(_) => {
+            warn!("[imap:bounded] {} timed out after {}s", what, secs);
+            Err(format!("{} timed out after {}s", what, secs))
+        }
+    }
+}
+
 /// APPEND with pre/post verification. Returns the mailbox EXISTS count before
 /// and after the APPEND, and whether a UID SEARCH for the Message-ID header
 /// finds the new message. Used by the compose send flow so logs can prove
@@ -3153,5 +3171,32 @@ mod resolve_mailbox_path_tests {
         let mut container = mb("[Google Mail]/Sent Mail", Some("\\Sent"));
         container.noselect = true;
         assert_eq!(resolve_mailbox_path("Sent", &[mb("INBOX", Some("\\Inbox")), container]), None);
+    }
+}
+
+#[cfg(test)]
+mod bounded_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_future_that_never_answers_becomes_an_error() {
+        let err = bounded("UID FETCH 1", 0, std::future::pending::<Result<(), String>>())
+            .await
+            .expect_err("a pending await must not be reported as success");
+        assert!(err.contains("timed out"), "unhelpful error: {err}");
+        assert!(err.contains("UID FETCH 1"), "the error must name the call: {err}");
+    }
+
+    #[tokio::test]
+    async fn a_ready_ok_passes_through() {
+        assert_eq!(bounded("x", 60, async { Ok::<_, String>(7) }).await, Ok(7));
+    }
+
+    #[tokio::test]
+    async fn a_ready_err_passes_through_unchanged() {
+        assert_eq!(
+            bounded("x", 60, async { Err::<(), _>("NO Mailbox doesn't exist".to_string()) }).await,
+            Err("NO Mailbox doesn't exist".to_string())
+        );
     }
 }

@@ -416,3 +416,47 @@ async fn search_still_returns_what_parsed() {
     assert!(!rows.is_empty(), "the rows that parsed must survive");
     assert!(rows.len() < 3, "the fault must actually poison an item: {rows:?}");
 }
+
+// ── A bounded fetch ────────────────────────────────────────────────────────
+//
+// A backup that fetches thousands of messages holds one session per worker. If
+// the disk stalls a worker long enough for the server (or a NAT) to drop that
+// socket, the next FETCH on it never answers and `join_next()` waits for ever:
+// the whole backup locks up with nothing logged. `bounded` is the ceiling.
+//
+// Both run under tokio, not async-std: `bounded` is `tokio::time::timeout` and
+// panics without a tokio reactor (see `append_verified_survives_a_slow_server`
+// in imap_write.rs). That matches production — daemon and Tauri are both tokio.
+
+#[tokio::test]
+async fn a_fetch_the_server_never_answers_gives_up_instead_of_hanging() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 1))
+            .fault(Trigger::on("FETCH"), Action::Delay(std::time::Duration::from_secs(5))),
+    );
+    let mut sess = session(&server).await;
+
+    let started = std::time::Instant::now();
+    let err = bounded("UID FETCH 1", 1, fetch_email_by_uid(&mut sess, "INBOX", 1))
+        .await
+        .expect_err("a fetch that never answers must not be awaited for ever");
+
+    assert!(err.contains("timed out"), "unhelpful error: {err}");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(3),
+        "the bound must fire, not the server: {:?}",
+        started.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn a_healthy_fetch_is_untouched_by_the_bound() {
+    let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+    let mut sess = session(&server).await;
+
+    let email = bounded("UID FETCH 1", 10, fetch_email_by_uid(&mut sess, "INBOX", 1))
+        .await
+        .expect("a server that answers must pass straight through");
+    assert!(email.is_some(), "the message is right there");
+}

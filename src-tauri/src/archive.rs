@@ -50,7 +50,7 @@ pub async fn run(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
 ) -> Result<ArchiveProgress, String> {
-    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None).await
+    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None, true).await
 }
 
 pub async fn run_with_backup(
@@ -62,6 +62,11 @@ pub async fn run_with_backup(
     cancel: Arc<AtomicBool>,
     backup_path: Option<String>,
     account_email: Option<String>,
+    // A backup run only ever fetches uids the local scan just proved absent, so
+    // the per-message read_dir looking for a stale copy is pure disk cost on the
+    // one path that can least afford it. The plain archive path passes true:
+    // there a uid the user re-archives can well be on disk already.
+    remove_existing: bool,
 ) -> Result<ArchiveProgress, String> {
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
@@ -117,6 +122,7 @@ pub async fn run_with_backup(
 
             match fetch_and_store(
                 &pool, &app, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
+                remove_existing,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -259,14 +265,21 @@ async fn fetch_and_store(
     uid: u32,
     backup_path: Option<&str>,
     account_email: Option<&str>,
+    remove_existing: bool,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
-    use std::fs;
 
     // Get a priority session for the fetch (semaphore-guarded)
     let mut guard = pool.get_priority(account).await?;
 
-    let email = imap::fetch_email_by_uid(&mut guard.session, mailbox, uid)
+    // Bounded: a socket the server (or a NAT) dropped while a slow disk held
+    // this worker never answers, and an unbounded await here is what locks a
+    // whole backup up with nothing logged.
+    let email = imap::bounded(
+        &format!("UID FETCH {}", uid),
+        60,
+        imap::fetch_email_by_uid(&mut guard.session, mailbox, uid),
+    )
         .await
         .map_err(|e| {
             // Don't return session on error — guard drops, semaphore permit released
@@ -281,17 +294,13 @@ async fn fetch_and_store(
     // The server's own read state, not a hardcoded "seen": this name is what
     // restore uploads, what the mirror copies, and what a vault row reads back.
     let flags = crate::vault_flags::store_flags(&email.flags);
+    // Path computation only — no disk touched, so it stays off the blocking pool.
     let cur_dir = super::maildir_cur_path(app_handle, account_id, mailbox)?;
-    fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
 
-    if let Some(existing) = super::find_file_by_uid(&cur_dir, uid) {
-        let _ = fs::remove_file(&existing);
-    }
-
-    let filename = super::build_maildir_filename(uid, &flags);
     let raw_bytes = base64::engine::general_purpose::STANDARD
         .decode(&email.raw_source)
         .map_err(|e| format!("base64 decode: {}", e))?;
+    let raw_len = raw_bytes.len();
 
     // Parse In-Reply-To and References from raw email for threading
     let (in_reply_to, references) = parse_threading_headers(&raw_bytes);
@@ -302,37 +311,62 @@ async fn fetch_and_store(
         .chars().take(150).collect::<String>()
         .replace('\n', " ").replace('\r', "");
 
-    fs::write(cur_dir.join(&filename), &raw_bytes)
-        .map_err(|e| format!("write .eml: {}", e))?;
+    // Every fs call below is synchronous std::fs. On a runtime worker, an
+    // external drive that Time Machine is reading blocks that worker — and with
+    // five of them in flight the runtime stops polling the IMAP sockets, which
+    // is how the provider comes to drop them mid-run. Do the disk work on the
+    // blocking pool instead.
+    let mailbox_owned = mailbox.to_string();
+    let mirror = backup_path.zip(account_email).map(|(bp, addr)| {
+        std::path::PathBuf::from(bp).join(addr).join(&mailbox_owned).join("cur")
+    });
+    let (_filename, external_copy_failed) = tokio::task::spawn_blocking(
+        move || -> Result<(String, bool), String> {
+            use std::fs;
 
-    // Also write to backup location if configured
-    let mut external_copy_failed = false;
-    if let (Some(bp), Some(email_addr)) = (backup_path, account_email) {
-        let backup_dir = std::path::PathBuf::from(bp)
-            .join(email_addr)
-            .join(mailbox)
-            .join("cur");
-        match fs::create_dir_all(&backup_dir) {
-            Ok(()) => {
-                // Same Maildir name as the app copy (+ .eml) so flags survive a
-                // restore from the external location back into the app store.
-                let eml_name = format!("{}.eml", filename);
-                let dst = backup_dir.join(&eml_name);
-                if super::find_msg_file_by_uid(&backup_dir, uid).is_none() {
-                    if let Err(e) = fs::write(&dst, &raw_bytes) {
-                        warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
+            fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
+
+            if remove_existing {
+                if let Some(existing) = super::find_file_by_uid(&cur_dir, uid) {
+                    let _ = fs::remove_file(&existing);
+                }
+            }
+
+            let filename = super::build_maildir_filename(uid, &flags);
+            // Atomic: a kill (or a drive that vanishes) mid-write must not leave
+            // a half file behind for the next run's resume scan to trust.
+            mailvault_core::fsx::write_atomic(&cur_dir.join(&filename), &raw_bytes)
+                .map_err(|e| format!("write .eml: {}", e))?;
+
+            // Also write to backup location if configured
+            let mut external_copy_failed = false;
+            if let Some(backup_dir) = mirror {
+                match fs::create_dir_all(&backup_dir) {
+                    Ok(()) => {
+                        // Same Maildir name as the app copy (+ .eml) so flags survive a
+                        // restore from the external location back into the app store.
+                        let dst = backup_dir.join(format!("{}.eml", filename));
+                        if super::find_msg_file_by_uid(&backup_dir, uid).is_none() {
+                            if let Err(e) = mailvault_core::fsx::write_atomic(&dst, &raw_bytes) {
+                                warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
+                                external_copy_failed = true;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        warn!("archive_emails: external mkdir failed for UID {}: {}", uid, e);
                         external_copy_failed = true;
                     }
                 }
             }
-            Err(e) => {
-                warn!("archive_emails: external mkdir failed for UID {}: {}", uid, e);
-                external_copy_failed = true;
-            }
-        }
-    }
 
-    info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_bytes.len(),
+            Ok((filename, external_copy_failed))
+        },
+    )
+    .await
+    .map_err(|e| format!("store UID {} panicked: {}", uid, e))??;
+
+    info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_len,
         if external_copy_failed { ", external copy FAILED" } else { "" });
 
     // Build local-index entry
