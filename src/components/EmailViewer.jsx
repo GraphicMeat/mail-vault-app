@@ -39,7 +39,7 @@ import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey, selectionKey } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -288,7 +288,12 @@ function EmailViewerComponent({ onComposeReply }) {
     setConfirmDelete(false);
     setDeleting(true);
     try {
-      await deleteEmailFromServer(selectedEmail.uid);
+      // A bare uid names a message only inside one folder of one account: in
+      // a list that spans mailboxes it matches whichever row carries that
+      // number first, which is another account's mail. Same rule as
+      // ThreadView.requestDelete and the row menu.
+      const state = useMailStore.getState();
+      await deleteEmailFromServer(spansMailboxes(state) ? selectionKey(selectedEmail, state) : selectedEmail.uid);
     } catch (err) {
       // The workflow removes the row optimistically and puts it back when the
       // server refuses (deleteEmailFromServer's restoreRow). Unreported, that

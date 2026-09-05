@@ -367,6 +367,23 @@ describe('RowActionMenuItems', () => {
 
       expect(useMailStoreMock.getState().setSelection).toHaveBeenCalledWith(['acct-9:INBOX:7']);
     });
+
+    // Delete from server does not go through the selection at all — it hands
+    // the workflow a key directly. A bare uid there names another account's
+    // message just as readily as this one, and the workflow cannot tell.
+    it('hands Delete from server the same key, not the bare uid', async () => {
+      useMailStoreMock.setState({ activeMailbox: 'UNIFIED' });
+      const email = baseEmail({ uid: 7, _accountId: 'acct-9', _mailbox: 'INBOX', source: 'server' });
+      const actions = makeActions();
+      const onRequestDelete = vi.fn();
+      render(<RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
+
+      fireEvent.click(screen.getByText('Delete from server'));
+      const [executor] = onRequestDelete.mock.calls[0];
+      await executor();
+
+      expect(actions.deleteEmailFromServer).toHaveBeenCalledWith('acct-9:INBOX:7');
+    });
   });
 
   describe('a pre-existing bulk selection survives a row-scoped action', () => {

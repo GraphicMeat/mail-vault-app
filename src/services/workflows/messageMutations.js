@@ -369,11 +369,21 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   const selectedEmailId = state.selectedEmailId;
   if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
 
+  // The uid the server knows. In a spanning view the argument is a whole
+  // selection key ("acct:INBOX:7"), and everything below — the row lookup, the
+  // journal, the tombstone, the network call, the custody stamp — addresses a
+  // message by number inside one (account, mailbox).
+  const realUid = unified?.uid ?? uid;
+
   // Local-only short-circuit: if this UID belongs to an email that only
   // exists in Maildir + local-index (never confirmed server-side), route to
   // the local delete path. Otherwise the server delete would error on the
   // pseudo-UID and the entry would re-hydrate on next loadEmails.
-  const candidate = [...(state.emails || []), ...(state.sentEmails || [])].find(e => e.uid === uid);
+  // Matched on the resolved uid and, in a spanning view, on the account and
+  // folder this delete is aimed at: keyed by the raw key it matches no row at
+  // all, and a bare uid matches any account's row carrying that number.
+  const candidate = [...(state.emails || []), ...(state.sentEmails || [])].find(e => e.uid === realUid
+    && (!isUnified || (e._accountId === accountId && (e._mailbox == null || e._mailbox === mailbox))));
   const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true;
 
   const invoke = window.__TAURI__?.core?.invoke;
@@ -384,7 +394,6 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // launch can finish (replayPendingDeletes). Skipped for Graph (its delete is
   // addressed by a per-session message id, not a replayable uid) and for
   // local-only rows (no server delete to replay).
-  const realUid = unified?.uid ?? uid;
   const journalled = !isLocalOnly && !isGraphAccount(account);
   if (journalled) await db.queuePendingDeletes(accountId, mailbox, [realUid]);
 
@@ -443,11 +452,11 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   if (isLocalOnly) {
     if (invoke) {
       try {
-        await invoke('maildir_delete', { accountId, mailbox, uid });
-        await invoke('local_index_remove', { accountId, mailbox, uid });
-        console.log(`[deleteEmail] Local-only delete: UID ${uid} (${accountId}/${mailbox})`);
+        await invoke('maildir_delete', { accountId, mailbox, uid: realUid });
+        await invoke('local_index_remove', { accountId, mailbox, uid: realUid });
+        console.log(`[deleteEmail] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
       } catch (err) {
-        console.error(`[deleteEmail] Local-only delete FAILED for UID ${uid}:`, err);
+        console.error(`[deleteEmail] Local-only delete FAILED for UID ${realUid}:`, err);
         restoreRow();
         throw err;
       }
@@ -477,7 +486,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   if (journalled) await db.clearPendingDeletes(accountId, mailbox, [realUid]);
 
-  await applyServerRemoval(uid, {
+  await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
     clearSelection: !threadUpdate && selectedEmailId === uid,
     deletedByUs: true,
@@ -564,8 +573,17 @@ export async function applyServerRemoval(uid, {
   // or the Bin, and that is precisely the guess this whole change removes.
   if (deletedByUs) await markServerDeleted(accountId, mailbox, uid);
 
-  const filteredEmails = get().emails.filter(e => e.uid !== uid);
-  const filteredSent = get().sentEmails.filter(e => e.uid !== uid);
+  // A uid names a message only inside one (account, mailbox). In a list that
+  // spans mailboxes another account's row carries the same number, so the row
+  // filter has to read each row's own location — this is the same predicate
+  // the localEmails stamp below has always used. A single folder's list has
+  // one location, and there the bare uid is the whole answer.
+  const sameMessage = (e) => e.uid === uid
+    && (e._mailbox == null || e._mailbox === mailbox)
+    && (e._accountId == null || e._accountId === accountId);
+  const isRemoved = isUnified ? sameMessage : (e) => e.uid === uid;
+  const filteredEmails = get().emails.filter(e => !isRemoved(e));
+  const filteredSent = get().sentEmails.filter(e => !isRemoved(e));
   const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
   const updates = {
     emails: filteredEmails,
@@ -589,9 +607,7 @@ export async function applyServerRemoval(uid, {
   // stamps it at read time), so stamp them here too rather than waiting for the
   // next disk read — the row must go gold in this paint, not the one after.
   if (deletedByUs) updates.localEmails = get().localEmails.map(e => (
-    e.uid === uid && (e._mailbox == null || e._mailbox === mailbox) && (e._accountId == null || e._accountId === accountId)
-      ? { ...e, serverDeleted: true }
-      : e
+    sameMessage(e) ? { ...e, serverDeleted: true } : e
   ));
 
   useMailStore.setState(updates);

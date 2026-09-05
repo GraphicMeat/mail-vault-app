@@ -23,6 +23,8 @@ const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+const mockGetLocalIndexEntry = vi.fn().mockResolvedValue(null);
+const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
@@ -33,7 +35,7 @@ vi.mock('../../db', () => ({
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getLocalEmails: vi.fn().mockResolvedValue([]),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
-  getLocalIndexEntry: vi.fn().mockResolvedValue(null),
+  getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
@@ -55,6 +57,7 @@ vi.mock('../../api', () => ({
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
+  appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
 }));
 vi.mock('../../authUtils', () => ({
   hasValidCredentials: () => true,
@@ -131,7 +134,10 @@ function primeUnified(emails, selected = []) {
 }
 
 describe('deleting from a unified list', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+  });
 
   it('refuses a row that names no account instead of aiming at the active INBOX', async () => {
     primeUnified([row(7)]); // stamped late: no _accountId, so its key is the bare uid
@@ -157,5 +163,46 @@ describe('deleting from a unified list', () => {
     primeUnified([row(7)], [7]);
     await expect(useMailStore.getState().deleteSelectedFromServer()).rejects.toThrow(/Cannot tell which account/);
     expect(mockDeleteEmail).not.toHaveBeenCalled();
+    // The journal is written before the network loop, so a refusal that came
+    // one line too late would still leave replayPendingDeletes an entry to
+    // finish at the next launch — against a target nobody could name.
+    expect(mockQueuePendingDeletes).not.toHaveBeenCalled();
+  });
+
+  // The row that is only in the vault: a compose-staged Sent copy carries
+  // `_localStaged` and a pseudo-uid the server never issued. The list lookup
+  // that decides this has to use the resolved uid — keyed by the raw argument
+  // it misses every row in a spanning view, and a message that exists nowhere
+  // but on disk gets an IMAP delete and a journal entry to retry it forever.
+  it('takes the local path for a staged row named by its composite key', async () => {
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX', _localStaged: true });
+    primeUnified([r]);
+    const invoke = vi.fn().mockResolvedValue(undefined);
+    globalThis.window.__TAURI__ = { core: { invoke } };
+    try {
+      await useMailStore.getState().deleteEmailFromServer(_selKey(r));
+    } finally {
+      delete globalThis.window.__TAURI__;
+    }
+    expect(invoke).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7 });
+    expect(mockDeleteEmail).not.toHaveBeenCalled();
+    expect(mockQueuePendingDeletes).not.toHaveBeenCalled();
+  });
+
+  // "The server copy is gone by our own hand" is the durable proof that makes
+  // an archived row gold. It is written against the vault index, which is
+  // keyed by (account, mailbox, uid) — a selection key looks up nothing there
+  // and the stamp silently never lands.
+  it('stamps the vault entry with the real uid, not the selection key', async () => {
+    mockGetLocalIndexEntry.mockImplementation(async (acct, mb, uid) => (
+      acct === ACCT_B.id && mb === 'INBOX' && uid === 7 ? { uid: 7, subject: 'm7' } : null
+    ));
+    const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([r]);
+    await useMailStore.getState().deleteEmailFromServer(_selKey(r));
+    expect(mockGetLocalIndexEntry).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', 7);
+    expect(mockAppendLocalIndex).toHaveBeenCalledWith(ACCT_B.id, 'INBOX', [
+      expect.objectContaining({ uid: 7, serverDeleted: true }),
+    ]);
   });
 });
