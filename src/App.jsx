@@ -406,8 +406,11 @@ function App() {
     // rowKey write), which is exactly what the toggle wants: a bare uid in a
     // single folder's list, the full key in one that spans mailboxes.
     toggleStar: () => {
-      const { selectedEmail, selectedEmailId } = useMailStore.getState();
-      if (selectedEmail || selectedEmailId) useMailStore.getState().toggleFlagged(selectedEmailId);
+      // On the key this actually spends: with only `selectedEmail` set, the
+      // old test passed and `null` went to toggleFlagged, which resolves
+      // nothing and warns.
+      const { selectedEmailId } = useMailStore.getState();
+      if (selectedEmailId) useMailStore.getState().toggleFlagged(selectedEmailId);
     },
     // One slot, not a stack: whatever the last mutation left there. The slot
     // outlives its toast, so this still works long after the toast has gone.

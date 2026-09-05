@@ -181,6 +181,13 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const accountId = unified?.accountId || state.activeAccountId;
   const rawMailbox = mailboxOverride || unified?.mailbox || state.activeMailbox;
   const mailbox = rawMailbox === 'UNIFIED' ? 'INBOX' : rawMailbox;
+  // The uid the server knows. In a spanning view the argument is a whole
+  // selection key ("acct:INBOX:7") — App.jsx's j/k step() sends exactly that —
+  // and everything below addresses a message by number inside one (account,
+  // mailbox): the row lookup, the cache key, the fetch, the flag write. Same
+  // rule and same name as deleteEmailFromServer. Only the refusal above wants
+  // the key itself, and it has already run.
+  const realUid = unified?.uid ?? uid;
   // A draft the user wrote here reopens in compose, not the viewer — before
   // the token refresh below, because continuing a local draft needs no server
   // at all. The index read that proves provenance is gated on the flag the
@@ -188,15 +195,15 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // opening an ordinary message costs nothing extra. Imported here rather than
   // at the top for the same reason mailStore is: localDrafts reaches back into
   // the store this workflow is reached FROM.
-  const clickedRow = _rowOf(state, accountId, mailbox, uid);
+  const clickedRow = _rowOf(state, accountId, mailbox, realUid);
   if (clickedRow?.flags?.includes('draft')) {
     const { openLocalDraft } = await import('../localDrafts');
-    if (await openLocalDraft(accountId, mailbox, uid)) return;
+    if (await openLocalDraft(accountId, mailbox, realUid)) return;
   }
 
   let account = unified?.account || state.accounts.find(a => a.id === accountId);
   account = await ensureFreshToken(account);
-  const cacheKey = `${accountId}-${mailbox}-${uid}`;
+  const cacheKey = `${accountId}-${mailbox}-${realUid}`;
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
   // Cancel any pending delayed mark-as-read from previous email
@@ -211,7 +218,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
 
   // Through the helper: a uid names one row only inside one mailbox, and
   // EmailList already highlights by comparing this against a full key.
-  const selectedEmailId = rowKey({ _accountId: accountId, _mailbox: mailbox, uid }, isUnified);
+  const selectedEmailId = rowKey({ _accountId: accountId, _mailbox: mailbox, uid: realUid }, isUnified);
   useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source, lastSelectedAccountId: accountId });
 
   try {
@@ -225,19 +232,19 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       if (hydrated !== cachedEmail) get().addToCache(cacheKey, hydrated, cacheLimitMB);
       // The cached body is frozen at fetch time, but flags keep moving (mark
       // read/unread, sync, another client). The list row is the current copy.
-      const row = _rowOf(get(), accountId, mailbox, uid);
+      const row = _rowOf(get(), accountId, mailbox, realUid);
       const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
       useMailStore.setState({ selectedEmail: withAccount(fresh), selectedEmailSource: source, loadingEmail: false });
       await _autoMarkRead(useMailStore, {
-        email: fresh, accountId, mailbox, uid, isUnified,
-        markOnServer: () => _setSeenOnServer(account, accountId, mailbox, uid, true),
+        email: fresh, accountId, mailbox, uid: realUid, isUnified,
+        markOnServer: () => _setSeenOnServer(account, accountId, mailbox, realUid, true),
       });
       return;
     }
 
     // 2. Check Maildir for cached .eml file
-    const headerRow = _rowOf(get(), accountId, mailbox, uid);
-    const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, headerRow);
+    const headerRow = _rowOf(get(), accountId, mailbox, realUid);
+    const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, headerRow);
 
     if (localEmail && (source === 'local-only' || localEmail.html !== undefined)) {
       email = localEmail;
@@ -257,27 +264,27 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // Row `_graphId` first, then the positional map, then a relist — the
       // ladder now lives in cacheManager and is shared with the delete, move
       // and mark-read paths, which used to read the map raw.
-      const graphId = await resolveGraphMessageId(accountId, mailbox, uid, { row: headerRow, token });
+      const graphId = await resolveGraphMessageId(accountId, mailbox, realUid, { row: headerRow, token });
 
       if (graphId) {
         const graphMsg = await api.graphGetMessage(token, graphId);
-        email = graphMessageToEmail(graphMsg, uid);
+        email = graphMessageToEmail(graphMsg, realUid);
         actualSource = 'server';
         get().addToCache(cacheKey, email, cacheLimitMB);
 
-        api.graphCacheMime(token, graphId, accountId, mailbox, uid)
+        api.graphCacheMime(token, graphId, accountId, mailbox, realUid)
           .catch(e => console.warn('[selectEmail] Background MIME cache failed:', e));
 
         email = await _autoMarkRead(useMailStore, {
-          email, accountId, mailbox, uid, isUnified,
+          email, accountId, mailbox, uid: realUid, isUnified,
           markOnServer: () => api.graphSetRead(token, graphId, true),
         });
       } else {
-        console.warn('[selectEmail] No Graph message ID found for UID', uid);
+        console.warn('[selectEmail] No Graph message ID found for UID', realUid);
       }
     } else if (account) {
       // 3b. IMAP
-      email = await api.fetchEmailLight(account, uid, mailbox, accountId);
+      email = await api.fetchEmailLight(account, realUid, mailbox, accountId);
       actualSource = 'server';
       get().addToCache(cacheKey, email, cacheLimitMB);
 
@@ -289,8 +296,8 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       }
 
       email = await _autoMarkRead(useMailStore, {
-        email, accountId, mailbox, uid, isUnified,
-        markOnServer: () => api.updateEmailFlags(account, uid, ['\\Seen'], 'add', mailbox),
+        email, accountId, mailbox, uid: realUid, isUnified,
+        markOnServer: () => api.updateEmailFlags(account, realUid, ['\\Seen'], 'add', mailbox),
       });
     }
 
@@ -306,7 +313,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     useMailStore.setState(state => ({
       selectedEmail: withAccount(email),
       selectedEmailSource: actualSource,
-      emails: state.emails.map(e => e.uid === uid ? { ...e, hasAttachments: hasReal } : e),
+      emails: state.emails.map(e => e.uid === realUid ? { ...e, hasAttachments: hasReal } : e),
     }));
   } catch (error) {
     console.error('[selectEmail] Failed to load email:', error);
@@ -319,9 +326,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // email whose body is its subject. `_bodyError` is what makes the two
     // distinguishable downstream (EmailViewer shows it, with a retry).
     const headerOnly = () => {
-      const headerEmail = get().emails.find(e => e.uid === uid);
+      const headerEmail = get().emails.find(e => e.uid === realUid);
       if (!headerEmail) {
-        useMailStore.setState({ error: decodeImapUtf7(`Failed to load email (UID ${uid}, ${mailbox}): ${detail}`) });
+        useMailStore.setState({ error: decodeImapUtf7(`Failed to load email (UID ${realUid}, ${mailbox}): ${detail}`) });
         return;
       }
       useMailStore.setState({
@@ -333,7 +340,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     try {
       // Same check as the primary read: a fallback is still a render, and the
       // wrong message is worse here than an honest "body did not load".
-      const localEmail = await _readVerifiedLocal(accountId, mailbox, uid, get().emails.find(e => e.uid === uid));
+      const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, get().emails.find(e => e.uid === realUid));
       if (localEmail) {
         useMailStore.setState({ selectedEmail: withAccount(localEmail), selectedEmailSource: 'local-only' });
       } else {
@@ -355,7 +362,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // and the caller only clicked a row.
     if (error?.messageGone) {
       try {
-        await applyServerRemoval(uid, { accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false });
+        await applyServerRemoval(realUid, { accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false });
       } catch (pruneError) {
         console.warn('[selectEmail] Could not prune the vanished row:', pruneError);
       }
@@ -372,8 +379,8 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       // Only for a message the vault actually holds — nothing rides on the
       // answer otherwise — and never awaited: it is a SELECT per folder, and
       // the click that started this is waiting on `loadingEmail`.
-      if (get().archivedEmailIds?.has(uid)) {
-        probeServerCopy(uid, { accountId, mailbox })
+      if (get().archivedEmailIds?.has(realUid)) {
+        probeServerCopy(realUid, { accountId, mailbox })
           .catch(probeError => console.warn('[selectEmail] Server-wide check failed:', probeError));
       }
     }
@@ -381,6 +388,6 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     useMailStore.setState({ loadingEmail: false });
 
     // Pre-fetch adjacent email bodies in background
-    get()._prefetchAdjacentEmails(uid);
+    get()._prefetchAdjacentEmails(realUid);
   }
 }
