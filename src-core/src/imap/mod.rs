@@ -881,6 +881,22 @@ pub async fn mailbox_status(session: &mut ImapSession, mailbox: &str) -> Result<
     })
 }
 
+/// STATUS for a list of folders on one session. A folder the server refuses
+/// (\Noselect, gone) is simply absent from the answer — the sidebar shows no
+/// count for it; a dead socket ends the sweep with an error so the pool
+/// discards the session instead of asking it about every remaining folder.
+pub async fn mailbox_statuses(session: &mut ImapSession, mailboxes: &[String]) -> Result<Vec<MailboxStatus>, String> {
+    let mut out = Vec::with_capacity(mailboxes.len());
+    for path in mailboxes {
+        match mailbox_status(session, path).await {
+            Ok(st) => out.push(st),
+            Err(e) if pool::is_connection_lost(&e) => return Err(e),
+            Err(e) => warn!("[folder_status] {}: {}", path, e),
+        }
+    }
+    Ok(out)
+}
+
 /// Fetch UIDs with changed flags since a given MODSEQ (CONDSTORE).
 /// Returns Vec of (uid, flags) for emails whose flags changed.
 pub async fn fetch_changed_flags(

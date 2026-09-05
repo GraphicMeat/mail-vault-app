@@ -147,6 +147,7 @@ export async function fetchFolderStatus(account, mailboxes) {
     // server refused STATUS for is absent.
     return tauriInvoke('imap_folder_status', { account, mailboxes });
   }
+  // No HTTP endpoint exists for STATUS — [] means "no counts", not an error.
   return [];
 }
 

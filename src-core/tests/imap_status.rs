@@ -32,7 +32,8 @@ async fn status_reports_counts_without_selecting_the_folder() {
 async fn status_of_a_missing_folder_is_an_error() {
     let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
     let mut sess = session(&server).await;
-    assert!(mailbox_status(&mut sess, "Nope").await.is_err());
+    let err = mailbox_status(&mut sess, "Nope").await.expect_err("a missing folder is an error");
+    assert!(!pool::is_connection_lost(&err), "a refused folder must not read as a dead socket: {err}");
 }
 
 /// Same rule as SELECT: a reply with nothing in it is a dead socket, not an
@@ -48,5 +49,38 @@ async fn status_on_a_dropped_socket_is_an_error_not_zero_messages() {
     let mut sess = session(&server).await;
 
     let err = mailbox_status(&mut sess, "Archive").await.expect_err("no reply is not zero messages");
+    assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
+}
+
+/// A refused folder is skipped, not fatal — the sweep answers for the rest.
+#[async_std::test]
+async fn a_refused_folder_is_skipped_by_the_sweep() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(archive()));
+    let mut sess = session(&server).await;
+
+    let rows = mailbox_statuses(&mut sess, &["Nope".to_string(), "Archive".to_string()])
+        .await
+        .expect("a refused folder must not fail the sweep");
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].path, "Archive");
+    assert_eq!(rows[0].messages, 2);
+}
+
+/// A dead socket ends the sweep: no partial answer built on a connection that
+/// is gone, and an error the pool's retry recognises.
+#[async_std::test]
+async fn a_dead_socket_ends_the_sweep_with_an_error() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX"))
+            .mailbox(archive())
+            .fault(Trigger::nth("STATUS", 2), Action::DropConnection),
+    );
+    let mut sess = session(&server).await;
+
+    let err = mailbox_statuses(&mut sess, &["Archive".to_string(), "INBOX".to_string()])
+        .await
+        .expect_err("the second STATUS dies; the sweep must not answer");
     assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
 }

@@ -257,16 +257,7 @@ pub async fn imap_folder_status(
     mailboxes: Vec<String>,
 ) -> Result<Vec<imap::MailboxStatus>, String> {
     with_background(&pool, &account, |mut session| async move {
-        let mut out = Vec::with_capacity(mailboxes.len());
-        for path in &mailboxes {
-            match imap::mailbox_status(&mut session, path).await {
-                Ok(st) => out.push(st),
-                // A folder the server refuses (\Noselect, gone) is simply
-                // absent from the answer; a dead socket ends the sweep.
-                Err(e) if mailvault_core::imap::pool::is_connection_lost(&e) => return Err(e),
-                Err(e) => tracing::warn!("[folder_status] {}: {}", path, e),
-            }
-        }
+        let out = imap::mailbox_statuses(&mut session, &mailboxes).await?;
         Ok((out, session, None))
     })
     .await
