@@ -550,6 +550,55 @@ pub async fn imap_ensure_sent_mailbox(
     }).await
 }
 
+// ── Folder management: CREATE / RENAME / DELETE ──────────────────────────
+//
+// All three report `None` as the pooled session's last-selected mailbox:
+// CREATE changes the hierarchy under it, and RENAME/DELETE send CLOSE, so
+// whatever the socket had selected before is no longer selected.
+
+#[tauri::command]
+pub async fn imap_create_mailbox(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    path: String,
+) -> Result<serde_json::Value, String> {
+    with_priority(&pool, &account, |mut session| async move {
+        imap::create_mailbox(&mut session, &path).await?;
+        Ok(((), session, None))
+    })
+    .await?;
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+pub async fn imap_rename_mailbox(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    from: String,
+    to: String,
+) -> Result<serde_json::Value, String> {
+    with_priority(&pool, &account, |mut session| async move {
+        imap::rename_mailbox(&mut session, &from, &to).await?;
+        Ok(((), session, None))
+    })
+    .await?;
+    Ok(serde_json::json!({ "success": true }))
+}
+
+#[tauri::command]
+pub async fn imap_delete_mailbox(
+    pool: tauri::State<'_, ImapPool>,
+    account: ImapConfig,
+    paths: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let deleted = with_priority(&pool, &account, |mut session| async move {
+        let n = imap::delete_mailbox(&mut session, &paths).await?;
+        Ok((n, session, None))
+    })
+    .await?;
+    Ok(serde_json::json!({ "success": true, "deleted": deleted }))
+}
+
 /// Build the RFC2822 MIME bytes for an outgoing email WITHOUT sending.
 /// Used by the JS compose flow so it can write the raw .eml to the local
 /// Maildir archive BEFORE SMTP submission (and replace the on-disk copy with

@@ -359,6 +359,105 @@ pub async fn vault_apply_flags(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// One mailbox path change. The JS sends one pair per renamed folder AND one
+/// per descendant, because a server's RENAME moves the whole subtree in a
+/// single command while the vault keeps a directory per full mailbox path.
+#[derive(Debug, Deserialize)]
+pub struct RenamePair {
+    pub from: String,
+    pub to: String,
+}
+
+/// Move every location `from` has to `to`. The Maildir mailbox DIRECTORY
+/// (parent of `cur/`, so `archived_headers.json` travels with it), the index
+/// directory, the sidecar cache, the mirror. Missing sources are skipped;
+/// returns how many moved. Nothing is ever deleted here.
+///
+/// Two of the four are flat: `maildir_cur_path` and `cache_base_name` sanitize
+/// the WHOLE mailbox path into one directory name, so `Projects` and
+/// `Projects/Alpha` are siblings and their pairs never interact. The other two
+/// — `local_index_path` and the mirror — use the raw path, so they nest, and
+/// renaming `Projects` there carries `Projects/Alpha` along with it. That is
+/// harmless as long as the parent pair runs first, which is why
+/// `vault_rename_mailbox` sorts shallowest-first: the descendant's pair then
+/// finds its source already gone and skips.
+pub fn rename_dirs(from: &Dirs, to: &Dirs) -> usize {
+    fn up(p: &Path) -> Option<PathBuf> {
+        p.parent().map(|q| q.to_path_buf())
+    }
+    let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
+    if let (Some(a), Some(b)) = (up(&from.cur), up(&to.cur)) {
+        pairs.push((a, b));
+    }
+    if let (Some(a), Some(b)) = (up(&from.index), up(&to.index)) {
+        pairs.push((a, b));
+    }
+    pairs.push((from.sidecar_dir.clone(), to.sidecar_dir.clone()));
+    if let (Some(a), Some(b)) = (
+        from.mirror_cur.as_deref().and_then(up),
+        to.mirror_cur.as_deref().and_then(up),
+    ) {
+        pairs.push((a, b));
+    }
+
+    let mut moved = 0;
+    for (src, dst) in pairs {
+        if !src.exists() || dst.exists() {
+            continue; // ponytail: an existing destination is left alone; merge if it ever matters
+        }
+        if let Some(p) = dst.parent() {
+            let _ = fs::create_dir_all(p);
+        }
+        match fs::rename(&src, &dst) {
+            Ok(()) => moved += 1,
+            Err(e) => warn!("vault_rename: {:?} -> {:?}: {}", src, dst, e),
+        }
+    }
+    moved
+}
+
+/// The local half of a folder rename: the server already moved the subtree,
+/// this moves the directories that hold its copies.
+#[tauri::command]
+pub async fn vault_rename_mailbox(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_email: Option<String>,
+    pairs: Vec<RenamePair>,
+) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
+        // Shallowest first — see `rename_dirs`: the index and the mirror nest,
+        // so a parent's move has to happen before its descendants' pairs.
+        let mut pairs = pairs;
+        pairs.sort_by_key(|p| p.from.len());
+        let mut moved = 0;
+        let result = (|| -> Result<usize, String> {
+            for p in &pairs {
+                let from = dirs_for(&app_handle, &account_id, &p.from, account_email.as_deref(), root.as_deref())?;
+                let to = dirs_for(&app_handle, &account_id, &p.to, account_email.as_deref(), root.as_deref())?;
+                moved += rename_dirs(&from, &to);
+            }
+            Ok(moved)
+        })();
+        if needs_release {
+            if let Some(ref p) = root {
+                crate::backup::release_backup_path(p);
+            }
+        }
+        let moved = result?;
+        info!(
+            "vault_rename_mailbox: {} — {} location(s) moved for {} pair(s)",
+            account_id,
+            moved,
+            pairs.len()
+        );
+        Ok(moved)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -565,5 +664,58 @@ mod tests {
         assert_eq!(names(&d.cur), vec!["1:2,AS", "2:2,AS", "3:2,A"]);
         assert_eq!(flags_of(&d.index, 1), Some(s(&["\\Seen"])));
         assert_eq!(flags_of(&d.index, 3), Some(s(&[])));
+    }
+
+    /// A `Dirs` pair for one mailbox rename, laid out the way `dirs_for` builds
+    /// it: a sanitized Maildir/sidecar name, a raw path for the index and mirror.
+    ///
+    /// The index tree is named `index` rather than the app's `maildir`: on a
+    /// case-insensitive volume (every stock macOS) `maildir` and `Maildir` are
+    /// ONE directory, so the real index file sits beside `cur` and rides along
+    /// with the Maildir rename. Keeping them apart here is what makes this test
+    /// measure `rename_dirs` instead of the filesystem's case folding.
+    fn rename_fixture(base: &Path, mailbox: &str, sidecar: &str) -> Dirs {
+        let mailbox_dir = base.join("Maildir").join("a").join(mailbox);
+        Dirs {
+            cur: mailbox_dir.join("cur"),
+            mirror_cur: Some(base.join("mirror").join("me@x").join(mailbox).join("cur")),
+            index: base.join("index").join("a").join(mailbox).join("local-index.json"),
+            sidecar_dir: base.join("email_cache").join(sidecar),
+            archived_cache: mailbox_dir.join("archived_headers.json"),
+        }
+    }
+
+    #[test]
+    fn rename_dirs_moves_every_existing_location_and_skips_missing_ones() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let from = rename_fixture(base, "Projects", "a_Projects");
+        let to = rename_fixture(base, "Work", "a_Work");
+
+        // Only three of the four locations exist — no external mirror is configured.
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::create_dir_all(from.index.parent().unwrap()).unwrap();
+        fs::create_dir_all(&from.sidecar_dir).unwrap();
+        fs::write(from.cur.join("7:2,AS"), b"body").unwrap();
+        fs::write(&from.archived_cache, b"{\"emails\":[]}").unwrap();
+        fs::write(&from.index, b"[]").unwrap();
+        fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
+
+        assert_eq!(rename_dirs(&from, &to), 3);
+
+        assert!(to.cur.join("7:2,AS").exists());
+        // The whole mailbox directory moved, so its sibling files came along.
+        assert!(to.archived_cache.exists(), "archived_headers.json stayed behind");
+        assert!(to.index.exists());
+        assert!(to.sidecar_dir.join("7.json").exists());
+        // A mirror that was never there is not invented.
+        assert!(!base.join("mirror").exists());
+        // Nothing is left at the old paths, and nothing was deleted.
+        assert!(!base.join("Maildir").join("a").join("Projects").exists());
+        assert!(!from.index.exists());
+        assert!(!from.sidecar_dir.exists());
+
+        // Idempotent: the sources are gone, so a repeat moves nothing.
+        assert_eq!(rename_dirs(&from, &to), 0);
     }
 }

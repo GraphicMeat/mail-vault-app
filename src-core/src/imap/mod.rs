@@ -1616,6 +1616,59 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
     .await
 }
 
+/// Where a folder goes when "deleted": under Trash, keeping its leaf name —
+/// Thunderbird's model, and Rokas' call for MailVault (2026-09-05). A real
+/// DELETE is for a folder that already sits under Trash.
+pub fn trash_destination(path: &str, trash: &str, delimiter: &str) -> String {
+    let leaf = path.rsplit(delimiter).next().unwrap_or(path);
+    format!("{}{}{}", trash, delimiter, leaf)
+}
+
+/// `path` is `ancestor` itself or lives below it. A plain `starts_with` would
+/// call "Trashy" a child of "Trash"; the delimiter is what separates them.
+pub fn is_under(path: &str, ancestor: &str, delimiter: &str) -> bool {
+    path == ancestor || path.starts_with(&format!("{}{}", ancestor, delimiter))
+}
+
+pub async fn create_mailbox(session: &mut ImapSession, path: &str) -> Result<(), String> {
+    session
+        .create(path)
+        .await
+        .map_err(|e| format!("CREATE {} failed: {}", path, e))?;
+    // Best-effort, as ensure_role_mailbox does: we LIST, never LSUB, so this is
+    // for the other clients on the account.
+    let _ = session.subscribe(path).await;
+    Ok(())
+}
+
+/// RENAME renames the inferiors too (RFC 3501 §6.3.5) — the caller renames the
+/// matching local directories. CLOSE first: some servers refuse to rename the
+/// selected mailbox, and Thunderbird sends it (nsImapProtocol.cpp ~#7681).
+/// A CLOSE with nothing selected is a tagged NO/BAD on a real server, which is
+/// why its result is dropped rather than checked.
+pub async fn rename_mailbox(session: &mut ImapSession, from: &str, to: &str) -> Result<(), String> {
+    let _ = session.close().await;
+    session
+        .rename(from, to)
+        .await
+        .map_err(|e| format!("RENAME {} -> {} failed: {}", from, to, e))
+}
+
+/// DELETE every path, deepest first — a folder with inferiors cannot be deleted
+/// before them on most servers. Returns how many were deleted.
+pub async fn delete_mailbox(session: &mut ImapSession, paths: &[String]) -> Result<usize, String> {
+    let _ = session.close().await;
+    let mut ordered: Vec<&String> = paths.iter().collect();
+    ordered.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    for p in &ordered {
+        session
+            .delete(p.as_str())
+            .await
+            .map_err(|e| format!("DELETE {} failed: {}", p, e))?;
+    }
+    Ok(ordered.len())
+}
+
 /// RFC 3501 `date-time` for APPEND, unquoted: `05-Mar-2019 08:15:00 +0100`.
 pub fn imap_date_time(dt: &chrono::DateTime<chrono::FixedOffset>) -> String {
     dt.format("%d-%b-%Y %H:%M:%S %z").to_string()

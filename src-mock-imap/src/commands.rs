@@ -179,6 +179,12 @@ pub fn dispatch(
         "STATUS" => do_status(cmd, state),
         "CREATE" => do_create(cmd, state),
         "DELETE" => do_delete(cmd, state),
+        "RENAME" => do_rename(cmd, state),
+        "SUBSCRIBE" | "UNSUBSCRIBE" => Response::ok("completed"),
+        "CLOSE" => {
+            sess.selected = None;
+            Response::ok("CLOSE completed")
+        }
         "SEARCH" => do_search(cmd, state, sess, faults),
         "FETCH" => do_fetch(cmd, state, sess, faults),
         "STORE" => do_store(cmd, state, sess),
@@ -334,9 +340,46 @@ fn do_create(cmd: &Command, state: &mut ServerState) -> Response {
     Response::ok("CREATE completed")
 }
 
+/// RENAME carries the inferiors with it (RFC 3501 §6.3.5) — `Projects/Alpha`
+/// becomes `Work/Alpha` when `Projects` becomes `Work`. A client that renamed
+/// only the named folder would leave the children stranded under a name that
+/// no longer exists, so the mock has to move them too.
+fn do_rename(cmd: &Command, state: &mut ServerState) -> Response {
+    let mut args = cmd.args.as_str();
+    let from = next_arg(&mut args).unwrap_or_default();
+    let to = next_arg(&mut args).unwrap_or_default();
+    if state.find(&from).is_none() {
+        return Response::no("[NONEXISTENT] Mailbox does not exist");
+    }
+    if state.find(&to).is_some() {
+        return Response::no("[ALREADYEXISTS] Mailbox already exists");
+    }
+    let delim = state.delimiter.clone();
+    let prefix = format!("{}{}", from, delim);
+    for mb in state.mailboxes.iter_mut() {
+        if mb.name.eq_ignore_ascii_case(&from) {
+            mb.name = to.clone();
+        } else if mb.name.starts_with(&prefix) {
+            mb.name = format!("{}{}{}", to, delim, &mb.name[prefix.len()..]);
+        }
+    }
+    Response::ok("RENAME completed")
+}
+
 fn do_delete(cmd: &Command, state: &mut ServerState) -> Response {
     let mut args = cmd.args.as_str();
     let name = next_arg(&mut args).unwrap_or_default();
+    // A folder that still has inferiors cannot go first: Dovecot and Gmail
+    // both answer [HASCHILDREN]. A `\Noselect` name is only a placeholder in
+    // the hierarchy, so it goes without a fight. This is what makes a client
+    // that deletes a tree in the wrong order fail here instead of in the wild.
+    let noselect = state
+        .find(&name)
+        .is_some_and(|m| m.attrs.iter().any(|a| a.eq_ignore_ascii_case("\\Noselect")));
+    let prefix = format!("{}{}", name, state.delimiter);
+    if !noselect && state.mailboxes.iter().any(|m| m.name.starts_with(&prefix)) {
+        return Response::no("[HASCHILDREN] Mailbox has inferior hierarchical names");
+    }
     let before = state.mailboxes.len();
     state.mailboxes.retain(|m| !m.name.eq_ignore_ascii_case(&name));
     if state.mailboxes.len() == before {
