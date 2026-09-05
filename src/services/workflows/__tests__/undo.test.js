@@ -111,7 +111,7 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
-const { markAnswered } = await import('../messageMutations');
+const { markAnswered, setDeleteUndo } = await import('../messageMutations');
 
 const ACCOUNT = { id: 'a1', email: 'a1@x' };
 
@@ -287,6 +287,56 @@ describe('undo after a delete', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5, 6], 'Trash', 'INBOX');
   });
 
+  it('a thread-row delete fills one slot for the whole row, not one per copy', async () => {
+    mockDeleteEmail
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 51 })
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 52 })
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 53 });
+    primeStore({ emails: [row(7), row(8), row(9)] });
+
+    // Exactly what RowActionMenuItems' delete loop does: one call per
+    // server-backed copy of the row, each skipping its own refresh.
+    const outcomes = [];
+    for (const uid of [7, 8, 9]) {
+      outcomes.push(await useMailStore.getState()
+        .deleteEmailFromServer(uid, { skipRefresh: true, mailboxOverride: 'INBOX' }));
+    }
+    // A slot per message would describe one and strand four.
+    expect(useMailStore.getState().undo).toBeNull();
+
+    await setDeleteUndo(outcomes.filter(Boolean));
+
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.deleted', labelParams: { count: 3 }, canUndo: true,
+    });
+
+    mockMoveEmails.mockClear();
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [51, 52, 53], 'Trash', 'INBOX');
+  });
+
+  it('a mixed bulk delete offers back exactly what reached Trash', async () => {
+    mockDeleteEmail
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 5 })
+      .mockResolvedValueOnce({ trash: null, trashUid: null })
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 6 });
+    primeStore({ emails: [row(7), row(8), row(9)], selected: [7, 8, 9] });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.deleted', labelParams: { count: 2 }, canUndo: true,
+    });
+
+    mockMoveEmails.mockClear();
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5, 6], 'Trash', 'INBOX');
+  });
+
   it('a bulk delete that emptied Trash offers no undo button', async () => {
     mockDeleteEmail.mockResolvedValue({ trash: null, trashUid: null });
     primeStore({ emails: [row(7), row(8)], selected: [7, 8] });
@@ -326,6 +376,33 @@ describe('undo after a flag change', () => {
     await useMailStore.getState().runUndo();
 
     expect(mockUpdateEmailFlags).toHaveBeenLastCalledWith(ACCOUNT, 7, ['\\Seen'], 'remove', 'INBOX');
+  });
+
+  it('offers back only the messages the change actually touched', async () => {
+    // Row 8 is already read: marking both read changes one message, so the
+    // offer must be for one — undoing all of them would mark 8 unread, which
+    // this action never did.
+    primeStore({ emails: [row(7), row(8, { flags: ['\\Seen'] })], selected: [7, 8] });
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.markedRead', labelParams: { count: 1 },
+    });
+
+    mockUpdateEmailFlags.mockClear();
+    await useMailStore.getState().runUndo();
+
+    expect(mockUpdateEmailFlags.mock.calls.map(c => c[1])).toEqual([7]);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 7, ['\\Seen'], 'remove', 'INBOX');
+  });
+
+  it('offers nothing when the change was a no-op on every row', async () => {
+    primeStore({ emails: [row(7, { flags: ['\\Seen'] })], selected: [7] });
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(useMailStore.getState().undo).toBeNull();
   });
 
   it('does not offer to undo the \\Answered stamp a reply writes', async () => {

@@ -101,6 +101,13 @@ vi.mock('../../utils/composeOpener', () => ({
   openCompose: (...args) => openCompose(...args),
 }));
 
+// The whole delete of a row fills ONE undo slot, from the outcomes the loop
+// collected — the workflow itself is covered in services/workflows/__tests__.
+const setDeleteUndo = vi.fn();
+vi.mock('../../services/workflows/messageMutations', () => ({
+  setDeleteUndo: (...args) => setDeleteUndo(...args),
+}));
+
 // The resolver pulls in db/api/mailStore; the menu only needs its answer.
 const resolveMessageBody = vi.fn();
 vi.mock('../../services/export/bodyResolver', () => ({
@@ -308,6 +315,33 @@ describe('RowActionMenuItems', () => {
       expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(1, { skipRefresh: true, mailboxOverride: 'INBOX' });
       expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(2, { skipRefresh: true, mailboxOverride: 'INBOX' });
       expect(useMailStoreMock.getState().loadEmails).toHaveBeenCalledTimes(1);
+    });
+
+    it('a multi-message delete fills one undo slot from the outcomes, not one per message', async () => {
+      const emails = [
+        baseEmail({ uid: 1, source: 'server' }),
+        baseEmail({ uid: 2, source: 'server' }),
+        baseEmail({ uid: 3, source: 'server' }),
+      ];
+      const actions = makeActions();
+      // The middle one had nowhere to go back to (no Trash): it returns no
+      // outcome, and must not cost the other two their offer.
+      actions.deleteEmailFromServer = vi.fn()
+        .mockResolvedValueOnce({ accountId: 'a1', mailbox: 'INBOX', uid: 1, trash: 'Trash', trashUid: 11 })
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({ accountId: 'a1', mailbox: 'INBOX', uid: 3, trash: 'Trash', trashUid: 13 });
+      setDeleteUndo.mockClear();
+      const onRequestDelete = vi.fn();
+      render(<RowActionMenuItems emails={emails} actions={actions} onRequestDelete={onRequestDelete} onClose={vi.fn()} />);
+
+      fireEvent.click(screen.getByText('Delete from server'));
+      await onRequestDelete.mock.calls[0][0]();
+
+      expect(setDeleteUndo).toHaveBeenCalledTimes(1);
+      expect(setDeleteUndo).toHaveBeenCalledWith([
+        { accountId: 'a1', mailbox: 'INBOX', uid: 1, trash: 'Trash', trashUid: 11 },
+        { accountId: 'a1', mailbox: 'INBOX', uid: 3, trash: 'Trash', trashUid: 13 },
+      ]);
     });
 
     it('the purge scopes to every message in the set, including local-only ones', async () => {

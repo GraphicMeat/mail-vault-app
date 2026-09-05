@@ -3,6 +3,7 @@ import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX
 import { useMailStore } from '../stores/mailStore';
 import { selectionKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
+import { setDeleteUndo } from '../services/workflows/messageMutations';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
@@ -229,7 +230,10 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
                 // Multiple messages: each needs its own folder resolved — the
                 // same uid in another folder is a different message, and
                 // this delete is irreversible. skipRefresh + one trailing
-                // loadEmails avoids N redundant reloads.
+                // loadEmails avoids N redundant reloads — and one trailing
+                // setDeleteUndo, so the whole row gets one offer instead of a
+                // slot per copy describing only the last one.
+                const outcomes = [];
                 for (const em of serverEmails) {
                   const mailbox = resolveEmailLocation(em, state)?.mailbox;
                   if (!mailbox) {
@@ -237,12 +241,15 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
                     continue;
                   }
                   try {
-                    await deleteEmailFromServer(keyOf(em), { skipRefresh: true, mailboxOverride: mailbox });
+                    outcomes.push(await deleteEmailFromServer(keyOf(em), { skipRefresh: true, mailboxOverride: mailbox }));
                   } catch (err) {
                     console.error(`[RowActionMenuItems] Failed to delete email ${em.uid} from ${mailbox}:`, err);
                   }
                 }
                 useMailStore.getState().loadEmails();
+                // Only the copies that landed somewhere addressable — a
+                // local-only or Graph delete returns nothing.
+                setDeleteUndo(outcomes.filter(Boolean));
               },
               {
                 title: t('rowMenu.deleteServer2'),
