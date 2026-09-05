@@ -56,8 +56,21 @@ const toBase64 = (canvas) => {
 // call Date methods on it, and subtracting two strings to sort gives NaN.
 const asDate = (value) => (value instanceof Date ? value : new Date(value));
 
-const utf8ToBase64 = (text) =>
-  btoa(String.fromCharCode(...new TextEncoder().encode(text)));
+// btoa takes a binary STRING, so the document's bytes have to become chars
+// first — but spreading them into String.fromCharCode passes one ARGUMENT per
+// byte, and a mirrored thread carries its images as data: URIs, so the file
+// runs to hundreds of KB and overflows the engine's stack ("Maximum call stack
+// size exceeded", reported from the dialog as a failed export). Chunked: the
+// limit is the argument count, and 32k of them is far under every engine's.
+const CHUNK = 0x8000;
+const utf8ToBase64 = (text) => {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+};
 
 // The body a message contributes to an export: CID images resolved, executable
 // content stripped, remote content mirrored when the user asked for it.

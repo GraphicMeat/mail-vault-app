@@ -98,6 +98,38 @@ describe('html export', () => {
   });
 });
 
+// A mirrored thread is not a page of text: every remote image comes back as a
+// data: URI inside the document, so the finished file runs to hundreds of KB.
+// Encoding it by spreading its bytes into String.fromCharCode passes the byte
+// count as the ARGUMENT count, and the engine overflows its stack long before
+// it runs out of memory — "Export failed: Maximum call stack size exceeded",
+// on exactly the export that had the most work in it.
+describe('a document too big to spread', () => {
+  const filler = 'lorem ipsum dolor sit amet '.repeat(16_000);   // ~430 KB
+
+  it('encodes a body far past the engine argument limit', async () => {
+    const big = { ...thread[0], html: `<p>${filler}</p>` };
+    const out = await buildExport({ messages: [big], format: 'html', layout: 'single', ...base });
+    expect(out.ok).toBe(true);
+    expect(atob(out.files[0].base64)).toContain(filler);
+  });
+
+  it('keeps multi-byte characters intact across the chunk boundary', async () => {
+    // A chunk cut mid-character would corrupt the pair on either side of it,
+    // and every chunk boundary lands at a fixed byte offset — so the document
+    // is nothing but characters that occupy more than one byte.
+    const glyphs = '\u00e4\u20ac\ud83d\udd12'.repeat(40_000);   // ~360 KB of UTF-8
+    const out = await buildExport({
+      messages: [{ ...thread[0], html: `<p>${glyphs}</p>` }],
+      format: 'html', layout: 'single', ...base,
+    });
+    expect(out.ok).toBe(true);
+    const decoded = new TextDecoder().decode(
+      Uint8Array.from(atob(out.files[0].base64), c => c.charCodeAt(0)));
+    expect(decoded).toContain(glyphs);
+  });
+});
+
 describe('the mirror toggle', () => {
   it('mirrors when asked', async () => {
     await buildExport({ messages: [thread[0]], format: 'html', layout: 'single', ...base, mirror: true });

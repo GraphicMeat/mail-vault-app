@@ -472,6 +472,45 @@ function exportAttachmentMessage({ uid, owner, day }) {
   };
 }
 
+// ── The oversized-document fixture ──────────────────────────────────────────
+// Every other body in these mailboxes is a few hundred bytes, and an HTML
+// export encodes the finished document in one pass — so without a big message
+// the encoder is never handed more than a few KB, and the argument-count
+// overflow a real mirrored thread hits ("Maximum call stack size exceeded")
+// cannot be reached by any run. This one clears the limit on its own, with no
+// network and no images.
+
+export const BIG_BODY_SUBJECT = 'Annual report, in full';
+/** Last line of the body: proves the whole document survived the encoder. */
+export const BIG_BODY_MARKER = 'End of the annual report.';
+
+/** ~640 KB of wrapped paragraphs — real mail lines, not one endless one. */
+const bigBodyFiller = () => Array.from({ length: 9000 }, (_, i) =>
+  `<p>Paragraph ${i} of the annual report, lorem ipsum dolor sit amet.</p>`).join('\n');
+
+function bigBodyMessage({ uid, owner, day }) {
+  const { internalDate, header } = stamp(day);
+  return {
+    uid,
+    flags: ['\\Seen'],
+    internal_date: internalDate,
+    modseq: uid,
+    raw: [
+      'From: Reports <reports@mock.test>',
+      `To: ${owner}`,
+      `Subject: ${BIG_BODY_SUBJECT}`,
+      `Date: ${header}`,
+      `Message-ID: <mock-bigbody-${uid}-${owner}>`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8',
+      '',
+      bigBodyFiller(),
+      `<p id="mv-big-body">${BIG_BODY_MARKER}</p>`,
+      '',
+    ].join('\n'),
+  };
+}
+
 /** An HTML message whose body says which message it is. */
 function htmlMarkerMessage({ uid, owner, from, subject, marker, day }) {
   const { internalDate, header } = stamp(day);
@@ -704,6 +743,10 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
             uid: 9502, owner, from: QUOTED_SUBJECT_SENDER, subject: QUOTED_SUBJECT_WIRE,
             body: 'Subscription reminder two.', messageId: `quoted-subject-2@${owner}`, day: 43,
           }),
+          // The oversized document, day 44 for the same reasons: under the
+          // tracker (55) and the attachment fixture (54), so the first
+          // single-message row and every top-of-list assertion stay put.
+          bigBodyMessage({ uid: 9503, owner, day: 44 }),
         ]);
       }
 

@@ -26,6 +26,7 @@ import { setPremium } from './mockBilling.js';
 import {
   EXPORT_ATTACHMENT_SUBJECT, EXPORT_ATTACHMENT_PDF_NAME, EXPORT_ATTACHMENT_PDF_BASE64,
   EXPORT_ATTACHMENT_PNG_NAME, EXPORT_ATTACHMENT_PNG_BASE64, EXPORT_ATTACHMENT_INLINE_NAME,
+  BIG_BODY_SUBJECT, BIG_BODY_MARKER,
 } from './mockImap.js';
 
 const OUT = path.join(os.tmpdir(), `mv-export-${process.pid}`);
@@ -321,6 +322,28 @@ describe('Export', function () {
     const anchors = rail.match(/#mv-m\d+/g) || [];
     expect(anchors.length).toBeGreaterThanOrEqual(2);
     for (const a of anchors) expect(html).toContain(`id="${a.slice(1)}"`);
+  });
+
+  // A finished document is encoded in one pass, and a real mirrored thread runs
+  // to hundreds of KB — which the encoder used to hand to the engine as one
+  // argument per byte, failing the export with "Maximum call stack size
+  // exceeded". Only a body this size reaches that limit in a real webview.
+  it('writes a document too big to encode in a single call', async function () {
+    const dest = path.join(OUT, 'big.html');
+    await openBySubject(BIG_BODY_SUBJECT);
+    await clickExportEntry();
+    await choose('HTML');
+    await setMirror(false);
+    await setCheckbox('Include attachments', false);
+    await setDest(dest);
+    await confirmExport();
+    await waitForFile(dest);
+
+    const html = fs.readFileSync(dest, 'utf8');
+    // Past every engine's argument limit, and whole: the marker is the body's
+    // last line, so a document cut short by the encoder loses it.
+    expect(html.length).toBeGreaterThan(500_000);
+    expect(html).toContain(BIG_BODY_MARKER);
   });
 
   it('writes one numbered PNG per message into a directory', async function () {
