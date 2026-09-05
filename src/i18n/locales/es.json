@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "Los nombres de carpeta no pueden estar vacíos ni contener «{{delimiter}}».",
   "errors.folderLocked": "La bandeja de entrada y las carpetas especiales no se pueden renombrar ni eliminar.",
   "common.create": "Crear",
-  "common.rename": "Cambiar nombre"
+  "common.rename": "Cambiar nombre",
+  "email.thread.layout": "Diseño",
+  "email.thread.layout.timeline": "Cronología",
+  "email.thread.layout.compact": "Compacto",
+  "email.thread.layout.split": "Vista dividida"
 }

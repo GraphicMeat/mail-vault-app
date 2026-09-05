@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "フォルダ名を空にすることはできません。「{{delimiter}}」も使用できません。",
   "errors.folderLocked": "受信トレイと特殊フォルダは名前の変更や削除ができません。",
   "common.create": "作成",
-  "common.rename": "名前を変更"
+  "common.rename": "名前を変更",
+  "email.thread.layout": "レイアウト",
+  "email.thread.layout.timeline": "時系列",
+  "email.thread.layout.compact": "コンパクト",
+  "email.thread.layout.split": "分割表示"
 }

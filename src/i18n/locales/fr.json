@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "Un nom de dossier ne peut pas être vide ni contenir « {{delimiter}} ».",
   "errors.folderLocked": "La boîte de réception et les dossiers spéciaux ne peuvent pas être renommés ni supprimés.",
   "common.create": "Créer",
-  "common.rename": "Renommer"
+  "common.rename": "Renommer",
+  "email.thread.layout": "Disposition",
+  "email.thread.layout.timeline": "Chronologie",
+  "email.thread.layout.compact": "Condensé",
+  "email.thread.layout.split": "Vue partagée"
 }

@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "文件夹名称不能为空，也不能包含“{{delimiter}}”。",
   "errors.folderLocked": "收件箱和特殊文件夹无法重命名或删除。",
   "common.create": "新建",
-  "common.rename": "重命名"
+  "common.rename": "重命名",
+  "email.thread.layout": "布局",
+  "email.thread.layout.timeline": "时间线",
+  "email.thread.layout.compact": "紧凑",
+  "email.thread.layout.split": "分栏视图"
 }

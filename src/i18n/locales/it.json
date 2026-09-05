@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "I nomi delle cartelle non possono essere vuoti né contenere «{{delimiter}}».",
   "errors.folderLocked": "La posta in arrivo e le cartelle speciali non possono essere rinominate né eliminate.",
   "common.create": "Crea",
-  "common.rename": "Rinomina"
+  "common.rename": "Rinomina",
+  "email.thread.layout": "Disposizione",
+  "email.thread.layout.timeline": "Cronologia",
+  "email.thread.layout.compact": "Compatto",
+  "email.thread.layout.split": "Vista divisa"
 }

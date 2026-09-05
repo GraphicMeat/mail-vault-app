@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "Nomes de pasta não podem ficar vazios nem conter \"{{delimiter}}\".",
   "errors.folderLocked": "A Caixa de Entrada e as pastas especiais não podem ser renomeadas nem excluídas.",
   "common.create": "Criar",
-  "common.rename": "Renomear"
+  "common.rename": "Renomear",
+  "email.thread.layout": "Disposição",
+  "email.thread.layout.timeline": "Linha do tempo",
+  "email.thread.layout.compact": "Compacto",
+  "email.thread.layout.split": "Visualização dividida"
 }

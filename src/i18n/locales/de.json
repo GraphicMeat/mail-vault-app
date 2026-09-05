@@ -1974,5 +1974,9 @@
   "errors.folderNameInvalid": "Ordnernamen dürfen nicht leer sein und kein „{{delimiter}}“ enthalten.",
   "errors.folderLocked": "Der Posteingang und besondere Ordner können nicht umbenannt oder gelöscht werden.",
   "common.create": "Erstellen",
-  "common.rename": "Umbenennen"
+  "common.rename": "Umbenennen",
+  "email.thread.layout": "Anordnung",
+  "email.thread.layout.timeline": "Zeitverlauf",
+  "email.thread.layout.compact": "Kompakt",
+  "email.thread.layout.split": "Geteilte Ansicht"
 }
