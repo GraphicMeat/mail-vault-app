@@ -205,4 +205,49 @@ describe('deleting from a unified list', () => {
       expect.objectContaining({ uid: 7, serverDeleted: true }),
     ]);
   });
+
+  // A uid names a message only inside one folder, and a unified list merges
+  // each account's INBOX with its Sent copies. The optimistic filter has to
+  // read the row's folder as well — the same predicate applyServerRemoval
+  // settles on — or deleting the INBOX copy takes the Sent row off the list
+  // with it, and only a reload puts it back.
+  it('leaves the same uid in another folder on screen', async () => {
+    const inbox = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    const sent = row(7, { _accountId: ACCT_B.id, _mailbox: 'Sent' });
+    primeUnified([inbox, sent]);
+
+    await useMailStore.getState().deleteEmailFromServer(_selKey(inbox));
+
+    expect(useMailStore.getState().emails.map(e => e._mailbox)).toEqual(['Sent']);
+  });
+});
+
+// The refusal belongs to the actions that DESTROY a message. Save, mark and
+// move do not: refusing those over one row that was stamped late loses the
+// whole batch, silently, and the user has no way to tell which row did it.
+describe('a bulk action that destroys nothing skips the row it cannot place', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetLocalIndexEntry.mockResolvedValue(null);
+  });
+
+  it('marks the rows it can resolve and skips the one it cannot', async () => {
+    const stamped = row(8, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([row(7), stamped], [7, _selKey(stamped)]);
+
+    await useMailStore.getState().markSelectedAsRead();
+
+    expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(1);
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCT_B, 8, ['\\Seen'], 'add', 'INBOX');
+  });
+
+  it('moves the rows it can resolve and skips the one it cannot', async () => {
+    const stamped = row(8, { _accountId: ACCT_B.id, _mailbox: 'INBOX' });
+    primeUnified([row(7), stamped]);
+
+    await useMailStore.getState().moveEmails([7, _selKey(stamped)], 'Archive');
+
+    expect(mockMoveEmails).toHaveBeenCalledTimes(1);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCT_B, [8], 'INBOX', 'Archive');
+  });
 });

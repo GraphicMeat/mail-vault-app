@@ -310,10 +310,15 @@ export async function saveSelectedLocally() {
   // bare uid) — the same reading every other selection workflow does.
   const emailMap = new Map([...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]
     .map(e => [selectionKey(e, state), e]));
-  const rows = keys.map(key => {
-    const { uid, accountId, mailbox } = _resolveKeyContext(key, state, emailMap);
-    return { uid, _accountId: accountId, _mailbox: mailbox };
-  });
+  const rows = [];
+  for (const key of keys) {
+    const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
+    if (!ctx) {
+      console.warn('[saveSelectedLocally] skipped a row that names no account:', key);
+      continue;
+    }
+    rows.push({ uid: ctx.uid, _accountId: ctx.accountId, _mailbox: ctx.mailbox });
+  }
   await get().saveEmailsLocally(rows);
 }
 
@@ -406,7 +411,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // meantime; a failed delete lifts it again and reloads, which puts the row
   // back — exactly the contract the bulk paths use.
   const tombstone = `${accountId}|${mailbox}|${realUid}`;
-  const isThisEmail = (e) => (isUnified ? _selKey(e) === String(uid) || (e._accountId === accountId && e.uid === realUid) : e.uid === uid);
+  // The folder is part of the identity, exactly as in applyServerRemoval's
+  // `sameMessage`: a thread and the unified list both merge INBOX with Sent,
+  // and the two share uids — without it, deleting the INBOX copy took the Sent
+  // row off the list too.
+  const isThisEmail = (e) => (isUnified
+    ? _selKey(e) === String(uid)
+      || (e._accountId === accountId && e.uid === realUid && (e._mailbox == null || e._mailbox === mailbox))
+    : e.uid === uid);
   // The open thread is a snapshot; take the message out of it too, and close
   // the reader only when nothing is left (pruneSelectedThread). Matched by
   // folder wherever the row can say where it lives: a thread merges INBOX with
@@ -848,7 +860,15 @@ async function _markSelected(read) {
     const k = selKeyOf(e);
     if (!emailMap.has(k)) emailMap.set(k, e);
   }
-  const targets = keys.map(key => ({ key, ..._resolveKeyContext(key, state, emailMap) }));
+  const targets = [];
+  for (const key of keys) {
+    const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
+    if (!ctx) {
+      console.warn('[markSelected] skipped a row that names no account:', key);
+      continue;
+    }
+    targets.push({ key, ...ctx });
+  }
   const targetKeys = new Set(targets.map(t => `${t.accountId}-${t.mailbox}-${t.uid}`));
   const matches = (e) => targetKeys.has(emailScopeKey(e, state));
 
@@ -914,9 +934,25 @@ export const markSelectedAsUnread = () => _markSelected(false);
 // set of arrays (see purgeEverywhere's comment on why it also includes
 // `localEmails`).
 
-function _resolveKeyContext(key, state, emailMap) {
+function _resolveKeyContext(key, state, emailMap, { require = true } = {}) {
   const isUnified = spansMailboxes(state);
-  const ctx = isUnified ? requireUnifiedContext(key, state) : null;
+  // `require` is what happens to a key that names no account: the actions that
+  // destroy a message (delete, purge) refuse the whole batch rather than guess
+  // a folder, and the ones that do not (save, mark, move) skip the row and go
+  // on. Guessing was the original bug — it aimed the mutation at the active
+  // account's INBOX under the raw uid, i.e. at somebody else's message.
+  let ctx = null;
+  if (isUnified) {
+    try {
+      // Not `_resolveUnifiedContext`: a FULL key still names its own account
+      // and folder after the row has left every list, and that case resolves
+      // in both modes. Only a key that names nothing at all throws.
+      ctx = requireUnifiedContext(key, state);
+    } catch (e) {
+      if (require) throw e;
+      return null;
+    }
+  }
   // A full key names its account and folder itself (a merged Sent copy in a
   // single folder's list gets one — see selectionKey); a bare uid names the
   // view's.
@@ -1443,7 +1479,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
 //   "e7ce0440-…:INBOX:34363", expected u32   (bson73, discussion #1)
 //
 // One move per (account, mailbox). A key that names no account, or no numeric
-// uid, is skipped: a guessed folder moves a different message under that uid.
+// uid, is skipped — the rest of the selection still moves. A guessed folder
+// moves a different message under that uid, and refusing the whole batch over
+// one unstamped row would strand a move that is not destroying anything.
 
 export async function moveEmails(keys, targetMailbox) {
   const { useMailStore } = await import('../../stores/mailStore');
@@ -1457,7 +1495,11 @@ export async function moveEmails(keys, targetMailbox) {
     .map(e => [selectionKey(e, state), e]));
   const groups = new Map();
   for (const key of keys) {
-    const ctx = _resolveKeyContext(key, state, emailMap);
+    const ctx = _resolveKeyContext(key, state, emailMap, { require: false });
+    if (!ctx) {
+      console.warn('[moveEmails] skipped a row that names no account:', key);
+      continue;
+    }
     if (!ctx.account || typeof ctx.uid !== 'number') continue;
     const gk = `${ctx.accountId}|${ctx.mailbox}`;
     if (!groups.has(gk)) groups.set(gk, { account: ctx.account, accountId: ctx.accountId, mailbox: ctx.mailbox, uids: [], rows: [] });

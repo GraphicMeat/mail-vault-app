@@ -86,11 +86,16 @@ export function SelectionActionBar() {
     };
   }, [selectedEmailIds, archivedEmailIds]);
 
-  const handleAction = async (action) => {
+  // `report` for the actions that destroy a message: those refuse a row they
+  // cannot place (which account, which folder) rather than guess, and the
+  // whole selection stays put. Console-only, that reads as a button that does
+  // nothing. Mark and save skip such a row instead, so they keep the log line.
+  const handleAction = async (action, { report = false } = {}) => {
     try {
       await action();
     } catch (e) {
       console.error('Selection action failed:', e);
+      if (report) useMailStore.setState({ error: t('list.deleteFailed', { err: e?.message || e }) });
     }
   };
 
@@ -105,7 +110,7 @@ export function SelectionActionBar() {
   const confirmDelete = () => {
     const mode = deleteMode;
     setDeleteMode(null);
-    handleAction(mode === 'everywhere' ? purgeSelectedEverywhere : deleteSelectedFromServer);
+    handleAction(mode === 'everywhere' ? purgeSelectedEverywhere : deleteSelectedFromServer, { report: true });
   };
 
   const handleUnarchive = async () => {

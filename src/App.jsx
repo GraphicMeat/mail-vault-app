@@ -391,10 +391,14 @@ function App() {
     },
     delete: () => {
       const { selectedEmail, selectedEmailId } = useMailStore.getState();
-      // deleteEmailFromServer resolves a composite key itself, and falls back
-      // to the active mailbox for a bare uid — so hand it the id as it stands.
+      // deleteEmailFromServer resolves a composite key itself; in a list that
+      // spans mailboxes selectedEmailId IS that key, and a key it cannot place
+      // is refused rather than aimed at the active folder. Report the refusal —
+      // unreported it reads as a keypress that did nothing. Same toast the
+      // reading pane's delete uses.
       if (selectedEmail || selectedEmailId) {
-        useMailStore.getState().deleteEmailFromServer(selectedEmailId);
+        useMailStore.getState().deleteEmailFromServer(selectedEmailId)
+          .catch(err => useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) }));
       }
     },
     // j/k walk the list the user can actually see: with the unread filter on,
