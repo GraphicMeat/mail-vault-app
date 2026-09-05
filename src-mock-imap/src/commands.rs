@@ -683,8 +683,9 @@ fn do_expunge(cmd: &Command, state: &mut ServerState, sess: &Session) -> Respons
 fn do_append(cmd: &Command, state: &mut ServerState) -> Response {
     let mut args = cmd.args.as_str();
     let name = next_arg(&mut args).unwrap_or_default();
-    // Optional flag list and optional date-time precede the literal.
+    // Optional flag list and optional date-time precede the literal marker.
     let _flags = next_group(&mut args);
+    let date = if args.trim_start().starts_with('"') { next_arg(&mut args) } else { None };
 
     let Some(mb) = state.find_mut(&name) else {
         return Response::no("[TRYCREATE] Mailbox does not exist");
@@ -693,6 +694,9 @@ fn do_append(cmd: &Command, state: &mut ServerState) -> Response {
     let validity = mb.uid_validity;
     let modseq = mb.highest_modseq + 1;
     let mut msg = Message::new(uid, cmd.literal.clone());
+    if let Some(d) = date {
+        msg.internal_date = d;
+    }
     msg.modseq = modseq;
     mb.add(msg);
     mb.highest_modseq = modseq;

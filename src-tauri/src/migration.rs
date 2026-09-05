@@ -400,7 +400,7 @@ pub async fn migrate_email_imap_to_imap(
     let _mbox = imap::select_mailbox(source_session, source_mailbox).await?;
 
     let fetch_stream = source_session
-        .uid_fetch(uid.to_string(), "(UID FLAGS BODY.PEEK[])")
+        .uid_fetch(uid.to_string(), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
         .await
         .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
 
@@ -437,8 +437,11 @@ pub async fn migrate_email_imap_to_imap(
         .collect();
     let flags_str = flags.join(" ");
 
-    // Append to destination
-    imap::append_email(dest_session, dest_mailbox, mime_bytes, &flags_str).await?;
+    // Append to destination, keeping the source message's INTERNALDATE — without
+    // it every migrated message lands dated "now".
+    let internal_date = fetch.internal_date().map(|d| imap::imap_date_time(&d));
+    imap::append_email(dest_session, dest_mailbox, mime_bytes, &flags_str, internal_date.as_deref())
+        .await?;
 
     Ok(true)
 }
@@ -455,7 +458,10 @@ pub async fn migrate_email_graph_to_imap(
 
     let flags_str = if is_read { "\\Seen".to_string() } else { String::new() };
 
-    imap::append_email(dest_session, dest_mailbox, &mime_bytes, &flags_str).await?;
+    // Graph gives no INTERNALDATE; the message's own Date header is the best source.
+    let internal_date = imap::internal_date_from_raw(&mime_bytes);
+    imap::append_email(dest_session, dest_mailbox, &mime_bytes, &flags_str, internal_date.as_deref())
+        .await?;
 
     Ok(true)
 }
@@ -906,7 +912,7 @@ pub async fn run_migration(
                             use futures::StreamExt;
                             let _mbox = imap::select_mailbox(&mut src_guard.session, &src_path).await?;
                             let fetch_stream = src_guard.session
-                                .uid_fetch(uid.to_string(), "(UID FLAGS BODY.PEEK[])")
+                                .uid_fetch(uid.to_string(), "(UID FLAGS INTERNALDATE BODY.PEEK[])")
                                 .await
                                 .map_err(|e| format!("UID FETCH {} failed: {}", uid, e))?;
                             let fetches: Vec<_> = fetch_stream
@@ -975,7 +981,8 @@ pub async fn run_migration(
                                         })
                                         .collect();
                                     let flags_str = flags.join(" ");
-                                    imap::append_email(&mut dst_guard.session, &dst_path, mime_bytes, &flags_str).await
+                                    let internal_date = fetch.internal_date().map(|d| imap::imap_date_time(&d));
+                                    imap::append_email(&mut dst_guard.session, &dst_path, mime_bytes, &flags_str, internal_date.as_deref()).await
                                 } else {
                                     Err(format!("No body for UID {}", uid))
                                 };

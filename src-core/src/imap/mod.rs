@@ -1379,17 +1379,44 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
     .await
 }
 
-/// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND
+/// RFC 3501 `date-time` for APPEND, unquoted: `05-Mar-2019 08:15:00 +0100`.
+pub fn imap_date_time(dt: &chrono::DateTime<chrono::FixedOffset>) -> String {
+    dt.format("%d-%b-%Y %H:%M:%S %z").to_string()
+}
+
+/// The message's own `Date:` header as an APPEND `date-time` (UTC), so a
+/// restored or migrated message keeps its date instead of arriving "today".
+pub fn internal_date_from_raw(raw: &[u8]) -> Option<String> {
+    use chrono::TimeZone;
+    use mailparse::MailHeaderMap;
+    let parsed = mailparse::parse_mail(raw).ok()?;
+    let date = parsed.headers.get_first_value("Date")?;
+    let secs = mailparse::dateparse(&date).ok()?;
+    let utc = chrono::Utc.timestamp_opt(secs, 0).single()?;
+    Some(imap_date_time(&utc.with_timezone(&chrono::FixedOffset::east_opt(0)?)))
+}
+
+/// Append a raw email (RFC 5322) to a mailbox via IMAP APPEND.
+///
+/// `internal_date` is the RFC 3501 `date-time` the server should stamp
+/// (`imap_date_time` / `internal_date_from_raw`); `None` lets the server use
+/// now, which is right only for a message written this instant.
 pub async fn append_email(
     session: &mut ImapSession,
     mailbox: &str,
     raw_email: &[u8],
     flags: &str,
+    internal_date: Option<&str>,
 ) -> Result<(), String> {
-    let flags_opt: Option<&str> = if flags.is_empty() { None } else { Some(flags) };
+    // async-imap inserts both arguments verbatim. RFC 3501 wants the flag list
+    // parenthesized and the date-time quoted; every caller passes bare flags
+    // (`\Seen \Flagged`), which without the parens leaves the date in a position
+    // no server parses — and is malformed APPEND on its own.
+    let flag_list = if flags.is_empty() { None } else { Some(format!("({})", flags)) };
+    let quoted_date = internal_date.map(|d| format!("\"{}\"", d));
 
     session
-        .append(mailbox, flags_opt, None, raw_email)
+        .append(mailbox, flag_list.as_deref(), quoted_date.as_deref(), raw_email)
         .await
         .map_err(|e| format!("IMAP APPEND to '{}' failed: {}", mailbox, e))?;
 
@@ -1422,6 +1449,7 @@ pub async fn append_email_verified(
     raw_email: &[u8],
     flags: &str,
     message_id: Option<&str>,
+    internal_date: Option<&str>,
 ) -> Result<(u32, u32, Option<u32>), String> {
     tracing::info!("[append_verified:select_before_start] mailbox={}", mailbox);
     let before = select_mailbox(session, mailbox).await?;
@@ -1446,9 +1474,10 @@ pub async fn append_email_verified(
     } else {
         format!(" ({})", flags)
     };
+    let date_clause: String = internal_date.map(|d| format!(" \"{}\"", d)).unwrap_or_default();
     let header = format!(
-        "APPEND {}{} {{{}+}}\r\n",
-        quoted_mailbox, flags_clause, raw_email.len()
+        "APPEND {}{}{} {{{}+}}\r\n",
+        quoted_mailbox, flags_clause, date_clause, raw_email.len()
     );
     let mut cmd_bytes: Vec<u8> = Vec::with_capacity(header.len() + raw_email.len());
     cmd_bytes.extend_from_slice(header.as_bytes());

@@ -153,7 +153,7 @@ async fn append_stores_the_message_and_reports_the_new_uid() {
     let mut sess = session(&server).await;
 
     let raw = eml("Sent from MailVault", "user@example.com", "hello").into_bytes();
-    append_email(&mut sess, "Sent", &raw, "\\Seen").await.expect("append");
+    append_email(&mut sess, "Sent", &raw, "\\Seen", None).await.expect("append");
 
     let sent = server.state().find("Sent").unwrap().clone();
     assert_eq!(sent.messages.len(), 1);
@@ -177,7 +177,7 @@ async fn append_verified_survives_a_slow_server() {
 
     let raw = eml("Delayed", "user@example.com", "hello").into_bytes();
     let (before, after, found) =
-        append_email_verified(&mut sess, "Sent", &raw, "\\Seen", Some("<delayed@example.com>"))
+        append_email_verified(&mut sess, "Sent", &raw, "\\Seen", Some("<delayed@example.com>"), None)
             .await
             .expect("append should survive a slow server");
 
@@ -192,7 +192,7 @@ async fn append_to_a_missing_mailbox_reports_the_failure() {
     let mut sess = session(&server).await;
 
     let raw = eml("Nowhere", "user@example.com", "hello").into_bytes();
-    let err = append_email(&mut sess, "NoSuchFolder", &raw, "")
+    let err = append_email(&mut sess, "NoSuchFolder", &raw, "", None)
         .await
         .expect_err("append to a missing mailbox must fail");
     assert!(err.to_lowercase().contains("append"), "unhelpful error: {err}");
@@ -272,4 +272,58 @@ async fn a_move_whose_socket_dies_after_copy_is_an_error_not_a_success() {
 
     assert!(pool::is_connection_lost(&err), "must read as a lost connection: {err}");
     assert!(server.state().find("INBOX").unwrap().by_uid(1).is_some(), "the source copy is still there");
+}
+
+// ── APPEND date ────────────────────────────────────────────────────────────
+// Both APPEND paths sent no INTERNALDATE, so every migrated or restored
+// message arrived dated "now" on the server.
+
+#[async_std::test]
+async fn append_carries_the_internal_date() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+    let mut sess = session(&server).await;
+    let raw = eml("Old news", "a@example.com", "body");
+
+    append_email(&mut sess, "INBOX", raw.as_bytes(), "\\Seen", Some("05-Mar-2019 08:15:00 +0100"))
+        .await
+        .expect("append");
+
+    let state = server.state();
+    let msg = state.find("INBOX").unwrap().messages.last().expect("appended");
+    assert_eq!(msg.internal_date, "05-Mar-2019 08:15:00 +0100");
+    // RFC 3501: `APPEND mailbox [(flags)] ["date-time"] literal`. An unparenthesized
+    // flag list puts the date in a position no server parses.
+    assert!(
+        server
+            .commands()
+            .iter()
+            .any(|c| c.contains("APPEND") && c.contains("(\\Seen) \"05-Mar-2019 08:15:00 +0100\"")),
+        "the flag list must be parenthesized and the date-time quoted: {:?}",
+        server.commands()
+    );
+}
+
+/// Runs under tokio, not async-std: `append_email_verified` wraps its APPEND in
+/// `tokio::time::timeout` (see `append_verified_survives_a_slow_server`).
+#[tokio::test]
+async fn verified_append_carries_the_internal_date_too() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
+    let config = common::config_for(&server);
+    let mut sess = create_imap_session_no_compress(&config).await.expect("session");
+    let raw = eml("Old news", "a@example.com", "body");
+
+    append_email_verified(&mut sess, "INBOX", raw.as_bytes(), "", None, Some("05-Mar-2019 08:15:00 +0100"))
+        .await
+        .expect("verified append");
+
+    let state = server.state();
+    assert_eq!(state.find("INBOX").unwrap().messages.last().unwrap().internal_date, "05-Mar-2019 08:15:00 +0100");
+}
+
+#[test]
+fn internal_date_comes_from_the_date_header() {
+    // eml() writes `Date: Thu, 01 Jan 2026 12:00:00 +0000`.
+    let raw = eml("Old news", "a@example.com", "body");
+    assert_eq!(internal_date_from_raw(raw.as_bytes()).as_deref(), Some("01-Jan-2026 12:00:00 +0000"));
+    assert_eq!(internal_date_from_raw(b"Subject: no date\r\n\r\nx"), None);
 }

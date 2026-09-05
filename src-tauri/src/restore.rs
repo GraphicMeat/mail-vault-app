@@ -234,7 +234,15 @@ pub async fn run_restore(
                 }
             }
 
-            let append = imap::append_email(&mut guard.session, folder, &raw, &msg.imap_flags);
+            // Keep the message's own date: a restored backup must not arrive dated today.
+            let internal_date = imap::internal_date_from_raw(&raw);
+            let append = imap::append_email(
+                &mut guard.session,
+                folder,
+                &raw,
+                &msg.imap_flags,
+                internal_date.as_deref(),
+            );
             match tokio::time::timeout(std::time::Duration::from_secs(30), append).await {
                 Ok(Ok(())) => uploaded += 1,
                 Ok(Err(e)) => {

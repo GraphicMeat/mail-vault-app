@@ -685,6 +685,8 @@ pub async fn smtp_send_email(
                             &raw_bytes,
                             "\\Seen",
                             mid_for_closure.as_deref(),
+                            // The Sent copy was written this instant — "now" is its real date.
+                            None,
                         ).await;
                         // Best-effort logout regardless of result
                         let _ = session.logout().await;
