@@ -17,9 +17,12 @@ import { formatBytes } from '../utils/formatBytes';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, t, useT   } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
+import { FolderContextMenu } from './FolderContextMenu';
+import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
 import { buildMailboxTree, mailboxAncestors } from '../services/workflows/mailboxTree';
 import { openFolder } from '../services/workflows/loadSubtree';
+import { mailboxLabel } from '../utils/imapUtf7';
 import {
   Inbox,
   Send,
@@ -753,6 +756,94 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // openFolder, because a remembered folder has to be restored the same way.
   const selectFolder = (path) => openFolder(activeAccountId, path);
 
+  // ── Folder operations ──
+  // `folderMenu` = { node, x, y }; `nameDialog` = { mode, node }; `confirmDelete`
+  // = the node whose permanent delete still needs a yes.
+  const [folderMenu, setFolderMenu] = useState(null);
+  const [nameDialog, setNameDialog] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+
+  /** Every folder op reports through the app's one error toast. */
+  const runFolderOp = async (op, notice) => {
+    try {
+      await op();
+      if (notice) useMailStore.setState({ error: notice, errorType: 'success', errorTypeFor: notice });
+    } catch (e) {
+      useMailStore.setState({ error: e?.message || String(e) });
+    }
+  };
+
+  const submitFolderName = (name) => {
+    const dialog = nameDialog;
+    setNameDialog(null);
+    if (!dialog) return;
+    runFolderOp(() => (dialog.mode === 'rename'
+      ? useMailStore.getState().renameFolder(dialog.node.path, name)
+      : useMailStore.getState().createFolder(dialog.node?.path || null, name)));
+  };
+
+  const deleteFolder = (node, { permanent } = {}) => {
+    // A move into Trash is reversible from Trash; a real DELETE is not, so only
+    // that one stops for a confirmation.
+    if (permanent) { setConfirmDelete(node); return; }
+    runFolderOp(
+      () => useMailStore.getState().deleteFolder(node.path),
+      t('sidebar.folderMovedToTrash', { name: mailboxLabel(node.name) }),
+    );
+  };
+
+  const folderOpsUi = (
+    <>
+      <FolderContextMenu
+        menu={folderMenu}
+        mailboxes={mailboxes}
+        onClose={() => setFolderMenu(null)}
+        onNewSubfolder={(node) => setNameDialog({ mode: 'create', node })}
+        onRename={(node) => setNameDialog({ mode: 'rename', node })}
+        onDelete={deleteFolder}
+      />
+      <FolderNameDialog
+        open={!!nameDialog}
+        title={t(nameDialog?.mode === 'rename' ? 'sidebar.folderRenameTitle' : 'sidebar.folderCreateTitle')}
+        initial={nameDialog?.mode === 'rename' ? mailboxLabel(nameDialog.node.name) : ''}
+        confirmLabel={t(nameDialog?.mode === 'rename' ? 'common.rename' : 'common.create')}
+        onSubmit={submitFolderName}
+        onClose={() => setNameDialog(null)}
+      />
+      <Dialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        role="alertdialog"
+        size="sm"
+        title={t('sidebar.deleteFolderForever')}
+        description={confirmDelete
+          ? t('sidebar.deleteFolderConfirm', { name: mailboxLabel(confirmDelete.name) })
+          : null}
+        footer={
+          <>
+            <Button variant="secondary" fullWidth onClick={() => setConfirmDelete(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              fullWidth
+              data-testid="confirm-delete-folder"
+              onClick={() => {
+                const node = confirmDelete;
+                setConfirmDelete(null);
+                runFolderOp(() => useMailStore.getState().deleteFolder(node.path));
+              }}
+            >
+              {t('common.delete')}
+            </Button>
+          </>
+        }
+      />
+    </>
+  );
+
+  const onFolderContextMenu = (node, at) => setFolderMenu({ node, ...at });
+
   // Shared hover bubble (rendered in both collapsed and expanded views)
   const hoverBubble = hoverAccountId && hoverPos && (
     <TransferStatsHoverBubble
@@ -901,6 +992,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             onToggle={toggleFolder}
             onSelect={selectFolder}
             counts={folderStatus?.[activeAccountId]}
+            onContextMenu={onFolderContextMenu}
           />
         </div>}
 
@@ -962,6 +1054,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {errorModal}
         {hoverBubble}
+        {folderOpsUi}
       </div>
     );
   }
@@ -1272,8 +1365,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       )}
       {!unifiedInbox && (
         <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
-          <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-            {t('sidebar.folders')}
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs text-mail-text-muted uppercase tracking-wide">
+              {t('sidebar.folders')}
+            </span>
+            <Button
+              variant="ghost" icon size="xs"
+              data-testid="new-folder-btn"
+              aria-label={t('sidebar.newFolder')}
+              title={t('sidebar.newFolder')}
+              onClick={() => setNameDialog({ mode: 'create', node: null })}
+            >
+              <Plus size={14} />
+            </Button>
           </div>
           <Folders
             mailboxes={mailboxes}
@@ -1282,6 +1386,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             onToggle={toggleFolder}
             onSelect={selectFolder}
             counts={folderStatus?.[activeAccountId]}
+            onContextMenu={onFolderContextMenu}
           />
         </div>
       )}
@@ -1330,6 +1435,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
       {errorModal}
       {hoverBubble}
+      {folderOpsUi}
     </div>
   );
 }

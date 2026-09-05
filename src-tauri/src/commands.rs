@@ -1136,6 +1136,47 @@ pub async fn graph_move_emails(
     }))
 }
 
+// ── Graph API: Folder management ─────────────────────────────────────────
+
+#[tauri::command]
+pub async fn graph_create_folder(
+    access_token: String,
+    display_name: String,
+    parent_folder_id: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    let folder = client
+        .create_folder(&display_name, parent_folder_id.as_deref())
+        .await?;
+    serde_json::to_value(&folder).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn graph_rename_folder(
+    access_token: String,
+    folder_id: String,
+    display_name: String,
+) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.rename_folder(&folder_id, &display_name).await
+}
+
+#[tauri::command]
+pub async fn graph_move_folder(
+    access_token: String,
+    folder_id: String,
+    destination_id: String,
+) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.move_folder(&folder_id, &destination_id).await
+}
+
+#[tauri::command]
+pub async fn graph_delete_folder(access_token: String, folder_id: String) -> Result<(), String> {
+    let client = crate::graph::GraphClient::new(&access_token);
+    client.delete_folder(&folder_id).await
+}
+
 // ── Move emails between folders ──────────────────────────────────────────
 
 #[tauri::command]

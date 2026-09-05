@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} Nachrichten in den Papierkorb verschoben",
   "undo.deletedPermanently_one": "{{count}} Nachricht endgültig gelöscht",
   "undo.deletedPermanently_other": "{{count}} Nachrichten endgültig gelöscht",
-  "settings.shortcuts.undo": "Letzte Aktion rückgängig machen"
+  "settings.shortcuts.undo": "Letzte Aktion rückgängig machen",
+  "sidebar.newFolder": "Neuer Ordner",
+  "sidebar.newSubfolder": "Neuer Unterordner…",
+  "sidebar.renameFolder": "Umbenennen…",
+  "sidebar.deleteFolder": "In den Papierkorb verschieben",
+  "sidebar.deleteFolderForever": "Endgültig löschen…",
+  "sidebar.folderName": "Ordnername",
+  "sidebar.folderCreateTitle": "Neuer Ordner",
+  "sidebar.folderRenameTitle": "Ordner umbenennen",
+  "sidebar.deleteFolderConfirm": "„{{name}}“ und alles darin löschen? Das lässt sich nicht rückgängig machen.",
+  "sidebar.folderMovedToTrash": "„{{name}}“ in den Papierkorb verschoben",
+  "errors.noTrashFolder": "Dieses Konto hat keinen Papierkorb, in den der Ordner verschoben werden könnte.",
+  "errors.folderNameInvalid": "Ordnernamen dürfen nicht leer sein und kein „{{delimiter}}“ enthalten.",
+  "common.create": "Erstellen",
+  "common.rename": "Umbenennen"
 }

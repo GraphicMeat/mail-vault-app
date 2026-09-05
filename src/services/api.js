@@ -434,6 +434,27 @@ export async function bulkDeleteEmails(account, accountId, mailbox, uids) {
   }
 }
 
+// ── Folder management ─────────────────────────────────────────────────────
+// The server half. `vaultRenameMailbox` is the local half of a rename: one
+// pair per folder AND per descendant, because a server's RENAME moves a whole
+// subtree in one command while the vault keeps a directory per full path.
+
+export async function createMailbox(account, path) {
+  return tauriInvoke('imap_create_mailbox', { account, path });
+}
+
+export async function renameMailbox(account, from, to) {
+  return tauriInvoke('imap_rename_mailbox', { account, from, to });
+}
+
+export async function deleteMailbox(account, paths) {
+  return tauriInvoke('imap_delete_mailbox', { account, paths });
+}
+
+export async function vaultRenameMailbox(accountId, accountEmail, pairs) {
+  return tauriInvoke('vault_rename_mailbox', { accountId, accountEmail, pairs });
+}
+
 // ── Graph API functions (personal Microsoft accounts) ─────────────────────
 
 export async function graphListFolders(accessToken) {
@@ -467,6 +488,22 @@ export async function graphDeleteMessage(accessToken, messageId) {
 
 export async function graphMoveEmails(accessToken, messageIds, targetFolderId) {
   return await tauriInvoke('graph_move_emails', { accessToken, messageIds, targetFolderId });
+}
+
+export async function graphCreateFolder(accessToken, displayName, parentFolderId = null) {
+  return tauriInvoke('graph_create_folder', { accessToken, displayName, parentFolderId });
+}
+
+export async function graphRenameFolder(accessToken, folderId, displayName) {
+  return tauriInvoke('graph_rename_folder', { accessToken, folderId, displayName });
+}
+
+export async function graphMoveFolder(accessToken, folderId, destinationId) {
+  return tauriInvoke('graph_move_folder', { accessToken, folderId, destinationId });
+}
+
+export async function graphDeleteFolder(accessToken, folderId) {
+  return tauriInvoke('graph_delete_folder', { accessToken, folderId });
 }
 
 export async function resolveEmailSettings(domain) {

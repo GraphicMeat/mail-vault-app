@@ -656,6 +656,81 @@ impl GraphClient {
             .map_err(|e| format!("Graph create_folder parse error: {}", e))
     }
 
+    /// Rename a folder. Graph names folders, it does not path them, so this is
+    /// the whole of a rename — the subtree comes along untouched.
+    pub async fn rename_folder(&self, folder_id: &str, display_name: &str) -> Result<(), String> {
+        let url = format!("{}/me/mailFolders/{}", GRAPH_BASE, folder_id);
+
+        let resp = self
+            .client
+            .patch(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({ "displayName": display_name }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph rename_folder request failed: {}", e))?;
+
+        Self::folder_op_status(resp, "rename_folder").await
+    }
+
+    /// Move a folder under another one. `destination_id` takes a well-known
+    /// name as well as an id, which is what makes "deleteditems" the delete.
+    pub async fn move_folder(&self, folder_id: &str, destination_id: &str) -> Result<(), String> {
+        let url = format!("{}/me/mailFolders/{}/move", GRAPH_BASE, folder_id);
+
+        let resp = self
+            .client
+            .post(&url)
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({ "destinationId": destination_id }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph move_folder request failed: {}", e))?;
+
+        Self::folder_op_status(resp, "move_folder").await
+    }
+
+    /// Delete a folder for good. Graph's DELETE on a folder outside Deleted
+    /// Items moves it there instead, so the caller only reaches this for one
+    /// that is already in the bin.
+    pub async fn delete_folder(&self, folder_id: &str) -> Result<(), String> {
+        let url = format!("{}/me/mailFolders/{}", GRAPH_BASE, folder_id);
+
+        let resp = self
+            .client
+            .delete(&url)
+            .bearer_auth(&self.access_token)
+            .send()
+            .await
+            .map_err(|e| format!("Graph delete_folder request failed: {}", e))?;
+
+        Self::folder_op_status(resp, "delete_folder").await
+    }
+
+    /// The response check the three folder operations share, including the 429
+    /// branch every other Graph call carries.
+    async fn folder_op_status(resp: reqwest::Response, what: &str) -> Result<(), String> {
+        let status = resp.status();
+        if status.is_success() {
+            return Ok(());
+        }
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
+            let retry_after = resp
+                .headers()
+                .get("retry-after")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(30);
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!(
+                "Graph {} failed (429:retry_after={}) {}",
+                what, retry_after, body
+            ));
+        }
+        let body = resp.text().await.unwrap_or_default();
+        Err(format!("Graph {} failed ({}) {}", what, status.as_u16(), body))
+    }
+
     // -----------------------------------------------------------------------
     // Error classification helpers
     // -----------------------------------------------------------------------

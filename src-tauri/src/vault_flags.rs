@@ -371,7 +371,12 @@ pub struct RenamePair {
 /// Move every location `from` has to `to`. The Maildir mailbox DIRECTORY
 /// (parent of `cur/`, so `archived_headers.json` travels with it), the index
 /// directory, the sidecar cache, the mirror. Missing sources are skipped;
-/// returns how many moved. Nothing is ever deleted here.
+/// returns how many moved and which ones ERRORED. Nothing is ever deleted here.
+///
+/// The two are not the same answer: a source that was never there is a
+/// non-event, a source that failed to move leaves the vault half-renamed and
+/// the user has to be told. A count alone cannot tell them apart, which is
+/// how a failed rename used to end up as a `warn!` nobody reads.
 ///
 /// Two of the four are flat: `maildir_cur_path` and `cache_base_name` sanitize
 /// the WHOLE mailbox path into one directory name, so `Projects` and
@@ -381,7 +386,7 @@ pub struct RenamePair {
 /// harmless as long as the parent pair runs first, which is why
 /// `vault_rename_mailbox` sorts shallowest-first: the descendant's pair then
 /// finds its source already gone and skips.
-pub fn rename_dirs(from: &Dirs, to: &Dirs) -> usize {
+pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
@@ -401,6 +406,7 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> usize {
     }
 
     let mut moved = 0;
+    let mut failed = Vec::new();
     for (src, dst) in pairs {
         if !src.exists() || dst.exists() {
             continue; // ponytail: an existing destination is left alone; merge if it ever matters
@@ -410,10 +416,13 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> usize {
         }
         match fs::rename(&src, &dst) {
             Ok(()) => moved += 1,
-            Err(e) => warn!("vault_rename: {:?} -> {:?}: {}", src, dst, e),
+            Err(e) => {
+                warn!("vault_rename: {:?} -> {:?}: {}", src, dst, e);
+                failed.push(format!("{} ({})", src.display(), e));
+            }
         }
     }
-    moved
+    (moved, failed)
 }
 
 /// The local half of a folder rename: the server already moved the subtree,
@@ -432,11 +441,20 @@ pub async fn vault_rename_mailbox(
         let mut pairs = pairs;
         pairs.sort_by_key(|p| p.from.len());
         let mut moved = 0;
+        // EVERY pair is attempted before the first failure is reported: the
+        // server has already renamed the whole subtree, so stopping halfway
+        // would strand directories that could still have been moved.
+        let mut failed: Vec<String> = Vec::new();
         let result = (|| -> Result<usize, String> {
             for p in &pairs {
                 let from = dirs_for(&app_handle, &account_id, &p.from, account_email.as_deref(), root.as_deref())?;
                 let to = dirs_for(&app_handle, &account_id, &p.to, account_email.as_deref(), root.as_deref())?;
-                moved += rename_dirs(&from, &to);
+                let (n, mut bad) = rename_dirs(&from, &to);
+                moved += n;
+                failed.append(&mut bad);
+            }
+            if !failed.is_empty() {
+                return Err(format!("vault rename incomplete: {}", failed.join("; ")));
             }
             Ok(moved)
         })();
@@ -701,7 +719,7 @@ mod tests {
         fs::write(&from.index, b"[]").unwrap();
         fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
 
-        assert_eq!(rename_dirs(&from, &to), 3);
+        assert_eq!(rename_dirs(&from, &to), (3, vec![]));
 
         assert!(to.cur.join("7:2,AS").exists());
         // The whole mailbox directory moved, so its sibling files came along.
@@ -716,6 +734,37 @@ mod tests {
         assert!(!from.sidecar_dir.exists());
 
         // Idempotent: the sources are gone, so a repeat moves nothing.
-        assert_eq!(rename_dirs(&from, &to), 0);
+        assert_eq!(rename_dirs(&from, &to), (0, vec![]));
+    }
+
+    /// A source that WOULD NOT move is not the same answer as a source that was
+    /// never there: only the first one leaves the vault half-renamed, and the
+    /// count alone cannot tell the caller which it got.
+    #[test]
+    fn a_rename_that_errors_is_reported_by_path_not_swallowed_into_the_count() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let from = rename_fixture(base, "Projects", "a_Projects");
+        let to = rename_fixture(base, "Work", "a_Work");
+
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::create_dir_all(&from.sidecar_dir).unwrap();
+        fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
+
+        // The sidecar cache's parent is a FILE, so neither create_dir_all nor
+        // the rename beneath it can succeed. The Maildir move still can.
+        fs::write(base.join("email_cache_blocked"), b"not a directory").unwrap();
+        let blocked = Dirs {
+            sidecar_dir: base.join("email_cache_blocked").join("a_Work"),
+            ..rename_fixture(base, "Work", "a_Work")
+        };
+
+        let (moved, failed) = rename_dirs(&from, &blocked);
+        assert_eq!(moved, 1, "the Maildir directory still moved");
+        assert_eq!(failed.len(), 1, "{failed:?}");
+        assert!(failed[0].contains("a_Projects"), "names the source it could not move: {failed:?}");
+        // Untouched: nothing is deleted when a move fails.
+        assert!(from.sidecar_dir.join("7.json").exists());
+        assert!(to.cur.exists());
     }
 }

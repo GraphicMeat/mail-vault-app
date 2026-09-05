@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} messages déplacés vers la Corbeille",
   "undo.deletedPermanently_one": "{{count}} message supprimé définitivement",
   "undo.deletedPermanently_other": "{{count}} messages supprimés définitivement",
-  "settings.shortcuts.undo": "Annuler la dernière action"
+  "settings.shortcuts.undo": "Annuler la dernière action",
+  "sidebar.newFolder": "Nouveau dossier",
+  "sidebar.newSubfolder": "Nouveau sous-dossier…",
+  "sidebar.renameFolder": "Renommer…",
+  "sidebar.deleteFolder": "Mettre à la corbeille",
+  "sidebar.deleteFolderForever": "Supprimer définitivement…",
+  "sidebar.folderName": "Nom du dossier",
+  "sidebar.folderCreateTitle": "Nouveau dossier",
+  "sidebar.folderRenameTitle": "Renommer le dossier",
+  "sidebar.deleteFolderConfirm": "Supprimer « {{name}} » et tout son contenu ? Cette action est irréversible.",
+  "sidebar.folderMovedToTrash": "« {{name}} » a été mis à la corbeille",
+  "errors.noTrashFolder": "Ce compte n’a pas de corbeille où déplacer le dossier.",
+  "errors.folderNameInvalid": "Un nom de dossier ne peut pas être vide ni contenir « {{delimiter}} ».",
+  "common.create": "Créer",
+  "common.rename": "Renommer"
 }

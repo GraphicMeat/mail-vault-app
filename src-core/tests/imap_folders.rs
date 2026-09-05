@@ -82,4 +82,7 @@ fn trash_rules() {
     assert_eq!(trash_destination("INBOX.Kunden", "INBOX.Trash", "."), "INBOX.Trash.Kunden");
     assert!(is_under("Trash/Old", "Trash", "/") && is_under("Trash", "Trash", "/"));
     assert!(!is_under("Trashy", "Trash", "/"));
+    // A NIL delimiter is a flat namespace: equality, and nothing else.
+    assert!(!is_under("Trashy", "Trash", ""));
+    assert!(is_under("Trash", "Trash", ""));
 }

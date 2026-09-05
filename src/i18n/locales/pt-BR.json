@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} mensagens movidas para a Lixeira",
   "undo.deletedPermanently_one": "{{count}} mensagem excluída permanentemente",
   "undo.deletedPermanently_other": "{{count}} mensagens excluídas permanentemente",
-  "settings.shortcuts.undo": "Desfazer a última ação"
+  "settings.shortcuts.undo": "Desfazer a última ação",
+  "sidebar.newFolder": "Nova pasta",
+  "sidebar.newSubfolder": "Nova subpasta…",
+  "sidebar.renameFolder": "Renomear…",
+  "sidebar.deleteFolder": "Mover para a lixeira",
+  "sidebar.deleteFolderForever": "Excluir permanentemente…",
+  "sidebar.folderName": "Nome da pasta",
+  "sidebar.folderCreateTitle": "Nova pasta",
+  "sidebar.folderRenameTitle": "Renomear pasta",
+  "sidebar.deleteFolderConfirm": "Excluir \"{{name}}\" e todo o seu conteúdo? Isso não pode ser desfeito.",
+  "sidebar.folderMovedToTrash": "\"{{name}}\" foi movida para a lixeira",
+  "errors.noTrashFolder": "Esta conta não tem uma lixeira para onde mover a pasta.",
+  "errors.folderNameInvalid": "Nomes de pasta não podem ficar vazios nem conter \"{{delimiter}}\".",
+  "common.create": "Criar",
+  "common.rename": "Renomear"
 }

@@ -145,6 +145,27 @@ describe('FolderTree', () => {
     expect(onToggle).toHaveBeenCalledWith('INBOX.Container');
   });
 
+  it('reports the node and the pointer position on a right-click', () => {
+    const onContextMenu = vi.fn();
+    draw({ onContextMenu });
+    const target = row('INBOX.Kunden');
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 120, clientY: 44 });
+    fireEvent(target, ev);
+    // The browser's own menu must not also open over ours.
+    expect(ev.defaultPrevented).toBe(true);
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'INBOX.Kunden' }),
+      { x: 120, y: 44 },
+    );
+  });
+
+  it('leaves the browser menu alone when no handler is given', () => {
+    draw();
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+    fireEvent(row('INBOX.Kunden'), ev);
+    expect(ev.defaultPrevented).toBe(false);
+  });
+
   it('shows the decoded name but keeps the encoded path', () => {
     render(
       <FolderTree
@@ -217,6 +238,18 @@ describe('FolderBubbles', () => {
     drawBubbles({ onSelect, expanded: ALL_OPEN });
     fireEvent.click(row('INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt'));
     expect(onSelect).toHaveBeenCalledWith('INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt');
+  });
+
+  it('reports the node on a right-click, from a chip too', () => {
+    const onContextMenu = vi.fn();
+    drawBubbles({ onContextMenu, expanded: ALL_OPEN });
+    const ev = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 7, clientY: 9 });
+    fireEvent(row('INBOX.Lieferanten.Technik'), ev);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(onContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'INBOX.Lieferanten.Technik' }),
+      { x: 7, y: 9 },
+    );
   });
 
   it('opens rather than selects a folder the server marked unselectable', () => {

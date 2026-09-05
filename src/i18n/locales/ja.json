@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} 件をゴミ箱に移動しました",
   "undo.deletedPermanently_one": "{{count}} 件を完全に削除しました",
   "undo.deletedPermanently_other": "{{count}} 件を完全に削除しました",
-  "settings.shortcuts.undo": "直前の操作を取り消す"
+  "settings.shortcuts.undo": "直前の操作を取り消す",
+  "sidebar.newFolder": "新しいフォルダ",
+  "sidebar.newSubfolder": "新しいサブフォルダ…",
+  "sidebar.renameFolder": "名前を変更…",
+  "sidebar.deleteFolder": "ゴミ箱へ移動",
+  "sidebar.deleteFolderForever": "完全に削除…",
+  "sidebar.folderName": "フォルダ名",
+  "sidebar.folderCreateTitle": "新しいフォルダ",
+  "sidebar.folderRenameTitle": "フォルダ名を変更",
+  "sidebar.deleteFolderConfirm": "「{{name}}」とその中身をすべて削除しますか？この操作は元に戻せません。",
+  "sidebar.folderMovedToTrash": "「{{name}}」をゴミ箱へ移動しました",
+  "errors.noTrashFolder": "このアカウントには、フォルダの移動先となるゴミ箱がありません。",
+  "errors.folderNameInvalid": "フォルダ名を空にすることはできません。「{{delimiter}}」も使用できません。",
+  "common.create": "作成",
+  "common.rename": "名前を変更"
 }

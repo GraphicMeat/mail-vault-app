@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}}건을 휴지통으로 옮겼습니다",
   "undo.deletedPermanently_one": "{{count}}건을 완전히 삭제했습니다",
   "undo.deletedPermanently_other": "{{count}}건을 완전히 삭제했습니다",
-  "settings.shortcuts.undo": "마지막 작업 실행 취소"
+  "settings.shortcuts.undo": "마지막 작업 실행 취소",
+  "sidebar.newFolder": "새 폴더",
+  "sidebar.newSubfolder": "새 하위 폴더…",
+  "sidebar.renameFolder": "이름 변경…",
+  "sidebar.deleteFolder": "휴지통으로 이동",
+  "sidebar.deleteFolderForever": "영구 삭제…",
+  "sidebar.folderName": "폴더 이름",
+  "sidebar.folderCreateTitle": "새 폴더",
+  "sidebar.folderRenameTitle": "폴더 이름 변경",
+  "sidebar.deleteFolderConfirm": "\"{{name}}\" 및 그 안의 모든 항목을 삭제할까요? 되돌릴 수 없습니다.",
+  "sidebar.folderMovedToTrash": "\"{{name}}\"을(를) 휴지통으로 옮겼습니다",
+  "errors.noTrashFolder": "이 계정에는 폴더를 옮길 휴지통이 없습니다.",
+  "errors.folderNameInvalid": "폴더 이름은 비워 둘 수 없으며 \"{{delimiter}}\"을(를) 포함할 수 없습니다.",
+  "common.create": "만들기",
+  "common.rename": "이름 변경"
 }

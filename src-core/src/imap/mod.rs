@@ -1619,15 +1619,24 @@ pub async fn ensure_sent_mailbox(session: &mut ImapSession) -> Result<String, St
 /// Where a folder goes when "deleted": under Trash, keeping its leaf name —
 /// Thunderbird's model, and Rokas' call for MailVault (2026-09-05). A real
 /// DELETE is for a folder that already sits under Trash.
+///
+/// An empty (NIL) delimiter is a namespace with no hierarchy: nothing can go
+/// under Trash there, so the caller has to refuse the move before it gets
+/// here rather than have a separator invented for it.
 pub fn trash_destination(path: &str, trash: &str, delimiter: &str) -> String {
+    debug_assert!(!delimiter.is_empty(), "trash_destination needs a hierarchy delimiter");
     let leaf = path.rsplit(delimiter).next().unwrap_or(path);
     format!("{}{}{}", trash, delimiter, leaf)
 }
 
 /// `path` is `ancestor` itself or lives below it. A plain `starts_with` would
-/// call "Trashy" a child of "Trash"; the delimiter is what separates them.
+/// call "Trashy" a child of "Trash"; the delimiter is what separates them —
+/// and with no delimiter at all there is no "below", only equality.
 pub fn is_under(path: &str, ancestor: &str, delimiter: &str) -> bool {
-    path == ancestor || path.starts_with(&format!("{}{}", ancestor, delimiter))
+    if path == ancestor {
+        return true;
+    }
+    !delimiter.is_empty() && path.starts_with(&format!("{}{}", ancestor, delimiter))
 }
 
 pub async fn create_mailbox(session: &mut ImapSession, path: &str) -> Result<(), String> {

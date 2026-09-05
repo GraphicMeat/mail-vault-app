@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} messaggi spostati nel Cestino",
   "undo.deletedPermanently_one": "{{count}} messaggio eliminato definitivamente",
   "undo.deletedPermanently_other": "{{count}} messaggi eliminati definitivamente",
-  "settings.shortcuts.undo": "Annulla l'ultima azione"
+  "settings.shortcuts.undo": "Annulla l'ultima azione",
+  "sidebar.newFolder": "Nuova cartella",
+  "sidebar.newSubfolder": "Nuova sottocartella…",
+  "sidebar.renameFolder": "Rinomina…",
+  "sidebar.deleteFolder": "Sposta nel cestino",
+  "sidebar.deleteFolderForever": "Elimina definitivamente…",
+  "sidebar.folderName": "Nome della cartella",
+  "sidebar.folderCreateTitle": "Nuova cartella",
+  "sidebar.folderRenameTitle": "Rinomina cartella",
+  "sidebar.deleteFolderConfirm": "Eliminare «{{name}}» e tutto il suo contenuto? L’operazione è irreversibile.",
+  "sidebar.folderMovedToTrash": "«{{name}}» spostata nel cestino",
+  "errors.noTrashFolder": "Questo account non ha un cestino in cui spostare la cartella.",
+  "errors.folderNameInvalid": "I nomi delle cartelle non possono essere vuoti né contenere «{{delimiter}}».",
+  "common.create": "Crea",
+  "common.rename": "Rinomina"
 }

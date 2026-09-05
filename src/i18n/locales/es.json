@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "{{count}} mensajes movidos a la Papelera",
   "undo.deletedPermanently_one": "{{count}} mensaje eliminado permanentemente",
   "undo.deletedPermanently_other": "{{count}} mensajes eliminados permanentemente",
-  "settings.shortcuts.undo": "Deshacer la última acción"
+  "settings.shortcuts.undo": "Deshacer la última acción",
+  "sidebar.newFolder": "Nueva carpeta",
+  "sidebar.newSubfolder": "Nueva subcarpeta…",
+  "sidebar.renameFolder": "Cambiar nombre…",
+  "sidebar.deleteFolder": "Mover a la papelera",
+  "sidebar.deleteFolderForever": "Eliminar permanentemente…",
+  "sidebar.folderName": "Nombre de la carpeta",
+  "sidebar.folderCreateTitle": "Nueva carpeta",
+  "sidebar.folderRenameTitle": "Cambiar nombre de la carpeta",
+  "sidebar.deleteFolderConfirm": "¿Eliminar «{{name}}» y todo su contenido? Esto no se puede deshacer.",
+  "sidebar.folderMovedToTrash": "«{{name}}» se movió a la papelera",
+  "errors.noTrashFolder": "Esta cuenta no tiene una papelera a la que mover la carpeta.",
+  "errors.folderNameInvalid": "Los nombres de carpeta no pueden estar vacíos ni contener «{{delimiter}}».",
+  "common.create": "Crear",
+  "common.rename": "Cambiar nombre"
 }

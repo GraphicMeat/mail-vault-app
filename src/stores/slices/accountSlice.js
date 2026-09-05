@@ -16,6 +16,11 @@ import { removeAccount as _removeAccount } from '../../services/workflows/remove
 import { refreshCurrentView as _refreshCurrentView, refreshAllAccounts as _refreshAllAccounts } from '../../services/workflows/refreshAccounts';
 import { retryKeychainAccess as _retryKeychainAccess } from '../../services/workflows/retryKeychainAccess';
 import {
+  createFolder as _createFolder,
+  renameFolder as _renameFolder,
+  deleteFolder as _deleteFolder,
+} from '../../services/workflows/folderOps';
+import {
   setUnifiedInbox as _setUnifiedInbox,
   switchUnifiedFolder as _switchUnifiedFolder,
   loadUnifiedInbox as _loadUnifiedInbox,
@@ -166,6 +171,12 @@ export const createAccountSlice = (set, get) => ({
   // Manual-refresh UI spinner — briefly spins on every click so the button
   // feels instant even when the underlying sync is throttled or already running.
   manualRefreshSpinning: false,
+
+  // Folder management — the active account is implied, as it is for every
+  // other sidebar action. Failures reach the caller, which owns the toast.
+  createFolder: (parentPath, name) => _createFolder(get().activeAccountId, parentPath, name),
+  renameFolder: (path, name) => _renameFolder(get().activeAccountId, path, name),
+  deleteFolder: (path) => _deleteFolder(get().activeAccountId, path),
 
   refreshCurrentView: () => _throttledRefreshCurrentView(set),
   refreshAllAccounts: (options) => _refreshAllAccounts(options),

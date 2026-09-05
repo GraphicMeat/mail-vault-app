@@ -48,13 +48,22 @@ function FolderToggle({ node, isOpen, onToggle, size = 14 }) {
   );
 }
 
+/**
+ * Right-click a folder: report the node and where the pointer was, so the
+ * caller can open its menu there. Without a handler the browser's own menu
+ * still comes up — that is the honest default for a build with no folder ops.
+ */
+const contextMenuHandler = (node, onContextMenu) => onContextMenu
+  ? (e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(node, { x: e.clientX, y: e.clientY }); }
+  : undefined;
+
 /** Click a folder: select it, or open it when the server says it holds nothing. */
 function activate(node, onToggle, onSelect) {
   if (node.noselect) { if (node.children.length) onToggle(node.path); }
   else onSelect(node.path);
 }
 
-function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts }) {
+function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact, counts, onContextMenu }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isOpen = expanded.has(node.path);
@@ -79,6 +88,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
                      ? 'bg-mail-accent/10 text-mail-accent-text'
                      : 'text-mail-text hover:bg-mail-surface-hover'}`}
         onClick={() => activate(node, onToggle, onSelect)}
+        onContextMenu={contextMenuHandler(node, onContextMenu)}
       >
         {hasChildren ? (
           <FolderToggle node={node} isOpen={isOpen} onToggle={onToggle} />
@@ -109,6 +119,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
           onSelect={onSelect}
           compact={compact}
           counts={counts}
+          onContextMenu={onContextMenu}
         />
       ))}
     </>
@@ -122,7 +133,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
  * see mailboxTree.js for why the stored list must stay flat.
  */
 export function FolderTree({
-  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts,
+  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu,
 }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
 
@@ -136,11 +147,12 @@ export function FolderTree({
       onSelect={onSelect}
       compact={compact}
       counts={counts}
+      onContextMenu={onContextMenu}
     />
   ));
 }
 
-function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect }) {
+function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, onContextMenu }) {
   const Icon = getMailboxIcon(node);
   const hasChildren = node.children.length > 0;
   const isActive = !node.noselect && activeMailbox === node.path;
@@ -160,6 +172,7 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect }
                    ? 'bg-mail-accent-fill text-white border-mail-accent'
                    : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
       onClick={() => activate(node, onToggle, onSelect)}
+      onContextMenu={contextMenuHandler(node, onContextMenu)}
     >
       <Icon size={12} />
       <span className="truncate max-w-[180px]">{label}</span>
@@ -203,7 +216,7 @@ function BubbleLevel({ nodes, trail, ...rest }) {
  * ("Telefonie › NFon AG") read as unrelated folders — and a parent gets the
  * tree's chevron, with its children indented beneath it while open.
  */
-export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect }) {
+export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
 
   return (
@@ -215,6 +228,8 @@ export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, on
         expanded={expanded}
         onToggle={onToggle}
         onSelect={onSelect}
+        counts={counts}
+        onContextMenu={onContextMenu}
       />
     </div>
   );

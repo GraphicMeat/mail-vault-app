@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "Moved {{count}} messages to Trash",
   "undo.deletedPermanently_one": "Deleted {{count}} message permanently",
   "undo.deletedPermanently_other": "Deleted {{count}} messages permanently",
-  "settings.shortcuts.undo": "Undo last action"
+  "settings.shortcuts.undo": "Undo last action",
+  "sidebar.newFolder": "New folder",
+  "sidebar.newSubfolder": "New subfolder…",
+  "sidebar.renameFolder": "Rename…",
+  "sidebar.deleteFolder": "Move to Trash",
+  "sidebar.deleteFolderForever": "Delete permanently…",
+  "sidebar.folderName": "Folder name",
+  "sidebar.folderCreateTitle": "New folder",
+  "sidebar.folderRenameTitle": "Rename folder",
+  "sidebar.deleteFolderConfirm": "Delete \"{{name}}\" and everything in it? This cannot be undone.",
+  "sidebar.folderMovedToTrash": "\"{{name}}\" moved to Trash",
+  "errors.noTrashFolder": "This account has no Trash folder to move the folder into.",
+  "errors.folderNameInvalid": "Folder names cannot be empty or contain \"{{delimiter}}\".",
+  "common.create": "Create",
+  "common.rename": "Rename"
 }

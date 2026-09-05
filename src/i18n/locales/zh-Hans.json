@@ -1955,5 +1955,19 @@
   "undo.deleted_other": "已将 {{count}} 封移到废纸篓",
   "undo.deletedPermanently_one": "已永久删除 {{count}} 封",
   "undo.deletedPermanently_other": "已永久删除 {{count}} 封",
-  "settings.shortcuts.undo": "撤销上一步操作"
+  "settings.shortcuts.undo": "撤销上一步操作",
+  "sidebar.newFolder": "新建文件夹",
+  "sidebar.newSubfolder": "新建子文件夹…",
+  "sidebar.renameFolder": "重命名…",
+  "sidebar.deleteFolder": "移到废纸篓",
+  "sidebar.deleteFolderForever": "永久删除…",
+  "sidebar.folderName": "文件夹名称",
+  "sidebar.folderCreateTitle": "新建文件夹",
+  "sidebar.folderRenameTitle": "重命名文件夹",
+  "sidebar.deleteFolderConfirm": "删除“{{name}}”及其中的全部内容？此操作无法撤销。",
+  "sidebar.folderMovedToTrash": "已将“{{name}}”移到废纸篓",
+  "errors.noTrashFolder": "此账户没有可供移入该文件夹的废纸篓。",
+  "errors.folderNameInvalid": "文件夹名称不能为空，也不能包含“{{delimiter}}”。",
+  "common.create": "新建",
+  "common.rename": "重命名"
 }
