@@ -1,7 +1,25 @@
-/* Acquisition interactions; intentionally loaded only by the English pages. */
+/* Shared acquisition interactions for English and generated localized pages. */
 (() => {
   'use strict';
   const html = document.documentElement;
+  const languageLinks = document.querySelectorAll('.mv-language a[hreflang], .mv-lang a[hreflang]');
+  const pageLanguage = html.lang || 'en';
+  // Explicit localized URLs win. Restore a saved choice on English entry pages
+  // only when that page advertises an equivalent translation.
+  try {
+    const saved = localStorage.getItem('mv-language');
+    const alternate = Array.from(document.querySelectorAll('link[rel="alternate"][hreflang]'))
+      .find(link => link.hreflang === saved);
+    if (pageLanguage === 'en' && saved && saved !== 'en' && alternate) {
+      const target = new URL(alternate.href);
+      location.replace(target.pathname + location.search + location.hash);
+      return;
+    }
+    if (pageLanguage !== 'en') localStorage.setItem('mv-language', pageLanguage);
+  } catch { /* language navigation also works without browser storage */ }
+  languageLinks.forEach(link => link.addEventListener('click', () => {
+    try { localStorage.setItem('mv-language', link.hreflang); } catch { /* optional preference */ }
+  }));
   const query = new URLSearchParams(location.search);
   const selectedPlan = ['free', 'yearly', 'monthly'].includes(query.get('plan')) ? query.get('plan') : 'free';
   try {

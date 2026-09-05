@@ -424,6 +424,17 @@ function applyEdits(src, edits) {
 const ESC = (s) => s.replace(/&(?![a-zA-Z#][a-zA-Z0-9]*;)/g, '&amp;');
 
 export function render(html, pageRel, loc, dict) {
+  // The header picker is untranslated UI, but its selected locale is page-specific.
+  html = html.replace(/<details class="mv-language"[\s\S]*?<\/details>/g, picker => picker
+    .replace(/(<span class="mv-language-name">)[^<]*/, `$1${loc.name}`)
+    .replace(/(<span class="mv-language-code"[^>]*>)[^<]*/, `$1${loc.dir.toUpperCase()}`)
+    .replace(/Choose language, English selected/g, `Choose language, ${loc.name} selected`)
+    .replace(/ aria-current="page"/g, '')
+    .replace(/<a\b[^>]*>/g, link => {
+      const current = link.includes(`hreflang="${loc.hreflang}"`);
+      return link.replace('<a ', '<a data-i18n-abs ')
+        .replace(/>$/, `${current ? ' aria-current="page"' : ''}>`);
+    }));
   const { texts, tags, jsonlds, blocks } = scan(html);
   const edits = [];
   const tr = (s) => {
