@@ -71,7 +71,14 @@ export function toSyncAccount(account, id = account.id) {
     imapConfig: {
       email: account.email, password: account.password,
       imapHost: account.imapHost, imapPort: account.imapPort,
-      imapSecure: account.imapSecure, authType: account.authType,
+      // Both: `imapSecurity` ('ssl' | 'starttls' | 'none') is what the account
+      // form actually stores and what ImapConfig::effective_security reads
+      // first; `imapSecure` is hardcoded true beside it and is only the
+      // fallback. Sending the bool alone dialled every STARTTLS and plaintext
+      // account as implicit TLS, and the watcher then retried that handshake
+      // for the life of the process.
+      imapSecure: account.imapSecure, imapSecurity: account.imapSecurity,
+      authType: account.authType,
       oauth2AccessToken: account.oauth2AccessToken,
       smtpHost: account.smtpHost, smtpPort: account.smtpPort,
       smtpSecure: account.smtpSecure, name: account.name,

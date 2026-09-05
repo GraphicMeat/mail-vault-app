@@ -94,14 +94,14 @@ export function useEmailScheduler() {
     .join('|');
   useEffect(() => { registerWatchers(); }, [watchSignature]);
 
-  // Returns a repaint key (`accountIdU+0001mailbox`) when the change lands on
-  // screen, else null. A folder-subtree view (mailboxScope) lists every
-  // folder under its root — spansMailboxes(state) already treats that the
-  // same as UNIFIED, so a change to a folder under the open branch (not the
-  // root path itself) has to repaint too, not just an exact activeMailbox
-  // match. mailboxScope.paths is the branch already enumerated by
-  // loadSubtree (root + every descendant), so membership in it is the same
-  // check rather than a second copy of the delimiter/startsWith logic.
+  // Answers whether the change landed on screen. A folder-subtree view
+  // (mailboxScope) lists every folder under its root — spansMailboxes(state)
+  // already treats that the same as UNIFIED, so a change to a folder under the
+  // open branch (not the root path itself) has to repaint too, not just an
+  // exact activeMailbox match. mailboxScope.paths is the branch already
+  // enumerated by loadSubtree (root + every descendant), so membership in it
+  // is the same check rather than a second copy of the delimiter/startsWith
+  // logic.
   const onSyncChange = async ({ accountId, mailbox, newEmails }) => {
     const s = useMailStore.getState();
     const onScreen =
@@ -125,7 +125,7 @@ export function useEmailScheduler() {
         newestSubject: newest?.subject,
       }]);
     }
-    return onScreen ? `${accountId}\u0001${mailbox}` : null;
+    return onScreen;
   };
 
   // Each daemonCall is its own socket connection — the Tauri forwarder connects,
@@ -155,16 +155,18 @@ export function useEmailScheduler() {
         // in the same reply must stop the loop before the next one starts —
         // checking `stopped` only before the loop let a change after the
         // first still fire post-unmount.
-        const toRepaint = new Set();
+        let repaint = false;
         for (const c of reply?.changes || []) {
           if (stopped) break;
-          const key = await onSyncChange(c);
-          if (key) toRepaint.add(key);
+          if (await onSyncChange(c)) repaint = true;
         }
         if (stopped) return;
-        // One reload per distinct (account, mailbox) pair, even when the
-        // reply names it twice — notifications still fire once per change.
-        for (const _key of toRepaint) useMailStore.getState().loadEmails?.();
+        // One reload per reply, whatever it named. `loadEmails()` takes no
+        // arguments and always reloads the view that is open, so deduping by
+        // (account, mailbox) deduped the keys and not the work: in All
+        // Inboxes, a reply naming two accounts' INBOXes fired two concurrent
+        // reloads of the one list. Notifications still fire once per change.
+        if (repaint) useMailStore.getState().loadEmails?.();
       }
     })();
     return () => { stopped = true; };

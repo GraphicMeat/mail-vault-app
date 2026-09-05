@@ -309,8 +309,35 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockLoadEmails.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
-  // One reload per distinct (accountId, mailbox) pair per reply, even when the
-  // reply names it twice — notifications still fire once per change.
+  // `loadEmails()` takes no arguments and always reloads the view that is
+  // open, so a reply naming two on-screen folders is still one list to
+  // repaint. Deduping by (account, mailbox) deduped the keys and not the work.
+  it('reloads once for a reply that names two on-screen folders', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A, IMAP_B],
+      activeAccountId: 'a1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+    });
+    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Two folders' }] });
+    eventReplies = [reply({
+      gen: 1,
+      changes: [
+        { gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+        { gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 },
+      ],
+    })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledTimes(2);
+  });
+
+  // One reload per reply, even when the reply names one folder twice —
+  // notifications still fire once per change.
   it('reloads once per distinct on-screen folder even when a reply names it twice', async () => {
     mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
     mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Difference engine' }] });

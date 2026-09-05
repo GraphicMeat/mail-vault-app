@@ -115,7 +115,7 @@ vi.mock('../../syncService', () => ({
   syncNow: (...a) => mockSyncNow(...a),
   waitForSync: (...a) => mockWaitForSync(...a),
   // The daemon-alive branch builds its sync account through this; the tail
-  // hands the same account to the IDLE watcher. The twelve-field shape itself
+  // hands the same account to the IDLE watcher. The thirteen-field shape itself
   // is pinned in syncService.test.js, not here.
   toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
   watchAccount: (...a) => mockWatchAccount(...a),

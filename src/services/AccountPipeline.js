@@ -1,7 +1,7 @@
 import * as api from './api';
 import * as db from './db';
 import { hasValidCredentials, ensureFreshToken } from './authUtils';
-import { syncNow, waitForSync } from './syncService';
+import { syncNow, waitForSync, toSyncAccount } from './syncService';
 import { getDaemonHealth } from './transport';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -129,19 +129,11 @@ export class AccountPipeline {
       const account = await ensureFreshToken(this.account);
       this.account = account;
 
-      const { ticket } = await syncNow({
-        id: this.accountId,
-        email: account.email,
-        imapConfig: {
-          email: account.email, password: account.password,
-          imapHost: account.imapHost, imapPort: account.imapPort,
-          imapSecure: account.imapSecure, authType: account.authType,
-          oauth2AccessToken: account.oauth2AccessToken,
-          smtpHost: account.smtpHost, smtpPort: account.smtpPort,
-          smtpSecure: account.smtpSecure, name: account.name,
-          oauth2Transport: account.oauth2Transport,
-        },
-      }, mailbox);
+      // One builder for the account shape the daemon deserializes — this was a
+      // third hand-written copy of it, and it carried the same omission the
+      // other two did (no `imapSecurity`, so a STARTTLS account was dialled as
+      // implicit TLS).
+      const { ticket } = await syncNow(toSyncAccount(account, this.accountId), mailbox);
       if (this._destroyed) return false;
 
       // Warm cache: paint what the daemon already has and let the sync land later.

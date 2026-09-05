@@ -51,7 +51,8 @@ vi.mock('../messageMutations', async (importOriginal) => ({
   markServerDeleted: (...a) => mockMarkServerDeleted(...a),
 }));
 
-const mailState = { activeAccountId: 'acct1', activeMailbox: 'INBOX', loadEmails: (...a) => mockLoadEmails(...a) };
+const mockClearUndo = vi.fn();
+const mailState = { activeAccountId: 'acct1', activeMailbox: 'INBOX', loadEmails: (...a) => mockLoadEmails(...a), clearUndo: (...a) => mockClearUndo(...a) };
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => mailState,
@@ -139,6 +140,27 @@ describe('replayOps', () => {
 
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {} });
     expect(dropped).toMatchObject({ failed: 1, kept: 0 });
+  });
+
+  // An offline move's undo works by forgetting its journal entry. Once this
+  // has read the journal the entry is going to the server whatever the undo
+  // does, so the offer has to come down before the first op is sent — or the
+  // user is shown an undo that worked and then quietly unworked itself.
+  it('withdraws the undo offer before it sends anything', async () => {
+    mockReadOps.mockResolvedValue([entry({ op: 'move', uids: [5], arg: { target: 'Archive' } })]);
+
+    await replayOps();
+
+    expect(mockClearUndo).toHaveBeenCalledTimes(1);
+    expect(mockClearUndo.mock.invocationCallOrder[0]).toBeLessThan(mockMoveEmails.mock.invocationCallOrder[0]);
+  });
+
+  it('leaves the undo slot alone when there is nothing to replay', async () => {
+    mockReadOps.mockResolvedValue([]);
+
+    await replayOps();
+
+    expect(mockClearUndo).not.toHaveBeenCalled();
   });
 
   it('drops an entry whose account is gone rather than carrying it forever', async () => {

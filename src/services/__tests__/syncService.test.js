@@ -41,26 +41,30 @@ describe('syncService', () => {
 });
 
 // The daemon's SyncAccount/ImapConfig deserialize is by field name — a rename
-// here and the account silently stops being watchable. The twelve names are
+// here and the account silently stops being watchable. The thirteen names are
 // pinned so `toSyncAccount` and the daemon struct can never drift apart, and
 // so the UI-only keys a store account carries never reach the socket.
 describe('toSyncAccount', () => {
+  // `imapSecurity` is the one the account form actually stores and the one
+  // ImapConfig::effective_security reads first; `imapSecure` beside it is
+  // hardcoded true and is only the fallback. Leaving it out dialled every
+  // STARTTLS and plaintext account as implicit TLS.
   const IMAP_FIELDS = [
-    'email', 'password', 'imapHost', 'imapPort', 'imapSecure', 'authType',
+    'email', 'password', 'imapHost', 'imapPort', 'imapSecure', 'imapSecurity', 'authType',
     'oauth2AccessToken', 'smtpHost', 'smtpPort', 'smtpSecure', 'name',
     'oauth2Transport',
   ];
 
   const storeAccount = {
     id: 'acc-1', email: 'a@b.co', password: 'pw',
-    imapHost: 'imap.b.co', imapPort: 993, imapSecure: true, authType: 'password',
+    imapHost: 'imap.b.co', imapPort: 993, imapSecure: true, imapSecurity: 'starttls', authType: 'password',
     oauth2AccessToken: 'tok', smtpHost: 'smtp.b.co', smtpPort: 465, smtpSecure: true,
     name: 'A B', oauth2Transport: null,
     // UI-only keys the store carries around
     color: '#fff', unreadCount: 3, previousImapHost: 'old.b.co', _dirty: true,
   };
 
-  it('maps the twelve IMAP fields and drops everything else', () => {
+  it('maps the thirteen IMAP fields and drops everything else', () => {
     const sync = toSyncAccount(storeAccount);
 
     expect(sync.id).toBe('acc-1');
@@ -69,7 +73,7 @@ describe('toSyncAccount', () => {
     expect(Object.keys(sync.imapConfig).sort()).toEqual([...IMAP_FIELDS].sort());
     expect(sync.imapConfig).toEqual({
       email: 'a@b.co', password: 'pw',
-      imapHost: 'imap.b.co', imapPort: 993, imapSecure: true, authType: 'password',
+      imapHost: 'imap.b.co', imapPort: 993, imapSecure: true, imapSecurity: 'starttls', authType: 'password',
       oauth2AccessToken: 'tok', smtpHost: 'smtp.b.co', smtpPort: 465, smtpSecure: true,
       name: 'A B', oauth2Transport: null,
     });

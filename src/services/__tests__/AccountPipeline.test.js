@@ -25,6 +25,9 @@ vi.mock('../db', () => ({
 vi.mock('../syncService', () => ({
   syncNow: vi.fn(),
   waitForSync: vi.fn(),
+  // The daemon header path builds its sync account through this; the field
+  // shape itself is pinned in syncService.test.js, not here.
+  toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
 }));
 vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }) }));
 vi.mock('../api', () => ({ prefetchAttachments: vi.fn(async () => 0), fetchEmailLight: vi.fn() }));

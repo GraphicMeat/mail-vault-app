@@ -51,6 +51,18 @@ export async function replayOps({ reason = 'launch' } = {}) {
 
   const ops = await db.readOps();
   if (!ops.length) return finish({ attempted: 0, done: 0, failed: 0, kept: 0, errors: [] });
+
+  // Withdraw the undo offer before sending anything.
+  //
+  // A move made offline is undone by forgetting its journal entry — that is
+  // the whole undo, because nothing was ever sent. Once this replay has read
+  // the journal into memory, the entry WILL be sent, so a clearOps arriving
+  // after this line undoes nothing: the messages move, the rows come back for
+  // one repaint, and the next sync takes them away again. Taking the offer
+  // down means the undo either ran before the replay started or is no longer
+  // on the table.
+  useMailStore.getState().clearUndo?.();
+
   log(
     `[replayOps] ${ops.length} unfinished op(s) from a previous session (${reason}):`,
     ops.map((o) => `${o.op} ${o.accountId}/${o.mailbox} ${o.uids.join(',')}`),
