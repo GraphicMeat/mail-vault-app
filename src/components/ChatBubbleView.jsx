@@ -24,7 +24,6 @@ import {
   ExternalLink,
   Loader,
 } from 'lucide-react';
-import { EmailSenderInfo } from './email/EmailSenderInfo';
 import { EmailActionBar } from './email/EmailActionBar';
 import { SenderInfoPopover } from './email/SenderInfoPopover';
 import { FullViewEmailModal } from './email/FullViewEmailModal';

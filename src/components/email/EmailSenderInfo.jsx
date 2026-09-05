@@ -14,7 +14,7 @@ import { getSenderName } from '../../utils/emailParser';
 import { t, useT  } from '../../i18n/index.js';
 
 /**
- * Shared sender info component with three variants: single, thread, chat.
+ * Shared sender info component with two variants: single and thread.
  * Renders avatar, sender name, email, DKIM shield, insights button,
  * To/CC, timestamp, and "via" indicator in a unified layout.
  *
@@ -34,8 +34,6 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   showInsights,
   onToggleInsights,
   archivedEmailIds,
-  onAvatarClick,
-  onNameClick,
 }) {
   const t = useT();
   const [headerExpanded, setHeaderExpanded] = useState(false);
@@ -66,27 +64,6 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   if (listId) {
     const match = listId.match(/^"?([^"<]+)"?\s*</);
     if (match) listName = match[1].trim();
-  }
-
-  // ── Chat variant: compact avatar + clickable name ──
-  if (variant === 'chat') {
-    return (
-      <div className="flex items-center gap-2">
-        <div
-          className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
-          onClick={onAvatarClick}
-          title={senderName}
-        >
-          <span className="text-white font-semibold text-xs">{initial}</span>
-        </div>
-        <span
-          className="text-xs font-semibold text-mail-text cursor-pointer hover:underline"
-          onClick={onNameClick}
-        >
-          {senderName}
-        </span>
-      </div>
-    );
   }
 
   // ── Single / Thread variant: full inline layout ──
