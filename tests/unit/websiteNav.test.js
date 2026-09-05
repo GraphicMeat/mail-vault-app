@@ -10,10 +10,22 @@
  * release-time regeneration) still line up with it.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { JSDOM } from 'jsdom';
 import { ITEMS, DOWNLOAD_HREF, navPages, renderNav, applyNav } from '../../website/i18n/nav.mjs';
 
+// The legacy generator still serves localized pages. English pages now use
+// the shared mv-header shell, applied after changelog generation.
 const pages = navPages();
+const legacyPage = `<nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
+<div>Old menu</div>
+<!-- i18n:switcher --><a href="/de/">Deutsch</a><!-- /i18n:switcher -->
+</nav>`;
+const englishPages = (dir = 'website') => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+  const file = `${dir}/${entry.name}`;
+  if (entry.isDirectory()) return ['node_modules', 'api', 'i18n', 'oauth'].includes(entry.name) ? [] : englishPages(file);
+  return entry.name.endsWith('.html') && /<html[^>]*lang="en"/.test(readFileSync(file, 'utf8')) ? [file] : [];
+});
 const read = (rel) => readFileSync(`website/${rel}`, 'utf8');
 
 // The nav element only, with the language switcher removed — the switcher links
@@ -31,11 +43,22 @@ const labelsIn = (nav) => [
 ];
 
 describe('website nav', () => {
-  it('finds every page that has a menu', () => {
-    expect(pages.length).toBeGreaterThanOrEqual(47);
-    expect(pages).toContain('index.html');
-    // The localizer skips these three; a menu still has to be a menu on them.
-    expect(pages).toEqual(expect.arrayContaining(['changelog.html', 'privacy.html', 'terms.html']));
+  it('checks the current English shell on every content page', () => {
+    const files = englishPages();
+    expect(files.length).toBeGreaterThanOrEqual(47);
+    expect(files).toEqual(expect.arrayContaining(['website/index.html', 'website/changelog.html', 'website/privacy.html', 'website/terms.html']));
+    const expected = ['/#how-it-works', '/features.html', '/pricing.html', '/blog.html', '/docs.html'];
+    for (const file of files) {
+      const dom = new JSDOM(readFileSync(file, 'utf8'));
+      try {
+        const doc = dom.window.document;
+        expect([...doc.querySelectorAll('.mv-navlinks a')].map(a => a.getAttribute('href')), file).toEqual(expected);
+        expect([...doc.querySelectorAll('.mv-mobile-menu nav a')].map(a => a.getAttribute('href')), file).toEqual([...expected, '/get-started.html?plan=free']);
+        expect(doc.querySelector('.mv-mobile-menu summary'), file).not.toBeNull();
+        expect(doc.querySelector('.mv-language a[hreflang="de"]'), file).not.toBeNull();
+        expect(doc.querySelector('script[src^="/assets/english-site.js"]'), file).not.toBeNull();
+      } finally { dom.window.close(); }
+    }
   });
 
   it.each(pages)('%s carries the canonical item set', (rel) => {
@@ -83,19 +106,25 @@ describe('website nav', () => {
     // it silently reverted the menu, so the generator reads i18n/nav.html.
     const partial = readFileSync('website/i18n/nav.html', 'utf8').trimEnd();
     expect(partial).toBe(renderNav().trimEnd());
-    expect(read('changelog.html')).toContain(partial);
+    const header = html => html.match(/<header class="mv-header">[\s\S]*?<\/header>/)?.[0];
+    // Links localize to their own page; the shared primary navigation stays identical.
+    expect(header(read('changelog.html'))).toBeTruthy();
+    const changelogLinks = labelsIn(header(read('changelog.html')));
+    const homepageLinks = labelsIn(header(read('index.html')));
+    expect(changelogLinks).toEqual(homepageLinks);
+    expect(readFileSync('scripts/generate-changelog.cjs', 'utf8')).toContain('style-english-pages.py');
     expect(readFileSync('scripts/generate-changelog.cjs', 'utf8')).toContain('nav.html');
   });
 });
 
 describe('nav injection', () => {
   it('is idempotent — a second pass changes nothing', () => {
-    const once = applyNav(read('faq.html'));
+    const once = applyNav(legacyPage);
     expect(applyNav(once)).toBe(once);
   });
 
   it('leaves the language switcher alone', () => {
-    expect(applyNav(read('index.html'))).toContain('<!-- i18n:switcher -->');
+    expect(applyNav(legacyPage)).toContain('<!-- i18n:switcher -->');
   });
 
   it('keeps the homepage logo scrolling to the top instead of reloading', () => {
