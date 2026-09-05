@@ -24,7 +24,7 @@ export function useEmailScheduler() {
 
   const intervalRef = useRef(null);
   const hasRefreshedOnLaunch = useRef(false);
-  const hasReplayedDeletes = useRef(false);
+  const hasReplayedOps = useRef(false);
   const lastBadgeCount = useRef(-1);
 
   // Dispatch per-account notifications using shouldNotify + showPreview
@@ -129,7 +129,7 @@ export function useEmailScheduler() {
     }
   }, [refreshOnLaunch, accounts.length]);
 
-  // Finish any server delete the last session confirmed but never sent.
+  // Finish any server op the last session confirmed but never sent.
   //
   // Deliberately NOT gated on refreshOnLaunch: that setting governs whether the
   // app goes looking for new mail, while this is unfinished work the user
@@ -138,11 +138,17 @@ export function useEmailScheduler() {
   // to delete. Once per session — accounts.length can change as accounts load,
   // and re-issuing these is not free.
   useEffect(() => {
-    if (accounts.length === 0 || hasReplayedDeletes.current) return;
-    hasReplayedDeletes.current = true;
-    import('../services/workflows/replayPendingDeletes')
-      .then(({ replayPendingDeletes }) => replayPendingDeletes())
-      .catch((e) => console.warn('[scheduler] Could not replay pending deletes:', e));
+    if (accounts.length === 0 || hasReplayedOps.current) return;
+    hasReplayedOps.current = true;
+    import('../services/workflows/replayOps')
+      .then(({ replayOps, wireReplayOnReconnect }) => {
+        // Wired here rather than at module load: it needs the same "there is at
+        // least one account" precondition, and it is idempotent so a remount
+        // that re-runs this effect costs nothing.
+        wireReplayOnReconnect();
+        return replayOps();
+      })
+      .catch((e) => console.warn('[scheduler] Could not replay pending ops:', e));
   }, [accounts.length]);
 
   // Set up interval for periodic refresh

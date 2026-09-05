@@ -339,7 +339,7 @@ async fn a_refusal_is_not_retried() {
 ///
 /// Only for a delete addressed by UID, which is why this is not `run_read`:
 /// re-issuing it against a uid the server has already expunged is a no-op, the
-/// same property `pending_delete`'s next-launch replay has always relied on.
+/// same property `op_journal`'s next-launch replay has always relied on.
 #[async_std::test]
 async fn a_delete_whose_socket_dies_retries_once_on_a_new_connection() {
     let server = MockImap::start(

@@ -64,8 +64,4 @@ export {
   loadGraphIdMap,
 } from './caches.js';
 
-export {
-  queuePendingDeletes,
-  clearPendingDeletes,
-  readPendingDeletes,
-} from './pendingDeletes.js';
+export { queueOp, clearOps, readOps } from './opJournal.js';

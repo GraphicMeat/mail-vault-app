@@ -176,13 +176,13 @@ describe('Storage matrix diagnostics', function () {
   }
 
   /**
-   * The durable journal of confirmed-but-unfinished server deletes, or null if
+   * The durable journal of confirmed-but-unfinished server ops, or null if
    * there is nothing owed. Written before the first IMAP round-trip of a delete
    * and cleared after the last, so its contents at a given moment say exactly
    * how far a delete got.
    */
-  function pendingDeleteJournal() {
-    const path = join(appDataDir(HOME()), 'pending_server_delete.json');
+  function pendingOpJournal() {
+    const path = join(appDataDir(HOME()), 'pending_ops.json');
     if (!existsSync(path)) return null;
     try {
       return JSON.parse(readFileSync(path, 'utf-8'));
@@ -1040,8 +1040,8 @@ describe('Storage matrix diagnostics', function () {
      *
      * What makes it survive now: the uids are journalled to disk before the
      * first round-trip and cleared after the last, and launch replays whatever
-     * is left (src-tauri/src/pending_delete.rs,
-     * services/workflows/replayPendingDeletes.js). This asserts the outcome the
+     * is left (src-tauri/src/op_journal.rs,
+     * services/workflows/replayOps.js). This asserts the outcome the
      * user actually cares about — the message really is gone from INBOX and
      * really is in Trash — not that any particular mechanism ran.
      *
@@ -1074,23 +1074,23 @@ describe('Storage matrix diagnostics', function () {
         timeout: 20_000, interval: 200,
         timeoutMsg: `"${subject}" never disappeared after confirming the delete`,
       });
-      const journalMidFlight = pendingDeleteJournal();
+      const journalMidFlight = pendingOpJournal();
       console.log('[reload-durability] journal at the moment the row vanished:', JSON.stringify(journalMidFlight));
 
       // The server is still sitting on the 4s MOVE.
       await browser.execute(() => window.location.reload());
       await waitForApp();
-      console.log('[reload-durability] journal right after reload:', JSON.stringify(pendingDeleteJournal()));
+      console.log('[reload-durability] journal right after reload:', JSON.stringify(pendingOpJournal()));
       // Wait for the launch replay to actually finish before asking the UI
       // anything. It waits on the keychain and then a 4s-stalled MOVE, and a
       // folder opened before it lands shows a pre-delete server state that
       // nothing re-fetches — which reads as "the delete was lost" when it was
       // merely not finished yet.
       await browser.waitUntil(async () => !!(await browser.execute(
-        () => window.__MAIL_STORE__?.getState?.().pendingDeleteReplay)), {
+        () => window.__MAIL_STORE__?.getState?.().opReplay)), {
         timeout: 60_000, interval: 500, timeoutMsg: 'The launch replay never ran at all',
       });
-      const replay = await browser.execute(() => window.__MAIL_STORE__?.getState?.().pendingDeleteReplay || null);
+      const replay = await browser.execute(() => window.__MAIL_STORE__?.getState?.().opReplay || null);
       console.log('[reload-durability] replay result:', JSON.stringify(replay));
 
       // Re-switch on every poll: Trash may have been opened and cached before
@@ -1108,7 +1108,7 @@ describe('Storage matrix diagnostics', function () {
           `showed the user a row disappearing.\n` +
           `  journal mid-flight (before the reload): ${JSON.stringify(journalMidFlight)}\n` +
           `  replay: ${JSON.stringify(replay)}\n` +
-          `  journal now: ${JSON.stringify(pendingDeleteJournal())}`,
+          `  journal now: ${JSON.stringify(pendingOpJournal())}`,
       });
 
       // …and it must not still be listed where it was deleted from.

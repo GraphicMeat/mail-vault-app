@@ -223,7 +223,7 @@ impl ImapPool {
     /// `run_read`'s doc rules mutations out of that retry, and rightly: a
     /// STORE/APPEND/COPY whose reply was lost may already have been applied,
     /// and sending it twice applies it twice. A delete addressed BY UID is the
-    /// exception the rule already makes elsewhere — `pending_delete`'s replay
+    /// exception the rule already makes elsewhere — `op_journal`'s replay
     /// re-issues exactly these commands at the next launch precisely because
     /// re-deleting a uid the server no longer has is a no-op, not a second
     /// deletion. Nothing else may use this.

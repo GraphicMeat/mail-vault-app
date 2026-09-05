@@ -20,8 +20,8 @@ const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
-const mockQueuePendingDeletes = vi.fn().mockResolvedValue(undefined);
-const mockClearPendingDeletes = vi.fn().mockResolvedValue(undefined);
+const mockQueueOp = vi.fn().mockResolvedValue(undefined);
+const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
@@ -39,8 +39,8 @@ vi.mock('../../db', () => ({
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
-  queuePendingDeletes: (...a) => mockQueuePendingDeletes(...a),
-  clearPendingDeletes: (...a) => mockClearPendingDeletes(...a),
+  queueOp: (...a) => mockQueueOp(...a),
+  clearOps: (...a) => mockClearOps(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
   getAccounts: vi.fn().mockResolvedValue([]),
   ensureAccountsInFile: vi.fn().mockResolvedValue(undefined),
@@ -409,15 +409,15 @@ describe('deleteSelectedFromServer', () => {
   // written BEFORE the first round-trip.
   it('journals the uids before the first server delete and clears them after', async () => {
     const order = [];
-    mockQueuePendingDeletes.mockImplementation(async (...a) => { order.push(['queue', ...a]); });
-    mockClearPendingDeletes.mockImplementation(async (...a) => { order.push(['clear', ...a]); });
+    mockQueueOp.mockImplementation(async (...a) => { order.push(['queue', ...a]); });
+    mockClearOps.mockImplementation(async (...a) => { order.push(['clear', ...a]); });
     mockDeleteEmail.mockImplementation(async () => { order.push(['delete']); });
     primeStore(seedThread(), [1, 2]);
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(order[0]).toEqual(['queue', ACCOUNT.id, 'INBOX', [1, 2]]);
-    expect(order.at(-1)).toEqual(['clear', ACCOUNT.id, 'INBOX', [1, 2]]);
+    expect(order[0]).toEqual(['queue', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]);
+    expect(order.at(-1)).toEqual(['clear', { op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1, 2] }]);
     expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
   });
 
@@ -429,7 +429,7 @@ describe('deleteSelectedFromServer', () => {
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockClearPendingDeletes).toHaveBeenCalledWith(ACCOUNT.id, 'INBOX', [1]);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1] });
   });
 
   it('does not prune a uid whose server delete failed', async () => {
@@ -563,8 +563,8 @@ describe('deleteEmailFromServer', () => {
 
     await useMailStore.getState().deleteEmailFromServer(1);
 
-    expect(mockQueuePendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
-    expect(mockClearPendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
   });
 
   it('clears the journal when the delete fails, so no replay deletes a restored row', async () => {
@@ -573,7 +573,7 @@ describe('deleteEmailFromServer', () => {
 
     await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
 
-    expect(mockClearPendingDeletes).toHaveBeenCalledWith('acct1', 'INBOX', [1]);
+    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1] });
   });
 
   it('clears the viewer when the deleted row was the open email', async () => {

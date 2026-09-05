@@ -17,8 +17,8 @@ const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
-const mockQueuePendingDeletes = vi.fn().mockResolvedValue(undefined);
-const mockClearPendingDeletes = vi.fn().mockResolvedValue(undefined);
+const mockQueueOp = vi.fn().mockResolvedValue(undefined);
+const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
@@ -39,8 +39,8 @@ vi.mock('../../db', () => ({
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
-  queuePendingDeletes: (...a) => mockQueuePendingDeletes(...a),
-  clearPendingDeletes: (...a) => mockClearPendingDeletes(...a),
+  queueOp: (...a) => mockQueueOp(...a),
+  clearOps: (...a) => mockClearOps(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
   getAccounts: vi.fn().mockResolvedValue([]),
   ensureAccountsInFile: vi.fn().mockResolvedValue(undefined),
@@ -143,7 +143,7 @@ describe('deleting from a unified list', () => {
     primeUnified([row(7)]); // stamped late: no _accountId, so its key is the bare uid
     await expect(useMailStore.getState().deleteEmailFromServer(7)).rejects.toThrow(/Cannot tell which account/);
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockQueuePendingDeletes).not.toHaveBeenCalled();
+    expect(mockQueueOp).not.toHaveBeenCalled();
   });
 
   it('deletes a resolvable row from its own account and folder', async () => {
@@ -164,9 +164,9 @@ describe('deleting from a unified list', () => {
     await expect(useMailStore.getState().deleteSelectedFromServer()).rejects.toThrow(/Cannot tell which account/);
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     // The journal is written before the network loop, so a refusal that came
-    // one line too late would still leave replayPendingDeletes an entry to
-    // finish at the next launch — against a target nobody could name.
-    expect(mockQueuePendingDeletes).not.toHaveBeenCalled();
+    // one line too late would still leave replayOps an entry to finish at the
+    // next launch — against a target nobody could name.
+    expect(mockQueueOp).not.toHaveBeenCalled();
   });
 
   // The row that is only in the vault: a compose-staged Sent copy carries
@@ -186,7 +186,7 @@ describe('deleting from a unified list', () => {
     }
     expect(invoke).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7 });
     expect(mockDeleteEmail).not.toHaveBeenCalled();
-    expect(mockQueuePendingDeletes).not.toHaveBeenCalled();
+    expect(mockQueueOp).not.toHaveBeenCalled();
   });
 
   // "The server copy is gone by our own hand" is the durable proof that makes

@@ -14,6 +14,16 @@ import { withoutUids } from '../../stores/slices/serverUids';
 import { t as tr } from '../../i18n/index.js';
 
 
+/**
+ * A failure that says "try again later", not "this mutation cannot be applied".
+ *
+ * The journal replay clears an entry once attempted — a uid that fails twice
+ * fails forever — so this is the one class of failure that has to keep it.
+ */
+export const isCredentialsProblem = (message) =>
+  /password missing|no password|authentication|auth failed|login failed|credential/i.test(message || '');
+
+
 // One message as local-index.json stores it. `local_index_append` upserts by
 // uid, so this doubles as the shape any later writer has to preserve — see
 // markServerDeleted, which re-appends an entry to add one field.
@@ -396,11 +406,11 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // Journal the intent first, and await it — same reason and same ordering as
   // deleteSelectedFromServer: the row is about to vanish from the list, so a
   // reload or quit before the server answers must leave something the next
-  // launch can finish (replayPendingDeletes). Skipped for Graph (its delete is
-  // addressed by a per-session message id, not a replayable uid) and for
-  // local-only rows (no server delete to replay).
+  // launch can finish (replayOps). Skipped for Graph (its delete is addressed
+  // by a per-session message id, not a replayable uid) and for local-only rows
+  // (no server delete to replay).
   const journalled = !isLocalOnly && !isGraphAccount(account);
-  if (journalled) await db.queuePendingDeletes(accountId, mailbox, [realUid]);
+  if (journalled) await db.queueOp({ op: 'delete', accountId, mailbox, uids: [realUid] });
 
   // ── Optimistic removal ──
   // Take the row out now. Everything below is a network round trip (pool
@@ -449,7 +459,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     // Drop the journal entry too: the row is back on screen, so a replay at
     // next launch would delete a message the app is currently showing as
     // present. Same call the bulk path makes for its whole group.
-    if (journalled) db.clearPendingDeletes(accountId, mailbox, [realUid]);
+    if (journalled) db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid] });
     // The open thread was pruned optimistically too: put the message back, or
     // the row the reload restores counts one more than the reader shows. Only
     // while that pruned thread is still what is open — a reader the user has
@@ -496,7 +506,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     }
   }
 
-  if (journalled) await db.clearPendingDeletes(accountId, mailbox, [realUid]);
+  if (journalled) await db.clearOps({ op: 'delete', accountId, mailbox, uids: [realUid] });
 
   await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
@@ -991,9 +1001,9 @@ export async function deleteSelectedFromServer() {
   //
   // Everything below runs in the webview: reload or quit inside the loop and
   // this context dies before the remaining commands are sent. The journal is
-  // what lets the next launch finish the job (see replayPendingDeletes) — but
-  // only if it actually reached disk first, and it is an async IPC racing the
-  // very window it exists to cover.
+  // what lets the next launch finish the job (see replayOps) — but only if it
+  // actually reached disk first, and it is an async IPC racing the very window
+  // it exists to cover.
   //
   // So it goes ahead of the optimistic update, not after it. That ordering is
   // the guarantee: the rows do not disappear until the delete is durable, so
@@ -1014,7 +1024,7 @@ export async function deleteSelectedFromServer() {
     journalGroups.get(groupKey).uids.push(uid);
   }
   await Promise.all([...journalGroups.values()].map(
-    (g) => db.queuePendingDeletes(g.accountId, g.mailbox, g.uids),
+    (g) => db.queueOp({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
   ));
 
   // Remove from the UI immediately — the server/maildir deletes below can take
@@ -1118,7 +1128,7 @@ export async function deleteSelectedFromServer() {
   // message, and the only thing it gives up is that a crash mid-loop replays a
   // few already-deleted uids at launch, which the replay is written to shrug off.
   await Promise.all([...journalGroups.values()].map(
-    (g) => db.clearPendingDeletes(g.accountId, g.mailbox, g.uids),
+    (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids }),
   ));
 
   // Prune the header sidecar for the rows just deleted.
