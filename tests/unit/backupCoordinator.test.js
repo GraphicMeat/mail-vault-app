@@ -618,6 +618,69 @@ describe('computeNextEligibleTime', () => {
   });
 });
 
+describe('computeNextEligibleTime — hours mode', () => {
+  // "At set hours": run on the top of a selected hour, never inside the hour
+  // that already holds a backup. Fixed local-time `now` values, so a machine
+  // in any zone reads the same wall clock the user picked.
+  const at = (h, m = 0, s = 0, day = 20) => new Date(2026, 2, day, h, m, s, 0).getTime();
+
+  it('picks the next selected hour today when never backed up', () => {
+    expect(computeNextEligibleTime(null, { interval: 'hours', hours: [2, 14] }, at(9, 30)))
+      .toBe(at(14));
+  });
+
+  it('allows two consecutive selected hours', () => {
+    expect(computeNextEligibleTime(
+      { lastBackupTime: at(14, 0, 20) },
+      { interval: 'hours', hours: [14, 15] },
+      at(14, 5),
+    )).toBe(at(15));
+  });
+
+  it('rolls over to the first selected hour tomorrow', () => {
+    expect(computeNextEligibleTime(
+      { lastBackupTime: at(15, 0, 5) },
+      { interval: 'hours', hours: [2, 14] },
+      at(15, 30),
+    )).toBe(at(2, 0, 0, 21));
+  });
+
+  it('is due right now on the top of a selected hour', () => {
+    expect(computeNextEligibleTime(null, { interval: 'hours', hours: [14] }, at(14)))
+      .toBe(at(14));
+  });
+
+  it('does not catch up a selected hour that already passed', () => {
+    // Backed up at 02:00 yesterday, only 02:00 selected, now 09:30: the 02:00
+    // slot today was missed (asleep, busy). Next chance is 02:00 tomorrow — a
+    // catch-up at 09:30 would touch the drive outside the chosen hours.
+    expect(computeNextEligibleTime(
+      { lastBackupTime: at(2, 0, 10, 19) },
+      { interval: 'hours', hours: [2] },
+      at(9, 30),
+    )).toBe(at(2, 0, 0, 21));
+  });
+
+  it('is due inside a selected hour, not only on its first second', () => {
+    expect(computeNextEligibleTime(null, { interval: 'hours', hours: [14] }, at(14, 40)))
+      .toBe(at(14));
+  });
+
+  it('never runs with no hours picked', () => {
+    expect(computeNextEligibleTime(null, { interval: 'hours', hours: [] }, at(9, 30)))
+      .toBe(Number.MAX_SAFE_INTEGER);
+    expect(computeNextEligibleTime({ lastBackupTime: at(9) }, { interval: 'hours' }, at(9, 30)))
+      .toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('leaves the other intervals alone', () => {
+    const last = new Date('2026-03-20T15:00:00').getTime();
+    const result = computeNextEligibleTime({ lastBackupTime: last }, { interval: 'daily', timeOfDay: '03:00' });
+    expect(new Date(result).getHours()).toBe(3);
+    expect(result).toBeGreaterThan(last);
+  });
+});
+
 describe('BackupCoordinator — checkAndQueueDue', () => {
   beforeEach(() => {
     resetCoordinator();

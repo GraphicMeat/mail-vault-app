@@ -198,7 +198,7 @@ class BackupCoordinator {
       if (!config?.enabled) continue;
 
       const accountState = backupState[account.id];
-      const nextEligible = computeNextEligibleTime(accountState, config);
+      const nextEligible = computeNextEligibleTime(accountState, config, now);
 
       if (now >= nextEligible) {
         console.log(`[backup] ${account.email} is due (next eligible: ${new Date(nextEligible).toLocaleString()})`);
@@ -628,10 +628,38 @@ const MIN_BACKUP_INTERVAL_MS = 60 * 60 * 1000; // Never re-backup within 1 hour
 
 /**
  * Compute the earliest time an account is eligible for its next backup.
- * Respects interval, timeOfDay, and dayOfWeek from config.
+ * Respects interval, timeOfDay, dayOfWeek and (for 'hours') hours from config.
  */
-export function computeNextEligibleTime(accountState, config) {
+export function computeNextEligibleTime(accountState, config, now = Date.now()) {
   const lastBackup = accountState?.lastBackupTime || 0;
+
+  // "At set hours": the top of the next selected hour strictly after the hour
+  // that already holds a backup. Two consecutive selected hours are legal, and
+  // MIN_BACKUP_INTERVAL does not apply — the user picked these hours because
+  // the drive is free then.
+  if (config?.interval === 'hours') {
+    const hours = [...new Set(config.hours || [])]
+      .filter(h => Number.isInteger(h) && h >= 0 && h < 24)
+      .sort((a, b) => a - b);
+    if (hours.length === 0) return Number.MAX_SAFE_INTEGER; // nothing picked — never due
+    // Start from the current hour, never earlier: a selected hour that passed
+    // while the app was busy or the user was active is missed, not caught up
+    // at 09:30 — the whole point is that the drive is only touched inside the
+    // chosen hours.
+    const cursor = new Date(now);
+    cursor.setMinutes(0, 0, 0);
+    if (lastBackup) {
+      const after = new Date(lastBackup);
+      after.setMinutes(0, 0, 0);
+      after.setHours(after.getHours() + 1);
+      if (after.getTime() > cursor.getTime()) cursor.setTime(after.getTime());
+    }
+    for (let i = 0; i < 48; i++) {
+      if (hours.includes(cursor.getHours())) return cursor.getTime();
+      cursor.setHours(cursor.getHours() + 1);
+    }
+    return Number.MAX_SAFE_INTEGER;
+  }
 
   // Never backed up — eligible immediately
   if (lastBackup === 0) return 0;

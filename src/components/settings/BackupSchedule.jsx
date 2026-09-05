@@ -83,14 +83,49 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.backupFrequency')}</label>
               <select
                 value={backupGlobalConfig.interval}
-                onChange={(e) => setBackupGlobalConfig({ interval: e.target.value })}
+                onChange={(e) => setBackupGlobalConfig(
+                  // Switching into "at set hours" with nothing picked would never
+                  // run; seed it with the 03:00 the daily default already uses.
+                  e.target.value === 'hours' && !(backupGlobalConfig.hours?.length)
+                    ? { interval: 'hours', hours: [3] }
+                    : { interval: e.target.value }
+                )}
                 className={selectClass}
               >
                 <option value="hourly">{t('settings.backup.schedule.everyHourIdle')}</option>
                 <option value="daily">{t('settings.backup.schedule.onceADayIdle')}</option>
                 <option value="weekly">{t('settings.backup.schedule.onceAWeekIdle')}</option>
+                <option value="hours">{t('settings.backup.schedule.atSetHoursIdle')}</option>
               </select>
             </div>
+            {backupGlobalConfig.interval === 'hours' && (
+              <div>
+                <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.pickHours')}</label>
+                <div className="flex flex-wrap gap-1">
+                  {Array.from({ length: 24 }, (_, h) => {
+                    const picked = (backupGlobalConfig.hours || []).includes(h);
+                    return (
+                      <button
+                        key={h}
+                        type="button"
+                        aria-pressed={picked}
+                        onClick={() => {
+                          const cur = backupGlobalConfig.hours || [];
+                          const next = picked ? cur.filter(x => x !== h) : [...cur, h].sort((a, b) => a - b);
+                          setBackupGlobalConfig({ hours: next });
+                        }}
+                        className={`rounded-md px-2 py-1 text-xs tabular-nums transition-colors ${picked
+                          ? 'bg-mail-accent text-white hover:bg-mail-accent/90'
+                          : 'bg-mail-bg border border-mail-border text-mail-text-muted hover:text-mail-text hover:border-mail-accent'}`}
+                      >
+                        {String(h).padStart(2, '0')}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-mail-text-muted mt-1.5">{t('settings.backup.schedule.pickHoursHint')}</p>
+              </div>
+            )}
           </div>
         )}
 
