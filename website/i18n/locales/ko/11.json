@@ -2,7 +2,6 @@
   "0b2f4950a151": "매일, 매주 또는 원하는 주기와 실행 시각 지정을 지원하는 MailVault의 예약 백업 설정 화면",
   "7e28f4edb996": "메일함의 특정 시점 스냅샷을 보여주는 MailVault의 Time Capsule",
   "fe81d78bb9d1": "메시지가 그려지기 전에 추적 픽셀을 걷어내는 MailVault의 메일 추적기 차단 기능",
-  "2dda3c18c3bd": "다크 모드 전환",
   "57f5f5efbc59": "메뉴",
   "14d6c53d894b": "저장 공간 확보",
   "c2708cead384": "보관과 백업",
@@ -23,5 +22,9 @@
   "78ceb0998f53": "정확한 폴더",
   "055879937934": "Mac에서 숨겨진 라이브러리 폴더 열기",
   "d5719b8508e0": "MailVault는 실제로 사용 중인 폴더도 알려줍니다: <strong>설정 &rarr; 백업 및 복원 &rarr; 백업 설정 &rarr; 메일 저장 위치</strong>. 볼트를 다른 드라이브로 옮겼다면 그 경로를 열어야 합니다 — 위의 경로는 기본값일 뿐입니다.",
-  "f0b743ca14e7": "볼트는 표준 .eml 파일을 Maildir 형식으로 정리해 둔 폴더입니다 — Mac 또는 Linux 컴퓨터에, 메일 한 통당 파일 하나로, 데이터베이스는 필요 없습니다. macOS에서 MailVault는 샌드박스로 실행되므로 폴더는 ~/Library/Application Support가 아니라 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/입니다. Linux에서는 .deb 패키지의 경우 ~/.local/share/com.mailvault.app/, Snap의 경우 ~/snap/mailvault/current/.local/share/com.mailvault.app/입니다. ~/Library는 Finder에서 숨겨져 있고 Spotlight도 색인하지 않기 때문에 드라이브에서 com.mailvault.app을 검색해도 아무것도 찾을 수 없습니다: Finder에서 Shift + Command + G를 누르고 ~/Library를 입력하거나, Option을 누른 채 Finder의 이동 메뉴를 열거나, 홈 폴더에서 Command + J를 누르고 라이브러리 폴더 보기를 선택하십시오. MailVault는 사용 중인 폴더를 설정, 백업 및 복원, 백업 설정, 메일 저장 위치에도 표시합니다. 데이터는 절대 컴퓨터를 벗어나지 않으며 어떤 클라우드 서비스에도 업로드되지 않습니다. .eml은 보편적인 표준이므로 메일은 Apple Mail, Thunderbird, Outlook 등 어떤 메일 클라이언트로도 열 수 있습니다 — MailVault에 묶이는 일은 없습니다."
+  "11af1fc3f6fb": "자동 백업이 실행되는 시각을 정할 수 있나요?",
+  "93b89198c9ce": "MailVault가 메일을 어떻게 보관하는지, 보관한 뒤 삭제하면 서버 사본이 어떻게 되는지, 자동 백업이 언제 실행되는지, 볼트를 내보내고 다시 가져오는 방법.",
+  "700411c4f346": "MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면",
+  "80550bee2c88": "질문 6개",
+  "cb19c0c628c9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>예약 자동 백업</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — 계정별로 매시간, 매일 또는 매주로 설정할 수 있고 실행 시각 지정과 폴더 단위 체크포인트를 지원합니다. <strong>지정한 시각에</strong>를 고르면 백업이 시작될 수 있는 시각을 직접 정할 수 있어, 다른 프로그램이 이미 쓰는 외장 드라이브의 볼트에 알맞습니다. 모든 일정은 앱이 유휴 상태가 될 때까지 기다립니다</span>"
 }

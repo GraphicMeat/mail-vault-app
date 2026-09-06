@@ -14,6 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/faq/storage-and-vault.html">
   <meta property="og:title" content="存储与你的保险库 — MailVault 常见问题">
   <meta property="og:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -24,6 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="存储与你的保险库 — MailVault 常见问题">
   <meta name="twitter:description" content="MailVault 把邮件放在磁盘的什么位置、为什么用 .eml 和 Maildir，以及如何把保险库移到另一块硬盘。">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -58,7 +60,7 @@
       "name": "我的邮件存在哪里？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "你的保险库是一个存放标准 .eml 文件的文件夹，按 Maildir 格式组织 — 就在你的 Mac 或 Linux 机器上，一封邮件一个文件，不需要数据库。在 macOS 上 MailVault 运行在沙盒中，所以文件夹是 ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/，而不是 ~/Library/Application Support。在 Linux 上，.deb 包为 ~/.local/share/com.mailvault.app/，Snap 为 ~/snap/mailvault/current/.local/share/com.mailvault.app/。~/Library 在 Finder 中是隐藏的，Spotlight 也不会索引它，所以在硬盘上搜索 com.mailvault.app 找不到任何东西：在 Finder 中按 Shift + Command + G 并输入 ~/Library，或者按住 Option 打开 Finder 的“前往”菜单，或者在个人文件夹中按 Command + J 并勾选显示“资源库”文件夹。MailVault 也会在设置、备份与恢复、备份设置、你的邮件存放在哪里中显示正在使用的文件夹。你的数据从不离开你的电脑，也从不上传到任何云服务。由于 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 — 你永远不会被 MailVault 锁定。"
+        "text": "Your vault is a folder of standard .eml files organized in Maildir format — on your Mac or Linux machine — one file per email, no database required. On macOS MailVault is sandboxed, so the folder is ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ rather than ~/Library/Application Support. On Linux it is ~/.local/share/com.mailvault.app/ for the .deb package, or ~/snap/mailvault/current/.local/share/com.mailvault.app/ for the Snap. ~/Library is hidden in Finder and Spotlight does not index it, which is why searching the drive for com.mailvault.app finds nothing: in Finder press Shift + Command + G and type ~/Library, or hold Option while opening Finder's Go menu, or press Command + J in your Home folder and tick Show Library Folder. MailVault also shows the folder it is using under Settings, Backup & Restore, Backup Settings, Where your mail is stored. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you are never locked in to MailVault."
       }
     },
     {
@@ -98,7 +100,7 @@
       "name": "什么是外部备份位置（第二份副本）？",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "MailVault 始终在应用自己的存储里保留一份工作副本——你读的、搜的、打开的都是它。外部备份位置会在你选定的磁盘上再加一份独立的第二副本：外接 SSD、NAS 共享目录，或者一个同步文件夹。它在备份运行时与工作副本同时写入，使用相同的 .eml 和 Maildir 布局，所以任何邮件客户端都能读它。应用平时不会读取它，它是冷存储：在服务器上删掉的邮件，或在 MailVault 里移除的邮件，都仍然留在这份外部副本里。在 设置 的「备份」里，通过「第二份副本 — 外部冷存储」设置它。在 macOS 上，MailVault 会为该文件夹保存一个安全作用域书签，这样重启和应用更新之后访问权限依然有效；状态标记会显示「就绪」「需要重新授权」「不可用」或「访问被拒绝」，重新授权只需点一下。如果备份过程中拔掉了磁盘，工作副本仍会成功，MailVault 会报告有多少封邮件没有写入外部副本；下一次运行会把它们补上。"
+        "text": "MailVault always keeps a working copy of your mail in the app's own storage — that is what you read, search and open. An external backup location adds a second, independent copy on a drive you choose: an external SSD, a NAS share, or a synced folder. It is written during backup runs at the same time as the working copy, in the same .eml and Maildir layout, so apps that support EML can read the message files. The app never reads it day to day, and it is cold storage: emails deleted on the server, or removed inside MailVault, stay in the external copy. Set it in Settings under Backup, in 'Second copy — external cold storage'. On macOS, MailVault stores a security-scoped bookmark for the folder so access survives restarts and app updates; the status badge shows Ready, Needs reauthorization, Unavailable, or Access denied, and reauthorizing is a single click. If the drive is unplugged during a backup, the working copy still succeeds and MailVault reports how many messages failed to reach the external copy; the next run copies them across."
       }
     }
   ]
@@ -143,84 +145,56 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/storage-and-vault.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/storage-and-vault.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=1">
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
 
   <!-- Navigation -->
-  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
-      <!-- nav:main -->
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <a href="/zh/" class="flex items-center gap-3">
-            <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
-            <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
-          </a>
-
-          <div class="hidden lg:flex items-center gap-8">
-            <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
-            <a href="/zh/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">定价</a>
-            <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
-            <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
-            <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <button id="theme-toggle" aria-label="切换深色模式" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
-              </svg>
-              <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
-              </svg>
-            </button>
-            <a href="/zh/#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
-              下载
-            </a>
-            <!-- Mobile menu button -->
-            <button id="mobile-menu-btn" aria-label="菜单" aria-controls="mobile-menu" aria-expanded="false" class="lg:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile menu -->
-        <div id="mobile-menu" class="hidden lg:hidden pb-4">
-          <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
-            <a href="/zh/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">定价</a>
-            <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
-            <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
-            <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
-            <a href="/zh/#download" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
-          </div>
-        </div>
-      </div>
-      <!-- /nav:main -->
-      <!-- i18n:switcher -->
-      <div class="mv-lang" role="navigation" aria-label="选择语言">
-        <ul>
-        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/faq/storage-and-vault.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/faq/storage-and-vault.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/faq/storage-and-vault.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/faq/storage-and-vault.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/faq/storage-and-vault.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/faq/storage-and-vault.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/faq/storage-and-vault.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/faq/storage-and-vault.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/faq/storage-and-vault.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
-        </ul>
-      </div>
-      <!-- /i18n:switcher -->
-  </nav>
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, 简体中文 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/faq/storage-and-vault.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/faq/storage-and-vault.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/faq/storage-and-vault.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/faq/storage-and-vault.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/faq/storage-and-vault.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/faq/storage-and-vault.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/faq/storage-and-vault.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/faq/storage-and-vault.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/faq/storage-and-vault.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary>菜单</summary>
+<nav aria-label="Mobile navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a><a href="/zh/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
   <!-- Content -->
-  <main class="pt-32 pb-20">
+  <main id="main" class="pt-32 pb-20">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
 
       <nav aria-label="面包屑导航" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
@@ -241,7 +215,7 @@
         <article id="where-are-emails-stored" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
           <h2 class="text-lg font-semibold px-6 pt-6 pb-2">我的邮件存在哪里？</h2>
             <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
-              <p class="mb-4">你的保险库就是你 Mac 或 Linux 机器上的一个文件夹，里面是按 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 格式组织的标准 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 文件</a> &mdash; 一封邮件一个文件，不需要数据库。你的数据从不离开你的电脑，也从不上传到任何云服务。因为 .eml 是通用标准，你的邮件可以用 Apple Mail、Thunderbird、Outlook 或任何其他邮件客户端打开 —— 你永远不会被 MailVault 锁住。</p>
+              <p class="mb-4">Your vault is a folder of standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files</a> organized in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine &mdash; one file per email, no database required. Your data never leaves your computer and is never uploaded to any cloud service. Because .eml is a widely supported email format, your emails can be opened by Apple Mail, Thunderbird, Outlook, or other apps that support EML — you're never locked in to MailVault.</p>
 
               <p class="mb-2 font-medium text-slate-700 dark:text-slate-300">确切的文件夹</p>
               <p class="mb-2">MailVault 是沙盒应用，因此在 macOS 上保险库位于应用自己的容器内 &mdash; 而不是大多数人首先查看的 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">~/Library/Application Support</code> 下：</p>
@@ -366,70 +340,25 @@
   </main>
 
   <!-- Footer -->
-  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-        <a href="/zh/" class="flex items-center gap-2">
-          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
-          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
-        </a>
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
-          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
-          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
-          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
-          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
-          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
-          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
-          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
-          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
-        </div>
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/zh/use-cases.html">Use cases</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">What’s new</a><a href="/zh/mentioned-in.html">Mentions</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
 
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-          &copy; 2026 MailVault. 保留所有权利。
-        </p>
-      </div>
-    </div>
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
-        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
-        </a>
-      </div>
-    </div>
 
-  </footer>
-
-  <script>
-    // Theme Toggle
-    const themeToggle = document.getElementById('theme-toggle');
-    const html = document.documentElement;
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      html.classList.add('dark');
-    }
-    themeToggle.addEventListener('click', () => {
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
-
-    // Mobile Menu
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const menuIconOpen = document.getElementById('menu-icon-open');
-    const menuIconClose = document.getElementById('menu-icon-close');
-    mobileMenuBtn.addEventListener('click', () => {
-      mobileMenu.classList.toggle('hidden');
-      menuIconOpen.classList.toggle('hidden');
-      menuIconClose.classList.toggle('hidden');
-    });
-    document.querySelectorAll('#mobile-menu a').forEach(link => {
-      link.addEventListener('click', () => {
-        mobileMenu.classList.add('hidden');
-        menuIconOpen.classList.remove('hidden');
-        menuIconClose.classList.add('hidden');
-      });
-    });
-  </script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=2"></script>
 </body>
 </html>

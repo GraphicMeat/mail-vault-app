@@ -2,7 +2,6 @@
   "0b2f4950a151": "Impostazioni di backup pianificato di MailVault con pianificazioni giornaliere, settimanali o personalizzate e controllo dell'ora",
   "7e28f4edb996": "Time Capsule di MailVault che mostra un'istantanea a una data precisa di una casella di posta",
   "fe81d78bb9d1": "Blocco dei tracciatori nelle email di MailVault che mostra i pixel di tracciamento rimossi da un messaggio prima che venga visualizzato",
-  "2dda3c18c3bd": "Attiva/disattiva la modalità scura",
   "57f5f5efbc59": "Menu",
   "14d6c53d894b": "Liberare spazio",
   "c2708cead384": "Archiviare e fare backup",
@@ -23,5 +22,9 @@
   "78ceb0998f53": "La cartella esatta",
   "055879937934": "Aprire la cartella Libreria nascosta su un Mac",
   "d5719b8508e0": "MailVault indica anche la cartella che sta effettivamente usando: <strong>Impostazioni &rarr; Backup e ripristino &rarr; Impostazioni backup &rarr; Dove viene conservata la posta</strong>. Se hai spostato il vault su un altro disco, è quello il percorso da aprire — quello sopra è solo il predefinito.",
-  "f0b743ca14e7": "Il tuo vault è una cartella di file .eml standard organizzati in formato Maildir — sul tuo Mac o sulla tua macchina Linux — un file per messaggio, senza database. Su macOS MailVault è in sandbox, quindi la cartella è ~/Library/Containers/com.mailvault.app/Data/Library/Application Support/com.mailvault.app/ e non ~/Library/Application Support. Su Linux è ~/.local/share/com.mailvault.app/ per il pacchetto .deb, oppure ~/snap/mailvault/current/.local/share/com.mailvault.app/ per lo Snap. ~/Library è nascosta nel Finder e Spotlight non la indicizza: per questo cercare com.mailvault.app nel disco non trova nulla. Nel Finder premi Shift + Command + G e digita ~/Library, oppure tieni premuto Option mentre apri il menu Vai del Finder, oppure premi Command + J nella cartella Inizio e spunta Mostra cartella Libreria. MailVault mostra anche la cartella in uso in Impostazioni, Backup e ripristino, Impostazioni backup, Dove viene conservata la posta. I tuoi dati non lasciano mai il computer e non vengono mai caricati su alcun servizio cloud. Poiché .eml è uno standard universale, le tue email possono essere aperte da Apple Mail, Thunderbird, Outlook o da qualsiasi altro client — non sei mai vincolato a MailVault."
+  "11af1fc3f6fb": "Posso scegliere a che ore vengono eseguiti i backup automatici?",
+  "93b89198c9ce": "Come MailVault archivia la posta, che cosa succede alla copia sul server quando archivi e poi elimini, quando vengono eseguiti i backup automatici e come esportare e reimportare il tuo vault.",
+  "700411c4f346": "Pianificazione backup di MailVault impostata su «A orari prestabiliti», con 07, 12 e 22 selezionate nella griglia delle 24 ore",
+  "80550bee2c88": "6 domande",
+  "cb19c0c628c9": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Backup automatici pianificati</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — ogni ora, ogni giorno o ogni settimana per account, con controllo dell’orario e punti di controllo a livello di cartella, oppure <strong>a orari prestabiliti</strong>: scegli le ore del giorno in cui un backup può partire, per un vault su un disco esterno già usato da qualcos’altro. Ogni pianificazione attende che l’app sia inattiva</span>"
 }

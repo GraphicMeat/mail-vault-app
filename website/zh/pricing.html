@@ -14,6 +14,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/zh/pricing.html">
   <meta property="og:title" content="MailVault 定价 — 永久免费，或 Premium（年付含 14 天试用）">
   <meta property="og:description" content="邮件阅读、撰写、搜索和不限次数的手动备份永久免费。Premium 解锁定时备份、迁移、清理规则、Time Capsule 以及图片/HTML 导出——$4/月 或 $25/年，年付方案含 14 天免费试用。">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -24,6 +25,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="MailVault 定价 — 永久免费，或 Premium（年付含 14 天试用）">
   <meta name="twitter:description" content="邮件阅读、撰写、搜索和不限次数的手动备份永久免费。Premium 解锁定时备份、迁移、清理规则、Time Capsule 以及图片/HTML 导出——$4/月 或 $25/年，年付方案含 14 天免费试用。">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -35,19 +37,7 @@
   <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/tailwind.css?v=11">
 
-  <style>
-    .glass {
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .dark .glass {
-      background: rgba(0, 0, 0, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-  </style>
-
-  <!-- Structured Data -->
+<!-- Structured Data -->
   <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -98,373 +88,184 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/pricing.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/pricing.html">
   <!-- /i18n:alternates -->
+
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
-
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
-
-  <!-- Navigation -->
-  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
-      <!-- nav:main -->
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <a href="/zh/" class="flex items-center gap-3">
-            <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
-            <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
-          </a>
-
-          <div class="hidden lg:flex items-center gap-8">
-            <a href="/zh/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">功能</a>
-            <a href="/zh/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">定价</a>
-            <a href="/zh/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">使用场景</a>
-            <a href="/zh/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">文档</a>
-            <a href="/zh/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">博客</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <button id="theme-toggle" aria-label="切换深色模式" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
-              </svg>
-              <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
-              </svg>
-            </button>
-            <a href="/zh/#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
-              下载
-            </a>
-            <!-- Mobile menu button -->
-            <button id="mobile-menu-btn" aria-label="菜单" aria-controls="mobile-menu" aria-expanded="false" class="lg:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile menu -->
-        <div id="mobile-menu" class="hidden lg:hidden pb-4">
-          <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <a href="/zh/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">功能</a>
-            <a href="/zh/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">定价</a>
-            <a href="/zh/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">使用场景</a>
-            <a href="/zh/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">文档</a>
-            <a href="/zh/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">博客</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
-            <a href="/zh/#download" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">下载</a>
-          </div>
-        </div>
-      </div>
-      <!-- /nav:main -->
-      <!-- i18n:switcher -->
-      <div class="mv-lang" role="navigation" aria-label="选择语言">
-        <ul>
-        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/pricing.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/pricing.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/pricing.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/pricing.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/pricing.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/pricing.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/pricing.html"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/pricing.html" aria-current="page"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/pricing.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
-        </ul>
-      </div>
-      <!-- /i18n:switcher -->
-  </nav>
-
-  <main>
-
-  <!-- Hero -->
-  <section aria-label="定价页头图" class="pt-32 pb-12 relative overflow-hidden">
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute -top-40 -right-40 w-80 h-80 bg-primary-500/20 rounded-full blur-3xl"></div>
-      <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-purple-500/20 rounded-full blur-3xl"></div>
-    </div>
-
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
-      <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-        简单诚实的<span class="lamp-text">定价</span>
-      </h1>
-      <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-        核心应用——阅读、撰写、搜索、会话视图和不限次数的手动备份——永久免费。Premium 在此之上增加自动化能力——年付方案从 14 天免费试用开始。
-      </p>
-    </div>
-  </section>
-
-  <!-- Pricing Tiers -->
-  <section aria-label="定价方案" class="py-12">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid md:grid-cols-3 gap-8 items-start">
-
-        <!-- Free -->
-        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-8 flex flex-col h-full">
-          <h2 class="text-xl font-semibold mb-1">免费 —— 永久</h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">没有试用期，没有时间限制，没有套路。</p>
-          <div class="mb-6">
-            <span class="text-5xl font-extrabold" data-mv-price="{zero}">$0</span>
-          </div>
-          <ul class="space-y-3 mb-8 flex-1">
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">完整的邮件客户端 —— 撰写、回复、会话视图、聊天视图、搜索</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">不限次数的手动备份，一次一键</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">本地 Maildir + .eml 存储 —— 文件归你所有，不被锁定</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">不限账户数量，支持统一收件箱</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">开源 —— 在 GitHub 上逐行查看</span>
-            </li>
-          </ul>
-          <a href="/zh/#download" class="block w-full text-center px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 dark:hover:border-primary-500 transition-colors">
-            免费下载
-          </a>
-        </div>
-
-        <!-- Yearly (hero) -->
-        <div class="relative rounded-2xl bg-white dark:bg-slate-800 border-2 border-primary-500 shadow-xl shadow-primary-500/10 p-8 flex flex-col h-full md:-mt-4 md:mb-4">
-          <div class="absolute -top-4 left-1/2 -translate-x-1/2">
-            <span class="inline-block px-4 py-1.5 rounded-full lamp-bg text-white text-xs font-bold uppercase tracking-wide whitespace-nowrap">最受欢迎</span>
-          </div>
-          <h2 class="text-xl font-semibold mb-1 mt-2">年付</h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">按年计费。升级 Premium 最划算的方式。</p>
-          <div class="mb-1">
-            <span class="text-5xl font-extrabold lamp-text" data-mv-price="{yearly}">$25</span>
-            <span class="text-slate-500 dark:text-slate-400">/年</span>
-          </div>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6" data-mv-price="约 {monthlyEquivalent}/月">约 $2/月</p>
-          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6 w-fit">
-            14 天免费试用
-          </div>
-          <ul class="space-y-3 mb-8 flex-1">
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">包含免费版的全部内容，另加：</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">按账户设置的定时自动备份</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">跨账户邮箱迁移</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">带自动分类的邮件清理规则</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">Time Capsule 时间点快照</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">把一封邮件或整个会话导出为图片，或一个自包含的 HTML 文件</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><a href="/zh/features/email-tracker-blocking.html" class="underline hover:text-primary-500">邮件跟踪拦截</a> —— 跟踪像素在渲染前就被剥掉</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">最多可在 5 台设备上使用</span>
-            </li>
-          </ul>
-          <a href="/zh/#download" class="block w-full text-center lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity">
-            下载并开始试用
-          </a>
-        </div>
-
-        <!-- Monthly -->
-        <div class="rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-8 flex flex-col h-full">
-          <h2 class="text-xl font-semibold mb-1">月付</h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">按月计费。想取消随时取消。</p>
-          <div class="mb-1">
-            <span class="text-5xl font-extrabold" data-mv-price="{monthly}">$4</span>
-            <span class="text-slate-500 dark:text-slate-400">/月</span>
-          </div>
-          <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">&nbsp;</p>
-          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 text-sm font-medium mb-6 w-fit">
-            随时取消
-          </div>
-          <ul class="space-y-3 mb-8 flex-1">
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">Premium 的全部功能，按月计费</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">用多久付多久 —— 没有长期承诺</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">随时可在 设置 &rarr; 账单 中切换为年付</span>
-            </li>
-            <li class="flex items-start gap-2">
-              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">最多可在 5 台设备上使用</span>
-            </li>
-          </ul>
-          <a href="/zh/#download" class="block w-full text-center px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 dark:hover:border-primary-500 transition-colors">
-            下载并升级
-          </a>
-        </div>
-
-      </div>
-
-      <p class="text-center text-sm text-slate-500 dark:text-slate-400 mt-8">
-        下载之后，在应用内的 设置 &rarr; 账单 里完成付款。年付方案从 14 天免费试用开始。
-      </p>
-    </div>
-  </section>
-
-  <!-- Honest FAQ -->
-  <section aria-label="定价相关问题" class="py-20">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h2 class="text-3xl font-bold text-center mb-12">关于定价的问题</h2>
-
-      <div class="space-y-6">
-        <div>
-          <h3 class="text-lg font-semibold mb-2">为什么会有订阅？</h3>
-          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            MailVault 是一个由小团队开发和维护的真实产品，不是靠善意撑着的业余项目。订阅费用于持续开发、修复缺陷，以及支撑 Premium 功能的同步与计费服务器。核心应用不需要服务器也能工作，所以它永久免费——Premium 的存在，正是为了给需要服务器的那部分买单。
-          </p>
-        </div>
-        <div>
-          <h3 class="text-lg font-semibold mb-2">我可以随时取消吗？</h3>
-          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            可以。年付方案下，在 14 天试用期内取消就不会扣款。试用期后取消，Premium 会一直有效到你已付费的周期结束，然后账户安静地退回免费版——不会删除任何东西，也不会锁住任何东西。
-          </p>
-        </div>
-        <div>
-          <h3 class="text-lg font-semibold mb-2">我的本地数据会被收费墙挡住吗？</h3>
-          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            不会。在本地阅读、撰写、搜索和归档邮件永久免费，将来也一样。Premium 只针对在此之上的自动化、导出和跟踪拦截收费——定时任务、迁移、清理规则、Time Capsule 快照、图片/HTML 导出，以及从收到的邮件中剥离跟踪像素。无论订阅状态如何，磁盘上的 .eml 文件都属于你。
-          </p>
-        </div>
-        <div>
-          <h3 class="text-lg font-semibold mb-2">我之前手动做的备份会怎么样？</h3>
-          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            它们会原封不动地留在原处。手动的一键归档是免费功能——一直都是，也不会变。Premium 只是加上了把同样的归档定时自动执行的选项，省得你自己去点那个按钮。
-          </p>
-        </div>
-        <div>
-          <h3 class="text-lg font-semibold mb-2">我到底在哪里订阅？</h3>
-          <p class="text-slate-600 dark:text-slate-400 leading-relaxed">
-            在应用里。免费下载 MailVault，然后打开 设置 &rarr; 账单，开始年付的 14 天试用或按月订阅。本网站上没有结账流程。
-          </p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
-  <section class="py-20 relative overflow-hidden">
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute -top-40 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl"></div>
-    </div>
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative">
-      <h2 class="text-3xl sm:text-4xl font-bold mb-4">准备好开始了吗？</h2>
-      <p class="text-lg text-slate-600 dark:text-slate-400 mb-8 max-w-2xl mx-auto">
-        免费下载。想要定时任务、迁移、清理、Time Capsule 或跟踪拦截时，随时在应用内升级。
-      </p>
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
-        <a href="/zh/#download" class="lamp-bg text-white px-8 py-4 rounded-xl font-semibold text-lg hover:opacity-90 transition-opacity inline-flex items-center gap-2">
-          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/>
-          </svg>
-          免费下载
-        </a>
-        <a href="/zh/features.html" class="px-8 py-4 rounded-xl font-semibold text-lg border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 dark:hover:border-primary-500 text-slate-700 dark:text-slate-300 hover:text-primary-500 transition-colors">
-          查看全部功能
-        </a>
-      </div>
-    </div>
-  </section>
-
-  </main>
-
-  <!-- Footer -->
-  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-        <a href="/zh/" class="flex items-center gap-2">
-          <img src="/icon-128.webp" alt="MailVault 标志" class="w-8 h-8 rounded-lg" width="32" height="32">
-          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
-        </a>
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
-          <a href="/zh/docs.html" class="hover:text-primary-500 transition-colors">文档</a>
-          <a href="/zh/blog.html" class="hover:text-primary-500 transition-colors">博客</a>
-          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">隐私</a>
-          <a href="/zh/faq.html" class="hover:text-primary-500 transition-colors">常见问题</a>
-          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">更新日志</a>
-          <a href="/terms.html" class="hover:text-primary-500 transition-colors">条款</a>
-          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
-          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
-        </div>
-
-        <p class="text-sm text-slate-500 dark:text-slate-400">
-          &copy; 2026 MailVault. 保留所有权利。
-        </p>
-      </div>
-    </div>
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-        <span>在一块 <span class="text-primary-500 font-semibold">开放的 GPU</span> 上烹制，作者</span>
-        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.webp" alt="由 Graphic Meat 制作" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
-        </a>
-      </div>
-    </div>
-
-  </footer>
-
-  <script>
-    // Theme Toggle
-    const themeToggle = document.getElementById('theme-toggle');
-    const html = document.documentElement;
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      html.classList.add('dark');
-    }
-    themeToggle.addEventListener('click', () => {
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
-
-    // Mobile Menu
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const menuIconOpen = document.getElementById('menu-icon-open');
-    const menuIconClose = document.getElementById('menu-icon-close');
-    mobileMenuBtn.addEventListener('click', () => {
-      mobileMenu.classList.toggle('hidden');
-      menuIconOpen.classList.toggle('hidden');
-      menuIconClose.classList.toggle('hidden');
-    });
-    document.querySelectorAll('#mobile-menu a').forEach(link => {
-      link.addEventListener('click', () => {
-        mobileMenu.classList.add('hidden');
-        menuIconOpen.classList.remove('hidden');
-        menuIconClose.classList.add('hidden');
-      });
-    });
-
-    // Metrics: fire-and-forget page view beacon, no cookies/IDs
-    try {
-      navigator.sendBeacon('/api/metrics/e', 'pricing_view');
-    } catch (e) {}
-  </script>
-  <script defer src="/pricing-localize.js?v=1"></script>
-  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<body class="mv-site min-h-screen"><a class="mv-skip" href="#main">Skip to content</a>
+<header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/zh/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html" aria-current="page">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, 简体中文 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">简体中文</span><span class="mv-language-code" aria-hidden="true">ZH</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/pricing.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/pricing.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/pricing.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/pricing.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/pricing.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/pricing.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/pricing.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/pricing.html" lang="zh-Hans" hreflang="zh-Hans" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/pricing.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/zh/get-started.html?plan=free">下载</a>
+<details class="mv-mobile-menu">
+<summary>菜单</summary>
+<nav aria-label="Mobile navigation"><a href="/zh/#how-it-works">工作方式</a><a href="/zh/features.html">功能</a><a href="/zh/pricing.html">定价</a><a href="/zh/blog.html">博客</a><a href="/zh/docs.html">Help</a><a href="/zh/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+<main id="main">
+<section class="mv-page-hero mv-wrap" aria-labelledby="pricing-title">
+<p class="mv-eyebrow">Your mail stays yours, on every plan.</p>
+<h1 id="pricing-title">Start free.<br>Automate when you’re ready.</h1>
+<p class="mv-lead">Read, reply, and archive for free. Choose Premium when you want backups to run on your schedule.</p>
+<div class="mv-actions mv-mobile-only"><a class="mv-text-link" href="#plans">Compare Free &amp; Premium ↓</a><a class="mv-text-link" href="#premium-plan">Explore Premium ↓</a>
+</div>
+</section>
+<section class="mv-wrap mv-pricing-section" aria-label="对比方案">
+<h2 class="mv-sr-only">Choose Free or Premium</h2>
+<div class="mv-plans" id="plans">
+<article class="mv-plan mv-free-plan">
+<div class="mv-pixel-banner mv-pixel-free"><img src="/assets/pixel-free.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Yours to keep</span><h3>Free. For keeps.</h3></div></div>
+<p class="mv-plan-intro">Your inbox, your archive, your files.</p>
+<p class="mv-price"><span data-mv-price="{zero}">$0</span><span>forever</span>
+</p>
+<ul class="mv-checklist">
+<li>Read, compose, reply, and search</li>
+<li>All your accounts in one unified inbox</li>
+<li>Manual backups are free. Always will be.</li>
+<li>Standard EML files in Maildir-style folders</li>
+</ul><a class="mv-button mv-secondary" href="/zh/get-started.html?plan=free">免费下载</a>
+<p class="mv-small">No subscription. No backup quota from us. Use the disk space you already own.</p>
+</article>
+<article class="mv-plan mv-premium" id="premium-plan">
+<div class="mv-plan-heading">
+<h3>Premium</h3><span class="mv-tag">Less to remember</span>
+</div>
+<p class="mv-plan-intro">Set the routine. Let MailVault handle the repeat work.</p>
+<div class="mv-pixel-banner mv-pixel-grill"><img src="/assets/pixel-grill.svg" width="72" height="72" alt=""><div><span class="mv-pixel-kicker">Fresh off the grill</span><p>Early Bird &amp; Family Pricing <span>for now</span></p></div></div>
+<fieldset class="mv-billing" hidden>
+<legend class="mv-sr-only">Premium billing period</legend>
+<label><input type="radio" name="billing" value="yearly" checked><span>年付</span>
+</label>
+<label><input type="radio" name="billing" value="monthly"><span>月付</span>
+</label>
+</fieldset>
+<div data-billing-panel="yearly">
+<p class="mv-price"><span data-mv-price="{yearly}">$25</span><span>/ year</span>
+</p>
+<p class="mv-small" data-mv-price="About {monthlyEquivalent}/month, billed yearly">About $2.08/month, billed yearly</p>
+<div class="mv-yearly-saving" data-mv-saving><strong data-mv-price="Save {savingsPercent}% with yearly">Save 48% with yearly</strong><span data-mv-price="Save {annualSavings}/year compared with {annualMonthly} for 12 monthly payments.">Save $23/year compared with $48 for 12 monthly payments.</span></div>
+<p class="mv-trial">14-day free trial on your first yearly subscription</p>
+</div>
+<div data-billing-panel="monthly" hidden>
+<p class="mv-price"><span data-mv-price="{monthly}">$4</span><span>/ month</span>
+</p>
+<p class="mv-small">Billed monthly. Cancel anytime.</p>
+<p class="mv-trial">The 14-day trial is available on yearly billing.</p>
+</div>
+<noscript><p class="mv-small">Monthly Premium is $4/month, without a trial. <a href="/zh/get-started.html?plan=monthly">Choose monthly billing</a>.</p></noscript>
+<p class="mv-small">Everything in Free, plus these 10 features. Select one to see how it works.</p><ul class="mv-premium-links"><li><a href="#premium-backup-schedule">Scheduled automatic backups<span aria-hidden="true">↗</span></a></li><li><a href="#premium-backup-health">Backup health monitoring<span aria-hidden="true">↗</span></a></li><li><a href="#premium-cleanup">Email Cleanup<span aria-hidden="true">↗</span></a></li><li><a href="#premium-time-capsule">Time Capsule<span aria-hidden="true">↗</span></a></li><li><a href="#premium-tracker-blocking">Tracker removal<span aria-hidden="true">↗</span></a></li><li><a href="#premium-auto-cleanup">Auto-cleanup rules<span aria-hidden="true">↗</span></a></li><li><a href="#premium-migration">Mailbox migration<span aria-hidden="true">↗</span></a></li><li><a href="#premium-server-change">Guided server change<span aria-hidden="true">↗</span></a></li><li><a href="#premium-export-image">Export as image or HTML<span aria-hidden="true">↗</span></a></li><li><a href="#premium-devices">Five devices<span aria-hidden="true">↗</span></a></li></ul>
+<a class="mv-button" data-premium-cta href="/zh/get-started.html?plan=yearly"><span data-billing-panel="yearly">Get started with the yearly trial</span><span data-billing-panel="monthly" hidden>Get started with monthly Premium</span></a>
+<p class="mv-small">Download first, then choose your plan in Settings → Billing. Your trial starts when you complete checkout in the app.</p>
+<p class="mv-reassurance">Cancel anytime. Your saved mail stays yours.</p>
+</article>
+</div>
+<p class="mv-after-plans">All prices are shown in your detected currency when available. Final pricing and any applicable tax are confirmed in checkout.</p><noscript>
+<p class="mv-after-plans">Monthly Premium is $4/month. <a href="/zh/get-started.html?plan=monthly">Get started with monthly billing</a>.</p></noscript>
+</section>
+<!-- premium-catalog:start --><section class="mv-section mv-wrap" id="premium-features" aria-labelledby="premium-features-title"><div class="mv-section-heading"><h2 id="premium-features-title">See what Premium<br>does for you.</h2><p>The same 10 features you’ll find in the app’s onboarding. Open a feature to explore it.</p></div><details class="mv-premium-detail" id="premium-backup-schedule" name="premium-feature"><summary>Scheduled automatic backups</summary><div class="mv-premium-detail-body"><div><p>Daily, weekly or custom schedules per account, with time-of-day control and folder-level checkpoints.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Scheduled automatic backups"><img src="/screenshots/zh/premium-backup-schedule-1440.webp" srcset="/screenshots/zh/premium-backup-schedule-720.webp 720w, /screenshots/zh/premium-backup-schedule-1440.webp 1440w, /screenshots/zh/premium-backup-schedule-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Scheduled automatic backups in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-backup-health" name="premium-feature"><summary>Backup health monitoring</summary><div class="mv-premium-detail-body"><div><p>Server, local and external counts per folder, so you can see what is actually safe.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Backup health monitoring"><img src="/screenshots/zh/premium-backup-health-1440.webp" srcset="/screenshots/zh/premium-backup-health-720.webp 720w, /screenshots/zh/premium-backup-health-1440.webp 1440w, /screenshots/zh/premium-backup-health-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Backup health monitoring in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-cleanup" name="premium-feature"><summary>Email Cleanup</summary><div class="mv-premium-detail-body"><div><p>A classifier that learns your mail and sorts it into Newsletter, Promotional, Transactional, Personal, Work and Spam, with keep, archive or delete per category.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Email Cleanup"><img src="/screenshots/zh/premium-cleanup-1440.webp" srcset="/screenshots/zh/premium-cleanup-720.webp 720w, /screenshots/zh/premium-cleanup-1440.webp 1440w, /screenshots/zh/premium-cleanup-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Email Cleanup in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-time-capsule" name="premium-feature"><summary>Time Capsule</summary><div class="mv-premium-detail-body"><div><p>Point-in-time snapshots of a mailbox. Browse it as it stood on any earlier date.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Time Capsule"><img src="/screenshots/zh/premium-time-capsule-1440.webp" srcset="/screenshots/zh/premium-time-capsule-720.webp 720w, /screenshots/zh/premium-time-capsule-1440.webp 1440w, /screenshots/zh/premium-time-capsule-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Time Capsule in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-tracker-blocking" name="premium-feature"><summary>Tracker removal</summary><div class="mv-premium-detail-body"><div><p>Strips tracking pixels before a message renders, so senders are never told you opened it. Spotting the tracker is free; removing it is what the subscription adds.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Tracker removal"><img src="/screenshots/zh/premium-tracker-blocking-1440.webp" srcset="/screenshots/zh/premium-tracker-blocking-720.webp 720w, /screenshots/zh/premium-tracker-blocking-1440.webp 1440w, /screenshots/zh/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Tracker removal in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-auto-cleanup" name="premium-feature"><summary>Auto-cleanup rules</summary><div class="mv-premium-detail-body"><div><p>Archive or delete mail past an age you set, per account and folder, without touching it yourself.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Auto-cleanup rules"><img src="/screenshots/zh/premium-auto-cleanup-1440.webp" srcset="/screenshots/zh/premium-auto-cleanup-720.webp 720w, /screenshots/zh/premium-auto-cleanup-1440.webp 1440w, /screenshots/zh/premium-auto-cleanup-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Auto-cleanup rules in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-migration" name="premium-feature"><summary>Mailbox migration</summary><div class="mv-premium-detail-body"><div><p>Move mail between IMAP accounts with folder mapping and progress you can watch.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Mailbox migration"><img src="/screenshots/zh/premium-migration-1440.webp" srcset="/screenshots/zh/premium-migration-720.webp 720w, /screenshots/zh/premium-migration-1440.webp 1440w, /screenshots/zh/premium-migration-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Mailbox migration in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-server-change" name="premium-feature"><summary>Guided server change</summary><div class="mv-premium-detail-body"><div><p>Enter a new host once: IMAP and SMTP are verified, your vault can be uploaded, and a DNS check warns about delivery problems.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Guided server change"><img src="/screenshots/zh/premium-server-change-1440.webp" srcset="/screenshots/zh/premium-server-change-720.webp 720w, /screenshots/zh/premium-server-change-1440.webp 1440w, /screenshots/zh/premium-server-change-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Guided server change in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-export-image" name="premium-feature"><summary>Export as image or HTML</summary><div class="mv-premium-detail-body"><div><p>Save a message or a whole thread as a PNG, or as one self-contained HTML file that still reads years later with the network unplugged.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><button class="mv-shot" type="button" data-image aria-label="Enlarge: Export as image or HTML"><img src="/screenshots/zh/premium-export-image-1440.webp" srcset="/screenshots/zh/premium-export-image-720.webp 720w, /screenshots/zh/premium-export-image-1440.webp 1440w, /screenshots/zh/premium-export-image-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="Export as image or HTML in MailVault"></button><p class="mv-small">Real app screenshot · Click to enlarge</p></div></div></details><details class="mv-premium-detail" id="premium-devices" name="premium-feature"><summary>Five devices</summary><div class="mv-premium-detail-body"><div><p>One subscription covers up to five installations, managed automatically.</p><a href="/zh/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div><div class="mv-device-allowance"><strong>5</strong><span>MailVault installations<br>One Premium subscription</span></div></div></div></details></section><!-- premium-catalog:end -->
+<div class="mv-portable-note" id="portable-mail"><strong>Your emails don’t need a subscription to stay yours.</strong><p>Manual backups are free and will always be free. Messages are saved as standard EML files in Maildir-style folders. Open them in other apps that support EML, or use compatible Maildir tools. Import steps and folder support vary by app.</p><a class="mv-text-link" href="/zh/faq/storage-and-vault.html">About your files and storage →</a></div>
+<section class="mv-section mv-wrap mv-faq-layout" aria-labelledby="billing-title">
+<div>
+<h2 id="billing-title">Straightforward<br>from the start.</h2>
+<p>Try it, keep it, or return to Free. Your saved mail remains accessible.</p>
+</div>
+<div class="mv-faq">
+<details>
+<summary>How do I start the trial?</summary>
+<p>Download and open MailVault, then go to Settings → Billing and choose Yearly. Complete checkout to start your 14-day trial. The trial is available for your first yearly subscription; returning subscribers should check their eligibility in the app.</p>
+</details>
+<details>
+<summary>When will I be charged?</summary>
+<p>The yearly subscription starts charging after the trial unless you cancel first. Monthly subscriptions are charged when you subscribe and do not include the yearly trial. Review the amount, payment details, and renewal date in checkout before confirming.</p>
+</details>
+<details>
+<summary>我可以随时取消吗？</summary>
+<p>You keep access to your saved mail and Free features. Premium remains active until the end of your trial or paid period, then the app returns to Free. Cancel during the yearly trial to avoid the subscription charge.</p>
+</details>
+<details>
+<summary>Why pay for Premium?</summary>
+<p>Premium adds scheduled backups, snapshots, migration, cleanup, export, and tracker blocking. Your subscription also supports ongoing development and maintenance by our small team. The full mail client and manual archiving remain free.</p>
+</details>
+<details>
+<summary>Does Premium upload my email to MailVault?</summary>
+<p>Your archived email stays in your local vault. Premium billing uses an online service to manage your subscription and devices; it is separate from your stored messages. <a href="/privacy.html">Read how we handle data</a>.</p>
+</details>
+<details>
+<summary>What if I already installed MailVault?</summary>
+<p>Open the app and go to Settings → Billing. Choose Yearly for the trial, if eligible, or Monthly. You do not need to download the app again.</p>
+</details>
+<details>
+<summary>Can I keep using my backups if I stop paying?</summary>
+<p>Yes. Your local files and Free features remain available. Premium automation stops after the trial or paid period ends; your existing archives and backups are not deleted.</p>
+</details>
+</div>
+</section>
+<section class="mv-section mv-final">
+<div class="mv-wrap">
+<h2>Try the vault for yourself.</h2>
+<p>No subscription needed to read, reply, search, or archive.</p><a class="mv-button" href="/zh/get-started.html?plan=free">免费下载</a>
+</div>
+</section>
+</main>
+<aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside>
+<footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/zh/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/zh/use-cases.html">Use cases</a><a href="/zh/blog.html">博客</a><a href="/changelog.html">What’s new</a><a href="/zh/mentioned-in.html">Mentions</a><a href="/zh/faq.html">常见问题</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">隐私</a><a href="/terms.html">条款</a>
+</div>
+</div>
+</div>
+</footer>
+<dialog class="mv-lightbox" aria-label="Product screenshot"><button type="button" class="mv-button mv-secondary" data-close-image>Close screenshot</button><img src="/screenshots/zh/thread-view-1440.webp" alt="MailVault inbox">
+<p>
+</p>
+</dialog>
+<script defer src="/assets/english-site.js?v=1">
+</script>
+<script defer src="/pricing-localize.js?v=20260905-savings">
+</script>
+<script defer src="/gm.js?v=af272b7" data-site="mailvault">
+</script>
+<script defer src="/assets/premium-features.js"></script>
 </body>
 </html>

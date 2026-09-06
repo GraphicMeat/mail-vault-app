@@ -15,6 +15,7 @@
   <meta property="og:url" content="https://mailvaultapp.com/ko/features.html">
   <meta property="og:title" content="MailVault 기능 — 메일 관리, 스레드, 보안, 백업 등">
   <meta property="og:description" content="MailVault의 모든 기능을 살펴보십시오: 통합 받은편지함, 메일 스레드, 채팅 보기, 단축키, 발송 취소, 템플릿, 발신자 검증, 로컬 백업 등. macOS와 Linux용 무료 오픈소스입니다.">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -25,6 +26,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="MailVault 기능 — 메일 관리, 스레드, 보안, 백업 등">
   <meta name="twitter:description" content="MailVault의 모든 기능을 살펴보십시오: 통합 받은편지함, 메일 스레드, 채팅 보기, 단축키, 발송 취소, 템플릿, 발신자 검증, 로컬 백업 등. macOS와 Linux용 무료 오픈소스입니다.">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
 
@@ -105,83 +107,58 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features.html">
   <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/features-page.css">
+<style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
+<script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
 
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+<body class="mv-site mv-content-page mv-features-page"><a class="mv-skip" href="#main">Skip to content</a>
 
   <!-- Navigation -->
-  <nav role="banner" class="fixed top-0 left-0 right-0 z-50 glass">
-      <!-- nav:main -->
-      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16">
-          <a href="/ko/" class="flex items-center gap-3">
-            <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
-            <span class="font-bold text-xl">Mail<span class="text-primary-500">Vault</span></span>
-          </a>
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, 한국어 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/features.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/features.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/features.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/features.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/features.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/features.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/features.html" lang="ko" hreflang="ko" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/features.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/features.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+<details class="mv-mobile-menu">
+<summary>메뉴</summary>
+<nav aria-label="Mobile navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html">블로그</a><a href="/ko/docs.html">Help</a><a href="/ko/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
 
-          <div class="hidden lg:flex items-center gap-8">
-            <a href="/ko/features.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">기능</a>
-            <a href="/ko/pricing.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">가격</a>
-            <a href="/ko/use-cases.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">활용 사례</a>
-            <a href="/ko/docs.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">문서</a>
-            <a href="/ko/blog.html" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">블로그</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="text-slate-600 dark:text-slate-300 hover:text-primary-500 transition-colors">GitHub</a>
-          </div>
-
-          <div class="flex items-center gap-4">
-            <button id="theme-toggle" aria-label="다크 모드 전환" class="p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5 hidden dark:block" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z"/>
-              </svg>
-              <svg class="w-5 h-5 block dark:hidden" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
-              </svg>
-            </button>
-            <a href="/ko/#download" class="hidden sm:inline-flex lamp-bg text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 transition-opacity">
-              다운로드
-            </a>
-            <!-- Mobile menu button -->
-            <button id="mobile-menu-btn" aria-label="메뉴" aria-controls="mobile-menu" aria-expanded="false" class="lg:hidden p-2 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors min-w-11 min-h-11 inline-flex items-center justify-center">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                <path id="menu-icon-open" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                <path id="menu-icon-close" class="hidden" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- Mobile menu -->
-        <div id="mobile-menu" class="hidden lg:hidden pb-4">
-          <div class="flex flex-col gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-            <a href="/ko/features.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">기능</a>
-            <a href="/ko/pricing.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">가격</a>
-            <a href="/ko/use-cases.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">활용 사례</a>
-            <a href="/ko/docs.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">문서</a>
-            <a href="/ko/blog.html" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">블로그</a>
-            <a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" class="px-3 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-primary-500 transition-colors">GitHub</a>
-            <a href="/ko/#download" class="sm:hidden mt-1 px-3 py-2 rounded-lg lamp-bg text-white font-medium text-center hover:opacity-90 transition-opacity">다운로드</a>
-          </div>
-        </div>
-      </div>
-      <!-- /nav:main -->
-      <!-- i18n:switcher -->
-      <div class="mv-lang" role="navigation" aria-label="언어 선택">
-        <ul>
-        <li><a data-i18n-abs translate="no" data-lang="en" lang="en" hreflang="en" href="/features.html"><span aria-hidden="true">🇬🇧</span> English</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="de" lang="de" hreflang="de" href="/de/features.html"><span aria-hidden="true">🇩🇪</span> Deutsch</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="fr" lang="fr" hreflang="fr" href="/fr/features.html"><span aria-hidden="true">🇫🇷</span> Français</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="es" lang="es" hreflang="es" href="/es/features.html"><span aria-hidden="true">🇪🇸</span> Español</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="it" lang="it" hreflang="it" href="/it/features.html"><span aria-hidden="true">🇮🇹</span> Italiano</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ja" lang="ja" hreflang="ja" href="/ja/features.html"><span aria-hidden="true">🇯🇵</span> 日本語</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="ko" lang="ko" hreflang="ko" href="/ko/features.html" aria-current="page"><span aria-hidden="true">🇰🇷</span> 한국어</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="zh-Hans" lang="zh-Hans" hreflang="zh-Hans" href="/zh/features.html"><span aria-hidden="true">🇨🇳</span> 简体中文</a></li>
-        <li><a data-i18n-abs translate="no" data-lang="pt-BR" lang="pt-BR" hreflang="pt-BR" href="/pt-br/features.html"><span aria-hidden="true">🇧🇷</span> Português (Brasil)</a></li>
-        </ul>
-      </div>
-      <!-- /i18n:switcher -->
-  </nav>
-
-  <main>
+  <main id="main">
 
   <!-- Hero Section -->
   <section aria-label="기능 소개 이미지" class="pt-32 pb-16 relative overflow-hidden">
@@ -193,33 +170,15 @@
 
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center">
       <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-tight mb-6">
-        <span class="lamp-text">필요한</span> 모든 기능
+        Your inbox.<br><span class="lamp-text">With room to do more.</span>
       </h1>
       <p class="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-3xl mx-auto leading-relaxed">
-        MailVault는 macOS와 Linux를 위한 메일 클라이언트이자 백업 도구입니다. 통합 받은편지함과 스레드 대화부터 로컬 보관까지, MailVault가 할 수 있는 일을 모두 정리했습니다.
+        Read your mail, keep a searchable copy, and take your archive with you. Manual backups are free forever; Premium takes care of the recurring jobs.
       </p>
     </div>
   </section>
 
-  <!-- Anchor Navigation Strip -->
-  <div class="sticky top-16 z-40 bg-slate-50/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-700">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="anchor-nav flex items-center gap-1 overflow-x-auto py-3 -mx-4 px-4">
-        <a href="#email-management" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">메일 관리</a>
-        <a href="#threading" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">스레드</a>
-        <a href="#chat-view" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">채팅 보기</a>
-        <a href="#security" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">보안</a>
-        <a href="#storage" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">저장</a>
-        <a href="#bulk-operations" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">일괄 작업</a>
-        <a href="#multi-account" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">다중 계정</a>
-        <a href="#customization" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">사용자 설정</a>
-        <a href="#performance" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-slate-600 dark:text-slate-400 hover:text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors">성능</a>
-        <a href="#premium" class="shrink-0 px-3 py-1.5 rounded-full text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 transition-colors">Premium</a>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================ -->
+<div class="mv-feature-layout mv-wrap"><aside class="mv-feature-nav"><details open><summary>Browse features</summary><nav aria-label="Feature categories"><a href="#email-management">메일 관리</a><a href="#threading">스레드</a><a href="#chat-view">채팅 보기</a><a href="#security">보안</a><a href="#storage">저장</a><a href="#bulk-operations">일괄 작업</a><a href="#multi-account">다중 계정</a><a href="#customization">사용자 설정</a><a href="#performance">성능</a><a href="#premium">Premium</a></nav></details></aside><div class="mv-feature-content">  <!-- ============================================================ -->
   <!-- 1. Email Management (text left, image right) -->
   <!-- ============================================================ -->
   <section id="email-management" class="py-20 scroll-mt-32">
@@ -236,78 +195,61 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             메일을 읽고, 쓰고, 정리하는 데 필요한 모든 것을 갖췄습니다. 한 번의 클릭으로 로그인하고, 정확하게 검색하고, 받은편지함을 손쉽게 관리하십시오.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">첨부파일과 함께 작성, 답장, 전체 답장, 전달</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">Gmail &amp; Microsoft 365 OAuth2 원클릭 로그인</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">Outlook.com용 Microsoft Graph API — IMAP 회귀 버그를 우회합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+              <span class="text-slate-700 dark:text-slate-300">Connect Outlook.com through Microsoft’s supported sign-in flow</span>
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">필터를 갖춘 고급 검색 — 발신자, 기간, 첨부파일, 폴더</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 16 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">검색 기록 &amp; 자주 쓰는 필터 제안</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">읽음/읽지 않음 표시, 별표/중요 표시</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">발송 취소 — 전역 기본값과 작성 창별 개별 설정(15초에서 5분)</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">보낼 편지함 — 로컬에 담아 두었다가 보내며, 전송 중인 메일도 취소하고 다시 시도할 수 있습니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">보낸 편지함 동기화 — SMTP로 발송한 뒤 서버의 보낸 편지함에 복사됩니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">폴더로 이동 — 서버 폴더 사이에서 메일을 다시 정리합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">메일 템플릿 — 자주 쓰는 문구를 저장해 다시 사용합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">연락처 선택기 — 작성, 수신자 지정, 답장 시 계정별로 걸러지고 우선순위가 매겨진 제안</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">발신자별 묶기 — 받은편지함을 연락처 기준으로 정리하고, 보낸 답장도 같은 줄기에 함께 표시합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">DNS 기반 서버 자동 감지 — SRV 레코드, Mozilla autoconfig, MX 대체 조회, 알려진 제공업체 매핑</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">인라인 임베드 이미지 — CID로 참조된 로고와 사진이 본문 안에서 표시됩니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">링크 안전성 — 피싱 링크와 발신자 사칭을 감지해 눈에 띄게 경고합니다</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
         <!-- Screenshots: email list → sender grouped → expanded topic -->
         <div class="flex gap-3 justify-center">
-          <img src="/screenshots/ko/email-list-view-1440.webp" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="/screenshots/ko/sender-grouped-view-1440.webp" srcset="/screenshots/ko/sender-grouped-view-720.webp 720w, /screenshots/ko/sender-grouped-view-1440.webp 1440w, /screenshots/ko/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="연락처별로 메일을 정리해 보여 주는 MailVault 발신자별 묶기 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="/screenshots/ko/sender-grouped-expanded-1440.webp" srcset="/screenshots/ko/sender-grouped-expanded-720.webp 720w, /screenshots/ko/sender-grouped-expanded-1440.webp 1440w, /screenshots/ko/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="보낸 답장이 사이사이 끼워진 채 주제가 펼쳐진 MailVault 발신자별 묶기 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
+          <img src="/screenshots/ko/email-list-view-1440.webp" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
+          <img src="/screenshots/ko/sender-grouped-view-1440.webp" srcset="/screenshots/ko/sender-grouped-view-720.webp 720w, /screenshots/ko/sender-grouped-view-1440.webp 1440w, /screenshots/ko/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="연락처별로 메일을 정리해 보여 주는 MailVault 발신자별 묶기 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
+          <img src="/screenshots/ko/sender-grouped-expanded-1440.webp" srcset="/screenshots/ko/sender-grouped-expanded-720.webp 720w, /screenshots/ko/sender-grouped-expanded-1440.webp 1440w, /screenshots/ko/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="보낸 답장이 사이사이 끼워진 채 주제가 펼쳐진 MailVault 발신자별 묶기 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
         </div>
       </div>
     </div>
@@ -332,30 +274,24 @@
           </div>
           <h2 class="text-3xl sm:text-4xl font-bold mb-4">메일 스레드 &amp; 대화</h2>
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
-            JWZ 알고리즘으로 구현한 Gmail 스타일 스레드 대화입니다. 관련된 메일이 한데 묶여 보이고, 접기 기능이 알아서 화면을 정돈해 줍니다.
+            Follow a conversation from first message to final reply. Related emails stay together, with quoted text folded away until you need it.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">JWZ 알고리즘을 쓰는 Gmail 스타일 스레드 대화</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">스레드 대화 보기 — 모든 메일이 시간순으로 쌓입니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">정렬 순서 선택 — 오래된 순 또는 최신 순</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">인용문 접기 — 인용된 답장을 접어 읽기 좋게 만듭니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 5 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">서명 접기 — 스마트, 항상 표시, 항상 숨김, 접힘의 4가지 모드</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
       </div>
     </div>
@@ -433,47 +369,36 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             메일은 사용자의 컴퓨터에 남습니다. MailVault는 발신자를 검증하고, 인증 정보를 macOS 키체인이나 Linux Secret Service에 저장하며, 샌드박스 안에서 실행됩니다. 클라우드 서비스도, 텔레메트리도 없습니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">링크 안전성 — 표시된 문구와 실제 URL 목적지가 다른 피싱 링크를 감지합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><a href="/ko/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">메일 추적기 차단</a> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 광고 메일이 열람 시점을 알리는 데 쓰는 숨은 1×1 픽셀을 찾아, 메시지가 그려지기 전에 HTML에서 걷어냅니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">발신자 사칭 감지 — 표시 이름이 다른 주소나 도메인을 흉내 내면 경고합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">클릭 확인 — 의심스러운 링크를 열기 전에 URL을 비교해 보여 주는 경고 창</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 10 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">발신자 검증 배지 — SPF, DKIM, DMARC 검사</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">헤더 불일치 감지 — From과 Reply-To가 어긋나면 위조 경고</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">macOS 키체인 &amp; Linux Secret Service 인증 정보 저장</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">macOS App Sandbox — 안전한 컨테이너 안에서 실행됩니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">클라우드 없음, 추적 없음, 텔레메트리 없음</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">오픈소스 — 코드를 한 줄까지 직접 확인할 수 있습니다</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
       </div>
     </div>
@@ -496,44 +421,34 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             메일이 어디서든 읽을 수 있는 표준 형식으로 저장됩니다. 한 번의 클릭으로 로컬에 보관하고, ZIP으로 내보내고, 어떤 컴퓨터에서든 복원하십시오. 특정 업체에 묶이는 일은 없습니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">표준 Maildir + .eml(RFC 5322) 형식 — 어디에도 묶이지 않습니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">클릭 한 번으로 로컬 저장소에 보관</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">ZIP 백업 내보내기 — 보관된 메일만 또는 전체 메일, 설정 포함</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">이식 가능한 가져오기 — 어떤 컴퓨터에서도 복원</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 9 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">외부 백업 폴더 — .eml 파일을 Dropbox, iCloud Drive 등 원하는 외부 위치에 복사하며, macOS 보안 범위 북마크로 접근 권한이 유지됩니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">빈 캐시로 인한 손상 방지 — 이전 캐시에 데이터가 있었는데 서버가 갑자기 빈 결과를 돌려주면 이를 거부해 메일함 구조와 헤더를 지킵니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">캐시 크기 한도와 보관 기간 설정</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">백그라운드 캐싱 파이프라인 — 조용히 동기화합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">백그라운드 헬퍼 — 앱 창을 닫아도 메일 동기화가 계속됩니다</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
         <!-- Screenshot -->
         <div class="flex justify-center">
@@ -570,28 +485,22 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             수백에서 수천 통의 메일을 한 번에 선택해 보관하거나 삭제하거나, 두 가지를 한 번에 처리하십시오. 기간을 고르고, 진행 상황을 보고, 언제든 취소할 수 있습니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">떠 있는 작업 막대와 함께 다중 선택</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">일괄 보관, 삭제, 또는 보관 후 삭제</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">기간 선택 — 연도별 또는 직접 지정</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">취소 버튼이 있는 진행 막대</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 5 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">비정상 종료에도 안전한 작업 복구</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
       </div>
     </div>
@@ -614,40 +523,31 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             모든 메일 계정을 한곳에서 관리합니다. 기다림 없이 즉시 전환하고, 통합 받은편지함으로 합치거나, 계정마다 표시 이름과 색을 따로 지정할 수 있습니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">메일 계정을 개수 제한 없이 추가</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">통합 받은편지함 — 모든 계정을 하나의 목록에서 확인</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">Gmail, Outlook, Yahoo, iCloud, ProtonMail(Bridge), Fastmail, Zoho 등 모든 IMAP 제공업체</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">표시 이름과 아바타 색 직접 지정</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 8 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">계정 순서 변경과 숨기기/보이기</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">LRU 상태 캐시를 활용한 즉시 계정 전환</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">계정별 메일함 기억 — 마지막으로 본 폴더를 기억합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">발신자 정보 — 연락처별 주고받은 기록과 빈도</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
         <!-- Screenshot -->
         <div class="flex justify-center">
@@ -679,48 +579,37 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             MailVault를 자신에게 맞추십시오. 테마를 고르고, 창을 재배치하고, 날짜 형식을 정하고, 일하는 방식에 맞게 인터페이스를 다듬을 수 있습니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">다크 모드와 라이트 모드, 그리고 메시지 본문에만 적용되는 별도의 테마 전환</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">크기를 조절할 수 있는 3단 또는 2단 레이아웃</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">아이콘만 표시하는 모드를 갖춘 접이식 사이드바</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">기본형 또는 간결형 메일 목록</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 10 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">날짜 형식 선택 — 미국식, 유럽식, ISO, 사람이 읽기 쉬운 형식, 또는 직접 지정</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">데스크톱 알림과 독 배지</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">모든 핵심 동작에 대한 단축키, 원하는 대로 변경 가능</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">알림 세부 설정 — 계정별, 폴더별 제어</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">소스 보기 — RFC 5322 원본 메일을 그대로 확인</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">새 창에서 메일 열기</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
       </div>
     </div>
@@ -743,44 +632,34 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             네이티브 속도와 낮은 자원 사용을 위해 Rust와 Tauri로 만들었습니다. 똑똑한 동기화 프로토콜, 가상 스크롤, 미리 가져오기가 모든 동작을 빠르게 유지합니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">Rust(Tauri)로 제작 — Electron이 아닙니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">async-imap 기반 네이티브 IMAP — Node.js 사이드카 없음</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">CONDSTORE 증분 동기화 — 바뀐 것이 없으면 IMAP 호출이 전혀 없습니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">COMPRESS=DEFLATE — 대역폭 70-80% 절감</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 9 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">가상 스크롤 — 17,000통이 넘어도 부드럽게 처리</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">본문 미리 가져오기 — 다음 메일 3통이 즉시 열립니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">macOS의 네이티브 Sparkle 자동 업데이터 — 서명된 appcast, 앱 안에서 내려받아 설치</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">크로스 플랫폼 — macOS(Apple Silicon &amp; Intel)와 Linux(.deb, AppImage, Snap, Flatpak)</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
               <span class="text-slate-700 dark:text-slate-300">시스템 트레이 — 백그라운드에서 조용히 동기화</span>
-            </li>
-          </ul>
+            </li></ul></details>
         </div>
         <!-- Illustration -->
         <div class="flex justify-center">
@@ -845,43 +724,33 @@
           <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
             Premium 구독으로 고급 기능을 사용하십시오. 연간 요금제는 14일 무료 체험으로 시작합니다.
           </p>
-          <ul class="space-y-4">
-            <li class="flex items-start gap-3">
-              <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>예약 자동 백업</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 계정마다 매일, 매주 또는 원하는 주기로 예약하고 실행 시각과 폴더 단위 체크포인트까지 지정합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+          <ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>예약 자동 백업</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 계정별로 매시간, 매일 또는 매주로 설정할 수 있고 실행 시각 지정과 폴더 단위 체크포인트를 지원합니다. <strong>지정한 시각에</strong>를 고르면 백업이 시작될 수 있는 시각을 직접 정할 수 있어, 다른 프로그램이 이미 쓰는 외장 드라이브의 볼트에 알맞습니다. 모든 일정은 앱이 유휴 상태가 될 때까지 기다립니다</span>
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>백업 상태 점검</strong> — 폴더별로 서버, 로컬, 외부 사본의 개수를 상태 표시와 함께 보여 주는 검증 보기</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>계정 간 메일함 이전</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 폴더 매핑과 진행 상황 표시를 갖추고 IMAP 계정 사이로 메일을 옮깁니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>안내에 따른 서버 변경</strong> — 메일 호스트를 옮깁니까? 새 서버를 한 번만 입력하십시오. IMAP과 SMTP를 검증하고, 볼트를 새 서버로 올릴 수 있으며, DNS 상태 점검(MX/SPF/DKIM/DMARC)이 배달 문제를 미리 알려 줍니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li></ul><details class="mv-feature-more"><summary>See all 10 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>나이브 베이즈 분류기를 쓰는 메일 정리</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 메일을 뉴스레터, 홍보, 거래, 개인, 업무, 스팸으로 분류하는 법을 배우며, 분류마다 유지/보관/삭제 동작을 지정할 수 있습니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>Time Capsule</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 어떤 메일함이든 특정 시점의 스냅샷을 만들고, 지난 어느 날짜의 상태였는지 그대로 살펴봅니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>메일 추적기 차단</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> — 모든 메시지가 그려지기 전에 추적 픽셀을 걷어내므로, 보낸 사람은 당신이 열었다는 것을 알지 못합니다. 추적기를 찾아내는 것은 누구에게나 무료이고, 그것을 없애는 것이 구독으로 더해지는 부분입니다. <a href="/ko/features/email-tracker-blocking.html" class="text-primary-500 hover:text-primary-600 underline">차단 전과 후를 보십시오</a></span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>자동 정리 규칙</strong> — 계정과 폴더마다 정해 둔 기간보다 오래된 메일을 자동으로 지우거나 보관합니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>이미지 또는 HTML로 내보내기</strong> <span class="align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">Premium</span> &mdash; 메시지 하나나 스레드 전체를 PNG로, 또는 스레드를 날짜순 목록으로 접어 메시지마다 펼쳐 볼 수 있는 자족적인 HTML 파일 하나로 저장합니다. 원격 이미지도 파일 안에 함께 담기므로 몇 년 뒤 네트워크가 끊긴 상태에서도 그대로 읽힙니다</span>
-            </li>
-            <li class="flex items-start gap-3">
+            </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-amber-500 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg> <span class="text-slate-700 dark:text-slate-300"><strong>기기 5대 구독</strong> — 자동 기기 관리와 함께 최대 5곳의 설치 환경에서 Premium을 쓸 수 있습니다</span>
-            </li>
-          </ul>
-          <!-- Screenshots: backup schedule → Time Capsule → tracker blocking -->
-          <div class="flex gap-3 justify-center mt-6">
-            <img src="/screenshots/ko/premium-backup-schedule-1440.webp" srcset="/screenshots/ko/premium-backup-schedule-720.webp 720w, /screenshots/ko/premium-backup-schedule-1440.webp 1440w, /screenshots/ko/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="매일, 매주 또는 원하는 주기와 실행 시각 지정을 지원하는 MailVault의 예약 백업 설정 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ko/premium-time-capsule-1440.webp" srcset="/screenshots/ko/premium-time-capsule-720.webp 720w, /screenshots/ko/premium-time-capsule-1440.webp 1440w, /screenshots/ko/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="메일함의 특정 시점 스냅샷을 보여주는 MailVault의 Time Capsule" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ko/premium-tracker-blocking-1440.webp" srcset="/screenshots/ko/premium-tracker-blocking-720.webp 720w, /screenshots/ko/premium-tracker-blocking-1440.webp 1440w, /screenshots/ko/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="메시지가 그려지기 전에 추적 픽셀을 걷어내는 MailVault의 메일 추적기 차단 기능" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/3 max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            </li></ul></details>
+          <!-- Screenshots: backup schedule → set hours → Time Capsule → tracker blocking -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 justify-items-center mt-6">
+            <img src="/screenshots/ko/premium-backup-schedule-1440.webp" srcset="/screenshots/ko/premium-backup-schedule-720.webp 720w, /screenshots/ko/premium-backup-schedule-1440.webp 1440w, /screenshots/ko/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="매일, 매주 또는 원하는 주기와 실행 시각 지정을 지원하는 MailVault의 예약 백업 설정 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <img src="/screenshots/premium-backup-hours-1440.webp" srcset="/screenshots/premium-backup-hours-720.webp 720w, /screenshots/premium-backup-hours-1440.webp 1440w, /screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <img src="/screenshots/ko/premium-time-capsule-1440.webp" srcset="/screenshots/ko/premium-time-capsule-720.webp 720w, /screenshots/ko/premium-time-capsule-1440.webp 1440w, /screenshots/ko/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="메일함의 특정 시점 스냅샷을 보여주는 MailVault의 Time Capsule" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <img src="/screenshots/ko/premium-tracker-blocking-1440.webp" srcset="/screenshots/ko/premium-tracker-blocking-720.webp 720w, /screenshots/ko/premium-tracker-blocking-1440.webp 1440w, /screenshots/ko/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="메시지가 그려지기 전에 추적 픽셀을 걷어내는 MailVault의 메일 추적기 차단 기능" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
           </div>
         </div>
         <div class="flex justify-center">
@@ -919,6 +788,7 @@
     </div>
   </section>
 
+</div></div>
   <!-- ============================================================ -->
   <!-- CTA Section -->
   <!-- ============================================================ -->
@@ -951,96 +821,31 @@
   </main>
 
   <!-- Footer -->
-  <footer class="py-12 border-t border-slate-200 dark:border-slate-700">
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex flex-col md:flex-row items-center justify-between gap-6">
-        <div class="flex items-center gap-2">
-          <img src="/icon-128.webp" alt="MailVault 로고" class="w-8 h-8 rounded-lg" width="32" height="32">
-          <span class="font-bold text-lg">Mail<span class="text-primary-500">Vault</span></span>
-        </div>
-        <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-slate-600 dark:text-slate-400">
-          <a href="/ko/docs.html" class="hover:text-primary-500 transition-colors">문서</a>
-          <a href="/ko/blog.html" class="hover:text-primary-500 transition-colors">블로그</a>
-          <a href="/privacy.html" class="hover:text-primary-500 transition-colors">개인정보</a>
-          <a href="/ko/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a>
-          <a href="/changelog.html" class="hover:text-primary-500 transition-colors">변경 내역</a>
-          <a href="/ko/mentioned-in.html" class="hover:text-primary-500 transition-colors">소개된 곳</a>
-          <a href="/terms.html" class="hover:text-primary-500 transition-colors">약관</a>
-          <a href="https://github.com/GraphicMeat/mail-vault-app" class="hover:text-primary-500 transition-colors">GitHub</a>
-          <a href="https://x.com/GraphicMeat" target="_blank" class="hover:text-primary-500 transition-colors">X / Twitter</a>
-        </div>
-
-        <p class="text-sm text-slate-500 dark:text-slate-400">&copy; 2026 MailVault. 모든 권리 보유.</p>
-      </div>
-    </div>
-    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 pt-6 border-t border-slate-200 dark:border-slate-700">
-            <div class="flex flex-col items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-        <span>이 앱을 구운 곳은 <span class="text-primary-500 font-semibold">오픈 GPU</span> · 제작:</span>
-        <a href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Graphic Meat" class="inline-flex hover:opacity-80 transition-opacity">
-          <img src="/graphicmeat-logo.webp" alt="Graphic Meat 제작" class="w-full max-w-[400px] h-auto" width="512" height="512" loading="lazy" decoding="async">
-        </a>
-      </div>
-    </div>
-
-  </footer>
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/ko/use-cases.html">Use cases</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">What’s new</a><a href="/ko/mentioned-in.html">Mentions</a><a href="/ko/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a>
+</div>
+</div>
+</div>
+</footer>
 
   <!-- Theme Toggle Script -->
-  <script>
-    const themeToggle = document.getElementById('theme-toggle');
-    const html = document.documentElement;
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      html.classList.add('dark');
-    }
-    themeToggle.addEventListener('click', () => {
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
-  </script>
+
 
   <!-- Mobile Menu Script -->
-  <script>
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const menuIconOpen = document.getElementById('menu-icon-open');
-    const menuIconClose = document.getElementById('menu-icon-close');
 
-    mobileMenuBtn.addEventListener('click', () => {
-      const isOpen = !mobileMenu.classList.contains('hidden');
-      mobileMenu.classList.toggle('hidden');
-      menuIconOpen.classList.toggle('hidden');
-      menuIconClose.classList.toggle('hidden');
-    });
-
-    // Close mobile menu when clicking a link
-    mobileMenu.querySelectorAll('a').forEach(link => {
-      link.addEventListener('click', () => {
-        mobileMenu.classList.add('hidden');
-        menuIconOpen.classList.remove('hidden');
-        menuIconClose.classList.add('hidden');
-      });
-    });
-  </script>
 
   <!-- Anchor Nav Active Highlight Script -->
-  <script>
-    const sections = document.querySelectorAll('section[id]');
-    const anchors = document.querySelectorAll('.anchor-nav a');
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          anchors.forEach(a => {
-            a.classList.remove('text-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
-            if (a.getAttribute('href') === '#' + entry.target.id) {
-              a.classList.add('text-primary-500', 'bg-primary-50', 'dark:bg-primary-900/20');
-            }
-          });
-        }
-      });
-    }, { rootMargin: '-20% 0px -70% 0px' });
-
-    sections.forEach(section => observer.observe(section));
-  </script>
+  <script defer src="/assets/features-page.js"></script>
 
   <!-- Lightbox Modal -->
   <div id="lightbox-modal" class="fixed inset-0 z-50 hidden" role="dialog" aria-modal="true" aria-label="스크린샷 미리보기">
@@ -1111,7 +916,8 @@
     })();
   </script>
 
-  <script defer src="/pricing-localize.js?v=1"></script>
+  <script defer src="/pricing-localize.js?v=20260905-savings"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=2"></script>
 </body>
 </html>
