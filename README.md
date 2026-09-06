@@ -83,7 +83,7 @@ A background helper keeps mail syncing with the window closed, and macOS builds 
 
 ### Premium
 
-The client is free forever — reading, composing, search, threading, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, and Time Capsule snapshots of a mailbox as it was on any past date. Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
+The client is free forever: reading, composing, search, threading, and unlimited manual archiving. Premium adds the parts that need a scheduler or a server: automatic backups with health verification, cross-account migration, a guided server change with DNS health checks, cleanup rules driven by a local Naive Bayes classifier, and Time Capsule snapshots of a mailbox as it was on any past date. Focus sessions, a timer that covers the window and holds notifications for the minutes you choose, are Premium too. Pricing is on [mailvaultapp.com/pricing](https://mailvaultapp.com/pricing.html).
 
 ## Requirements
 
