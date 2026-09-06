@@ -177,6 +177,10 @@ async function shot(name, settle = SETTLE) {
     const el = document.activeElement;
     if (el && el !== document.body && !/^(INPUT|TEXTAREA)$/.test(el.tagName) && !el.isContentEditable) el.blur();
   });
+  // The blur above lands in the DOM before this returns, but WebKit repaints on
+  // its next frame: a capture taken immediately still shows the ring a dialog's
+  // auto-focused close button was wearing.
+  await browser.pause(150);
   capture(name);
 }
 
