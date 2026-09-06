@@ -47,7 +47,20 @@ function appPid() {
   const binary = process.env.SHOTS_APP_BINARY;
   if (!binary) return null;
   try {
-    return execFileSync('pgrep', ['-f', binary], { encoding: 'utf-8' }).trim().split('\n')[0] || null;
+    const pids = execFileSync('pgrep', ['-f', binary], { encoding: 'utf-8' })
+      .trim().split('\n').filter(Boolean);
+    // `pgrep -f <binary>` matches `<binary>-daemon` too, and the daemon can
+    // outlive a killed run — an orphan from 11:35 then sorts ahead of the app
+    // this run launched, pins MAILVAULT_WINDOW_PID to a process that owns no
+    // window, and every locale skips with "no capturable window owned by
+    // MailVault; candidates:" and an empty list. Keep only a process whose
+    // argv[0] IS the binary.
+    for (const pid of pids) {
+      const argv0 = execFileSync('ps', ['-o', 'command=', '-p', pid], { encoding: 'utf-8' })
+        .trim().split(' ')[0];
+      if (argv0 === binary) return pid;
+    }
+    return null;
   } catch {
     return null; // not up yet — windowId retries, and fails loudly if it never is
   }
