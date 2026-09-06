@@ -413,7 +413,8 @@ fi
 CREATE_DMG_ARGS=(
     --volname "$APP_NAME"
     --window-pos 100 100
-    --window-size 660 400
+    --window-size 660 600
+    --background "$PROJECT_DIR/src-tauri/icons/dmg-background.png"
     --icon-size 96
     --text-size 12
     --icon "${APP_NAME}.app" 180 200
@@ -422,7 +423,7 @@ CREATE_DMG_ARGS=(
     --format UDZO
 )
 
-create-dmg "${CREATE_DMG_ARGS[@]}" "$SIGNED_DMG" "$APP_PATH"
+python3 "$SCRIPT_DIR/create-installer-dmg.py" "${CREATE_DMG_ARGS[@]}" "$SIGNED_DMG" "$APP_PATH"
 
 if [ ! -f "$SIGNED_DMG" ]; then
     echo -e "${RED}❌ DMG creation failed!${NC}"
