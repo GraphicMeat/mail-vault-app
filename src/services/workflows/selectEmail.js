@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, rowKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -79,14 +79,6 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
 
 // ── _prefetchAdjacentEmails workflow ──
 
-// selectedEmailId is `accountId:uid` in the unified inbox and a bare uid
-// elsewhere — same shape selectEmail writes.
-function _selectionIdFor(uid, state) {
-  if (state.activeMailbox !== 'UNIFIED') return uid;
-  const row = state.sortedEmails.find(e => e.uid === uid);
-  return `${row?._accountId || state.activeAccountId}:${uid}`;
-}
-
 export async function _prefetchAdjacentEmails(currentUid) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -106,7 +98,10 @@ export async function _prefetchAdjacentEmails(currentUid) {
   for (let i = 1; i <= 3; i++) {
     // The user moved on — every remaining fetch here is for a row nobody is
     // looking at, and each one still costs a pool permit and a round trip.
-    if (get().selectedEmailId !== _selectionIdFor(currentUid, get())) return;
+    // Compare on the uid the key names, never on the key's shape: it is a bare
+    // uid in one folder's list and `accountId:mailbox:uid` in a spanning one,
+    // and a guard that rebuilt the shape by hand never matched either.
+    if (_parseSelKey(get().selectedEmailId).uid !== currentUid) return;
 
     const nextEmail = sortedEmails[currentIndex + i];
     if (!nextEmail) break;
@@ -216,9 +211,14 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // here, where they are already resolved.
   const withAccount = (e) => (e ? { ...e, _accountId: e._accountId || accountId, _mailbox: e._mailbox || mailbox } : e);
 
-  // Through the helper: a uid names one row only inside one mailbox, and
-  // EmailList already highlights by comparing this against a full key.
-  const selectedEmailId = rowKey({ _accountId: accountId, _mailbox: mailbox, uid: realUid }, isUnified);
+  // Through the helper the ROWS use: `selectionKey`, not `rowKey`. A single
+  // folder's list keys by bare uid — except for a row it merged in from
+  // another folder (your own reply, pulled into the INBOX list from Sent),
+  // which gets the full key. `rowKey` gave that row a bare uid, so it never
+  // compared equal to what EmailList drew it with and the open message showed
+  // as unselected. selectThread has written this key since the merged-Sent-row
+  // fix; this is the click path agreeing with it.
+  const selectedEmailId = selectionKey({ _accountId: accountId, _mailbox: mailbox, uid: realUid }, get());
   useMailStore.setState({ selectedThread: null, selectedEmailId, loadingEmail: true, selectedEmail: null, selectedEmailSource: source, lastSelectedAccountId: accountId });
 
   try {
