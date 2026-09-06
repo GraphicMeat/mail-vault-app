@@ -119,8 +119,16 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         <ConnectedStateIcon email={latestEmail} size={14} />
       </div>
 
-      <div className={`w-[32%] max-w-48 min-w-[80px] truncate flex-shrink ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
-        {participantNames}
+      {/*
+        No `truncate` on the column itself — that clips the alert icons that
+        now sit after the names. The names span truncates instead.
+      */}
+      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+        <span data-testid="row-sender" className="truncate min-w-0">{participantNames}</span>
+        {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
+        <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
+        <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
+        <TrackerAlertIcon info={getThreadTrackerInfo(thread.emails)} blocked={trackerBlocking} />
       </div>
 
       {/*
@@ -137,11 +145,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         the default width better but starts overflowing at 320px.
       */}
       <div className="flex-1 min-w-[140px] flex items-center gap-2">
-        {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
-        <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
-        <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
-        <TrackerAlertIcon info={getThreadTrackerInfo(thread.emails)} blocked={trackerBlocking} />
-        <span dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+        <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(thread.subject, '(No subject)')}
         </span>
         {thread.messageCount > 1 && (
@@ -255,8 +259,9 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       </div>
 
       <div className="flex-1 min-w-0 py-1.5">
-        <div className="flex items-center gap-2">
-          <span className={`truncate text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+        {/* Line 1: participants, count, alerts ... date */}
+        <div className="flex items-center gap-1.5">
+          <span data-testid="row-sender" className={`truncate min-w-0 text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
             {participantNames}
           </span>
           {thread.messageCount > 1 && (
@@ -265,17 +270,19 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
               {thread.messageCount}
             </span>
           )}
-          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
-            {formatEmailDate(latestEmail.date)}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
           {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={12} /> : null; })()}
           <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} size={12} />
           <LinkAlertIcon level={getLinkAlertLevel(thread.emails)} size={12} alerts={getAlertsForEmails(thread.emails, useMailStore.getState())} />
           <TrackerAlertIcon info={getThreadTrackerInfo(thread.emails)} blocked={trackerBlocking} size={12} />
+          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
+            {formatEmailDate(latestEmail.date)}
+          </span>
+        </div>
+        {/* Line 2: Subject + attachment. Nothing before the subject, so its
+            left edge is the participants' on every row. */}
+        <div className="flex items-center gap-1.5">
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
-          <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(thread.subject, '(No subject)')}
           </span>
           {latestEmail.hasAttachments && (

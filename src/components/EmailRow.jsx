@@ -33,9 +33,14 @@ import { useT } from '../i18n/index.js';
  * and the folder's own message share a number, and only one of them was
  * clicked.
  *
- * It sits at the LEFT of the subject line, not beside the date: the row's
- * hover actions are an absolute overlay pinned to the right edge, so a star
- * that only appears on hover would appear underneath them.
+ * It sits on the sender line in every row variant, never beside the date: the
+ * row's hover actions are an absolute overlay pinned to the right edge, so a
+ * star that only appears on hover would appear underneath them.
+ *
+ * Nothing sits ahead of the subject, the star included: a thread row has no
+ * star, so a message row whose subject started one star-width further right
+ * than its thread-row neighbour's put a zig-zag down the subject column — the
+ * same defect the alert icons made, just constant per row kind.
  */
 function StarToggle({ email, actions, size }) {
   const t = useT();
@@ -115,7 +120,12 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <ConnectedStateIcon email={email} size={14} />
       </div>
 
-      <div className={`w-[32%] max-w-48 min-w-[80px] truncate flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      {/*
+        No `truncate` on the column itself — that clips the alert icons that
+        now sit after the name. The name span truncates instead, which is what
+        was meant all along.
+      */}
+      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
         {unifiedInbox && email._accountEmail && (
           <span
             data-testid="account-dot"
@@ -124,7 +134,12 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
             title={email._accountEmail}
           />
         )}
-        <span className="truncate" dir="auto">{displayText(getSenderName(email))}</span>
+        <span data-testid="row-sender" className="truncate min-w-0" dir="auto">{displayText(getSenderName(email))}</span>
+        <StarToggle email={email} actions={actions} size={14} />
+        <SenderAlertIcon level={email._senderAlert} email={email} />
+        <ReplyToAlertIcon mismatch={email._replyToMismatch} />
+        <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
+        <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} />
       </div>
 
       {/*
@@ -143,12 +158,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         someone scans a list for and a sender name is what they can infer.
       */}
       <div className="flex-1 min-w-[120px] flex items-center gap-2">
-        <StarToggle email={email} actions={actions} size={14} />
-        <SenderAlertIcon level={email._senderAlert} email={email} />
-        <ReplyToAlertIcon mismatch={email._replyToMismatch} />
-        <LinkAlertIcon level={email._linkAlert} alerts={alerts} />
-        <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} />
-        <span dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+        <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(email.subject, '(No subject)')}
         </span>
         {email.hasAttachments && (
@@ -235,8 +245,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
 
       {/* Two-line content */}
       <div className="flex-1 min-w-0 py-1.5">
-        {/* Line 1: Sender ... Date */}
-        <div className="flex items-center gap-2">
+        {/* Line 1: Sender, star, alerts ... Date */}
+        <div className="flex items-center gap-1.5">
           {unifiedInbox && email._accountEmail && (
             <span
               data-testid="account-dot"
@@ -245,22 +255,23 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
               title={email._accountEmail}
             />
           )}
-          <span dir="auto" className={`truncate text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+          <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
             {displayText(getSenderName(email))}
           </span>
-          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
-            {formatEmailDate(email.date)}
-          </span>
-        </div>
-        {/* Line 2: Subject + attachment */}
-        <div className="flex items-center gap-1.5">
           <StarToggle email={email} actions={actions} size={13} />
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
           <ReplyToAlertIcon mismatch={email._replyToMismatch} size={12} />
           <LinkAlertIcon level={email._linkAlert} size={12} alerts={alerts} />
           <TrackerAlertIcon info={email._trackerInfo} blocked={trackerBlocking} size={12} />
+          <span className="text-xs text-mail-text-muted whitespace-nowrap ml-auto">
+            {formatEmailDate(email.date)}
+          </span>
+        </div>
+        {/* Line 2: Subject + attachment. Nothing before the subject, so its
+            left edge is the sender's on every row. */}
+        <div className="flex items-center gap-1.5">
           {/* flex-1 min-w-0: same shrink-to-nothing hazard as the row above. */}
-          <span dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(email.subject, '(No subject)')}
           </span>
           {email.hasAttachments && (
