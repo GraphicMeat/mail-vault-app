@@ -43,6 +43,7 @@
   "export.dialog.formatHtmlLabel",
   "export.dialog.formatImageLabel",
   "focus.min",
+  "focus.minutesUnit",
   "hook.useKeyboardShortcuts.ctrl",
   "hook.useKeyboardShortcuts.meta",
   "hook.useKeyboardShortcuts.shift",

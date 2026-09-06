@@ -12,7 +12,7 @@ describe('premium feature catalog', () => {
     expect(PREMIUM_FEATURES.map(f => f.id)).toEqual([
       'backup-schedule', 'backup-health', 'cleanup', 'time-capsule',
       'tracker-blocking', 'auto-cleanup', 'migration', 'server-change',
-      'export-image', 'devices',
+      'export-image', 'focus-session', 'devices',
     ]);
   });
 
@@ -38,6 +38,6 @@ describe('premium feature catalog', () => {
   it('has unique, unique-per-feature shot names', () => {
     const shots = PREMIUM_FEATURES.map(f => f.shot).filter(Boolean);
     expect(new Set(shots).size).toBe(shots.length);
-    expect(shots).toHaveLength(9);
+    expect(shots).toHaveLength(10);
   });
 });

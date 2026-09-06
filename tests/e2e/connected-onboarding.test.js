@@ -236,12 +236,12 @@ describe('onboarding', function () {
      *
      * It must walk the WHOLE catalog. The first version of this test clicked
      * next four times and stayed green against the real defect: the only
-     * feature whose box differed was `devices`, the tenth and the one with no
+     * feature whose box differed was `devices`, the last one and the one with no
      * screenshot, so a partial sweep never reached the thing it was testing.
      */
     it('does not move the Continue button while browsing every feature', async function () {
       const total = await $$('[data-testid^="premium-tile-"]').length;
-      expect(total).toBe(10);
+      expect(total).toBe(11);
 
       const seen = [], tops = [];
       for (let i = 0; i < total; i++) {

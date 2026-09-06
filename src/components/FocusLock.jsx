@@ -26,7 +26,7 @@ export function FocusLock() {
   const abandon = useFocusStore(s => s.abandon);
 
   const [confirming, setConfirming] = useState(false);
-  const [shame, setShame] = useState(null);
+  const [early, setEarly] = useState(null);
 
   // The session can end under the confirm step — the timer runs out while the
   // user is still deciding. Without this the NEXT lock opens on "Unlock early?".
@@ -39,7 +39,7 @@ export function FocusLock() {
     const count = durationMin;
     abandon();
     setConfirming(false);
-    setShame({ count, time });
+    setEarly({ count, time });
   };
 
   return (
@@ -104,19 +104,19 @@ export function FocusLock() {
         )}
       </Dialog>
 
-      {/* Renders once the overlay is gone — the one cheeky surface in the app. */}
+      {/* Renders once the overlay is gone: the one cheeky surface in the app. */}
       <Dialog
-        open={!!shame}
-        onClose={() => setShame(null)}
+        open={!!early}
+        onClose={() => setEarly(null)}
         role="alertdialog"
         size="sm"
         portal
-        title={t('focus.shameTitle')}
-        description={shame && t('focus.shameBody', shame)}
-        data-testid="focus-shame"
+        title={t('focus.earlyTitle')}
+        description={early && t('focus.earlyBody', early)}
+        data-testid="focus-early"
         footer={
-          <Button variant="primary" size="lg" fullWidth data-autofocus onClick={() => setShame(null)}>
-            {t('focus.shameDismiss')}
+          <Button variant="primary" size="lg" fullWidth data-autofocus onClick={() => setEarly(null)}>
+            {t('focus.earlyDismiss')}
           </Button>
         }
       />

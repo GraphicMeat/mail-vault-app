@@ -26,9 +26,12 @@ if '<!-- premium-catalog:start -->' in s:
 else:
  a=s.rfind('<section',0,s.index('mv-premium-story'))
  b=s.index('</section>',a)+10
-catalog='<section class="mv-section mv-wrap" id="premium-features" aria-labelledby="premium-features-title"><div class="mv-section-heading"><h2 id="premium-features-title">See what Premium<br>does for you.</h2><p>The same 10 features you’ll find in the app’s onboarding. Open a feature to explore it.</p></div>'+''.join(details)+'</section>'
+catalog=f'<section class="mv-section mv-wrap" id="premium-features" aria-labelledby="premium-features-title"><div class="mv-section-heading"><h2 id="premium-features-title">See what Premium<br>does for you.</h2><p>The same {len(features)} features you’ll find in the app’s onboarding. Open a feature to explore it.</p></div>'+''.join(details)+'</section>'
 s=s[:a]+'<!-- premium-catalog:start -->'+catalog+'<!-- premium-catalog:end -->'+s[b:]
-if 'Select one to see how it works.' not in s:s=s.replace('<ul class="mv-premium-links">','<p class="mv-small">Everything in Free, plus these 10 features. Select one to see how it works.</p><ul class="mv-premium-links">',1)
+# Rewritten, not just inserted-if-missing: the count was hardcoded, so adding
+# an eleventh feature left the page still advertising ten.
+s=re.sub(r'<p class="mv-small">Everything in Free, plus these \d+ features\. Select one to see how it works\.</p>','',s)
+s=s.replace('<ul class="mv-premium-links">',f'<p class="mv-small">Everything in Free, plus these {len(features)} features. Select one to see how it works.</p><ul class="mv-premium-links">',1)
 if '/assets/premium-features.js' not in s:s=s.replace('</body>','<script defer src="/assets/premium-features.js"></script>\n</body>')
 p.write_text(s)
 print('Generated',len(features),'Premium features from the app catalog')

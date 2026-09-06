@@ -769,6 +769,22 @@ describe('MailVault marketing screenshots', function () {
       await expectState(hasText(L('export.dialog.mirrorRemoteContent')), 'export dialog not on screen');
     });
 
+    await step('premium-focus-session', async () => {
+      await pressKey('Escape');            // the export dialog from the previous step
+      await closeSettings();
+      await browser.pause(400);
+      await resetToInbox();
+      if (!(await clickTestId('focus-button'))) throw new Error('focus button not found');
+      await $('[data-testid="focus-dialog"]').waitForExist({ timeout: 5000 });
+      // Open with the default (25) then pick 45, so the shot proves the selected chip is the one
+      // just clicked - this is the repro for the "previous preset stays lit" report.
+      if (!(await clickTestId('focus-preset-45'))) throw new Error('45 preset not found');
+      await browser.pause(300);
+      // Nothing closes the dialog here: `step` takes the shot AFTER this
+      // returns, so an Escape would photograph the inbox. The next step opens
+      // with closeSettings(), whose first act is an Escape, and that clears it.
+    });
+
     await step('shortcuts-modal', async () => {
       await closeSettings();
       await browser.pause(700);

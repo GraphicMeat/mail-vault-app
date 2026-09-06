@@ -96,7 +96,7 @@ describe('FocusLock', () => {
     expect(screen.queryByText('Unlock anyway')).toBe(null);
   });
 
-  it('unlocks on the second ask, then says exactly what was broken', () => {
+  it('unlocks on the second ask, then counts the cost without scolding', () => {
     lock();
     render(<FocusLock />);
     fireEvent.click(screen.getByTestId('focus-unlock-early'));
@@ -104,12 +104,13 @@ describe('FocusLock', () => {
 
     expect(useFocusStore.getState().endsAt).toBe(null);
 
-    const shame = screen.getByTestId('focus-shame');
-    expect(shame.textContent).toContain('quietly disappointed');
-    expect(shame.textContent).toContain('25 minutes');
-    expect(shame.textContent).toContain('01:01');
+    const early = screen.getByTestId('focus-early');
+    expect(early.textContent).toContain('Back so soon?');
+    expect(early.textContent).toContain('We believe in you');
+    expect(early.textContent).toContain('25 minutes');
+    expect(early.textContent).toContain('01:01');
 
-    fireEvent.click(screen.getByText("I'll do better"));
-    expect(document.querySelector('[data-testid="focus-shame"]')).toBe(null);
+    fireEvent.click(screen.getByText("I'll finish the next one"));
+    expect(document.querySelector('[data-testid="focus-early"]')).toBe(null);
   });
 });

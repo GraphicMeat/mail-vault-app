@@ -164,7 +164,8 @@ export const remainingMs = (state) =>
 
 /**
  * mm:ss, seconds rounded UP — so a running session never shows 00:00 while it
- * still has time on it. Minutes may exceed 59; a session is never hours long.
+ * still has time on it. Minutes may exceed 59: a custom session runs up to 480
+ * minutes, so the field carries 480:00 rather than rolling over into hours.
  */
 export function formatRemaining(ms) {
   const total = Math.ceil(ms / 1000);

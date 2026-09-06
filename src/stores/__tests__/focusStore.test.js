@@ -47,6 +47,15 @@ describe('start', () => {
     expect(s.endsAt).toBe(T0 + 1_500_000);
     expect(s.durationMin).toBe(25);
   });
+
+  // Nothing here presumes the four preset buttons; the dialog also takes a
+  // typed number, and 7 is not one of them.
+  it('takes any number of minutes, not just a preset', () => {
+    useFocusStore.getState().start(7);
+    const s = useFocusStore.getState();
+    expect(s.endsAt).toBe(T0 + 7 * 60_000);
+    expect(s.durationMin).toBe(7);
+  });
 });
 
 describe('formatRemaining', () => {
