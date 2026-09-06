@@ -1,7 +1,7 @@
 // Render the site's code-defined social card. SHARP_MODULE may point to a bundled
 // sharp installation; otherwise the script uses a locally installed sharp package.
 import { createRequire } from 'node:module';
-import { readFileSync } from 'node:fs';
+import { readFileSync, copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
 const sharp = require(process.env.SHARP_MODULE || 'sharp');
@@ -29,4 +29,8 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" v
 <g transform="translate(0 108) scale(0.833333 0.6)"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="#4f46df" stroke-width="1.5" vector-effect="non-scaling-stroke"/></g>
 </svg>`;
 await sharp(Buffer.from(svg)).png().toFile(resolve(root,'website/assets/og-mailvault-en-v2.png'));
+// Keep historical URLs current for existing links and crawlers that retain them.
+for (const legacyPath of ['website/og-image.png', 'og-image.png']) {
+  copyFileSync(resolve(root, 'website/assets/og-mailvault-en-v2.png'), resolve(root, legacyPath));
+}
 console.log('Generated website/assets/og-mailvault-en-v2.png (1200 × 630)');
