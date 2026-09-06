@@ -101,13 +101,14 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
             {backupGlobalConfig.interval === 'hours' && (
               <div>
                 <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.pickHours')}</label>
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1" data-testid="backup-hours-picker">
                   {Array.from({ length: 24 }, (_, h) => {
                     const picked = (backupGlobalConfig.hours || []).includes(h);
                     return (
                       <button
                         key={h}
                         type="button"
+                        data-hour={h}
                         aria-pressed={picked}
                         onClick={() => {
                           const cur = backupGlobalConfig.hours || [];

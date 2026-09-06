@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Backup and Restore — MailVault FAQ</title>
-  <meta name="description" content="How MailVault archives mail, what archiving then deleting does to the server copy, and how to export and re-import your vault.">
+  <meta name="description" content="How MailVault archives mail, what archiving then deleting does to the server copy, when automatic backups run, and how to export and re-import your vault.">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://mailvaultapp.com/faq/backup-and-restore.html">
   <meta name="theme-color" content="#6366f1">
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://mailvaultapp.com/faq/backup-and-restore.html">
   <meta property="og:title" content="Backup and Restore — MailVault FAQ">
-  <meta property="og:description" content="How MailVault archives mail, what archiving then deleting does to the server copy, and how to export and re-import your vault.">
+  <meta property="og:description" content="How MailVault archives mail, what archiving then deleting does to the server copy, when automatic backups run, and how to export and re-import your vault.">
   <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
@@ -24,7 +24,7 @@
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Backup and Restore — MailVault FAQ">
-  <meta name="twitter:description" content="How MailVault archives mail, what archiving then deleting does to the server copy, and how to export and re-import your vault.">
+  <meta name="twitter:description" content="How MailVault archives mail, what archiving then deleting does to the server copy, when automatic backups run, and how to export and re-import your vault.">
   <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta name="twitter:site" content="@GraphicMeat">
@@ -93,6 +93,14 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "MailVault exports your emails as a ZIP archive containing all .eml files plus a manifest.json that maps emails to accounts by email address, making backups portable across installations. You can export all emails or archived only. Importing is idempotent — duplicates are skipped. If a backup contains emails for an unrecognized account, MailVault creates it automatically."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I choose the hours automatic backups run?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, with Premium. Settings then Backup & Restore then Backup Schedule offers four frequencies: every hour, once a day, once a week, and At set hours. Choose At set hours and a grid of all 24 hours appears; tap the ones you want, say 07, 12 and 22, and MailVault backs up on the hour at each of them and never in between. Every frequency runs only while the app is idle, so a backup never starts under your hands. Set hours are for a vault or backup mirror on an external drive that something else already uses on its own schedule, Time Machine most often: pick the hours that drive is free. A selected hour that comes round while MailVault is busy is skipped rather than caught up later, so the next selected hour is the next attempt."
         }
       }
     ]
@@ -200,7 +208,7 @@
       </nav>
 
       <h1 class="text-4xl font-bold mb-2">Backup and Restore</h1>
-      <p class="text-slate-500 dark:text-slate-400 mb-10">How MailVault archives mail, what archiving then deleting does to the server copy, and how to export and re-import your vault.</p>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">How MailVault archives mail, what archiving then deleting does to the server copy, when automatic backups run, and how to export and re-import your vault.</p>
 
       <div class="space-y-4">
 
@@ -245,6 +253,19 @@
             </p>
             <figure class="px-6 pb-5">
               <img src="/screenshots/settings-backup-1440.webp" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup and restore settings with ZIP export, import, and MBOX export for Thunderbird or Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+            </figure>
+        </article>
+
+        <article id="backup-at-set-hours" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I choose the hours automatic backups run?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Yes, with <a href="/pricing.html" class="text-primary-500 hover:underline">Premium</a>. <strong>Settings &rarr; Backup &amp; Restore &rarr; Backup Schedule</strong> offers four frequencies: every hour, once a day, once a week, and <strong>At set hours</strong>. Choose At set hours and a grid of all 24 hours appears; tap the ones you want, say 07, 12 and 22, and MailVault backs up on the hour at each of them and never in between. Every frequency runs only while the app is idle, so a backup never starts under your hands.
+            </p>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Set hours are meant for a vault or backup mirror on an external drive that something else already uses on its own schedule, Time Machine most often: pick the hours that drive is free. A selected hour that comes round while MailVault is busy is skipped rather than caught up later, so the next selected hour is the next attempt.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/premium-backup-hours-1440.webp" srcset="/screenshots/premium-backup-hours-720.webp 720w, /screenshots/premium-backup-hours-1440.webp 1440w, /screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup schedule set to At set hours, with 07, 12 and 22 picked in the 24-hour grid" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
             </figure>
         </article>
 

@@ -624,6 +624,31 @@ describe('MailVault marketing screenshots', function () {
         'backup frequency picker not on screen');
     });
 
+    await step('premium-backup-hours', async () => {
+      await openSettings();
+      await browser.pause(500);
+      await clickByText(L('settings.tab.backup'));
+      await browser.pause(400);
+      if (!(await clickByText(L('settings.backup.backupSchedule')))) throw new Error('backup schedule sub-tab not found');
+      await browser.pause(400);
+      // "At set hours" is the only frequency that reveals the 24-hour grid, and
+      // WebDriver's own select handling never reaches React's onChange inside
+      // WKWebView — the first run of this step skipped in every locale with the
+      // grid never rendered. Write the config on the store the VITE_E2E build
+      // publishes instead; the grid appearing below IS the proof it took.
+      // A morning/midday/night trio photographs as a schedule somebody chose
+      // rather than as the 03:00 the picker seeds itself with.
+      await browser.execute(() => {
+        window.__SETTINGS_STORE__.getState().setBackupGlobalConfig({ interval: 'hours', hours: [7, 12, 22] });
+      });
+      await $('[data-testid="backup-hours-picker"] [data-hour="22"]').waitForExist({ timeout: 10000 });
+      await browser.pause(400);
+      // The hint under the grid exists only while the grid does, so this fails
+      // loudly if the select never took the change.
+      await expectState(hasText(L('settings.backup.schedule.pickHours')),
+        'hour picker not on screen');
+    });
+
     await step('premium-backup-health', async () => {
       await openSettings();
       await browser.pause(500);
