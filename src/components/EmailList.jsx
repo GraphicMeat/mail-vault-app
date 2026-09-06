@@ -635,6 +635,20 @@ function EmailListComponent() {
     return items;
   }, [senderGroups, emailListGrouping, expandedSender, expandedTopics, expandedEmail, layoutMode]);
 
+  // Which sender / topic holds the open message, so the collapsed tree can
+  // still say where you are. Null outside sender grouping.
+  const selectedSenderLocus = useMemo(() => {
+    if (emailListGrouping !== 'sender' || !senderGroups || selectedEmailId == null) return null;
+    for (const sender of senderGroups) {
+      for (const topic of sender.topics) {
+        if (topic.emails.some(e => selectedEmailId === selKey(e))) {
+          return { senderEmail: sender.senderEmail, topicKey: `${sender.senderEmail}-${topic.topicId}` };
+        }
+      }
+    }
+    return null;
+  }, [senderGroups, emailListGrouping, selectedEmailId]);
+
   const SENDER_ROW_HEIGHT = 56;
   const TOPIC_ROW_HEIGHT = 52;
   const SENDER_EMAIL_ROW_HEIGHT = 44;
@@ -1170,7 +1184,11 @@ function EmailListComponent() {
                           setExpandedTopics(new Set());
                           setExpandedEmail(null);
                         }}
-                        className={`w-full h-full flex items-center gap-3 px-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                        className={`w-full h-full flex items-center gap-3 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                          selectedSenderLocus?.senderEmail === item.sender.senderEmail
+                            ? 'border-l-2 border-l-mail-accent pl-[14px] pr-4'
+                            : 'px-4'
+                        } ${
                           expandedSender === item.sender.senderEmail ? 'bg-mail-surface-hover' : ''
                         } ${focusedRow?.type === 'sender' && focusedRow?.senderEmail === item.sender.senderEmail ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
@@ -1216,8 +1234,16 @@ function EmailListComponent() {
                           });
                           setExpandedEmail(null);
                         }}
-                        className={`w-full h-full flex items-center gap-3 pl-12 pr-4 text-left hover:bg-mail-surface-hover bg-mail-surface-hover/50 ${
-                          expandedTopics.has(item.topicKey) ? 'bg-mail-surface-hover' : ''
+                        className={`w-full h-full flex items-center gap-3 pr-4 text-left border-b border-mail-border ${
+                          selectedSenderLocus?.topicKey === item.topicKey
+                            // The grounds are equal-specificity utilities;
+                            // whichever the stylesheet declares last would win,
+                            // so the marked row simply does not ask for the
+                            // others — the hover one included, or hovering the
+                            // row you are in hides the mark. Same rule as the
+                            // list rows (69313e84).
+                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[46px]'
+                            : `pl-12 hover:bg-mail-surface-hover bg-mail-surface-hover/50 ${expandedTopics.has(item.topicKey) ? 'bg-mail-surface-hover' : ''}`
                         } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === item.topicKey ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1261,10 +1287,13 @@ function EmailListComponent() {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }
                         }}
-                        className={`w-full h-full flex items-center gap-3 pl-16 pr-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                        className={`w-full h-full flex items-center gap-3 pr-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
                           selectedEmailId === selKey(item.email)
-                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent'
-                            : expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : 'bg-mail-surface'
+                            // pl-[62px], not pl-16: the 2px border eats into
+                            // the padding box, so a fixed pl-16 shifted the
+                            // row's content 2px right the moment it was marked.
+                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[62px]'
+                            : `pl-16 ${expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : 'bg-mail-surface'}`
                         } ${focusedRow?.type === 'email' && focusedRow?.emailUid === item.email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
                         <div className="flex-1 min-w-0">

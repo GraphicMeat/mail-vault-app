@@ -1029,4 +1029,55 @@ describe('sender grouping keys topics per thread', () => {
       groupBySender.mockReturnValue([]);
     }
   });
+
+  // Sender grouping collapses the list into a tree, and the open message can be
+  // two levels down inside it. Without a mark on the sender and the topic that
+  // hold it, the tree says nothing about where you are — and the topic rows had
+  // no separator either, so a run of them read as one block of text.
+  it('separates topic rows and marks the sender and topic holding the open message', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { groupBySender } = await import('../../utils/emailParser');
+
+    const emails = [msg(1), msg(2)];
+    groupBySender.mockReturnValue([{
+      senderEmail: 'forms@test.com',
+      senderName: 'Contact form',
+      unreadCount: 0,
+      totalEmails: 2,
+      lastDate: emails[1].date,
+      topics: [topic('t1', [emails[0]]), topic('t2', [emails[1]])],
+    }]);
+    useMailStore.setState({ sortedEmails: emails, totalEmails: 2, getChatEmails: () => emails, selectedEmailId: 2 });
+    useSettingsStore.setState({ emailListGrouping: 'sender' });
+
+    try {
+      const { EmailList } = await import('../EmailList.jsx');
+      const { container } = render(React.createElement(EmailList.type));
+      await settle();
+
+      fireEvent.click(screen.getByTestId('sender-group-row'));
+      await settle();
+
+      const topics = container.querySelectorAll('[data-testid="sender-topic-row"]');
+      expect(topics.length).toBe(2);
+      for (const row of topics) expect(row.className).toMatch(/\bborder-b\b/);
+
+      // Second topic holds uid 2; a single-folder INBOX list keys by bare uid.
+      expect(topics[1].className).toContain('bg-mail-accent-tint');
+      expect(topics[0].className).not.toContain('bg-mail-accent-tint');
+      // Equal-specificity utilities race, so the marked row must not also ask
+      // for the hover surface it would otherwise carry.
+      expect(topics[1].className.split(/\s+/)).not.toContain('bg-mail-surface-hover/50');
+      // Nor the hover ground: hovering the row you are in must not hide the mark.
+      expect(topics[1].className.split(/\s+/)).not.toContain('hover:bg-mail-surface-hover');
+      expect(topics[0].className.split(/\s+/)).toContain('hover:bg-mail-surface-hover');
+
+      expect(screen.getByTestId('sender-group-row').className).toContain('border-l-mail-accent');
+    } finally {
+      useSettingsStore.setState({ emailListGrouping: 'chronological' });
+      useMailStore.setState({ selectedEmailId: null });
+      groupBySender.mockReturnValue([]);
+    }
+  });
 });
