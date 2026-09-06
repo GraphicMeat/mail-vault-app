@@ -43,7 +43,7 @@ import { emailScopeKey, selectionKey, spansMailboxes } from '../stores/slices/un
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, measureEmailIframeHeight } from '../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../utils/mailChrome';
@@ -390,17 +390,7 @@ function EmailViewerComponent({ onComposeReply }) {
     if (!iframeRef.current || !selectedEmail?.html) return;
 
     const iframe = iframeRef.current;
-    let resizeTimers = [];
-
-    const resizeIframe = () => {
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        const height = measureEmailIframeHeight(doc);
-        if (height) iframe.style.height = Math.max(height + 8, 300) + 'px';
-      } catch (e) {
-        console.error('Failed to resize iframe:', e);
-      }
-    };
+    const detachAutoSize = attachEmailIframeAutoSize(iframe, { minHeight: 300 });
 
     // Named handlers so we can remove them in cleanup
     const handleClick = (e) => {
@@ -499,26 +489,13 @@ function EmailViewerComponent({ onComposeReply }) {
       } catch (e) {
         console.error('Failed to intercept iframe links:', e);
       }
-      resizeIframe();
-      resizeTimers.push(setTimeout(resizeIframe, 200));
-      resizeTimers.push(setTimeout(resizeIframe, 1000));
     };
-
-    // Quote/signature toggles inside the iframe post their new height.
-    const handleMessage = (e) => {
-      if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
-        iframeRef.current.style.height = Math.max(e.data.height + 8, 300) + 'px';
-      }
-    };
-    window.addEventListener('message', handleMessage);
 
     iframe.addEventListener('load', onLoad);
-    resizeTimers.push(setTimeout(resizeIframe, 100));
 
     return () => {
       iframe.removeEventListener('load', onLoad);
-      window.removeEventListener('message', handleMessage);
-      resizeTimers.forEach(t => clearTimeout(t));
+      detachAutoSize();
       if (currentDoc) {
         try {
           currentDoc.removeEventListener('click', handleClick);

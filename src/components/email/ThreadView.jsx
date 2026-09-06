@@ -12,7 +12,7 @@ import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent, measureEmailIframeHeight } from '../../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, attachEmailIframeAutoSize } from '../../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
@@ -128,17 +128,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     if (!iframeRef.current || !loadedEmail?.html) return;
 
     const iframe = iframeRef.current;
-    let resizeTimers = [];
-
-    const resizeIframe = () => {
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow?.document;
-        const height = measureEmailIframeHeight(doc);
-        if (height) iframe.style.height = Math.max(height + 8, 100) + 'px';
-      } catch (e) {
-        console.error('Failed to resize thread iframe:', e);
-      }
-    };
+    const detachAutoSize = attachEmailIframeAutoSize(iframe, { minHeight: 100 });
 
     const handleClick = (e) => {
       const link = e.target.closest('a');
@@ -173,25 +163,13 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
         // Dark Reader is inlined into the iframe HTML (see useMemo above);
         // runs during load, so no post-load injection is needed here.
       } catch (e) {}
-      resizeIframe();
-      resizeTimers.push(setTimeout(resizeIframe, 200));
-      resizeTimers.push(setTimeout(resizeIframe, 1000));
     };
-
-    const handleMessage = (e) => {
-      if (e.data?.type === 'iframe-resize' && e.data.height && iframeRef.current) {
-        iframeRef.current.style.height = Math.max(e.data.height + 8, 100) + 'px';
-      }
-    };
-    window.addEventListener('message', handleMessage);
 
     iframe.addEventListener('load', onLoad);
-    resizeTimers.push(setTimeout(resizeIframe, 100));
 
     return () => {
       iframe.removeEventListener('load', onLoad);
-      window.removeEventListener('message', handleMessage);
-      resizeTimers.forEach(t => clearTimeout(t));
+      detachAutoSize();
     };
     // Theme is NOT a dep: DR is inlined into the iframe HTML (see useMemo),
     // so theme toggles don't need to tear down the load listener.

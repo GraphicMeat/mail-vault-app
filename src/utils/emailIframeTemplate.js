@@ -46,21 +46,139 @@ export function stripInlineColorImportant(html) {
     .replace(/style\s*=\s*'([^']*)'/gi, (_m, css) => `style='${dropPriority(css)}'`);
 }
 
-// Content height of an email iframe document, for auto-sizing the frame.
+// Content height of an email iframe document, VALID ONLY WITH THE FRAME
+// COLLAPSED. That precondition is the whole contract — see
+// attachEmailIframeAutoSize, the only caller.
 //
-// Measure the BODY box only. `documentElement.scrollHeight` is never smaller
-// than the frame's own viewport, so feeding it back into the frame height
-// ratchets: every re-measure returns the current height and the caller's
-// padding is added again. Body height stays content-driven (the template gives
-// html/body no height), so re-measuring after a quote fold can shrink the frame.
-export function measureEmailIframeHeight(doc) {
-  const body = doc?.body;
-  if (!body) return 0;
+// At its real height the frame cannot be measured against itself. The root box
+// is never smaller than the frame's own viewport, and a body sized in `%` or
+// `vh` (`html, body { height: 100% }` is standard email boilerplate) is not
+// either: both report the number we last wrote, so every pass adds `pad` again
+// and the frame grows without end.
+//
+// What breaks that loop is measuring at a height we did NOT derive from the
+// content — not reaching zero. The caller writes `1px`, but the frame's own
+// inline `min-height` (300 in the viewer, 100 in a thread) floors it there, so
+// a `%` body reports that same floor on every pass instead of the number we
+// just wrote, and the height settles. Don't "fix" the floor away on the
+// strength of the word collapsed: a real 1px frame would be a much larger
+// shrink for the pane's scroll position to survive, and that is measured
+// behaviour, not theory.
+//
+// Read the ROOT box, not the body box. Half the page inset sits on `html`, and
+// a first child's margin collapses through a mail's own `body{margin:0}` and
+// out of the body box entirely — both are inside the root box and outside the
+// body's, and both left the document taller than the frame it was sized to.
+export function measureCollapsedEmailIframeHeight(doc) {
+  const root = doc?.documentElement;
+  if (!root) return 0;
   return Math.ceil(Math.max(
-    body.scrollHeight || 0,
-    body.offsetHeight || 0,
-    body.getBoundingClientRect?.().height || 0
+    root.getBoundingClientRect?.().height || 0,
+    root.scrollHeight || 0,
+    root.offsetHeight || 0
   ));
+}
+
+// Keep an email frame exactly as tall as its document, for its whole life.
+//
+// The reading pane is the one scroller. A frame that is shorter than its own
+// document scrolls internally — a scrollbar inside the pane's scrollbar. Load
+// events and a couple of timers can't hold that: images finishing decode,
+// remote images, web fonts and Dark Reader all change the height seconds after
+// the last timer would have fired. A ResizeObserver on the body follows all of
+// them, so the timers are gone.
+//
+// Every measure collapses the frame first, so the document is never measured
+// against a height we wrote ourselves — see measureCollapsedEmailIframeHeight.
+//
+// Returns a detach function. `pad` covers sub-pixel rounding in the measure.
+export function attachEmailIframeAutoSize(iframe, { minHeight = 0, pad = 8 } = {}) {
+  if (!iframe) return () => {};
+  let observer = null;
+  let applied = -1;
+  let measuring = false;
+
+  const docOf = () => {
+    try {
+      return iframe.contentDocument || iframe.contentWindow?.document || null;
+    } catch {
+      return null; // frame detached or not same-origin yet
+    }
+  };
+
+  // Collapse, measure, apply — one synchronous block. Reading layout forces
+  // style and layout, not a paint, so nothing renders at the collapsed height
+  // and there is no flicker. Same trick the HTML export uses
+  // (services/export/exportHtml.js). The frame's inline `min-height` floors
+  // the collapse — see measureCollapsedEmailIframeHeight for why that is the
+  // property that matters, and why it is fine.
+  const measure = () => {
+    // The collapse resizes the body we observe. A synchronous delivery would
+    // re-enter here with the frame still collapsed and never come back out.
+    if (measuring) return;
+    const doc = docOf();
+    if (!doc?.documentElement) return;
+    measuring = true;
+    const was = iframe.style.height;
+    // A pane that shrinks clamps its own scrollTop, and the restore does not
+    // bring it back — without this the reader is thrown to the top of the
+    // message every time a late image resizes the frame.
+    const scrolled = [];
+    for (let el = iframe.parentElement; el; el = el.parentElement) {
+      if (el.scrollTop) scrolled.push([el, el.scrollTop]);
+    }
+    try {
+      iframe.style.height = '1px';
+      const height = measureCollapsedEmailIframeHeight(doc);
+      const next = height ? Math.max(height + pad, minHeight) : 0;
+      // Only write on a real change; otherwise put back exactly what we
+      // collapsed from.
+      if (!next || next === applied) {
+        iframe.style.height = was;
+      } else {
+        applied = next;
+        iframe.style.height = next + 'px';
+      }
+    } finally {
+      scrolled.forEach(([el, top]) => { el.scrollTop = top; });
+      measuring = false;
+    }
+  };
+
+  // Re-point the observer at whichever document the frame is showing now.
+  const observe = () => {
+    const body = docOf()?.body;
+    if (!body) return;
+    observer?.disconnect();
+    const Observer = globalThis.ResizeObserver;
+    if (!Observer) return;
+    observer = new Observer(measure);
+    observer.observe(body);
+  };
+
+  const onLoad = () => { applied = -1; observe(); measure(); };
+
+  // The quote/signature fold scripts post from inside the frame when the user
+  // folds something. The height they report is their own body box, taken at
+  // the frame's current height — take the message as a signal and measure it
+  // ourselves. Without the source check, one message's fold resized every
+  // other frame on screen: thread view mounts one per message.
+  const onMessage = (e) => {
+    if (e.source !== iframe.contentWindow) return;
+    if (e.data?.type === 'iframe-resize') measure();
+  };
+
+  iframe.addEventListener('load', onLoad);
+  window.addEventListener('message', onMessage);
+  observe();
+  measure();
+
+  return () => {
+    iframe.removeEventListener('load', onLoad);
+    window.removeEventListener('message', onMessage);
+    observer?.disconnect();
+    observer = null;
+  };
 }
 
 // Build a complete HTML document for an email iframe.

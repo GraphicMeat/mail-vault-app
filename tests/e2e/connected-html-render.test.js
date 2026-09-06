@@ -136,6 +136,16 @@ async function forceDarkReaderPass() {
   });
 }
 
+/**
+ * How far above `body.scrollHeight` the frame may legitimately sit.
+ *
+ * The sizer measures the ROOT box with the frame collapsed, so it covers the
+ * 16px of `html` padding at each end that the body box does not, plus its own
+ * 8px pad — and it rounds a fractional root box up, or a frame a quarter-pixel
+ * short of its content grows a scrollbar over it.
+ */
+const FRAME_SLACK = 16 + 16 + 8 + 1;
+
 describe('HTML email rendering', function () {
   this.timeout(90_000);
 
@@ -263,7 +273,7 @@ describe('HTML email rendering', function () {
     const frame = await readFrame();
     // 300 is the viewer's minimum height; above that the frame must track the
     // content. The pre-fix ratchet added 32px per measurement pass.
-    expect(frame.frameHeight).toBeLessThanOrEqual(Math.max(frame.contentHeight + 40, 300));
+    expect(frame.frameHeight).toBeLessThanOrEqual(Math.max(frame.contentHeight + FRAME_SLACK, 300));
   });
 
   it('resizes when the quote is expanded and collapsed', async function () {
@@ -274,7 +284,7 @@ describe('HTML email rendering', function () {
     expect(expanded.quotesHidden).toBe(false);
     // The fixture's quote is 24 paragraphs — far more than any measuring slack.
     expect(expanded.frameHeight).toBeGreaterThan(before.frameHeight + 200);
-    expect(expanded.frameHeight).toBeLessThanOrEqual(expanded.contentHeight + 40);
+    expect(expanded.frameHeight).toBeLessThanOrEqual(expanded.contentHeight + FRAME_SLACK);
 
     expect(await clickQuoteToggle()).toBe(true);
     const collapsed = await readFrame();
