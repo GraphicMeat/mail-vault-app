@@ -164,7 +164,21 @@ describe('Thread modes from the list header', function () {
 
     expected = (await conversationUids(false)).length;
     expect(expected).toBeGreaterThanOrEqual(2);
-    // The Sent replies are merged in, so the unfolded set is larger than the folder's own.
+    // The Sent replies are merged in, so the unfolded set is larger than the
+    // folder's own — once they have landed. `before` only waited for the INBOX
+    // rows; loadSentHeaders waits for the real folder list before it fetches
+    // Sent, so at this point the store can still hold the INBOX placeholder,
+    // no Sent path and zero Sent headers (seen 4 runs out of 6 on the mini).
+    // Assert after the merge, not before it.
+    await browser.waitUntil(
+      async () => (await conversationUids(true)).length > expected,
+      {
+        timeout: 30_000,
+        interval: 500,
+        timeoutMsg: `the Sent replies never merged into the conversation `
+          + `(INBOX ${expected}, merged ${(await conversationUids(true)).length})`,
+      },
+    );
     const whole = await conversationUids(true);
     expect(whole.length).toBeGreaterThan(expected);
 
