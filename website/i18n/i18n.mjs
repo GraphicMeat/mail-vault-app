@@ -572,25 +572,20 @@ function alternatesBlock(rel) {
   return `  <!-- i18n:alternates -->\n${lines.join('\n')}\n  <!-- /i18n:alternates -->\n`;
 }
 
-function switcherBlock(rel) {
+// Every flag in the header picker must land on THIS page's translation, not on
+// the locale's home. The picker is hand-written into each page's shell, so it
+// drifts the way the menu used to: `get-started.html` shipped all nine links
+// pointing at the locale roots because it was copied from `index.html`, where
+// `/de/` happens to be correct. The generator owns the hrefs instead, keyed off
+// each link's own hreflang.
+function localizePicker(html, rel) {
   const p = urlPathOf(rel);
-  // The English source is itself a rendered page, so it carries the current-page
-  // marker; render() moves it to whichever locale it is emitting.
-  const row = (href, l, current) =>
-    `        <li><a data-i18n-abs translate="no" data-lang="${l.hreflang}" lang="${l.hreflang}" `
-    + `hreflang="${l.hreflang}" href="${href}"${current ? ' aria-current="page"' : ''}>`
-    + `<span aria-hidden="true">${l.flag}</span> ${l.name}</a></li>`;
-  return [
-      '      <!-- i18n:switcher -->',
-      '      <div class="mv-lang" role="navigation" aria-label="Choose a language">',
-      '        <ul>',
-      row(p, EN, true),
-      ...LOCALES.map((loc) => row(localizePath(p, loc), loc)),
-      '        </ul>',
-      '      </div>',
-      '      <!-- /i18n:switcher -->',
-      '',
-  ].join('\n');
+  const paths = new Map([[EN.hreflang, p], ...LOCALES.map((l) => [l.hreflang, localizePath(p, l)])]);
+  return html.replace(/<details class="mv-language"[\s\S]*?<\/details>/g, (picker) =>
+    picker.replace(/<a\b[^>]*>/g, (a) => {
+      const to = paths.get(a.match(/hreflang="([^"]+)"/)?.[1]);
+      return to ? a.replace(/href="[^"]*"/, `href="${to}"`) : a;
+    }));
 }
 
 function spliceMarked(html, name, block, anchor) {
@@ -614,26 +609,19 @@ export function inject() {
   // The menu first: it owns the banner interior, and it covers pages the
   // localizer skips (changelog/privacy/terms have menus but stay English).
   injectNav();
-  let touched = 0, missing = [], noFooter = [];
+  let touched = 0, missing = [], noPicker = [];
   for (const rel of sourcePages()) {
     const file = path.join(ROOT, rel);
     const src = fs.readFileSync(file, 'utf8');
     let out = ensureOgLocale(src);
     const withAlt = spliceMarked(out, 'alternates', alternatesBlock(rel), '</head>');
     if (!withAlt) { missing.push(`${rel}: no </head>`); continue; }
-    out = withAlt;
-    // The flag row lives inside the fixed banner nav, as a second row under the
-    // links — the same position graphicmeat.com puts it in. Any previously
-    // injected block (this used to sit in the footer) is stripped first, so the
-    // switcher moves rather than being duplicated.
-    out = out.replace(/[ \t]*<!-- i18n:switcher -->[\s\S]*?<!-- \/i18n:switcher -->\n?/, '');
-    const navEnd = out.indexOf('\n  </nav>');
-    if (navEnd === -1) { noFooter.push(rel); }
-    else out = out.slice(0, navEnd + 1) + switcherBlock(rel) + out.slice(navEnd + 1);
+    out = localizePicker(withAlt, rel);
+    if (!/<details class="mv-language"/.test(out)) noPicker.push(rel);
     if (out !== src) { fs.writeFileSync(file, out); touched++; }
   }
   console.log(`inject: ${touched} English page(s) updated`
-    + (noFooter.length ? ` (no switcher, footerless: ${noFooter.join(', ')})` : ''));
+    + (noPicker.length ? ` (no language picker: ${noPicker.join(', ')})` : ''));
   if (missing.length) { console.error('inject: SKIPPED\n  ' + missing.join('\n  ')); process.exitCode = 1; }
 }
 

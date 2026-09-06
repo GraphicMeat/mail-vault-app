@@ -13,7 +13,7 @@ node i18n/i18n.mjs check [locale]   # validate locale files before building
 | step | what it does |
 |---|---|
 | `extract` | scans the English pages, updates `i18n/corpus.json` |
-| `inject`  | writes the hreflang block and footer language switcher into the English sources, in place, between markers |
+| `inject`  | writes the hreflang block into the English sources between markers, and points every header language link at that page's own translation |
 | `build`   | emits `website/<lang>/**` and regenerates `sitemap.xml` |
 | `chunk N` | prints one corpus chunk, for a translator to work from |
 | `check`   | fails if a locale is incomplete or lost a placeholder or a tag |
