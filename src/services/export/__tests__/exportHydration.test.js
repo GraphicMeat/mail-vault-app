@@ -75,3 +75,18 @@ describe('the hydrated body does not overwrite the header', () => {
     expect(out.files[0].name).toContain('2026-08-12');
   });
 });
+
+// A contact form, and most replies, have no HTML part at all. The export read
+// `html` alone, so such a message hydrated fine and still came out as a header
+// card over an empty frame.
+describe('a message that only ever had text', () => {
+  it('exports the text, escaped, instead of an empty body', async () => {
+    resolveMessageBody.mockResolvedValue({ ok: true, email: { text: 'Name: Jesse\nMessage: <3 the app & the form' } });
+    const out = await buildExport({ ...base, format: 'html', messages: [header(1)] });
+    expect(out.ok).toBe(true);
+    const doc = new TextDecoder().decode(Uint8Array.from(atob(out.files[0].base64), c => c.charCodeAt(0)));
+    expect(doc).toContain('Name: Jesse');
+    expect(doc).toContain('&amp;lt;3 the app &amp;amp; the form');
+    expect(doc).toContain('&lt;pre');
+  });
+});

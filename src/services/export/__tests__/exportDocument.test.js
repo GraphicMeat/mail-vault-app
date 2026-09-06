@@ -122,9 +122,12 @@ describe('buildMessageDocument', () => {
     expect(html).toContain('<p>hi</p>');
   });
 
+  // The rasterizer has no reader to follow: an image is one set of pixels. The
+  // HTML export follows the reader's scheme; this document never does.
   it('forces a light background regardless of app theme', () => {
     const html = buildMessageDocument({ message, bodyHtml: '<p>hi</p>' });
     expect(html).toContain('color-scheme: light');
     expect(html).toContain('#ffffff');
+    expect(html).not.toContain('prefers-color-scheme');
   });
 });

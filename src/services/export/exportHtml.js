@@ -81,6 +81,39 @@ const THREAD_CSS = `
     details { margin-left: 12px; margin-right: 12px; }
     .mv-thread-head { padding: 20px 12px 14px; }
   }
+
+  /* The document follows the reader's own scheme. EXPORT_CSS pins light for
+     the rasterizer, which has no reader; this file has one. The chrome is
+     recoloured, and each message frame is inverted whole with its hue put
+     back — the reading pane's dark mode is Dark Reader doing the same to the
+     same light baseline. The frame's own images invert once more inside it
+     (FRAME_DARK_CSS) and so come back as themselves. */
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #141518; color: #e6e7ea; }
+    .mv-rail, .mv-prov, details, details > iframe { border-color: #2a2c31; }
+    details, .mv-rail-actions button { background: #1e2024; }
+    .mv-rail-actions button { color: #e6e7ea; border-color: #2a2c31; }
+    .mv-rail-actions button:hover, .mv-toc a:hover { background: #26282d; }
+    .mv-rail-title, .mv-toc .mv-n, .mv-att-title, .mv-mark, summary::before { color: #7c8290; }
+    .mv-when, .mv-alt, .mv-thread-sub, .mv-prov { color: #9aa1ab; }
+    .mv-att a { color: #8ab4f8; }
+    details > iframe { filter: invert(1) hue-rotate(180deg); }
+  }
+`;
+
+// Inside a frame the outer document inverts. Pictures inverted twice are
+// pictures; the media query here and the one above answer to the same OS
+// setting, so the two always agree.
+const FRAME_DARK_CSS = `
+  @media (prefers-color-scheme: dark) {
+    /* The pre-image of the card's #1e2024 under invert + hue-rotate(180deg),
+       so the message sits on its card instead of on a black slab inside it.
+       Not a neutral grey: the spec's hue-rotate matrix is only an
+       approximation, and an off-neutral input comes out with a warm cast. */
+    html, body { background: #dddfe3; }
+    img, video, picture, svg { filter: invert(1) hue-rotate(180deg); }
+  }
 `;
 
 // Sizing has to survive a reflow: the baked height was measured at one column
@@ -147,7 +180,7 @@ function attachmentsHtml(attachments) {
 }
 
 function messageBlock(message, bodyHtml, height, threadSubject, openByDefault, id, attachments) {
-  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${EXPORT_CSS}</style></head>`
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${EXPORT_CSS}${FRAME_DARK_CSS}</style></head>`
     + `<body>${headerCardHtml(message)}<main class="mv-body">${sanitizeForExport(bodyHtml)}</main></body></html>`;
   const ownSubject = rootSubject(message.subject);
   const differs = ownSubject && ownSubject.toLowerCase() !== rootSubject(threadSubject).toLowerCase();

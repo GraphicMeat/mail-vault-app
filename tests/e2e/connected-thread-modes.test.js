@@ -9,15 +9,15 @@
  *
  * Fixture: FRAGMENTED_SUBJECT. Its conversation is five messages, THREE of them
  * in INBOX (frag-0, frag-2, frag-4 from the partner) and two in Sent (our
- * replies). Expandable mode unfolds a thread's own-folder members only — Sent
- * copies merged in for context are never members (threadRowMembers) — so the
- * fixture must have >= 2 messages in INBOX itself. CROSS_FOLDER_SUBJECT is
- * 1 INBOX + 1 Sent and would unfold to a single member; SENT_THREAD_SUBJECT
- * isn't in INBOX at all.
+ * replies). Expandable mode unfolds the whole conversation, the Sent replies
+ * the INBOX list merges in included — the thread row's checkbox and menu still
+ * act on the INBOX members only (threadRowMembers). Flat mode draws the folder
+ * itself, so there the Sent copies are absent. SENT_THREAD_SUBJECT isn't in
+ * INBOX at all.
  *
- * The expected member count is read from the store rather than hardcoded:
- * `sortedEmails` is the INBOX list without the Sent merge, which is exactly the
- * set expandable mode unfolds and flat mode draws as separate rows.
+ * Both counts are read from the store rather than hardcoded: `getChatEmails()`
+ * is the merged list expandable mode unfolds, `sortedEmails` the INBOX list
+ * flat mode draws as separate rows.
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
@@ -97,23 +97,24 @@ const selectedThread = () => browser.execute(() =>
   window.__MAIL_STORE__?.getState?.().selectedThread ?? null);
 
 /**
- * How many of the conversation's messages live in the folder on screen.
- *
- * `sortedEmails` is the INBOX list before the Sent copies are merged in for
- * threading, so a subject-family count over it is the member count expandable
- * mode should unfold — and the row count flat mode should draw.
+ * The conversation's uids as the store holds them, sorted. `merged` is
+ * `getChatEmails()` — INBOX with the Sent copies merged in for threading, the
+ * set expandable mode unfolds. `sortedEmails` is the INBOX list alone, the
+ * rows flat mode draws. Uids, not a count: a Sent copy can share its uid with
+ * an INBOX message, so the unfolded rows are matched as a multiset.
  */
-const expectedMembers = () => browser.execute((subj) => {
+const conversationUids = (merged) => browser.execute((subj, fromChat) => {
   const norm = (s) => (s || '').replace(/^(\s*(re|fwd|fw)\s*:\s*)+/i, '').trim().toLowerCase();
   const want = norm(subj);
-  return (window.__MAIL_STORE__?.getState?.().sortedEmails || [])
-    .filter(e => norm(e.subject) === want).length;
-}, FRAGMENTED_SUBJECT);
+  const state = window.__MAIL_STORE__?.getState?.();
+  const list = (fromChat ? state?.getChatEmails?.() : state?.sortedEmails) || [];
+  return list.filter(e => norm(e.subject) === want).map(e => String(e.uid)).sort();
+}, FRAGMENTED_SUBJECT, merged);
 
 describe('Thread modes from the list header', function () {
   this.timeout(240_000);
 
-  /** INBOX members of the fixture conversation — read once the list is warm. */
+  /** INBOX rows of the fixture conversation — read once the list is warm. */
   let expected = 0;
 
   before(async function () {
@@ -149,7 +150,7 @@ describe('Thread modes from the list header', function () {
     expect(await anyDisclosure()).toBe(0);
   });
 
-  it('expandable: the chevron unfolds the INBOX members without opening the thread', async function () {
+  it('expandable: the chevron unfolds the whole conversation without opening the thread', async function () {
     await clickToggle();
     await browser.waitUntil(
       async () => (await headerMode()) === 'expandable' && (await disclosure()) === 'false',
@@ -161,16 +162,19 @@ describe('Thread modes from the list header', function () {
       },
     );
 
-    expected = await expectedMembers();
+    expected = (await conversationUids(false)).length;
     expect(expected).toBeGreaterThanOrEqual(2);
+    // The Sent replies are merged in, so the unfolded set is larger than the folder's own.
+    const whole = await conversationUids(true);
+    expect(whole.length).toBeGreaterThan(expected);
 
     await clickDisclosure();
     await browser.waitUntil(
-      async () => (await memberRows()).length === expected,
+      async () => (await memberRows()).length === whole.length,
       {
         timeout: 30_000,
         interval: 500,
-        timeoutMsg: `expected ${expected} member rows, got ${JSON.stringify(await memberRows())}; `
+        timeoutMsg: `expected ${whole.length} member rows, got ${JSON.stringify(await memberRows())}; `
           + `list: ${JSON.stringify(await visibleRows())}`,
       },
     );
@@ -179,7 +183,7 @@ describe('Thread modes from the list header', function () {
     // Every unfolded row belongs to this conversation, and is a real message.
     expect(members.every(m => m.matches)).toBe(true);
     expect(members.every(m => m.uid)).toBe(true);
-    expect(new Set(members.map(m => m.uid)).size).toBe(expected);
+    expect(members.map(m => m.uid).sort()).toEqual(whole);
     expect(await disclosure()).toBe('true');
     // Unfolding is not opening: the viewer stays where it was.
     expect(await selectedThread()).toBe(null);

@@ -112,6 +112,15 @@ export function addressesToHtml(text) {
     .join('');
 }
 
+/**
+ * A text/plain body as the fragment a frame renders. FullViewEmailModal and the
+ * export share it: the export used to read `html` alone, so a message that
+ * only ever had text (a contact form, most replies) came out as an empty card.
+ */
+export function plainTextBodyHtml(text) {
+  return `<pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">${addressesToHtml(text || '')}</pre>`;
+}
+
 // ── mailto: handed over by the OS ───────────────────────────────────────────
 
 /**

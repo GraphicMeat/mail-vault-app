@@ -644,6 +644,20 @@ describe('export from a row', () => {
     expect(openExport).toHaveBeenCalledWith({ messages: emails });
     expect(onClose).toHaveBeenCalled();
   });
+
+  // A thread row in INBOX acts on its own folder's messages, but the
+  // conversation it stands for also holds the replies you wrote, merged in
+  // from Sent. Exporting the conversation is exporting all of it — the row
+  // hands over the whole thread, not the part its checkbox would tick.
+  it('exports the whole conversation when the row stands for part of it', () => {
+    const own = [baseEmail({ uid: 1 })];
+    const whole = [own[0], baseEmail({ uid: 1, _fromSentFolder: true, _mailbox: 'Sent' })];
+    render(<RowActionMenuItems emails={own} exportEmails={whole} actions={makeActions()} onRequestDelete={vi.fn()} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('Export…'));
+
+    expect(openExport).toHaveBeenCalledWith({ messages: whole });
+  });
 });
 
 // The star, gated the way every other item in this menu is: derived over the

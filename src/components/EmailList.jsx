@@ -5,7 +5,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey } from '../stores/slices/unifiedHelpers';
+import { selectionKey, emailKey as messageKey } from '../stores/slices/unifiedHelpers';
 import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
@@ -530,7 +530,12 @@ function EmailListComponent() {
   // Freshening: when only flags/archived state change, reuse existing rows and update email refs.
   const displayRowCache = useRef({ deferredThreads: null, rows: [], displayEmails: null });
 
-  const emailKey = useCallback((e) => `${e._accountId || ''}:${e.uid}`, []);
+  // Account, folder AND uid. `freshen` below swaps a thread's rows for the
+  // list's current copies by this key, and an INBOX thread holds the Sent
+  // copies merged in for context — keyed by uid alone, a reply of yours whose
+  // Sent uid matched an INBOX uid in the same thread was replaced by that
+  // INBOX message, and drawn as it.
+  const emailKey = messageKey;
 
   const threadedDisplay = useMemo(() => {
     const isFlat = searchActive || !deferredThreads || deferredThreads.size === 0;
@@ -582,11 +587,12 @@ function EmailListComponent() {
         thread.lastEmail = freshen(thread.lastEmail) || thread.emails[thread.emails.length - 1];
         rows.push({ type: 'thread', thread });
         if (unfold && expandedThreads.has(thread.threadId)) {
-          // Only the folder's own messages — never the Sent copies an INBOX
-          // list merges in for context; opening one of those would open the
-          // wrong folder. Same rule as the row's checkbox (threadRowMembers).
-          const members = threadRowMembers(thread.emails);
-          const ordered = threadSortOrder === 'newest-first' ? [...members].reverse() : members;
+          // The whole conversation, the Sent copies an INBOX list merges in
+          // included: a reply you wrote is part of what you unfold. Each row
+          // carries its own folder (`_mailbox`), so opening one opens the
+          // right message and ticking one keys by folder (selectionKey). The
+          // thread row's own checkbox and menu still act on threadRowMembers.
+          const ordered = threadSortOrder === 'newest-first' ? [...thread.emails].reverse() : thread.emails;
           for (const email of ordered) rows.push({ type: 'thread-member', email, threadId: thread.threadId });
         }
       }
@@ -651,7 +657,8 @@ function EmailListComponent() {
     const item = threadedDisplay[index];
     if (!item) return index;
     if (item.type === 'thread') return `th-${item.thread.threadId}`;
-    if (item.type === 'thread-member') return `tm-${item.threadId}-${item.email._accountId || ''}:${item.email.uid}`;
+    // A Sent copy can share its uid with a message of this folder in the same thread.
+    if (item.type === 'thread-member') return `tm-${item.threadId}-${emailKey(item.email)}`;
     return `em-${item.email._accountId || ''}:${item.email.uid}`;
   }, [threadedDisplay]);
 

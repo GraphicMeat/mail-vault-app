@@ -15,7 +15,7 @@ import { checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers } from '../../utils/trackerDetect';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
-import { openMailtoCompose, addressesToHtml } from '../../utils/mailto';
+import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { t as tr, useT  } from '../../i18n/index.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
@@ -80,12 +80,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
   // Build full HTML content for iframe
   const iframeContent = useMemo(() => {
-    const htmlBody = email.html || `<pre style="white-space: pre-wrap; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 0;">${
-      // Escapes (including `&`, which the hand-rolled pair here used to let
-      // through) and turns any address into a mailto: the frame's click
-      // handler already knows what to do with.
-      addressesToHtml(email.text || email.textBody || '(No content)')
-    }</pre>`;
+    // Escapes (including `&`, which the hand-rolled pair here used to let
+    // through) and turns any address into a mailto: the frame's click
+    // handler already knows what to do with.
+    const htmlBody = email.html || plainTextBodyHtml(email.text || email.textBody || '(No content)');
 
     // Full-view is a fourth renderer of the same body; blocking holds here too.
     const cidResolved = replaceCidUrls(htmlBody, email.attachments);

@@ -199,3 +199,24 @@ describe('attachments in the thread document', () => {
     expect(build({ attachments: atts })).toContain('Attachments');
   });
 });
+
+// The file opens in a browser that has a colour scheme of its own. The chrome
+// follows it; each message frame is inverted whole and its pictures inverted
+// back, so an email written black-on-white reads white-on-black with its
+// images intact. The rasterizer's document (buildMessageDocument) stays light —
+// that one is pinned in exportDocument.test.js.
+describe('the reader\'s colour scheme', () => {
+  it('lets the document follow it', () => {
+    const html = build();
+    expect(html).toContain('color-scheme: light dark');
+    expect(html).toContain('@media (prefers-color-scheme: dark)');
+  });
+
+  it('inverts every message frame in the dark, and its pictures back', () => {
+    const html = build();
+    expect(html).toMatch(/details > iframe \{ filter: invert\(1\) hue-rotate\(180deg\); \}/);
+    // Inside the srcdoc, so escaped — and once per frame.
+    const inner = html.match(/img, video, picture, svg \{ filter: invert\(1\) hue-rotate\(180deg\); \}/g) || [];
+    expect(inner).toHaveLength(messages.length);
+  });
+});

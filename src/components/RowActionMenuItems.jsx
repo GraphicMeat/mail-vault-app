@@ -27,7 +27,10 @@ import { t, useT  } from '../i18n/index.js';
  * (Reply to the newest member, a new message to its sender), so it acts on
  * `newest`, not on the whole set.
  */
-export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }) {
+// `exportEmails` is the whole conversation where `emails` is only the part of
+// it in this folder: a thread row acts on its own folder's messages, but an
+// export of the conversation is the conversation, replies from Sent included.
+export function RowActionMenuItems({ emails, exportEmails = emails, actions, onRequestDelete, onClose }) {
   const t = useT();
   const { saveEmailsLocally, removeLocalEmail, deleteEmailFromServer } = actions;
   const setSelection = useMailStore(s => s.setSelection);
@@ -191,7 +194,7 @@ export function RowActionMenuItems({ emails, actions, onRequestDelete, onClose }
 
       <MenuItem onClick={(e) => {
         e.stopPropagation();
-        useExportStore.getState().openExport({ messages: emails });
+        useExportStore.getState().openExport({ messages: exportEmails });
         onClose();
       }}>
         <ImageDown size={14} />

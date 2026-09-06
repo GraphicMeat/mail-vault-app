@@ -11,6 +11,7 @@ import { useMailStore } from '../../stores/mailStore';
 import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
+import { plainTextBodyHtml } from '../../utils/mailto';
 
 // Samples run the real pipeline over fixture data, so they must reach it
 // without a subscription. Everything else meets the gate below.
@@ -75,7 +76,10 @@ const utf8ToBase64 = (text) => {
 // The body a message contributes to an export: CID images resolved, executable
 // content stripped, remote content mirrored when the user asked for it.
 async function prepareBody(message, mirror, fetchAsset, totals) {
-  const raw = getEmailBodyContent(replaceCidUrls(message.html || '', message.attachments));
+  // The same fallback the reader makes: a message with no HTML part still has
+  // its text, and reading `html` alone exported it as an empty card.
+  const source = message.html || plainTextBodyHtml(message.text || message.textBody);
+  const raw = getEmailBodyContent(replaceCidUrls(source, message.attachments));
   const safe = sanitizeForExport(raw);
   if (!mirror) return safe;
   const { html, stats } = await mirrorRemoteAssets(safe, { fetchAsset, caps: DEFAULT_CAPS });

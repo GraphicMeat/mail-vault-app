@@ -789,13 +789,13 @@ describe('thread modes', () => {
   const conversation = [reply(1, 'Re: Plan'), reply(2, 'Re: Plan'), reply(3, 'Re: Plan')];
   const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
 
-  const mount = async (threadMode) => {
+  const mount = async (threadMode, chat = conversation) => {
     const { useMailStore } = await import('../../stores/mailStore');
     const { useSettingsStore } = await import('../../stores/settingsStore');
     // Threading in INBOX runs off getChatEmails (INBOX + Sent merged), not
     // sortedEmails — the default `() => []` mock would hand buildThreads an
     // empty list and every mode would render flat for the wrong reason.
-    useMailStore.setState({ sortedEmails: conversation, totalEmails: 3, getChatEmails: () => conversation });
+    useMailStore.setState({ sortedEmails: conversation, totalEmails: 3, getChatEmails: () => chat });
     useSettingsStore.setState({ threadMode });
     const { EmailList } = await import('../EmailList.jsx');
     const utils = render(React.createElement(EmailList.type));
@@ -870,6 +870,29 @@ describe('thread modes', () => {
     await settle();
     expect(lastVirtualizerConfig.count).toBe(1);
     expect(container.querySelector('[data-testid="thread-member-row"]')).toBeNull();
+  });
+
+  // A reply you wrote lives in Sent; the INBOX list merges it into the thread
+  // for context (getChatEmails). It unfolds with the rest, and its row keys by
+  // folder — a Sent uid that collides with an INBOX uid is still its own row.
+  it('expandable: your own replies from Sent unfold with the rest', async () => {
+    const mine = {
+      ...reply(2, 'Re: Plan'), from: [{ address: 'me@test.com', name: 'Me' }],
+      date: new Date(2024, 0, 1, 0, 0, 2, 500).toISOString(), _fromSentFolder: true, _mailbox: 'Sent',
+    };
+    const { container } = await mount('expandable', [conversation[0], conversation[1], mine, conversation[2]]);
+    fireEvent.click(screen.getByTestId('thread-expand'));
+    await settle();
+    expect(lastVirtualizerConfig.count).toBe(5);
+    const rows = [...container.querySelectorAll('[data-testid="thread-member-row"] [data-testid="email-row"]')];
+    expect(rows.map(n => n.getAttribute('data-uid'))).toEqual(['1', '2', '2', '3']);
+    // The Sent copy is drawn as itself — not as INBOX's message 2, which it
+    // shares a uid with and which `freshen` used to hand back in its place.
+    expect(rows.map(n => n.querySelector('[dir="auto"]').textContent)).toEqual(['P1', 'P2', 'Me', 'P3']);
+    // And opening it opens it in its own folder.
+    const { useMailStore } = await import('../../stores/mailStore');
+    fireEvent.click(rows[2]);
+    expect(useMailStore.getState().selectEmail).toHaveBeenLastCalledWith(2, 'server', 'Sent');
   });
 
   it('expandable: members follow threadSortOrder', async () => {
