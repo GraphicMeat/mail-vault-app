@@ -99,6 +99,17 @@ vi.mock('../../../stores/settingsStore', () => ({
     }),
   },
 }));
+// `reloadListInView` reaches for the whole-account refresh when the view is
+// UNIFIED, and nothing here awaits it: it walks every account, dies on a
+// settings store this file only stubs the parts it needs of, and vitest fails
+// the RUN on the unhandled rejection while every test still passes. The
+// refresh is not what these cases are about; the module has these two exports
+// and no more.
+vi.mock('../refreshAccounts', () => ({
+  refreshCurrentView: vi.fn().mockResolvedValue(undefined),
+  refreshAllAccounts: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));
