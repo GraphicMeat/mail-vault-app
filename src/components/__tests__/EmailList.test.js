@@ -124,6 +124,7 @@ vi.mock('../../stores/mailStore', () => {
     loadMoreEmails: vi.fn(),
     selectEmail: vi.fn(),
     selectThread: vi.fn(),
+    syncSelectedThread: vi.fn(),
     toggleEmailSelection: vi.fn(),
     selectAllEmails: vi.fn(),
     clearSelection: vi.fn(),
@@ -702,6 +703,67 @@ describe('thread cache follows the list it was built from', () => {
     await settle();
 
     expect(lastVirtualizerConfig.count).toBe(3);
+  });
+});
+
+// The reading pane's open thread is a snapshot of one entry in the map built
+// below. This list is the only place the whole pool is threaded, so it is the
+// only place that snapshot can be re-read — without this call a reply you just
+// sent lands in the list row and never in the thread you sent it from.
+describe('the open thread is re-read from the map the list builds', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  const message = (uid, date) => ({
+    uid,
+    subject: 'Quote request',
+    from: [{ address: 'them@test.com', name: 'Them' }],
+    to: [{ address: 'me@test.com' }],
+    date,
+    flags: ['\\Seen'],
+    source: 'server',
+    isArchived: false,
+  });
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      sortedEmails: mockEmails, totalEmails: 500, selectedThread: null,
+      getChatEmails: vi.fn(() => []),
+    });
+  });
+
+  it('hands the fresh threads to syncSelectedThread once a reply joins the pool', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const opened = message(1, '2026-09-07T09:00:00Z');
+    useMailStore.setState({
+      sortedEmails: [opened],
+      totalEmails: 1,
+      // An INBOX list threads over INBOX + Sent, which is where the reply lands.
+      getChatEmails: () => useMailStore.getState().sortedEmails,
+      // What clicking the row left behind: one message, threaded alone.
+      selectedThread: { threadId: '1', subject: 'Quote request', emails: [opened], lastEmail: opened, messageCount: 1 },
+    });
+    const sync = useMailStore.getState().syncSelectedThread;
+    sync.mockClear();
+
+    const { EmailList } = await import('../EmailList.jsx');
+    const { rerender } = render(React.createElement(EmailList.type));
+    await settle();
+
+    // The reply lands in the pool the way the compose window's staged copy does.
+    const reply = message(2, '2026-09-07T09:05:00Z');
+    useMailStore.setState({ sortedEmails: [opened, reply], totalEmails: 2 });
+    rerender(React.createElement(EmailList.type));
+    await settle();
+
+    expect(sync).toHaveBeenCalled();
+    // (this file's buildThreads stub keys its map by subject, so read the entry
+    // out rather than by threadId — what matters is that the map it hands over
+    // is the one built from the pool the reply is now in.)
+    const threads = sync.mock.calls[sync.mock.calls.length - 1][0];
+    const thread = [...threads.values()].find(t => t.threadId === '1');
+    expect(thread.emails.map(e => e.uid)).toEqual([1, 2]);
   });
 });
 

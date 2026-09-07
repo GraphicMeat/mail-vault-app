@@ -682,19 +682,23 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
         // Optimistic in-memory entry — mirrors the just-archived local copy
         // so the Sent list view updates instantly.
+        //
+        // Built FROM `indexBase`, not beside it. Written out by hand it lost
+        // the two fields threading runs on (`in_reply_to`, `references`), so
+        // the copy the UI showed the instant you hit Send was an orphan
+        // "Re: …": a second row in the list, and nothing the open thread would
+        // take. It only healed when the server APPEND landed and replaced it —
+        // seconds later at best, never when the APPEND was refused.
         const optimistic = {
-          uid: pseudoUid,
-          subject: formData.subject,
-          from: { address: fromAddress, name: displayName },
-          to: parseAddresses(formData.to),
+          ...indexBase,
           cc: parseAddresses(formData.cc),
           bcc: parseAddresses(formData.bcc),
-          date: new Date().toISOString(),
-          internal_date: new Date().toISOString(),
-          internalDate: new Date().toISOString(),
-          messageId: builtMime?.messageId || null,
-          hasAttachments: attachments.length > 0,
-          has_attachments: attachments.length > 0,
+          internal_date: indexBase.date,
+          internalDate: indexBase.date,
+          messageId: indexBase.message_id,
+          // Same headers, under the names buildThreads and the reader read.
+          inReplyTo: indexBase.in_reply_to,
+          hasAttachments: indexBase.has_attachments,
           read: true,
           flags: ['\\Seen', '\\Draft'],
           _accountId: freshAccount.id,

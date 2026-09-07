@@ -251,6 +251,44 @@ export function pruneSelectedThread(state, isRemoved) {
   };
 }
 
+/** A thread member's identity for comparison. A thread merges INBOX with Sent
+ *  and the two share uids, so the folder is part of it. */
+const memberKey = (e) => `${e._accountId || ''}\0${e._mailbox || ''}\0${e.uid}`;
+const memberKeys = (emails) => (emails || []).map(memberKey).join(',');
+
+/**
+ * The open thread, re-read from the thread map the list has just built. Null
+ * when there is nothing to change.
+ *
+ * pruneSelectedThread covers messages LEAVING the snapshot. Nothing covered one
+ * arriving, so the reply you had just sent — and any message a sync brought in
+ * — never joined the thread you were reading; only closing and reopening the
+ * row showed it. The list already rebuilds its threads whenever the message
+ * pool moves, so the open thread is re-read from that same map rather than
+ * threading a second time here.
+ *
+ * Matched by threadId, then by any member the snapshot still shares with it: an
+ * arriving message can bridge two conversations, which renames the thread it
+ * lands in. A thread the map does not hold at all (search, another folder) is
+ * left standing — absence there is not evidence the conversation shrank.
+ */
+export function refreshSelectedThread(state, threads) {
+  const open = state.selectedThread;
+  if (!open || !threads?.size) return null;
+  let fresh = threads.get(open.threadId);
+  if (!fresh) {
+    const wanted = new Set((open.emails || []).map(memberKey));
+    for (const thread of threads.values()) {
+      if (thread.emails.some(e => wanted.has(memberKey(e)))) { fresh = thread; break; }
+    }
+  }
+  // Same members = same reader. buildThreads runs on every list change and
+  // hands back fresh objects each time; swapping one in for an identical one
+  // only re-renders the pane and re-keys its body loader.
+  if (!fresh || fresh === open || memberKeys(fresh.emails) === memberKeys(open.emails)) return null;
+  return { selectedThread: fresh };
+}
+
 /**
  * The row `delta` places from the open one, clamped to the ends.
  *

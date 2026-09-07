@@ -164,6 +164,7 @@ function EmailListComponent() {
   const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const selectThread = useSelectionStore(s => s.selectThread);
+  const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
   const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
   const setEmailsSelected = useSelectionStore(s => s.setEmailsSelected);
   const selectAllEmails = useSelectionStore(s => s.selectAllEmails);
@@ -478,6 +479,7 @@ function EmailListComponent() {
     // Use cached threads if fingerprint matches
     if (threadCache.current.fingerprint === threadFingerprint) {
       setDeferredThreads(threadCache.current.threads);
+      syncSelectedThread(threadCache.current.threads);
       return;
     }
 
@@ -489,10 +491,14 @@ function EmailListComponent() {
       const threads = buildThreads(mergedEmails);
       threadCache.current = { fingerprint: threadFingerprint, threads };
       setDeferredThreads(threads);
+      // The reader's open thread is a snapshot of one of these. This is the
+      // only place the whole pool is threaded, so it is where the snapshot is
+      // re-read — a reply sent from inside a thread reaches the pane here.
+      syncSelectedThread(threads);
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode]);
+  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, syncSelectedThread]);
 
   // Deferred sender grouping computation
   useEffect(() => {

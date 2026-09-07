@@ -3,7 +3,7 @@
 // This slice contains state, simple inline actions, and passthrough wrappers.
 
 import { buildThreads } from '../../utils/emailParser';
-import { selectionKey } from './unifiedHelpers';
+import { selectionKey, refreshSelectedThread } from './unifiedHelpers';
 import {
   selectEmail as _selectEmail,
   _prefetchAdjacentEmails,
@@ -54,6 +54,16 @@ export const createSelectionSlice = (set, get) => ({
       // Only unified rows are tagged; a single-account row leaves it standing.
       lastSelectedAccountId: thread.lastEmail._accountId || state.lastSelectedAccountId,
     }));
+  },
+
+  // Re-read the open thread from the threads the list has just built, so a
+  // message that joined the conversation (the reply you sent, one a sync
+  // brought in, the server's copy replacing a staged one) shows in the reader
+  // without closing and reopening the row. No-ops unless the membership
+  // actually changed — see refreshSelectedThread.
+  syncSelectedThread: (threads) => {
+    const update = refreshSelectedThread(get(), threads);
+    if (update) set(update);
   },
 
   // Put the reader away and leave the list. The same four fields every
