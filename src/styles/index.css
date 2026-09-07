@@ -195,9 +195,13 @@ html.platform-mac .overflow-x-scroll {
    scroll container: WebKit scrolls one sideways to bring a text selection or a
    caret into view, and because there is no scrollbar the offset is permanent —
    a row's subject slides out of its own box and the row renders blank.
-   `overflow: clip` clips identically (ellipsis included) and cannot scroll. */
+   `overflow: clip` clips identically (ellipsis included) and cannot scroll.
+   But `clip` is not a scroll container, so a flex item loses the automatic
+   `min-width: 0` that `hidden` gave it, and a long path in Backup Settings
+   widened the whole pane instead of truncating; hand the minimum back. */
 .truncate {
   overflow: clip;
+  min-width: 0;
 }
 
 /* The document itself must never move. The app root is exactly 100vh, so there

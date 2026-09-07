@@ -136,7 +136,7 @@ export default function MailStorageLocation({ readOnly = false }) {
       </p>
 
       <div className="flex items-center gap-2">
-        <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
+        <div data-testid="vault-path" className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
           {vaultStatus?.displayPath || 'Loading...'}
         </div>
         <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${

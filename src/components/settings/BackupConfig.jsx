@@ -239,7 +239,7 @@ export default function BackupConfig() {
                parts={[(s) => <strong>{s}</strong>]} />
           </p>
           <div className="flex items-center gap-2">
-            <div className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
+            <div data-testid="backup-path" className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
               {externalBackupLocation?.displayPath || (defaultBackupPath ? tr('settings.backup.config.maildirAppOnly', { defaultBackupPath }) : tr('chat.bubble.loading'))}
             </div>
             {backupFolder && (

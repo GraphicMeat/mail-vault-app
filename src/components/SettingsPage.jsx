@@ -207,7 +207,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
           )}
 
           {/* Content Area */}
-          <div className={`flex-1 ${hasAccountPills && subView !== 'config' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
+          <div data-testid="settings-content" className={`flex-1 ${hasAccountPills && subView !== 'config' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
             {activeTab === 'cleanup' && (
               subView === 'config'
                 ? <AISettings />
