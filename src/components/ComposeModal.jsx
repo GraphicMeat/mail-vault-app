@@ -529,6 +529,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         },
       };
 
+      // The ONE staged identity of this outbox item: the vault uid the copy is
+      // written under, and the bytes (with their Message-ID) that go on the
+      // wire. Allocated on the first attempt and reused by every retry —
+      // `retryOutbox` re-runs this exact closure, Rust mints a fresh Message-ID
+      // on every `smtp_build_mime`, and the uid is a fresh clock read, so
+      // rebuilding per attempt left the previous attempt's .eml and index entry
+      // orphaned in the vault and put two copies of one message on the wire
+      // that no recipient can pair up.
+      let staged = null;
+
       // The actual send function
       const sendFn = async () => {
         // Refresh OAuth2 token if needed before sending
@@ -602,7 +612,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
         };
 
-        const pseudoUid = Math.floor(Date.now() / 1000);
+        const pseudoUid = staged ? staged.uid : Math.floor(Date.now() / 1000);
         // Local archive target: must be a non-empty string — Maildir dirs use
         // it as the mailbox folder name. Default to literal 'Sent' so the
         // .eml lands under <data>/Maildir/<account>/Sent/cur/.
@@ -612,21 +622,24 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         // ── STAGE 1: archive raw MIME locally as DRAFT ──
         // Build the RFC2822 bytes via Rust so we can store them BEFORE SMTP.
         // Failure here is fatal — the whole point is to have a safety copy.
-        let builtMime;
-        try {
-          builtMime = await api.buildOutgoingMime(
-            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-            outgoingPayload
-          );
-        } catch (err) {
-          console.error('[compose:build_mime_fail]', err);
-          throw new Error('Failed to build outgoing MIME: ' + (err?.message || err));
+        let builtMime = staged?.mime;
+        if (!builtMime) {
+          try {
+            builtMime = await api.buildOutgoingMime(
+              { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
+              outgoingPayload
+            );
+          } catch (err) {
+            console.error('[compose:build_mime_fail]', err);
+            throw new Error('Failed to build outgoing MIME: ' + (err?.message || err));
+          }
+          console.log('[compose:build_mime_ok]', {
+            account: freshAccount.email,
+            bytes: builtMime?.rawSize,
+            messageId: builtMime?.messageId,
+          });
         }
-        console.log('[compose:build_mime_ok]', {
-          account: freshAccount.email,
-          bytes: builtMime?.rawSize,
-          messageId: builtMime?.messageId,
-        });
+        staged = { uid: pseudoUid, mime: builtMime };
 
         if (invoke && builtMime?.rawBase64) {
           try {
@@ -679,53 +692,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             console.warn('[compose:index_draft_fail]', err);
           }
         }
-
-        // Optimistic in-memory entry — mirrors the just-archived local copy
-        // so the Sent list view updates instantly.
-        //
-        // Built FROM `indexBase`, not beside it. Written out by hand it lost
-        // the two fields threading runs on (`in_reply_to`, `references`), so
-        // the copy the UI showed the instant you hit Send was an orphan
-        // "Re: …": a second row in the list, and nothing the open thread would
-        // take. It only healed when the server APPEND landed and replaced it —
-        // seconds later at best, never when the APPEND was refused.
-        const optimistic = {
-          ...indexBase,
-          cc: parseAddresses(formData.cc),
-          bcc: parseAddresses(formData.bcc),
-          internal_date: indexBase.date,
-          internalDate: indexBase.date,
-          messageId: indexBase.message_id,
-          // Same headers, under the names buildThreads and the reader read.
-          inReplyTo: indexBase.in_reply_to,
-          hasAttachments: indexBase.has_attachments,
-          read: true,
-          flags: ['\\Seen', '\\Draft'],
-          _accountId: freshAccount.id,
-          _optimistic: true,
-          _localStaged: true,
-        };
-        useMailStore.setState(s => {
-          const dedupById = (list) => (optimistic.messageId
-            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
-            : (list || []));
-          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
-          if (
-            sentFolderPath &&
-            s.activeAccountId === freshAccount.id &&
-            s.activeMailbox === sentFolderPath
-          ) {
-            updates.emails = [optimistic, ...dedupById(s.emails)];
-            updates.totalEmails = (s.totalEmails || 0) + 1;
-          }
-          return updates;
-        });
-        useMailStore.getState().updateSortedEmails?.();
-        console.log('[compose:optimistic_insert]', {
-          account: freshAccount.email,
-          uid: pseudoUid,
-          messageId: builtMime?.messageId,
-        });
 
         // ── STAGE 2: SMTP send ──
         let sendResult;
@@ -795,19 +761,58 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           }
         }
 
-        // Strip \Draft flag from the in-memory optimistic entry.
-        useMailStore.setState(s => ({
-          sentEmails: (s.sentEmails || []).map(e =>
-            e.uid === pseudoUid && e._accountId === freshAccount.id
-              ? { ...e, flags: ['\\Seen'] }
-              : e
-          ),
-          emails: (s.emails || []).map(e =>
-            e.uid === pseudoUid && e._accountId === freshAccount.id
-              ? { ...e, flags: ['\\Seen'] }
-              : e
-          ),
-        }));
+        // The Sent row, now that the message has actually left.
+        //
+        // It goes in HERE, after SMTP, not before it. Staged ahead of the send
+        // it claimed a message was in your Sent folder while it was still on
+        // the wire — and a send that failed left that claim standing for the
+        // session: `_mergeOptimisticSent` keeps an optimistic entry the server
+        // never returns, and no outbox path (retry, cancel, dismiss) removes
+        // it. The safety net is the vault copy above, written BEFORE SMTP and
+        // untouched by this; a failed send keeps that, its Drafts autosave and
+        // the outbox bubble, and claims nothing.
+        //
+        // Built FROM `indexBase`, not beside it. Written out by hand it lost
+        // the two fields threading runs on (`in_reply_to`, `references`), and
+        // the row was then an orphan "Re: …": a second row in the list, and
+        // nothing the open thread would take.
+        const optimistic = {
+          ...indexBase,
+          cc: parseAddresses(formData.cc),
+          bcc: parseAddresses(formData.bcc),
+          internal_date: indexBase.date,
+          internalDate: indexBase.date,
+          messageId: indexBase.message_id,
+          // Same headers, under the names buildThreads and the reader read.
+          inReplyTo: indexBase.in_reply_to,
+          hasAttachments: indexBase.has_attachments,
+          read: true,
+          flags: ['\\Seen'],
+          _accountId: freshAccount.id,
+          _optimistic: true,
+          _localStaged: true,
+        };
+        useMailStore.setState(s => {
+          const dedupById = (list) => (optimistic.messageId
+            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
+            : (list || []));
+          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
+          if (
+            sentFolderPath &&
+            s.activeAccountId === freshAccount.id &&
+            s.activeMailbox === sentFolderPath
+          ) {
+            updates.emails = [optimistic, ...dedupById(s.emails)];
+            updates.totalEmails = (s.totalEmails || 0) + 1;
+          }
+          return updates;
+        });
+        useMailStore.getState().updateSortedEmails?.();
+        console.log('[compose:sent_row_insert]', {
+          account: freshAccount.email,
+          uid: pseudoUid,
+          messageId: builtMime?.messageId,
+        });
 
         // ── STAGE 4: listen for Rust's server-APPEND completion, then
         // refresh the Sent headers so the real server UID replaces the
