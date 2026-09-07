@@ -1,13 +1,14 @@
 /**
- * E2E: the three ways into a reply — the open message's header, a message
- * inside a thread, and the row's 3-dot menu.
+ * E2E: the ways into a reply — the sender's address on the open message, the
+ * address on a message inside a thread, and the row's 3-dot menu.
  *
- * The header row used to fold the details; the chevron beside it was
- * decoration. Now a click on the row replies to THAT message and the chevron
- * is the only fold control, in the single viewer and on every message in a
- * thread. The row menu gained the same reach without the list ever holding a
- * compose prop: Reply (body resolved first, so the quote is the message) and
- * "New message to <sender>".
+ * A message is a line in a list of messages: a click on the line opens or
+ * shuts it — in a thread it unfolds that message, in the single viewer it
+ * unfolds the details — and the chevron says the same thing explicitly. Only
+ * the sender's ADDRESS writes back to him, in the header and in the Sender
+ * Details popover. The row menu gained the same reach without the list ever
+ * holding a compose prop: Reply (body resolved first, so the quote is the
+ * message) and "New message to <sender>".
  *
  * Harness facts these lean on:
  *  - framer-motion exits never finish under the occluded runner window, so
@@ -238,33 +239,63 @@ describe('Reply entry points — header, thread message, row menu', function () 
     await closeComposeHard();
   });
 
-  // ── 1 + 2: the single viewer ──────────────────────────────────────────────
+  // ── the single viewer ──────────────────────────────────────────────
 
-  it('the open message\'s header replies to it', async function () {
+  it('the open message\'s header unfolds the details and composes nothing', async function () {
     await openSingleRow(SUBJECT);
 
-    await waitFor(
+    const shut = await waitFor(
       senderHeader,
       (h) => !!h && h.visible,
       'the viewer showed no [data-testid="sender-header"] after the row was opened',
       15_000,
       300,
     );
+    expect(shut.expanded).toBe('false');
 
     expect(await clickTestid('sender-header')).toBe(true);
+    const open = await waitFor(
+      senderHeader,
+      (h) => !!h && h.expanded === 'true',
+      'a click on the sender header did not unfold the details',
+      10_000,
+      200,
+    );
+    expect(open.text).toContain('To:');
+    // Nothing was composed: the address is the only thing that does that.
+    await browser.pause(600);
+    expect(await modalCount()).toBe(0);
+
+    // Put it back, so the chevron case starts where it used to.
+    expect(await clickTestid('sender-header')).toBe(true);
+    await waitFor(
+      senderHeader,
+      (h) => !!h && h.expanded === 'false',
+      'a second click on the sender header did not fold the details again',
+      10_000,
+      200,
+    );
+  });
+
+  it('the sender address on the open message replies to it', async function () {
+    expect(await selectedSubject()).toBe(SUBJECT);
+
+    expect(await clickTestid('sender-address')).toBe(true);
     const compose = await prefilledCompose(
-      'clicking the sender header opened no compose window addressed to the sender',
+      'clicking the sender address opened no compose window addressed to the sender',
     );
 
     expect(compose.to).toBe(SENDER);
     expect(compose.subject).toBe(`Re: ${SUBJECT}`);
+    // Composing is not folding: the details are where they were.
+    expect((await senderHeader()).expanded).toBe('false');
   });
 
-  it('two quick clicks on the header open one compose', async function () {
-    // The whole header row is a compose trigger, so a double-click — or a drag
-    // over the address that ends in a click — calls the reply handler twice.
-    // Both clicks go in ONE execute: back to back, with no runner pause in
-    // between, which is what a real double-click looks like to the page.
+  it('two quick clicks on the address open one compose', async function () {
+    // A double-click — or a drag over the address that ends in a click —
+    // calls the reply handler twice. Both clicks go in ONE execute: back to
+    // back, with no runner pause in between, which is what a real
+    // double-click looks like to the page.
     await openSingleRow(SUBJECT);
     await waitFor(
       senderHeader,
@@ -275,16 +306,16 @@ describe('Reply entry points — header, thread message, row menu', function () 
     );
 
     const clicked = await browser.execute(() => {
-      const row = document.querySelector('[data-testid="sender-header"]');
-      if (!row || row.offsetHeight === 0) return false;
-      row.click();
-      row.click();
+      const el = document.querySelector('[data-testid="sender-address"]');
+      if (!el || el.offsetHeight === 0) return false;
+      el.click();
+      el.click();
       return true;
     });
     expect(clicked).toBe(true);
 
     await prefilledCompose(
-      'two clicks on the sender header opened no compose window addressed to the sender',
+      'two clicks on the sender address opened no compose window addressed to the sender',
     );
     // A second window would mount in a later frame: settle before counting, or
     // a green here only means the poll was early.
@@ -294,7 +325,7 @@ describe('Reply entry points — header, thread message, row menu', function () 
   });
 
   it('the chevron unfolds the details and opens nothing', async function () {
-    // The same message, still open — case 1's compose was closed in afterEach.
+    // The same message, still open — the compose above was closed in afterEach.
     expect(await selectedSubject()).toBe(SUBJECT);
     expect(await modalCount()).toBe(0);
 
@@ -309,7 +340,6 @@ describe('Reply entry points — header, thread message, row menu', function () 
     // Unfolded means the details are actually there, not just an attribute.
     expect(open.text).toContain('To:');
     expect(open.label).toBe('Hide details');
-    // The chevron folds; it must not reach the row's reply handler.
     expect(await modalCount()).toBe(0);
 
     expect(await clickTestid('header-toggle')).toBe(true);
@@ -324,17 +354,17 @@ describe('Reply entry points — header, thread message, row menu', function () 
     expect(await modalCount()).toBe(0);
   });
 
-  // ── 3 + 4: a message inside a thread ──────────────────────────────────────
+  // ── a message inside a thread ──────────────────────────────────────
 
   describe('inside a thread', function () {
     /** The folded partner message — found once, used by both cases. */
     let folded = -1;
 
-    it('a collapsed thread message replies to that message, not to the newest', async function () {
+    it('a click on a folded thread message unfolds it instead of composing', async function () {
       await openThread(CROSS_FOLDER_SUBJECT);
 
       // Folded, and its snippet is its OWN body — that is the body having
-      // loaded, which is what makes "the reply quotes it" provable.
+      // loaded, which is what makes the later "the reply quotes it" provable.
       const headers = await waitFor(
         threadHeaders,
         (hs) => foldedWith(hs, CROSS_FOLDER_INBOX_BODY) >= 0,
@@ -344,16 +374,48 @@ describe('Reply entry points — header, thread message, row menu', function () 
       );
       folded = foldedWith(headers, CROSS_FOLDER_INBOX_BODY);
 
+      // The snippet line, not the sender row: the line the reader's eye is on
+      // when the message is shut.
       const clicked = await browser.execute((i) => {
         const h = document.querySelectorAll('[data-testid="thread-email-header"]')[i];
-        if (!h) return false;
-        h.click();
+        const line = h?.querySelector('p');
+        if (!line || line.offsetHeight === 0) return false;
+        line.click();
         return true;
       }, folded);
       expect(clicked).toBe(true);
 
+      const body = await waitFor(
+        () => threadBodyAt(folded),
+        (text) => !!text && text.includes(CROSS_FOLDER_INBOX_BODY),
+        'a click on the folded thread message did not render its body',
+        20_000,
+        400,
+      );
+      expect(body).toContain(CROSS_FOLDER_INBOX_BODY);
+      expect(await modalCount()).toBe(0);
+
+      // Shut it again — the same target folds both ways, and the address case
+      // below starts from the message folded.
+      expect(await clickTestid('header-toggle', folded)).toBe(true);
+      await waitFor(
+        () => threadBodyAt(folded),
+        (text) => text === null,
+        'the thread message never folded again',
+        15_000,
+        400,
+      );
+      expect(await modalCount()).toBe(0);
+    });
+
+    it('the address on a thread message replies to THAT message', async function () {
+      expect(folded).toBeGreaterThanOrEqual(0);
+      expect(await modalCount()).toBe(0);
+
+      expect(await clickTestid('sender-address', folded)).toBe(true);
+
       const compose = await prefilledCompose(
-        'clicking the folded thread message opened no compose window addressed to its sender',
+        'clicking the address on the folded thread message opened no compose window',
       );
 
       // The message clicked, not the newest one in the thread (our Sent reply,
@@ -389,7 +451,7 @@ describe('Reply entry points — header, thread message, row menu', function () 
     });
   });
 
-  // ── 5 + 6: the row's 3-dot menu ───────────────────────────────────────────
+  // ── the row's 3-dot menu ───────────────────────────────────────────
 
   it('the row menu replies with the body loaded', async function () {
     await openRowMenu(SUBJECT);

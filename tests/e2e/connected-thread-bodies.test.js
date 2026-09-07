@@ -68,8 +68,9 @@ async function openThread(subject) {
  * The newest message starts expanded, so this clicks only the ones showing
  * neither a body nor a loading spinner — clicking blindly would collapse it.
  *
- * The chevron, not the header: a click on the header itself now opens a reply
- * to that message, and would leave every body still folded behind a compose.
+ * The chevron or the header row: since a message folds on a click anywhere
+ * on it, either would do. The chevron stays for the compact layout, whose
+ * folded summary is one button and has no sender row to click.
  */
 async function readThreadBodies() {
   const expandAll = () => browser.execute(() => {

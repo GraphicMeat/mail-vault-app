@@ -12,6 +12,7 @@ vi.mock('../../hooks/useChatBodyLoader', async () => {
   return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: new Map() }, registerListener: () => () => {} }) };
 });
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
+vi.mock('../../utils/replyTarget', () => ({ replyTarget: async (header) => header }));
 const { ThreadView } = await import('../email/ThreadView');
 const { useSettingsStore } = await import('../../stores/settingsStore');
 const emails = [
@@ -47,5 +48,40 @@ describe('thread reader layouts', () => {
     fireEvent.click(screen.getByRole('button', { name: /Older.*Earlier/ }));
     expect(screen.getAllByTestId('header-toggle')).toHaveLength(2);
     expect(onComposeReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('thread message click targets', () => {
+  // The thread reader is a list of messages: a click on a message opens or
+  // shuts it, and only the sender's address writes back to him.
+  const expandedFlags = () => screen.getAllByTestId('header-toggle').map(n => n.getAttribute('aria-expanded'));
+
+  it('a click on a folded message unfolds it instead of composing', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const onComposeReply = vi.fn();
+    render(<ThreadView thread={thread} onComposeReply={onComposeReply} />);
+    expect(expandedFlags()).toEqual(['false', 'true']);
+    fireEvent.click(screen.getAllByTestId('thread-email-header')[0]);
+    expect(expandedFlags()).toEqual(['true', 'true']);
+    expect(onComposeReply).not.toHaveBeenCalled();
+  });
+
+  it('a click on an unfolded message folds it again', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    render(<ThreadView thread={thread} onComposeReply={vi.fn()} />);
+    fireEvent.click(screen.getAllByTestId('thread-email-header')[1]);
+    expect(expandedFlags()).toEqual(['false', 'false']);
+  });
+
+  it('a click on the sender address composes to THAT message', async () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    const onComposeReply = vi.fn();
+    render(<ThreadView thread={thread} onComposeReply={onComposeReply} />);
+    await act(async () => { fireEvent.click(screen.getAllByTestId('sender-address')[0]); });
+    expect(onComposeReply).toHaveBeenCalledTimes(1);
+    expect(onComposeReply.mock.calls[0][0]).toBe('reply');
+    expect(onComposeReply.mock.calls[0][1].from.address).toBe('old@example.com');
+    // Composing left the message folded — the two acts are independent.
+    expect(expandedFlags()).toEqual(['false', 'true']);
   });
 });

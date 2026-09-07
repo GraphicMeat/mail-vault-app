@@ -70,8 +70,9 @@ async function openThread(subject) {
 /**
  * Expand every collapsed message and report what the thread is showing.
  *
- * The chevron, not the header: a click on the header itself now opens a reply
- * to that message, and would leave every body still folded behind a compose.
+ * The chevron or the header row: since a message folds on a click anywhere
+ * on it, either would do. The chevron stays for the compact layout, whose
+ * folded summary is one button and has no sender row to click.
  */
 async function readThread() {
   await browser.execute(() => {

@@ -341,11 +341,12 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
 
   return (
     <div className={`border-b border-mail-border overflow-hidden ${expanded ? '' : 'hover:bg-mail-surface-hover'}`} style={{ contain: 'inline-size' }}>
-      {/* Header — always visible. A click on the message replies to it; the
-          chevron inside EmailSenderInfo is the only fold control, and it
-          stops the event before it reaches this handler. A click that ends a
-          drag over the snippet line is a copy, not a reply. */}
-      <div data-testid="thread-email-header" onClick={() => { if (!window.getSelection?.()?.isCollapsed) return; compose('reply'); }}>
+      {/* Header — always visible. A click on the message opens or shuts it;
+          only the sender's address replies to it. This handler is here for
+          the snippet line below, which sits outside EmailSenderInfo — the
+          header stops its own clicks. A click that ends a drag over the
+          snippet is a copy, not a fold. */}
+      <div data-testid="thread-email-header" onClick={() => { if (!window.getSelection?.()?.isCollapsed) return; onToggle(); }}>
         {compact && !expanded ? (
           <button type="button" onClick={e => { e.stopPropagation(); onToggle(); }} aria-expanded={false}
             className="w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-mail-surface-hover">
@@ -360,6 +361,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
           variant="thread"
           expanded={expanded}
           onToggle={onToggle}
+          onReply={() => compose('reply')}
           showRaw={showRaw}
           onToggleRaw={toggleRawSource}
           loadingRaw={loadingRaw}

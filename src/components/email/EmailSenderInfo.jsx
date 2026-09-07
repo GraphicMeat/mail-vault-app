@@ -18,9 +18,13 @@ import { t, useT  } from '../../i18n/index.js';
  * Renders avatar, sender name, email, DKIM shield, insights button,
  * To/CC, timestamp, and "via" indicator in a unified layout.
  *
- * A click on the row replies to the message (`onReply`); only the chevron
- * button folds the details (`onToggle`), and it stops the event so a thread
- * wrapper listening for the reply click never sees it.
+ * A message is a line in a list of messages, so a click on the row opens or
+ * shuts it (`onToggle`) — in a thread that unfolds the message, in the single
+ * viewer it unfolds the details. Writing back to the sender is the one thing
+ * his ADDRESS does (`onReply`), wherever the header prints it: the `<addr>`
+ * chip, the name line when the name IS the address, and the same address in
+ * the Sender Details popover. The row handles its own clicks and stops them,
+ * so a thread wrapper listening for the fold never sees one twice.
  */
 export const EmailSenderInfo = memo(function EmailSenderInfo({
   email,
@@ -48,6 +52,14 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
 
+  // Compose to the sender. Dragging over the address to copy it ends in a
+  // click on it, same as on the row.
+  const composeToSender = (e) => {
+    e.stopPropagation();
+    if (!window.getSelection?.()?.isCollapsed) return;
+    onReply?.(e);
+  };
+
   // No custody glyph here. The band directly above this line already states
   // where the message lives, in words, from the ROW's derivation
   // (EmailViewer — custodyRowFor). This line could only ever restate it from a
@@ -72,9 +84,12 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       data-testid="sender-header"
       className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
       onClick={(e) => {
-        // Dragging over the address to copy it ends in a click on this row.
-        if (!window.getSelection?.()?.isCollapsed) { e.stopPropagation(); return; }
-        onReply?.(e);
+        // Handled here either way: a thread wrapper folds the snippet line
+        // below, and one click must not reach both.
+        e.stopPropagation();
+        // Dragging over the header to copy text ends in a click on this row.
+        if (!window.getSelection?.()?.isCollapsed) return;
+        onToggle?.();
       }}
     >
       {/* Avatar — click opens Sender Details (parity with chat view) */}
@@ -89,10 +104,14 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {/* Sender name — click opens Sender Details (parity with chat view) */}
+            {/* Sender name — click opens Sender Details (parity with chat
+                view). With no display name this line IS the address, and
+                nothing else on the header carries it, so it composes. */}
             <span
+              data-testid={hasDistinctName ? undefined : 'sender-address'}
               className="text-sm font-semibold text-mail-text truncate cursor-pointer hover:underline"
-              onClick={openDetails}
+              onClick={hasDistinctName ? openDetails : composeToSender}
+              title={hasDistinctName ? t('email.sender.senderDetails') : t('emailActionBar.reply')}
             >
               {senderName}
             </span>
@@ -100,9 +119,15 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             {/* DKIM / verification badge */}
             <SenderVerificationBadge email={email} />
 
-            {/* Sender email (only when name differs from address) */}
+            {/* Sender email (only when name differs from address) — the
+                compose target. */}
             {hasDistinctName && (
-              <span className="text-xs text-mail-text-muted truncate">
+              <span
+                data-testid="sender-address"
+                className="text-xs text-mail-text-muted truncate cursor-pointer hover:underline"
+                onClick={composeToSender}
+                title={t('emailActionBar.reply')}
+              >
                 &lt;{email.from.address}&gt;
               </span>
             )}
@@ -206,6 +231,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
           email={email}
           anchorRect={detailsAnchor}
           onClose={() => setDetailsAnchor(null)}
+          onReply={onReply}
           archivedEmailIds={archivedEmailIds}
         />
       )}

@@ -15,6 +15,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   email,
   anchorRect,
   onClose,
+  onReply,
   archivedEmailIds,
 }) {
   const t = useT();
@@ -24,6 +25,11 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
   const senderName = getSenderName(email);
   const initial = senderName ? senderName[0].toUpperCase() : '?';
   const hasDistinctName = email?.from?.name && email.from.name !== email.from.address;
+  // The address prints here too, so it composes here too — same rule as the
+  // header it was opened from. Surfaces that pass no `onReply` (chat view)
+  // keep the plain text.
+  const address = email?.from?.address || '';
+  const composeToSender = () => { onReply?.(); onClose?.(); };
 
   // `email` is fetched fresh for its body (IMAP/Maildir/chat list), not
   // derived through the row pipeline, so it never carries `.isArchived`.
@@ -96,12 +102,25 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
             <span className="text-white font-semibold text-xs">{initial}</span>
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-mail-text truncate">
-              {senderName}
-            </div>
             {hasDistinctName && (
-              <div className="text-xs text-mail-text-muted truncate">
-                {email.from.address}
+              <div className="text-sm font-semibold text-mail-text truncate">
+                {senderName}
+              </div>
+            )}
+            {address && onReply ? (
+              <button
+                type="button"
+                data-testid="popover-address"
+                onClick={composeToSender}
+                title={t('emailActionBar.reply')}
+                className={`block max-w-full truncate text-left hover:underline ${
+                  hasDistinctName ? 'text-xs text-mail-text-muted' : 'text-sm font-semibold text-mail-text'}`}
+              >
+                {hasDistinctName ? address : senderName}
+              </button>
+            ) : (
+              <div className={hasDistinctName ? 'text-xs text-mail-text-muted truncate' : 'text-sm font-semibold text-mail-text truncate'}>
+                {hasDistinctName ? address : senderName}
               </div>
             )}
           </div>
