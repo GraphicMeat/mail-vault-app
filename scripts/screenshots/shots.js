@@ -233,6 +233,29 @@ async function setAppearanceOption(testId) {
   await browser.pause(SETTLE);
 }
 
+/**
+ * Both highlighting shots are about row GROUNDS, so the list must not read as
+ * mid-scroll: clicking a row part way down leaves a half-row clipped under the
+ * header. (The migration toast in the corner stays: `wdio.screenshots.conf.js`
+ * seeds a job "already in flight" on purpose, so every shot in a run carries
+ * it.)
+ */
+async function settleListForHighlightShot() {
+  await browser.execute(() => {
+    // The list has no testid of its own: walk up from a row to the first
+    // ancestor that actually scrolls. Snap to the row grid rather than to the
+    // top - scrolling to 0 puts the open message's conversation below the fold,
+    // and the conversation IS what the second shot is about.
+    const row = document.querySelector('[data-testid="email-row"]');
+    let el = row?.parentElement;
+    while (el && el.scrollHeight <= el.clientHeight + 4) el = el.parentElement;
+    if (!el || !row) return;
+    const h = row.getBoundingClientRect().height || 56;
+    el.scrollTo({ top: Math.round(el.scrollTop / h) * h });
+  });
+  await browser.pause(500);
+}
+
 /** The list header's checkbox opens the bulk operations modal. */
 const openBulkModal = () => browser.execute(() => {
   const btn = document.querySelector('[data-testid="email-list-header"] button');
@@ -336,11 +359,13 @@ describe('MailVault marketing screenshots', function () {
       await setAppearanceOption('thread-mode-flat');
       await clickRow(MARKERS.thread);
       await expectState((s) => !s.viewerEmpty, 'no message open for the highlighting shots');
+      await settleListForHighlightShot();
     });
 
     await step('list-highlight-selection', async () => {
       await setAppearanceOption('row-highlight-selection');
       await expectState((s) => !s.viewerEmpty, 'the open message did not survive the setting change');
+      await settleListForHighlightShot();
     });
 
     // Back to the defaults the rest of the run assumes.
