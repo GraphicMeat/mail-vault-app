@@ -14,7 +14,6 @@
   <meta property="og:url" content="https://mailvaultapp.com/changelog.html">
   <meta property="og:title" content="Changelog - MailVault | What's New">
   <meta property="og:description" content="See what's new in MailVault. Full changelog of features, improvements, and bug fixes for every release.">
-  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
@@ -24,7 +23,6 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Changelog - MailVault | What's New">
   <meta name="twitter:description" content="See what's new in MailVault. Full changelog of features, improvements, and bug fixes for every release.">
-  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
   <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
 
   <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -126,11 +124,191 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.12.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.12.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 7, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A focus session covers MailVault until the timer runs out.</strong> A timer in the sidebar footer runs for 15, 25, 45 or 60 minutes, or any number of minutes up to eight hours. While it runs, the window shows nothing but the time left; mail keeps syncing into the vault underneath, and every notification MailVault would have shown waits until the session ends, when a notification says the time is done and the held ones follow. Quitting the app does not end a session: reopening it brings the countdown back with the time that was left. A small "Unlock early" link is always there. It asks whether you are sure, and if you are, MailVault lets you out with a word about the next one. Focus sessions are a Premium feature.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Messages can be starred, and the star follows you to every other client on the account.</strong> Hover a row for the star, or use the one in the reading pane, the row menu, or the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">s</code> key. A starred message is starred in webmail and on your phone too, because MailVault now writes the flag to the server the way it always wrote "read". Replying marks the original as answered on the server, and forwarding marks it forwarded, so other clients show the little arrows.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Folders can be created, renamed and deleted from the sidebar.</strong> Right-click a folder for New subfolder, Rename and Move to Trash; the "+" next to Folders makes a top-level one. Deleting a folder files it under Trash, the way Thunderbird does, and only a folder already inside Trash is deleted for good, after a confirmation. Your vault copies follow a renamed folder to its new name; nothing local is ever deleted. INBOX and the special folders (Sent, Drafts, Trash, Junk, Archive) cannot be renamed or deleted.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>New mail arrives as it lands, not on the next timer tick.</strong> MailVault now keeps one connection per account listening on the inbox (IMAP IDLE), so a new message shows up and notifies within a second or two. The five-minute refresh stays as the fallback for servers without IDLE and for the other folders.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Undo for moves, Trash deletes, stars and read marks.</strong> Every one of those actions offers Undo in a small toast for eight seconds, and ⌘Z brings back the last one at any time until the next action replaces it. A permanent delete says so and offers nothing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Backups can run at hours you choose.</strong> Settings → Backup & Restore → Backup Schedule has a fourth frequency, "At set hours": pick any hours of the day and MailVault backs up on the hour at each one, only while the app is idle, and never in between. Meant for a vault or backup mirror on an external drive that something else, such as Time Machine, reads on its own schedule: choose the hours that drive is free. A selected hour that passes while the app is busy is skipped, not caught up later.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Changes made offline are kept and sent when the connection returns.</strong> Marking read, starring, moving and deleting while offline apply on screen immediately and are queued; MailVault sends them when the network is back (or on the next launch), the same way it already finished deletes interrupted by a quit.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An exported HTML thread follows your system's light or dark appearance.</strong> The file used to be white whatever your Mac was set to. Opened on a Mac in dark mode it now draws dark: the rail, the cards and every message, with the pictures inside left as they are. The image export is unchanged and stays light.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Attachments open in MailVault instead of only downloading.</strong> A picture or a PDF on a message now has a preview button beside the download one, and clicking the row itself previews it where it can: images inline, PDFs in a reader panel. What you download is kept, so opening the same attachment again is instant and works with no connection; the new "Download attachments automatically" setting fetches a folder's attachments in the background after its messages arrive, newest first. Attachments in All Inboxes used to fail with "Failed to download" because the row could not say which account and folder the message came from; it names both now.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Export can carry a message's attachments.</strong> The export dialog has an "Include attachments" checkbox, on by default and remembered. An image export writes them beside the picture, named "<your file name> - <attachment name>"; an HTML export puts them in the page itself as download links. Only real attachments travel: the pictures already drawn in the body, and tracking pixels, are left out.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Replying starts from the message itself.</strong> Clicking a message's header — in the single reader and on every message in a thread — opens a reply. The chevron beside it is now a button of its own and is the only thing that folds the details away, so the two no longer fight over the same click. The row's ⋯ menu gained Reply, which loads the message first so the quote is the whole message and a thread row answers its newest message, and "New message to <sender>", a blank message to that address from the account the row belongs to.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A conversation can be read three ways.</strong> The thread reader has a Layout control: Timeline, the tall column it has always been; Compact, which tightens every message to fit more on screen; and Split view, the list of messages on one side and the one you picked on the other. The choice is remembered, and jumping to the newest message now lands on it in all three.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Closed folders show how much is unread.</strong> MailVault asks the server for each folder's unread count when an account comes online and after every Refresh, so the number is beside the folder name in the sidebar — a badge on the icon in compact mode — without opening it first.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The list knows a message's size and whether it has attachments before you open it.</strong> The paperclip and the size used to appear only once a message had been read, so searching for messages with attachments missed everything in the list that had not been opened. Both arrive with the rest of the row now.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Mac installer window was redrawn.</strong> The window that opens from the .dmg — the app icon, the arrow and the Applications folder you drag it onto — now uses a background generated at the app's own colours and at the size a Retina screen expects, instead of the stretched placeholder it shipped with.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message with no HTML part exports with its text.</strong> A contact-form notification or a plain-text reply came out of Export as a header card over an empty body; the text is now in the file, the way the reading pane shows it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Exporting a conversation from the row menu includes your replies.</strong> The menu handed over only the messages in the folder on screen, so a thread of four that held two replies of yours exported as two. The whole conversation goes now, replies from Sent included.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Unfolding a conversation shows your replies too.</strong> In the expandable thread view, the rows under a conversation were the folder's own messages only; the replies you sent are now listed with them, in order, and open in Sent when clicked. The thread row's checkbox and menu still act on the folder's own messages.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A reply of yours is no longer drawn as someone else's message.</strong> When a reply in Sent happened to share its number with a message in the inbox of the same conversation, the list showed that inbox message twice and your reply not at all.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message that was read or flagged now goes back to the server.</strong> Restoring a message from the vault, or moving one between accounts, sent its flags in a form some servers refuse — so an unread, unflagged message went through and everything else was turned away. Every message uploads now, and it arrives carrying the date it was written rather than the day it was put back. Run a restore twice and the second run skips what is already there.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message MailVault cannot place is refused, not fetched from the wrong account.</strong> In All Inboxes, opening a row whose account could not be determined used to guess the active account and could show a stranger's message under that number; it now says so and shows nothing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A damaged header page fails and is retried instead of showing a short list.</strong> When a server sends a header MailVault cannot parse, the page used to come back silently shorter; it is now reported and fetched again on the next pass, and the background backfill no longer gives up on the whole folder over one bad line.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A backup to a slow drive can no longer freeze silently.</strong> With the vault on an external drive that Time Machine was reading every hour, a large Gmail backup stopped after an hour or two with no message, and Cancel did nothing; restarting stopped at the same place. Each slow write held up a worker until the mail server dropped the connection, and MailVault then waited on that dead connection for ever. Every server wait in a backup is now bounded (a minute per message), so a dropped connection ends the run with the error in the backup card instead of a hang, and the disk work has moved off the threads that keep the connections alive, so a slow drive slows the backup rather than killing it. Messages are also written to a temporary name and renamed into place, so a backup interrupted mid-write leaves no half file for the next run to skip over. And a backup now notices when the drive itself is struggling: three writes in a row that each take over two seconds make it wait half a minute before the next download and say so in the backup card ("Backup drive is slow"), rather than piling more work onto a drive that is already behind; the first normal write clears the wait. The same drive scans that feed the backup status pane and Microsoft 365 backups moved off the connection threads too.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Moving a message no longer clears an unrelated selection.</strong> Moving one row from its menu used to deselect everything you had ticked elsewhere in the list; it now clears only what it moved.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Quotation marks in a subject or a name are no longer shown with backslashes.</strong> A subject like Pratęskite žurnalo "Iliustruotoji istorija" prenumeratą arrived with the server's own escaping still in it, and the list drew the backslashes; so did the To: line in a thread. Messages already in the list keep them until they are fetched again.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Grouping by sender no longer stacks rows on top of each other.</strong> Several conversations from one sender that happen to share a subject — five identical contact-form notifications, say — were treated as one row and drew over each other, and a conversation from elsewhere appeared at the wrong place in the list. Each conversation is now its own row.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The message you are reading is visible in the list.</strong> Selection was a thin line down the left edge, easy to lose next to an unread message's own background; the open message now has a filled background as well.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message no longer scrolls inside its own pane.</strong> Every HTML mail sat in a frame slightly shorter than the mail itself, so the reading pane had a second scrollbar inside it, and anything that arrived late — a picture finishing, a remote image, a web font — left the frame short for good. The frame is measured from the page's real box now and re-measured whenever the mail changes height, so there is one scrollbar again.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A large export no longer fails.</strong> Exporting a thread that carried its pictures with it produced "Maximum call stack size exceeded" on exactly the conversations with the most in them. Those files run to hundreds of kilobytes and were encoded in a single call; they are encoded in pieces now, whatever their size.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An export cannot hang on a picture that never loads.</strong> A message pointing at a remote image on a server that has gone away kept the export waiting; it now waits a bounded moment and writes the file.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Subjects line up down the list.</strong> The warning icons — sender, link, tracker — were drawn before the subject, so each row began its subject at a different place depending on which warnings that message had. They now sit after it, and the subject starts in the same column on every row, in every row height.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Grouping by sender says where you are.</strong> With the list collapsed into senders and topics, the open message could sit two levels down with nothing marking the sender or the topic that held it, and a run of topic rows read as one block of text with no line between them. Topic rows take the same separator every other row has, and the sender and topic holding the open message are marked the way the list marks a selected row.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Clicking your own reply highlights it.</strong> In a folder that shows your replies alongside the messages they answer, clicking one of your own selected it but left nothing marked, because the click and the list disagreed about how to name a message that lives in Sent.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Refresh re-reads the folder list.</strong> The sidebar's folder list is cached for ten minutes, and Refresh did not clear it, so a folder made in webmail could take that long to appear. Refresh now fetches the list from the server.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The website's language picker goes to the page you were reading.</strong> Choosing a language from a guide, a comparison or an FAQ answer sent you to that language's front page instead of that page's translation, and the choice was forgotten on the next page. Every link now points at its own page's translation, and the language you pick is remembered.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.11.3">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.11.3</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 4, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">
