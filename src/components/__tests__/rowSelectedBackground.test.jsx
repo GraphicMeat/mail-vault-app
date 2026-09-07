@@ -174,3 +174,35 @@ describe.each(variants.slice(0, 2))('%s sibling ground', (_name, renderRow) => {
     expect(c).toContain('hover:bg-mail-surface-hover');
   });
 });
+
+// An unfolded thread row is the container of the conversation, not the message
+// being read — the member rows carry the mark. Folded, it IS the row you
+// opened. Only the marking mode has a sibling ground to demote to.
+describe('an unfolded thread row holding the open message', () => {
+  const cls = (container) => container.querySelector('[data-testid="email-row"]').className.split(/\s+/);
+  const renderThread = (props) =>
+    render(<ThreadRow rowId="r1" thread={thread()} isSelected anyChecked={false}
+      onSelectThread={vi.fn()} onSetSelection={vi.fn()} {...shared()} {...props} />).container;
+
+  afterEach(() => useSettingsStore.setState({ emailRowHighlight: 'hover' }));
+
+  it('takes the sibling grey while unfolded', () => {
+    useSettingsStore.setState({ emailRowHighlight: 'selection' });
+    const c = cls(renderThread({ expandable: true, expanded: true }));
+    expect(c).toContain('bg-mail-row-related');
+    expect(c).not.toContain('bg-mail-row-selected');
+  });
+
+  it('takes the marking grey once folded', () => {
+    useSettingsStore.setState({ emailRowHighlight: 'selection' });
+    const c = cls(renderThread({ expandable: true, expanded: false }));
+    expect(c).toContain('bg-mail-row-selected');
+    expect(c).not.toContain('bg-mail-row-related');
+  });
+
+  it('is untouched in hover mode — an unfolded thread keeps the accent tint', () => {
+    const c = cls(renderThread({ expandable: true, expanded: true }));
+    expect(c).toContain('bg-mail-accent-tint');
+    expect(c).toContain('border-l-mail-accent');
+  });
+});

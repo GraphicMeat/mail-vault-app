@@ -59,6 +59,11 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   // Which mode marks the row is a live setting too — a toggle repaints the list.
   const highlight = useSettingsStore(s => s.emailRowHighlight);
+  const holdsOpen = isSelected && !anyChecked;
+  // An unfolded thread row is the container, not the message being read — its
+  // members carry the mark. Folded, it IS the row you opened. Only the marking
+  // mode has a sibling ground to demote to, so hover mode is untouched.
+  const demoted = highlight === 'selection' && expandable && expanded;
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -108,7 +113,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${listRowGround({ highlight, selected: isSelected && !anyChecked, related: false, unread: hasUnread })}`}
+                 ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
@@ -201,6 +206,11 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   // Which mode marks the row is a live setting too — a toggle repaints the list.
   const highlight = useSettingsStore(s => s.emailRowHighlight);
+  const holdsOpen = isSelected && !anyChecked;
+  // An unfolded thread row is the container, not the message being read — its
+  // members carry the mark. Folded, it IS the row you opened. Only the marking
+  // mode has a sibling ground to demote to, so hover mode is untouched.
+  const demoted = highlight === 'selection' && expandable && expanded;
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -248,7 +258,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${listRowGround({ highlight, selected: isSelected && !anyChecked, related: false, unread: hasUnread })}`}
+                 ${listRowGround({ highlight, selected: holdsOpen && !demoted, related: holdsOpen && demoted, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
