@@ -58,6 +58,14 @@ describe('sanitizeForExport', () => {
     expect(out).not.toContain('<base');
   });
 
+  it('stops the mail\'s own dark-mode CSS reaching a light export', () => {
+    // The export is light always, but that query reads the READER's OS.
+    const out = sanitizeForExport('<style>@media (prefers-color-scheme: dark){body{background:#000}}</style><p>hi</p>');
+    expect(out).not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+    expect(out).toContain('background:#000');
+    expect(out).toContain('<p>hi</p>');
+  });
+
   it('handles empty and null input', () => {
     expect(sanitizeForExport('')).toBe('');
     expect(sanitizeForExport(null)).toBe('');

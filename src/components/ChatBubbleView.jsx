@@ -39,6 +39,7 @@ import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { MAIL_DARK_TEXT } from '../utils/mailChrome';
+import { neutralizeEmailDarkScheme } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 
@@ -405,7 +406,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             ${indicatorStyle}
           </style>
         </head>
-        <body>${scannedBody}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
+        <body>${neutralizeEmailDarkScheme(scannedBody)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };

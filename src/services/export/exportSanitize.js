@@ -3,6 +3,13 @@
 // Everything executable comes out here, before the bytes are written.
 //
 // DOMParser, not regex: regex over nested markup is how sanitizers get bypassed.
+//
+// The one non-safety pass that lives here: an export is "light always" (see
+// EXPORT_CSS), and a mail's own `@media (prefers-color-scheme: dark)` block
+// would still fire from the reader's OS and paint the page black under its own
+// black text. Every export path runs its body through this one function, so the
+// suppression belongs here rather than in each document builder.
+import { neutralizeEmailDarkScheme } from '../../utils/emailIframeTemplate';
 
 const DROP_TAGS = ['script', 'iframe', 'object', 'embed', 'applet', 'base'];
 const URL_ATTRS = ['href', 'src', 'action', 'formaction'];
@@ -33,5 +40,5 @@ export function sanitizeForExport(bodyHtml) {
     }
   });
 
-  return doc.body.innerHTML;
+  return neutralizeEmailDarkScheme(doc.body.innerHTML);
 }

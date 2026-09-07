@@ -2,10 +2,10 @@ import { t } from '../i18n/index.js';
 // Shared iframe template for rendering HTML email bodies.
 //
 // Baseline is always LIGHT (white bg, dark text). This gives Dark Reader a
-// clean set of colors to invert from when the app is in dark mode. We also
-// force `color-scheme: light` so the OS-level prefers-color-scheme doesn't
-// partially activate some emails' own dark variants — Dark Reader is the
-// single source of truth for dark mode.
+// clean set of colors to invert from when the app is in dark mode. We set
+// `color-scheme: light` so UA-painted widgets stay light, and we neutralize the
+// mail's own dark-scheme rules (see neutralizeEmailDarkScheme) — together those
+// keep Dark Reader the single source of truth for dark mode.
 //
 // Kept separate from ChatBubbleView's iframe (transparent bg, per-bubble tint).
 
@@ -44,6 +44,34 @@ export function stripInlineColorImportant(html) {
   return html
     .replace(/style\s*=\s*"([^"]*)"/gi, (_m, css) => `style="${dropPriority(css)}"`)
     .replace(/style\s*=\s*'([^']*)'/gi, (_m, css) => `style='${dropPriority(css)}'`);
+}
+
+// A mail's own dark-mode CSS must never fire in the reading pane.
+//
+// `@media (prefers-color-scheme: dark)` reads the OS appearance. Neither
+// `<meta name="color-scheme" content="light">` nor `:root { color-scheme:
+// light }` changes what it matches — inside the frame it was true on every dark
+// Mac, in both email themes. The newsletter shape that breaks on it flips only
+// its BACKGROUNDS in dark mode (its text is already white by then, or it trusts
+// the client): the card went #171717 while the text stayed #0d0d0d, which is
+// black on black rendered light, and a design with no light colours left for
+// Dark Reader to invert rendered dark.
+//
+// Rewriting the feature name leaves an unknown feature, so the query can never
+// match, and every declaration inside the block is preserved for anyone reading
+// the source. Only `<style>` elements are touched — their CSS and their own
+// `media` attribute, which is the other place an ESP puts the query — so a mail
+// that TALKS about `prefers-color-scheme: dark` in its prose keeps its words.
+const STYLE_BLOCK = /(<style\b[^>]*>)([\s\S]*?)(<\/style\s*>)/gi;
+const DARK_SCHEME_FEATURE = /prefers-color-scheme(\s*:\s*)dark/gi;
+const SUPPRESSED = 'mv-suppressed-color-scheme$1dark';
+
+export function neutralizeEmailDarkScheme(html) {
+  if (!html || html.toLowerCase().indexOf('<style') === -1) return html;
+  return html.replace(STYLE_BLOCK, (_m, open, css, close) =>
+    open.replace(DARK_SCHEME_FEATURE, SUPPRESSED)
+    + css.replace(DARK_SCHEME_FEATURE, SUPPRESSED)
+    + close);
 }
 
 // Content height of an email iframe document, VALID ONLY WITH THE FRAME
@@ -201,7 +229,12 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
   // Inline `!important` colours outrank Dark Reader's override sheet — strip
   // their priority when DR is going to run (themeTag 'dark' is the single
   // signal every caller pairs with getDarkReaderInlineScripts()).
-  const body = themeTag === 'dark' ? stripInlineColorImportant(bodyHtml) : bodyHtml;
+  // The mail's own dark variant is suppressed in BOTH themes: rendered light it
+  // paints black on black, rendered dark it leaves Dark Reader nothing light to
+  // invert.
+  const body = neutralizeEmailDarkScheme(
+    themeTag === 'dark' ? stripInlineColorImportant(bodyHtml) : bodyHtml
+  );
 
   // <meta charset> is first in <head> so WKWebView decodes correctly even
   // when the document is loaded from a file:// URL (which would otherwise

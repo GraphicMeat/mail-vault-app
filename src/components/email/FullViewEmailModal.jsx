@@ -16,6 +16,7 @@ import { scanTrackers } from '../../utils/trackerDetect';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
+import { neutralizeEmailDarkScheme } from '../../utils/emailIframeTemplate';
 import { t as tr, useT  } from '../../i18n/index.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
@@ -87,9 +88,12 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
     // Full-view is a fourth renderer of the same body; blocking holds here too.
     const cidResolved = replaceCidUrls(htmlBody, email.attachments);
-    const bodyForFrame = trackerBlocking
+    const scannedForFrame = trackerBlocking
       ? scanTrackers(cidResolved, emailScopeKey(email, useMailStore.getState())).cleanedBodyHtml
       : cidResolved;
+    // The mail's own `@media (prefers-color-scheme: dark)` block would paint
+    // this white frame black under its #333 text — see emailIframeTemplate.
+    const bodyForFrame = neutralizeEmailDarkScheme(scannedForFrame);
 
     return `
       <!DOCTYPE html>

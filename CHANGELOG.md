@@ -5,6 +5,9 @@
 ### Added
 - **Deleting the message you are reading can open the next one.** Settings → Behavior → After Deleting chooses what the reading pane does once the open message is deleted: nothing, which is what MailVault has always done and is still the default, or open the next message in the list. Delete the last message in a folder and the one above it opens instead. The selection bar's delete follows the same choice, and the setup screen on first run asks for it too.
 
+### Fixed
+- **A newsletter that ships its own dark mode is readable again.** Some senders swap only their backgrounds when your Mac is set to dark and leave the writing black, and MailVault let that swap happen inside the message view: the mail painted itself black under its own black text, whether the message was drawn light or dark. Messages are now always drawn from the sender's ordinary design, and MailVault does the dark rendering itself, the way it was meant to.
+
 ## [2.12.0] - 2026-09-07
 
 ### Added

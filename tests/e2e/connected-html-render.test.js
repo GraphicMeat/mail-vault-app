@@ -34,11 +34,25 @@ import { waitForApp, waitForEmails } from './helpers.js';
 import {
   HTML_QUOTED_SUBJECT, DARK_HEADING_ID, DARK_BRAND_LINK_ID,
   FLAT_QUOTE_HEADER_ID, FLAT_QUOTE_MARKER,
+  OWN_DARK_CARD_ID, OWN_DARK_TEXT_ID, OWN_DARK_CARD_BG,
 } from './mockImap.js';
+
+/** WCAG contrast ratio between two computed `rgb(...)` strings. */
+function contrast(a, b) {
+  const lum = (c) => {
+    const [r, g, bl] = (c.match(/\d+/g) || [0, 0, 0]).map(Number).map((v) => {
+      const s = v / 255;
+      return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+  };
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 /** Everything the assertions need, read from inside the email iframe. */
 async function readFrame() {
-  return browser.execute((headingId, brandLinkId) => {
+  return browser.execute((headingId, brandLinkId, ownCardId, ownTextId) => {
     const iframe = document.querySelector('iframe[sandbox]');
     if (!iframe) return null;
     let doc;
@@ -70,7 +84,19 @@ async function readFrame() {
     // which pass produced these colours so an assertion can't read the
     // fallback's flattened text colour as proof of anything.
     const fallback = doc.querySelector('.darkreader--fallback');
+    const ownCard = doc.getElementById(ownCardId);
+    const ownText = doc.getElementById(ownTextId);
     return {
+      // The mail's own dark-mode block, and whether the frame let it match.
+      framePrefersDark: !!iframe.contentWindow?.matchMedia?.('(prefers-color-scheme: dark)').matches,
+      ownDarkFound: !!ownCard && !!ownText,
+      ownDarkCardBg: ownCard ? getComputedStyle(ownCard).backgroundColor : '',
+      ownDarkTextColor: ownText ? getComputedStyle(ownText).color : '',
+      // The mail's OWN stylesheet as it reached the frame. Dark Reader's sheets
+      // carry the class and are excluded: this is what the sender shipped.
+      mailOwnCss: [...doc.body.querySelectorAll('style:not(.darkreader)')]
+        .map((s) => s.textContent).join('\n'),
+      themeTag: doc.documentElement.getAttribute('data-mv-theme'),
       drFallbackActive: !!fallback && fallback.textContent.length > 0,
       drInlineOverrides: doc.querySelectorAll('[data-darkreader-inline-color]').length,
       headingFound: !!heading,
@@ -88,7 +114,27 @@ async function readFrame() {
       quotesHidden: quotes.length > 0 && quotes.every((q) => q.style.display === 'none'),
       hasToggle: quotes.length > 0 && !!quotes[0].previousElementSibling,
     };
-  }, DARK_HEADING_ID, DARK_BRAND_LINK_ID);
+  }, DARK_HEADING_ID, DARK_BRAND_LINK_ID, OWN_DARK_CARD_ID, OWN_DARK_TEXT_ID);
+}
+
+/** Click the reading pane's Light/Dark toggle and wait for the reload. */
+async function toggleEmailTheme(want) {
+  const clicked = await browser.execute((label) => {
+    for (const b of document.querySelectorAll('button')) {
+      if ((b.textContent || '').trim() === label || b.getAttribute('aria-label') === label) {
+        b.click();
+        return true;
+      }
+    }
+    return false;
+  }, want === 'light' ? 'Light' : 'Dark');
+  if (!clicked) return false;
+  // srcDoc differs per theme, so the frame reloads; wait for the new document.
+  await browser.waitUntil(async () => {
+    const f = await readFrame();
+    return !!f && f.themeTag === want && f.ownDarkFound;
+  }, { timeout: 15_000, interval: 250, timeoutMsg: `frame never re-rendered as ${want}` });
+  return true;
 }
 
 /** Click the fold toggle sitting in front of the first quote. */
@@ -274,6 +320,36 @@ describe('HTML email rendering', function () {
     // 300 is the viewer's minimum height; above that the frame must track the
     // content. The pre-fix ratchet added 32px per measurement pass.
     expect(frame.frameHeight).toBeLessThanOrEqual(Math.max(frame.contentHeight + FRAME_SLACK, 300));
+  });
+
+  it('never lets the mail\'s own dark-mode CSS paint over it', async function () {
+    // `<meta name="color-scheme" content="light">` does not stop
+    // `@media (prefers-color-scheme: dark)` matching — that reads the OS. On a
+    // dark Mac the fixture's block painted its card #171717 while its text
+    // stayed #0d0d0d, and Dark Reader had no light design left to invert.
+    const frame = await readFrame();
+    expect(frame.ownDarkFound).toBe(true);
+    // The OS is what that query reads, and this runner is on a dark Mac — so
+    // the block would match if it still said `prefers-color-scheme`.
+    expect(frame.framePrefersDark).toBe(true);
+    // Positive control: the block is still in the mail, declarations intact.
+    expect(frame.mailOwnCss).toContain('#171717');
+    expect(frame.mailOwnCss).not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+    expect(frame.ownDarkCardBg).not.toBe(OWN_DARK_CARD_BG);
+    expect(contrast(frame.ownDarkTextColor, frame.ownDarkCardBg)).toBeGreaterThan(4.5);
+  });
+
+  it('keeps the mail readable when it is rendered light inside a dark app', async function () {
+    // The reported shape: app dark, this message toggled to Light, so no Dark
+    // Reader at all — nothing to rescue the mail from its own dark block.
+    expect(await toggleEmailTheme('light')).toBe(true);
+    const light = await readFrame();
+    expect(light.ownDarkCardBg).not.toBe(OWN_DARK_CARD_BG);
+    expect(contrast(light.ownDarkTextColor, light.ownDarkCardBg)).toBeGreaterThan(4.5);
+
+    // Put the frame back the way the other assertions expect it.
+    expect(await toggleEmailTheme('dark')).toBe(true);
+    await forceDarkReaderPass();
   });
 
   it('resizes when the quote is expanded and collapsed', async function () {

@@ -161,6 +161,11 @@ export function htmlQuotedMessage({ uid, to, from, subject, date }) {
     'Content-Type: text/html; charset=UTF-8',
     '',
     '<p>Short answer above the quote.</p>'
+      + '<style>'
+      + `@media (prefers-color-scheme: dark){#${OWN_DARK_CARD_ID}{background:#171717 !important;}}`
+      + '</style>'
+      + `<div id="${OWN_DARK_CARD_ID}" style="background:#ffffff;padding:8px;">`
+      + `<p id="${OWN_DARK_TEXT_ID}" style="color:#0d0d0d;">Body text the mail never recolours.</p></div>`
       + `<h2 id="${DARK_HEADING_ID}" style="color:hsl(0, 0%, 0%) !important; font-size:1.3em !important; font-weight:600 !important;">Heading that ships its own colour</h2>`
       + `<a id="${DARK_BRAND_LINK_ID}" href="https://example.com/brand" style="color:#e6375a; font-weight:600;">Brand coloured link</a>`
       + `<a id="${MAILTO_LINK_ID}" href="${MAILTO_HREF}">${MAILTO_TEXT}</a>`
@@ -313,6 +318,17 @@ export const FLAT_QUOTE_MARKER = 'Fastmail-shaped quoted line';
 /** Ids of the two dark-mode probes inside that message's HTML body. */
 export const DARK_HEADING_ID = 'mv-dark-important-heading';
 export const DARK_BRAND_LINK_ID = 'mv-dark-brand-link';
+
+// ── The mail's OWN dark-mode stylesheet ─────────────────────────────────────
+// `@media (prefers-color-scheme: dark)` reads the OS appearance, and `<meta
+// name="color-scheme" content="light">` does not stop it matching inside the
+// frame. Newsletters that flip only their BACKGROUNDS in dark mode then painted
+// themselves black under their own black text — black on black, on every dark
+// Mac, in BOTH email themes.
+export const OWN_DARK_CARD_ID = 'mv-own-dark-card';
+export const OWN_DARK_TEXT_ID = 'mv-own-dark-text';
+/** What that block would paint if it were allowed to match. */
+export const OWN_DARK_CARD_BG = 'rgb(23, 23, 23)';
 
 // ── The mailto: link in that same message's body ────────────────────────────
 // An address in a message is not a place to navigate to: clicking it opens a

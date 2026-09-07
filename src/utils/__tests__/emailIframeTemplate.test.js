@@ -5,6 +5,7 @@ import {
   measureCollapsedEmailIframeHeight,
   attachEmailIframeAutoSize,
   stripInlineColorImportant,
+  neutralizeEmailDarkScheme,
   buildEmailIframeHtml,
 } from '../emailIframeTemplate';
 
@@ -63,6 +64,78 @@ describe('stripInlineColorImportant', () => {
     const html = '<p style="color:#000">x</p><p>plain</p>';
     expect(stripInlineColorImportant(html)).toBe(html);
     expect(stripInlineColorImportant('')).toBe('');
+  });
+});
+
+describe('neutralizeEmailDarkScheme', () => {
+  // `color-scheme: light` does NOT stop `@media (prefers-color-scheme: dark)`
+  // from matching — that query reads the OS appearance, and inside the frame it
+  // was true on every dark Mac. A newsletter that flips only its BACKGROUNDS in
+  // dark mode then painted itself black under its own black text.
+  it('makes a dark-scheme block unmatchable while keeping its declarations', () => {
+    const html = '<style>@media (prefers-color-scheme: dark){.card{background:#171717 !important;}}</style><p>hi</p>';
+    const out = neutralizeEmailDarkScheme(html);
+    expect(out).not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+    expect(out).toContain('background:#171717 !important');
+    expect(out).toContain('<p>hi</p>');
+  });
+
+  it('leaves a light-scheme query alone — the baseline IS light', () => {
+    const html = '<style>@media (prefers-color-scheme: light){.card{background:#fff;}}</style>';
+    expect(neutralizeEmailDarkScheme(html)).toContain('prefers-color-scheme: light');
+  });
+
+  it('catches the spacing and casing an ESP actually ships', () => {
+    const html = '<style>@media(prefers-color-scheme:dark){a{color:#fff}}'
+      + '@media screen and (PREFERS-COLOR-SCHEME : DARK){b{color:#fff}}'
+      + '@media (prefers-color-scheme:dark),print{c{color:#fff}}</style>';
+    const out = neutralizeEmailDarkScheme(html);
+    expect(out).not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+    // The rest of each prelude survives, so `print` still prints.
+    expect(out).toContain('screen and');
+    expect(out).toContain(',print');
+  });
+
+  it('catches the query in a <style media> attribute too', () => {
+    const html = '<style media="(prefers-color-scheme: dark)">.card{background:#171717;}</style>';
+    const out = neutralizeEmailDarkScheme(html);
+    expect(out).not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+    expect(out).toContain('background:#171717');
+  });
+
+  it('does not rewrite the words in a mail that TALKS about dark mode', () => {
+    const html = '<p>Use @media (prefers-color-scheme: dark) in your CSS.</p>';
+    expect(neutralizeEmailDarkScheme(html)).toBe(html);
+  });
+
+  it('passes through a body with no stylesheet', () => {
+    expect(neutralizeEmailDarkScheme('<p>plain</p>')).toBe('<p>plain</p>');
+    expect(neutralizeEmailDarkScheme('')).toBe('');
+  });
+});
+
+describe('buildEmailIframeHtml dark-scheme suppression', () => {
+  const mail = '<style>@media (prefers-color-scheme: dark){body{background:#0d0d0d !important;}}</style>'
+    + '<p style="color:#0d0d0d">Sara Choi</p>';
+
+  // Dark Reader is the single source of truth for dark mode, so the email's own
+  // dark variant must not fire under it either.
+  it('suppresses it in dark mode', () => {
+    expect(buildEmailIframeHtml({ bodyHtml: mail, themeTag: 'dark' }))
+      .not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+  });
+
+  // The screenshot case: app dark, email rendered LIGHT, no Dark Reader. The
+  // mail's own dark block painted the body black under its black text.
+  it('suppresses it in light mode', () => {
+    expect(buildEmailIframeHtml({ bodyHtml: mail, themeTag: 'light' }))
+      .not.toMatch(/prefers-color-scheme\s*:\s*dark/i);
+  });
+
+  it('keeps our own light baseline declarations', () => {
+    const out = buildEmailIframeHtml({ bodyHtml: mail, themeTag: 'light' });
+    expect(out).toContain('color-scheme: light');
+    expect(out).toContain('background: #ffffff');
   });
 });
 
