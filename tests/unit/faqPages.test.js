@@ -23,8 +23,8 @@ describe('FAQ hub and topic pages', () => {
   it('keeps every one of the 23 original answers, each on exactly one topic page', () => {
     const all = TOPICS.flatMap(t => questionsIn(topic(t)));
     // 23 from the original single-page FAQ, plus every answer added since.
-    expect(all.length).toBe(25);
-    expect(new Set(all).size).toBe(25);
+    expect(all.length).toBe(26);
+    expect(new Set(all).size).toBe(26);
   });
 
   it('links the hub to every topic and every topic back to the hub', () => {

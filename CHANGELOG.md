@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **The message list can mark what you are reading instead of what the pointer touches.** Settings → Appearance → Highlighting offers two ways for the list to show where you are. Follow the pointer is the default and is what MailVault has always done: a row lights up under the mouse, and the message you opened carries a tinted band. Mark what I'm reading turns it around, the way Apple Mail does: the pointer changes nothing, the open message is filled with a solid grey, and the other messages of the same conversation take a lighter grey, so one look tells you what you are reading and what it belongs to. Both work in every folder and every list layout, and the greys are tuned separately for the light and dark themes.
 - **Deleting the message you are reading can open the next one.** Settings → Behavior → After Deleting chooses what the reading pane does once the open message is deleted: nothing, which is what MailVault has always done and is still the default, or open the next message in the list. Delete the last message in a folder and the one above it opens instead. The selection bar's delete follows the same choice, and the setup screen on first run asks for it too.
 
 ### Fixed
