@@ -173,6 +173,11 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     extensions: [
       StarterKit.configure({
         heading: false,
+        // StarterKit ships its own link and underline; the two below replace
+        // them, and registering both names warns and leaves which one wins
+        // up to extension order.
+        link: false,
+        underline: false,
       }),
       Underline,
       Link.configure({
