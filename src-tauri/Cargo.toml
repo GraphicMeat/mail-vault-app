@@ -68,6 +68,8 @@ signal-hook = "0.3"
 
 [dev-dependencies]
 tempfile = "3"
+# The mock SMTP listener the e2e harness uses — see src-mock-imap/src/smtp.rs.
+mock-imap = { path = "../src-mock-imap" }
 
 [features]
 default = ["custom-protocol", "sparkle"]

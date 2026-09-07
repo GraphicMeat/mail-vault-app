@@ -6,7 +6,7 @@ use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 use serde::Deserialize;
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::imap::ImapConfig;
 
@@ -367,6 +367,15 @@ fn is_loopback_host(host: &str) -> bool {
             .unwrap_or(false)
 }
 
+/// `MAILVAULT_SMTP_PLAINTEXT=1` drops the TLS requirement so tests can point the
+/// client at a plaintext mock SMTP server. Honored ONLY for loopback hosts (the
+/// caller pairs it with `is_loopback_host`) — otherwise the variable would be a
+/// TLS-downgrade vector in a shipped binary. Same hatch, same rule, as
+/// `MAILVAULT_IMAP_PLAINTEXT` on the IMAP side.
+fn plaintext_requested() -> bool {
+    std::env::var("MAILVAULT_SMTP_PLAINTEXT").as_deref() == Ok("1")
+}
+
 /// True when the server refused the *sender* identity rather than the login or
 /// the recipient. Providers word this differently (Postfix "Sender address
 /// rejected", Fastmail "not owned by", Microsoft "SendAsDenied", Gmail "not
@@ -424,27 +433,40 @@ fn build_transport(
         .ok_or_else(|| "SMTP host not configured".to_string())?;
     let smtp_port = account.smtp_port.unwrap_or(587);
 
-    let mut tls_builder = TlsParameters::builder(smtp_host.to_string());
-    if is_loopback_host(smtp_host) {
-        // ponytail: local bridges (Proton Mail Bridge) use self-signed certs; loopback-only.
-        tls_builder = tls_builder.dangerous_accept_invalid_certs(true);
-    }
-    let tls_params = tls_builder
-        .build_rustls()
-        .map_err(|e| format!("TLS params error: {}", e))?;
-
-    let transport = if use_implicit_tls(account.smtp_secure, smtp_port) {
-        AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
-            .map_err(|e| format!("SMTP relay error: {}", e))?
+    let transport = if plaintext_requested() && is_loopback_host(smtp_host) {
+        warn!(
+            "[smtp] MAILVAULT_SMTP_PLAINTEXT=1 — TLS DISABLED for loopback {}:{}",
+            smtp_host, smtp_port
+        );
+        AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(smtp_host)
             .port(smtp_port)
-            .tls(Tls::Wrapper(tls_params))
             .timeout(Some(io_timeout))
     } else {
-        AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(smtp_host)
-            .map_err(|e| format!("SMTP STARTTLS relay error: {}", e))?
-            .port(smtp_port)
-            .tls(Tls::Required(tls_params))
-            .timeout(Some(io_timeout))
+        if plaintext_requested() {
+            warn!("[smtp] MAILVAULT_SMTP_PLAINTEXT=1 ignored — {} is not loopback", smtp_host);
+        }
+        let mut tls_builder = TlsParameters::builder(smtp_host.to_string());
+        if is_loopback_host(smtp_host) {
+            // ponytail: local bridges (Proton Mail Bridge) use self-signed certs; loopback-only.
+            tls_builder = tls_builder.dangerous_accept_invalid_certs(true);
+        }
+        let tls_params = tls_builder
+            .build_rustls()
+            .map_err(|e| format!("TLS params error: {}", e))?;
+
+        if use_implicit_tls(account.smtp_secure, smtp_port) {
+            AsyncSmtpTransport::<Tokio1Executor>::relay(smtp_host)
+                .map_err(|e| format!("SMTP relay error: {}", e))?
+                .port(smtp_port)
+                .tls(Tls::Wrapper(tls_params))
+                .timeout(Some(io_timeout))
+        } else {
+            AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(smtp_host)
+                .map_err(|e| format!("SMTP STARTTLS relay error: {}", e))?
+                .port(smtp_port)
+                .tls(Tls::Required(tls_params))
+                .timeout(Some(io_timeout))
+        }
     };
 
     let transport = if account.is_oauth2() {
@@ -855,5 +877,95 @@ mod tests {
         let msg = friendly_smtp_error("smtp.x.com", 587, "DEF@fastmail.fm",
             "550 5.1.1 <nobody@example.com>: Recipient address rejected: User unknown");
         assert!(!msg.contains("refused to send as"), "{}", msg);
+    }
+
+    // ── the wire, against the mock SMTP server ──────────────────────────────────
+    //
+    // Everything above tests what we BUILD; these test what a real SMTP server
+    // sees and what comes back. The e2e harness leans on exactly this pairing —
+    // `MAILVAULT_SMTP_PLAINTEXT=1` plus `mock-imap`'s SMTP listener — and an e2e
+    // cycle on the runner is fifteen minutes, so the handshake is pinned here.
+
+    mod wire_tests {
+        use super::super::*;
+        use super::{account, outgoing};
+        use mock_imap::{MockImap, Scenario};
+
+        /// The hatch is a process-wide env var and cargo runs these in parallel.
+        static ENV: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+        fn config_for(server: &MockImap) -> ImapConfig {
+            let mut cfg = account("luke@mock.test", None);
+            cfg.smtp_host = Some("127.0.0.1".to_string());
+            cfg.smtp_port = Some(server.smtp_port());
+            cfg.smtp_secure = Some(false);
+            cfg
+        }
+
+        async fn send_to(server: &MockImap, to: &str) -> Result<SendResult, String> {
+            let cfg = config_for(server);
+            let mut email = outgoing();
+            email.to = to.to_string();
+            email.subject = "Wire subject".to_string();
+            let built = build_mime(&cfg, &email).expect("build_mime");
+            send_built(&cfg, &email, built).await
+        }
+
+        #[tokio::test]
+        async fn a_send_succeeds_against_the_mock_and_the_server_holds_the_message() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+
+            let result = send_to(&server, "partner@example.com").await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            let result = result.expect("send against the mock SMTP server");
+            assert!(!result.raw_rfc2822.is_empty());
+
+            // The bytes the server took in are the message we built, not a
+            // paraphrase of it — dot-stuffing and the terminator both undone.
+            let sent = server.sent_messages();
+            assert_eq!(sent.len(), 1, "commands: {:?}", server.smtp_commands());
+            let raw = String::from_utf8_lossy(&sent[0]).to_string();
+            assert!(raw.contains("Subject: Wire subject"), "{}", raw);
+            assert!(raw.contains("To: partner@example.com"), "{}", raw);
+            assert!(raw.contains("From: \"Test User\" <luke@mock.test>"), "{}", raw);
+
+            // It authenticated on the way in — a mock that skipped AUTH would let a
+            // broken credential path pass unnoticed.
+            let log = server.smtp_commands();
+            assert!(log.iter().any(|l| l.starts_with("AUTH")), "{:?}", log);
+            assert!(log.iter().any(|l| l.starts_with("RCPT TO:<partner@example.com>")), "{:?}", log);
+        }
+
+        #[tokio::test]
+        async fn a_refused_recipient_fails_the_send_and_leaves_nothing_behind() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new().smtp_refuse("@refused.test"));
+
+            let result = send_to(&server, "bounce@refused.test").await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+
+            let Err(err) = result else { panic!("a 550 at RCPT TO must fail the send") };
+            assert!(err.contains("550") || err.to_lowercase().contains("reject"), "{}", err);
+            // The refusal is the whole point: nothing may reach the server.
+            assert!(server.sent_messages().is_empty());
+        }
+
+        #[tokio::test]
+        async fn without_the_env_hatch_the_plaintext_server_is_refused() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            let server = MockImap::start(Scenario::new());
+
+            // STARTTLS is required by default and the mock does not offer it, so a
+            // shipped binary cannot be talked into plaintext by the port alone.
+            let Err(err) = send_to(&server, "partner@example.com").await else {
+                panic!("STARTTLS is required by default — a plaintext server must not be used")
+            };
+            assert!(!err.is_empty());
+            assert!(server.sent_messages().is_empty(), "a message crossed an unencrypted link");
+        }
     }
 }

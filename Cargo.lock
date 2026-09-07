@@ -3651,6 +3651,7 @@ dependencies = [
  "libc",
  "mailparse",
  "mailvault-core",
+ "mock-imap",
  "objc",
  "objc2",
  "objc2-foundation",
