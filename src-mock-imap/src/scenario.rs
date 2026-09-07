@@ -104,6 +104,20 @@ pub struct Fault {
     pub action: Action,
 }
 
+/// The SMTP listener's behaviour. It runs on its own port beside the IMAP one
+/// (`MockImap::smtp_port`) and accepts everything by default.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct SmtpScenario {
+    /// A recipient whose address contains this needle (case-insensitive) is
+    /// refused with `550` at RCPT TO. `None` accepts every recipient.
+    ///
+    /// Recipient-scoped rather than a global on/off because one mock server
+    /// serves a whole e2e run: a per-run switch cannot be flipped by a single
+    /// spec, but the address a spec types is its own.
+    pub refuse_recipient: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Scenario {
@@ -111,6 +125,7 @@ pub struct Scenario {
     pub faults: Vec<Fault>,
     /// Greeting line sent on connect. Default: `* OK MockIMAP ready`
     pub greeting: Option<String>,
+    pub smtp: SmtpScenario,
 }
 
 impl Scenario {
@@ -119,6 +134,7 @@ impl Scenario {
             state: ServerState::default(),
             faults: vec![],
             greeting: None,
+            smtp: SmtpScenario::default(),
         }
     }
 
@@ -155,6 +171,12 @@ impl Scenario {
 
     pub fn greeting(mut self, g: &str) -> Self {
         self.greeting = Some(g.to_string());
+        self
+    }
+
+    /// Refuse any SMTP recipient whose address contains `needle`.
+    pub fn smtp_refuse(mut self, needle: &str) -> Self {
+        self.smtp.refuse_recipient = Some(needle.to_string());
         self
     }
 

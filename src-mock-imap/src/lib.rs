@@ -1,4 +1,5 @@
-//! Scriptable mock IMAP server for MailVault tests.
+//! Scriptable mock IMAP server for MailVault tests — plus a minimal SMTP
+//! listener on a second port, so a send can succeed in a test (see `smtp.rs`).
 //!
 //! Plaintext TCP on loopback — no TLS. TLS is `async_native_tls`'s job, not ours,
 //! and putting a cert here would mean an accept-invalid-certs hatch in production
@@ -12,15 +13,16 @@
 //! ```no_run
 //! use mock_imap::{MockImap, Scenario, state::{Mailbox, synthetic_mailbox}};
 //! let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
-//! // point ImapConfig at server.host()/server.port()
+//! // point ImapConfig at server.host()/server.port(), and SMTP at server.smtp_port()
 //! ```
 
 pub mod commands;
 pub mod encode;
 pub mod scenario;
+mod smtp;
 pub mod state;
 
-pub use scenario::{Action, Fault, Scenario, Trigger};
+pub use scenario::{Action, Fault, Scenario, SmtpScenario, Trigger};
 pub use state::{Mailbox, Message, ServerState};
 
 use commands::{Command, Response, Session};
@@ -33,6 +35,7 @@ use std::time::Duration;
 
 pub struct MockImap {
     addr: SocketAddr,
+    smtp_addr: SocketAddr,
     state: Arc<Mutex<ServerState>>,
     stop: Arc<AtomicBool>,
     /// Every command line the server received, in order. Test assertions read this
@@ -40,6 +43,8 @@ pub struct MockImap {
     log: Arc<Mutex<Vec<String>>>,
     /// Accepted TCP connections. Proves whether a session was reused or replaced.
     connections: Arc<AtomicUsize>,
+    /// What the SMTP listener took in — see `smtp.rs`.
+    smtp: Arc<smtp::SmtpRecorder>,
 }
 
 impl MockImap {
@@ -51,6 +56,8 @@ impl MockImap {
         let log = Arc::new(Mutex::new(Vec::new()));
         let connections = Arc::new(AtomicUsize::new(0));
         let counts: Arc<Mutex<HashMap<String, usize>>> = Arc::new(Mutex::new(HashMap::new()));
+        let smtp_recorder = Arc::new(smtp::SmtpRecorder::new());
+        let smtp_addr = smtp::start(scenario.smtp.clone(), stop.clone(), smtp_recorder.clone());
 
         {
             let state = state.clone();
@@ -84,7 +91,7 @@ impl MockImap {
             });
         }
 
-        MockImap { addr, state, stop, log, connections }
+        MockImap { addr, smtp_addr, state, stop, log, connections, smtp: smtp_recorder }
     }
 
     pub fn host(&self) -> String {
@@ -97,6 +104,28 @@ impl MockImap {
 
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// The SMTP listener's port — a different one from `port()`, so a fixture
+    /// that names both is telling the truth about each.
+    pub fn smtp_port(&self) -> u16 {
+        self.smtp_addr.port()
+    }
+
+    pub fn smtp_addr(&self) -> SocketAddr {
+        self.smtp_addr
+    }
+
+    /// Raw RFC 5322 bytes of every message SMTP accepted, in order. The mock
+    /// files none of them anywhere: MailVault APPENDs its own Sent copy over
+    /// IMAP once the send returns.
+    pub fn sent_messages(&self) -> Vec<Vec<u8>> {
+        self.smtp.accepted.lock().unwrap().clone()
+    }
+
+    /// Every SMTP command line received, in order. DATA content is not one.
+    pub fn smtp_commands(&self) -> Vec<String> {
+        self.smtp.log.lock().unwrap().clone()
     }
 
     /// Snapshot of server state — assert here that a write actually landed.
@@ -139,8 +168,9 @@ impl MockImap {
 impl Drop for MockImap {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        // Wake the blocking accept() so the listener thread can exit.
+        // Wake the blocking accept() so each listener thread can exit.
         let _ = TcpStream::connect(self.addr);
+        let _ = TcpStream::connect(self.smtp_addr);
     }
 }
 

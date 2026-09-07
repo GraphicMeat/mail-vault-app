@@ -1,8 +1,8 @@
 //! Standalone mock IMAP server for JS tests.
 //!
-//! Reads a JSON `Scenario` on stdin, prints `{"port":N}` on stdout, then serves
-//! until killed. Same implementation as the in-process Rust harness — one mock,
-//! both test tiers.
+//! Reads a JSON `Scenario` on stdin, prints `{"port":N,"smtpPort":M}` on stdout,
+//! then serves until killed. Same implementation as the in-process Rust harness
+//! — one mock, both test tiers. The two ports are separate listeners.
 //!
 //! ```sh
 //! echo '{"state":{"mailboxes":[...]},"faults":[]}' | mock-imap-server
@@ -24,7 +24,7 @@ fn main() {
     };
 
     let server = MockImap::start(scenario);
-    println!("{{\"port\":{}}}", server.port());
+    println!("{{\"port\":{},\"smtpPort\":{}}}", server.port(), server.smtp_port());
 
     // Park forever — the parent test process kills us.
     loop {
