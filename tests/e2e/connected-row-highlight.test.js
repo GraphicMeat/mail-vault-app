@@ -42,8 +42,17 @@ const probeColours = () => browser.execute(() => {
 });
 
 /** Every visible row carrying the fixture's subject, in list order. */
-const threadRows = () => browser.execute((subj) =>
-  [...document.querySelectorAll('[data-testid="email-row"]')]
+const threadRows = () => browser.execute((subj) => {
+  // `.virtual-row` transitions background-color, and a webview that is not
+  // compositing reports that transition frozen at its START: the class is
+  // right and the computed colour is still the old one, however long you poll.
+  if (!document.getElementById('e2e-no-row-transition')) {
+    const style = document.createElement('style');
+    style.id = 'e2e-no-row-transition';
+    style.textContent = '.virtual-row { transition: none !important; }';
+    document.head.appendChild(style);
+  }
+  return [...document.querySelectorAll('[data-testid="email-row"]')]
     .filter(r => r.offsetHeight > 0 && (r.textContent || '').includes(subj))
     .map(r => ({
       uid: r.getAttribute('data-uid'),
@@ -52,7 +61,8 @@ const threadRows = () => browser.execute((subj) =>
       // no computed style can report until a real pointer is over the row.
       reactsToPointer: /(^|\s)hover:bg-mail-surface-hover(\s|$)/.test(r.className),
       border: getComputedStyle(r).borderLeftWidth,
-    })), FRAGMENTED_SUBJECT);
+    }));
+}, FRAGMENTED_SUBJECT);
 
 /**
  * WebDriver never reaches React's onChange, so a setting is written through the
@@ -91,7 +101,12 @@ describe('Email row highlighting', function () {
   });
 
   after(async function () {
+    // Spec files run one at a time against a shared HOME, so what this file
+    // leaves in the persisted settings is what the NEXT file boots with. The
+    // store's write is async and the session is torn down right after this
+    // hook, so restoring without waiting can lose the write entirely.
     await setSettings({ threadMode: 'grouped', emailRowHighlight: 'hover' });
+    await browser.pause(2000);
   });
 
   it('draws the conversation as separate rows in flat mode', async function () {

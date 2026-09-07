@@ -106,7 +106,26 @@ describe('List rows: subject text, sender grouping, selection', function () {
     await browser.execute(() => document.querySelector('[data-testid="email-row"]').click());
     await browser.pause(600);
 
-    const after = await browser.execute(() => {
+    const after = await read();
+
+    expect(after.selected).toBe(after.tint);
+    expect(after.selected).not.toBe(after.sibling);
+  });
+
+  /** The tint token and the first two rows' grounds, as rgb strings. */
+  function read() {
+    return browser.execute(() => {
+      // `.virtual-row` transitions background-color over 0.14s, and a webview
+      // that is not compositing reports that transition frozen at its START —
+      // the class is right, the computed colour is still the old one, for as
+      // long as you care to poll. Diagnosed 2026-09-07: row0 carried
+      // `bg-mail-accent-tint` while this read returned `rgba(0, 0, 0, 0)`.
+      if (!document.getElementById('e2e-no-row-transition')) {
+        const style = document.createElement('style');
+        style.id = 'e2e-no-row-transition';
+        style.textContent = '.virtual-row { transition: none !important; }';
+        document.head.appendChild(style);
+      }
       const rows = [...document.querySelectorAll('[data-testid="email-row"]')];
       // Resolve the token through a throwaway element so the comparison is
       // rgb-string vs rgb-string, whatever the theme.
@@ -122,10 +141,7 @@ describe('List rows: subject text, sender grouping, selection', function () {
         sibling: getComputedStyle(rows[1]).backgroundColor,
       };
     });
-
-    expect(after.selected).toBe(after.tint);
-    expect(after.selected).not.toBe(after.sibling);
-  });
+  }
 
   it('gives one sender two topic rows for two same-subject threads, at two offsets', async function () {
     expect(await clickButtonByTitle('Group by sender')).toBe(true);
