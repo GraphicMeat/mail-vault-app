@@ -44,6 +44,28 @@ class EmailPipelineManager {
     this._activeAccountId = accountId;
     this._destroyed = false; // Reset so background pipelines can run after destroyAll()
 
+    // ── What this pipeline is actually allowed to fetch ──
+    //
+    // In All Inboxes the list spans accounts AND folders, and both of the
+    // values below were read straight off the store:
+    //   - `emails` holds EVERY account's rows, so this account's pipeline was
+    //     handed other accounts' uids — a uid names a message only inside one
+    //     (account, mailbox).
+    //   - `activeMailbox` is the literal 'UNIFIED', which no server can SELECT.
+    //     Every body fetch died on `SELECT UNIFIED … [NONEXISTENT]`, so nothing
+    //     was cached in that view at all and each refused uid went back on the
+    //     retry queue for the life of the session.
+    //
+    // The rows carry the answer: loadUnifiedInbox stamps each with its own
+    // `_accountId` and the `_mailbox` it resolved for that account. It builds
+    // the list from one folder per account, so a single mailbox covers this
+    // account's whole slice of the list.
+    const spanning = activeMailbox === 'UNIFIED';
+    const ownRows = spanning ? emails.filter(e => e._accountId === accountId) : emails;
+    const pipelineMailbox = spanning
+      ? (ownRows.find(e => e._mailbox)?._mailbox || 'INBOX')
+      : activeMailbox;
+
     // Reuse a live pipeline for this account — switching away and back used to
     // destroy it and rebuild from scratch, throwing away its queue and the
     // headers it had already loaded. Callbacks are plain fields, so a pipeline
@@ -60,7 +82,7 @@ class EmailPipelineManager {
       pipeline.onProgress = (state) => this._onProgress(accountId, state);
       pipeline.onComplete = () => this._onActiveComplete(accountId);
       pipeline.onError = (err) => console.warn(`[PipelineManager] Active pipeline error:`, err.message);
-      pipeline.resume?.(activeMailbox);
+      pipeline.resume?.(pipelineMailbox);
     } else {
       if (existing) existing.destroy();
       pipeline = new AccountPipeline(account, {
@@ -81,11 +103,11 @@ class EmailPipelineManager {
 
     // Filter UIDs that need caching
     const { localCacheDurationMonths } = useSettingsStore.getState();
-    const uidsToFetch = this._getUncachedUids(emails, savedEmailIds, localCacheDurationMonths);
+    const uidsToFetch = this._getUncachedUids(ownRows, savedEmailIds, localCacheDurationMonths);
 
     // An empty list still runs the after-bodies step (attachment prefetch)
     // and completes at once, which cascades to the background accounts.
-    await pipeline.startContentCaching(uidsToFetch, activeMailbox);
+    await pipeline.startContentCaching(uidsToFetch, pipelineMailbox);
   }
 
   /**
