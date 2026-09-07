@@ -112,20 +112,6 @@ export async function waitForEmails(timeout = 60_000) {
   );
 }
 
-/**
- * Generic wait for an element matching `selector` to be visible in the DOM.
- * @param {string} selector - CSS selector
- * @param {number} timeout - Max wait time in ms (default 10s)
- */
-export async function waitForElement(selector, timeout = 10_000) {
-  const el = await $(selector);
-  await el.waitForDisplayed({
-    timeout,
-    timeoutMsg: `Element "${selector}" not visible within ${timeout}ms`,
-  });
-  return el;
-}
-
 // ---------------------------------------------------------------------------
 // Keyboard helpers
 // ---------------------------------------------------------------------------
