@@ -223,6 +223,24 @@ describe('threadMode', () => {
   });
 });
 
+describe('emailRowHighlight', () => {
+  it('defaults to following the pointer — today’s behaviour', () => {
+    expect(useSettingsStore.getState().emailRowHighlight).toBe('hover');
+  });
+
+  it('setEmailRowHighlight writes the value', () => {
+    useSettingsStore.getState().setEmailRowHighlight('selection');
+    expect(useSettingsStore.getState().emailRowHighlight).toBe('selection');
+    useSettingsStore.getState().setEmailRowHighlight('hover');
+  });
+
+  it('resetSettings restores hover', () => {
+    useSettingsStore.getState().setEmailRowHighlight('selection');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().emailRowHighlight).toBe('hover');
+  });
+});
+
 describe('afterDeleteSelect', () => {
   it('defaults to selecting nothing', () => {
     expect(useSettingsStore.getState().afterDeleteSelect).toBe('none');

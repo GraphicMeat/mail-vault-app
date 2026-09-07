@@ -229,6 +229,7 @@ export const useSettingsStore = create(
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
+      emailRowHighlight: 'hover', // 'hover' (rows light under the pointer) | 'selection' (the open row and its thread stay lit)
       dateFormat: 'auto', // 'auto' | 'MM/dd/yyyy' | 'dd/MM/yyyy' | 'yyyy-MM-dd' | 'dd MMM yyyy' | 'custom'
       customDateFormat: '', // Only used when dateFormat === 'custom'
       timeFormat: 'auto', // 'auto' (system locale) | '12h' | '24h'
@@ -717,6 +718,7 @@ export const useSettingsStore = create(
       setThreadReaderLayout: (layout) => set({ threadReaderLayout: layout }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setThreadMode: (mode) => set({ threadMode: mode }),
+      setEmailRowHighlight: (mode) => set({ emailRowHighlight: mode }),
       setDateFormat: (value) => set({ dateFormat: value }),
       setCustomDateFormat: (value) => set({ customDateFormat: value }),
       setTimeFormat: (value) => set({ timeFormat: value }),
@@ -911,6 +913,7 @@ export const useSettingsStore = create(
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
           threadMode: 'grouped',
+          emailRowHighlight: 'hover',
           dateFormat: 'auto',
           customDateFormat: '',
           timeFormat: 'auto',
