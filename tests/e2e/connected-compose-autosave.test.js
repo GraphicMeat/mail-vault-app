@@ -19,6 +19,7 @@
  */
 
 import { waitForApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   openComposeFresh,
   closeComposeHard,
@@ -323,12 +324,10 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
   });
 
   it('keeps the draft when the send fails', async function () {
-    // A real SMTP attempt against a port that does not speak SMTP; one failure
-    // is slower than the spec-level budget.
-    this.timeout(240_000);
-
     await freshCompose();
-    await setField('compose-to', 'nobody@example.com');
+    // The mock SMTP server answers this recipient 550 — the failure is asked
+    // for, not an accident of the harness.
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', 'Draft outlives a failed send');
     await setField('compose-delay', 0);
     await waitForLocalDraft(account.id, 'Draft outlives a failed send');

@@ -110,7 +110,7 @@ npx vitest run
 npm run test:e2e
 ```
 
-The E2E suite drives the real app against a scripted mock IMAP server ([`src-mock-imap/`](src-mock-imap/)) — no credentials, no network, no chance of touching a real mailbox. Packaging, signing and notarisation are documented in [BUILDING.md](BUILDING.md).
+The E2E suite drives the real app against a scripted mock IMAP and SMTP server ([`src-mock-imap/`](src-mock-imap/)): no credentials, no network, no chance of touching a real mailbox, and a send that can either succeed or be refused on demand. Packaging, signing and notarisation are documented in [BUILDING.md](BUILDING.md).
 
 ## Screenshots
 

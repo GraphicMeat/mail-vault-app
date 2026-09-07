@@ -5,9 +5,11 @@
  * .env.test. They now run against `src-mock-imap` on loopback — hermetic, no
  * credentials, no rate limits. Reuses the e2e harness for build/spawn.
  *
- * SMTP is gone: the mock speaks IMAP only, so "send" in these tests is an
- * APPEND into the target INBOX via `deliver()`. Provider SMTP conformance is
- * not testable against a mock and is intentionally out of scope here.
+ * "Send" here is an APPEND into the target INBOX via `deliver()`, not SMTP.
+ * The mock does have an SMTP listener (see src-mock-imap/src/smtp.rs), but it
+ * only accepts and drops; these suites are about what IMAP does with a message
+ * that has already arrived. Provider SMTP conformance is not testable against a
+ * mock and stays out of scope here.
  */
 
 import { ImapFlow } from 'imapflow';

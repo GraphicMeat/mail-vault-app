@@ -14,10 +14,10 @@
  * one config line (tauri.conf.json `dragDropEnabled: false`) and is not
  * provable from here.
  *
- * The last two cases go all the way to disk. The harness has NO SMTP server
- * (mockImap points smtpHost at the mock IMAP port), so a real Send builds the
- * MIME, stages a `.eml` under `Maildir/<accountId>/Sent/cur/`, and only then
- * fails on SMTP. That staged file is the one end-to-end proof of what compose
+ * The last two cases go all the way to disk. They address `SEND_REFUSED_TO`,
+ * which the mock SMTP server answers 550, so a real Send builds the MIME,
+ * stages a `.eml` under `Maildir/<accountId>/Sent/cur/`, and only then fails on
+ * SMTP — leaving that file behind. It is the one end-to-end proof of what compose
  * hands to the wire — the assertion that an inline picture leaves as a
  * `cid:`-referenced MIME part and not as a `data:` URI (Gmail and Outlook.com
  * strip those, so a data URI reaches the recipient as nothing at all).
@@ -28,6 +28,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   MODAL,
   EDITOR,
@@ -154,7 +155,7 @@ describe('Connected Compose Drop Zones', function () {
   // ── the staged .eml on disk ──────────────────────────────────────────────
   // sentDir/listSent/readStagedEml/flatten/waitForOutboxError live in
   // composeHelpers.js — connected-compose-from-identities asserts on the same
-  // staged file, and one copy of the "no SMTP here" knowledge is enough.
+  // staged file, and one copy of the staged-send knowledge is enough.
 
   /**
    * Send from account[0] (luke@mock.test) and hand back the staged MIME.
@@ -188,7 +189,9 @@ describe('Connected Compose Drop Zones', function () {
       await waitForAttachments(attach.map((f) => f.name), 'attaching through the paperclip input');
     }
 
-    await setField('compose-to', account.email);
+    // Not the account's own address: a deliverable recipient would let the
+    // send SUCCEED, and the staged copy is only observable while it has not.
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
 

@@ -6,12 +6,19 @@
  * loopback instead of a real provider — no credentials, no network, no chance
  * of a test mutating a real inbox.
  *
- * The app skips its TLS wrap for loopback when `MAILVAULT_IMAP_PLAINTEXT=1`,
- * and reads credentials from a file when `MAILVAULT_TEST_CREDENTIALS` is set,
- * so a seeded account boots straight into the mock (see wdio.conf.js).
+ * The app skips its TLS wrap for loopback when `MAILVAULT_IMAP_PLAINTEXT=1`
+ * (`MAILVAULT_SMTP_PLAINTEXT=1` for the SMTP half), and reads credentials from a
+ * file when `MAILVAULT_TEST_CREDENTIALS` is set, so a seeded account boots
+ * straight into the mock (see wdio.conf.js).
+ *
+ * The server listens on two ports: IMAP, and a minimal SMTP responder that
+ * makes a send actually succeed. A send to `SEND_REFUSED_TO` is answered 550 —
+ * that is how a spec asks for a failing send now that failure is no longer the
+ * only thing the harness can do.
  */
 
 import { spawn, execFileSync } from 'node:child_process';
+import { ImapFlow } from 'imapflow';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
@@ -31,9 +38,9 @@ export function buildMockServer() {
 }
 
 /**
- * Start a mock IMAP server on a random loopback port.
- * @param {object} scenario - `{ state: { mailboxes, capabilities }, faults }`
- * @returns {Promise<{host: string, port: number, stop: () => void}>}
+ * Start a mock server on random loopback ports — one for IMAP, one for SMTP.
+ * @param {object} scenario - `{ state: { mailboxes, capabilities }, faults, smtp }`
+ * @returns {Promise<{host: string, port: number, smtpPort: number, stop: () => void}>}
  */
 export function startMockImap(scenario) {
   return new Promise((res, rej) => {
@@ -54,10 +61,11 @@ export function startMockImap(scenario) {
       if (settled || !line.includes('}')) return;
       settled = true;
       clearTimeout(timer);
-      const { port } = JSON.parse(line);
+      const { port, smtpPort } = JSON.parse(line);
       res({
         host: '127.0.0.1',
         port,
+        smtpPort,
         stop() {
           proc.kill('SIGTERM');
           setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* gone */ } }, 1000);
@@ -837,7 +845,9 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     }));
   }
 
-  return { state: { mailboxes }, faults };
+  // Every account's SMTP listener refuses the same one address, so a spec asks
+  // for a failing send by typing it — see SEND_REFUSED_TO.
+  return { state: { mailboxes }, faults, smtp: { refuse_recipient: `@${SMTP_REFUSED_DOMAIN}` } };
 }
 /**
  * Stall every occurrence of one IMAP command by `ms`.
@@ -947,6 +957,66 @@ export function unreadableBody(uid, ms) {
   ];
 }
 
+/**
+ * The address the mock SMTP server refuses, and the domain it matches on.
+ *
+ * The harness used to fail every send by accident — `smtpPort` pointed at the
+ * IMAP mock, so nothing could speak SMTP. Now it can, and a spec that needs a
+ * FAILING send has to say so: address the message here and RCPT TO is answered
+ * `550`. Everything else is delivered (and dropped — the mock files nothing,
+ * because the app APPENDs its own Sent copy over IMAP once the send returns).
+ *
+ * Recipient-scoped rather than a server switch on purpose: one mock server
+ * serves the whole run, so a per-run flag could not be flipped by one spec
+ * (see reference: a fixture flag is per RUN, not per spec). The address a spec
+ * types is its own.
+ */
+export const SMTP_REFUSED_DOMAIN = 'refused.test';
+export const SEND_REFUSED_TO = `bounce@${SMTP_REFUSED_DOMAIN}`;
+
+/**
+ * Snapshot a mailbox on a mock server, and hand back the undo.
+ *
+ * A send that SUCCEEDS is APPENDed to the account's Sent folder by the app, and
+ * that copy outlives the spec file: one mock server serves the whole run, and
+ * `resetAppState` wipes the app's data dir, never the server's mailboxes. The
+ * next spec then opens a fixture with an extra message in it — which is how
+ * `connected-unified-archive-thread` first went red on a conversation another
+ * spec had replied into.
+ *
+ * So a spec that lets a send land calls this in `before` and awaits the
+ * returned function in `after`. It removes every message added since, straight
+ * over IMAP, and leaves the fixture as the run started with it.
+ *
+ * @returns {Promise<() => Promise<void>>} restore
+ */
+export async function trackMailbox({ host, port }, mailbox) {
+  const connect = async () => {
+    const client = new ImapFlow({
+      host, port, secure: false,
+      auth: { user: 'e2e-harness', pass: MOCK_PASSWORD },
+      logger: false,
+    });
+    await client.connect();
+    return client;
+  };
+
+  const client = await connect();
+  // UIDNEXT is the watermark: everything the run appends lands at or above it.
+  const { uidNext } = await client.mailboxOpen(mailbox);
+  await client.logout();
+
+  return async function restore() {
+    const c = await connect();
+    try {
+      await c.mailboxOpen(mailbox);
+      await c.messageDelete(`${uidNext}:*`, { uid: true });
+    } finally {
+      await c.logout();
+    }
+  };
+}
+
 // ── Account seeding ─────────────────────────────────────────────────────────
 
 /** Where the app and daemon put their data under a given HOME. */
@@ -960,7 +1030,7 @@ export function appDataDir(home, platform = process.platform) {
  * Account blob in the shape `db.saveAccount` persists — the credentials file and
  * accounts.json are exactly what the app would have written itself.
  */
-export function mockAccount({ id, email, port, name }) {
+export function mockAccount({ id, email, port, smtpPort, name }) {
   return {
     id,
     name: name || email,
@@ -970,7 +1040,7 @@ export function mockAccount({ id, email, port, name }) {
     imapPort: port,
     imapSecure: false,
     smtpHost: '127.0.0.1',
-    smtpPort: port,
+    smtpPort,
     smtpSecure: false,
     authType: 'password',
     createdAt: '2026-01-01T00:00:00.000Z',

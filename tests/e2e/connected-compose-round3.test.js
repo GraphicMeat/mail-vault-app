@@ -7,12 +7,13 @@
  *    that sent last (`settingsStore.lastComposeIdentity`) is an address, not an
  *    account: it is kept only when the account being read is the one that sent
  *    as it (it used to outrank the account outright, which wrote from the
- *    account you had just switched away from). The harness has no SMTP, so the
- *    write side (recorded after `smtp_ok`) can't fire here — these cases seed
- *    the store method directly and assert the READ side: the From row, and the
- *    staged `.eml` that a send with that default produces. Replies must ignore
- *    it; minimize→restore must keep the picked account (`_accountId` /
- *    `_fromAddress` round-trip through saved compose state).
+ *    account you had just switched away from). Most cases seed the store method
+ *    directly and assert the READ side: the From row, and the staged `.eml` that
+ *    a send with that default produces. The WRITE side (recorded after
+ *    `smtp_ok`) is proved at the unit tier; here only the refused-send half is,
+ *    because a delivered message mutates the shared mock server. Replies must
+ *    ignore the memory; minimize→restore must keep the picked account
+ *    (`_accountId` / `_fromAddress` round-trip through saved compose state).
  *
  * 2. Replying to your own message targets its recipients, not you — including
  *    when "you" is the account's Send Mail As alias, which is only knowable
@@ -30,6 +31,7 @@
  *    move it to the search input.
  */
 import { waitForApp, waitForEmails } from './helpers.js';
+import { SEND_REFUSED_TO, SMTP_REFUSED_DOMAIN } from './mockImap.js';
 import {
   EDITOR,
   setField,
@@ -156,7 +158,8 @@ describe('Connected Compose Round 3', function () {
 
     const subject = 'Round three remembered alias';
     const before = new Set(listSent(luke.id));
-    await setField('compose-to', 'someone@example.com');
+    // Refused: the staged .eml is only on disk while the send has not succeeded.
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
     expect(await clickSend()).toBe(true);
@@ -252,7 +255,7 @@ describe('Connected Compose Round 3', function () {
     const subject = 'Round three quoted name';
     const before = new Set(listSent(luke.id));
     await openComposeFresh();
-    await setField('compose-to', '"Doe, John" <doe@example.com>, second@example.com');
+    await setField('compose-to', `"Doe, John" <doe@${SMTP_REFUSED_DOMAIN}>, second@${SMTP_REFUSED_DOMAIN}`);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
     expect(await clickSend()).toBe(true);
@@ -264,14 +267,14 @@ describe('Connected Compose Round 3', function () {
     // nothing is ever staged — this file existing is the fix working.
     const raw = flatten(await readStagedEml(luke.id, before, subject));
     const to = headerLine(raw, 'To');
-    expect(to).toContain('doe@example.com');
-    expect(to).toContain('second@example.com');
+    expect(to).toContain(`doe@${SMTP_REFUSED_DOMAIN}`);
+    expect(to).toContain(`second@${SMTP_REFUSED_DOMAIN}`);
     // lettre writes a display name with specials as an RFC 2047 encoded-word,
     // not a quoted-string — either form must decode to the intact name.
     const encodedWord = `=?utf-8?b?${Buffer.from('Doe, John').toString('base64')}?=`;
     expect(to.includes('"Doe, John"') || to.includes(encodedWord)).toBe(true);
     // Two recipients on the wire, not three fragments.
-    expect((to.match(/@example\.com/g) || []).length).toBe(2);
+    expect((to.match(new RegExp(`@${SMTP_REFUSED_DOMAIN}`, 'g')) || []).length).toBe(2);
     await waitForOutboxError(subject);
   });
 
@@ -279,7 +282,7 @@ describe('Connected Compose Round 3', function () {
     const subject = 'Round three trailing comma';
     const before = new Set(listSent(luke.id));
     await openComposeFresh();
-    await setField('compose-to', 'trail@example.com,');
+    await setField('compose-to', `trail@${SMTP_REFUSED_DOMAIN},`);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
     expect(await clickSend()).toBe(true);
@@ -287,7 +290,7 @@ describe('Connected Compose Round 3', function () {
     expect(await testidText('compose-error')).toBeFalsy();
 
     const raw = flatten(await readStagedEml(luke.id, before, subject));
-    expect(headerLine(raw, 'To')).toContain('trail@example.com');
+    expect(headerLine(raw, 'To')).toContain(`trail@${SMTP_REFUSED_DOMAIN}`);
     await waitForOutboxError(subject);
   });
 
@@ -317,14 +320,16 @@ describe('Connected Compose Round 3', function () {
     expect(result.stillThere).toBe(true);
   });
 
-  it('the remembered identity starts unset in a fresh profile', async function () {
-    // The write side records after a successful SMTP send, which this harness
-    // cannot produce — so prove the default and the failed-send behaviour:
-    // a send that never reached smtp_ok must not move the identity.
+  it('the remembered identity starts unset, and a refused send leaves it alone', async function () {
+    // The write side records after `smtp_ok`. Its success half is asserted in
+    // src/components/__tests__/composeStagedSend.test.jsx rather than here: a
+    // delivered message is APPENDed to the mock server's Sent folder for the
+    // rest of the run, and this file runs early enough that the extra row would
+    // reach fifty later specs.
     expect(await lastIdentity()).toBe(null);
-    const subject = 'Round three no smtp no memory';
+    const subject = 'Round three refused no memory';
     await openComposeFresh();
-    await setField('compose-to', 'someone@example.com');
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
     expect(await clickSend()).toBe(true);

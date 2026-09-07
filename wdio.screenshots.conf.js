@@ -162,7 +162,8 @@ export const config = {
       buildMockServer();
       mockServers = await Promise.all(DEMO_ACCOUNTS.map((a) => startMockImap(a.scenario())));
       accounts = DEMO_ACCOUNTS.map((a, i) => mockAccount({
-        id: a.id, email: a.email, name: a.name, port: mockServers[i].port,
+        id: a.id, email: a.email, name: a.name,
+        port: mockServers[i].port, smtpPort: mockServers[i].smtpPort,
       }));
     }
     const credentialsPath = seedAccounts(dataDir, accounts);

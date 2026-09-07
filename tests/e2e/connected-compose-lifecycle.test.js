@@ -11,12 +11,14 @@
  *     is open, the store says X) rather than an animated element's absence.
  *   - `expect(value, 'message')` throws in this runner (one argument only) —
  *     explanations are comments above their assertion.
- *   - There is no SMTP server: the mock account's smtpHost/smtpPort point at
- *     its IMAP mock, so a real send always ends in an outbox error. That is the
- *     behaviour under test here, not a limitation to work around.
+ *   - The harness has a real SMTP listener now, so a send succeeds unless the
+ *     spec asks otherwise. The outbox case below addresses `SEND_REFUSED_TO`,
+ *     which the mock answers 550 at RCPT TO — an explicit failure instead of
+ *     the accidental one the harness used to hand out.
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   openComposeFresh,
   closeComposeHard,
@@ -306,12 +308,8 @@ describe('Connected Compose Lifecycle', function () {
   // -------------------------------------------------------------------------
 
   it('sends with no delay, errors in the outbox, retries, and restores the draft on dismiss', async function () {
-    // Two full SMTP attempts against a port that does not speak SMTP; the
-    // spec-level 120s budget is not enough for both.
-    this.timeout(240_000);
-
     await freshCompose();
-    await fillDraft({ to: 'nobody@example.com', subject: 'Outbox round trip' });
+    await fillDraft({ to: SEND_REFUSED_TO, subject: 'Outbox round trip' });
     await typeInBody('OutboxBodyText');
     expect(await attachViaInput([pdfFile()])).toBe(true);
     await browser.waitUntil(async () => (await attachments()).includes('notes.pdf'), {
@@ -330,8 +328,8 @@ describe('Connected Compose Lifecycle', function () {
       timeoutMsg: 'Send with delay 0 produced no outbox item — composeSlice._startOutbox never ran',
     });
 
-    // The mock account's SMTP port is its IMAP mock, so the send must fail and
-    // the item must stick as an error instead of disappearing.
+    // The mock refuses this recipient with a 550, so the send must fail and the
+    // item must stick as an error instead of disappearing.
     await browser.waitUntil(async () => (await outboxItems())[0]?.status === 'error', {
       timeout: 90_000,
       interval: 1000,
@@ -367,7 +365,7 @@ describe('Connected Compose Lifecycle', function () {
       interval: 200,
       timeoutMsg: 'Dismissing the errored outbox bubble did not reopen a compose window with the draft',
     });
-    expect(await fieldValue('compose-to')).toBe('nobody@example.com');
+    expect(await fieldValue('compose-to')).toBe(SEND_REFUSED_TO);
     expect(await fieldValue('compose-subject')).toBe('Outbox round trip');
     expect((await editorText()) || '').toContain('OutboxBodyText');
     expect(await attachments()).toContain('notes.pdf');

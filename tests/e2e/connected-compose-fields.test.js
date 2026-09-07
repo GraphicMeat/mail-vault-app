@@ -16,8 +16,9 @@
  *     focused, so that case clicks the input with WebDriver first and only then
  *     sets the value (`setField` alone never focuses; `browser.keys` never
  *     types — under tauri-wd key events drive shortcuts, not text input).
- *   - The harness has no SMTP server, so the submit path is proved through the
- *     recipient guard instead of a real send.
+ *   - The submit path is proved through the recipient guard rather than a real
+ *     send: the guard runs before any MIME is built, so an empty To is the
+ *     cheapest observable proof that handleSend was entered at all.
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
@@ -297,8 +298,8 @@ describe('Connected Compose Fields', function () {
     await setField('compose-subject', 'Shift+Enter sends');
     await keyInField('compose-subject', 'Enter', { shiftKey: true });
 
-    // No SMTP in the harness, so the empty To is what makes the submit path
-    // visible: the guard only runs once handleSend is entered.
+    // The empty To is what makes the submit path visible: the guard only runs
+    // once handleSend is entered, and it runs before anything reaches SMTP.
     await browser.waitUntil(() => testidPresent('compose-error'), {
       timeout: 10_000,
       interval: 200,

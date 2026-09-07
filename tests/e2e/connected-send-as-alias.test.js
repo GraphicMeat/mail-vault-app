@@ -4,12 +4,11 @@
  * Reported by a Fastmail user who logs in as ABC@ but needs mail to leave as
  * DEF@, without a Reply-To header.
  *
- * The harness has NO SMTP server (mockImap points smtpHost at the mock IMAP
- * port), so a real submission cannot be asserted end to end. The MIME the app
- * hands to SMTP is asserted instead, via the same `smtp_build_mime` command the
- * compose flow uses to stage the local .eml — that is where the From header is
- * decided, so it is the real proof. The verify flow's failure path is covered
- * against that same non-SMTP port.
+ * The MIME the app hands to SMTP is what these cases assert, via the same
+ * `smtp_build_mime` command the compose flow uses to stage the local .eml —
+ * that is where the From header is decided, so it is the real proof. The verify
+ * flow's failure path addresses `SEND_REFUSED_TO`, which the harness's mock
+ * SMTP server answers 550.
  */
 
 import {
@@ -21,6 +20,7 @@ import {
   openCompose,
   pressKey,
 } from './helpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 
 const ALIAS = 'alias@mock.test';
 const OTHER_DOMAIN_ALIAS = 'hello@graphicmeat.com';
@@ -266,9 +266,9 @@ describe('Connected Send-As Alias', function () {
 
   describe('verify button', function () {
     it('reports the server error instead of claiming success', async function () {
-      // The mock port speaks IMAP, not SMTP, so submission must fail — the
-      // assertion is that the failure surfaces in the modal rather than being
-      // swallowed or silently reported as verified.
+      // Addressed to the one recipient the mock SMTP server refuses, so the
+      // submission must fail — the assertion is that the failure surfaces in
+      // the modal rather than being swallowed or reported as verified.
       await setSendAs(account.id, ALIAS);
       await openSettings();
       await clickSettingsNav('Accounts');
@@ -289,6 +289,18 @@ describe('Connected Send-As Alias', function () {
       // Defaults to the user's own mailbox — the safest place for a test message.
       expect(modalState.recipient).toBe(account.email);
       expect(modalState.text).toContain(ALIAS);
+
+      // Re-address it at the refused recipient — any other address is delivered
+      // now, and a delivered test message would verify instead of failing.
+      const readdressed = await browser.execute((to) => {
+        const el = document.querySelector('[data-testid="send-as-verify-recipient"]');
+        if (!el) return false;
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set.call(el, to);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        return el.value === to;
+      }, SEND_REFUSED_TO);
+      expect(readdressed).toBe(true);
 
       await browser.execute(() =>
         document.querySelector('[data-testid="send-as-verify-send"]')?.click());

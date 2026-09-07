@@ -486,10 +486,11 @@ export async function openComposeFresh() {
 // The staged .eml on disk — what compose actually hands to the wire
 // ---------------------------------------------------------------------------
 //
-// The harness has NO SMTP server (mockImap points smtpHost at the mock IMAP
-// port), so a real Send builds the MIME, stages a `.eml` under
-// `Maildir/<accountId>/Sent/cur/`, and only then fails on SMTP. That staged
-// file is the one end-to-end proof of what left the compose window.
+// A real Send builds the MIME and stages a `.eml` under
+// `Maildir/<accountId>/Sent/cur/` BEFORE it reaches SMTP. That staged file is
+// the one end-to-end proof of what left the compose window — and it is only
+// observable while the send has not succeeded, so every case that reads it
+// addresses `SEND_REFUSED_TO` (mockImap.js) and lets the send fail.
 
 export const sentDir = (accountId) =>
   join(appDataDir(browser.testDataDir), 'Maildir', accountId, 'Sent', 'cur');
@@ -558,7 +559,13 @@ export async function readStagedEml(accountId, before, subject) {
  */
 export const flatten = (raw) => raw.replace(/=\r?\n/g, '');
 
-/** The harness has no SMTP server, so every real send ends in the outbox as an error. */
+/**
+ * Wait for the outbox to report a failed send.
+ *
+ * Only a send addressed to `SEND_REFUSED_TO` fails now — the mock SMTP server
+ * delivers everything else. A case that wants this waiter has to ask for the
+ * refusal on its To line.
+ */
 export async function waitForOutboxError(subject) {
   try {
     await browser.waitUntil(async () => (await outboxItems()).some((i) => i.status === 'error'), {
@@ -568,9 +575,9 @@ export async function waitForOutboxError(subject) {
     });
   } catch {
     throw new Error(
-      `The send of "${subject}" never resolved in the outbox — SMTP is ` +
-      `unreachable by design here, so a send that neither fails nor succeeds ` +
-      `means the outbox never ran it. Items: ${JSON.stringify(await outboxItems())}`,
+      `The send of "${subject}" never reported an error. The mock SMTP server ` +
+      `only refuses SEND_REFUSED_TO — check the To line: any other recipient ` +
+      `is DELIVERED now. Items: ${JSON.stringify(await outboxItems())}`,
     );
   }
 }

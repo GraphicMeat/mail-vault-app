@@ -309,7 +309,9 @@ export const config = {
         nestedMailboxes: a.nestedMailboxes,
       }))),
     );
-    seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({ ...a, port: mockServers[i].port }));
+    seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({
+      ...a, port: mockServers[i].port, smtpPort: mockServers[i].smtpPort,
+    }));
     credentialsPath = seedAccounts(testDataDir, seededAccounts);
 
     // onPrepare runs in the launcher, before() runs in each worker — module state
@@ -326,10 +328,10 @@ export const config = {
     // could only ever read back "not there".
     process.env.E2E_DATA_DIR = testDataDir;
     process.env.E2E_MOCK_ACCOUNTS = JSON.stringify(seededAccounts);
-    process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map(({ host, port }) => ({ host, port })));
+    process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map(({ host, port, smtpPort }) => ({ host, port, smtpPort })));
     process.env.E2E_MOCK_INBOX_SIZES = JSON.stringify(MOCK_ACCOUNTS.map((a) => a.inbox || 40));
 
-    mockServers.forEach((s, i) => console.log(`[wdio] Mock IMAP for ${MOCK_ACCOUNTS[i].email}: ${s.host}:${s.port}`));
+    mockServers.forEach((s, i) => console.log(`[wdio] Mock for ${MOCK_ACCOUNTS[i].email}: IMAP ${s.host}:${s.port}, SMTP ${s.host}:${s.smtpPort}`));
 
     return new Promise((resolve) => {
       // Trace level in CI: tauri-wd relays the app's stdout lines at
@@ -347,6 +349,9 @@ export const config = {
           MAILVAULT_TEST_CREDENTIALS: credentialsPath,
           // Mock IMAP is plaintext; the app honors this for loopback only
           MAILVAULT_IMAP_PLAINTEXT: '1',
+          // Same hatch for the mock SMTP listener, same loopback-only rule.
+          // Without it lettre insists on STARTTLS and no send can ever succeed.
+          MAILVAULT_SMTP_PLAINTEXT: '1',
         },
       });
 

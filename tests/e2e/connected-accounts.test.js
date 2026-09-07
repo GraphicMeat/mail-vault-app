@@ -321,7 +321,7 @@ describe('Connected Account Setup', function () {
     });
 
     it('should add an account through the AccountModal', async function () {
-      const { host, port } = browser.mockImap[0];
+      const { host, port, smtpPort } = browser.mockImap[0];
 
       await addTestAccount({
         email,
@@ -329,7 +329,9 @@ describe('Connected Account Setup', function () {
         imapHost: host,
         imapPort: port,
         smtpHost: host,
-        smtpPort: port,
+        // The mock's own SMTP listener, not its IMAP port — the connection test
+        // the modal runs reaches a server that answers.
+        smtpPort,
       });
 
       const present = await browser.execute((target) => {

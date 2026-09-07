@@ -10,10 +10,10 @@
  * What is worth asserting here is the WIRE, not the label: the existing
  * send-as spec proves the selected option's text, which a From row could get
  * right while still handing SMTP the login address. So the three send cases
- * below read the `.eml` compose stages on disk. The harness has NO SMTP server
- * (mockImap points smtpHost at the mock IMAP port), so a real Send builds the
- * MIME, stages the file under `Maildir/<accountId>/Sent/cur/`, and only then
- * fails on SMTP — that file is what left the compose window.
+ * below read the `.eml` compose stages on disk. They address `SEND_REFUSED_TO`,
+ * which the mock SMTP server answers 550, so a real Send builds the MIME,
+ * stages the file under `Maildir/<accountId>/Sent/cur/`, and only then fails on
+ * SMTP — leaving that file behind as the record of what left the compose window.
  *
  * The Fastmail label swap ("Login Address", not "Email Address") is the other
  * half of the same report and is asserted at both surfaces: the add-account
@@ -44,6 +44,7 @@ import {
   flatten,
   waitForOutboxError,
 } from './composeHelpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 
 const ALIAS = 'butcher@graphicmeat.com';
 
@@ -112,7 +113,9 @@ describe('Connected Compose From Identities', function () {
       }
     }
 
-    await setField('compose-to', 'someone@example.com');
+    // Refused on purpose: the staged .eml this case reads only survives while
+    // the send has not succeeded.
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
 

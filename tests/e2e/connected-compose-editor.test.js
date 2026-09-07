@@ -15,6 +15,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   MODAL,
   EDITOR,
@@ -404,7 +405,9 @@ describe('Connected Compose Editor', function () {
     await typeInBody('Spacing check body');
 
     const before = new Set(listSent(luke.id));
-    await setField('compose-to', 'someone@example.com');
+    // Addressed to refuse: this case reads the STAGED .eml, which only
+    // survives on disk while the send has not succeeded.
+    await setField('compose-to', SEND_REFUSED_TO);
     await setField('compose-subject', subject);
     await setField('compose-delay', 0);
     expect(await clickSend()).toBe(true);
