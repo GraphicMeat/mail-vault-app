@@ -158,6 +158,8 @@ describe('Email row highlighting', function () {
   });
 
   describe('switching back', function () {
+    // Deliberately the last block: every spec file shares one HOME, so the
+    // marking mode must not outlive this file's own assertions.
     it('restores the accent tint without a reload', async function () {
       await setSettings({ emailRowHighlight: 'hover' });
       await browser.pause(600);

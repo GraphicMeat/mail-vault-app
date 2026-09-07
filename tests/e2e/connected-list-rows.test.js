@@ -62,6 +62,11 @@ describe('List rows: subject text, sender grouping, selection', function () {
   before(async function () {
     await waitForApp();
     await waitForEmails();
+    // The accent tint below is one of TWO highlighting modes now, and every
+    // spec file shares one HOME (wdio.conf.js) - a concurrent spec that puts
+    // the app in the marking mode would leave this asserting the wrong ground.
+    // Pin what this file depends on instead of inheriting the default.
+    await browser.execute(() => window.__SETTINGS_STORE__.setState({ emailRowHighlight: 'hover' }));
     luke = browser.mockAccounts[0];
     await activate(luke.id);
     await browser.waitUntil(async () => (await activeAccountId()) === luke.id, {
