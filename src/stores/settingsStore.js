@@ -212,6 +212,11 @@ export const useSettingsStore = create(
       markAsReadMode: 'delay', // 'delay' | 'auto' | 'manual'
       markAsReadDelay: 3, // seconds to wait before marking as read (when mode is 'delay')
 
+      // What the reading pane shows after the open message is deleted.
+      // 'none' closes it — the safe default, because the next message opens
+      // itself the moment it is selected and that marks it read.
+      afterDeleteSelect: 'none', // 'none' | 'next'
+
       // After a mailbox's bodies are cached, write its attachments to the
       // attachment cache newest-first so they open without a round trip.
       autoDownloadAttachments: false,
@@ -701,6 +706,7 @@ export const useSettingsStore = create(
       // Mark as read settings
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
+      setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
       setAutoDownloadAttachments: (on) => set({ autoDownloadAttachments: on }),
 
       // Layout settings
@@ -897,6 +903,7 @@ export const useSettingsStore = create(
           badgeMode: 'unread',
           markAsReadMode: 'delay',
           markAsReadDelay: 3,
+          afterDeleteSelect: 'none',
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'default',

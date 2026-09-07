@@ -10,6 +10,7 @@ const setSidebarStyle = vi.fn();
 const setViewStyle = vi.fn();
 const setEmailListStyle = vi.fn();
 const setThreadMode = vi.fn();
+const setAfterDeleteSelect = vi.fn();
 const toggleTheme = vi.fn();
 const setTheme = vi.fn();
 
@@ -18,6 +19,7 @@ vi.mock('../../../stores/settingsStore', () => ({
     layoutMode: 'three-column', sidebarStyle: 'list', viewStyle: 'list', emailListStyle: 'default',
     setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle,
     threadMode: 'grouped', setThreadMode,
+    afterDeleteSelect: 'none', setAfterDeleteSelect,
     localeEpoch: 0,
   }),
 }));
@@ -27,10 +29,10 @@ vi.mock('../../../stores/themeStore', () => ({
 
 import { AppearanceStep } from '../AppearanceStep';
 
-afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, setThreadMode, toggleTheme, setTheme].forEach(m => m.mockClear()); });
+afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, setThreadMode, setAfterDeleteSelect, toggleTheme, setTheme].forEach(m => m.mockClear()); });
 
 describe('appearance step', () => {
-  it('offers exactly the six first-run controls', () => {
+  it('offers exactly the seven first-run controls', () => {
     render(<AppearanceStep onContinue={() => {}} />);
     expect(screen.getAllByTestId(/^appearance-control-/).map(n => n.dataset.testid || n.getAttribute('data-testid')))
       .toEqual([
@@ -40,7 +42,16 @@ describe('appearance step', () => {
         'appearance-control-view',
         'appearance-control-density',
         'appearance-control-threads',
+        'appearance-control-after-delete',
       ]);
+  });
+
+  // The one control the preview cannot show. It still writes to the live store
+  // like the rest — a first run that only *looks* configured is the failure.
+  it('writes the after-delete choice straight to the live store', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByTestId('appearance-after-delete-next'));
+    expect(setAfterDeleteSelect).toHaveBeenCalledWith('next');
   });
 
   it('writes straight to the live stores', () => {

@@ -265,6 +265,23 @@ export function stepThroughList(rows, currentId, spans, delta) {
   return rows[Math.min(Math.max(idx + delta, 0), rows.length - 1)] ?? null;
 }
 
+/**
+ * The row a delete should leave open, when the setting asks for one.
+ *
+ * Read BEFORE the rows are removed — the open row is what places the cursor,
+ * and once it is gone there is nothing to count from. The row after it wins;
+ * the row before it is the fallback when the deleted one was last. Rows the
+ * same delete is taking are skipped, which is what makes a multi-row delete
+ * land on a survivor rather than on the next tombstone.
+ */
+export function nextAfterRemoval(rows, isOpenRow, isRemoved) {
+  const idx = (rows || []).findIndex(isOpenRow);
+  if (idx === -1) return null;
+  for (let i = idx + 1; i < rows.length; i++) if (!isRemoved(rows[i])) return rows[i];
+  for (let i = idx - 1; i >= 0; i--) if (!isRemoved(rows[i])) return rows[i];
+  return null;
+}
+
 // ── Unified folder resolution ──────────────────────────────────────────────
 // Maps canonical folder IDs to IMAP specialUse flags for cross-provider resolution
 export const SPECIAL_USE_MAP = {

@@ -37,6 +37,9 @@ const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 // journal entry stays and replayOps sends it when the link is back.
 let netOnline = true;
 
+// The setting under test, read through the settings mock below on every call.
+let afterDeleteSelect = 'none';
+
 vi.mock('../../../stores/connectivityStore', () => ({
   useConnectivityStore: { getState: () => ({ online: netOnline }) },
 }));
@@ -108,6 +111,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       emailListStyle: 'default',
       linkAlerts: {},
       linkSafetyEnabled: false,
+      afterDeleteSelect,
       setUnreadForAccount: (...a) => mockSetUnreadForAccount(...a),
     }),
   },
@@ -175,6 +179,7 @@ const seenOf = (uid) =>
 beforeEach(() => {
   vi.clearAllMocks();
   netOnline = true;
+  afterDeleteSelect = 'none';
   // uid 1 is the message every delete case here removes; the vault holds it.
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 1, subject: 'General', flags: ['archived'], source: 'local' });
   mockAppendLocalIndex.mockResolvedValue(undefined);
@@ -687,6 +692,80 @@ describe('deleteEmailFromServer', () => {
 
     expect(useMailStore.getState().selectedEmailId).toBeNull();
     expect(useMailStore.getState().selectedEmail).toBeNull();
+  });
+});
+
+// settings.behavior.afterDeleting. The default ('none') is the case above:
+// the reader closes. These are the opt-in half.
+describe('deleteEmailFromServer with "select the next email" on', () => {
+  const order = () => useMailStore.getState().sortedEmails.map(e => e.uid);
+
+  it('opens the row below the deleted one', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [open, below] = order();
+    useMailStore.setState({ selectedEmailId: open, selectedEmail: { uid: open } });
+
+    await useMailStore.getState().deleteEmailFromServer(open);
+
+    expect(useMailStore.getState().selectedEmailId).toBe(below);
+  });
+
+  // Nothing below the last row, and closing the reader there would punish the
+  // user for deleting from the bottom of the list.
+  it('falls back to the row above when the deleted one was last', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [above, open] = order();
+    useMailStore.setState({ selectedEmailId: open, selectedEmail: { uid: open } });
+
+    await useMailStore.getState().deleteEmailFromServer(open);
+
+    expect(useMailStore.getState().selectedEmailId).toBe(above);
+  });
+
+  it('leaves the reader alone when the deleted row was not the open one', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [open, other] = order();
+    useMailStore.setState({ selectedEmailId: open, selectedEmail: { uid: open } });
+
+    await useMailStore.getState().deleteEmailFromServer(other);
+
+    expect(useMailStore.getState().selectedEmailId).toBe(open);
+  });
+
+  // The checkbox path clears the reader the same way, so it answers to the
+  // same setting — and it has to skip every row the batch is taking, not just
+  // the open one.
+  it('applies to the selection bar\'s delete too', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [open, below] = order();
+    useMailStore.setState({
+      selectedEmailIds: new Set([open]),
+      selectedEmailId: open,
+      selectedEmail: { uid: open },
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().selectedEmailId).toBe(below);
+  });
+
+  it('closes the reader when the batch takes every row', async () => {
+    afterDeleteSelect = 'next';
+    primeStore(seedThread(), []);
+    const [open, other] = order();
+    useMailStore.setState({
+      selectedEmailIds: new Set([open, other]),
+      selectedEmailId: open,
+      selectedEmail: { uid: open },
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(useMailStore.getState().selectedEmailId).toBeNull();
   });
 });
 

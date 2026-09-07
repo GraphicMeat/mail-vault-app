@@ -3,7 +3,7 @@ import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { DefaultMailApp } from './DefaultMailApp';
-import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip } from 'lucide-react';
+import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
 export function BehaviorSettings() {
@@ -18,6 +18,8 @@ export function BehaviorSettings() {
     setMarkAsReadMode,
     markAsReadDelay,
     setMarkAsReadDelay,
+    afterDeleteSelect,
+    setAfterDeleteSelect,
     autoDownloadAttachments,
     setAutoDownloadAttachments,
     searchHistoryLimit,
@@ -235,6 +237,40 @@ export function BehaviorSettings() {
               </div>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* After deleting */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <Trash2 size={18} className="text-mail-accent-text" />
+          {t('settings.behavior.afterDeleting')}
+        </h4>
+
+        <p className="text-sm text-mail-text-muted mb-4">
+          {t('settings.behavior.chooseWhatOpensAfterDelete')}
+        </p>
+
+        <div>
+          <label className="block text-sm font-medium text-mail-text mb-2">
+            {t('settings.behavior.whenAnEmailIsDeleted')}
+          </label>
+          <select
+            data-testid="after-delete-select"
+            value={afterDeleteSelect}
+            onChange={(e) => setAfterDeleteSelect(e.target.value)}
+            className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      text-mail-text focus:border-mail-accent transition-all
+                      cursor-pointer"
+          >
+            <option value="none">{t('settings.behavior.afterDeleteSelectNothing')}</option>
+            <option value="next">{t('settings.behavior.afterDeleteSelectNext')}</option>
+          </select>
+          <p className="text-xs text-mail-text-muted mt-1">
+            {afterDeleteSelect === 'next'
+              ? t('settings.behavior.afterDeleteNextHint')
+              : t('settings.behavior.afterDeleteNothingHint')}
+          </p>
         </div>
       </div>
 

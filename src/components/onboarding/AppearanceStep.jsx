@@ -7,9 +7,12 @@ import { Button } from '../ui/Button';
 import { AppearancePreview } from './AppearancePreview';
 
 /**
- * Six controls, chosen because the preview can prove each one. Date and time
- * format, action button style, signature display, thread sort and the viewer
- * theme all stay in Settings — none of them is a first-run decision.
+ * Six controls the preview proves, plus one it cannot: what the reading pane
+ * does after you delete a message. That one is here because it changes what
+ * every later delete feels like and the default (nothing opens) is the
+ * conservative half of the choice. Date and time format, action button style,
+ * signature display, thread sort and the viewer theme all stay in Settings —
+ * none of them is a first-run decision.
  *
  * Writes land on the live stores immediately: the preview reads the same values
  * the app will, so Continue merely advances. No staging buffer to get wrong.
@@ -46,6 +49,8 @@ export function AppearanceStep({ onContinue }) {
   const setEmailListStyle = useSettingsStore(s => s.setEmailListStyle);
   const threadMode = useSettingsStore(s => s.threadMode);
   const setThreadMode = useSettingsStore(s => s.setThreadMode);
+  const afterDeleteSelect = useSettingsStore(s => s.afterDeleteSelect);
+  const setAfterDeleteSelect = useSettingsStore(s => s.setAfterDeleteSelect);
 
   // The six values the app is actually designed around — the same set every
   // marketing screenshot is shot in. Written through the same setters the
@@ -114,6 +119,14 @@ export function AppearanceStep({ onContinue }) {
               <Choice id="appearance-threads-grouped" active={threadMode} value="grouped" onPick={setThreadMode}>{t('settings.appearance.threadModeGrouped')}</Choice>
               <Choice id="appearance-threads-expandable" active={threadMode} value="expandable" onPick={setThreadMode}>{t('settings.appearance.threadModeExpandable')}</Choice>
               <Choice id="appearance-threads-flat" active={threadMode} value="flat" onPick={setThreadMode}>{t('settings.appearance.threadModeFlat')}</Choice>
+            </div>
+          </div>
+
+          <div data-testid="appearance-control-after-delete">
+            <div className="text-xs font-medium text-mail-text mb-1">{t('settings.behavior.afterDeleting')}</div>
+            <div className="flex gap-1.5">
+              <Choice id="appearance-after-delete-none" active={afterDeleteSelect} value="none" onPick={setAfterDeleteSelect}>{t('onboarding.afterDeleteNone')}</Choice>
+              <Choice id="appearance-after-delete-next" active={afterDeleteSelect} value="next" onPick={setAfterDeleteSelect}>{t('onboarding.afterDeleteNext')}</Choice>
             </div>
           </div>
 

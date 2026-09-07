@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Deleting the message you are reading can open the next one.** Settings → Behavior → After Deleting chooses what the reading pane does once the open message is deleted: nothing, which is what MailVault has always done and is still the default, or open the next message in the list. Delete the last message in a folder and the one above it opens instead. The selection bar's delete follows the same choice, and the setup screen on first run asks for it too.
+
 ## [2.12.0] - 2026-09-07
 
 ### Added

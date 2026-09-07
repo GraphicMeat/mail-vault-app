@@ -223,6 +223,23 @@ describe('threadMode', () => {
   });
 });
 
+describe('afterDeleteSelect', () => {
+  it('defaults to selecting nothing', () => {
+    expect(useSettingsStore.getState().afterDeleteSelect).toBe('none');
+  });
+
+  it('setAfterDeleteSelect writes the value', () => {
+    useSettingsStore.getState().setAfterDeleteSelect('next');
+    expect(useSettingsStore.getState().afterDeleteSelect).toBe('next');
+  });
+
+  it('resetSettings restores none', () => {
+    useSettingsStore.getState().setAfterDeleteSelect('next');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().afterDeleteSelect).toBe('none');
+  });
+});
+
 describe('autoDownloadAttachments', () => {
   it('is off by default', () => {
     expect(useSettingsStore.getState().autoDownloadAttachments).toBe(false);

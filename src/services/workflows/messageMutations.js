@@ -6,7 +6,8 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
+import { filterUnread } from '../../utils/emailParser';
 import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { withoutUids } from '../../stores/slices/serverUids';
@@ -370,6 +371,25 @@ export async function removeLocalEmail(uid) {
 }
 
 
+// ── what stays open after a delete ──
+//
+// Off by default (settings.behavior.afterDeleting): opening the next message
+// the moment you delete one also marks it read, which is a decision the user
+// opts into rather than inherits.
+//
+// On, it reads the list the user can actually SEE — with the unread filter on
+// `sortedEmails` still holds every loaded message, and selecting one of those
+// opens a row that is not on screen. Same reading as App.jsx's j/k step.
+// Called before the rows are removed, because the open row is what places the
+// cursor.
+function _openAfterDelete(state, isOpenRow, isRemoved) {
+  if (useSettingsStore.getState().afterDeleteSelect !== 'next') return null;
+  const keyOf = (e) => selectionKey(e, state);
+  const visible = filterUnread(state.sortedEmails, state.unreadOnly, state.selectedEmailId, keyOf);
+  return nextAfterRemoval(visible, isOpenRow, isRemoved);
+}
+
+
 // ── deleteEmailFromServer workflow ──
 
 export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null } = {}) {
@@ -447,6 +467,12 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     return loc ? e.uid === realUid && loc.accountId === accountId && loc.mailbox === mailbox : isThisEmail(e);
   };
   const threadUpdate = pruneSelectedThread(state, isThisMessage);
+  // Only a delete that CLOSES the reader hands it a new message: a thread with
+  // messages left keeps the one pruneSelectedThread moved to.
+  const closedReader = threadUpdate
+    ? threadUpdate.selectedThread === null
+    : (selectedEmailId === uid || selectedEmailId === realUid);
+  const openNext = closedReader ? _openAfterDelete(state, isThisEmail, isThisEmail) : null;
   useMailStore.setState({
     deleteTombstones: new Set(state.deleteTombstones).add(tombstone),
     emails: state.emails.filter(e => !isThisEmail(e)),
@@ -457,6 +483,11 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       : {})),
   });
   get().updateSortedEmails();
+  // Now, not after the round trip: the reader is empty from this paint, and a
+  // message that appears seconds later reads as a bug. A delete the server
+  // refuses restores the row, not the reader — the same trade the optimistic
+  // removal above already makes.
+  if (openNext) get().selectEmail(selectionKey(openNext, state));
 
   // Put the row back and let the reconcile re-derive it. `totalEmails` is
   // untouched above — applyServerRemoval owns that decrement on the success
@@ -534,7 +565,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
-    clearSelection: !threadUpdate && selectedEmailId === uid,
+    // Never over a message this delete just opened.
+    clearSelection: !threadUpdate && selectedEmailId === uid && !openNext,
     deletedByUs: true,
   });
 
@@ -1318,6 +1350,13 @@ export async function deleteSelectedFromServer() {
   const newTombstones = new Set(state.deleteTombstones);
   for (const key of keys) newTombstones.add(contextOf(key).tombstone);
 
+  // The open message may be one of the ticked ones; if it is, the same setting
+  // the single delete honours decides what replaces it.
+  const isDeletedRow = (e) => deletedKeySet.has(selectionKey(e, state));
+  const openNext = realUidSet.has(state.selectedEmailId)
+    ? _openAfterDelete(state, (e) => selectionKey(e, state) === state.selectedEmailId, isDeletedRow)
+    : null;
+
   useMailStore.setState({
     deleteTombstones: newTombstones,
     selectedEmailIds: new Set(),
@@ -1328,6 +1367,7 @@ export async function deleteSelectedFromServer() {
     selectedEmail: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmail,
   });
   get().updateSortedEmails();
+  if (openNext) get().selectEmail(selectionKey(openNext, state));
 
   const deletedRealUids = new Set();
   // Uids deleted out of the mailbox currently on screen. Only these can be
