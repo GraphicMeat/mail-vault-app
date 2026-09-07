@@ -80,6 +80,14 @@
   --mail-accent-fill: #4f46e5;     /* filled control under white, 6.29:1 */
   --mail-accent-tint: #262759;
 
+  /* Row marking — the second highlighting mode (`emailRowHighlight:
+     'selection'`), where hover goes quiet and the open row is what is lit.
+     Neutral on purpose: the accent tint means "this is the live thing", a
+     grey ground means "this is where you are". Dark inverts the direction —
+     "darker" here is *raised*, or the row sinks into the desk. */
+  --mail-row-selected: #33334a;    /* 1.48:1 on surface — visible without hover */
+  --mail-row-related: #24242f;     /* 1.25:1 under selected, muted text 4.62:1 */
+
   /* Custody — a closed vocabulary. Emerald/blue/gold mean vault/server/
      only-copy and are never spent on decoration or generic status. */
   --mail-local: #10b981;           /* Vault Emerald — on your disk */
@@ -121,6 +129,9 @@
   --mail-accent-text: #4338ca;     /* 7.90:1 on white */
   --mail-accent-fill: #4f46e5;
   --mail-accent-tint: #d5d3f9;
+
+  --mail-row-selected: #d3d7e2;    /* muted text 4.51:1, clears white by 1.44:1 */
+  --mail-row-related: #e6e8f0;     /* muted text 5.31:1 */
 
   --mail-local: #065f46;           /* 7.68:1 on white, 5.58:1 on its own tint */
   --mail-local-tint: #c8e1da;
@@ -239,6 +250,14 @@ body {
 
 /* Tint surfaces — solid, so text contrast on them is a fixed number. */
 .bg-mail-accent-tint { background-color: var(--mail-accent-tint); }
+.bg-mail-row-selected { background-color: var(--mail-row-selected); }
+.bg-mail-row-related { background-color: var(--mail-row-related); }
+/* `--mail-row-selected` has to sit high enough over the row surface to read as
+   "you are here" without hover's help, and at that luminance grey muted text
+   falls to 3.69:1 in the dark theme. Same reason the tints carry
+   `--mail-text-on-tint`: secondary text on a raised ground gets the raised
+   ground's own ink. */
+.bg-mail-row-selected .text-mail-text-muted { color: var(--mail-text-on-tint); }
 .bg-mail-local-tint { background-color: var(--mail-local-tint); }
 .bg-mail-server-tint { background-color: var(--mail-server-tint); }
 .bg-mail-only-copy-tint { background-color: var(--mail-only-copy-tint); }

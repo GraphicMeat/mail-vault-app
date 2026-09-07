@@ -3,7 +3,7 @@
 // The open message has to be visible in the list. A 2px left border alone is
 // easy to miss — especially on an unread row, which already carries its own
 // background — so a selected row also gets the accent tint.
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, cleanup } from '@testing-library/react';
 
@@ -38,6 +38,7 @@ vi.mock('../../stores/mailStore', () => {
 
 const { EmailRow, CompactEmailRow } = await import('../EmailRow');
 const { ThreadRow, CompactThreadRow } = await import('../ThreadRow');
+const { useSettingsStore } = await import('../../stores/settingsStore');
 
 const email = (extra = {}) => ({
   uid: 42, _accountId: 'acct-1', _mailbox: 'INBOX', source: 'server', isArchived: false,
@@ -60,11 +61,11 @@ const thread = (extra = {}) => ({
 });
 
 const variants = [
-  ['EmailRow', (sel, unread) =>
-    <EmailRow email={email(unread ? { flags: [] } : {})} isSelected={sel} isChecked={false}
+  ['EmailRow', (sel, unread, related) =>
+    <EmailRow email={email(unread ? { flags: [] } : {})} isSelected={sel} isRelated={related} isChecked={false}
       onSelect={vi.fn()} onToggleSelection={vi.fn()} {...shared()} />],
-  ['CompactEmailRow', (sel, unread) =>
-    <CompactEmailRow email={email(unread ? { flags: [] } : {})} isSelected={sel} isChecked={false}
+  ['CompactEmailRow', (sel, unread, related) =>
+    <CompactEmailRow email={email(unread ? { flags: [] } : {})} isSelected={sel} isRelated={related} isChecked={false}
       onSelect={vi.fn()} onToggleSelection={vi.fn()} {...shared()} />],
   ['ThreadRow', (sel, unread) =>
     <ThreadRow rowId="r1" thread={thread(unread ? { unreadCount: 1, emails: [email({ flags: [] })], lastEmail: email({ flags: [] }) } : {})}
@@ -105,5 +106,71 @@ describe.each(variants)('%s selected background', (_name, renderRow) => {
     // Both are plain, equal-specificity utilities; whichever the stylesheet
     // declares last would win, so the unread surface is simply not requested.
     expect(cls.split(/\s+/)).not.toContain('bg-mail-surface');
+  });
+});
+
+// The second highlighting mode (`emailRowHighlight: 'selection'`): hover goes
+// quiet and the open row is what is lit, with the rest of its thread a step
+// lighter. The four blocks above are the guarantee that turning this on is the
+// only way to change any of it.
+describe.each(variants)('%s in selection mode', (name, renderRow) => {
+  const row = (container) => container.querySelector('[data-testid="email-row"]');
+  const cls = (container) => row(container).className.split(/\s+/);
+
+  beforeEach(() => useSettingsStore.setState({ emailRowHighlight: 'selection' }));
+  afterEach(() => useSettingsStore.setState({ emailRowHighlight: 'hover' }));
+
+  it('fills the open row with the marking grey', () => {
+    const c = cls(render(renderRow(true, false)).container);
+    expect(c).toContain('bg-mail-row-selected');
+    // The accent tint is the "live thing" colour and the border shifts the
+    // row's content by 2px; neither belongs to a neutral marking.
+    expect(c).not.toContain('bg-mail-accent-tint');
+    expect(c).not.toContain('border-l-mail-accent');
+    expect(c).not.toContain('pl-[14px]');
+  });
+
+  it('never reacts to the pointer', () => {
+    for (const args of [[false, false], [true, false], [false, true]]) {
+      const { container } = render(renderRow(...args));
+      expect(cls(container)).not.toContain('hover:bg-mail-surface-hover');
+      cleanup();
+    }
+  });
+
+  it('a selected unread row does not also ask for the unread surface', () => {
+    const c = cls(render(renderRow(true, true)).container);
+    expect(c).toContain('bg-mail-row-selected');
+    expect(c).not.toContain('bg-mail-surface');
+  });
+
+  it('an unmarked unread row keeps its own surface', () => {
+    const c = cls(render(renderRow(false, true)).container);
+    expect(c).toContain('bg-mail-surface');
+    expect(c).not.toContain('bg-mail-row-selected');
+    expect(c).not.toContain('bg-mail-row-related');
+  });
+});
+
+// A thread row that holds the open message is already `isSelected`, so only the
+// message rows carry the sibling ground.
+describe.each(variants.slice(0, 2))('%s sibling ground', (_name, renderRow) => {
+  const cls = (container) => container.querySelector('[data-testid="email-row"]').className.split(/\s+/);
+
+  afterEach(() => useSettingsStore.setState({ emailRowHighlight: 'hover' }));
+
+  it('paints the lighter grey on the rest of the open message’s thread', () => {
+    useSettingsStore.setState({ emailRowHighlight: 'selection' });
+    const c = cls(render(renderRow(false, false, true)).container);
+    expect(c).toContain('bg-mail-row-related');
+    expect(c).not.toContain('bg-mail-row-selected');
+    expect(c).not.toContain('hover:bg-mail-surface-hover');
+  });
+
+  it('ignores the sibling flag entirely while hover is the mode', () => {
+    useSettingsStore.setState({ emailRowHighlight: 'hover' });
+    const c = cls(render(renderRow(false, false, true)).container);
+    expect(c).not.toContain('bg-mail-row-related');
+    expect(c).toContain('hover:bg-mail-surface-hover');
   });
 });

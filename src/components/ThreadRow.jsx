@@ -2,6 +2,7 @@ import { Button } from './ui/Button';
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
 import { getSenderName, threadRowMembers } from '../utils/emailParser';
+import { listRowGround } from '../utils/listRowGround';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -56,6 +57,8 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  // Which mode marks the row is a live setting too — a toggle repaints the list.
+  const highlight = useSettingsStore(s => s.emailRowHighlight);
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -105,8 +108,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !anyChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread && !(isSelected && !anyChecked) ? 'bg-mail-surface' : ''}`}
+                 ${listRowGround({ highlight, selected: isSelected && !anyChecked, related: false, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
@@ -197,6 +199,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   const serverKnown = useMailStore(s => s.serverUids.complete);
   const scopeKey = emailScopeKey(thread?.lastEmail, useMailStore.getState());
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  // Which mode marks the row is a live setting too — a toggle repaints the list.
+  const highlight = useSettingsStore(s => s.emailRowHighlight);
   const custodyTone = thread?.lastEmail
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
@@ -244,8 +248,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !anyChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${hasUnread && !(isSelected && !anyChecked) ? 'bg-mail-surface' : ''}`}
+                 ${listRowGround({ highlight, selected: isSelected && !anyChecked, related: false, unread: hasUnread })}`}
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>

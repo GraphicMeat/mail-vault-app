@@ -3,6 +3,7 @@ import React from 'react';
 import { displayText } from '../utils/bidiText';
 import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { getSenderName } from '../utils/emailParser';
+import { listRowGround } from '../utils/listRowGround';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { emailScopeKey, selectionKey } from '../stores/slices/unifiedHelpers';
@@ -61,7 +62,7 @@ function StarToggle({ email, actions, size }) {
   );
 }
 
-export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
@@ -73,6 +74,8 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  // Which mode marks the row is a live setting too — a toggle repaints the list.
+  const highlight = useSettingsStore(s => s.emailRowHighlight);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -103,8 +106,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       style={style}
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread && !(isSelected && !isChecked) ? 'bg-mail-surface' : ''}`}
+                 ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
@@ -192,7 +194,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
   const { saveEmailLocally } = actions;
@@ -204,6 +206,8 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
   // Whether the glyph reads "blocked" or "tracks you" is a live setting, not a
   // property of the row's data — subscribe so a toggle repaints every row.
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
+  // Which mode marks the row is a live setting too — a toggle repaints the list.
+  const highlight = useSettingsStore(s => s.emailRowHighlight);
 
   const handleSave = async (e) => {
     e.stopPropagation();
@@ -230,8 +234,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       style={style}
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
-                 ${isSelected && !isChecked ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[14px]' : 'hover:bg-mail-surface-hover'}
-                 ${isUnread && !(isSelected && !isChecked) ? 'bg-mail-surface' : ''}`}
+                 ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>

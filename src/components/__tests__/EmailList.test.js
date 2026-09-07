@@ -169,6 +169,7 @@ vi.mock('../../stores/settingsStore', () => {
     threadMode: 'grouped',
     setThreadMode: vi.fn(),
     threadSortOrder: 'oldest-first',
+    emailRowHighlight: 'hover',
     layoutMode: 'three-column',
     accountColors: {},
     // Rows subscribe to this to decide whether the tracker glyph reads
@@ -1141,5 +1142,94 @@ describe('sender grouping keys topics per thread', () => {
       useMailStore.setState({ selectedEmailId: null });
       groupBySender.mockReturnValue([]);
     }
+  });
+});
+
+
+// `emailRowHighlight: 'selection'` marks the open message and, a step lighter,
+// the rest of its conversation. The sibling set is derived from the thread
+// model, so it has to survive the two things a uid alone gets wrong: a merged
+// Sent copy that shares its number with an INBOX message, and flat mode, where
+// no thread model existed at all.
+describe('the related set marks the open message’s thread', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  const msg = (uid, subject, extra = {}) => ({
+    uid, subject,
+    from: [{ address: `p${uid}@test.com`, name: `P${uid}` }],
+    to: [{ address: 'me@test.com' }],
+    date: new Date(2024, 0, 1, 0, 0, uid).toISOString(),
+    flags: ['\\Seen'], source: 'server', isArchived: false,
+    _accountId: 'acc1', _mailbox: 'INBOX', ...extra,
+  });
+
+  // A reply of yours, in Sent, carrying the SAME uid as the open INBOX
+  // message. Its selection key is the three-part `acc1:Sent:1`, so only a set
+  // built from selection keys can tell it apart from the row that is open.
+  const open = msg(1, 'Re: Plan');
+  const sibling = msg(2, 'Re: Plan');
+  const mine = msg(1, 'Re: Plan', { _mailbox: 'Sent', _fromSentFolder: true, from: [{ address: 'me@test.com', name: 'Me' }] });
+  const stranger = msg(9, 'Unrelated');
+  const list = [open, sibling, mine, stranger];
+
+  const mount = async (emailRowHighlight) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    useMailStore.setState({
+      sortedEmails: list, totalEmails: list.length,
+      getChatEmails: () => list, selectedEmailId: 1,
+    });
+    // Flat, deliberately: it is the one view where every sibling is already a
+    // separate row, and the one that used to skip threading entirely.
+    useSettingsStore.setState({ threadMode: 'flat', emailRowHighlight });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+
+  const grounds = (container) =>
+    [...container.querySelectorAll('[data-testid="email-row"]')].map(n => n.className.split(/\s+/));
+
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    useMailStore.setState({
+      sortedEmails: mockEmails, totalEmails: 500,
+      getChatEmails: vi.fn(() => []), selectedEmailId: null,
+    });
+    useSettingsStore.setState({ threadMode: 'grouped', emailRowHighlight: 'hover' });
+  });
+
+  it('lights the open row and the two others in its thread, and nothing else', async () => {
+    const { container } = await mount('selection');
+    const [openRow, siblingRow, sentRow, strangerRow] = grounds(container);
+
+    expect(openRow).toContain('bg-mail-row-selected');
+    expect(openRow).not.toContain('bg-mail-row-related');
+    expect(siblingRow).toContain('bg-mail-row-related');
+    // The Sent copy shares the open message's uid and is still a sibling.
+    expect(sentRow).toContain('bg-mail-row-related');
+    expect(sentRow).not.toContain('bg-mail-row-selected');
+    expect(strangerRow).not.toContain('bg-mail-row-related');
+    expect(strangerRow).not.toContain('bg-mail-row-selected');
+  });
+
+  it('keeps the list flat — the threads exist only to name the siblings', async () => {
+    const { container } = await mount('selection');
+    expect(lastVirtualizerConfig.count).toBe(4);
+    expect(container.querySelector('[data-thread-count]')).toBeNull();
+  });
+
+  it('marks nothing at all while hover is the mode', async () => {
+    const { container } = await mount('hover');
+    const rows = grounds(container);
+    for (const cls of rows) {
+      expect(cls).not.toContain('bg-mail-row-related');
+      expect(cls).not.toContain('bg-mail-row-selected');
+    }
+    // And today's mark is untouched.
+    expect(rows[0]).toContain('bg-mail-accent-tint');
   });
 });

@@ -13,6 +13,7 @@ import { shouldPrefetch } from '../services/cachePressure';
 import { backfillTrackerVerdicts } from '../services/trackerVerdicts';
 import { buildThreads, groupBySender, getSenderName, filterUnread, threadRowMembers } from '../utils/emailParser';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
+import { listRowGround } from '../utils/listRowGround';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
 import { Button } from './ui/Button';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -71,6 +72,10 @@ const THREAD_MODE_LABEL = {
   expandable: 'settings.appearance.threadModeExpandable',
   flat: 'settings.appearance.threadModeFlat',
 };
+
+// One identity for "no siblings", so the memo below keeps a stable result
+// while nothing is open and the rows it feeds do not all repaint.
+const EMPTY_SET = Object.freeze(new Set());
 
 const ROW_HEIGHT_DEFAULT = 56;
 const ROW_HEIGHT_COMPACT = 52;
@@ -190,6 +195,7 @@ function EmailListComponent() {
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
   const threadMode = useSettingsStore(s => s.threadMode);
+  const emailRowHighlight = useSettingsStore(s => s.emailRowHighlight);
   const setThreadMode = useSettingsStore(s => s.setThreadMode);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const layoutMode = useSettingsStore(s => s.layoutMode);
@@ -471,7 +477,9 @@ function EmailListComponent() {
 
   // Compute threads in a deferred callback to avoid blocking render
   useEffect(() => {
-    if (!mergedEmails || searchActive || threadMode === 'flat') {
+    // Flat mode still builds threads when the marking mode needs them: they
+    // answer "which rows are siblings", never "which rows group".
+    if (!mergedEmails || searchActive || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
       setDeferredThreads(null);
       return;
     }
@@ -498,7 +506,7 @@ function EmailListComponent() {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, syncSelectedThread]);
+  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
 
   // Deferred sender grouping computation
   useEffect(() => {
@@ -544,7 +552,9 @@ function EmailListComponent() {
   const emailKey = messageKey;
 
   const threadedDisplay = useMemo(() => {
-    const isFlat = searchActive || !deferredThreads || deferredThreads.size === 0;
+    // `threadMode === 'flat'` explicitly: threads may now exist in flat mode
+    // purely to answer which rows are siblings, and must never regroup the list.
+    const isFlat = searchActive || threadMode === 'flat' || !deferredThreads || deferredThreads.size === 0;
 
     const cache = displayRowCache.current;
 
@@ -611,6 +621,25 @@ function EmailListComponent() {
   // Through the helper: a uid is unique only inside one mailbox of one account,
   // and a key built here by hand is a key the store cannot read back.
   const selKey = (email) => selectionKey(email, useMailStore.getState());
+
+  // The rest of the open message's conversation, as selection keys. A merged
+  // Sent copy shares its uid with an INBOX message, so the set is keyed the way
+  // the row is — `selKey`, not the bare number. Empty in hover mode: the setting
+  // is what decides whether siblings are marked at all.
+  const relatedKeys = useMemo(() => {
+    if (emailRowHighlight !== 'selection' || !selectedEmailId || !deferredThreads) return EMPTY_SET;
+    for (const thread of deferredThreads.values()) {
+      if (thread.emails.some(e => selKey(e) === selectedEmailId)) {
+        const keys = new Set();
+        for (const e of thread.emails) { const k = selKey(e); if (k !== selectedEmailId) keys.add(k); }
+        return keys;
+      }
+    }
+    return EMPTY_SET;
+    // selKey reads the store imperatively, the way selectedSenderLocus below
+    // does; it is not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emailRowHighlight, selectedEmailId, deferredThreads]);
 
   const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
@@ -1241,15 +1270,19 @@ function EmailListComponent() {
                           setExpandedEmail(null);
                         }}
                         className={`w-full h-full flex items-center gap-3 pr-4 text-left border-b border-mail-border ${
-                          selectedSenderLocus?.topicKey === item.topicKey
-                            // The grounds are equal-specificity utilities;
-                            // whichever the stylesheet declares last would win,
-                            // so the marked row simply does not ask for the
-                            // others — the hover one included, or hovering the
-                            // row you are in hides the mark. Same rule as the
-                            // list rows (69313e84).
-                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[46px]'
-                            : `pl-12 hover:bg-mail-surface-hover bg-mail-surface-hover/50 ${expandedTopics.has(item.topicKey) ? 'bg-mail-surface-hover' : ''}`
+                          listRowGround({
+                            highlight: emailRowHighlight,
+                            selected: selectedSenderLocus?.topicKey === item.topicKey,
+                            markedPad: 'pl-[46px]',
+                            restPad: 'pl-12',
+                          })
+                        } ${
+                          // The half-tint and the expanded ground are hover-mode
+                          // furniture: in the marking mode an unmarked row is
+                          // plain, so the marked one is the only thing lit.
+                          emailRowHighlight === 'hover' && selectedSenderLocus?.topicKey !== item.topicKey
+                            ? `bg-mail-surface-hover/50 ${expandedTopics.has(item.topicKey) ? 'bg-mail-surface-hover' : ''}`
+                            : ''
                         } ${focusedRow?.type === 'topic' && focusedRow?.topicKey === item.topicKey ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1293,13 +1326,26 @@ function EmailListComponent() {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }
                         }}
-                        className={`w-full h-full flex items-center gap-3 pr-4 text-left hover:bg-mail-surface-hover border-b border-mail-border ${
+                        className={`w-full h-full flex items-center gap-3 pr-4 text-left border-b border-mail-border ${
+                          // pl-[62px], not pl-16: the 2px border eats into the
+                          // padding box, so a fixed pl-16 shifted the row's
+                          // content 2px right the moment it was marked. The
+                          // hover ground moved in here too — it carries a
+                          // pseudo-class, so on the marked row it outranked the
+                          // mark and hovering hid it (69313e84).
+                          listRowGround({
+                            highlight: emailRowHighlight,
+                            selected: selectedEmailId === selKey(item.email),
+                            markedPad: 'pl-[62px]',
+                            restPad: 'pl-16',
+                          })
+                        } ${
+                          // This row's resting ground, in both modes — unlike the
+                          // topic row's half-tint it is what the row looks like,
+                          // not a pointer effect.
                           selectedEmailId === selKey(item.email)
-                            // pl-[62px], not pl-16: the 2px border eats into
-                            // the padding box, so a fixed pl-16 shifted the
-                            // row's content 2px right the moment it was marked.
-                            ? 'bg-mail-accent-tint border-l-2 border-l-mail-accent pl-[62px]'
-                            : `pl-16 ${expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : 'bg-mail-surface'}`
+                            ? ''
+                            : (expandedEmail === selKey(item.email) ? 'bg-mail-accent/10' : 'bg-mail-surface')
                         } ${focusedRow?.type === 'email' && focusedRow?.emailUid === item.email.uid ? 'ring-2 ring-mail-accent ring-inset' : ''}`}
                       >
                         <div className="flex-1 min-w-0">
@@ -1434,6 +1480,7 @@ function EmailListComponent() {
                     rowId={item.email.uid}
                     email={item.email}
                     isSelected={selectedEmailId === selKey(item.email)}
+                    isRelated={relatedKeys.has(selKey(item.email))}
                     isChecked={selectedEmailIds.has(selKey(item.email))}
                     onSelect={selectEmail}
                     onToggleSelection={toggleEmailSelection}
