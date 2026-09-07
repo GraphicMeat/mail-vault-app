@@ -18,14 +18,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 
-const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex } = vi.hoisted(() => ({
+const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.hoisted(() => ({
   invoke: vi.fn().mockResolvedValue(undefined),
   sendEmail: vi.fn(),
   buildOutgoingMime: vi.fn(),
   appendLocalIndex: vi.fn().mockResolvedValue(undefined),
+  listen: vi.fn(async () => () => {}),
 }));
 
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listen(...a) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -137,6 +138,8 @@ beforeEach(() => {
   window.__TAURI__ = { core: { invoke } };
   invoke.mockClear();
   appendLocalIndex.mockClear();
+  settings.setLastComposeIdentity.mockClear();
+  listen.mockClear();
   sendEmail.mockReset();
   buildOutgoingMime.mockReset();
   buildOutgoingMime.mockImplementation(async () => {
@@ -180,6 +183,16 @@ describe('a send that fails', () => {
       expect.objectContaining({ source: 'local_draft', flags: ['draft', 'seen'] }),
     ]);
   });
+
+  it('does not move the remembered compose identity', async () => {
+    sendEmail.mockRejectedValue(new Error('Connection refused'));
+
+    await sendReply();
+
+    // "The identity that sent last" has to mean sent — an attempt that never
+    // left would otherwise redirect the next new message on a failure.
+    expect(settings.setLastComposeIdentity).not.toHaveBeenCalled();
+  });
 });
 
 describe('a send that succeeds', () => {
@@ -193,6 +206,34 @@ describe('a send that succeeds', () => {
     // The row still has to thread — that is what put it in the conversation.
     expect(mail.sentEmails[0].inReplyTo).toBe('<parent@example.test>');
     expect(mail.emails).toHaveLength(1);
+  });
+
+  it('remembers the identity that sent it', async () => {
+    sendEmail.mockResolvedValue({ messageId: '<mine-1@example.test>' });
+
+    await sendReply();
+
+    expect(settings.setLastComposeIdentity).toHaveBeenCalledWith('acct-1', 'me@example.test');
+  });
+});
+
+describe('the Sent reconcile', () => {
+  it('is listening for the server APPEND before the message is handed to SMTP', async () => {
+    // Rust spawns the Sent APPEND the moment SMTP returns, and it can complete
+    // before a subscription opened afterwards exists — on a server that answers
+    // fast (Proton Mail Bridge on loopback, the e2e mock) the event was simply
+    // missed, and with it the local-copy cleanup, the optimistic-row swap and
+    // the Sent re-read. Assert the order rather than the effect: the effect is
+    // a race and would pass on a slow enough mock.
+    let subscribedFirst = null;
+    sendEmail.mockImplementation(async () => {
+      subscribedFirst = listen.mock.calls.some(([name]) => name === 'send-server-append-complete');
+      return { messageId: '<mine-1@example.test>' };
+    });
+
+    await sendReply();
+
+    expect(subscribedFirst).toBe(true);
   });
 });
 

@@ -693,130 +693,28 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           }
         }
 
-        // ── STAGE 2: SMTP send ──
-        let sendResult;
-        try {
-          sendResult = await api.sendEmail(
-            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
-            outgoingPayload,
-            sentMailbox
-          );
-          console.log('[compose:smtp_ok]', {
-            account: freshAccount.email,
-            smtpMessageId: sendResult?.messageId,
-          });
-          // Tell the server the original was answered / forwarded, the way
-          // every other client on the account does. Fire-and-forget: the send
-          // has already happened and a flag must never fail it.
-          if (mode === 'reply' || mode === 'replyAll') markAnswered(replyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
-          else if (mode === 'forward') markForwarded(replyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
-
-          // New composes default to the identity that actually sent last.
-          useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
-          // It left the building: the Drafts copy is not a draft any more.
-          // Only after SMTP succeeded — a failed send keeps its draft, which is
-          // what the outbox bubble restores from.
-          // The refs outlive the unmounted window. Read AFTER the last
-          // autosave settles, or a message sent seconds after it was typed
-          // deletes a draft the save is still writing.
-          await saveChainRef.current.catch(() => {});
-          if (draftUidRef.current && draftMailboxRef.current) {
-            await deleteLocalDraft({
-              accountId: draftAccountRef.current || freshAccount.id,
-              mailbox: draftMailboxRef.current,
-              uid: draftUidRef.current,
-            });
-            draftUidRef.current = null;
-          }
-        } catch (err) {
-          console.error('[compose:smtp_fail]', err);
-          // Local draft survives — user can retry via outbox bubble.
-          throw err;
-        }
-
-        // ── STAGE 3: re-archive locally as SENT ──
-        // Overwrite the .eml file: flags transition D→A. maildir_store
-        // removes the old file for this UID and writes the new one.
-        if (invoke && builtMime?.rawBase64) {
-          try {
-            await invoke('maildir_store', {
-              accountId: freshAccount.id,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-              rawSourceBase64: builtMime.rawBase64,
-              flags: ['archived', 'seen'],
-            });
-            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
-              ...indexBase,
-              flags: ['archived', 'seen'],
-              source: 'local_sent',
-            }]);
-            console.log('[compose:mark_sent_local]', {
-              account: freshAccount.email,
-              mailbox: localMailbox,
-              uid: pseudoUid,
-            });
-          } catch (err) {
-            console.warn('[compose:mark_sent_local_fail]', err);
-          }
-        }
-
-        // The Sent row, now that the message has actually left.
-        //
-        // It goes in HERE, after SMTP, not before it. Staged ahead of the send
-        // it claimed a message was in your Sent folder while it was still on
-        // the wire — and a send that failed left that claim standing for the
-        // session: `_mergeOptimisticSent` keeps an optimistic entry the server
-        // never returns, and no outbox path (retry, cancel, dismiss) removes
-        // it. The safety net is the vault copy above, written BEFORE SMTP and
-        // untouched by this; a failed send keeps that, its Drafts autosave and
-        // the outbox bubble, and claims nothing.
-        //
-        // Built FROM `indexBase`, not beside it. Written out by hand it lost
-        // the two fields threading runs on (`in_reply_to`, `references`), and
-        // the row was then an orphan "Re: …": a second row in the list, and
-        // nothing the open thread would take.
-        const optimistic = {
-          ...indexBase,
-          cc: parseAddresses(formData.cc),
-          bcc: parseAddresses(formData.bcc),
-          internal_date: indexBase.date,
-          internalDate: indexBase.date,
-          messageId: indexBase.message_id,
-          // Same headers, under the names buildThreads and the reader read.
-          inReplyTo: indexBase.in_reply_to,
-          hasAttachments: indexBase.has_attachments,
-          read: true,
-          flags: ['\\Seen'],
-          _accountId: freshAccount.id,
-          _optimistic: true,
-          _localStaged: true,
-        };
-        useMailStore.setState(s => {
-          const dedupById = (list) => (optimistic.messageId
-            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
-            : (list || []));
-          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
-          if (
-            sentFolderPath &&
-            s.activeAccountId === freshAccount.id &&
-            s.activeMailbox === sentFolderPath
-          ) {
-            updates.emails = [optimistic, ...dedupById(s.emails)];
-            updates.totalEmails = (s.totalEmails || 0) + 1;
-          }
-          return updates;
-        });
-        useMailStore.getState().updateSortedEmails?.();
-        console.log('[compose:sent_row_insert]', {
-          account: freshAccount.email,
-          uid: pseudoUid,
-          messageId: builtMime?.messageId,
-        });
-
-        // ── STAGE 4: listen for Rust's server-APPEND completion, then
+        // ── STAGE 2: subscribe to Rust's server-APPEND completion, then
         // refresh the Sent headers so the real server UID replaces the
         // optimistic one (and Message-ID dedupe hides the synthetic copy).
+        //
+        // BEFORE the send, not after it. Rust spawns the Sent APPEND the
+        // instant SMTP returns, and this subscription costs two IPC round
+        // trips (the dynamic import, then `listen`) — so against a fast server
+        // the event was emitted before anything was listening for it, and the
+        // whole tail silently never ran: the local staged copy stayed in the
+        // Maildir, the optimistic row was never replaced, and the Sent view was
+        // never re-read from the server. A server on loopback is not exotic
+        // (Proton Mail Bridge, and the e2e mock); the race was simply invisible
+        // while nothing in the suite could complete a send.
+        let unlistenAppend = null;
+        // Registered before the send but ALLOWED TO ACT only after the local
+        // side of the send is finished. The event can land while STAGE 4 is
+        // still re-archiving the .eml and the Sent row has not been inserted
+        // yet — a cleanup that ran then would delete a copy that is written
+        // again a moment later, and leave the optimistic row it was supposed to
+        // take out. Both halves of the race, one gate.
+        let markLocalStageDone;
+        const localStageDone = new Promise((resolve) => { markLocalStageDone = resolve; });
         try {
           const { listen } = await import('@tauri-apps/api/event');
           let handled = false;
@@ -833,6 +731,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             }
             if (handled) return;
             handled = true;
+            await localStageDone;
             console.log('[compose:server_append_event]', p);
             if (p.ok && p.verify) {
               console.log('[compose:server_append_verify]', {
@@ -924,8 +823,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               messageId_matched_server: messageIdMatch,
             });
           });
-          // Safety: unsubscribe after 30s even if event never fires.
-          setTimeout(() => { try { unlisten(); } catch {} }, 30000);
+          // Armed once the send is over — a 30s timer started HERE would expire
+          // mid-send on a large attachment (the SMTP timeout scales to 600s).
+          unlistenAppend = unlisten;
         } catch (err) {
           console.warn('[compose:event_listen_fail]', err);
           // Fallback to the original 8s reconcile.
@@ -934,6 +834,135 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             st.loadSentHeaders?.(freshAccount.id);
           }, 8000);
         }
+
+        // ── STAGE 3: SMTP send ──
+        let sendResult;
+        try {
+          sendResult = await api.sendEmail(
+            { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
+            outgoingPayload,
+            sentMailbox
+          );
+          console.log('[compose:smtp_ok]', {
+            account: freshAccount.email,
+            smtpMessageId: sendResult?.messageId,
+          });
+          // Tell the server the original was answered / forwarded, the way
+          // every other client on the account does. Fire-and-forget: the send
+          // has already happened and a flag must never fail it.
+          if (mode === 'reply' || mode === 'replyAll') markAnswered(replyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
+          else if (mode === 'forward') markForwarded(replyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
+
+          // New composes default to the identity that actually sent last.
+          useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
+          // It left the building: the Drafts copy is not a draft any more.
+          // Only after SMTP succeeded — a failed send keeps its draft, which is
+          // what the outbox bubble restores from.
+          // The refs outlive the unmounted window. Read AFTER the last
+          // autosave settles, or a message sent seconds after it was typed
+          // deletes a draft the save is still writing.
+          await saveChainRef.current.catch(() => {});
+          if (draftUidRef.current && draftMailboxRef.current) {
+            await deleteLocalDraft({
+              accountId: draftAccountRef.current || freshAccount.id,
+              mailbox: draftMailboxRef.current,
+              uid: draftUidRef.current,
+            });
+            draftUidRef.current = null;
+          }
+          // Safety: unsubscribe 30s after the send, even if the event never fires.
+          setTimeout(() => { try { unlistenAppend?.(); } catch {} }, 30000);
+        } catch (err) {
+          console.error('[compose:smtp_fail]', err);
+          // Nothing was sent, so no APPEND event is coming.
+          try { unlistenAppend?.(); } catch {}
+          markLocalStageDone();
+          // Local draft survives — user can retry via outbox bubble.
+          throw err;
+        }
+
+        // ── STAGE 4: re-archive locally as SENT ──
+        // Overwrite the .eml file: flags transition D→A. maildir_store
+        // removes the old file for this UID and writes the new one.
+        if (invoke && builtMime?.rawBase64) {
+          try {
+            await invoke('maildir_store', {
+              accountId: freshAccount.id,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+              rawSourceBase64: builtMime.rawBase64,
+              flags: ['archived', 'seen'],
+            });
+            await api.appendLocalIndex(freshAccount.id, localMailbox, [{
+              ...indexBase,
+              flags: ['archived', 'seen'],
+              source: 'local_sent',
+            }]);
+            console.log('[compose:mark_sent_local]', {
+              account: freshAccount.email,
+              mailbox: localMailbox,
+              uid: pseudoUid,
+            });
+          } catch (err) {
+            console.warn('[compose:mark_sent_local_fail]', err);
+          }
+        }
+
+        // The Sent row, now that the message has actually left.
+        //
+        // It goes in HERE, after SMTP, not before it. Staged ahead of the send
+        // it claimed a message was in your Sent folder while it was still on
+        // the wire — and a send that failed left that claim standing for the
+        // session: `_mergeOptimisticSent` keeps an optimistic entry the server
+        // never returns, and no outbox path (retry, cancel, dismiss) removes
+        // it. The safety net is the vault copy above, written BEFORE SMTP and
+        // untouched by this; a failed send keeps that, its Drafts autosave and
+        // the outbox bubble, and claims nothing.
+        //
+        // Built FROM `indexBase`, not beside it. Written out by hand it lost
+        // the two fields threading runs on (`in_reply_to`, `references`), and
+        // the row was then an orphan "Re: …": a second row in the list, and
+        // nothing the open thread would take.
+        const optimistic = {
+          ...indexBase,
+          cc: parseAddresses(formData.cc),
+          bcc: parseAddresses(formData.bcc),
+          internal_date: indexBase.date,
+          internalDate: indexBase.date,
+          messageId: indexBase.message_id,
+          // Same headers, under the names buildThreads and the reader read.
+          inReplyTo: indexBase.in_reply_to,
+          hasAttachments: indexBase.has_attachments,
+          read: true,
+          flags: ['\\Seen'],
+          _accountId: freshAccount.id,
+          _optimistic: true,
+          _localStaged: true,
+        };
+        useMailStore.setState(s => {
+          const dedupById = (list) => (optimistic.messageId
+            ? (list || []).filter(e => e.messageId !== optimistic.messageId)
+            : (list || []));
+          const updates = { sentEmails: [optimistic, ...dedupById(s.sentEmails)] };
+          if (
+            sentFolderPath &&
+            s.activeAccountId === freshAccount.id &&
+            s.activeMailbox === sentFolderPath
+          ) {
+            updates.emails = [optimistic, ...dedupById(s.emails)];
+            updates.totalEmails = (s.totalEmails || 0) + 1;
+          }
+          return updates;
+        });
+        useMailStore.getState().updateSortedEmails?.();
+        console.log('[compose:sent_row_insert]', {
+          account: freshAccount.email,
+          uid: pseudoUid,
+          messageId: builtMime?.messageId,
+        });
+        // The local side is complete — the APPEND handler may run now.
+        markLocalStageDone();
+
       };
 
       // Queue send (may delay if undo send is enabled)
