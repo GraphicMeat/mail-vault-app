@@ -8,5 +8,12 @@
   "dbe7404352e0": "Ingrandisci: Sessioni di concentrazione",
   "2945dfe35d10": "Le sessioni di concentrazione in MailVault",
   "6c44d6da332a": "Tutto quello che c’è in Gratuito, più queste 11 funzioni. Selezionane una per vedere come funziona.",
-  "7bc35f635b0b": "Le stesse 11 funzioni che trovi nell’introduzione dell’app. Apri una funzione per esplorarla."
+  "7bc35f635b0b": "Le stesse 11 funzioni che trovi nell’introduzione dell’app. Apri una funzione per esplorarla.",
+  "0d02f0a6ec06": "Posso cambiare il modo in cui viene evidenziato il messaggio aperto?",
+  "fdc278a8183a": "Sì. Impostazioni &rsaquo; Aspetto &rsaquo; Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. <strong>Segui il puntatore</strong> è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. <strong>Segna quello che sto leggendo</strong> ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi.",
+  "36bf4cfd6777": "Sì. Impostazioni > Aspetto > Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. Segui il puntatore è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. Segna quello che sto leggendo ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi.",
+  "63f585557c08": "Segui il puntatore: le righe reagiscono al mouse e il messaggio aperto è colorato.",
+  "9eee52a85e4f": "Segna quello che sto leggendo: il puntatore resta fermo, il messaggio aperto è pieno e la sua conversazione resta un tono più chiara.",
+  "370413878614": "Elenco dei messaggi di MailVault con l’evidenziazione predefinita: il messaggio aperto porta una fascia colorata",
+  "5a2270d3c7a6": "Elenco dei messaggi di MailVault che segna il messaggio aperto in grigio pieno e il resto della sua conversazione in un grigio più chiaro"
 }

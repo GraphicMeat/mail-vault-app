@@ -81,6 +81,14 @@
     },
     {
       "@type": "Question",
+      "name": "¿Puedo cambiar cómo se resalta el mensaje abierto?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí. Ajustes > Apariencia > Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. Seguir el puntero es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. Marcar lo que estoy leyendo le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "¿Están seguros mis datos?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -218,6 +226,21 @@
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault necesita macOS 11 (Big Sur) o posterior, y se ejecuta de forma nativa tanto en Intel como en Apple Silicon. En Linux se distribuye como .deb, AppImage, Snap y Flatpak para Ubuntu 22.04+ / Debian 12+. Se queda en la barra de menús y sigue sincronizando con la ventana cerrada.
             </p>
+        </article>
+
+        <article id="row-highlighting" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Puedo cambiar cómo se resalta el mensaje abierto?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sí. Ajustes &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/es/list-highlight-hover-1440.webp" srcset="/screenshots/es/list-highlight-hover-720.webp 720w, /screenshots/es/list-highlight-hover-1440.webp 1440w, /screenshots/es/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault con el resaltado por defecto: el mensaje abierto lleva una banda teñida" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Seguir el puntero: las filas reaccionan al ratón y el mensaje abierto queda teñido.</figcaption>
+            </figure>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/es/list-highlight-selection-1440.webp" srcset="/screenshots/es/list-highlight-selection-720.webp 720w, /screenshots/es/list-highlight-selection-1440.webp 1440w, /screenshots/es/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault marcando el mensaje abierto en gris firme y el resto de su conversación en un gris más claro" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Marcar lo que estoy leyendo: el puntero se queda quieto, el mensaje abierto queda relleno y su conversación, un tono más clara.</figcaption>
+            </figure>
         </article>
 
         <article id="data-security" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">

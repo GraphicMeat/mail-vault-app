@@ -81,6 +81,14 @@
     },
     {
       "@type": "Question",
+      "name": "Posso cambiare il modo in cui viene evidenziato il messaggio aperto?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sì. Impostazioni > Aspetto > Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. Segui il puntatore è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. Segna quello che sto leggendo ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "I miei dati sono al sicuro?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -218,6 +226,21 @@
             <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
               MailVault richiede macOS 11 (Big Sur) o successivo e gira in modo nativo sia su Intel sia su Apple Silicon. Su Linux viene distribuito come .deb, AppImage, Snap e Flatpak per Ubuntu 22.04+ / Debian 12+. Resta nella barra dei menu e continua a sincronizzare anche con la finestra chiusa.
             </p>
+        </article>
+
+        <article id="row-highlighting" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Posso cambiare il modo in cui viene evidenziato il messaggio aperto?</h2>
+            <p class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5">
+              Sì. Impostazioni &rsaquo; Aspetto &rsaquo; Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. <strong>Segui il puntatore</strong> è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. <strong>Segna quello che sto leggendo</strong> ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi.
+            </p>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/it/list-highlight-hover-1440.webp" srcset="/screenshots/it/list-highlight-hover-720.webp 720w, /screenshots/it/list-highlight-hover-1440.webp 1440w, /screenshots/it/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Elenco dei messaggi di MailVault con l’evidenziazione predefinita: il messaggio aperto porta una fascia colorata" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Segui il puntatore: le righe reagiscono al mouse e il messaggio aperto è colorato.</figcaption>
+            </figure>
+            <figure class="px-6 pb-5">
+              <img src="/screenshots/it/list-highlight-selection-1440.webp" srcset="/screenshots/it/list-highlight-selection-720.webp 720w, /screenshots/it/list-highlight-selection-1440.webp 1440w, /screenshots/it/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Elenco dei messaggi di MailVault che segna il messaggio aperto in grigio pieno e il resto della sua conversazione in un grigio più chiaro" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Segna quello che sto leggendo: il puntatore resta fermo, il messaggio aperto è pieno e la sua conversazione resta un tono più chiara.</figcaption>
+            </figure>
         </article>
 
         <article id="data-security" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">

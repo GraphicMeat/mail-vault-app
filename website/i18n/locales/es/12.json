@@ -8,5 +8,12 @@
   "dbe7404352e0": "Ampliar: Sesiones de concentración",
   "2945dfe35d10": "Sesiones de concentración en MailVault",
   "6c44d6da332a": "Todo lo de Gratis, más estas 11 funciones. Selecciona una para ver cómo funciona.",
-  "7bc35f635b0b": "Las mismas 11 funciones que verás en la introducción de la app. Abre una función para explorarla."
+  "7bc35f635b0b": "Las mismas 11 funciones que verás en la introducción de la app. Abre una función para explorarla.",
+  "0d02f0a6ec06": "¿Puedo cambiar cómo se resalta el mensaje abierto?",
+  "fdc278a8183a": "Sí. Ajustes &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.",
+  "36bf4cfd6777": "Sí. Ajustes > Apariencia > Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. Seguir el puntero es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. Marcar lo que estoy leyendo le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.",
+  "63f585557c08": "Seguir el puntero: las filas reaccionan al ratón y el mensaje abierto queda teñido.",
+  "9eee52a85e4f": "Marcar lo que estoy leyendo: el puntero se queda quieto, el mensaje abierto queda relleno y su conversación, un tono más clara.",
+  "370413878614": "Lista de mensajes de MailVault con el resaltado por defecto: el mensaje abierto lleva una banda teñida",
+  "5a2270d3c7a6": "Lista de mensajes de MailVault marcando el mensaje abierto en gris firme y el resto de su conversación en un gris más claro"
 }
