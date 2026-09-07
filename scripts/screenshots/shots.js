@@ -214,6 +214,25 @@ async function setAppearance(optionLabel) {
   await browser.pause(SETTLE);
 }
 
+/**
+ * Same, for the card grids whose labels are short enough to collide — "Off"
+ * (threading) matches half a dozen other controls in some catalogs, and a
+ * mis-click there is a silently wrong screenshot rather than an error.
+ */
+async function setAppearanceOption(testId) {
+  await openAppearance();
+  const clicked = await browser.execute((id) => {
+    const btn = document.querySelector(`[data-testid="${id}"]`);
+    if (!btn || btn.offsetHeight === 0) return false;
+    btn.click();
+    return true;
+  }, testId);
+  if (!clicked) throw new Error(`appearance option not found: ${testId}`);
+  await browser.pause(500);
+  await closeSettings();
+  await browser.pause(SETTLE);
+}
+
 /** The list header's checkbox opens the bulk operations modal. */
 const openBulkModal = () => browser.execute(() => {
   const btn = document.querySelector('[data-testid="email-list-header"] button');
@@ -308,6 +327,26 @@ describe('MailVault marketing screenshots', function () {
       await clickRow('Ana Brandt');
       await expectState((s) => s.threadHeaders >= 2, 'thread did not open');
     });
+
+    // ── Row highlighting: the two Appearance options ──────────────────────
+    // Threading goes flat first: the marking mode's lighter grey lands on the
+    // REST of the open message's conversation, and grouped mode collapses that
+    // conversation into the single row you just opened.
+    await step('list-highlight-hover', async () => {
+      await setAppearanceOption('thread-mode-flat');
+      await clickRow(MARKERS.thread);
+      await expectState((s) => !s.viewerEmpty, 'no message open for the highlighting shots');
+    });
+
+    await step('list-highlight-selection', async () => {
+      await setAppearanceOption('row-highlight-selection');
+      await expectState((s) => !s.viewerEmpty, 'the open message did not survive the setting change');
+    });
+
+    // Back to the defaults the rest of the run assumes.
+    await setAppearanceOption('row-highlight-hover');
+    await setAppearanceOption('thread-mode-grouped');
+    await resetToInbox();
 
     await step('email-invoice-attachment', async () => {
       await clickRow(MARKERS.invoice);
