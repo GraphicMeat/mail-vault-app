@@ -16,6 +16,8 @@ import {
   Layers,
   List,
   ListTree,
+  MousePointer2,
+  Highlighter,
   PenTool,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
@@ -53,6 +55,8 @@ export function AppearanceSettings() {
     setEmailListStyle,
     threadMode,
     setThreadMode,
+    emailRowHighlight,
+    setEmailRowHighlight,
     threadSortOrder,
     setThreadSortOrder,
     dateFormat,
@@ -418,6 +422,37 @@ export function AppearanceSettings() {
             <span className="text-sm font-medium text-mail-text">{t('settings.appearance.compact')}</span>
             <span className="text-xs text-mail-text-muted">{t('settings.appearance.senderSubjectTwoLines')}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Highlighting: what the list lights up — the pointer, or what you opened */}
+      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <Highlighter size={18} className="text-mail-accent-text" />
+          {t('settings.appearance.rowHighlight')}
+        </h4>
+        <p className="text-sm text-mail-text-muted mb-4">
+          {t('settings.appearance.rowHighlightDescription')}
+        </p>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { value: 'hover', Icon: MousePointer2, label: 'settings.appearance.rowHighlightHover', hint: 'settings.appearance.rowHighlightHoverHint' },
+            { value: 'selection', Icon: Highlighter, label: 'settings.appearance.rowHighlightSelection', hint: 'settings.appearance.rowHighlightSelectionHint' },
+          ].map(({ value, Icon, label, hint }) => (
+            <button
+              key={value}
+              data-testid={`row-highlight-${value}`}
+              onClick={() => setEmailRowHighlight(value)}
+              className={`p-4 rounded-lg border-2 transition-all flex flex-col items-center gap-3
+                        ${emailRowHighlight === value
+                          ? 'border-mail-accent bg-mail-accent/10'
+                          : 'border-mail-border hover:border-mail-accent/50'}`}
+            >
+              <Icon size={24} className="text-mail-text-muted" />
+              <span className="text-sm font-medium text-mail-text">{t(label)}</span>
+              <span className="text-xs text-mail-text-muted text-center">{t(hint)}</span>
+            </button>
+          ))}
         </div>
       </div>
 
