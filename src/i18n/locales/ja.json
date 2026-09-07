@@ -1582,7 +1582,7 @@
   "onboarding.densityCompact": "コンパクト",
   "onboarding.densityDefault": "標準",
   "onboarding.densityComfortable": "ゆったり",
-  "onboarding.moreInAppearance": "日付の形式や署名などは「設定 → 外観」にあります。",
+  "onboarding.moreInAppearance": "日付の形式や署名などは「設定 → 一般 → 外観」にあります。",
   "onboarding.afterDeleteNone": "何も選ばない",
   "onboarding.afterDeleteNext": "次のメール",
   "onboarding.recommended": "GraphicMeat のおすすめ",

@@ -1582,7 +1582,7 @@
   "onboarding.densityCompact": "紧凑",
   "onboarding.densityDefault": "默认",
   "onboarding.densityComfortable": "宽松",
-  "onboarding.moreInAppearance": "日期格式、签名等在“设置 → 外观”里。",
+  "onboarding.moreInAppearance": "日期格式、签名等在“设置 → 常规 → 外观”里。",
   "onboarding.afterDeleteNone": "不选中",
   "onboarding.afterDeleteNext": "下一封邮件",
   "onboarding.recommended": "GraphicMeat 推荐",

@@ -1582,7 +1582,7 @@
   "onboarding.densityCompact": "Compacta",
   "onboarding.densityDefault": "Predeterminada",
   "onboarding.densityComfortable": "Amplia",
-  "onboarding.moreInAppearance": "El formato de fecha, las firmas y más están en Ajustes → Apariencia.",
+  "onboarding.moreInAppearance": "El formato de fecha, las firmas y más están en Ajustes → General → Apariencia.",
   "onboarding.afterDeleteNone": "Nada",
   "onboarding.afterDeleteNext": "Siguiente correo",
   "onboarding.recommended": "Recomendado por GraphicMeat",
