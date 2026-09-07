@@ -3,7 +3,7 @@ import { MailOpen, Mail, Archive, ArchiveRestore, FolderSymlink, Trash2, ShieldX
 import { useMailStore } from '../stores/mailStore';
 import { selectionKey, resolveEmailLocation, spansMailboxes } from '../stores/slices/unifiedHelpers';
 import { describeServerDelete, describePurge } from '../utils/custodyCopy';
-import { setDeleteUndo } from '../services/workflows/messageMutations';
+import { setDeleteUndo, reloadListInView } from '../services/workflows/messageMutations';
 import { isBackedUp, useBackupScan } from './email/MessageStateIcon';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { MenuItem } from './ui/Popover';
@@ -249,7 +249,7 @@ export function RowActionMenuItems({ emails, exportEmails = emails, actions, onR
                     console.error(`[RowActionMenuItems] Failed to delete email ${em.uid} from ${mailbox}:`, err);
                   }
                 }
-                useMailStore.getState().loadEmails();
+                await reloadListInView();
                 // Only the copies that landed somewhere addressable — a
                 // local-only or Graph delete returns nothing.
                 setDeleteUndo(outcomes.filter(Boolean));

@@ -104,8 +104,12 @@ vi.mock('../../utils/composeOpener', () => ({
 // The whole delete of a row fills ONE undo slot, from the outcomes the loop
 // collected — the workflow itself is covered in services/workflows/__tests__.
 const setDeleteUndo = vi.fn();
+const reloadListInView = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../services/workflows/messageMutations', () => ({
   setDeleteUndo: (...args) => setDeleteUndo(...args),
+  // The menu's own reload after a multi-copy delete. Real, it picks the loader
+  // that matches the view; here it only has to exist.
+  reloadListInView: (...args) => reloadListInView(...args),
 }));
 
 // The resolver pulls in db/api/mailStore; the menu only needs its answer.
@@ -314,7 +318,11 @@ describe('RowActionMenuItems', () => {
       expect(actions.deleteEmailFromServer).toHaveBeenCalledTimes(2);
       expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(1, { skipRefresh: true, mailboxOverride: 'INBOX' });
       expect(actions.deleteEmailFromServer).toHaveBeenCalledWith(2, { skipRefresh: true, mailboxOverride: 'INBOX' });
-      expect(useMailStoreMock.getState().loadEmails).toHaveBeenCalledTimes(1);
+      // One trailing reload for the whole row — and through the helper that
+      // picks the loader matching the view, not a bare loadEmails(), which
+      // reloads nothing in a list that spans mailboxes.
+      expect(reloadListInView).toHaveBeenCalledTimes(1);
+      expect(useMailStoreMock.getState().loadEmails).not.toHaveBeenCalled();
     });
 
     it('a multi-message delete fills one undo slot from the outcomes, not one per message', async () => {

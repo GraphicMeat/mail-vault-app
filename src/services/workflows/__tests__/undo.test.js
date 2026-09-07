@@ -23,6 +23,7 @@ const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(1);
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
+const mockRefreshCurrentView = vi.fn().mockResolvedValue(undefined);
 
 let netOnline = true;
 
@@ -60,6 +61,13 @@ vi.mock('../../api', () => ({
   findMessageId: (...a) => mockFindMessageId(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
   removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
+}));
+
+// The unified view's reload verb. Real, it refetches every account — here it
+// only has to prove which reload the undo chose.
+vi.mock('../refreshAccounts', () => ({
+  refreshCurrentView: (...a) => mockRefreshCurrentView(...a),
+  refreshAllAccounts: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../authUtils', () => ({
@@ -120,14 +128,14 @@ const row = (uid, extra = {}) => ({
   from: { address: 'them@x' }, date: '2026-09-01T10:00:00Z', ...extra,
 });
 
-function primeStore({ emails, selected = [], activeMailbox = 'INBOX' } = {}) {
+function primeStore({ emails, selected = [], activeMailbox = 'INBOX', accounts = [ACCOUNT], mailboxScope = null } = {}) {
   useMailStore.setState({
-    accounts: [ACCOUNT],
+    accounts,
     activeAccountId: ACCOUNT.id,
     activeMailbox,
     unifiedInbox: false,
     unifiedFolder: null,
-    mailboxScope: null,
+    mailboxScope,
     mailboxes: [],
     viewMode: 'all',
     emails,
@@ -249,6 +257,10 @@ describe('undo after a delete', () => {
     });
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(true);
 
+    // The DELETE reloads too (applyServerRemoval), so a bare toHaveBeenCalled
+    // below would be satisfied by that one and pin nothing about the undo.
+    useMailStore.getState().loadEmails.mockClear();
+
     await useMailStore.getState().runUndo();
 
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
@@ -256,6 +268,73 @@ describe('undo after a delete', () => {
     expect(mockAppendLocalIndex).toHaveBeenLastCalledWith('a1', 'INBOX',
       [expect.objectContaining({ serverDeleted: false })]);
     expect(useMailStore.getState().deleteTombstones.has('a1|INBOX|7')).toBe(false);
+    // Lifting the tombstone only stops the row being HIDDEN — the optimistic
+    // update took it out of `emails` entirely, so nothing is back on screen
+    // until the folder is reloaded. One folder in view, so that is loadEmails,
+    // and the unified refresh must not fire for it.
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
+    expect(mockRefreshCurrentView).not.toHaveBeenCalled();
+  });
+
+  it('repaints the list that is on screen when the view spans mailboxes', async () => {
+    // All Inboxes: `activeMailbox` is the literal 'UNIFIED', which no account
+    // can SELECT. Reloading through loadEmails() put the message back on the
+    // server and then reloaded a folder that does not exist — the row never
+    // came back, so the undo read as a no-op.
+    primeStore({
+      emails: [row(7, { _accountId: 'a1', _mailbox: 'INBOX' })],
+      activeMailbox: 'UNIFIED',
+    });
+
+    await useMailStore.getState().deleteEmailFromServer('a1:INBOX:7');
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.deleted', canUndo: true,
+    });
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    expect(mockRefreshCurrentView).toHaveBeenCalled();
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
+  });
+
+  it('offers the undo when the server reported no COPYUID, addressing the copy by Message-ID', async () => {
+    // A server without UIDPLUS names no destination uid. The message is in
+    // Trash and perfectly restorable, but the slot used to say "Deleted 1
+    // message permanently" and offer nothing — the one word that must never be
+    // wrong about mail, over a message sitting in the bin.
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
+    mockFindMessageId.mockResolvedValue({
+      found: [{ mailbox: 'Trash', uid: 88 }, { mailbox: 'INBOX', uid: 7 }],
+      searched: 2, failed: 0, complete: true,
+    });
+    primeStore({ emails: [row(7)] });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.deleted', labelParams: { count: 1 }, canUndo: true,
+    });
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockFindMessageId).toHaveBeenCalledWith(ACCOUNT, 'm7@mock', { stopOnFirst: false });
+    // Only the hit in Trash — the same id also sits in INBOX's own copy, and
+    // moving that one back would be moving somebody else's message.
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [88], 'Trash', 'INBOX');
+  });
+
+  it('refuses to guess when no COPYUID and no copy in Trash can be found', async () => {
+    mockDeleteEmail.mockResolvedValue({ trash: 'Trash', trashUid: null });
+    mockFindMessageId.mockResolvedValue({ found: [], searched: 1, failed: 0, complete: true });
+    primeStore({ emails: [row(7)] });
+
+    await useMailStore.getState().deleteEmailFromServer(7);
+    mockMoveEmails.mockClear();
+
+    await expect(useMailStore.getState().runUndo()).resolves.toBe(false);
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(useMailStore.getState().error).toBeTruthy();
   });
 
   it('says a permanent delete cannot be undone rather than offering a button', async () => {
@@ -346,6 +425,57 @@ describe('undo after a delete', () => {
     expect(useMailStore.getState().undo).toMatchObject({
       labelKey: 'undo.deletedPermanently', labelParams: { count: 2 }, canUndo: false,
     });
+  });
+
+  it('restores across accounts with one move per (account, folder) pair', async () => {
+    // All Inboxes spans accounts, so one undo can owe two servers a move back.
+    const A2 = { id: 'a2', email: 'a2@x' };
+    mockDeleteEmail
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 5 })
+      .mockResolvedValueOnce({ trash: 'Trash', trashUid: 6 });
+    primeStore({
+      accounts: [ACCOUNT, A2],
+      activeMailbox: 'UNIFIED',
+      emails: [
+        row(7, { _accountId: 'a1', _mailbox: 'INBOX' }),
+        row(8, { _accountId: 'a2', _mailbox: 'INBOX' }),
+      ],
+      selected: ['a1:INBOX:7', 'a2:INBOX:8'],
+    });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+    expect(useMailStore.getState().undo).toMatchObject({
+      labelKey: 'undo.deleted', labelParams: { count: 2 },
+    });
+
+    mockMoveEmails.mockClear();
+    await useMailStore.getState().runUndo();
+
+    // Two accounts, so two moves — never one call carrying both accounts' uids,
+    // which would address a2's message against a1's server.
+    expect(mockMoveEmails).toHaveBeenCalledTimes(2);
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    expect(mockMoveEmails).toHaveBeenCalledWith(A2, [6], 'Trash', 'INBOX');
+  });
+
+  it('repaints a branch listing through loadEmails, not the unified refresh', async () => {
+    // The third view shape: `spansMailboxes` is true for a branch listing too,
+    // but its `activeMailbox` is a REAL folder (the branch root), and
+    // loadEmails knows how to reload it (loadSubtree). Only the literal
+    // 'UNIFIED' needs the other verb.
+    primeStore({
+      emails: [row(7, { _accountId: 'a1', _mailbox: 'INBOX' })],
+      mailboxScope: { root: 'INBOX' },
+    });
+
+    await useMailStore.getState().deleteEmailFromServer('a1:INBOX:7');
+    useMailStore.getState().loadEmails.mockClear();
+
+    await useMailStore.getState().runUndo();
+
+    expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [5], 'Trash', 'INBOX');
+    expect(useMailStore.getState().loadEmails).toHaveBeenCalledTimes(1);
+    expect(mockRefreshCurrentView).not.toHaveBeenCalled();
   });
 });
 

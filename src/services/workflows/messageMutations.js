@@ -27,6 +27,38 @@ export const isCredentialsProblem = (message) =>
   /password missing|no password|authentication|auth failed|login failed|credential/i.test(message || '');
 
 
+/**
+ * Reload the list that is actually on screen.
+ *
+ * `loadEmails()` reloads one (account, mailbox) — and a branch listing, via
+ * loadSubtree. It knows nothing about the unified view, where `activeMailbox`
+ * is the literal 'UNIFIED': no account can SELECT that, which is why every
+ * other reload in this file is guarded with `if (!isUnified)`.
+ *
+ * The three that were not guarded are exactly the ones that put rows BACK — an
+ * undo, and the repaint after a move. Taking rows out hides that: the
+ * optimistic update already did what the user asked, so a reload of a folder
+ * that does not exist changes nothing visible. Putting one back needs the
+ * reload to land, and in All Inboxes it never did: the message returned to the
+ * server and the row stayed off the screen.
+ *
+ * `refreshCurrentView` is the one verb that knows all three view shapes. The
+ * workflow, not the store action of the same name — that one throttles to a
+ * run per 15 s, and an undo that repaints a quarter of a minute later is the
+ * same bug wearing a timer.
+ */
+export async function reloadListInView() {
+  const { useMailStore } = await import('../../stores/mailStore');
+  const get = () => useMailStore.getState();
+  if (get().activeMailbox !== 'UNIFIED') return get().loadEmails();
+  // A cache-merge repaint (loadUnifiedInbox alone) would bring the row back
+  // carrying the uid the delete retired — the move back gave the message a new
+  // one. The accounts have to be refetched for the row to be clickable.
+  const { refreshCurrentView } = await import('./refreshAccounts');
+  return refreshCurrentView();
+}
+
+
 // One message as local-index.json stores it. `local_index_append` upserts by
 // uid, so this doubles as the shape any later writer has to preserve — see
 // markServerDeleted, which re-appends an entry to add one field.
@@ -551,6 +583,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
         outcome = {
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+          // The only handle left when the server reports no COPYUID — same
+          // fallback the move undo uses. See setDeleteUndo.
+          messageId: candidate?.messageId ?? null,
         };
       }
       console.log(`[deleteEmail] Successfully deleted UID ${realUid} from "${mailbox}"`);
@@ -597,7 +632,14 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
  */
 export async function setDeleteUndo(outcomes) {
   const { useMailStore } = await import('../../stores/mailStore');
-  const restorable = (outcomes || []).filter(o => o?.trashUid != null);
+  // Addressable, not necessarily by uid. A server without UIDPLUS reports no
+  // COPYUID, so `trashUid` is null for a message that is sitting in Trash and
+  // is perfectly restorable — offering nothing there told the user their mail
+  // was gone for good, under the word "permanently", and left it in the bin.
+  // The Message-ID is the handle in that case, exactly as it is for a move
+  // (see _resolveDestinationUids). Only a delete that resolved NO trash folder
+  // is truly permanent.
+  const restorable = (outcomes || []).filter(o => o?.trashUid != null || (o?.trash && o?.messageId));
   if (restorable.length) {
     useMailStore.getState().setUndo({
       labelKey: 'undo.deleted',
@@ -620,14 +662,26 @@ async function _restoreFromTrash(outcomes) {
   const groups = new Map();
   for (const o of outcomes) {
     const k = `${o.accountId}|${o.trash}|${o.mailbox}`;
-    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [] });
+    if (!groups.has(k)) groups.set(k, { ...o, trashUids: [], uids: [], messageIds: [] });
     groups.get(k).trashUids.push(o.trashUid);
     groups.get(k).uids.push(o.uid);
+    groups.get(k).messageIds.push(o.messageId);
   }
   // A throw on the second group must still repaint what the first one restored.
   try {
     for (const g of groups.values()) {
-      await api.moveEmails(await ensureFreshToken(g.account), g.trashUids, g.trash, g.mailbox);
+      const account = await ensureFreshToken(g.account);
+      // Without UIDPLUS the server named no destination uid, so find the copy
+      // by Message-ID in the folder it was moved to — never a guessed uid,
+      // which would move somebody else's message back.
+      const known = g.trashUids.filter(u => u != null);
+      const trashUids = known.length === g.uids.length
+        ? known
+        : await _resolveDestinationUids(account, g.trash, g.messageIds);
+      // Bare: runUndo already says "Undo failed: {{err}}" around whatever this
+      // throws, and saying it twice reads as a bug.
+      if (!trashUids.length) throw new Error(g.trash);
+      await api.moveEmails(account, trashUids, g.trash, g.mailbox);
       // The vault copy was stamped "we deleted the server copy" a moment ago
       // (markServerDeleted / applyServerRemoval); it is back, so custody must
       // stop claiming this is the only copy left. See stores/slices/custody.js.
@@ -640,7 +694,7 @@ async function _restoreFromTrash(outcomes) {
       useMailStore.setState({ deleteTombstones: ts });
     }
   } finally {
-    useMailStore.getState().loadEmails();
+    await reloadListInView();
   }
 }
 
@@ -1439,6 +1493,7 @@ export async function deleteSelectedFromServer() {
         deleted.push({
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
+          messageId: emailObj?.messageId ?? null,
         });
       }
       deletedRealUids.add(realUid);
@@ -1961,7 +2016,7 @@ export async function moveEmails(keys, targetMailbox) {
 
   _invalidateRestore(activeAccountId);
 
-  get().loadEmails();
+  reloadListInView();
 
   // Graph groups produce no record — no replayable uid, no COPYUID — so a
   // Graph-only move leaves the previous slot alone rather than offering an
@@ -1983,7 +2038,6 @@ export async function moveEmails(keys, targetMailbox) {
 // Move the messages back. The destination uids came with COPYUID; without
 // UIDPLUS they are found by Message-ID in the destination folder.
 async function _undoMove(records) {
-  const { useMailStore } = await import('../../stores/mailStore');
   // A throw on the second record must still repaint what the first one moved.
   try {
     for (const r of records) {
@@ -2000,7 +2054,7 @@ async function _undoMove(records) {
       await api.moveEmails(r.account, dst, r.to, r.from);
     }
   } finally {
-    useMailStore.getState().loadEmails();
+    await reloadListInView();
   }
 }
 
