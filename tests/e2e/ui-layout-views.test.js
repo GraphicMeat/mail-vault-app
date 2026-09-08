@@ -56,10 +56,6 @@ function segmentPressed(label) {
 }
 
 /** Read one settings-store value, so the assertion names the stored choice. */
-const settingValue = (key) => browser.execute(
-  (name) => window.__SETTINGS_STORE__.getState()[name],
-  key,
-);
 
 /**
  * Class name of the sidebar's visible sibling: the main content area, which is
@@ -83,8 +79,11 @@ describe('Reading Pane, Mail View & Message Rows', function () {
     appState = await waitForApp();
     // The reading-pane and message-row segments are disabled in Chat, and the
     // e2e specs share one profile, so a neighbour may have left it there.
+    // Through the UI, not a store seam: the CI build has no VITE_E2E seam.
     if (appState === 'ready') {
-      await browser.execute(() => window.__SETTINGS_STORE__.getState().setViewStyle('list'));
+      await openLayoutSettings();
+      if (!(await segmentPressed('Email'))) await clickSegment('Email');
+      await closeSettings();
     }
   });
 
@@ -102,7 +101,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Below the list');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Below the list')).toBe(true);
-      expect(await settingValue('layoutMode')).toBe('two-column');
 
       await closeSettings();
 
@@ -116,7 +114,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Beside the list');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Beside the list')).toBe(true);
-      expect(await settingValue('layoutMode')).toBe('three-column');
 
       await closeSettings();
 
@@ -139,7 +136,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Two lines');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Two lines')).toBe(true);
-      expect(await settingValue('emailListStyle')).toBe('compact');
 
       await closeSettings();
     });
@@ -150,7 +146,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Single line');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Single line')).toBe(true);
-      expect(await settingValue('emailListStyle')).toBe('default');
 
       await closeSettings();
     });
@@ -170,7 +165,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Chat');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Chat')).toBe(true);
-      expect(await settingValue('viewStyle')).toBe('chat');
 
       await closeSettings();
     });
@@ -181,7 +175,6 @@ describe('Reading Pane, Mail View & Message Rows', function () {
       const clicked = await clickSegment('Email');
       expect(clicked).toBe(true);
       expect(await segmentPressed('Email')).toBe(true);
-      expect(await settingValue('viewStyle')).toBe('list');
 
       await closeSettings();
     });
