@@ -67,12 +67,12 @@ describe('appearance step', () => {
   });
 
   it('applies current recommended defaults, including Follow the pointer', () => {
-    useThemeStore.setState({ theme: 'light', palette: 'graphite' });
+    useThemeStore.setState({ theme: 'light', palette: 'indigo' });
     useSettingsStore.setState({ layoutMode: 'two-column', sidebarStyle: 'tagcloud', sidebarLayout: 'switcher', viewStyle: 'chat', emailListStyle: 'default', threadMode: 'flat', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByTestId('appearance-recommended'));
-    expect(useThemeStore.getState()).toMatchObject({ theme: 'dark', palette: 'indigo' });
-    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'grouped', afterDeleteSelect: 'none', emailRowHighlight: 'hover' });
+    expect(useThemeStore.getState()).toMatchObject({ theme: 'dark', palette: 'graphite' });
+    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'expandable', afterDeleteSelect: 'none', emailRowHighlight: 'hover' });
   });
 
   it('can continue from any tab without resetting existing preferences', () => {

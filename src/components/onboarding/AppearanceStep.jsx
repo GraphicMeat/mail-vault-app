@@ -31,13 +31,13 @@ export function AppearanceStep({ onContinue }) {
   ] : [];
   const applyRecommended = () => {
     setTheme('dark');
-    setPalette('indigo');
+    setPalette('graphite');
     settings.setLayoutMode('three-column');
     settings.setSidebarStyle('list');
     settings.setSidebarLayout('stacked');
     settings.setViewStyle('list');
     settings.setEmailListStyle('compact');
-    settings.setThreadMode('grouped');
+    settings.setThreadMode('expandable');
     settings.setAfterDeleteSelect('none');
     settings.setEmailRowHighlight('hover');
   };
