@@ -1143,7 +1143,8 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
         const sub = await stripe.subscriptions.retrieve(session.subscription);
         await upsertSubscription(db, customerId, sub);
         // One activation event per completed checkout (trialing or active both count as conversion)
-        if (computePremiumAccess(sub.status, sub.cancel_at_period_end, sub.current_period_end ? new Date(sub.current_period_end * 1000) : null)) {
+        const activationPeriodEnd = sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end;
+        if (computePremiumAccess(sub.status, sub.cancel_at_period_end, activationPeriodEnd ? new Date(activationPeriodEnd * 1000) : null)) {
           bumpMetric('sub_activated');
         }
         break;
@@ -1165,11 +1166,13 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
 
       case 'invoice.payment_failed': {
         const invoice = event.data.object;
-        if (invoice.subscription) {
+        // 2025-03-31.basil moved invoice.subscription under parent.subscription_details.
+        const invoiceSubId = invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
+        if (invoiceSubId) {
           await db.execute(
             `UPDATE billing_subscriptions SET latest_invoice_status = 'failed', updated_at = NOW()
              WHERE stripe_subscription_id = ?`,
-            [invoice.subscription]
+            [invoiceSubId]
           );
         }
         break;
@@ -1177,11 +1180,13 @@ app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), asyn
 
       case 'invoice.paid': {
         const invoice = event.data.object;
-        if (invoice.subscription) {
+        // 2025-03-31.basil moved invoice.subscription under parent.subscription_details.
+        const invoiceSubId = invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
+        if (invoiceSubId) {
           await db.execute(
             `UPDATE billing_subscriptions SET latest_invoice_status = 'paid', updated_at = NOW()
              WHERE stripe_subscription_id = ?`,
-            [invoice.subscription]
+            [invoiceSubId]
           );
         }
         break;
@@ -1211,8 +1216,13 @@ async function upsertSubscription(db, stripeCustomerId, sub) {
   const priceItem = sub.items?.data?.[0];
   const priceId = priceItem?.price?.id || null;
   const interval = priceItem?.price?.recurring?.interval || null;
-  const periodStart = sub.current_period_start ? new Date(sub.current_period_start * 1000) : null;
-  const periodEnd = sub.current_period_end ? new Date(sub.current_period_end * 1000) : null;
+  // 2025-03-31.basil moved the billing period off the subscription onto its items. The SDK is
+  // pinned to acacia so its own calls still return the old shape; webhooks follow the account's
+  // default version, which can be either. Read both.
+  const periodStartTs = sub.current_period_start ?? priceItem?.current_period_start;
+  const periodEndTs = sub.current_period_end ?? priceItem?.current_period_end;
+  const periodStart = periodStartTs ? new Date(periodStartTs * 1000) : null;
+  const periodEnd = periodEndTs ? new Date(periodEndTs * 1000) : null;
   const canceledAt = sub.canceled_at ? new Date(sub.canceled_at * 1000) : null;
   const premiumAccess = computePremiumAccess(sub.status, sub.cancel_at_period_end, periodEnd);
 
