@@ -1,219 +1,187 @@
 /**
- * E2E Test: Layout Modes, View Styles, and Email List Styles (UI-only)
+ * E2E Test: Reading Pane, Mail View and Message Rows (UI-only)
  *
- * Verifies switching between layout modes, view styles, and email list
- * styles via the Settings UI:
- * - Layout: Three Columns / Two Columns
- * - View Style: List View / Chat View
- * - Email List Style: Default / Compact
+ * Verifies switching the workspace segments in Settings > Appearance > Layout
+ * and the effect each one has on the app:
+ * - Reading pane: Beside the list / Below the list
+ * - Mail view: Email / Chat
+ * - Message rows: Two lines / Single line
  */
 
-import { waitForApp, openSettings, closeSettings, pressKey } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+
+/** Open Settings on Appearance > Layout, where the workspace segments live. */
+async function openLayoutSettings() {
+  await openSettings();
+  await clickSettingsNav('Appearance');
+  await clickSettingsNav('Layout');
+  await browser.pause(300);
+}
 
 /**
- * Click a settings option button by its exact text content.
- * Scrolls the button into view first to handle off-screen elements.
- * @param {string} buttonText - The visible text of the button to click
- * @returns {boolean} - Whether the button was found and clicked
+ * Click a workspace segment by its exact label.
+ * Scrolls it into view first to handle off-screen options.
+ * @param {string} label - The visible text of the segment to click
+ * @returns {boolean} - Whether the segment was found and clicked
  */
-async function clickSettingsButton(buttonText) {
+async function clickSegment(label) {
   const clicked = await browser.execute((text) => {
-    const buttons = document.querySelectorAll('button');
-    for (const btn of buttons) {
-      if (btn.offsetHeight > 0 && btn.textContent.trim().startsWith(text)) {
+    for (const btn of document.querySelectorAll('.settings-segments button')) {
+      if (btn.offsetHeight > 0 && !btn.disabled && btn.textContent.trim() === text) {
         btn.scrollIntoView({ behavior: 'instant', block: 'center' });
         btn.click();
         return true;
       }
     }
     return false;
-  }, buttonText);
+  }, label);
   await browser.pause(300);
   return clicked;
 }
 
 /**
- * Check if a settings button has the active/selected state (border-mail-accent class).
- * @param {string} buttonText - The visible text of the button to check
+ * Read the selected state (aria-pressed) of a workspace segment.
+ * @param {string} label - The visible text of the segment to check
  * @returns {boolean}
  */
-async function isButtonActive(buttonText) {
+function segmentPressed(label) {
   return browser.execute((text) => {
-    const buttons = document.querySelectorAll('button');
-    for (const btn of buttons) {
-      if (btn.offsetHeight > 0 && btn.textContent.trim().startsWith(text)) {
-        return btn.className.includes('border-mail-accent');
+    for (const btn of document.querySelectorAll('.settings-segments button')) {
+      if (btn.offsetHeight > 0 && btn.textContent.trim() === text) {
+        return btn.getAttribute('aria-pressed') === 'true';
       }
     }
     return false;
-  }, buttonText);
+  }, label);
 }
 
-describe('Layout, View & List Style Switching', function () {
+/** Read one settings-store value, so the assertion names the stored choice. */
+const settingValue = (key) => browser.execute(
+  (name) => window.__SETTINGS_STORE__.getState()[name],
+  key,
+);
+
+/**
+ * Class name of the sidebar's visible sibling: the main content area, which is
+ * flex-col in the stacked reading pane and flex-row beside the list.
+ */
+const mainAreaClassName = () => browser.execute(() => {
+  const sidebar = document.querySelector('[data-testid="sidebar"]');
+  const parent = sidebar?.parentElement;
+  if (!parent) return '';
+  for (const child of parent.children) {
+    if (child !== sidebar && child.offsetHeight > 0) return child.className;
+  }
+  return '';
+});
+
+describe('Reading Pane, Mail View & Message Rows', function () {
   this.timeout(30000);
 
   let appState;
   before(async function () {
     appState = await waitForApp();
+    // The reading-pane and message-row segments are disabled in Chat, and the
+    // e2e specs share one profile, so a neighbour may have left it there.
+    if (appState === 'ready') {
+      await browser.execute(() => window.__SETTINGS_STORE__.getState().setViewStyle('list'));
+    }
   });
 
   // -----------------------------------------------------------------------
-  // Layout Mode Switching
+  // Reading Pane Switching
   // -----------------------------------------------------------------------
-  describe('Layout Mode Switching', function () {
+  describe('Reading Pane Switching', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
     });
 
-    it('should switch to 2-column layout', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should move the reading pane below the list', async function () {
+      await openLayoutSettings();
 
-      const clicked = await clickSettingsButton('Two Columns');
+      const clicked = await clickSegment('Below the list');
       expect(clicked).toBe(true);
+      expect(await segmentPressed('Below the list')).toBe(true);
+      expect(await settingValue('layoutMode')).toBe('two-column');
 
       await closeSettings();
 
-      // Verify the main content area uses flex-col (2-column layout)
-      const usesFlexCol = await browser.execute(() => {
-        const sidebar = document.querySelector('[data-testid="sidebar"]');
-        if (!sidebar) return false;
-        // The main content area is a sibling of the sidebar
-        const parent = sidebar.parentElement;
-        if (!parent) return false;
-        const children = Array.from(parent.children);
-        for (const child of children) {
-          if (child !== sidebar && child.offsetHeight > 0) {
-            return child.className.includes('flex-col');
-          }
-        }
-        return false;
-      });
-      expect(usesFlexCol).toBe(true);
+      // Verify the main content area uses flex-col (stacked reading pane)
+      expect(await mainAreaClassName()).toContain('flex-col');
     });
 
-    it('should switch back to 3-column layout', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should move the reading pane back beside the list', async function () {
+      await openLayoutSettings();
 
-      const clicked = await clickSettingsButton('Three Columns');
+      const clicked = await clickSegment('Beside the list');
       expect(clicked).toBe(true);
+      expect(await segmentPressed('Beside the list')).toBe(true);
+      expect(await settingValue('layoutMode')).toBe('three-column');
 
       await closeSettings();
 
-      // Verify the main content area uses flex-row (3-column layout)
-      const usesFlexRow = await browser.execute(() => {
-        const sidebar = document.querySelector('[data-testid="sidebar"]');
-        if (!sidebar) return false;
-        const parent = sidebar.parentElement;
-        if (!parent) return false;
-        const children = Array.from(parent.children);
-        for (const child of children) {
-          if (child !== sidebar && child.offsetHeight > 0) {
-            return child.className.includes('flex-row');
-          }
-        }
-        return false;
-      });
-      expect(usesFlexRow).toBe(true);
+      // Verify the main content area uses flex-row (side-by-side reading pane)
+      expect(await mainAreaClassName()).toContain('flex-row');
     });
   });
 
   // -----------------------------------------------------------------------
-  // View Style Switching
+  // Message Row Switching
   // -----------------------------------------------------------------------
-  describe('View Style Switching', function () {
+  describe('Message Row Switching', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
     });
 
-    it('should switch to Chat view', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should switch to two-line rows', async function () {
+      await openLayoutSettings();
 
-      const clicked = await clickSettingsButton('Chat View');
+      const clicked = await clickSegment('Two lines');
       expect(clicked).toBe(true);
-
-      // Verify the Chat View button is now active
-      const isActive = await isButtonActive('Chat View');
-      expect(isActive).toBe(true);
+      expect(await segmentPressed('Two lines')).toBe(true);
+      expect(await settingValue('emailListStyle')).toBe('compact');
 
       await closeSettings();
     });
 
-    it('should switch back to List view', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should switch back to single-line rows', async function () {
+      await openLayoutSettings();
 
-      const clicked = await clickSettingsButton('List View');
+      const clicked = await clickSegment('Single line');
       expect(clicked).toBe(true);
-
-      // Verify the List View button is now active
-      const isActive = await isButtonActive('List View');
-      expect(isActive).toBe(true);
+      expect(await segmentPressed('Single line')).toBe(true);
+      expect(await settingValue('emailListStyle')).toBe('default');
 
       await closeSettings();
     });
   });
 
   // -----------------------------------------------------------------------
-  // Email List Style Switching
+  // Mail View Switching. Last: Chat disables the two groups above.
   // -----------------------------------------------------------------------
-  describe('Email List Style Switching', function () {
+  describe('Mail View Switching', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
     });
 
-    it('should switch to Compact style', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should switch to the Chat mail view', async function () {
+      await openLayoutSettings();
 
-      // Scroll down to find the Compact button (it may be off-screen)
-      await browser.execute(() => {
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          if (btn.textContent.trim() === 'Compact') {
-            btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-            return true;
-          }
-        }
-        return false;
-      });
-      await browser.pause(200);
-
-      const clicked = await clickSettingsButton('Compact');
+      const clicked = await clickSegment('Chat');
       expect(clicked).toBe(true);
-
-      // Verify the Compact button is now active
-      const isActive = await isButtonActive('Compact');
-      expect(isActive).toBe(true);
+      expect(await segmentPressed('Chat')).toBe(true);
+      expect(await settingValue('viewStyle')).toBe('chat');
 
       await closeSettings();
     });
 
-    it('should switch back to Default style', async function () {
-      await openSettings();
-      await browser.pause(300);
+    it('should switch back to the Email mail view', async function () {
+      await openLayoutSettings();
 
-      // Scroll down to find the Default button
-      await browser.execute(() => {
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-          if (btn.textContent.trim() === 'Default') {
-            btn.scrollIntoView({ behavior: 'instant', block: 'center' });
-            return true;
-          }
-        }
-        return false;
-      });
-      await browser.pause(200);
-
-      const clicked = await clickSettingsButton('Default');
+      const clicked = await clickSegment('Email');
       expect(clicked).toBe(true);
-
-      // Verify the Default button is now active
-      const isActive = await isButtonActive('Default');
-      expect(isActive).toBe(true);
+      expect(await segmentPressed('Email')).toBe(true);
+      expect(await settingValue('viewStyle')).toBe('list');
 
       await closeSettings();
     });

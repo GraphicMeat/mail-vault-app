@@ -2,14 +2,18 @@
  * E2E Test: Settings Page — Extended Sections (UI-only)
  *
  * Covers settings tabs/sections not tested by ui-settings.test.js:
- * - General Tab: Appearance (theme, date format)
- * - General Tab: Layout & View Modes
+ * - Appearance: theme, date format
+ * - Appearance > Layout: mail view, reading pane, message rows
  * - General Tab: Search & History
  * - General Tab: Notifications Details (badge count, mark-as-read mode)
  * - Accounts Tab (display name, signature, avatar color picker)
  */
 
 import { waitForApp, openSettings, closeSettings, clickSettingsNav, pressKey } from './helpers.js';
+
+/** Labels of the workspace segments rendered on the current settings page. */
+const segmentLabels = () => browser.execute(() =>
+  [...document.querySelectorAll('.settings-segments button')].map(btn => btn.textContent.trim()));
 
 describe('Settings Page — Extended', function () {
   this.timeout(30000);
@@ -20,12 +24,13 @@ describe('Settings Page — Extended', function () {
   });
 
   // -----------------------------------------------------------------------
-  // General Tab — Appearance
+  // Appearance
   // -----------------------------------------------------------------------
-  describe('General Tab — Appearance', function () {
+  describe('Appearance', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
       await openSettings();
+      await clickSettingsNav('Appearance');
       await browser.pause(300);
     });
 
@@ -43,6 +48,7 @@ describe('Settings Page — Extended', function () {
     });
 
     it('should have the date format dropdown', async function () {
+      await clickSettingsNav('Date & time');
       const options = await browser.execute(() => {
         const selects = document.querySelectorAll('select');
         for (const select of selects) {
@@ -63,6 +69,7 @@ describe('Settings Page — Extended', function () {
     });
 
     it('should show custom format input when "custom" is selected, then restore to "auto"', async function () {
+      await clickSettingsNav('Date & time');
       // Select "custom" from the date format dropdown
       await browser.execute(() => {
         const selects = document.querySelectorAll('select');
@@ -115,12 +122,14 @@ describe('Settings Page — Extended', function () {
   });
 
   // -----------------------------------------------------------------------
-  // General Tab — Layout & View Modes
+  // Appearance - Layout
   // -----------------------------------------------------------------------
-  describe('General Tab — Layout & View Modes', function () {
+  describe('Appearance - Layout', function () {
     before(async function () {
       if (appState !== 'ready') this.skip();
       await openSettings();
+      await clickSettingsNav('Appearance');
+      await clickSettingsNav('Layout');
       await browser.pause(300);
     });
 
@@ -128,28 +137,22 @@ describe('Settings Page — Extended', function () {
       await closeSettings();
     });
 
-    it('should have layout mode options (3-Column and 2-Column)', async function () {
-      const found = await browser.execute(() => {
-        const text = document.body.innerText;
-        return text.includes('Three Columns') && text.includes('Two Columns');
-      });
-      expect(found).toBe(true);
+    it('should have reading pane options (beside and below the list)', async function () {
+      const labels = await segmentLabels();
+      expect(labels).toContain('Beside the list');
+      expect(labels).toContain('Below the list');
     });
 
-    it('should have view style options (List and Chat)', async function () {
-      const found = await browser.execute(() => {
-        const text = document.body.innerText;
-        return text.includes('List View') && text.includes('Chat View');
-      });
-      expect(found).toBe(true);
+    it('should have mail view options (Email and Chat)', async function () {
+      const labels = await segmentLabels();
+      expect(labels).toContain('Email');
+      expect(labels).toContain('Chat');
     });
 
-    it('should have email list style options (Default and Compact)', async function () {
-      const found = await browser.execute(() => {
-        const text = document.body.innerText;
-        return text.includes('Default') && text.includes('Compact');
-      });
-      expect(found).toBe(true);
+    it('should have message row options (two lines and single line)', async function () {
+      const labels = await segmentLabels();
+      expect(labels).toContain('Two lines');
+      expect(labels).toContain('Single line');
     });
   });
 
@@ -351,6 +354,8 @@ describe('Settings Page — Extended', function () {
     });
 
     it('should have avatar color picker with 5+ color buttons', async function () {
+      // The avatar palette moved under the account's Advanced sub-tab
+      await clickSettingsNav('Advanced');
       const colorCount = await browser.execute(() => {
         const buttons = document.querySelectorAll('button');
         let count = 0;
