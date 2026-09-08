@@ -6,7 +6,7 @@ use tokio::sync::{Mutex, OwnedSemaphorePermit, Semaphore};
 use tokio::time::Instant;
 use tracing::{info, warn};
 
-use super::{ImapConfig, create_imap_session};
+use super::{create_imap_session, poison_in, ImapConfig, Poison};
 
 /// Trait alias for any stream type that can back an IMAP session.
 /// Using a trait object allows the pool to store both plain TLS and
@@ -501,6 +501,51 @@ where
     }
 }
 
+/// How many poisoned messages one call will skip before it gives up. More than
+/// a handful of unreadable lines is a parser problem, not a message problem,
+/// and each skip costs a reconnect and a round trip.
+pub const MAX_POISON_SKIPS: usize = 3;
+
+/// `retry_once_on_dead_socket`, plus the poison retry.
+///
+/// A FETCH reply line the decoder cannot parse takes the whole page with it —
+/// async-imap marks the connection dead and yields one Err — so an iCloud
+/// account with one malformed message-id showed "Server error" and no mail at
+/// all. Here the failing UID is named by the error, added to the exclusion list
+/// and the fetch runs again without it: 499 messages instead of none.
+///
+/// `skip` is seed-in / grown-out, so a caller can remember what it learned and
+/// spare the next tick the same discovery.
+pub async fn retry_skipping_poison<T, F, Fut>(skip: &mut Vec<u32>, attempt: F) -> Result<T, String>
+where
+    F: Fn(bool, Vec<u32>) -> Fut,
+    Fut: std::future::Future<Output = Result<T, String>>,
+{
+    let mut fresh = false;
+    let mut socket_retried = false;
+    let mut added = 0usize;
+
+    loop {
+        match attempt(fresh, skip.clone()).await {
+            Err(e) if is_connection_lost(&e) && !socket_retried => {
+                warn!("[IMAP pool] {} — retrying once on a new connection", e);
+                socket_retried = true;
+                fresh = true;
+            }
+            Err(e) => match poison_in(&e) {
+                Some(Poison { uid: Some(uid), .. }) if added < MAX_POISON_SKIPS => {
+                    warn!("[IMAP pool] uid {} is unreadable — retrying without it: {}", uid, e);
+                    skip.push(uid);
+                    added += 1;
+                    fresh = true;
+                }
+                _ => return Err(e),
+            },
+            ok => return ok,
+        }
+    }
+}
+
 /// Run `attempt`, and on a transient transport failure run it once more after
 /// `delay`. Anything else (auth, a tagged NO) returns its first error.
 pub async fn retry_once_on_transient<T, F, Fut>(
@@ -603,6 +648,97 @@ mod connect_retry_tests {
 
         assert_eq!(out, Err(AUTH.to_string()));
         assert_eq!(calls.get(), 1);
+    }
+
+    // ── poison skipping ────────────────────────────────────────────────────
+
+    /// The shape `collect_fetches_strict` produces.
+    fn poison(seq: u32, uid: &str) -> String {
+        format!(
+            "fetch_emails_page: FETCH reply unparseable [poison seq={} uid={}] * {} FETCH (UID {} ...); page incomplete",
+            seq, uid, seq, uid
+        )
+    }
+
+    #[tokio::test]
+    async fn a_poisoned_uid_is_skipped_on_the_retry() {
+        let calls = Cell::new(0);
+        let seen: std::cell::RefCell<Vec<Vec<u32>>> = std::cell::RefCell::new(Vec::new());
+        let mut skip = Vec::new();
+
+        let out: Result<&str, String> = retry_skipping_poison(&mut skip, |_fresh, s| {
+            calls.set(calls.get() + 1);
+            seen.borrow_mut().push(s);
+            let first = calls.get() == 1;
+            async move {
+                if first { Err(poison(7, "42")) } else { Ok("page") }
+            }
+        })
+        .await;
+
+        assert_eq!(out, Ok("page"));
+        assert_eq!(calls.get(), 2);
+        assert_eq!(seen.borrow()[0], Vec::<u32>::new());
+        assert_eq!(seen.borrow()[1], vec![42]);
+        assert_eq!(skip, vec![42], "the caller keeps what was learned");
+    }
+
+    #[tokio::test]
+    async fn a_poison_with_no_uid_is_returned_unchanged() {
+        let calls = Cell::new(0);
+        let mut skip = Vec::new();
+        let err = poison(999, "?");
+
+        let out: Result<&str, String> = retry_skipping_poison(&mut skip, |_fresh, _s| {
+            calls.set(calls.get() + 1);
+            let e = err.clone();
+            async move { Err(e) }
+        })
+        .await;
+
+        assert_eq!(out, Err(poison(999, "?")));
+        assert_eq!(calls.get(), 1, "nothing to exclude — do not spin");
+        assert!(skip.is_empty());
+    }
+
+    #[tokio::test]
+    async fn the_poison_budget_is_bounded() {
+        let calls = Cell::new(0);
+        let mut skip = Vec::new();
+
+        let out: Result<&str, String> = retry_skipping_poison(&mut skip, |_fresh, _s| {
+            calls.set(calls.get() + 1);
+            let n = calls.get() as u32;
+            async move { Err(poison(n, &(100 + n).to_string())) }
+        })
+        .await;
+
+        assert_eq!(out, Err(poison(4, "104")), "the 4th error is the answer");
+        assert_eq!(calls.get(), MAX_POISON_SKIPS + 1);
+        assert_eq!(skip, vec![101, 102, 103]);
+    }
+
+    #[tokio::test]
+    async fn a_dead_socket_does_not_eat_the_poison_budget() {
+        let calls = Cell::new(0);
+        let mut skip = Vec::new();
+
+        let out: Result<&str, String> = retry_skipping_poison(&mut skip, |_fresh, _s| {
+            calls.set(calls.get() + 1);
+            let n = calls.get();
+            async move {
+                match n {
+                    1 => Err("SELECT INBOX failed: connection lost".to_string()),
+                    2 => Err(poison(3, "9")),
+                    _ => Ok("page"),
+                }
+            }
+        })
+        .await;
+
+        assert_eq!(out, Ok("page"));
+        assert_eq!(calls.get(), 3);
+        assert_eq!(skip, vec![9]);
     }
 
     #[tokio::test]

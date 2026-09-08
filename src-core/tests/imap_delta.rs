@@ -142,7 +142,7 @@ async fn fetch_headers_by_uids_returns_only_what_was_asked_for() {
     let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 30)));
     let mut sess = session(&server).await;
 
-    let (emails, total) = fetch_headers_by_uids(&mut sess, "INBOX", &[3, 17, 29])
+    let (emails, total) = fetch_headers_by_uids(&mut sess, "INBOX", &[3, 17, 29], &[])
         .await
         .expect("fetch by uids");
 

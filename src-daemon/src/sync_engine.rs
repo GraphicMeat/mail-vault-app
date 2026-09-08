@@ -7,7 +7,7 @@
 use crate::contacts_index::ContactsState;
 use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
-use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
+use crate::imap::pool::{retry_skipping_poison, ImapPool, PooledSessionGuard};
 use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -103,6 +103,14 @@ pub struct SyncEngine {
     /// process so an unfetchable mailbox can't retry in a loop — but NOT
     /// reported as `backfilling`, or the app would wait on it forever.
     backfill_gave_up: Mutex<HashSet<String>>,
+    /// `account_id\x01mailbox` → UIDs whose FETCH reply no parser can read.
+    /// One of them kills the whole page (async-imap drops the connection on a
+    /// line it cannot parse), so they are excluded from the next attempt.
+    ///
+    // ponytail: in memory only. A restart re-discovers each poison at the cost
+    // of one failed FETCH and one reconnect, which is what the very first
+    // discovery costs anyway — not worth a file on disk.
+    poisoned: Mutex<HashMap<String, Vec<u32>>>,
     /// `account_id` → UTC day whose cap we already logged, so a capped account
     /// costs one log line a day instead of one per sync tick.
     cap_logged: Mutex<HashMap<String, String>>,
@@ -153,6 +161,7 @@ impl SyncEngine {
             contacts,
             backfilling: Mutex::new(HashSet::new()),
             backfill_gave_up: Mutex::new(HashSet::new()),
+            poisoned: Mutex::new(HashMap::new()),
             net,
             cap_logged: Mutex::new(HashMap::new()),
             mailbox_aliases: Mutex::new(HashMap::new()),
@@ -479,7 +488,15 @@ impl SyncEngine {
         mailbox: &str,
     ) -> SyncResult {
         let account_id = account.id.clone();
-        match retry_once_on_dead_socket(|fresh| self.sync_on(account, mailbox, fresh)).await {
+        let key = format!("{}\u{1}{}", account.id, mailbox);
+        let mut skip = self.poisoned.lock().await.get(&key).cloned().unwrap_or_default();
+        let outcome =
+            retry_skipping_poison(&mut skip, |fresh, skip| self.sync_on(account, mailbox, fresh, skip))
+                .await;
+        if !skip.is_empty() {
+            self.poisoned.lock().await.insert(key, skip);
+        }
+        match outcome {
             Ok((delta, mailbox)) => SyncResult {
                 account_id,
                 mailbox,
@@ -506,6 +523,7 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         fresh: bool,
+        skip: Vec<u32>,
     ) -> Result<(SyncDelta, String), String> {
         let account_id = &account.id;
         let config = &account.imap_config;
@@ -524,7 +542,7 @@ impl SyncEngine {
         // the folder is not there.
         let requested = mailbox;
         let mut mailbox = self.alias_for(account_id, requested).await;
-        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore).await;
+        let mut outcome = self.sync_mailbox(&mut session, account, &mailbox, has_condstore, &skip).await;
 
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
             if mailbox != requested {
@@ -541,7 +559,7 @@ impl SyncEngine {
                 // asking the server to resolve it: `resolve_mailbox` answers
                 // None for an exact match, so this is the only path that finds
                 // a plain folder by the requested name in the same tick.
-                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore).await;
+                outcome = self.sync_mailbox(&mut session, account, requested, has_condstore, &skip).await;
             }
         }
         if matches!(&outcome, Err(e) if imap::is_missing_mailbox(e)) {
@@ -550,7 +568,7 @@ impl SyncEngine {
                     "[sync] {} has no '{}' — syncing '{}' instead",
                     account.email, requested, actual
                 );
-                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore).await;
+                outcome = self.sync_mailbox(&mut session, account, &actual, has_condstore, &skip).await;
                 mailbox = actual;
             }
         }
@@ -582,6 +600,7 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
         has_condstore: bool,
+        skip: &[u32],
     ) -> Result<SyncDelta, String> {
         let account_id = &account.id;
 
@@ -613,7 +632,7 @@ impl SyncEngine {
                 let _ = fs::remove_dir_all(&cache_dir);
             }
             let (headers, _total, _has_more, _skipped) =
-                imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+                imap::fetch_emails_page(session, mailbox, 1, 500, skip).await?;
             let new_emails = headers.len();
             write_cache_meta(&cache_dir, total, uid_validity, server_uid_next, highest_modseq)?;
             write_headers(&cache_dir, &headers)?;
@@ -634,11 +653,13 @@ impl SyncEngine {
             let gap = server_next - cached_uid_next;
             if gap > MAX_DELTA_UID_GAP {
                 // Too far behind for a range fetch to be cheaper than a page.
-                let (headers, _t, _h, _s) = imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+                let (headers, _t, _h, _s) =
+                    imap::fetch_emails_page(session, mailbox, 1, 500, skip).await?;
                 new_headers = headers;
             } else {
                 let uids: Vec<u32> = (cached_uid_next..server_next).collect();
-                let (headers, _t) = imap::fetch_headers_by_uids(session, mailbox, &uids).await?;
+                let (headers, _t) =
+                    imap::fetch_headers_by_uids(session, mailbox, &uids, skip).await?;
                 new_headers = headers;
             }
         }
@@ -807,10 +828,25 @@ impl SyncEngine {
     }
 
     async fn run_backfill(&self, account: &SyncAccount, mailbox: &str) -> Result<usize, String> {
-        retry_once_on_dead_socket(|fresh| self.backfill_on(account, mailbox, fresh)).await
+        let key = format!("{}\u{1}{}", account.id, mailbox);
+        let mut skip = self.poisoned.lock().await.get(&key).cloned().unwrap_or_default();
+        let outcome = retry_skipping_poison(&mut skip, |fresh, skip| {
+            self.backfill_on(account, mailbox, fresh, skip)
+        })
+        .await;
+        if !skip.is_empty() {
+            self.poisoned.lock().await.insert(key, skip);
+        }
+        outcome
     }
 
-    async fn backfill_on(&self, account: &SyncAccount, mailbox: &str, fresh: bool) -> Result<usize, String> {
+    async fn backfill_on(
+        &self,
+        account: &SyncAccount,
+        mailbox: &str,
+        fresh: bool,
+        skip: Vec<u32>,
+    ) -> Result<usize, String> {
         let config = &account.imap_config;
         let guard = if fresh {
             self.pool.get_background_fresh(config).await?
@@ -819,7 +855,9 @@ impl SyncEngine {
         };
         let PooledSessionGuard { mut session, last_selected: _, _permit } = guard;
 
-        let outcome = self.backfill_with_session(&mut session, account, mailbox).await;
+        let outcome = self
+            .backfill_with_session(&mut session, account, mailbox, &skip)
+            .await;
 
         let guard = PooledSessionGuard {
             session,
@@ -841,6 +879,7 @@ impl SyncEngine {
         session: &mut imap::ImapSession,
         account: &SyncAccount,
         mailbox: &str,
+        skip: &[u32],
     ) -> Result<usize, String> {
         let cache_dir = tauri_cache_dir(&self.data_dir, account.id.as_str(), mailbox);
         let server_uids = imap::search_all_uids(session, mailbox, false).await?;
@@ -850,7 +889,12 @@ impl SyncEngine {
 
         let have = cached_uids(&cache_dir);
         // Newest first — the user is looking at the top of the list.
-        let mut missing: Vec<u32> = server_uids.into_iter().filter(|u| !have.contains(u)).collect();
+        // A remembered poison would otherwise be re-requested every tick — and
+        // fail the chunk it lands in every time.
+        let mut missing: Vec<u32> = server_uids
+            .into_iter()
+            .filter(|u| !have.contains(u) && !skip.contains(u))
+            .collect();
         missing.sort_unstable_by(|a, b| b.cmp(a));
         if missing.is_empty() {
             return Ok(0);
@@ -863,7 +907,8 @@ impl SyncEngine {
 
         let mut written = 0usize;
         for chunk in missing.chunks(BACKFILL_CHUNK) {
-            let (headers, _total) = imap::fetch_headers_by_uids(session, mailbox, chunk).await?;
+            let (headers, _total) =
+                imap::fetch_headers_by_uids(session, mailbox, chunk, skip).await?;
             if headers.is_empty() {
                 warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
                 break;

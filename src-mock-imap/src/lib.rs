@@ -434,6 +434,15 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
         return raw.replace("{tag}", &cmd.tag).replace("\\r\\n", "\r\n").into_bytes();
     }
 
+    // Same, for a reply that is not valid UTF-8. Only `{tag}` is substituted:
+    // the caller writes real CRLF bytes.
+    if let Some(Action::RespondRawBytes(raw)) = actions
+        .iter()
+        .find(|a| matches!(a, Action::RespondRawBytes(_)))
+    {
+        return replace_bytes(raw, b"{tag}", cmd.tag.as_bytes());
+    }
+
     let (mut status, mut text) = response.tagged;
     let mut untagged = response.untagged;
 
@@ -453,6 +462,24 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
         if cmd.name == "FETCH" {
             if let Some(line) = untagged.get_mut(n.saturating_sub(1)) {
                 *line = b"* 999 FETCH (UID notanumber FLAGS ())".to_vec();
+            }
+        }
+    }
+
+    // PoisonFetchUid: the item for one UID becomes a line no parser can read,
+    // keeping its own sequence number and UID so the error can name them.
+    // `cmd.name` is "FETCH" for `UID FETCH` too, so both shapes are covered.
+    if let Some(Action::PoisonFetchUid(uid)) = actions
+        .iter()
+        .find(|a| matches!(a, Action::PoisonFetchUid(_)))
+    {
+        if cmd.name == "FETCH" {
+            for line in untagged.iter_mut() {
+                let Some(seq) = fetch_seq_of(line, *uid) else { continue };
+                // INTERNALDATE wants a quoted date; a bare atom is unparseable
+                // for imap-proto, patched or not.
+                *line = format!("* {} FETCH (UID {} FLAGS () INTERNALDATE notadate)", seq, uid)
+                    .into_bytes();
             }
         }
     }
@@ -488,6 +515,40 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
     }
     buf.extend_from_slice(format!("{} {} {}\r\n", cmd.tag, status, text).as_bytes());
     buf
+}
+
+/// `* <seq> FETCH (... UID <uid> ...)` → `seq`, when this line carries that UID.
+fn fetch_seq_of(line: &[u8], uid: u32) -> Option<u32> {
+    let text = String::from_utf8_lossy(line);
+    let seq: u32 = text
+        .strip_prefix("* ")?
+        .split_once(" FETCH")?
+        .0
+        .parse()
+        .ok()?;
+    let needle = format!("UID {}", uid);
+    let at = text.find(&needle)?;
+    // "UID 2" must not match "UID 21".
+    let after = text[at + needle.len()..].chars().next();
+    if after.is_some_and(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(seq)
+}
+
+fn replace_bytes(haystack: &[u8], needle: &[u8], with: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(haystack.len());
+    let mut i = 0;
+    while i < haystack.len() {
+        if haystack[i..].starts_with(needle) {
+            out.extend_from_slice(with);
+            i += needle.len();
+        } else {
+            out.push(haystack[i]);
+            i += 1;
+        }
+    }
+    out
 }
 
 fn emit(out: &mut TcpStream, bytes: &[u8], actions: &[Action]) -> std::io::Result<()> {

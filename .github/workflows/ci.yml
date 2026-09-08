@@ -74,7 +74,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y pkg-config libssl-dev
-      - run: cargo test -p mailvault-core -p mailvault-daemon -p mock-imap
+      - run: cargo test -p imap-proto -p mailvault-core -p mailvault-daemon -p mock-imap
       # JS integration suite drives the same mock server through imapflow — an
       # independent client implementation cross-checking the mock. Replaced the
       # credential-gated live-conformance workflow.

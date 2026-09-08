@@ -57,6 +57,11 @@ pub enum Action {
     /// `{tag}` is substituted with the command's tag.
     RespondRaw(String),
 
+    /// `RespondRaw` for a reply that is not valid UTF-8 — a Latin-1 filename in
+    /// a BODYSTRUCTURE param, say, which a `String` cannot carry. `{tag}` is
+    /// substituted the same way; write CRLF as real bytes.
+    RespondRawBytes(Vec<u8>),
+
     /// Replace the tagged result: ("NO"|"BAD"|"BYE", text). Untagged data suppressed.
     Respond(String, String),
 
@@ -96,6 +101,16 @@ pub enum Action {
     /// that really holds that many. This is the only way to produce an `Err`
     /// item in the FETCH stream on demand; no real server can be asked for one.
     CorruptFetchItem(usize),
+
+    /// Replace the untagged FETCH item carrying this UID with a line that no
+    /// parser can read, keeping its own `* <seq>` and `UID <n>` — so the error
+    /// can name the message and the client can retry the page without it.
+    ///
+    /// Unlike `CorruptFetchItem`, which is addressed by position, this one is
+    /// addressed by UID and so survives a re-fetch of a different range. It
+    /// covers `UID FETCH` too: the mock strips the `UID ` prefix, so both
+    /// arrive as `FETCH`.
+    PoisonFetchUid(u32),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

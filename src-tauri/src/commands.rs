@@ -172,7 +172,7 @@ pub async fn imap_get_emails(
 
     let (emails, total, has_more, skipped_uids) =
         with_background(&pool, &account, |mut session| async move {
-            let result = imap::fetch_emails_page(&mut session, &mailbox, page, limit).await
+            let result = imap::fetch_emails_page(&mut session, &mailbox, page, limit, &[]).await
                 .map_err(|e| format!("Failed to fetch emails: {}", e))?;
             Ok((result, session, Some(mailbox)))
         }).await?;
@@ -204,7 +204,7 @@ pub async fn imap_get_emails_range(
 
     let (emails, total, skipped_uids) =
         with_background(&pool, &account, |mut session| async move {
-            let result = imap::fetch_emails_range(&mut session, &mailbox, start, end).await
+            let result = imap::fetch_emails_range(&mut session, &mailbox, start, end, &[]).await
                 .map_err(|e| format!("Failed to fetch emails range: {}", e))?;
             Ok((result, session, Some(mailbox)))
         }).await?;
@@ -298,7 +298,7 @@ pub async fn imap_fetch_headers_by_uids(
     let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
 
     let (emails, total) = with_background(&pool, &account, |mut session| async move {
-        let result = imap::fetch_headers_by_uids(&mut session, &mailbox, &uids).await?;
+        let result = imap::fetch_headers_by_uids(&mut session, &mailbox, &uids, &[]).await?;
         Ok((result, session, Some(mailbox)))
     }).await?;
 

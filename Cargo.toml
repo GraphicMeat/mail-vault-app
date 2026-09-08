@@ -1,3 +1,9 @@
 [workspace]
-members = ["src-tauri", "src-daemon", "src-core", "src-mock-imap"]
+members = ["src-tauri", "src-daemon", "src-core", "src-mock-imap", "vendor/imap-proto"]
 resolver = "2"
+
+# imap-proto 0.16.6 with two MailVault patches (see vendor/imap-proto/src/parser):
+# iCloud's unescaped inner quotes in ENVELOPE, and non-UTF-8 bytes in
+# BODYSTRUCTURE params. Both make the whole FETCH stream die, not one field.
+[patch.crates-io]
+imap-proto = { path = "vendor/imap-proto" }
