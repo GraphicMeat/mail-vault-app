@@ -28,18 +28,31 @@
  * defects - the uids the engine takes are stamped serverDeleted, which is what
  * turns "saved in your vault" into "your only copy".
  *
- * ── Why the stamp and not the glyph ───────────────────────────────────────
- * The stamp is asserted where the engine writes it (local-index.json) rather
- * than on the row's `data-state`, and that is not a softer question - it is a
- * question about this rule instead of about two subsystems downstream of it.
- * Measured on this runner, within ~20s of the run: the delta sync prunes the
- * deleted uid's header sidecar (loadEmails.js, `prunedUids` - correct, the
- * message really did leave INBOX), and `repair_generation` then moves the
- * vault .eml into `orphaned/` and drops its index entry, because a vault file
- * whose Message-ID no sidecar carries is exactly what a uid reissue looks like.
- * `locally_created_uids` protects `local_sent` / `local_draft` from that and
- * knows nothing about serverDeleted. Until it does, the glyph is not a stable
- * question to ask, and asking it here would report that defect as this one.
+ * ── The stamp first, then the glyph ───────────────────────────────────────
+ * The stamp is read where the engine writes it (local-index.json), in the same
+ * poll that finds the report line: that is the engine's own answer and it is
+ * true the moment the run ends. The glyph is asked for afterwards, once two
+ * subsystems downstream have had their turn. Measured on this runner, within
+ * ~20s of the run the delta sync prunes the deleted uid's header sidecar
+ * (correct - the message really did leave INBOX), and `repair_generation` then
+ * opens a vault dir that has never carried a `.uidvalidity` stamp.
+ *
+ * That second step is what this spec caught destroying the evidence. A vault
+ * dir written by `archive_emails` or by the scheduled backup is unstamped until
+ * a repair stamps it, and the repair read "unstamped" as "the server reissued
+ * its UIDs" - so every file whose Message-ID no sidecar carries went to
+ * `orphaned/`, which nothing in the app lists, searches or exports. The
+ * victim's only copy landed there about twenty seconds after the rule took the
+ * server copy.
+ *
+ * Which side of the prune that first run falls on is a race, and a spec that
+ * waits to see how it goes passes on the broken build about as often as on the
+ * fixed one. So once the prune is on disk this one takes `.uidvalidity` off the
+ * vault dir and invokes the repair itself: the same never-stamped mailbox, at a
+ * moment of the spec's choosing. An unstamped mailbox is adopted now, and the
+ * assertions outlive that run - the .eml is still in `cur/`, nothing is in
+ * `orphaned/`, `maildir_read_light` still answers, and the row still reads
+ * "your only copy".
  *
  * ── Why yoda ──────────────────────────────────────────────────────────────
  * MOCK_ACCOUNTS (wdio.conf.js): yoda's INBOX count is asserted nowhere, and it
@@ -59,8 +72,10 @@
  * an armed cleanup rule.
  */
 
+import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
-import { MOCK_PASSWORD } from './mockImap.js';
+import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
 import { waitForApp, waitForEmails, closeSettings } from './helpers.js';
 import { openTab, setPremium } from './mockBilling.js';
 
@@ -376,5 +391,75 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     // action is `delete`, and a skip means skipped, not archived quietly.
     const orphanInVault = await vaultCopy(orphanUid);
     expect(orphanInVault?.value?.subject).not.toBe(ORPHAN);
+
+    // ── The vault again, after the repair has had its turn ───────────────
+    // Deleting the server copy is half the promise. The other half is that the
+    // vault copy is still there once the sync has noticed the message left
+    // INBOX (its header sidecar is gone) and `repair_generation` has opened
+    // this never-stamped vault dir - `.uidvalidity` is the repair's own
+    // signature, written at the end of a run and by nothing else.
+    const data = appDataDir(browser.testDataDir);
+    const vaultDir = join(data, 'Maildir', yodaId, 'INBOX');
+    const stamp = join(vaultDir, '.uidvalidity');
+    const sidecar = join(
+      data, 'email_cache', `${yodaId.replace(/[^a-zA-Z0-9]/g, '_')}_INBOX`, `${victimUid}.json`);
+    await browser.waitUntil(() => !existsSync(sidecar), {
+      timeout: 120_000,
+      interval: 1000,
+      timeoutMsg: `The sync never pruned uid ${victimUid}'s header sidecar, so the repair below `
+        + 'would still be able to name the message and would prove nothing',
+    });
+
+    // The repair writes `.uidvalidity` the first time it runs, so whether it
+    // falls before or after that prune is a race the runner wins about as often
+    // as it loses - and only the losing side is the bug: an unstamped vault dir
+    // holding a message no sidecar can name. Take the stamp off and ask for the
+    // run, rather than waiting to see which way the race went. Removed inside
+    // the poll because a folder open can stamp it back between two invokes.
+    let repair = null;
+    await browser.waitUntil(async () => {
+      rmSync(stamp, { force: true });
+      repair = (await invokeApp('maildir_repair_generation', {
+        accountId: yodaId, mailbox: 'INBOX',
+      }))?.value ?? null;
+      return repair?.ran === true;
+    }, {
+      timeout: 60_000,
+      interval: 1000,
+      timeoutMsg: 'The vault repair never ran against the pruned cache, so nothing below is a '
+        + 'question about what it does to a mailbox it has never stamped',
+    });
+    // Adopted, not re-keyed: a mailbox with no stamp is not a UID reissue.
+    // Named uid rather than an empty list - this run also sweeps yoda's fixture
+    // mail, and what it does with that is another spec's question.
+    expect(repair.orphaned).not.toContain(victimUid);
+    expect(repair.kept).toBeGreaterThan(0);
+    expect(existsSync(stamp)).toBe(true);
+
+    const named = (dir) =>
+      (existsSync(dir) ? readdirSync(dir) : []).filter((f) => f.startsWith(`${victimUid}:`));
+    // Still where the app can see it, and not in the holding area it cannot.
+    expect(named(join(vaultDir, 'cur')).length).toBeGreaterThan(0);
+    expect(named(join(vaultDir, 'orphaned'))).toEqual([]);
+    expect((await vaultCopy(victimUid))?.value?.subject).toBe(VICTIM);
+
+    // ── The glyph ────────────────────────────────────────────────────────
+    // And what the user is actually shown: a vault row whose server copy this
+    // app deleted reads "your only copy" (`local-only*`, MessageStateIcon).
+    await closeSettings().catch(() => {});
+    await activate(yodaId);
+    await browser.waitUntil(async () => {
+      const state = await browser.execute((needle) => {
+        const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+          .find((r) => (r.textContent || '').includes(needle));
+        return row?.querySelector('[data-testid="msg-state-icon"]')?.getAttribute('data-state') ?? null;
+      }, VICTIM);
+      return String(state).startsWith('local-only');
+    }, {
+      timeout: 30_000,
+      interval: 500,
+      timeoutMsg: `"${VICTIM}" never reported itself as the only copy left in yoda's INBOX `
+        + '(see the diagnostics dump below for the state it carried instead)',
+    });
   });
 });

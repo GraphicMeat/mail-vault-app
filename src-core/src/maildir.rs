@@ -574,13 +574,25 @@ fn extract_snippet(parsed: &mailparse::ParsedMail) -> Option<String> {
 // some other message.
 //
 // `.uidvalidity` (a sibling of `cur/`, alongside `local-index.json`) records
-// the generation the files in `cur/` are keyed under. When it disagrees with
-// the server's current UIDVALIDITY, `repair_generation` re-binds what it can
+// the generation the files in `cur/` are keyed under. When it names a
+// generation the server has replaced, `repair_generation` re-binds what it can
 // by Message-ID and moves the rest out of the uid namespace into `orphaned/`.
+//
+// A *missing* stamp is a different question, and answering it the same way was
+// a bug: a vault dir written by `archive_emails` or by the scheduled backup has
+// no stamp until the first repair writes one, so the first open treated every
+// copy of a message the server no longer has - deleted by a cleanup rule, by
+// the user, by another client - as a reissue casualty. There the mailbox is
+// adopted instead: files still bind by Message-ID, and one that binds to
+// nothing keeps its place unless its uid is one the current generation has
+// handed to some other message. Only that collision is set aside.
 //
 // Nothing here deletes mail. A message that isn't on the new server is exactly
 // the message the vault is *for*; it moves to `orphaned/` (still on disk,
-// still exportable) rather than being destroyed to reclaim space.
+// still exportable) rather than being destroyed to reclaim space. But
+// `orphaned/` is not listed, searched or exported by the app, so a file put
+// there is a file the user cannot see - which is why it takes a real collision,
+// not merely an absence, to put one there on a first open.
 
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -735,6 +747,15 @@ fn free_orphan_path(orphan_dir: &Path, name: &str) -> PathBuf {
 /// their uid and are never moved aside for missing from a server they were
 /// never on.
 ///
+/// What happens to a file the map cannot place depends on what the stamp says:
+///
+/// - stamp present and different - a reissue. Its uid means nothing now, so the
+///   file goes to `orphaned/`.
+/// - stamp absent - a mailbox nobody has stamped yet, adopted as it stands. The
+///   file keeps its uid, unless the current generation has given that uid to
+///   another message (or it is `protected`), which is the one case where
+///   keeping it would answer "uid N is archived" about the wrong mail.
+///
 /// No-ops when the recorded generation already matches, so this is cheap to
 /// call on every mailbox load.
 pub fn repair_generation(
@@ -745,9 +766,13 @@ pub fn repair_generation(
 ) -> GenerationRepair {
     let mut report = GenerationRepair { generation: current_uid_validity, ..Default::default() };
 
-    if read_generation(mailbox_dir) == Some(current_uid_validity) {
+    let recorded = read_generation(mailbox_dir);
+    if recorded == Some(current_uid_validity) {
         return report;
     }
+    // No stamp is not a reissue. The mailbox is adopted: unmatched files keep
+    // their place unless their uid collides with one the server is using.
+    let adopting = recorded.is_none();
     report.ran = true;
 
     let cur = mailbox_dir.join("cur");
@@ -768,6 +793,11 @@ pub fn repair_generation(
     // number.
     let mut claimed: HashSet<u32> = protected.clone();
     let mut plan: Vec<(PathBuf, String, u32, Option<u32>)> = Vec::new();
+    // Every uid the current generation hands out. When adopting, this is what
+    // separates "the server gave this number to a different message" (a real
+    // collision, set the file aside) from "nobody is using this number" (mail
+    // the server no longer has, which is what the vault is for).
+    let server_uids: HashSet<u32> = id_to_uid.values().copied().collect();
 
     let entries = match fs::read_dir(&cur) {
         Ok(e) => e,
@@ -795,6 +825,14 @@ pub fn repair_generation(
         let new_uid = read_message_id(&entry.path())
             .and_then(|id| id_to_uid.get(&id).copied())
             .filter(|u| claimed.insert(*u));
+        // Adopting a never-stamped mailbox: nothing binds this file, and no
+        // one else wants its number, so it stays. `claimed.insert` both asks
+        // whether the uid is free (protected uids and rebind targets are
+        // already in there) and reserves it against a later rebind.
+        if new_uid.is_none() && adopting && !server_uids.contains(&old_uid) && claimed.insert(old_uid) {
+            report.kept += 1;
+            continue;
+        }
         plan.push((entry.path(), name, old_uid, new_uid));
     }
 
@@ -1119,6 +1157,10 @@ mod tests {
         fs::write(cur.join("12:2,.eml"), b"Subject: no id\r\n\r\nbody".to_vec()).unwrap();
         // Not a message — must be left exactly where it is.
         fs::write(cur.join("notes.txt"), b"keep me").unwrap();
+        // A real reissue: the vault says which generation it is keyed under and
+        // the server now reports another one. Unstamped is a different question
+        // (see `..._adopts_an_unstamped_mailbox_...`).
+        write_generation(&mailbox, 605297893).unwrap();
 
         let id_to_uid: HashMap<String, u32> = [
             ("moved@host.test".to_string(), 5u32),
@@ -1173,6 +1215,8 @@ mod tests {
 
         fs::write(cur.join("1:2,.eml"), eml("dupe@host.test", "first")).unwrap();
         fs::write(cur.join("2:2,.eml"), eml("dupe@host.test", "second")).unwrap();
+        // A reissue, not a first open: the collision policy is what is on trial.
+        write_generation(&mailbox, 1).unwrap();
 
         let id_to_uid: HashMap<String, u32> =
             [("dupe@host.test".to_string(), 4u32)].into_iter().collect();
@@ -1199,6 +1243,10 @@ mod tests {
         fs::create_dir_all(&cur).unwrap();
 
         fs::write(cur.join("1:2,S.eml"), eml("later@host.test", "one")).unwrap();
+        // Stamped under the generation the server has just replaced - the only
+        // case that sets a file aside, and so the only way to get an orphan to
+        // recover from.
+        write_generation(&mailbox, 1).unwrap();
 
         // Generation 2, read against a cache that did not know this message.
         let r1 = repair_generation(&mailbox, 2, &HashMap::new(), &HashSet::new());
@@ -1232,6 +1280,9 @@ mod tests {
         // sidecar and never will be, so the Message-ID join can only miss it.
         fs::write(cur.join("900:2,S.eml"), eml("composed-here@mailvault", "draft")).unwrap();
         fs::write(cur.join("3:2,.eml"), eml("fromserver@host.test", "archived")).unwrap();
+        // A reissue: uid 3 losing its place to a protected uid is the point,
+        // and only a stamped-then-changed generation moves anything aside.
+        write_generation(&mailbox, 7).unwrap();
 
         let id_to_uid: HashMap<String, u32> =
             [("fromserver@host.test".to_string(), 900u32)].into_iter().collect();
@@ -1250,6 +1301,92 @@ mod tests {
         assert_eq!(r.orphaned, vec![3]);
         assert_eq!(r.errors, 0);
         assert_eq!(orphan_stats(&mailbox).count, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_repair_generation_adopts_an_unstamped_mailbox_and_keeps_its_deleted_mail() {
+        let dir = std::env::temp_dir().join("mailvault-test-repair-adopt");
+        let _ = fs::remove_dir_all(&dir);
+        let mailbox = dir.join("Maildir").join("acc1").join("INBOX");
+        let cur = mailbox.join("cur");
+        fs::create_dir_all(&cur).unwrap();
+
+        // No `.uidvalidity`: a vault dir `archive_emails` or the scheduled
+        // backup wrote, opened for the first time. uid 77 is the vault's whole
+        // reason to exist - a message the server no longer has, because a
+        // cleanup rule, the user, or another client deleted it.
+        fs::write(cur.join("77:2,S.eml"), eml("deleted-from-server@host.test", "kept")).unwrap();
+        fs::write(cur.join("3:2,.eml"), eml("still-there@host.test", "alive")).unwrap();
+
+        let id_to_uid: HashMap<String, u32> =
+            [("still-there@host.test".to_string(), 3u32)].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 5, &id_to_uid, &HashSet::new());
+        assert!(r.ran);
+        assert_eq!(r.errors, 0);
+        assert!(r.orphaned.is_empty(), "adopted a mailbox but set mail aside: {:?}", r.orphaned);
+        assert_eq!(r.kept, 2);
+        assert!(r.rebound.is_empty());
+
+        // Both files still where the app lists, searches and exports them.
+        assert!(cur.join("77:2,S.eml").exists());
+        assert!(cur.join("3:2,.eml").exists());
+        assert!(!mailbox.join(ORPHAN_DIR).exists());
+        assert_eq!(orphan_stats(&mailbox).count, 0);
+        assert_eq!(read_generation(&mailbox), Some(5));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_repair_generation_adopting_still_orphans_a_uid_the_server_reissued() {
+        let dir = std::env::temp_dir().join("mailvault-test-repair-adopt-collide");
+        let _ = fs::remove_dir_all(&dir);
+        let mailbox = dir.join("Maildir").join("acc1").join("INBOX");
+        let cur = mailbox.join("cur");
+        fs::create_dir_all(&cur).unwrap();
+
+        // Unstamped, and uid 4 names one message here and another one on the
+        // server. That is a reissue a legacy vault never recorded, and keeping
+        // the file would answer "uid 4 is archived" about the wrong message.
+        fs::write(cur.join("4:2,S.eml"), eml("from-the-old-server@host.test", "old")).unwrap();
+
+        let id_to_uid: HashMap<String, u32> =
+            [("someone-else@host.test".to_string(), 4u32)].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 6, &id_to_uid, &HashSet::new());
+        assert_eq!(r.orphaned, vec![4]);
+        assert_eq!(r.kept, 0);
+        assert_eq!(r.errors, 0);
+        assert!(!cur.join("4:2,S.eml").exists());
+        assert_eq!(orphan_stats(&mailbox).count, 1);
+        assert_eq!(read_generation(&mailbox), Some(6));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_repair_generation_stamped_mailbox_still_orphans_what_it_cannot_bind() {
+        let dir = std::env::temp_dir().join("mailvault-test-repair-stamped-control");
+        let _ = fs::remove_dir_all(&dir);
+        let mailbox = dir.join("Maildir").join("acc1").join("INBOX");
+        let cur = mailbox.join("cur");
+        fs::create_dir_all(&cur).unwrap();
+
+        // The control for the two above: same file, same map, and the one
+        // difference is a stamp naming a generation the server has replaced.
+        fs::write(cur.join("77:2,S.eml"), eml("deleted-from-server@host.test", "gone")).unwrap();
+        write_generation(&mailbox, 4).unwrap();
+
+        let r = repair_generation(&mailbox, 5, &HashMap::new(), &HashSet::new());
+        assert_eq!(r.orphaned, vec![77]);
+        assert_eq!(r.kept, 0);
+        assert_eq!(r.errors, 0);
+        assert!(!cur.join("77:2,S.eml").exists());
+        assert_eq!(orphan_stats(&mailbox).count, 1);
+        assert_eq!(read_generation(&mailbox), Some(5));
 
         let _ = fs::remove_dir_all(&dir);
     }
