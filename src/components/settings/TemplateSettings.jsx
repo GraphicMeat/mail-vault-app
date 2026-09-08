@@ -24,8 +24,8 @@ export function TemplateSettings() {
   const [templateBody, setTemplateBody] = useState('');
 
   return (
-    <div className="p-6 space-y-6">
-      <div data-testid="settings-templates" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+    <div className="settings-form space-y-6">
+      <div data-testid="settings-templates" className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <FileText size={18} className="text-mail-accent-text" />
           {t('settings.templates.emailTemplates')}
@@ -86,7 +86,7 @@ export function TemplateSettings() {
                     <label className="block text-sm font-medium text-mail-text mb-1">
                       {t('settings.templates.templateName')}
                     </label>
-                    <input
+                    <input aria-label={t('settings.templates.templateName')}
                       type="text"
                       value={templateName}
                       onChange={(e) => setTemplateName(e.target.value)}
@@ -101,7 +101,7 @@ export function TemplateSettings() {
                     <label className="block text-sm font-medium text-mail-text mb-1">
                       {t('settings.templates.templateBody')}
                     </label>
-                    <textarea
+                    <textarea aria-label={t('settings.templates.templateBody')}
                       value={templateBody}
                       onChange={(e) => setTemplateBody(e.target.value)}
                       placeholder={t('settings.templates.writeTemplateContentHere')}

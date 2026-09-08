@@ -21,7 +21,7 @@ const VARIANTS = {
   /** The Cancel side of every dialog. Outnumbers primary two to one. */
   secondary: 'bg-mail-surface border border-mail-border text-mail-text hover:bg-mail-surface-hover font-medium',
   /** Confirms a destruction that the surrounding copy has already named. */
-  danger: 'bg-mail-danger-fill text-white hover:bg-mail-danger font-medium',
+  danger: 'bg-mail-danger-fill text-white hover:bg-mail-danger-hover font-medium',
   /** A raised neutral action inside a panel that is already `surface`. */
   subtle: 'bg-mail-surface-hover text-mail-text hover:bg-mail-border font-medium',
   /** Accent as a tint, for a secondary action that is still the accented one. */
@@ -31,7 +31,7 @@ const VARIANTS = {
   /** Row and toolbar actions: no fill at rest, glyph lifts to `text` on hover. */
   ghost: 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover',
   /** Inline text action. No padding, no fill — it reads as a link. */
-  link: 'text-mail-accent-text hover:text-mail-accent-hover',
+  link: 'text-mail-accent-text hover:underline',
 };
 
 const SIZES = {
@@ -42,7 +42,7 @@ const SIZES = {
 };
 
 /** Square hit-areas for icon-only buttons. Glyph size stays the caller's. */
-const ICON_SIZES = { xs: 'p-1', sm: 'p-1.5', md: 'p-2', lg: 'p-2.5' };
+const ICON_SIZES = { xs: 'p-1 min-w-7 min-h-7', sm: 'p-1.5 min-w-8 min-h-8', md: 'p-2 min-w-9 min-h-9', lg: 'p-2.5 min-w-10 min-h-10' };
 
 const SPINNER = { xs: 12, sm: 12, md: 14, lg: 14 };
 

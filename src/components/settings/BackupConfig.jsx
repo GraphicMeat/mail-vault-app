@@ -27,6 +27,7 @@ export default function BackupConfig() {
   const setExternalBackupLocation = useSettingsStore(s => s.setExternalBackupLocation);
 
   const [defaultBackupPath, setDefaultBackupPath] = useState(null);
+  const [pathLoading, setPathLoading] = useState(true);
   const [validatingExternal, setValidatingExternal] = useState(false);
   const [entitled, setEntitled] = useState(!IS_APPSTORE_BUILD);
   const [iapBusy, setIapBusy] = useState(null); // 'purchase' | 'restore' | null
@@ -36,11 +37,11 @@ export default function BackupConfig() {
   // Load default backup path, external location, and migrate legacy on mount
   useEffect(() => {
     const inv = window.__TAURI__?.core?.invoke;
-    if (!inv) return;
+    if (!inv) { setPathLoading(false); return; }
     // The app's own Maildir follows the vault, which the user can move off the
     // app data dir — reading the data dir here would name a folder that is not
     // where the mail is.
-    api.vaultGetStatus().then(s => setDefaultBackupPath(s?.displayPath || null)).catch(() => {});
+    api.vaultGetStatus().then(s => setDefaultBackupPath(s?.displayPath || null)).catch(() => {}).finally(() => setPathLoading(false));
     inv('backup_get_external_location').then(loc => {
       if (loc?.status !== 'not_configured') setExternalBackupLocation(loc);
     }).catch(() => {});
@@ -200,7 +201,7 @@ export default function BackupConfig() {
           folder is safe everywhere, so MAS gets the read-only card. */}
       <MailStorageLocation readOnly={IS_APPSTORE_BUILD} />
 
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
+      <div className="settings-section space-y-4">
         <h4 className="font-semibold text-mail-text flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
           Backup Scope & Storage
@@ -221,7 +222,7 @@ export default function BackupConfig() {
         {/* Scope selector */}
         <div>
           <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.config.whatBackUp')}</label>
-          <select
+          <select aria-label={t('settings.backup.config.whatBackUp')}
             value={backupScope}
             onChange={(e) => setBackupScope(e.target.value)}
             className={selectClass}
@@ -240,7 +241,7 @@ export default function BackupConfig() {
           </p>
           <div className="flex items-center gap-2">
             <div data-testid="backup-path" className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
-              {externalBackupLocation?.displayPath || (defaultBackupPath ? tr('settings.backup.config.maildirAppOnly', { defaultBackupPath }) : tr('chat.bubble.loading'))}
+              {externalBackupLocation?.displayPath || (defaultBackupPath ? tr('settings.backup.config.maildirAppOnly', { defaultBackupPath }) : tr(pathLoading ? 'chat.bubble.loading' : 'settings.backup.config.unavailable'))}
             </div>
             {backupFolder && (
               <button

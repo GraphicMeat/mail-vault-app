@@ -84,6 +84,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
+      disabled={disabled} aria-pressed={selected}
       className={`w-full border rounded-lg p-3 flex items-center gap-3 transition-colors ${
         disabled
           ? 'opacity-50 cursor-not-allowed border-mail-border bg-mail-surface'
@@ -98,7 +99,7 @@ function AccountRow({ account, selected, disabled, disabledLabel, accountColors,
       >
         {avatarInitial}
       </div>
-      <span className="text-sm text-mail-text flex-1 text-left">{account.email}</span>
+      <span className="text-sm text-mail-text flex-1 min-w-0 break-words text-left">{account.email}</span>
       {disabledLabel && (
         <span className="text-xs text-mail-text-muted">{disabledLabel}</span>
       )}
@@ -317,7 +318,7 @@ export default function MigrationSettings({ onUpgrade }) {
 
   // ---- Premium gate ----
   const mainContent = (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       {/* Error display */}
       {error && (
         <div className="bg-mail-danger/10 border border-mail-danger/30 rounded-lg p-3 flex items-start gap-2">
@@ -462,6 +463,7 @@ export default function MigrationSettings({ onUpgrade }) {
                   <>
                     <div className="flex items-center gap-2 mb-3">
                       <input
+                        aria-label={t('settings.migration.selectAll')}
                         type="checkbox"
                         checked={selectedFolders.size === folderMappings.length && folderMappings.length > 0}
                         onChange={toggleAllFolders}
@@ -643,35 +645,14 @@ export default function MigrationSettings({ onUpgrade }) {
 
   if (!isPaidUser) {
     return (
-      <div className="p-6">
-        <div className="relative">
-          <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
-            {mainContent}
-          </div>
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
-            <div className="flex flex-col items-center gap-3 text-center px-6">
-              <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
-                <ArrowLeftRight size={20} className="text-mail-accent-text" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-mail-text mb-1">{t('common.premiumFeature')}</p>
-                <p className="text-xs text-mail-text-muted text-center max-w-[280px]">
-                  {t('settings.migration.mailboxMigrationLetsMoveEmails')}
-                </p>
-                {/* MAS builds must not advertise the web subscription — no external
-                    purchase price, no path to Stripe checkout. */}
-                {!IS_APPSTORE_BUILD && (
-                  <p className="text-xs text-mail-text-muted mt-1">{priceBlurb}</p>
-                )}
-              </div>
-              {!IS_APPSTORE_BUILD && onUpgrade && (
-                <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
-                  {t('common.upgrade')}
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
+      <div className="settings-form">
+        <section className="settings-feature-gate">
+          <ArrowLeftRight size={32} className="text-mail-accent-text" />
+          <h3 className="text-lg font-semibold text-mail-text">{t('common.premiumFeature')}</h3>
+          <p className="text-sm text-mail-text-muted max-w-md">{t('settings.migration.mailboxMigrationLetsMoveEmails')}</p>
+          {!IS_APPSTORE_BUILD && <p className="text-xs text-mail-text-muted">{priceBlurb}</p>}
+          {!IS_APPSTORE_BUILD && onUpgrade && <Button variant="primary" onClick={onUpgrade}>{t('common.upgrade')}</Button>}
+        </section>
       </div>
     );
   }

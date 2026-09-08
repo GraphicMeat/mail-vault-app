@@ -1,14 +1,13 @@
 import React, { memo, useMemo, useState, useCallback, useRef } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useShallow } from 'zustand/react/shallow';
-import { motion } from 'framer-motion';
 import {
   groupByCorrespondent,
   getAvatarColor,
   getInitials,
   formatRelativeTime
 } from '../utils/emailParser';
-import { MessageSquare, Search } from 'lucide-react';
+import { MessageSquare, Search, ChevronRight } from 'lucide-react';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
 import { LinkAlertIcon } from './LinkAlertIcon';
@@ -107,37 +106,34 @@ export function ChatSenderList({ onSelectSender }) {
   }
 
   return (
-    <div data-testid="chat-sender-list" className="flex flex-col h-full">
-      {/* Search Bar — matches sidebar header height (px-4 py-3) */}
-      <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center">
-        <div className="relative w-full">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t('chat.senders.searchConversations')}
-            className="w-full pl-9 pr-4 py-1.5 bg-mail-bg border border-mail-border rounded-lg
-                      text-mail-text placeholder-mail-text-muted text-sm
-                      focus:border-mail-accent focus:outline-none"
-          />
+    <div data-testid="chat-sender-list" className="flex flex-col h-full min-h-0">
+      <div data-tauri-drag-region className="border-b border-mail-border bg-mail-surface">
+        <div className="chat-content-column px-6 py-5">
+          <h2 className="text-lg font-semibold text-mail-text">{t('workspace.conversations')}</h2>
+          <p className="mt-1 text-sm text-mail-text-muted">{t('workspace.conversationsHint')}</p>
+          <div className="relative mt-4 max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
+            <input type="search" data-testid="mail-search-input" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+              aria-label={t('chat.senders.searchConversations')} placeholder={t('chat.senders.searchConversations')}
+              className="w-full pl-9 pr-4 py-2 bg-mail-bg border border-mail-border-strong rounded-lg text-mail-text placeholder-mail-text-muted text-sm" />
+          </div>
         </div>
       </div>
 
       {/* Sender List */}
-      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto min-h-0">
+        <div className="chat-content-column">
         {filteredCorrespondents.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-32 text-mail-text-muted">
             <p className="text-sm">{t('chat.senders.noMatchesFound')}</p>
           </div>
         ) : (
           <>
-            {visibleCorrespondents.map((correspondent, index) => (
+            {visibleCorrespondents.map(correspondent => (
               <SenderRow
                 key={correspondent.email}
                 correspondent={correspondent}
                 onClick={() => onSelectSender(correspondent)}
-                index={index}
               />
             ))}
             {hasMore && (
@@ -147,28 +143,28 @@ export function ChatSenderList({ onSelectSender }) {
             )}
           </>
         )}
+        </div>
       </div>
     </div>
   );
 }
 
-const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
+const SenderRow = memo(function SenderRow({ correspondent, onClick }) {
   const avatarColor = getAvatarColor(correspondent.email);
   const initials = getInitials(correspondent.name, correspondent.email);
 
   return (
-    <motion.div
+    <div
       data-testid="sender-row"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0 }}
+      role="button" tabIndex={0}
+      onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
       onClick={onClick}
-      className="flex items-center gap-3 px-4 py-3 border-b border-mail-border
+      className="flex items-center gap-3 px-6 py-4 border-b border-mail-border
                 cursor-pointer hover:bg-mail-surface-hover transition-colors"
     >
       {/* Avatar */}
       <div
-        className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg flex-shrink-0"
+        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0"
         style={{ backgroundColor: avatarColor }}
       >
         {initials}
@@ -177,7 +173,7 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <span className="font-semibold text-mail-text truncate">
+          <span className="text-sm font-semibold text-mail-text truncate">
             {correspondent.name}
           </span>
           <span className="text-xs text-mail-text-muted flex-shrink-0">
@@ -201,11 +197,12 @@ const SenderRow = memo(function SenderRow({ correspondent, onClick, index }) {
         </div>
 
         {correspondent.lastMessage?.preview && (
-          <p className="text-xs text-mail-text-muted truncate mt-0.5 opacity-70">
+          <p className="text-xs text-mail-text-muted truncate mt-1">
             {correspondent.lastMessage.preview}
           </p>
         )}
       </div>
-    </motion.div>
+      <ChevronRight size={16} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
+    </div>
   );
 });

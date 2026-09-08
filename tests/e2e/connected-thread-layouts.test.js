@@ -9,8 +9,17 @@ async function chooseLayout(layout) {
     select.dispatchEvent(new Event('change', { bubbles: true }));
   }, layout);
   await browser.waitUntil(async () => browser.execute(value => document.querySelector('#thread-reader-layout')?.value === value, layout));
+  await expectSeparatedRows();
 }
 const bodies = () => browser.execute(() => [...document.querySelectorAll('.thread-reader .email-content')].map(node => node.textContent).join('\n'));
+
+async function expectSeparatedRows() {
+  await browser.waitUntil(async () => browser.execute(() => {
+    const rows = [...document.querySelectorAll('.thread-reader-content [data-index]')];
+    return rows.length > 0 && rows.slice(1).every((row, index) =>
+      row.getBoundingClientRect().top >= rows[index].getBoundingClientRect().bottom - 1);
+  }), { timeout: 5000, timeoutMsg: 'Conversation messages must not overlap after a layout or body size change' });
+}
 
 async function expandAll() {
   await browser.execute(() => {
@@ -20,6 +29,7 @@ async function expandAll() {
     const text = await bodies();
     return text.includes(CROSS_FOLDER_INBOX_BODY) && text.includes(CROSS_FOLDER_SENT_BODY);
   }, { timeout: 30000, timeoutMsg: 'Both mailbox-specific bodies should be readable' });
+  await expectSeparatedRows();
 }
 
 describe('Thread reader layouts', function () {
@@ -40,6 +50,15 @@ describe('Thread reader layouts', function () {
   it('timeline reads the correct bodies from INBOX and Sent', async () => {
     await expandAll();
     expect(await bodies()).not.toContain('Body of mock message');
+  });
+
+  it('remeasures already-expanded messages across repeated layout changes', async () => {
+    // Both bodies are open: their heights stay unchanged when Timeline becomes
+    // Compact, so ResizeObserver alone cannot restore a cleared height cache.
+    for (const layout of ['compact', 'timeline', 'split', 'compact', 'timeline']) {
+      await chooseLayout(layout);
+    }
+    await expandAll();
   });
 
   it('compact summaries open messages without opening a compose window', async () => {

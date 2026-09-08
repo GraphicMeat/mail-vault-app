@@ -1,44 +1,28 @@
-import React, { useState } from 'react';
-import { AppearanceSettings } from './AppearanceSettings';
+import React, { useEffect, useState } from 'react';
 import { BehaviorSettings } from './BehaviorSettings';
 import { NotificationSettings } from './NotificationSettings';
 import { ShortcutsSettings } from './ShortcutsSettings';
-import { useT, t  } from '../../i18n/index.js';
+import { SettingsTabs } from './SettingsTabs';
+import { useT } from '../../i18n/index.js';
 
-export function GeneralSettings({ accounts }) {
+const validSubTab = value => ['behavior', 'notifications', 'shortcuts'].includes(value) ? value : 'behavior';
+
+export function GeneralSettings({ accounts, initialSubTab = 'behavior', onSubTabChange, active = true }) {
   const t = useT();
-  const [generalSubTab, setGeneralSubTab] = useState('appearance');
+  const [generalSubTab, setGeneralSubTab] = useState(() => validSubTab(initialSubTab));
+  useEffect(() => setGeneralSubTab(validSubTab(initialSubTab)), [initialSubTab]);
   const generalSubTabs = [
-    { id: 'appearance', label: t('settings.appearance.appearance') },
     { id: 'behavior', label: t('generalSettings.behavior') },
     { id: 'notifications', label: t('settings.notifications.notifications') },
     { id: 'shortcuts', label: t('shortcuts.keyboardShortcuts') },
   ];
 
   return (
-    <div>
-      {/* Sub-tab navigation */}
-      <div className="flex flex-wrap border-b border-mail-border px-6 pt-2">
-        {generalSubTabs.map(sub => (
-          <button
-            key={sub.id}
-            onClick={() => setGeneralSubTab(sub.id)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px
-                       ${generalSubTab === sub.id
-                         ? 'border-mail-accent text-mail-accent-text'
-                         : 'border-transparent text-mail-text-muted hover:text-mail-text hover:border-mail-border'}`}
-          >
-            {sub.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="p-6 space-y-6">
-        {generalSubTab === 'appearance' && <AppearanceSettings />}
+    <SettingsTabs tabs={generalSubTabs} value={generalSubTab}
+      onChange={value => { setGeneralSubTab(value); onSubTabChange?.(value); }} label={t('settings.navigation.mailPreferences')}>
         {generalSubTab === 'behavior' && <BehaviorSettings />}
         {generalSubTab === 'notifications' && <NotificationSettings accounts={accounts} />}
-        {generalSubTab === 'shortcuts' && <ShortcutsSettings />}
-      </div>
-    </div>
+        {generalSubTab === 'shortcuts' && <ShortcutsSettings active={active} />}
+    </SettingsTabs>
   );
 }

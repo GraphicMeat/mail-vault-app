@@ -2,10 +2,11 @@ import { useEffect, useRef } from 'react';
 
 const FOCUSABLE = [
   'a[href]',
-  'button:not([disabled])',
+  'button:not([disabled]):not([tabindex="-1"])',
   'input:not([disabled]):not([type="hidden"])',
   'select:not([disabled])',
   'textarea:not([disabled])',
+  '[contenteditable="true"]',
   '[tabindex]:not([tabindex="-1"])',
 ].join(',');
 
@@ -41,7 +42,7 @@ const openDialogs = [];
  * Capture on `document` (not `window`) is narrow enough to leave inputs alone.
  * See src/utils/escapeAction.js for the rest of that ordering.
  */
-export function useDialogA11y(isOpen, onClose) {
+export function useDialogA11y(isOpen, onClose, { preventScroll = false } = {}) {
   const panelRef = useRef(null);
   const restoreRef = useRef(null);
   const closeRef = useRef(onClose);
@@ -55,8 +56,15 @@ export function useDialogA11y(isOpen, onClose) {
     const token = {};
     openDialogs.push(token);
     restoreRef.current = document.activeElement;
-    const initial = panel.querySelector('[data-autofocus]') || panel.querySelector(FOCUSABLE);
-    initial?.focus();
+    const initial = panel.querySelector('[data-autofocus]') || [...panel.querySelectorAll(FOCUSABLE)].find(el => {
+      if (el.closest('[hidden], [inert]')) return false;
+      for (let node = el; node && node !== panel; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden') return false;
+      }
+      return true;
+    });
+    initial?.focus({ preventScroll });
 
     const onKeyDown = (e) => {
       if (openDialogs[openDialogs.length - 1] !== token) return;
@@ -96,9 +104,9 @@ export function useDialogA11y(isOpen, onClose) {
       const at = openDialogs.indexOf(token);
       if (at !== -1) openDialogs.splice(at, 1);
       const restore = restoreRef.current;
-      if (restore && document.contains(restore)) restore.focus();
+      if (restore && document.contains(restore)) restore.focus({ preventScroll });
     };
-  }, [isOpen]);
+  }, [isOpen, preventScroll]);
 
   return panelRef;
 }

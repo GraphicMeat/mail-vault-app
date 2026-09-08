@@ -14,8 +14,9 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => children,
 }));
 
+const settings = vi.hoisted(() => ({ actionButtonDisplay: 'icon-label' }));
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: (selector) => selector({ actionButtonDisplay: 'icon-and-text' }),
+  useSettingsStore: (selector) => selector(settings),
 }));
 
 const { EmailActionBar } = await import('../email/EmailActionBar');
@@ -58,12 +59,26 @@ function renderBar(props = {}) {
   return handlers;
 }
 
-const labels = () => screen.getAllByRole('button').map(b => b.textContent);
+function openMore() {
+  const more = screen.queryByRole('button', { name: 'More' });
+  if (more && more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+}
+function action(label) {
+  const direct = screen.queryByRole('button', { name: label, exact: true });
+  if (direct) return direct;
+  openMore();
+  return screen.getByRole('menuitem', { name: label, exact: true });
+}
+const labels = () => {
+  openMore();
+  return [...screen.queryAllByRole('button'), ...screen.queryAllByRole('menuitem')]
+    .map(button => button.textContent).filter(label => label !== 'More').sort();
+};
 
 // vitest runs without `globals`, so testing-library never registers its own
 // auto-cleanup — without this every render stacks another bar in the document.
 afterEach(cleanup);
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => { vi.clearAllMocks(); settings.actionButtonDisplay = 'icon-label'; });
 
 describe('EmailActionBar — every button fires its action', () => {
   const cases = [
@@ -83,37 +98,37 @@ describe('EmailActionBar — every button fires its action', () => {
     it(`${label} calls ${handler}`, () => {
       const handlers = renderBar();
 
-      fireEvent.click(screen.getByRole('button', { name: label }));
+      fireEvent.click(action(label));
 
       expect(handlers[handler]).toHaveBeenCalledTimes(1);
     });
   }
 
-  it('shows all ten actions for a server email in the viewer', () => {
+  it('keeps all ten actions reachable for a server email in the viewer', () => {
     renderBar();
-    expect(labels()).toEqual(cases.map(([l]) => l));
+    expect(labels()).toEqual(cases.map(([l]) => l).sort());
   });
 });
 
 describe('EmailActionBar — labels name the next action', () => {
   it('offers "Mark unread" for a read email', () => {
     renderBar({ isRead: true });
-    expect(screen.getByRole('button', { name: 'Mark unread' })).toBeTruthy();
+    expect(action('Mark unread')).toBeTruthy();
   });
 
   it('offers "Mark read" for an unread email', () => {
     renderBar({ isRead: false });
-    expect(screen.getByRole('button', { name: 'Mark read' })).toBeTruthy();
+    expect(action('Mark read')).toBeTruthy();
   });
 
   it('offers "Unarchive" for an archived email', () => {
     renderBar({ isArchived: true });
-    expect(screen.getByRole('button', { name: 'Unarchive' })).toBeTruthy();
+    expect(action('Unarchive')).toBeTruthy();
   });
 
   it('offers "Light" while the email renders dark', () => {
     renderBar({ emailThemeDark: true });
-    expect(screen.getByRole('button', { name: 'Light' })).toBeTruthy();
+    expect(action('Light')).toBeTruthy();
   });
 });
 
@@ -124,7 +139,7 @@ describe('EmailActionBar — no button without a handler', () => {
       handlers: allHandlers({ onArchive: null, onDelete: null, onMove: null, onToggleRead: null }),
     });
 
-    expect(labels()).toEqual(['Reply', 'Reply All', 'Forward', 'Open', 'Source', 'Dark']);
+    expect(labels()).toEqual(['Reply', 'Reply All', 'Forward', 'Open', 'Source', 'Dark'].sort());
   });
 
   it('hides the actions the chat variant does not wire', () => {
@@ -136,7 +151,7 @@ describe('EmailActionBar — no button without a handler', () => {
       }),
     });
 
-    expect(labels()).toEqual(['Reply', 'Reply All', 'Forward', 'Open']);
+    expect(labels()).toEqual(['Reply', 'Reply All', 'Forward', 'Open'].sort());
   });
 });
 
@@ -168,9 +183,9 @@ describe('EmailActionBar — context rules', () => {
   it('honours the disabled map', () => {
     const handlers = renderBar({ disabled: { delete: true, toggleRead: true, archive: true } });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Mark unread' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Archive' }));
+    fireEvent.click(action('Delete'));
+    fireEvent.click(action('Mark unread'));
+    fireEvent.click(action('Archive'));
 
     expect(handlers.onDelete).not.toHaveBeenCalled();
     expect(handlers.onToggleRead).not.toHaveBeenCalled();
@@ -186,7 +201,7 @@ describe('EmailActionBar — context rules', () => {
 
   it('hands the open message to the export handler', () => {
     const handlers = renderBar({ handlers: allHandlers({ onExport: vi.fn() }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Export' }));
+    fireEvent.click(action('Export'));
     expect(handlers.onExport).toHaveBeenCalledWith(EMAIL);
   });
 });
@@ -217,23 +232,23 @@ describe('EmailActionBar — star', () => {
 
   it('offers "Star" for an unflagged message', () => {
     renderStar(['\\Seen']);
-    expect(screen.getByRole('button', { name: 'Star' })).toBeTruthy();
+    expect(action('Star')).toBeTruthy();
   });
 
   it('offers "Remove star" once it is flagged', () => {
     renderStar(['\\Seen', '\\Flagged']);
-    expect(screen.getByRole('button', { name: 'Remove star' })).toBeTruthy();
+    expect(action('Remove star')).toBeTruthy();
   });
 
   it('hands the open message to the handler', () => {
     const { email, onToggleFlag } = renderStar([]);
-    fireEvent.click(screen.getByRole('button', { name: 'Star' }));
+    fireEvent.click(action('Star'));
     expect(onToggleFlag).toHaveBeenCalledWith(email);
   });
 
   it('honours disabled.toggleFlag', () => {
     const { onToggleFlag } = renderStar([], { disabled: { toggleFlag: true } });
-    fireEvent.click(screen.getByRole('button', { name: 'Star' }));
+    fireEvent.click(action('Star'));
     expect(onToggleFlag).not.toHaveBeenCalled();
   });
 
@@ -248,5 +263,59 @@ describe('EmailActionBar — star', () => {
   it('is absent when no handler is passed', () => {
     renderBar();
     expect(labels()).not.toContain('Star');
+  });
+});
+
+
+describe('reader toolbar action placement', () => {
+  it('keeps common actions visible and focuses the menu with full keyboard navigation', () => {
+    renderBar();
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Reply', 'Reply All', 'Forward', 'Archive', 'Delete', 'Move', 'Mark unread', 'Dark', 'More']);
+    const more = screen.getByRole('button', { name: 'More' });
+    fireEvent.click(more);
+    const open = screen.getByRole('menuitem', { name: 'Open' });
+    expect(document.activeElement).toBe(open);
+    fireEvent.keyDown(open, { key: 'End' });
+    expect(document.activeElement.textContent).toBe('Source');
+    fireEvent.keyDown(document.activeElement, { key: 'Home' });
+    expect(document.activeElement).toBe(open);
+    fireEvent.keyDown(open, { key: 'ArrowDown' });
+    expect(document.activeElement.textContent).toBe('Source');
+    fireEvent.keyDown(document.activeElement, { key: 'Escape' });
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(more);
+  });
+
+  it.each(['icon-only', 'icon-label', 'text-only'])('exposes everyday actions directly in %s mode', display => {
+    settings.actionButtonDisplay = display;
+    const handlers = renderBar({ handlers: allHandlers({ onToggleFlag: vi.fn(), onExport: vi.fn() }) });
+    for (const [label, handler] of [['Move', 'onMove'], ['Mark unread', 'onToggleRead'], ['Star', 'onToggleFlag'], ['Export', 'onExport']]) {
+      const button = screen.getByRole('button', { name: label, exact: true });
+      fireEvent.click(button);
+      expect(handlers[handler]).toHaveBeenCalledWith(EMAIL);
+      expect(button.querySelector('svg') !== null).toBe(display !== 'text-only');
+      expect(button.textContent).toBe(display === 'icon-only' ? '' : label);
+    }
+    openMore();
+    expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Open', 'Source']);
+  });
+
+  it('anchors the folder picker to Move and exposes its expanded state', () => {
+    const moveButtonRef = React.createRef();
+    const props = { email: EMAIL, onMove: vi.fn(), onOpenInWindow: vi.fn(), moveButtonRef };
+    const { rerender } = render(<EmailActionBar {...props} />);
+    const move = screen.getByRole('button', { name: 'Move' });
+    expect(moveButtonRef.current).toBe(move);
+    expect(move.getAttribute('aria-expanded')).toBe('false');
+    rerender(<EmailActionBar {...props} moveDropdownOpen />);
+    expect(move.getAttribute('aria-expanded')).toBe('true');
+    expect(moveButtonRef.current).toBe(move);
+  });
+
+  it('omits More when only everyday actions are available', () => {
+    renderBar({ handlers: { onMove: vi.fn(), onToggleRead: vi.fn(), onToggleFlag: vi.fn(), onExport: vi.fn() } });
+    expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+    expect(screen.getAllByRole('button')).toHaveLength(4);
   });
 });

@@ -34,7 +34,7 @@ export function NotificationSettings({ accounts }) {
   return (
     <>
       {/* Notifications */}
-      <div data-testid="settings-notifications" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div data-testid="settings-notifications" className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Bell size={18} className="text-mail-accent-text" />
           {t('settings.notifications.notifications')}
@@ -53,7 +53,7 @@ export function NotificationSettings({ accounts }) {
               </div>
             </div>
             <ToggleSwitch
-              active={notificationSettings.enabled}
+              label={t('settings.notifications.enableDesktopNotifications')} active={notificationSettings.enabled}
               onClick={() => setNotificationEnabled(!notificationSettings.enabled)}
             />
           </div>
@@ -68,7 +68,7 @@ export function NotificationSettings({ accounts }) {
                   </div>
                 </div>
                 <ToggleSwitch
-                  active={notificationSettings.showPreview}
+                  label={t('settings.notifications.showEmailPreview')} active={notificationSettings.showPreview}
                   onClick={() => setNotificationShowPreview(!notificationSettings.showPreview)}
                 />
               </div>
@@ -121,7 +121,7 @@ export function NotificationSettings({ accounts }) {
 
                           {/* Account toggle */}
                           <ToggleSwitch
-                            active={acctConfig.enabled}
+                            label={`${t('settings.notifications.notifications')}: ${displayName}`} active={acctConfig.enabled}
                             onClick={() => setAccountNotificationEnabled(account.id, !acctConfig.enabled)}
                           />
                         </div>
@@ -167,7 +167,7 @@ export function NotificationSettings({ accounts }) {
       </div>
 
       {/* Backup Notifications */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
           {t('settings.notifications.backupNotifications')}
@@ -176,17 +176,17 @@ export function NotificationSettings({ accounts }) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm text-mail-text">{t('settings.notifications.notifyWhenBackupCompletes')}</span>
-            <ToggleSwitch active={backupNotifyOnSuccess} onClick={() => setBackupNotifyOnSuccess(!backupNotifyOnSuccess)} />
+            <ToggleSwitch label={t('settings.notifications.notifyWhenBackupCompletes')} active={backupNotifyOnSuccess} onClick={() => setBackupNotifyOnSuccess(!backupNotifyOnSuccess)} />
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-mail-text">{t('settings.notifications.notifyWhenBackupFails')}</span>
-            <ToggleSwitch active={backupNotifyOnFailure} onClick={() => setBackupNotifyOnFailure(!backupNotifyOnFailure)} />
+            <ToggleSwitch label={t('settings.notifications.notifyWhenBackupFails')} active={backupNotifyOnFailure} onClick={() => setBackupNotifyOnFailure(!backupNotifyOnFailure)} />
           </div>
         </div>
       </div>
 
       {/* Badge */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Mail size={18} className="text-mail-accent-text" />
           {t('settings.notifications.badge')}
@@ -205,7 +205,7 @@ export function NotificationSettings({ accounts }) {
               </div>
             </div>
             <ToggleSwitch
-              active={badgeEnabled}
+              label={t('settings.notifications.showBadgeCount')} active={badgeEnabled}
               onClick={() => setBadgeEnabled(!badgeEnabled)}
             />
           </div>
@@ -215,7 +215,7 @@ export function NotificationSettings({ accounts }) {
               <label className="block text-sm font-medium text-mail-text mb-2">
                 {t('settings.notifications.badgeShows')}
               </label>
-              <select
+              <select aria-label={t('settings.notifications.badgeShows')}
                 value={badgeMode}
                 onChange={(e) => setBadgeMode(e.target.value)}
                 className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg

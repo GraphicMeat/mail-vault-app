@@ -23,8 +23,9 @@ const UNKNOWN = { isDefault: false, canSet: false, hint: '' };
  * re-queries afterwards. This re-renders from that answer; nothing here flips
  * optimistically on the click.
  */
-export function DefaultMailApp() {
+export function DefaultMailApp({ standalone = false }) {
   const t = useT();
+  const Heading = standalone ? 'h2' : 'h4';
   const [status, setStatus] = useState(null);
 
   const ask = useCallback(async (command) => {
@@ -55,11 +56,11 @@ export function DefaultMailApp() {
   const hintKey = HINT_KEYS[status.hint];
 
   return (
-    <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-      <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+    <div className="settings-section">
+      <Heading className={`${standalone ? 'text-lg ' : ''}font-semibold text-mail-text mb-4 flex items-center gap-2`}>
         <Mail size={18} className="text-mail-accent-text" />
         {t('settings.behavior.defaultMail.title')}
-      </h4>
+      </Heading>
 
       <p className="text-sm text-mail-text-muted mb-4">
         {t('settings.behavior.defaultMail.description')}

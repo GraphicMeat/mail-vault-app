@@ -76,12 +76,14 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
   return (
     <>
       <div
+        role="button" tabIndex={node.noselect && !hasChildren ? undefined : 0}
+        onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate(node, onToggle, onSelect); } }}
         data-testid="folder-row"
         data-path={node.path}
         data-depth={node.depth}
         aria-current={isActive ? 'true' : undefined}
         title={label}
-        style={{ paddingLeft: 8 + node.depth * (compact ? INDENT / 2 : INDENT) }}
+        style={{ paddingLeft: compact ? (hasChildren ? 2 : 20) : 8 + node.depth * INDENT }}
         className={`relative flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
                    ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                    ${isActive
@@ -93,7 +95,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
         {hasChildren ? (
           <FolderToggle node={node} isOpen={isOpen} onToggle={onToggle} />
         ) : (
-          <div className="w-5 shrink-0" />
+          !compact && <div className="w-5 shrink-0" />
         )}
         <Icon size={compact ? 14 : 16} className="shrink-0" />
         {!compact && <span className="text-sm flex-1 truncate">{label}</span>}
@@ -104,7 +106,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
               // `right-0`, not `-right-0.5`: the compact strip already sits
               // 1 px into its own overflow, and a badge hanging 2 px further
               // clipped against the edge.
-              ? 'absolute -top-0.5 right-0 min-w-[14px] h-3.5 px-0.5 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white leading-none flex items-center justify-center'
+              ? 'absolute -top-0.5 right-0 min-w-[14px] h-3.5 px-0.5 rounded-full bg-mail-danger-fill text-[11px] font-bold text-white leading-none flex items-center justify-center'
               : 'ml-auto text-xs tabular-nums text-mail-text-muted'}
           >
             {unseen > 99 ? '99+' : unseen}
@@ -129,6 +131,53 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
   );
 }
 
+// Search keeps the original nodes and server paths. Its temporary result list
+// never changes which branches the user has expanded in the normal tree.
+const searchText = value => String(value).normalize('NFKD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase();
+
+function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onContextMenu }) {
+  const t = useT();
+  const matches = useMemo(() => {
+    const words = searchText(query.trim()).split(/\s+/);
+    const results = [];
+    const visit = (nodes, trail = []) => {
+      for (const node of nodes) {
+        const label = mailboxLabel(node.name);
+        const fullPath = [...trail, label].join(' › ');
+        const searchable = searchText(`${fullPath} ${mailboxLabel(node.path)}`);
+        if (!node.noselect && words.every(word => searchable.includes(word))) {
+          results.push({ node, label, trail: trail.join(' › '), fullPath });
+        }
+        visit(node.children, [...trail, label]);
+      }
+    };
+    visit(tree);
+    return results;
+  }, [tree, query]);
+
+  if (!matches.length) return <p role="status" className="px-2 py-3 text-xs text-mail-text-muted">{t('sidebar.noFoldersFound')}</p>;
+
+  return matches.map(({ node, label, trail, fullPath }) => {
+    const Icon = getMailboxIcon(node);
+    const active = activeMailbox === node.path;
+    const unseen = counts?.[node.path]?.unseen || 0;
+    return <button type="button" key={node.path} data-testid="folder-row" data-path={node.path}
+      aria-label={fullPath} aria-current={active ? 'true' : undefined} title={fullPath}
+      onClick={() => onSelect(node.path)}
+      onContextMenu={contextMenuHandler(node, onContextMenu)}
+      className={`w-full min-w-0 flex items-center gap-2 px-2 py-2 mb-1 rounded-lg text-left ${active
+        ? 'bg-mail-accent-tint text-mail-accent-text'
+        : 'text-mail-text hover:bg-mail-surface-hover'}`}>
+      <Icon size={16} className="shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm">{label}</span>
+        {trail && <span className={`block truncate text-[11px] ${active ? 'text-mail-accent-text' : 'text-mail-text-muted'}`}>{trail}</span>}
+      </span>
+      {unseen > 0 && !active && <span data-testid="folder-unseen" className="shrink-0 text-xs tabular-nums text-mail-text-muted">{unseen > 99 ? '99+' : unseen}</span>}
+    </button>;
+  });
+}
+
 /**
  * The account's folders, drawn the way the server files them.
  *
@@ -136,9 +185,12 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
  * see mailboxTree.js for why the stored list must stay flat.
  */
 export function FolderTree({
-  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu,
+  mailboxes, activeMailbox, expanded, onToggle, onSelect, compact = false, counts, onContextMenu, searchQuery = '',
 }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+
+  if (searchQuery.trim()) return <FolderSearchResults tree={tree} query={searchQuery}
+    activeMailbox={activeMailbox} onSelect={onSelect} counts={counts} onContextMenu={onContextMenu} />;
 
   return tree.map(node => (
     <FolderRow
@@ -166,24 +218,26 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, 
 
   return (
     <div
+      role="button" tabIndex={node.noselect && !hasChildren ? undefined : 0}
+      onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); activate(node, onToggle, onSelect); } }}
       data-testid="folder-row"
       data-path={node.path}
       data-depth={node.depth}
       aria-current={isActive ? 'true' : undefined}
       title={[...trail, label].join(' › ')}
-      className={`inline-flex items-center gap-1 pl-2.5 py-1 rounded-full text-xs transition-colors border
+      className={`max-w-full min-w-0 inline-flex items-center gap-1.5 pl-2.5 py-1.5 rounded-full text-xs transition-colors border
                  ${hasChildren ? 'pr-1' : 'pr-2.5'}
                  ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                  ${isActive
-                   ? 'bg-mail-accent-fill text-white border-mail-accent'
+                   ? 'bg-mail-accent-tint text-mail-accent-text border-mail-accent'
                    : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
       onClick={() => activate(node, onToggle, onSelect)}
       onContextMenu={contextMenuHandler(node, onContextMenu)}
     >
-      <Icon size={12} />
+      <Icon size={12} className="shrink-0" />
       <span className="truncate max-w-[180px]">{label}</span>
       {showCount && (
-        <span data-testid="folder-unseen" className="ml-1 text-[10px] tabular-nums opacity-80">
+        <span data-testid="folder-unseen" className="ml-1 text-[11px] tabular-nums opacity-80">
           {unseen > 99 ? '99+' : unseen}
         </span>
       )}
@@ -227,8 +281,11 @@ function BubbleLevel({ nodes, trail, ...rest }) {
  * ("Telefonie › NFon AG") read as unrelated folders — and a parent gets the
  * tree's chevron, with its children indented beneath it while open.
  */
-export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu }) {
+export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, onSelect, counts, onContextMenu, searchQuery = '' }) {
   const tree = useMemo(() => buildMailboxTree(mailboxes), [mailboxes]);
+
+  if (searchQuery.trim()) return <FolderSearchResults tree={tree} query={searchQuery}
+    activeMailbox={activeMailbox} onSelect={onSelect} counts={counts} onContextMenu={onContextMenu} />;
 
   return (
     <div className="flex flex-col gap-1.5">

@@ -195,6 +195,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     },
     editorProps: {
       attributes: {
+        role: 'textbox',
+        'aria-label': placeholder,
+        'aria-multiline': 'true',
         class: 'prose prose-sm max-w-none focus:outline-none h-full p-4 text-mail-text',
       },
       handleDrop: (view, event, _slice, moved) => {

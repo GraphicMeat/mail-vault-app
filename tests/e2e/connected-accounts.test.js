@@ -21,7 +21,7 @@ describe('Connected Account Setup', function () {
 
   // Account rows live inside the settings page; the identical-looking sidebar
   // rows behind it must never be clicked by mistake.
-  const SETTINGS_ROW_SELECTOR = '[data-testid="settings-page"] [class*="cursor-pointer"]';
+  const SETTINGS_ROW_SELECTOR = '[data-testid="settings-page"] button[aria-pressed]';
 
   async function openAccountsTab() {
     await openSettings();

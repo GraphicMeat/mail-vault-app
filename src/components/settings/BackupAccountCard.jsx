@@ -197,7 +197,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
               }
             }}
             disabled={loadingStatus}
-            className="text-xs text-mail-accent-text hover:text-mail-accent-hover flex items-center gap-1"
+            className="text-xs text-mail-accent-text hover:underline flex items-center gap-1"
           >
             {loadingStatus ? <Loader size={10} className="animate-spin" /> : <Shield size={10} />}
             {loadingStatus ? tr('settings.daemon.checking') : tr('settings.backup.account.verifyBackupCoverage')}
@@ -225,7 +225,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             <div className="space-y-3 pt-3 border-t border-mail-border">
               <div className="pt-3 border-t border-mail-border">
                 <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.account.whatBackUp')}</label>
-                <select
+                <select aria-label={t('settings.backup.account.whatBackUp')}
                   value={config.scope || ''}
                   onChange={(e) => handleConfigChange('scope', e.target.value || null)}
                   className={selectClass}
@@ -431,7 +431,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         </div>
         {isPaidUser && !globalEnabled ? (
           <div aria-label={`Enable backup schedule for ${account.email}`}>
-            <ToggleSwitch active={config.enabled} onClick={handleToggle} />
+            <ToggleSwitch label={`${t('settings.backup.schedule.automaticBackup')}: ${account.email}`} active={config.enabled} onClick={handleToggle} />
           </div>
         ) : !isPaidUser && !IS_APPSTORE_BUILD && upsellBackupShown && onUpgrade ? (
           <button

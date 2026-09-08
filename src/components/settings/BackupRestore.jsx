@@ -245,7 +245,7 @@ export default function BackupRestore() {
   return (
     <div className="space-y-6">
       {/* Backup & Restore (ZIP) */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
           Backup & Restore
@@ -273,7 +273,7 @@ export default function BackupRestore() {
       </div>
 
       {/* MBOX Import / Export */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
           MBOX Import / Export

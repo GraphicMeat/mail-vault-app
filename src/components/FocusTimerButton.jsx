@@ -68,7 +68,7 @@ export function FocusTimerButton({ collapsed, onUpgrade }) {
         </Button>
       ) : (
         <Button
-          variant="ghost" fullWidth size="xs" className="justify-start"
+          variant="ghost" fullWidth size="xs" className="justify-start min-h-8 gap-1.5"
           onClick={openDialog}
           title={t('focus.title')}
           data-testid="focus-button"

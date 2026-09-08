@@ -22,19 +22,19 @@ const SRC = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.jsx'), '
 
 const EXPECTED = [
   'sidebar.passwordMissing', 'common.retry', 'sidebar.noInternet',
-  'sidebar.microsoftIssue', 'sidebar.oauth2Expired', 'sidebar.timedOut',
-  'sidebar.serverError', 'sidebar.viewErrorDetails', 'sidebar.retryConnection',
+  'sidebar.microsoftIssue', 'sidebar.signInRequired', 'sidebar.timedOut',
+  'sidebar.connectionProblem', 'sidebar.viewErrorDetails', 'sidebar.retryConnection',
   'sidebar.repointAccount', 'sidebar.lastNDays', 'sidebar.loading',
-  'sidebar.errorDetails', 'sidebar.errorDetailsLabel', 'common.close',
+  'sidebar.accountConnection', 'sidebar.details',
   'sidebar.expandSidebar', 'sidebar.compose', 'sidebar.allInboxes',
   'sidebar.addAccount', 'sidebar.refreshEmails', 'sidebar.settings',
   'sidebar.reportABug', 'sidebar.referAFriend', 'sidebar.mail', 'sidebar.vault',
-  'sidebar.collapseSidebar', 'sidebar.showingCachedData', 'sidebar.dragToResize',
+  'sidebar.collapseSidebar', 'sidebar.showingCachedData',
   'sidebar.down', 'sidebar.up',
   // Found only by the sweep: these are multi-line JSX text nodes, where the
   // `>` and the text sit on different lines. No line-based grep can see them.
-  'sidebar.allAccounts', 'sidebar.reenterPassword', 'sidebar.switchedProviders',
-  'sidebar.changeServer', 'sidebar.learnMoreFaq', 'sidebar.viewMode', 'sidebar.folders',
+  'sidebar.enterPassword', 'sidebar.reconnect', 'sidebar.switchedProviders',
+  'sidebar.changeServer', 'sidebar.learnMoreFaq', 'sidebar.mailSource', 'sidebar.allMail', 'sidebar.folders',
 ];
 
 describe('Sidebar extraction', () => {

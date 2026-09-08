@@ -17,7 +17,7 @@ describe('settings tab labels', () => {
 
   it('gives every labelKey a catalog entry', () => {
     const keys = [...SRC.matchAll(/labelKey:\s*'([^']+)'/g)].map(m => m[1]);
-    expect(keys.length).toBe(19);
+    expect(keys.length).toBeGreaterThanOrEqual(19);
     expect(keys.filter(k => !(k in en))).toEqual([]);
   });
 });

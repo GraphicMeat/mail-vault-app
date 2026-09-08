@@ -231,23 +231,23 @@ export default function ChangeServerModal() {
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.imapHost')}</label>
-                <input className={inputClass} value={form.imapHost} onChange={(e) => setForm((f) => ({ ...f, imapHost: e.target.value }))} />
+                <input aria-label={t('changeServer.imapHost')} className={inputClass} value={form.imapHost} onChange={(e) => setForm((f) => ({ ...f, imapHost: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.imapPort')}</label>
-                <input type="number" className={inputClass} value={form.imapPort} onChange={(e) => setForm((f) => ({ ...f, imapPort: Number(e.target.value) }))} />
+                <input aria-label={t('changeServer.imapPort')} type="number" className={inputClass} value={form.imapPort} onChange={(e) => setForm((f) => ({ ...f, imapPort: Number(e.target.value) }))} />
               </div>
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.smtpHost')}</label>
-                <input className={inputClass} value={form.smtpHost} onChange={(e) => setForm((f) => ({ ...f, smtpHost: e.target.value }))} />
+                <input aria-label={t('changeServer.smtpHost')} className={inputClass} value={form.smtpHost} onChange={(e) => setForm((f) => ({ ...f, smtpHost: e.target.value }))} />
               </div>
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.smtpPort')}</label>
-                <input type="number" className={inputClass} value={form.smtpPort} onChange={(e) => setForm((f) => ({ ...f, smtpPort: Number(e.target.value) }))} />
+                <input aria-label={t('changeServer.smtpPort')} type="number" className={inputClass} value={form.smtpPort} onChange={(e) => setForm((f) => ({ ...f, smtpPort: Number(e.target.value) }))} />
               </div>
               <div>
                 <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.security')}</label>
-                <select className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
+                <select aria-label={t('changeServer.security')} className={inputClass} value={form.imapSecurity} onChange={handleSecurityChange}>
                   <option value="ssl">{t('changeServer.sslTls')}</option>
                   <option value="starttls">{t('changeServer.starttls')}</option>
                   <option value="none">{t('changeServer.none')}</option>
@@ -257,7 +257,7 @@ export default function ChangeServerModal() {
 
             <div className="mb-3">
               <label className="block text-xs text-mail-text-muted mb-1">{t('changeServer.password')}</label>
-              <input
+              <input aria-label={t('changeServer.password')}
                 type="password"
                 className={inputClass}
                 value={form.password}

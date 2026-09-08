@@ -2,6 +2,7 @@ import { Button } from '../ui/Button';
 import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
+import { AfterDeletePreview } from './PreferencePreview';
 import { DefaultMailApp } from './DefaultMailApp';
 import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
@@ -88,7 +89,7 @@ export function BehaviorSettings() {
       <DefaultMailApp />
 
       {/* Email Sync (Behavior) */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <RefreshCw size={18} className="text-mail-accent-text" />
           {t('settings.behavior.emailSync')}
@@ -107,7 +108,7 @@ export function BehaviorSettings() {
               </div>
             </div>
             <ToggleSwitch
-              active={refreshOnLaunch}
+              label={t('settings.behavior.refreshAppLaunch')} active={refreshOnLaunch}
               onClick={() => setRefreshOnLaunch(!refreshOnLaunch)}
             />
           </div>
@@ -116,7 +117,7 @@ export function BehaviorSettings() {
             <label className="block text-sm font-medium text-mail-text mb-2">
               {t('settings.behavior.autoRefreshInterval')}
             </label>
-            <select
+            <select aria-label={t('settings.behavior.autoRefreshInterval')}
               value={refreshInterval}
               onChange={(e) => setRefreshInterval(parseInt(e.target.value))}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
@@ -160,7 +161,7 @@ export function BehaviorSettings() {
       </div>
 
       {/* Attachments */}
-      <div data-testid="settings-attachments" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div data-testid="settings-attachments" className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Paperclip size={18} className="text-mail-accent-text" />
           {t('email.original.attachments')}
@@ -173,7 +174,7 @@ export function BehaviorSettings() {
             </div>
           </div>
           <ToggleSwitch
-            active={autoDownloadAttachments}
+            label={t('settings.behavior.autoDownloadAttachments')} active={autoDownloadAttachments}
             onClick={() => setAutoDownloadAttachments(!autoDownloadAttachments)}
             testId="toggle-auto-download-attachments"
           />
@@ -181,7 +182,7 @@ export function BehaviorSettings() {
       </div>
 
       {/* Sending */}
-      <div data-testid="settings-undo-send" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div data-testid="settings-undo-send" className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <SendHorizontal size={18} className="text-mail-accent-text" />
           {t('settings.behavior.sending')}
@@ -197,7 +198,7 @@ export function BehaviorSettings() {
             <div className="text-sm text-mail-text-muted mb-3">
               {t('settings.behavior.delayOutgoingEmailsSoCan')}
             </div>
-            <select
+            <select aria-label={t('settings.behavior.sendDelay')}
               value={sendDelay ?? 0}
               onChange={(e) => setSendDelay(Number(e.target.value))}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
@@ -223,7 +224,7 @@ export function BehaviorSettings() {
       </div>
 
       {/* Mark as Read */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Eye size={18} className="text-mail-accent-text" />
           {t('settings.behavior.markRead')}
@@ -238,7 +239,7 @@ export function BehaviorSettings() {
             <label className="block text-sm font-medium text-mail-text mb-2">
               {t('settings.behavior.markEmailsRead')}
             </label>
-            <select
+            <select aria-label={t('settings.behavior.markEmailsRead')}
               value={markAsReadMode}
               onChange={(e) => setMarkAsReadMode(e.target.value)}
               className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
@@ -268,7 +269,7 @@ export function BehaviorSettings() {
                   {t('common.secondCount', { count: markAsReadDelay })}
                 </span>
               </div>
-              <input
+              <input aria-label={t('settings.behavior.delayBeforeMarkingRead')}
                 type="range"
                 min="1"
                 max="10"
@@ -278,9 +279,9 @@ export function BehaviorSettings() {
                 className="w-full"
               />
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs1')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs5')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.secs10')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.behavior.secs1')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.behavior.secs5')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.behavior.secs10')}</span>
               </div>
             </div>
           )}
@@ -288,7 +289,7 @@ export function BehaviorSettings() {
       </div>
 
       {/* After deleting */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Trash2 size={18} className="text-mail-accent-text" />
           {t('settings.behavior.afterDeleting')}
@@ -302,7 +303,7 @@ export function BehaviorSettings() {
           <label className="block text-sm font-medium text-mail-text mb-2">
             {t('settings.behavior.whenAnEmailIsDeleted')}
           </label>
-          <select
+          <select aria-label={t('settings.behavior.whenAnEmailIsDeleted')}
             data-testid="after-delete-select"
             value={afterDeleteSelect}
             onChange={(e) => setAfterDeleteSelect(e.target.value)}
@@ -318,6 +319,7 @@ export function BehaviorSettings() {
               ? t('settings.behavior.afterDeleteNextHint')
               : t('settings.behavior.afterDeleteNothingHint')}
           </p>
+          <AfterDeletePreview value={afterDeleteSelect} />
         </div>
       </div>
 
@@ -367,7 +369,7 @@ export function BehaviorSettings() {
       )}
 
       {/* Search Settings */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Search size={18} className="text-mail-accent-text" />
           {t('settings.behavior.search')}
@@ -388,7 +390,7 @@ export function BehaviorSettings() {
                 {t('settings.behavior.searchesCount', { count: searchHistoryLimit })}
               </span>
             </div>
-            <input
+            <input aria-label={t('settings.behavior.searchHistoryLimit')}
               type="range"
               min="20"
               max="500"
@@ -398,9 +400,9 @@ export function BehaviorSettings() {
               className="w-full"
             />
             <div className="flex justify-between mt-1 px-1">
-              <span className="text-[10px] text-mail-text-muted">20</span>
-              <span className="text-[10px] text-mail-text-muted">250</span>
-              <span className="text-[10px] text-mail-text-muted">500</span>
+              <span className="text-xs text-mail-text-muted">20</span>
+              <span className="text-xs text-mail-text-muted">250</span>
+              <span className="text-xs text-mail-text-muted">500</span>
             </div>
           </div>
 
@@ -422,7 +424,7 @@ export function BehaviorSettings() {
                   : t('settings.behavior.year1')}
               </span>
             </div>
-            <input
+            <input aria-label={t('settings.behavior.popularFiltersPeriod')}
               type="range"
               min="30"
               max="365"
@@ -432,9 +434,9 @@ export function BehaviorSettings() {
               className="w-full"
             />
             <div className="flex justify-between mt-1 px-1">
-              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.month1')}</span>
-              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.months6')}</span>
-              <span className="text-[10px] text-mail-text-muted">{t('settings.behavior.year1')}</span>
+              <span className="text-xs text-mail-text-muted">{t('settings.behavior.month1')}</span>
+              <span className="text-xs text-mail-text-muted">{t('settings.behavior.months6')}</span>
+              <span className="text-xs text-mail-text-muted">{t('settings.behavior.year1')}</span>
             </div>
           </div>
 
@@ -448,7 +450,7 @@ export function BehaviorSettings() {
                 {t('settings.behavior.filtersCount', { count: topFiltersLimit })}
               </span>
             </div>
-            <input
+            <input aria-label={t('settings.behavior.numberPopularFiltersShow')}
               type="range"
               min="5"
               max="50"
@@ -458,9 +460,9 @@ export function BehaviorSettings() {
               className="w-full"
             />
             <div className="flex justify-between mt-1 px-1">
-              <span className="text-[10px] text-mail-text-muted">5</span>
-              <span className="text-[10px] text-mail-text-muted">25</span>
-              <span className="text-[10px] text-mail-text-muted">50</span>
+              <span className="text-xs text-mail-text-muted">5</span>
+              <span className="text-xs text-mail-text-muted">25</span>
+              <span className="text-xs text-mail-text-muted">50</span>
             </div>
           </div>
 

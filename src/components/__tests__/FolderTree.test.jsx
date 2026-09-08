@@ -269,3 +269,48 @@ describe('FolderBubbles', () => {
     expect(onToggle).toHaveBeenCalledWith('INBOX.Container');
   });
 });
+
+
+describe.each([['List', FolderTree], ['Bubbles', FolderBubbles]])('%s folder search', (_, Component) => {
+  const renderSearch = (props = {}) => render(<Component mailboxes={MAILBOXES} activeMailbox="INBOX"
+    expanded={new Set()} onToggle={() => {}} onSelect={() => {}} {...props} />);
+
+  it('finds nested folders without changing the saved expansion state', () => {
+    const expanded = new Set();
+    const onToggle = vi.fn();
+    const { rerender } = renderSearch({ searchQuery: 'nfon erledigt', expanded, onToggle });
+    expect(rowPaths()).toEqual(['INBOX.Lieferanten.Technik.Telefonie.NFon AG.erledigt']);
+    expect(row(rowPaths()[0]).textContent).toContain('Lieferanten');
+    expect(row(rowPaths()[0]).textContent).toContain('NFon AG');
+    expect(expanded.size).toBe(0);
+    expect(onToggle).not.toHaveBeenCalled();
+    rerender(<Component mailboxes={MAILBOXES} activeMailbox="INBOX" expanded={expanded}
+      onToggle={onToggle} onSelect={() => {}} searchQuery="" />);
+    expect(rowPaths()).toEqual(['INBOX', 'INBOX.Kunden', 'INBOX.Lieferanten', 'INBOX.Sent']);
+  });
+
+  it('matches decoded folder names without case or accent differences', () => {
+    renderSearch({ mailboxes: [box('INBOX'), box('INBOX.Bokelmu&Awg-hle')], searchQuery: 'BOKELMUHLE' });
+    expect(rowPaths()).toEqual(['INBOX.Bokelmu&Awg-hle']);
+    expect(row(rowPaths()[0]).textContent).toContain('Bokelmühle');
+  });
+
+  it('preserves server paths and context-menu metadata in search results', () => {
+    const onSelect = vi.fn(), onContextMenu = vi.fn();
+    renderSearch({ searchQuery: 'Technik', onSelect, onContextMenu });
+    const target = row('INBOX.Lieferanten.Technik');
+    expect(target.tagName).toBe('BUTTON');
+    fireEvent.click(target);
+    expect(onSelect).toHaveBeenCalledWith('INBOX.Lieferanten.Technik');
+    fireEvent.contextMenu(target, { clientX: 12, clientY: 20 });
+    const [node] = onContextMenu.mock.calls[0];
+    expect(node.path).toBe('INBOX.Lieferanten.Technik');
+    expect(node.children[0].path).toBe('INBOX.Lieferanten.Technik.Telefonie');
+  });
+
+  it('shows an empty result instead of unrelated folders or synthetic containers', () => {
+    const { container } = renderSearch({ mailboxes: [box('INBOX'), box('INBOX.Container', { noselect: true }), box('INBOX.Container.Real')], searchQuery: 'absent' });
+    expect(rowPaths()).toEqual([]);
+    expect(container.querySelector('[role="status"]').textContent).toBeTruthy();
+  });
+});

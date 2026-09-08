@@ -398,7 +398,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
       onClose={handleMinimize}
       padded={false}
       aria-labelledby={titleId}
-      panelClassName="overflow-hidden"
+      panelClassName="overflow-y-auto"
     >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
@@ -435,8 +435,8 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                 <button
                   onClick={handleDeleteConfirm}
                   data-testid="bulk-delete-confirm"
-                  className="px-4 py-2 text-sm font-medium bg-mail-danger text-white rounded-lg
-                            hover:bg-mail-danger/90 transition-colors"
+                  className="px-4 py-2 text-sm font-medium bg-mail-danger-fill text-white rounded-lg
+                            hover:bg-mail-danger-hover transition-colors"
                 >
                   {CONFIRM_COPY()[selectedAction].confirmLabel}
                 </button>
@@ -470,6 +470,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                       return (
                         <button
                           key={year}
+                          aria-pressed={isActive}
                           onClick={() => setSelectedRange({ type: 'year', year })}
                           className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                             isActive
@@ -503,6 +504,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     return (
                       <button
                         key={preset.type}
+                        aria-pressed={isActive}
                         onClick={() => setSelectedRange({ type: preset.type })}
                         className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
                           isActive
@@ -521,6 +523,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
               <div className="mb-4">
                 <button
                   onClick={() => setSelectedRange({ type: 'custom' })}
+                  aria-expanded={selectedRange?.type === 'custom'}
                   className={`flex items-center gap-1.5 text-sm mb-2 ${
                     selectedRange?.type === 'custom' ? 'text-mail-accent-text font-medium' : 'text-mail-text-muted hover:text-mail-text'
                   }`}
@@ -529,9 +532,9 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                   {t('bulk.ops.customRange')}
                 </button>
                 {selectedRange?.type === 'custom' && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <input
-                      type="date"
+                      type="date" aria-label={t('common.from')}
                       value={customFrom}
                       onChange={(e) => setCustomFrom(e.target.value)}
                       className="px-2 py-1.5 text-sm bg-mail-surface border border-mail-border rounded-lg
@@ -539,7 +542,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     />
                     <span className="text-mail-text-muted text-sm">{t('bulk.ops.to')}</span>
                     <input
-                      type="date"
+                      type="date" aria-label={t('common.to')}
                       value={customTo}
                       onChange={(e) => setCustomTo(e.target.value)}
                       className="px-2 py-1.5 text-sm bg-mail-surface border border-mail-border rounded-lg
@@ -564,7 +567,7 @@ export function BulkOperationsModal({ isOpen, onClose, onConfirm }) {
                     onClick={() => setStep(2)}
                     disabled={selectedCount === 0 || loadingPool}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-mail-accent-fill text-white
-                              rounded-lg hover:bg-mail-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              rounded-lg hover:bg-mail-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {t('common.next')}
                     <ArrowRight size={14} />

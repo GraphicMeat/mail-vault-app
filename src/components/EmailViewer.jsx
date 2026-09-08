@@ -46,7 +46,7 @@ import { useThemeStore } from '../stores/themeStore';
 import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
-import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../utils/mailChrome';
+import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 
@@ -58,6 +58,8 @@ import { t, tErr, useT  } from '../i18n/index.js';
 
 function EmailViewerComponent({ onComposeReply }) {
   const t = useT();
+  const navigationShortcuts = useSettingsStore(s => s.keyboardShortcuts);
+  const shortcutsEnabled = useSettingsStore(s => s.keyboardShortcutsEnabled);
   const selectedEmail = useSelectionStore(s => s.selectedEmail);
   const selectedEmailSource = useSelectionStore(s => s.selectedEmailSource);
   const selectedThread = useSelectionStore(s => s.selectedThread);
@@ -86,6 +88,7 @@ function EmailViewerComponent({ onComposeReply }) {
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const appTheme = useThemeStore(s => s.theme);
+  const palette = useThemeStore(s => s.palette);
   // Default email theme: user preference ('light'|'dark') or follow app theme.
   const theme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -108,6 +111,7 @@ function EmailViewerComponent({ onComposeReply }) {
 
   const effectiveEmailTheme = emailThemeOverride ?? theme;
   const emailDarkMode = effectiveEmailTheme === 'dark';
+  const emailColors = getEmailColors(effectiveEmailTheme, palette);
 
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
   const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
@@ -350,7 +354,7 @@ function EmailViewerComponent({ onComposeReply }) {
     // iframe HTML (not injected post-load) so it runs during page load —
     // eliminates the load-event race and prevents a flash of light content
     // on theme toggle. srcDoc diff on theme change still forces reload.
-    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts() : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts({ palette }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
@@ -358,7 +362,7 @@ function EmailViewerComponent({ onComposeReply }) {
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
-  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, signatureDisplay]);
+  }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay]);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {
@@ -517,9 +521,17 @@ function EmailViewerComponent({ onComposeReply }) {
   if (!selectedEmail && !loadingEmail) {
     return (
       <div className="flex-1 flex items-center justify-center bg-mail-bg h-full min-h-0">
-        <div className="text-center text-mail-text-muted">
-          <FileText size={48} className="mx-auto mb-4 opacity-30" />
-          <p>{t('viewer.selectEmailRead')}</p>
+        <div className="reader-welcome max-w-sm px-8 text-center">
+          <FileText size={36} strokeWidth={1.25} className="mx-auto mb-5 text-mail-text-muted" />
+          <h2 className="text-lg font-medium text-mail-text">{t('viewer.selectEmailRead')}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-mail-text-muted">{t('workspace.readerHint')}</p>
+          {shortcutsEnabled && navigationShortcuts?.prevEmail && navigationShortcuts?.nextEmail && (
+            <div className="mt-6 inline-flex items-center gap-2 text-xs text-mail-text-muted">
+              <kbd className="reader-key">{navigationShortcuts.prevEmail}</kbd>
+              <kbd className="reader-key">{navigationShortcuts.nextEmail}</kbd>
+              <span>{t('workspace.browseMessages')}</span>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -542,13 +554,13 @@ function EmailViewerComponent({ onComposeReply }) {
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full relative">
+    <div className="email-reader flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full relative">
       {/* Drag region */}
       <div data-tauri-drag-region className="h-2 border-b border-mail-border" />
 
       {/* Subject */}
-      <div key={scopeKey} className="viewer-swap px-3 py-2.5 border-b border-mail-border flex items-start gap-2">
-        <h1 className="text-lg font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-1.5">
+      <div key={scopeKey} className="viewer-swap px-5 py-4 border-b border-mail-border flex items-start gap-3">
+        <h1 className="text-xl leading-snug font-semibold text-mail-text flex-1 min-w-0 flex items-center gap-2">
           <SenderAlertIcon level={selectedEmail._senderAlert} email={selectedEmail} size={18} />
           <ReplyToAlertIcon mismatch={selectedEmail._replyToMismatch} size={18} />
           <LinkAlertIcon level={selectedEmail._linkAlert} size={18} alerts={getCachedAlerts(scopeKey)} />
@@ -558,7 +570,7 @@ function EmailViewerComponent({ onComposeReply }) {
             blocked={trackerBlocking}
             size={18}
           />
-          {selectedEmail.subject}
+          <span className="min-w-0 break-words">{selectedEmail.subject}</span>
         </h1>
         <CloseViewerButton />
       </div>
@@ -644,7 +656,7 @@ function EmailViewerComponent({ onComposeReply }) {
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveEmailTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette }) : '',
               });
               invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
             }}
@@ -681,7 +693,7 @@ function EmailViewerComponent({ onComposeReply }) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
-        <div className="p-4 flex-1 flex flex-col">
+        <div className="p-3 flex-1 flex flex-col">
           {showRaw && (rawSource || rawError) ? (
             <pre className="text-xs font-mono text-mail-text bg-mail-surface rounded-lg p-4 overflow-x-auto whitespace-pre-wrap break-all" data-testid={rawError ? 'email-raw-error' : undefined}>
               {rawError || atob(rawSource)}
@@ -693,7 +705,7 @@ function EmailViewerComponent({ onComposeReply }) {
               className="rounded-lg overflow-hidden max-w-full h-full"
               style={{
                 contain: 'inline-size',
-                backgroundColor: emailDarkMode ? MAIL_DARK_BG : '#ffffff',
+                backgroundColor: emailColors.background,
               }}
             >
               <iframe
@@ -733,10 +745,10 @@ function EmailViewerComponent({ onComposeReply }) {
             </div>
           ) : (
             <div
-              className="email-content whitespace-pre-wrap rounded-lg p-4"
+              className="email-content email-plain-body whitespace-pre-wrap rounded-lg"
               style={{
-                backgroundColor: emailDarkMode ? MAIL_DARK_BG : '#ffffff',
-                color: emailDarkMode ? MAIL_DARK_TEXT : '#333333',
+                backgroundColor: emailColors.background,
+                color: emailColors.text,
               }}
             >
               <AddressText text={selectedEmail.text || 'No content'} accountId={selectedEmail?._accountId} />

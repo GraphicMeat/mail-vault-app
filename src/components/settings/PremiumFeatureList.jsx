@@ -15,7 +15,7 @@ export function PremiumFeatureList({ isPremium, onNavigate }) {
   const t = useT();
 
   return (
-    <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+    <div className="settings-section">
       <h4 className="text-sm font-semibold text-mail-text mb-3">{t('premium.list.title')}</h4>
       <ul className="space-y-1">
         {PREMIUM_FEATURES.map((f) => {
@@ -43,7 +43,7 @@ export function PremiumFeatureList({ isPremium, onNavigate }) {
                 <button
                   type="button"
                   onClick={() => onNavigate?.(f.tab)}
-                  className="flex items-center gap-0.5 text-xs text-mail-accent-text hover:text-mail-accent-hover flex-shrink-0 mt-0.5"
+                  className="flex items-center gap-0.5 text-xs text-mail-accent-text hover:underline flex-shrink-0 mt-0.5"
                 >
                   {t('common.open')}
                   <ChevronRight size={13} />

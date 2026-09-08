@@ -33,7 +33,6 @@ import {
   Archive,
   X,
   Layers,
-  ListTree,
   List,
   Search,
   MessageSquare,
@@ -51,26 +50,11 @@ import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
 
-/**
- * `viewMode` is a store value (`all` / `server` / `local`) and used to be
- * rendered straight into the header under `capitalize`, which turned it into a
- * label no catalog ever saw. The sidebar's filter already has keys for these
- * three; use them so the two agree in every language.
- */
-const VIEW_MODE_LABELS = {
-  all: 'sidebar.viewAll',
-  server: 'sidebar.viewServer',
-  local: 'sidebar.viewVault',
-};
-
-
-// Header button cycle. Three modes, one button: the icon names the current
-// mode and a click moves to the next.
-const NEXT_THREAD_MODE = { grouped: 'expandable', expandable: 'flat', flat: 'grouped' };
+// Labels describe what the list shows; users choose a mode directly.
 const THREAD_MODE_LABEL = {
-  grouped: 'settings.appearance.threadModeGrouped',
-  expandable: 'settings.appearance.threadModeExpandable',
-  flat: 'settings.appearance.threadModeFlat',
+  grouped: 'workspace.threads',
+  expandable: 'workspace.expandableThreads',
+  flat: 'workspace.messages',
 };
 
 // One identity for "no siblings", so the memo below keeps a stable result
@@ -142,7 +126,7 @@ export function formatListCount({ shown, loaded, total, unreadOnly }) {
     : t('list.emails2', { total: total.toLocaleString() });
 }
 
-function EmailListComponent() {
+function EmailListComponent({ stacked = false }) {
   const t = useT();
   // Individual selectors — component only re-renders when these specific fields change
   const loading = useSyncStore(s => s.loading);
@@ -172,7 +156,6 @@ function EmailListComponent() {
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
   const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
   const setEmailsSelected = useSelectionStore(s => s.setEmailsSelected);
-  const selectAllEmails = useSelectionStore(s => s.selectAllEmails);
   const clearSelection = useSelectionStore(s => s.clearSelection);
   const clearSearch = useSearchStore(s => s.clearSearch);
   const getChatEmails = useMessageListStore(s => s.getChatEmails);
@@ -199,7 +182,8 @@ function EmailListComponent() {
   const setThreadMode = useSettingsStore(s => s.setThreadMode);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
   const layoutMode = useSettingsStore(s => s.layoutMode);
-  const isCompact = emailListStyle === 'compact';
+  const [narrowList, setNarrowList] = useState(false);
+  const isCompact = emailListStyle === 'compact' || narrowList;
   const ROW_HEIGHT = isCompact ? ROW_HEIGHT_COMPACT : ROW_HEIGHT_DEFAULT;
   const rowStyle = useMemo(() => ({ height: ROW_HEIGHT }), [ROW_HEIGHT]);
   const RowComponent = isCompact ? CompactEmailRow : EmailRow;
@@ -268,6 +252,13 @@ function EmailListComponent() {
     setPendingDelete({ executor, copy });
   }, []);
   const scrollContainerRef = useRef(null);
+  useEffect(() => {
+    const element = scrollContainerRef.current;
+    if (!element || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(([entry]) => setNarrowList(entry.contentRect.width < 480));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const expandedSenderRef = useRef(expandedSender);
   const expandedTopicsRef = useRef(expandedTopics);
@@ -285,7 +276,7 @@ function EmailListComponent() {
     if (emailListGrouping !== 'sender') return;
 
     const handleKeyDown = (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
       const groups = senderGroupsRef.current;
       if (!groups?.length) return;
 
@@ -641,7 +632,6 @@ function EmailListComponent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [emailRowHighlight, selectedEmailId, deferredThreads]);
 
-  const hasSelection = selectedEmailIds.size > 0;
   const allSelected = displayEmails.length > 0 && selectedEmailIds.size === displayEmails.length;
 
   const rowCount = threadedDisplay.length;
@@ -738,6 +728,8 @@ function EmailListComponent() {
     overscan: 5,
     enabled: emailListGrouping !== 'sender',
   });
+
+  useEffect(() => { virtualizer.measure(); }, [virtualizer, ROW_HEIGHT]);
 
   // Diagnostic: trace loading spinner condition
   useEffect(() => {
@@ -925,141 +917,73 @@ function EmailListComponent() {
   };
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      {/* Header */}
-      <div data-tauri-drag-region data-testid="email-list-header" className="flex items-center justify-between px-4 py-3 border-b border-mail-border bg-mail-surface flex-shrink-0 min-h-[48px]">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
-            onClick={() => allSelected ? clearSelection() : openBulkModal()}
-          >
-            {allSelected ? (
-              <CheckSquare size={18} className="text-mail-accent-text" />
-            ) : (
-              <Square size={18} className="text-mail-text-muted" />
-            )}
-          </Button>
-
-          {searchActive ? (
-            <div className="flex items-center gap-2">
-              <Search size={16} className="text-mail-accent-text" />
-              <span className="text-lg font-semibold text-mail-text">{t('list.searchResults')}</span>
-              <span className="text-sm text-mail-text-muted">
-                ({displayEmails.length} found)
+    <div data-stacked={stacked || undefined} className="mail-list flex flex-col h-full min-h-0 overflow-hidden">
+      <div data-tauri-drag-region data-testid="email-list-header" className="mail-list-header">
+        <div className="flex items-start justify-between gap-3 min-w-0">
+          <div className="min-w-0 flex-1">
+            <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate">
+              {searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
+            </h2>
+            <div className="mail-list-summary text-xs text-mail-text-muted">
+              <span data-testid="email-list-count">
+                {formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly })}
               </span>
-              <button
-                onClick={() => {
-                  clearSearch();
-                  setShowSearch(false);
-                }}
-                className="ml-2 px-2 py-0.5 text-xs bg-mail-bg border border-mail-border rounded
-                          text-mail-text-muted hover:text-mail-text hover:border-mail-accent transition-colors"
-              >
-                {t('common.clear')}
-              </button>
+              {mailboxScope && <span>{t('list.acrossFolders', { count: mailboxScope.paths.length })}</span>}
+              {!searchActive && <span className="mail-list-date-range">{dateRange}</span>}
             </div>
-          ) : (
-            <div className="flex flex-col">
-              <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text">
-                {activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
-                {/* A branch total read as one folder's is the same lie the
-                    INBOX-only "all folders" search used to tell. */}
-                {mailboxScope && (
-                  <span className="ml-2 text-xs font-normal text-mail-text-muted">
-                    {t('list.acrossFolders', { count: mailboxScope.paths.length })}
-                  </span>
-                )}
-              </h2>
-              <div className="text-xs text-mail-text-muted mt-0.5 flex items-center gap-1.5">
-                {/* ponytail: the header used to always show the server total, so a
-                    half-loaded window looked identical to a full one. Say what the
-                    list actually holds whenever it's short of the total. */}
-                <span data-testid="email-list-count">
-                  {formatListCount({
-                    shown: displayEmails.length,
-                    loaded: sortedEmails.length,
-                    total: totalEmails,
-                    unreadOnly,
-                  })}
-                </span>
-                <span>·</span>
-                <span>{VIEW_MODE_LABELS[viewMode] ? t(VIEW_MODE_LABELS[viewMode]) : viewMode}</span>
-                {dateRange && (
-                  <>
-                    <span>·</span>
-                    <span>{dateRange}</span>
-                  </>
-                )}
-              </div>
-              {vaultShare && (
-                <div className="flex items-center gap-2 mt-1 max-w-[260px]">
-                  <span className="custody-meter flex-1 min-w-[40px]" aria-hidden="true">
-                    <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
-                  </span>
-                  <span data-testid="email-list-vault-share" className="text-[11px] text-mail-text-muted whitespace-nowrap">
-                    {t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
-                      inVault: vaultShare.inVault.toLocaleString(),
-                      loaded: vaultShare.loaded.toLocaleString(),
-                    })}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Unread-only filter */}
-          <button
-            data-testid="unread-filter-toggle"
-            onClick={toggleUnreadOnly}
-            className={`p-1.5 rounded-lg transition-colors ${
-              unreadOnly
-                ? 'bg-mail-accent/10 text-mail-accent-text'
-                : 'text-mail-text-muted hover:bg-mail-border'
-            }`}
-            title={unreadOnly ? t('list.showAllMessages') : t('list.showUnreadOnly')}
-            aria-pressed={unreadOnly}
-          >
-            <Mail size={16} />
-          </button>
-          {/* Sender grouping toggle */}
-          <button
-            onClick={() => setEmailListGrouping(
-              emailListGrouping === 'chronological' ? 'sender' : 'chronological'
-            )}
-            className={`p-1.5 rounded-lg transition-colors ${
-              emailListGrouping === 'sender'
-                ? 'bg-mail-accent/10 text-mail-accent-text'
-                : 'text-mail-text-muted hover:text-mail-text'
-            }`}
-            title={emailListGrouping === 'sender' ? t('list.switchChronologicalView') : t('list.groupSender')}
-          >
-            <Users size={16} />
-          </button>
-          {/* Thread mode cycle — meaningless under sender grouping, so hidden there */}
-          {emailListGrouping !== 'sender' && (
-            <button
-              onClick={() => setThreadMode(NEXT_THREAD_MODE[threadMode] || 'grouped')}
-              className="p-1.5 rounded-lg transition-colors text-mail-text-muted hover:text-mail-text"
-              title={`${t('settings.appearance.threadMode')}: ${t(THREAD_MODE_LABEL[threadMode] || THREAD_MODE_LABEL.grouped)}`}
-              data-testid="thread-mode-toggle"
-              data-thread-mode={threadMode}
-            >
-              {threadMode === 'flat' ? <List size={16} /> : threadMode === 'expandable' ? <ListTree size={16} /> : <Layers size={16} />}
-            </button>
-          )}
-          <button
-            onClick={() => setShowSearch(!showSearch)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSearch || searchActive
-                ? 'bg-mail-accent/10 text-mail-accent-text'
-                : 'hover:bg-mail-border text-mail-text-muted'
-            }`}
-            title={t('list.searchEmails')}
-          >
-            <Search size={18} />
+          </div>
+          <button type="button" data-testid="mail-search-toggle" onClick={e => {
+            if (searchActive) e.currentTarget.closest('.mail-list')?.querySelector('[data-testid="mail-search-input"]')?.focus();
+            else setShowSearch(!showSearch);
+          }}
+            aria-expanded={showSearch || searchActive} aria-controls="mail-search-panel"
+            className={`mail-toolbar-button shrink-0 ${showSearch || searchActive ? 'is-active' : ''}`}
+            title={t('list.searchEmails')}>
+            <Search size={16} /><span>{t('workspace.search')}</span>
           </button>
         </div>
+        {vaultShare && !searchActive && (
+          <div className="flex items-center gap-2 mt-2">
+            <span className="custody-meter w-16 shrink-0" aria-hidden="true">
+              <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
+            </span>
+            <span data-testid="email-list-vault-share" className="text-xs text-mail-text-muted">
+              {t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
+                inVault: vaultShare.inVault.toLocaleString(), loaded: vaultShare.loaded.toLocaleString(),
+              })}
+            </span>
+          </div>
+        )}
+        {searchActive && (
+          <button type="button" className="mt-2 text-xs text-mail-accent-text hover:underline"
+            onClick={() => { clearSearch(); setShowSearch(false); }}>{t('list.clearSearch')}</button>
+        )}
+      </div>
+      <div className="mail-list-toolbar" role="toolbar" aria-label={t('workspace.listControls')}>
+        <Button variant="ghost" icon size="sm" className="shrink-0"
+          title={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
+          aria-label={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
+          onClick={() => allSelected ? clearSelection() : openBulkModal()}>
+          {allSelected ? <CheckSquare size={18} className="text-mail-accent-text" /> : <Square size={18} />}
+        </Button>
+        <button type="button" data-testid="unread-filter-toggle" onClick={toggleUnreadOnly}
+          className={`mail-toolbar-button ${unreadOnly ? 'is-active' : ''}`}
+          title={unreadOnly ? t('list.showAllMessages') : t('list.showUnreadOnly')} aria-pressed={unreadOnly}>
+          <Mail size={14} /><span>{t('workspace.unread')}</span>
+        </button>
+        <button type="button" onClick={() => setEmailListGrouping(emailListGrouping === 'chronological' ? 'sender' : 'chronological')}
+          className={`mail-toolbar-button ${emailListGrouping === 'sender' ? 'is-active' : ''}`}
+          aria-pressed={emailListGrouping === 'sender'}
+          title={emailListGrouping === 'sender' ? t('list.switchChronologicalView') : t('list.groupSender')}>
+          <Users size={14} /><span>{t('workspace.senders')}</span>
+        </button>
+        {emailListGrouping !== 'sender' && (
+          <select value={threadMode} onChange={e => setThreadMode(e.target.value)}
+            aria-label={t('settings.appearance.threadMode')} title={t('settings.appearance.threadMode')}
+            className="mail-thread-select" data-testid="thread-mode-toggle" data-thread-mode={threadMode}>
+            {Object.entries(THREAD_MODE_LABEL).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -1069,10 +993,10 @@ function EmailListComponent() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-b border-mail-border bg-mail-surface/50 relative z-20 flex-shrink-0"
+            id="mail-search-panel" className="border-b border-mail-border bg-mail-surface/50 relative z-20 flex-shrink-0"
           >
             <div className="px-4 py-3">
-              <SearchBar />
+              <SearchBar autoFocus={showSearch} />
             </div>
           </motion.div>
         )}
@@ -1118,7 +1042,7 @@ function EmailListComponent() {
         ) : rowCount === 0 ? (
           <div
             data-testid="email-list-empty-state"
-            className="flex flex-col items-center justify-center h-full text-mail-text-muted"
+            className="flex flex-col items-center justify-center h-full p-6 text-center text-mail-text-muted"
           >
             {unreadOnly && !searchActive ? (
               <>
@@ -1507,7 +1431,7 @@ function EmailListComponent() {
       {/* View Mode Legend — three glyphs and one modifier, each explaining
           itself on hover or focus. Not one row per state: the dot is a
           modifier, and showing it as one is what teaches the composition. */}
-      <div className="px-4 py-2.5 border-t border-mail-border bg-mail-surface/50
+      <div className="mail-state-legend px-4 py-2.5 border-t border-mail-border bg-mail-surface/50
                       flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-mail-text-muted flex-shrink-0">
         {LEGEND_ENTRIES().map(entry => (
           <StateTooltip key={entry.id} label={entry.label} detail={entry.detail} state={entry.id} testId="legend-state-icon">

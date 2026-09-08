@@ -77,21 +77,21 @@ export default function BackupVerificationTree({ data, onHide }) {
 
       {/* Summary chips */}
       <div className="flex flex-wrap gap-1.5">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
           appComplete ? 'bg-mail-local-tint text-mail-local' : 'bg-mail-warning-tint text-mail-warning'
         }`}>
           {appComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
           {t('settings.backup.verify.appPct', { appPct })}
         </span>
         {hasExternal ? (
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
             extComplete ? 'bg-mail-local-tint text-mail-local' : 'bg-mail-warning-tint text-mail-warning'
           }`}>
             {extComplete ? <CheckCircle2 size={10} /> : <AlertCircle size={10} />}
             {t('settings.backup.verify.externalPct', { pct: total_server > 0 ? Math.round((total_external / total_server) * 100) : 0 })}
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-mail-surface text-mail-text-muted">
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-mail-surface text-mail-text-muted">
             {t('settings.backup.verify.externalNotConfigured')}
           </span>
         )}

@@ -17,11 +17,7 @@ export function DefaultMailStep({ onContinue }) {
 
   return (
     <div className="max-w-xl w-full">
-      <h2 className="text-lg font-semibold text-mail-text mb-3">
-        {t('settings.behavior.defaultMail.title')}
-      </h2>
-
-      <DefaultMailApp />
+      <DefaultMailApp standalone />
 
       <div className="flex justify-end mt-3">
         <Button

@@ -99,6 +99,9 @@ describe('onboarding', function () {
     await $('[data-testid="onboarding-continue"]').click();
     await $('[data-testid="appearance-preview"]').waitForExist({ timeout: 5000 });
 
+    // Appearance now starts with Colors; Layout is the second optional tab.
+    const appearanceTabs = await $$('[data-testid="onboarding-appearance"] [role="tab"]');
+    await appearanceTabs[1].click();
     await $('[data-testid="appearance-layout-two-column"]').click();
     // Two-column stacks the reader under the list — it does not remove it.
     // App.jsx keeps the same reader in both layouts and only swaps the

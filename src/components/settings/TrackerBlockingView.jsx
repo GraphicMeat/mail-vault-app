@@ -61,12 +61,12 @@ function SampleMail({ blocked }) {
         <p className="m-0 mb-2">{t('settings.tracking.hiThereHereWhatMissed')}</p>
         <div className="h-6 rounded bg-[#eef1f6]" />
         {blocked ? (
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-indigo-700">
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-indigo-700">
             <ShieldCheck size={11} />
             {t('settings.tracking.onePixelRemovedBeforeRender')}
           </div>
         ) : (
-          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-red-600">
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
             <span className="inline-block w-[6px] h-[6px] rounded-full bg-red-500 animate-pulse" />
             1×1 pixel loading from mailer.example.com
           </div>
@@ -100,9 +100,9 @@ export function TrackerBlockingView({ onUpgrade }) {
   }, [trackerAlerts]);
 
   return (
-    <div className="p-6 space-y-6 overflow-y-auto h-full" data-testid="settings-tracker-blocking">
+    <div className="settings-form space-y-6" data-testid="settings-tracker-blocking">
       {/* Header + the switch itself */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h4 className="text-sm font-semibold text-mail-text flex items-center gap-2">
@@ -115,7 +115,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           </div>
           {isPremium ? (
             <ToggleSwitch
-              active={trackerBlockingEnabled}
+              label={t('settings.tracking.blockTrackingPixels')} active={trackerBlockingEnabled}
               onClick={() => setTrackerBlockingEnabled(!trackerBlockingEnabled)}
             />
           ) : (
@@ -149,7 +149,7 @@ export function TrackerBlockingView({ onUpgrade }) {
           )}
           {/* The one link every premium gate shares — this gate is not an
               exception to it just because its demonstration is longer. */}
-          <PremiumFeaturesLink className="mt-4 block" />
+          <div className="mt-3"><PremiumFeaturesLink /></div>
         </div>
       )}
 

@@ -1,0 +1,77 @@
+.sidebar-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 56px; padding: 10px 12px; flex-shrink: 0; }
+.sidebar-brand { min-width: 0; font-size: 18px; line-height: 1.2; color: var(--mail-text); }
+.sidebar-header-tools { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.sidebar-navigation-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px 12px 16px; scrollbar-gutter: stable; }
+.sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin: 0 0 4px; padding-left: 8px; }
+.sidebar-section-heading h2 { font-size: 12px; line-height: 1.5; font-weight: 600; color: var(--mail-text-muted); }
+.sidebar-folder-section { margin-top: 20px; }
+.sidebar-account-row { display: flex; align-items: center; width: 100%; min-width: 0; min-height: 44px; margin-bottom: 2px; border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-account-open { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 7px 8px; border-radius: 8px; color: inherit; text-align: left; }
+.sidebar-backup-status { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 28px; flex-shrink: 0; border-radius: 6px; }
+.sidebar-account-row > .sidebar-backup-status { margin-right: 4px; }
+.sidebar-collapsed-backup { position: absolute; bottom: -5px; left: -5px; }
+.sidebar-collapsed-backup:empty { display: none; }
+.sidebar-collapsed-backup .sidebar-backup-status { min-width: 22px; min-height: 22px; background: var(--mail-surface); }
+.sidebar-account-row:hover { background: var(--mail-surface-hover); }
+.sidebar-account-selected, .sidebar-account-selected:hover { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.sidebar-account-avatar { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; color: white; font-size: 11px; font-weight: 600; }
+.sidebar-account-label { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
+.sidebar-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.35; }
+.sidebar-account-address { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 1.35; color: var(--mail-text-muted); }
+.sidebar-account-selected .sidebar-account-address { color: var(--mail-accent-text); }
+.sidebar-account-indicators { display: flex; align-items: center; flex-shrink: 0; gap: 5px; }
+.sidebar-account-indicators:empty { display: none; }
+.sidebar-account-selected .sidebar-unread-count { background: transparent; color: inherit; }
+.sidebar-unified-row { gap: 10px; padding: 7px 8px; font-size: 13px; font-weight: 500; }
+.sidebar-unified-icon { display: flex; justify-content: center; width: 26px; flex-shrink: 0; }
+.sidebar-source-filter { display: grid; grid-template-columns: 1fr 1fr 1fr; align-items: stretch; gap: 2px; margin: 0 0 10px; padding: 3px; border-radius: 8px; background: var(--mail-bg); }
+.sidebar-source-filter button { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 32px; padding: 5px 3px; border-radius: 6px; color: var(--mail-text-muted); font-size: 12px; font-weight: 500; line-height: 1.35; }
+.sidebar-source-filter button svg { flex-shrink: 0; }
+.sidebar-source-filter button[aria-pressed="true"] { background: var(--mail-surface-hover); color: var(--mail-text); }
+.sidebar-source-filter button:hover { color: var(--mail-text); }
+.sidebar-connection-notice { margin: 0 2px 8px 42px; padding: 2px 0 4px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; }
+.sidebar-connection-notice p { display: flex; align-items: center; gap: 6px; margin: 0; }
+.sidebar-connection-notice p > svg { flex-shrink: 0; color: var(--mail-warning); }
+.sidebar-connection-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 0; }
+.sidebar-connection-actions > button { min-height: 28px; padding: 4px 0; }
+.sidebar-connection-actions > button + button { margin-left: 4px; }
+.sidebar-connection-notice .sidebar-cache-explanation { display: block; margin: 4px 0; overflow-wrap: anywhere; }
+.sidebar-footer { padding: 8px 12px 10px; border-top: 1px solid var(--mail-border); flex-shrink: 0; }
+.sidebar-footer-tools, .sidebar-footer-meta { display: flex; align-items: center; gap: 2px; }
+.sidebar-footer-meta { justify-content: space-between; margin-top: 2px; padding-left: 8px; }
+.sidebar-mail-count { display: flex; align-items: center; gap: 5px; color: var(--mail-text-muted); font-size: 11px; line-height: 1.5; }
+.sidebar-mail-count svg { flex-shrink: 0; }
+.sidebar-version { margin-top: 2px; color: var(--mail-text-muted); font-size: 11px; line-height: 1.5; }
+
+/* Alternate layouts keep the familiar account rows and reserve space for folders. */
+.sidebar-navigation-scroll[data-sidebar-layout="split"],
+.sidebar-navigation-scroll[data-sidebar-layout="switcher"] { display: flex; flex-direction: column; overflow: hidden; gap: 16px; scrollbar-gutter: auto; }
+.sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { display: flex; flex-direction: column; flex: 0 1 auto; min-height: 76px; max-height: 35%; }
+.sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-list { min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-top: 0; }
+.sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
+.sidebar-navigation-scroll .sidebar-section-heading, .sidebar-navigation-scroll .sidebar-source-filter, .sidebar-navigation-scroll .sidebar-find-field { flex-shrink: 0; }
+.sidebar-switcher-section { flex-shrink: 0; }
+.sidebar-account-switcher { display: flex; align-items: center; width: 100%; min-height: 48px; gap: 8px; padding: 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-account-switcher:hover, .sidebar-account-switcher[aria-expanded="true"] { background: var(--mail-surface-hover); }
+.sidebar-switcher-section .sidebar-connection-notice { margin: 8px 8px 0; }
+.sidebar-find-field { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 34px; margin: 0 0 10px; padding: 0 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); background: var(--mail-bg); }
+.sidebar-find-field svg { flex-shrink: 0; }
+.sidebar-find-field input { width: 100%; min-width: 0; min-height: 32px; border: 0; padding: 5px 0; color: var(--mail-text); background: transparent; font-size: 12px; line-height: 1.5; }
+.sidebar-find-field input::placeholder { color: var(--mail-text-muted); opacity: 1; }
+.sidebar-find-field:focus-within { outline: 2px solid var(--mail-accent); outline-offset: 2px; }
+.sidebar-find-field input:focus-visible { outline: none; }
+.sidebar-account-chooser { display: flex; flex-direction: column; gap: 0; max-width: calc(100vw - 16px); max-height: min(460px, calc(100vh - 16px)); padding: 10px; }
+.sidebar-chooser-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.sidebar-account-chooser .sidebar-account-name, .sidebar-account-chooser .sidebar-account-address { white-space: normal; overflow-wrap: anywhere; }
+.sidebar-account-chooser .sidebar-account-row { align-items: center; }
+.sidebar-chooser-footer { flex-shrink: 0; margin-top: 8px; border-top: 1px solid var(--mail-border); padding-top: 12px; }
+.sidebar-no-results { padding: 16px 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; }
+
+/* In exceptionally short browser windows, keep every folder reachable. */
+@media (max-height: 520px) {
+  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) { display: block; overflow-y: auto; }
+  .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { max-height: 160px; }
+  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 16px; }
+  .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: none; overflow: visible; }
+}

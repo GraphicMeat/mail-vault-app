@@ -205,6 +205,7 @@ const ROW_HEIGHT = 60;
 const CleanupRow = React.memo(function CleanupRow({
   item, isSelected, allCategories, onToggleSelect, onPreview, onCorrectCategory, onCorrectAction,
 }) {
+  const t = useT();
   const c = item.classification || item;
   const mid = item.messageId;
   return (
@@ -213,8 +214,14 @@ const CleanupRow = React.memo(function CleanupRow({
         isSelected ? 'border-mail-accent bg-mail-accent/5' : 'border-mail-border hover:bg-mail-surface-hover'
       }`}
       onClick={() => onPreview(item)}
+      role="button" tabIndex={0}
+      onKeyDown={event => {
+        if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+        event.preventDefault(); onPreview(item);
+      }}
     >
       <input
+        aria-label={t('workspace.selectMessage')}
         type="checkbox"
         checked={isSelected}
         onClick={(e) => e.stopPropagation()}
@@ -241,10 +248,11 @@ const CleanupRow = React.memo(function CleanupRow({
 
 // ── Exported Modal ────────────────────────────────────────────────────────
 
-export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
+export function CleanupView({ accountId, onDetailChange, onUpgrade, active = true }) {
   const t = useT();
   const priceBlurb = usePremiumPriceBlurb();
-  const activeAccountId = accountId || useAccountStore(s => s.activeAccountId);
+  const selectedAccountId = useAccountStore(s => s.activeAccountId);
+  const activeAccountId = accountId || selectedAccountId;
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const billingProfile = useSettingsStore(s => s.billingProfile);
   const customCategories = useSettingsStore(s => s.customCategories);
@@ -338,8 +346,9 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     return () => clearInterval(interval);
   }, [activeAccountId, load]);
 
-  // ESC to go back from preview
+  // Retain the preview while Settings is minimized; Escape belongs to mail.
   useEffect(() => {
+    if (!active || !previewItem) return;
     const handleKeyDown = (e) => {
       if (e.key === 'Escape' && previewItem) {
         e.preventDefault();
@@ -348,7 +357,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [previewItem]);
+  }, [active, previewItem]);
 
   const handleClassifyNow = async () => {
     if (!activeAccountId) return;

@@ -29,9 +29,9 @@ export function DaemonSettings() {
   useEffect(() => { checkConnection(); }, []);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       {/* Connection Status */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-4">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${connected ? 'bg-mail-success-tint' : connected === false ? 'bg-mail-danger-tint' : 'bg-mail-accent/10'}`}>
             {checking ? (

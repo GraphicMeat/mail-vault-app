@@ -1,4 +1,5 @@
 import { t } from '../i18n/index.js';
+import { formatTime, formatWeekdayShort } from '../utils/dateFormat.js';
 
 /**
  * The same three accounts and the same cast as every marketing screenshot
@@ -24,12 +25,26 @@ export const PREVIEW_ACCOUNTS = Object.freeze([
 // breaks `getByText` in the appearance-preview test, which relies on each
 // account name being unique in the rendered output.
 export function previewRows() {
+  const time = (hour, minute) => formatTime(new Date(2026, 1, 25, hour, minute));
+  const monday = formatWeekdayShort(new Date(2026, 1, 23));
+  const sunday = formatWeekdayShort(new Date(2026, 1, 22));
   return [
-    { id: 'p1', sender: 'Rack & Rind',      subject: t('preview.row1.subject'), snippet: t('preview.row1.snippet'), time: '09:12', unread: true },
-    { id: 'p2', sender: 'MeatPad',          subject: t('preview.row2.subject'), snippet: t('preview.row2.snippet'), time: '08:40', unread: true },
-    { id: 'p3', sender: 'Nell Okafor',      subject: t('preview.row3.subject'), snippet: t('preview.row3.snippet'), time: 'Mon',   unread: false },
-    { id: 'p4', sender: 'Priya Raines',     subject: t('preview.row4.subject'), snippet: t('preview.row4.snippet'), time: 'Mon',   unread: false },
-    { id: 'p5', sender: "Butcher's Ledger", subject: t('preview.row5.subject'), snippet: t('preview.row5.snippet'), time: 'Sun',   unread: false },
-    { id: 'p6', sender: 'MeatPad',          subject: t('preview.row6.subject'), snippet: t('preview.row6.snippet'), time: 'Sun',   unread: false },
+    { id: 'p1', sender: 'Rack & Rind',      subject: t('preview.row1.subject'), snippet: t('preview.row1.snippet'), time: time(9, 12), unread: true },
+    { id: 'p2', sender: 'MeatPad',          subject: t('preview.row2.subject'), snippet: t('preview.row2.snippet'), time: time(8, 40), unread: true },
+    { id: 'p3', sender: 'Nell Okafor',      subject: t('preview.row3.subject'), snippet: t('preview.row3.snippet'), time: monday, unread: false },
+    { id: 'p4', sender: 'Priya Raines',     subject: t('preview.row4.subject'), snippet: t('preview.row4.snippet'), time: monday, unread: false },
+    { id: 'p5', sender: "Butcher's Ledger", subject: t('preview.row5.subject'), snippet: t('preview.row5.snippet'), time: sunday, unread: false },
+    { id: 'p6', sender: 'MeatPad',          subject: t('preview.row6.subject'), snippet: t('preview.row6.snippet'), time: sunday, unread: false },
   ];
+}
+
+/** One coherent fictional thread, shared by the workspace and feature tour. */
+export function previewConversation() {
+  return ['question', 'answer', 'followup'].map((key, index) => ({
+    id: `preview-reply-${index}`,
+    sender: index === 1 ? 'Rowan' : 'Nell Okafor',
+    sent: index === 1,
+    text: t(`settings.preview.${key}`),
+    time: formatTime(new Date(2026, 1, 25, 13, 15 + index * 10)),
+  }));
 }

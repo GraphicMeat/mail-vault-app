@@ -82,7 +82,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
   return (
     <div
       data-testid="sender-header"
-      className="flex items-start gap-2 px-3 py-2.5 cursor-pointer"
+      className="email-sender-header flex items-start gap-3 px-3 py-2.5 cursor-pointer"
       onClick={(e) => {
         // Handled here either way: a thread wrapper folds the snippet line
         // below, and one click must not reach both.
@@ -93,16 +93,17 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
       }}
     >
       {/* Avatar — click opens Sender Details (parity with chat view) */}
-      <div
-        className="w-8 h-8 bg-mail-accent rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
+      <button
+        type="button" aria-label={t('email.sender.senderDetails')}
+        className="w-9 h-9 bg-mail-accent-tint text-mail-accent-text rounded-full flex items-center justify-center flex-shrink-0 cursor-pointer"
         onClick={openDetails}
         title={t('email.sender.senderDetails')}
       >
-        <span className="text-white font-semibold text-xs">{initial}</span>
-      </div>
+        <span className="font-semibold text-sm">{initial}</span>
+      </button>
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-2">
+        <div className="email-sender-main flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-1">
             {/* Sender name — click opens Sender Details (parity with chat
                 view). With no display name this line IS the address, and
@@ -134,7 +135,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
 
             {/* "via" mailing list indicator */}
             {listName && (
-              <span className="text-[10px] text-mail-text-muted italic flex-shrink-0">
+              <span className="text-xs text-mail-text-muted italic flex-shrink-0">
                 {t('email.viaList', { listName })}
               </span>
             )}
@@ -143,8 +144,8 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
             <button
               data-testid="sender-insights-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleInsights?.(); }}
-              className={`p-0.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
-              title={t('email.sender.senderInsights')}
+              className={`p-1.5 rounded transition-colors flex-shrink-0 ${showInsights ? 'text-mail-accent-text' : 'text-mail-text-muted hover:text-mail-text'}`}
+              title={t('email.sender.senderInsights')} aria-label={t('email.sender.senderInsights')}
             >
               <Info size={12} />
             </button>
@@ -152,7 +153,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
 
           {/* Timestamp + expand chevron */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="text-[10px] text-mail-text-muted">
+            <span className="text-xs text-mail-text-muted">
               {email.date ? formatDateTime(email.date) : ''}
             </span>
             <button
@@ -162,7 +163,7 @@ export const EmailSenderInfo = memo(function EmailSenderInfo({
               aria-label={expanded ? t('email.sender.hideDetails') : t('email.sender.showDetails')}
               title={expanded ? t('email.sender.hideDetails') : t('email.sender.showDetails')}
               onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
-              className="p-0.5 rounded text-mail-text-muted hover:text-mail-text transition-colors flex-shrink-0"
+              className="p-1.5 rounded text-mail-text-muted hover:text-mail-text transition-colors flex-shrink-0"
             >
               {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
             </button>

@@ -25,7 +25,7 @@ export function LinkSafetyModal({ alert, onOpenAnyway, onCancel }) {
       open={Boolean(alert)}
       onClose={onCancel}
       role="alertdialog"
-      closeLabel="Cancel"
+      closeLabel={t('common.cancel')}
       // The hairline carries the severity here: this is the one dialog whose
       // whole job is to say the link is not what it claims to be.
       panelBorder={isRed ? 'border-mail-danger' : 'border-mail-warning'}

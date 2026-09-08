@@ -114,10 +114,10 @@ export function ShortcutsModal({ onClose }) {
       padded={false}
       data-testid="shortcuts-modal"
       aria-labelledby={titleId}
-      panelClassName="overflow-hidden"
+      panelClassName="flex flex-col overflow-hidden"
     >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">
+        <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-mail-border">
           <h2 id={titleId} className="text-lg font-semibold text-mail-text flex items-center gap-2">
             <Keyboard size={20} className="text-mail-accent-text" />
             {t('shortcuts.keyboardShortcuts')}
@@ -128,7 +128,7 @@ export function ShortcutsModal({ onClose }) {
         </div>
 
         {/* Body */}
-        <div className="px-5 py-4 max-h-[70vh] overflow-y-auto">
+        <div className="px-5 py-4 min-h-0 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
             {CATEGORIES().map((category) => (
               <div key={category.title}>
@@ -150,7 +150,7 @@ export function ShortcutsModal({ onClose }) {
         </div>
 
         {/* Footer hint */}
-        <div className="px-5 py-3 border-t border-mail-border">
+        <div className="px-5 py-3 shrink-0 border-t border-mail-border">
           <p className="text-xs text-mail-text-muted text-center">
             {t('shortcuts.press')} <KeyBadge>?</KeyBadge> {t('shortcuts.togglePanel')}
           </p>

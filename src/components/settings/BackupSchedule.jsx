@@ -52,7 +52,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
   return (
     <div className="space-y-6">
       {/* Automatic Backup */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center justify-between mb-3">
           <div>
             <h4 className="font-semibold text-mail-text flex items-center gap-2">
@@ -66,7 +66,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
           {/* Free: the switch reads off because nothing runs — the per-account
               cards below carry the upsell. */}
           <ToggleSwitch
-            active={isPaidUser && backupGlobalEnabled}
+            label={t('settings.backup.schedule.automaticBackup')} active={isPaidUser && backupGlobalEnabled}
             onClick={isPaidUser ? () => setBackupGlobalEnabled(!backupGlobalEnabled) : undefined}
             disabled={!isPaidUser}
           />
@@ -81,7 +81,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
             </div>
             <div>
               <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.backup.schedule.backupFrequency')}</label>
-              <select
+              <select aria-label={t('settings.backup.schedule.backupFrequency')}
                 value={backupGlobalConfig.interval}
                 onChange={(e) => setBackupGlobalConfig(
                   // Switching into "at set hours" with nothing picked would never
@@ -116,7 +116,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                           setBackupGlobalConfig({ hours: next });
                         }}
                         className={`rounded-md px-2 py-1 text-xs tabular-nums transition-colors ${picked
-                          ? 'bg-mail-accent text-white hover:bg-mail-accent/90'
+                          ? 'bg-mail-accent-fill text-white hover:bg-mail-accent/90'
                           : 'bg-mail-bg border border-mail-border text-mail-text-muted hover:text-mail-text hover:border-mail-accent'}`}
                       >
                         {String(h).padStart(2, '0')}
@@ -193,7 +193,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
           />
         ))
       ) : (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">
+        <div className="settings-section text-center">
           <h4 className="font-semibold text-mail-text mb-2">{t('common.noAccountsConfigured')}</h4>
           <p className="text-sm text-mail-text-muted">
             {t('settings.backup.schedule.addEmailAccountFirstThen')}

@@ -50,12 +50,16 @@ export function SafetyAlertLegend({ compact = false, locale, showShots = false }
               </div>
             </div>
             {url && (
+              <details className="mt-3">
+                <summary className="text-xs text-mail-accent-text cursor-pointer w-fit rounded py-1">{t('safety.viewExample')}</summary>
               <img
+                loading="lazy"
                 src={url}
                 alt={t(a.titleKey, vars)}
                 data-testid={`safety-shot-${a.shot}`}
                 className="w-full mt-2 rounded-lg border border-mail-border"
               />
+              </details>
             )}
           </div>
         );

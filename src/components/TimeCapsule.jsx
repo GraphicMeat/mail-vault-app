@@ -25,7 +25,8 @@ const ROW_HEIGHT = 56;
 export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
   const t = useT();
   const store = useSnapshotStore();
-  const resolvedAccountId = accountId || useAccountStore(s => s.activeAccountId);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const resolvedAccountId = accountId || activeAccountId;
   const accounts = useAccountStore(s => s.accounts);
   const activeAccount = accounts.find(a => a.id === resolvedAccountId);
   const billingProfile = useSettingsStore(s => s.billingProfile);
@@ -60,7 +61,7 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
       {/* Sub-header for internal navigation */}
       {page !== 'list' && (
         <div className="flex items-center gap-2 px-6 py-2 border-b border-mail-border shrink-0">
-          <Button variant="ghost" icon size="sm"
+          <Button variant="ghost" icon size="sm" aria-label={t('common.back')}
             onClick={page === 'viewer' ? store.closeViewer : store.closeSnapshot}
           >
             <ChevronLeft size={18} className="text-mail-text-muted" />
@@ -91,6 +92,7 @@ export function TimeCapsuleView({ accountId, onDetailChange, onUpgrade }) {
             confirmDelete={confirmDelete}
             onOpen={fn => store.openSnapshot(resolvedAccountId, fn)}
             onCreate={handleCreate}
+            onRetry={() => store.loadSnapshots(resolvedAccountId)}
             onDelete={async fn => { await store.deleteSnapshot(resolvedAccountId, fn); setConfirmDelete(null); }}
             onConfirmDelete={setConfirmDelete}
             accountEmail={activeAccount?.email}
@@ -130,22 +132,22 @@ function PremiumGate({ onUpgrade }) {
 
 // ── Snapshot List ─────────────────────────────────────────────────────────
 
-function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onDelete, onConfirmDelete, accountEmail }) {
+function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onRetry, onDelete, onConfirmDelete, accountEmail }) {
   const t = useT();
   return (
-    <div className="p-6 space-y-6 overflow-y-auto h-full">
+    <div className="settings-form space-y-6 overflow-y-auto h-full">
       {/* Header card */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
             <h4 className="text-sm font-semibold text-mail-text">{t('timeCapsule.mailboxSnapshots')}</h4>
             <p className="text-xs text-mail-text-muted mt-0.5">
               {accountEmail ? t('timeCapsule.pointTimeRecords', { accountEmail }) : t('timeCapsule.selectAccountViewSnapshots')}
             </p>
           </div>
           <button
-            onClick={onCreate} disabled={creating}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent/90 disabled:opacity-50 transition-colors"
+            onClick={onCreate} disabled={creating || !accountEmail}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg bg-mail-accent-fill text-white hover:bg-mail-accent-hover disabled:opacity-50 transition-colors"
           >
             {creating ? <Loader size={14} className="animate-spin" /> : <Download size={14} />}
             {creating ? t('timeCapsule.creating') : t('timeCapsule.takeSnapshot')}
@@ -154,8 +156,9 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-mail-danger text-xs">
-          <AlertCircle size={14} className="shrink-0" />{error}
+        <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-mail-danger text-xs">
+          <AlertCircle size={14} className="shrink-0" /><span className="flex-1 min-w-0 break-words">{error}</span>
+          <Button size="sm" onClick={onRetry} disabled={loading}>{t('common.retry')}</Button>
         </div>
       )}
 
@@ -163,7 +166,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
         <div className="flex items-center justify-center py-16">
           <Loader size={20} className="animate-spin text-mail-text-muted" />
         </div>
-      ) : snapshots.length === 0 ? (
+      ) : snapshots.length === 0 && error ? null : snapshots.length === 0 ? (
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Calendar size={32} className="text-mail-text-muted mx-auto mb-3" />
           <p className="text-sm font-medium text-mail-text mb-1">{t('timeCapsule.noSnapshotsYet')}</p>
@@ -176,6 +179,11 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
               key={snap.filename}
               className="group bg-mail-surface border border-mail-border rounded-xl p-4 flex items-center justify-between hover:border-mail-accent/40 cursor-pointer transition-all"
               onClick={() => onOpen(snap.filename)}
+              role="button" tabIndex={0}
+              onKeyDown={event => {
+                if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+                event.preventDefault(); onOpen(snap.filename);
+              }}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center shrink-0">
@@ -188,14 +196,14 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
                   </p>
                 </div>
               </div>
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+              <div className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
                 {confirmDelete === snap.filename ? (
                   <div className="flex items-center gap-1">
                     <button onClick={() => onDelete(snap.filename)} className="px-2.5 py-1 text-xs font-medium text-mail-danger hover:bg-mail-danger/20 rounded-lg">{t('common.delete')}</button>
                     <button onClick={() => onConfirmDelete(null)} className="px-2.5 py-1 text-xs text-mail-text-muted hover:bg-mail-surface-hover rounded-lg">{t('common.cancel')}</button>
                   </div>
                 ) : (
-                  <button onClick={() => onConfirmDelete(snap.filename)} className="p-1.5 rounded-lg hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors">
+                  <button aria-label={t('common.delete')} onClick={() => onConfirmDelete(snap.filename)} className="p-2 rounded-lg hover:bg-mail-danger/20 text-mail-text-muted hover:text-mail-danger transition-colors">
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -248,16 +256,17 @@ function SnapshotBrowser({ accountId }) {
   }, [visibleItems, accountId, emails]);
 
   return (
-    <div className="flex h-full">
+    <div className="snapshot-browser flex h-full min-w-0">
       {/* Folder sidebar */}
-      <div className="w-48 bg-mail-surface border-r border-mail-border flex flex-col shrink-0">
+      <div className="snapshot-folders w-48 bg-mail-surface border-r border-mail-border flex flex-col shrink-0">
         <div className="p-3 border-b border-mail-border">
-          <p className="text-[11px] text-mail-text-muted">{activeSnapshot?.account_email}</p>
+          <p className="text-xs text-mail-text-muted break-words">{activeSnapshot?.account_email}</p>
         </div>
         <nav className="flex-1 p-2 overflow-y-auto">
           {mailboxList.map(({ name, totalEmails }) => (
             <button
               key={name}
+              aria-pressed={selectedMailbox === name}
               onClick={() => selectMailbox(name)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-colors mb-0.5 ${
                 selectedMailbox === name
@@ -267,14 +276,14 @@ function SnapshotBrowser({ accountId }) {
             >
               <MailboxIcon name={name} />
               <span className="text-sm font-medium flex-1 truncate">{mailboxLabel(name)}</span>
-              <span className="text-[11px] opacity-60">{totalEmails}</span>
+              <span className="text-xs">{totalEmails}</span>
             </button>
           ))}
         </nav>
       </div>
 
       {/* Email list */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 min-w-0 min-h-0 overflow-y-auto">
         {emails.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-sm text-mail-text-muted">{t('timeCapsule.noEmailsFolder')}</p>
@@ -357,7 +366,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       </div>
 
       {/* Email header */}
-      <div className="px-6 py-4 border-b border-mail-border shrink-0">
+      <div className="px-6 py-4 border-b border-mail-border shrink-0 max-h-[35vh] overflow-y-auto break-words">
         <h3 className="text-lg font-semibold text-mail-text mb-2">{email.subject || '(No subject)'}</h3>
         <div className="text-sm text-mail-text-muted space-y-0.5">
           <p><span className="text-mail-text-muted font-medium w-12 inline-block">{t('common.from')}</span> <span className="text-mail-text">{from}</span></p>
@@ -368,7 +377,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
       </div>
 
       {/* Email body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         {email.html ? (
           <EmailHtmlBody html={email.html} />
         ) : email.text || email.textBody ? (
@@ -380,7 +389,7 @@ function SnapshotViewer({ email, loading, accountId, mailbox }) {
 
       {/* Attachments — using real AttachmentItem for download support */}
       {email.attachments && email.attachments.length > 0 && (
-        <div className="px-6 py-3 border-t border-mail-border shrink-0">
+        <div className="px-6 py-3 border-t border-mail-border shrink-0 max-h-36 overflow-y-auto">
           <p className="text-xs text-mail-text-muted mb-2">{tr('common.attachmentCount', { count: email.attachments.length })}</p>
           <div className="flex flex-wrap gap-2">
             {email.attachments.map((att, i) => (

@@ -2,14 +2,14 @@
  * E2E Test: Settings Page Sections (UI-only)
  *
  * Verifies that key settings sections exist and basic interactions work:
- * - Undo Send toggle and delay dropdown
+ * - Sending delay and stay-awake warning
  * - Email Templates (create / delete)
  * - Notifications (master toggle and preview option)
  * - Keyboard Shortcuts section
- * - Storage tab with Auto-Cleanup and Pro badge
+ * - Storage tab with Auto-Cleanup and its Premium gate
  */
 
-import { waitForApp, openSettings, closeSettings, clickSettingsNav, pressKey } from './helpers.js';
+import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
 describe('Settings Page', function () {
   this.timeout(30000);
@@ -37,8 +37,8 @@ describe('Settings Page', function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
-      // Undo Send lives on the General tab's Behavior sub-tab now
-      await clickSettingsNav('Behavior');
+      expect(await clickSettingsNav('Mail preferences')).toBe(true);
+      expect(await clickSettingsNav('Behavior')).toBe(true);
     });
 
     after(async function () {
@@ -48,8 +48,8 @@ describe('Settings Page', function () {
     it('should have the Undo Send section', async function () {
       const found = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-undo-send"]');
-        if (section && section.offsetHeight > 0) return true;
-        return document.body.innerText.includes('Send Delay');
+        return !!section && section.offsetHeight > 0
+          && !!section.querySelector('select[aria-label="Send Delay"]');
       });
       expect(found).toBe(true);
     });
@@ -98,7 +98,7 @@ describe('Settings Page', function () {
       await openSettings();
       await browser.pause(300);
       // Templates moved to their own top-level tab
-      await clickSettingsNav('Templates');
+      expect(await clickSettingsNav('Templates')).toBe(true);
     });
 
     after(async function () {
@@ -225,8 +225,8 @@ describe('Settings Page', function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
-      await clickSettingsNav('General');
-      await clickSettingsNav('Notifications');
+      expect(await clickSettingsNav('Mail preferences')).toBe(true);
+      expect(await clickSettingsNav('Notifications')).toBe(true);
     });
 
     after(async function () {
@@ -236,19 +236,15 @@ describe('Settings Page', function () {
     it('should have the Notifications section with master toggle', async function () {
       const found = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-notifications"]');
-        if (section && section.offsetHeight > 0) {
-          return section.innerText.includes('Enable desktop notifications');
-        }
-        const text = document.body.innerText;
-        return text.includes('Notifications') &&
-               text.includes('Enable desktop notifications');
+        return !!section && section.offsetHeight > 0
+          && !!section.querySelector('[role="switch"][aria-label="Enable desktop notifications"]');
       });
       expect(found).toBe(true);
     });
 
     it('should have the email preview option', async function () {
       const found = await browser.execute(() => {
-        return document.body.innerText.includes('Show email preview');
+        return !!document.querySelector('[data-testid="settings-notifications"] [role="switch"][aria-label="Show email preview"]');
       });
       expect(found).toBe(true);
     });
@@ -259,8 +255,8 @@ describe('Settings Page', function () {
       if (!settingsAccessible) this.skip();
       await openSettings();
       await browser.pause(300);
-      await clickSettingsNav('General');
-      await clickSettingsNav('Keyboard Shortcuts');
+      expect(await clickSettingsNav('Mail preferences')).toBe(true);
+      expect(await clickSettingsNav('Keyboard Shortcuts')).toBe(true);
     });
 
     after(async function () {
@@ -268,7 +264,7 @@ describe('Settings Page', function () {
     });
 
     it('should have the Keyboard Shortcuts section', async function () {
-      // Scroll down to find it — it is further down in the General tab
+      // Keyboard Shortcuts has its own Mail preferences section.
       const found = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-shortcuts"]');
         if (section) {
@@ -336,21 +332,18 @@ describe('Settings Page', function () {
       expect(found).toBe(true);
     });
 
-    it('should show Premium badge on Auto-Cleanup for non-paid users', async function () {
-      const hasBadge = await browser.execute(() => {
+    it('should show the Premium gate instead of rule controls for non-paid users', async function () {
+      const gate = await browser.execute(() => {
         const section = document.querySelector('[data-testid="settings-auto-cleanup"]');
-        if (section) {
-          return section.innerText.includes('Premium');
-        }
-        const headings = document.querySelectorAll('h4');
-        for (const h of headings) {
-          if (h.textContent.includes('Auto-Cleanup')) {
-            return h.textContent.includes('Premium');
-          }
-        }
-        return false;
+        if (!section) return null;
+        return {
+          // innerText includes CSS text-transform (PREMIUM); textContent is
+          // the actual label and stays correct when its visual casing changes.
+          badge: section.querySelector('h4 span')?.textContent.trim() || '',
+          ruleControls: [...section.querySelectorAll('button')].some(button => button.textContent.trim() === 'Add Rule'),
+        };
       });
-      expect(hasBadge).toBe(true);
+      expect(gate).toEqual({ badge: 'Premium', ruleControls: false });
     });
   });
 });

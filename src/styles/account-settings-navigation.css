@@ -1,0 +1,80 @@
+.account-settings-layout .account-settings-detail {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.account-settings-detail > .settings-tabbed-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.account-settings-detail .settings-tabs { flex-shrink: 0; }
+.account-settings-detail [role="tabpanel"] { flex: 1; min-height: 0; overflow-y: auto; }
+.account-settings-detail .settings-section { background: transparent; border: 0; border-radius: 0; padding: 0; }
+.account-settings-detail .settings-section + .settings-section { padding-top: 24px; border-top: 1px solid var(--mail-border); }
+.account-settings-detail .settings-section > h4 { font-size: 18px; }
+
+.account-settings-identity {
+  flex-shrink: 0;
+  padding: 24px 28px 16px;
+  background: var(--mail-bg);
+}
+.account-settings-identity-line { display: flex; align-items: center; gap: 12px; }
+.account-settings-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+}
+.account-settings-identity-copy { min-width: 0; }
+.account-settings-identity h3 { color: var(--mail-text); font-size: 18px; line-height: 1.4; font-weight: 600; overflow-wrap: anywhere; }
+.account-settings-identity p { color: var(--mail-text-muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.account-settings-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 12px; font-size: 13px; line-height: 1.5; color: var(--mail-text-muted); }
+.account-settings-status > svg { flex-shrink: 0; }
+.account-settings-status > span { min-width: 0; }
+.account-settings-status > button { margin-left: auto; }
+.account-settings-status-error { color: var(--mail-warning); }
+.account-settings-section-intro { color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px; }
+
+.account-settings-account { border-radius: 8px; }
+.account-settings-account:hover { background: var(--mail-surface-hover); }
+.account-settings-account-selected, .account-settings-account-selected:hover { background: var(--mail-accent-tint); }
+.account-settings-account-selected .text-mail-text-muted { color: var(--mail-accent-text); }
+.account-settings-account-button { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 10px; text-align: left; border-radius: 8px; }
+.account-settings-order { display: flex; flex-direction: column; gap: 4px; }
+.account-settings-order > li { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; color: var(--mail-text); }
+.account-settings-order > li > span { min-width: 0; overflow-wrap: anywhere; }
+.account-settings-order [role="group"] { display: flex; margin-left: auto; flex-shrink: 0; gap: 4px; }
+.account-settings-order button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); }
+.account-settings-order button:hover:not(:disabled) { color: var(--mail-text); background: var(--mail-surface-hover); }
+.account-settings-order button:disabled { opacity: .4; }
+.account-settings-error-details { padding-bottom: 20px; border-bottom: 1px solid var(--mail-border); color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; }
+.account-settings-error-details summary { cursor: pointer; color: var(--mail-text); }
+.account-settings-error-details p { margin-top: 12px; overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .account-settings-identity { padding: 16px 20px 12px; }
+  .account-settings-detail .settings-section :where(.flex.items-center.justify-between) { flex-wrap: wrap; }
+  .account-settings-detail .settings-section code { overflow-wrap: anywhere; }
+}
+
+/* On short windows, the identity can scroll away so forms retain usable room. */
+@media (max-height: 650px) {
+  .account-settings-layout .account-settings-detail { overflow-y: auto; }
+  .account-settings-detail > .settings-tabbed-page { flex: none; min-height: auto; }
+  .account-settings-detail [role="tabpanel"] { flex: none; overflow: visible; }
+  .account-settings-identity { padding: 12px 20px; }
+  .account-settings-identity h3 { font-size: 18px; }
+  .account-settings-avatar { width: 28px; height: 28px; }
+  .account-settings-status { margin-top: 8px; }
+}

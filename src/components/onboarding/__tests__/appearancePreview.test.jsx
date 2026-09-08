@@ -4,6 +4,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, within } from '@testing-library/react';
+import { t } from '../../../i18n';
+import { getEmailColors } from '../../../utils/mailChrome';
 import { PREVIEW_ACCOUNTS } from '../../../data/previewMail.js';
 import { AppearancePreview } from '../AppearancePreview';
 
@@ -48,18 +50,35 @@ describe('appearance preview', () => {
     expect(order).toEqual(['preview-list', 'preview-pane-viewer']);
   });
 
-  it('swaps rows for bubbles in chat view', () => {
-    const { rerender } = render(<AppearancePreview {...base} />);
-    expect(screen.getByTestId('preview-list').dataset.view).toBe('list');
-    // Real markup, not just the echoed prop: inside the list/bubble pane, list
-    // rows show the sender name; chat bubbles show only the subject and never
-    // render a sender at all. (The three-column reading pane also shows
-    // rows[0].sender regardless of viewStyle, so this is scoped to the pane
-    // that actually swaps.)
-    expect(within(screen.getByTestId('preview-list')).getByText('Rack & Rind')).toBeTruthy();
-    rerender(<AppearancePreview {...base} viewStyle="chat" />);
-    expect(screen.getByTestId('preview-list').dataset.view).toBe('chat');
-    expect(within(screen.getByTestId('preview-list')).queryByText('Rack & Rind')).toBeNull();
+  it('shows message bodies in a full Chat topic instead of email columns', () => {
+    render(<AppearancePreview {...base} viewStyle="chat" />);
+    expect(screen.queryByTestId('preview-list')).toBeNull();
+    expect(screen.queryByTestId('preview-pane-viewer')).toBeNull();
+    const chat = within(screen.getByTestId('preview-chat'));
+    expect(chat.getByText(t('settings.preview.question'))).toBeTruthy();
+    expect(chat.getByText(t('settings.preview.answer'))).toBeTruthy();
+  });
+
+  it('demonstrates grouped, expanded and separate messages', () => {
+    const { rerender, container } = render(<AppearancePreview {...base} />);
+    expect(within(screen.getByTestId('preview-list')).getByText('Nell, Rowan')).toBeTruthy();
+    expect(container.querySelectorAll('.onboarding-sample-nested')).toHaveLength(0);
+    rerender(<AppearancePreview {...base} threadMode="expandable" />);
+    expect(container.querySelectorAll('.onboarding-sample-nested')).toHaveLength(3);
+    rerender(<AppearancePreview {...base} threadMode="flat" />);
+    expect(within(screen.getByTestId('preview-list')).queryByText('Nell, Rowan')).toBeNull();
+    expect(within(screen.getByTestId('preview-list')).getAllByText(t('settings.preview.subject'))).toHaveLength(3);
+  });
+
+  it('uses the real email palette and exposes everyday actions without interactive demo controls', () => {
+    const { container } = render(<AppearancePreview {...base} palette="graphite" theme="dark" />);
+    const body = container.querySelector('[data-email-theme]');
+    const swatch = document.createElement('div');
+    swatch.style.backgroundColor = getEmailColors('dark', 'graphite').background;
+    expect(body.style.backgroundColor).toBe(swatch.style.backgroundColor);
+    const actions = within(screen.getByTestId('preview-actions'));
+    for (const key of ['emailActionBar.move', 'emailActionBar.markUnread', 'emailActionBar.star', 'common.export']) expect(actions.getByRole('img', { name: t(key) })).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toHaveLength(0);
   });
 
   it('reports the sidebar style and density it was given', () => {

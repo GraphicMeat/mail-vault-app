@@ -77,7 +77,8 @@ const variants = [
 
 afterEach(cleanup);
 
-describe.each(variants)('%s selected background', (_name, renderRow) => {
+describe.each(variants)('%s selected background in hover mode', (_name, renderRow) => {
+  beforeEach(() => useSettingsStore.setState({ emailRowHighlight: 'hover' }));
   const row = (container) => container.querySelector('[data-testid="email-row"]');
 
   it('paints the accent tint when selected, and keeps the left border', () => {

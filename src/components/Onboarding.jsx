@@ -31,7 +31,9 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
   const finish = () => setOnboardingComplete(true);
 
   return (
-    <div className="relative h-screen bg-mail-bg flex items-center justify-center p-4 pt-8" data-testid={`onboarding-${step}`}>
+    <div className="onboarding-page" data-testid={`onboarding-${step}`}>
+      <div className="onboarding-content">
+      <header className="onboarding-header">
       {/* One back control for the whole flow rather than one per step: the six
           steps put Continue in six different places, and a control that moves
           between screens is one people stop trusting. Absent on the first step
@@ -42,7 +44,7 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
           onClick={back}
           data-testid="onboarding-back"
           aria-label={t('common.back')}
-          className="absolute top-4 left-4 flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs
+          className="flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs
                      text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors"
         >
           <ArrowLeft size={14} />
@@ -50,7 +52,10 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
         </button>
       )}
 
-      {step === 'splash' && <Splash onContinue={next} />}
+      <span className="ml-auto" role="status">{t('onboarding.progress', { current: index + 1, total: steps.length })}</span>
+      </header>
+      <div className="onboarding-step">
+      {step === 'splash'  && <Splash onContinue={next} />}
       {step === 'account' && <AccountStep onAdded={next} onSkip={next} />}
       {step === 'appearance' && <AppearanceStep onContinue={next} />}
       {step === 'defaultMail' && <DefaultMailStep onContinue={next} />}
@@ -73,6 +78,8 @@ export function Onboarding({ onOpenBilling, onOpenFaq }) {
           onOpenFaq={onOpenFaq}
         />
       )}
+      </div>
+      </div>
     </div>
   );
 }

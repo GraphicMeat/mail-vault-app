@@ -224,7 +224,7 @@ describe('threadMode', () => {
 });
 
 describe('emailRowHighlight', () => {
-  it('defaults to following the pointer — today’s behaviour', () => {
+  it('defaults to following the pointer', () => {
     expect(useSettingsStore.getState().emailRowHighlight).toBe('hover');
   });
 
@@ -234,7 +234,7 @@ describe('emailRowHighlight', () => {
     useSettingsStore.getState().setEmailRowHighlight('hover');
   });
 
-  it('resetSettings restores hover', () => {
+  it('resetSettings restores pointer highlighting', () => {
     useSettingsStore.getState().setEmailRowHighlight('selection');
     useSettingsStore.getState().resetSettings();
     expect(useSettingsStore.getState().emailRowHighlight).toBe('hover');
@@ -321,5 +321,44 @@ describe('_mergePersistedSettings (persist merge for keyboardShortcuts)', () => 
     const merged = _mergePersistedSettings(undefined, current);
 
     expect(merged.keyboardShortcuts).toEqual(DEFAULT_SHORTCUTS);
+  });
+});
+
+describe('sidebarLayout', () => {
+  it('keeps the current stacked navigation as the default and reset layout', () => {
+    expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');
+    useSettingsStore.getState().setSidebarLayout('split');
+    expect(useSettingsStore.getState().sidebarLayout).toBe('split');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');
+  });
+
+  it('accepts each alternative independently of folder style and normalizes invalid choices', () => {
+    useSettingsStore.getState().setSidebarStyle('tagcloud');
+    for (const layout of ['stacked', 'split', 'switcher']) {
+      useSettingsStore.getState().setSidebarLayout(layout);
+      expect(useSettingsStore.getState().sidebarLayout).toBe(layout);
+      expect(useSettingsStore.getState().sidebarStyle).toBe('tagcloud');
+    }
+    useSettingsStore.getState().setSidebarLayout('unknown');
+    expect(useSettingsStore.getState().sidebarLayout).toBe('stacked');
+    useSettingsStore.getState().setSidebarStyle('list');
+  });
+
+  it('writes a selected layout to the persisted settings', async () => {
+    const { safeStorage } = await import('../safeStorage');
+    useSettingsStore.getState().setSidebarLayout('switcher');
+    const persisted = JSON.parse(safeStorage.getItem('mailvault-settings'));
+    expect(persisted.state.sidebarLayout).toBe('switcher');
+    useSettingsStore.getState().setSidebarLayout('stacked');
+  });
+
+  it('restores saved layouts and preserves existing installations without the preference', () => {
+    const current = useSettingsStore.getState();
+    for (const layout of ['stacked', 'split', 'switcher']) {
+      expect(_mergePersistedSettings({ sidebarLayout: layout }, current).sidebarLayout).toBe(layout);
+    }
+    expect(_mergePersistedSettings({}, current).sidebarLayout).toBe('stacked');
+    expect(_mergePersistedSettings({ sidebarLayout: 'obsolete' }, current).sidebarLayout).toBe('stacked');
   });
 });

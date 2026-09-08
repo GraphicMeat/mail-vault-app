@@ -151,38 +151,56 @@ export async function pressSequence(key1, key2) {
 // ---------------------------------------------------------------------------
 
 /**
- * Open the Settings page and wait for it.
- *
- * Tries Meta+, (macOS shortcut) first, then clicks the sidebar gear. Presence is
- * decided by `[data-testid="settings-page"]` alone — a `[class*="settings"]`
- * match hits ordinary sidebar chrome, so it reports "open" over the mail view and
- * every later click lands on the wrong element.
- */
-/**
- * Click a settings navigation button by its exact visible label. Works for
- * top-level tabs ('Templates', 'Storage', 'Accounts', 'General') and the
- * General tab's sub-tabs ('Appearance', 'Behavior', 'Notifications',
- * 'Keyboard Shortcuts') — the settings restructure moved sections off the
- * old flat General page onto these.
+ * Navigate through the current Settings hierarchy using real controls.
+ * Legacy callers of General mean Mail preferences; its three sections can be
+ * requested directly. Appearance is an independent top-level destination.
  */
 export async function clickSettingsNav(label) {
-  const clicked = await browser.execute((wanted) => {
-    for (const btn of document.querySelectorAll('button')) {
-      if (btn.offsetHeight > 0 && btn.textContent.trim() === wanted) {
-        btn.click();
-        return true;
-      }
-    }
-    return false;
-  }, label);
-  await browser.pause(400);
-  return clicked;
+  const destination = label === 'General' ? 'Mail preferences' : label;
+  const navigate = async wanted => {
+    const kind = await browser.execute(name => {
+      const root = document.querySelector('[data-testid="settings-page"][role="dialog"]');
+      if (!root || root.closest('[hidden], [inert], [aria-hidden="true"]')) return null;
+      const visible = element => element && element.offsetHeight > 0
+        && getComputedStyle(element).visibility !== 'hidden';
+      const button = [...root.querySelectorAll('.settings-nav-item, [role="tab"]')]
+        .find(element => visible(element) && element.textContent.trim() === name);
+      if (button) { button.click(); return button.getAttribute('role') === 'tab' ? 'tab' : 'page'; }
+      // The same destinations move into a native select in narrow windows.
+      const select = root.querySelector('.settings-mobile-navigation select');
+      const option = visible(select) && [...select.options].find(item => item.textContent.trim() === name);
+      if (!option) return null;
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, option.value);
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'mobile';
+    }, wanted);
+    if (!kind) return false;
+    await browser.waitUntil(() => browser.execute((name, type) => {
+      const root = document.querySelector('[data-testid="settings-page"][role="dialog"]');
+      if (!root) return false;
+      if (type === 'mobile') return root.querySelector('.settings-mobile-navigation select')?.selectedOptions[0]?.textContent.trim() === name;
+      const selector = type === 'tab' ? '[role="tab"][aria-selected="true"]' : '.settings-nav-item[aria-current="page"]';
+      return [...root.querySelectorAll(selector)].some(element => element.textContent.trim() === name);
+    }, wanted, kind), { timeout: 5000, interval: 100, timeoutMsg: `Settings did not navigate to ${wanted}` });
+    return true;
+  };
+  if (['Behavior', 'Notifications', 'Keyboard Shortcuts'].includes(destination)) {
+    if (!(await navigate('Mail preferences'))) return false;
+  }
+  return navigate(destination);
 }
 
+/**
+ * Open or restore Settings via Meta+, then the sidebar gear if needed.
+ * A retained minimized panel still has size, so only a visible, non-inert
+ * `settings-page` with the active dialog role counts as open.
+ */
 export async function openSettings() {
   const isOpen = () => browser.execute(() => {
     const el = document.querySelector('[data-testid="settings-page"]');
-    return el !== null && el.offsetHeight > 0;
+    return el?.getAttribute('role') === 'dialog' && el.offsetHeight > 0
+      && !el.closest('[hidden], [inert], [aria-hidden="true"]')
+      && getComputedStyle(el).visibility !== 'hidden';
   });
 
   await browser.keys(['Meta', ',']);
@@ -233,9 +251,14 @@ export async function openSettings() {
 export async function closeSettings() {
   const isOpen = () => browser.execute(() => {
     const el = document.querySelector('[data-testid="settings-page"]');
-    return el !== null && el.offsetHeight > 0;
+    return el?.getAttribute('role') === 'dialog' && el.offsetHeight > 0
+      && !el.closest('[hidden], [inert], [aria-hidden="true"]')
+      && getComputedStyle(el).visibility !== 'hidden';
   });
 
+  // A minimized Settings session belongs to its bubble; Escape here would
+  // otherwise act on mail or another working surface underneath it.
+  if (!(await isOpen())) return;
   await pressKey('Escape');
   await browser.pause(300);
 
@@ -319,7 +342,7 @@ export const sidebarHasFolder = (name) => browser.execute((needle) =>
 
 /** The list header — the only thing that names the folder actually on screen. */
 export const folderHeaderText = () => browser.execute(() =>
-  document.querySelector('h2')?.textContent?.trim() || '');
+  document.querySelector('[data-testid="mailbox-title"]')?.textContent?.trim() || '');
 
 /**
  * Text of each row currently rendered. A virtualized list renders a window, so
@@ -404,7 +427,7 @@ async function switchToFolderOnce(email, folderName, { requireRows = true } = {}
   }
 
   if (!(await clickSidebarItem(folderName))) throw new Error(`No sidebar entry for folder "${folderName}" (${email})`);
-  await browser.waitUntil(async () => (await folderHeaderText()) === folderName, {
+  await browser.waitUntil(async () => (await folderHeaderText()).toLowerCase() === folderName.toLowerCase(), {
     timeout: 10_000, interval: 300, timeoutMsg: `Folder header never showed "${folderName}" after switching (${email})`,
   });
   if (wantAccountId) {

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useId } from 'react';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { useAccountStore } from '../stores/accountStore';
@@ -77,11 +78,12 @@ function RecipientField({ name, label, placeholder, value, onChange, setValue, t
     <div className="flex items-center gap-2 relative">
       <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{label}</label>
       <div className="flex-1 flex items-center gap-1">
-        <input
+        <input aria-label={label}
           ref={inputRef}
           type="text"
           name={name}
           data-testid={testid}
+          data-autofocus={name === 'to' ? true : undefined}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
@@ -132,6 +134,9 @@ const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files'
 
 export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
   const t = useT();
+  const titleId = useId();
+  // Compose owns Escape (minimize or discard); the shared hook owns focus.
+  const dialogRef = useDialogA11y(true);
   const rawAccounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   // Which mailbox the user is reading, which is who a fresh compose is from.
@@ -1192,8 +1197,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         data-testid="compose-modal"
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         data-dragging={dragging ? 'true' : 'false'}
-        className={`bg-mail-surface border rounded-xl
+        className={`compose-window bg-mail-surface border rounded-2xl
                    w-full max-w-4xl max-h-[90vh] h-[min(80vh,700px)] min-h-[320px] flex flex-col overflow-hidden
                    ${dragging ? 'border-mail-accent border-2' : 'border-mail-border'}`}
         onClick={(e) => e.stopPropagation()}
@@ -1212,7 +1221,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
-          <h2 className="font-semibold text-mail-text">{getTitle()}</h2>
+          <h2 id={titleId} className="font-semibold text-mail-text">{getTitle()}</h2>
           <div className="flex items-center gap-1">
             {onMinimize && (
               <Button variant="ghost" icon size="sm" className="hover:bg-mail-border"
@@ -1247,16 +1256,17 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               }
             }
           }}
-          className="flex-1 flex flex-col overflow-hidden"
+          className="flex-1 min-h-0 flex flex-col overflow-hidden"
         >
-          <div className="px-4 py-2 space-y-2 border-b border-mail-border">
+          <div className="compose-scroll">
+          <div className="compose-addresses px-5 py-3 space-y-1 border-b border-mail-border">
             {/* From — shown whenever there is a choice to make, which on a
                 single account means it has an override or a mined alias. */}
-            {identities.length > 1 && (
+            {identities.length > 0 && (
               <div className="flex items-center gap-2">
                 <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.from')}</label>
-                <div className="relative flex-1">
-                  <select
+                <div className="relative flex-1 min-w-0">
+                  <select aria-label={t('compose.from')}
                     data-testid="compose-from"
                     value={`${selectedAccountId} ${composeFrom}`}
                     onChange={(e) => {
@@ -1331,7 +1341,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             {/* Subject */}
             <div className="flex items-center gap-2">
               <label className="w-16 flex-shrink-0 text-sm text-mail-text-muted">{t('compose.subject2')}</label>
-              <input
+              <input aria-label={t('compose.subject2')}
                 type="text"
                 name="subject"
                 data-testid="compose-subject"
@@ -1347,7 +1357,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           
           {/* Attachments */}
           {attachments.length > 0 && (
-            <div data-testid="compose-attachments" className="px-4 py-2 border-b border-mail-border">
+            <div data-testid="compose-attachments" className="px-5 py-3 border-b border-mail-border shrink-0 max-h-32 overflow-y-auto">
               <div className="flex items-center gap-2 mb-2 text-sm text-mail-text-muted">
                 <Paperclip size={14} />
                 <span>{attachments.length} Attachment(s)</span>
@@ -1366,7 +1376,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           
           {/* Body — Rich Text Editor */}
           <div
-            className={`relative flex-1 overflow-hidden flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
+            className={`compose-editor relative flex-1 overflow-hidden flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
             data-testid="compose-body"
           >
             {dragging && (
@@ -1414,6 +1424,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               <button
                 type="button"
                 data-testid="compose-quoted-toggle"
+                aria-expanded={quotedExpanded}
                 onClick={() => setQuotedExpanded(prev => !prev)}
                 className="w-full flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted
                           hover:bg-mail-surface-hover transition-colors"
@@ -1438,15 +1449,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
           {/* Error */}
           {error && (
-            <div data-testid="compose-error"
+            <div data-testid="compose-error" role="alert"
                  className="px-4 py-2 bg-mail-danger/10 border-t border-mail-danger/20
                            text-mail-danger text-sm">
               {error}
             </div>
           )}
+          </div>
           
           {/* Footer */}
-          <div className="flex items-center justify-between px-4 py-3 border-t border-mail-border">
+          <div className="compose-footer flex items-center justify-between gap-3 px-5 py-3 border-t border-mail-border shrink-0">
             <div className="flex items-center gap-2">
               <input
                 type="file"
@@ -1500,6 +1512,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                       {savingTemplate ? (
                         <div className="flex items-center gap-1 p-2">
                           <input
+                            aria-label={t('compose.templateName')}
                             type="text"
                             data-testid="compose-template-name"
                             value={templateName}
@@ -1548,6 +1561,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 {t('common.discard')}
               </button>
               <select
+                aria-label={t('compose.sendDelay')}
                 data-testid="compose-delay"
                 value={composeDelay ?? globalSendDelay}
                 onChange={(e) => setComposeDelay(Number(e.target.value))}
@@ -1598,7 +1612,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         panelBg="bg-mail-surface"
         data-testid="compose-discard-dialog"
         title={t('compose.discardMessage')}
-        description="You have unsaved changes. This message will be permanently discarded."
+        description={t('compose.discardDescription')}
         footer={
           <div className="flex justify-end gap-2 w-full">
             <Button variant="ghost" onClick={() => setShowDiscardDialog(false)} data-autofocus>

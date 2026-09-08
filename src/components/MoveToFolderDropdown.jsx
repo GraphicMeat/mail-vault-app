@@ -140,6 +140,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder={t('moveTo.searchFolders')}
+            aria-label={t('moveTo.searchFolders')}
             className="bg-transparent text-sm text-mail-text placeholder:text-mail-text-muted outline-none w-full"
           />
         </div>

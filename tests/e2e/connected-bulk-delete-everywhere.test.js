@@ -108,7 +108,7 @@ describe('Bulk delete everywhere', function () {
     return m ? parseInt(m[1].replace(/,/g, ''), 10) : NaN;
   };
 
-  const folderHeaderText = () => browser.execute(() => document.querySelector('h2')?.textContent?.trim() || '');
+  const folderHeaderText = () => browser.execute(() => document.querySelector('[data-testid="mailbox-title"]')?.textContent?.trim() || '');
 
   /** Click the sidebar leaf (account email or folder name) matching exact text. */
   function clickSidebarItem(text) {

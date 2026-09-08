@@ -4,7 +4,7 @@ import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
 import { getOAuth2AuthUrl, exchangeOAuth2Code, testConnection, resolveEmailSettings } from '../services/api';
 import { isPersonalMicrosoftEmail } from '../services/graphConfig';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { X, Mail, Lock, Server, Eye, EyeOff, Check, AlertCircle, Loader, Wand2, Shield, ChevronRight } from 'lucide-react';
 import { describeConnectionError } from '../utils/connectionError';
 import { t as tr, t, useT   } from '../i18n/index.js';
@@ -201,17 +201,6 @@ export function AccountModal({ onClose, onSuccess }) {
       onClose();
     }
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  });
 
   const handleProviderSelect = (key) => {
     const config = key === 'custom'
@@ -520,11 +509,11 @@ export function AccountModal({ onClose, onSuccess }) {
     <Dialog
       open
       onClose={handleClose}
-      size="lg"
+      size={step === 1 ? 'xl' : 'lg'}
       padded={false}
       panelBg="bg-mail-surface"
       aria-labelledby={titleId}
-      panelClassName="overflow-hidden max-h-[90vh] flex flex-col"
+      panelClassName="account-setup-window overflow-hidden max-h-[90vh] flex flex-col"
     >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-mail-border">
@@ -543,6 +532,7 @@ export function AccountModal({ onClose, onSuccess }) {
               {Object.entries(PROVIDER_CONFIGS()).map(([key, config]) => (
                 <button
                   key={key}
+                  data-autofocus={key === 'gmail' ? true : undefined}
                   onClick={() => handleProviderSelect(key)}
                   className="flex items-center gap-3 p-3 rounded-xl border border-mail-border
                             hover:border-mail-accent/50 hover:bg-mail-surface-hover
@@ -553,7 +543,7 @@ export function AccountModal({ onClose, onSuccess }) {
                     <Mail size={18} className="text-mail-accent-text" />
                   </div>
                   <div className="min-w-0">
-                    <div className="font-medium text-mail-text text-sm truncate">{config.name}</div>
+                    <div className="font-medium text-mail-text text-sm">{config.name}</div>
                     <div className="text-xs text-mail-text-muted truncate">{config.imapHost}</div>
                   </div>
                 </button>
@@ -570,7 +560,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   <Server size={18} className="text-mail-accent-text" />
                 </div>
                 <div className="min-w-0">
-                  <div className="font-medium text-mail-text text-sm truncate">{t('account.otherCustom')}</div>
+                  <div className="font-medium text-mail-text text-sm">{t('account.otherCustom')}</div>
                   <div className="text-xs text-mail-text-muted truncate">{t('account.autoDetectManualConfig')}</div>
                 </div>
               </button>
@@ -620,9 +610,10 @@ export function AccountModal({ onClose, onSuccess }) {
                   </label>
                   <div className="relative">
                     <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
-                    <input
+                    <input aria-label={t('account.emailAddressRequired')}
                       type="email"
                       name="email"
+                      autoFocus
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder={t('account.outlookCom')}
@@ -683,6 +674,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <button
                         type="button"
                         onClick={() => setShowAdvanced(!showAdvanced)}
+                        aria-expanded={showAdvanced}
                         className="text-xs text-mail-text-muted hover:text-mail-text flex items-center gap-1"
                       >
                         <ChevronRight size={12} className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} />
@@ -692,6 +684,7 @@ export function AccountModal({ onClose, onSuccess }) {
                         <div className="mt-2 space-y-2">
                           <input
                             type="text"
+                            aria-label={t('account.customClientIdOptional')}
                             placeholder={t('account.customClientIdOptional')}
                             value={formData.oauth2CustomClientId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2CustomClientId: e.target.value }))}
@@ -699,6 +692,7 @@ export function AccountModal({ onClose, onSuccess }) {
                           />
                           <input
                             type="text"
+                            aria-label={t('account.tenantIdOptionalEG')}
                             placeholder={t('account.tenantIdOptionalEG')}
                             value={formData.oauth2TenantId}
                             onChange={e => setFormData(prev => ({ ...prev, oauth2TenantId: e.target.value }))}
@@ -730,7 +724,7 @@ export function AccountModal({ onClose, onSuccess }) {
                 <label className="block text-sm text-mail-text-muted mb-1.5">
                   {t('account.displayNameOptional')}
                 </label>
-                <input
+                <input aria-label={t('account.displayNameOptional')}
                   type="text"
                   name="name"
                   value={formData.name}
@@ -751,9 +745,10 @@ export function AccountModal({ onClose, onSuccess }) {
                   </label>
                   <div className="relative">
                     <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
-                    <input
+                    <input aria-label={isFastmail ? t('account.loginAddress') : t('account.emailAddress') + "*"}
                       type="email"
                       name="email"
+                      autoFocus
                       value={formData.email}
                       onChange={handleInputChange}
                       placeholder={isFastmail ? 'you@fastmail.com' : 'you@example.com'}
@@ -775,7 +770,7 @@ export function AccountModal({ onClose, onSuccess }) {
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-mail-text-muted" />
-                    <input
+                    <input aria-label={t('account.passwordRequired')}
                       type={showPassword ? 'text' : 'password'}
                       name="password"
                       value={formData.password}
@@ -790,6 +785,8 @@ export function AccountModal({ onClose, onSuccess }) {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
+                      aria-label={t(showPassword ? 'account.hidePassword' : 'account.showPassword')}
+                      aria-pressed={showPassword}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-mail-text-muted
                                 hover:text-mail-text transition-colors"
                     >
@@ -823,6 +820,12 @@ export function AccountModal({ onClose, onSuccess }) {
                 </button>
               )}
 
+              {provider === 'custom' && !showManualConfig && !detectedProvider && (
+                <Button variant="link" size="sm" onClick={() => setShowManualConfig(true)}>
+                  <ChevronRight size={14} />{t('account.enterManualSettings')}
+                </Button>
+              )}
+
               {/* Server Settings (for custom provider or after auto-detect) */}
               {(provider === 'custom' && (showManualConfig || detectedProvider)) && (
                 <>
@@ -838,7 +841,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <label className="block text-sm text-mail-text-muted mb-1.5">
                         {t('account.imapHostRequired')}
                       </label>
-                      <input
+                      <input aria-label={t('account.imapHostRequired')}
                         type="text"
                         name="imapHost"
                         value={formData.imapHost}
@@ -854,7 +857,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <label className="block text-sm text-mail-text-muted mb-1.5">
                         {t('account.imapPort')}
                       </label>
-                      <input
+                      <input aria-label={t('account.imapPort')}
                         type="number"
                         name="imapPort"
                         value={formData.imapPort}
@@ -869,7 +872,7 @@ export function AccountModal({ onClose, onSuccess }) {
                     <label className="block text-sm text-mail-text-muted mb-1.5">
                       {t('account.security')}
                     </label>
-                    <select
+                    <select aria-label={t('account.security')}
                       name="imapSecurity"
                       value={formData.imapSecurity}
                       onChange={handleSecurityChange}
@@ -887,7 +890,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <label className="block text-sm text-mail-text-muted mb-1.5">
                         {t('account.smtpHostRequired')}
                       </label>
-                      <input
+                      <input aria-label={t('account.smtpHostRequired')}
                         type="text"
                         name="smtpHost"
                         value={formData.smtpHost}
@@ -903,7 +906,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       <label className="block text-sm text-mail-text-muted mb-1.5">
                         {t('account.smtpPort')}
                       </label>
-                      <input
+                      <input aria-label={t('account.smtpPort')}
                         type="number"
                         name="smtpPort"
                         value={formData.smtpPort}
@@ -978,7 +981,7 @@ export function AccountModal({ onClose, onSuccess }) {
                       {t('account.connected')}
                     </>
                   ) : (
-                    'Add Account'
+                    t('settings.accounts.addAccount')
                   )}
                 </Button>
               </div>
@@ -986,38 +989,15 @@ export function AccountModal({ onClose, onSuccess }) {
           )}
         </div>
 
-        <AnimatePresence>
-          {showDiscardConfirm && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/40 flex items-center justify-center z-10 rounded-2xl"
-              onClick={() => setShowDiscardConfirm(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-mail-surface border border-mail-border rounded-xl p-6 mx-4 max-w-xs"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 className="text-base font-semibold text-mail-text mb-2">{t('account.discardChanges')}</h3>
-                <p className="text-sm text-mail-text-muted mb-4">
-                  {t('account.allEnteredDetailsWillLost')}
-                </p>
-                <div className="flex gap-3">
-                  <Button variant="subtle" size="sm" className="flex-1" onClick={() => setShowDiscardConfirm(false)}>
-                    {t('account.keepEditing')}
-                  </Button>
-                  <Button variant="danger" size="sm" className="flex-1" onClick={onClose}>
-                    {t('common.discard')}
-                  </Button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <Dialog open={showDiscardConfirm} onClose={() => setShowDiscardConfirm(false)} portal
+          role="alertdialog" size="sm" title={t('account.discardChanges')}
+          description={t('account.allEnteredDetailsWillLost')}
+          footer={<div className="flex gap-3 w-full">
+            <Button variant="secondary" className="flex-1" data-autofocus onClick={() => setShowDiscardConfirm(false)}>
+              {t('account.keepEditing')}
+            </Button>
+            <Button variant="danger" className="flex-1" onClick={onClose}>{t('common.discard')}</Button>
+          </div>} />
     </Dialog>
   );
 }

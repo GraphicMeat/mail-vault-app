@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 
 // Keep the real account facade: mocking it as a Zustand store hides this regression.
 vi.mock('../../../services/classificationService', () => ({
@@ -68,6 +68,25 @@ describe('Cleanup account reads', () => {
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
     expect(invoke).toHaveBeenCalledWith('maildir_read_light', { accountId: account.id, mailbox: 'INBOX', uid: 42 });
     expect(invoke).toHaveBeenCalledWith('imap_get_email_light', { account: updatedAccount, accountId: account.id, mailbox: 'INBOX', uid: 42 });
+  });
+
+
+  it('preserves a preview while inactive and leaves Escape to the mail view', async () => {
+    const onDetailChange = vi.fn();
+    const { rerender } = render(<CleanupView accountId={account.id} onDetailChange={onDetailChange} />);
+    fireEvent.click(await screen.findByText(item.subject));
+    const body = await screen.findByText('Fetched preview body');
+    expect(onDetailChange).toHaveBeenLastCalledWith(true);
+    rerender(<CleanupView accountId={account.id} onDetailChange={onDetailChange} active={false} />);
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    act(() => document.body.dispatchEvent(escape));
+    expect(escape.defaultPrevented).toBe(false);
+    expect(screen.getByText('Fetched preview body')).toBe(body);
+    expect(onDetailChange).toHaveBeenLastCalledWith(true);
+    rerender(<CleanupView accountId={account.id} onDetailChange={onDetailChange} active />);
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByText('Fetched preview body')).toBeNull();
+    expect(onDetailChange).toHaveBeenLastCalledWith(false);
   });
 
   it.each(['Archive', 'Delete'])('confirms and starts a selected %s operation', async action => {

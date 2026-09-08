@@ -23,6 +23,7 @@ import { UndoSendToast } from './components/UndoSendToast';
 import { UndoToast } from './components/UndoToast';
 import { OutboxTray } from './components/OutboxTray';
 import { RestoreTray } from './components/RestoreTray';
+import { SettingsBubble } from './components/settings/SettingsBubble';
 import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
@@ -42,6 +43,7 @@ import { useEmailScheduler } from './hooks/useEmailScheduler';
 import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { useSettingsWindow } from './hooks/useSettingsWindow';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
@@ -75,6 +77,7 @@ const ShortcutsModal = lazy(() => import('./components/ShortcutsModal').then(m =
 
 // Resizable divider component
 function ResizeDivider({ orientation, onResize, onResizeEnd }) {
+  const t = useT();
   const [isDragging, setIsDragging] = useState(false);
   const dividerRef = useRef(null);
 
@@ -107,10 +110,20 @@ function ResizeDivider({ orientation, onResize, onResizeEnd }) {
   return (
     <div
       ref={dividerRef}
+      role="separator" tabIndex={0} aria-orientation={orientation}
+      aria-label={t('workspace.resizePanes')}
+      onKeyDown={e => {
+        const keys = orientation === 'vertical' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
+        if (!keys.includes(e.key)) return;
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        onResize((orientation === 'vertical' ? rect.left : rect.top) + (e.key === keys[0] ? -20 : 20));
+        onResizeEnd?.();
+      }}
       onMouseDown={handleMouseDown}
       className={`
         ${orientation === 'vertical' ? 'w-1 cursor-col-resize' : 'h-1 cursor-row-resize'}
-        bg-mail-border hover:bg-mail-accent transition-colors flex-shrink-0
+        mail-pane-divider hover:bg-mail-accent transition-colors flex-shrink-0
         ${isDragging ? 'bg-mail-accent' : ''}
       `}
       style={{ touchAction: 'none' }}
@@ -290,9 +303,19 @@ function App() {
   const openSamples = useExportStore(s => s.openSamples);
   const closeSamples = useExportStore(s => s.closeSamples);
 
-  const [showSettings, setShowSettings] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState(null);
-  const [settingsInitialAccountId, setSettingsInitialAccountId] = useState(null);
+  const {
+    isOpen: showSettings,
+    isMounted: settingsMounted,
+    isMinimized: settingsMinimized,
+    request: settingsWindowRequest,
+    openSettings,
+    closeSettings,
+    minimizeSettings,
+  } = useSettingsWindow();
+  const [settingsLocation, setSettingsLocation] = useState('');
+  useEffect(() => {
+    if (!settingsMounted) setSettingsLocation('');
+  }, [settingsMounted]);
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   // A leaf asked for a Settings tab (the tracker glyph's upsell, from a row or
   // the reading pane). Consume the request so the same tab can be asked for
@@ -300,10 +323,9 @@ function App() {
   const settingsRequest = useMailStore(s => s.settingsRequest);
   useEffect(() => {
     if (!settingsRequest) return;
-    if (settingsRequest.tab) setSettingsInitialTab(settingsRequest.tab);
-    setShowSettings(true);
+    openSettings({ tab: settingsRequest.tab });
     useMailStore.getState().clearSettingsRequest();
-  }, [settingsRequest]);
+  }, [settingsRequest, openSettings]);
 
   const [showBugModal, setShowBugModal] = useState(false);
   const [initialized, setInitialized] = useState(false);
@@ -446,15 +468,18 @@ function App() {
       if (action === 'end-bulk-session') endBulkSession();
       else if (action === 'clear-selection') clearSelection();
       else if (action === 'close-compose') setComposeState(null);
-      else if (action === 'close-settings') setShowSettings(false);
+      else if (action === 'close-settings') closeSettings();
       else if (action === 'close-shortcuts') setShowShortcutsModal(false);
     },
     focusSearch: () => {
-      const input = document.querySelector('input[placeholder*="Search"]');
+      if ([...document.querySelectorAll('[role="dialog"]')].some(dialog =>
+        !dialog.closest('[hidden], [inert], [aria-hidden="true"]'))) return;
+      const input = document.querySelector('[data-testid="mail-search-input"]');
       if (input) input.focus();
+      else document.querySelector('[data-testid="mail-search-toggle"]')?.click();
     },
     showShortcuts: () => setShowShortcutsModal(prev => !prev),
-    openSettings: () => setShowSettings(true),
+    openSettings,
     moveToFolder: () => {
       const { selectedEmailIds, selectedEmailId } = useMailStore.getState();
       // Only open if there's something to move
@@ -610,14 +635,14 @@ function App() {
     let active = true;
     import('@tauri-apps/api/event').then(({ listen }) => {
       listen('open-settings', () => {
-        setShowSettings(true);
+        openSettings();
       }).then(fn => {
         if (!active) fn();
         else unlisten = fn;
       });
     }).catch(() => {});
     return () => { active = false; if (unlisten) unlisten(); };
-  }, []);
+  }, [openSettings]);
 
   // Listen for open-shortcuts event from native menu
   useEffect(() => {
@@ -795,7 +820,7 @@ function App() {
   if (!onboardingComplete) {
     return (
       <Onboarding
-        onOpenBilling={() => { setSettingsInitialTab('billing'); setShowSettings(true); }}
+        onOpenBilling={() => openSettings({ tab: 'billing' })}
         onOpenFaq={() => { openInBrowser(faqUrl(language)).catch(() => {}); }}
       />
     );
@@ -868,14 +893,14 @@ function App() {
           With no scrollbar the offset sticks and the sidebar and list end up
           off-screen for good. `clip` cannot scroll at all. */}
       <div className="flex-1 flex min-w-0 min-h-0 overflow-clip">
-      <div data-testid="sidebar">
+      <div data-testid="sidebar" className="shrink-0 min-h-0">
         <Sidebar
           onAddAccount={() => setShowAccountModal(true)}
           onCompose={() => setComposeState({})}
-          onOpenSettings={(tab) => { if (typeof tab === 'string') setSettingsInitialTab(tab); setShowSettings(true); }}
-          onOpenBackup={(accountId) => { setSettingsInitialTab('backup'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
-          onOpenAccounts={(accountId) => { setSettingsInitialTab('accounts'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
-          onOpenDataUsage={(accountId) => { setSettingsInitialTab('data-usage'); setSettingsInitialAccountId(accountId || null); setShowSettings(true); }}
+          onOpenSettings={(tab) => openSettings(typeof tab === 'string' ? { tab } : undefined)}
+          onOpenBackup={(accountId) => openSettings({ tab: 'backup', accountId })}
+          onOpenAccounts={(accountId, section) => openSettings({ tab: 'accounts', accountId, section })}
+          onOpenDataUsage={(accountId) => openSettings({ tab: 'data-usage', accountId })}
           onReportBug={handleReportBug}
           onReferFriend={handleReferFriend}
         />
@@ -904,7 +929,7 @@ function App() {
               style={listPaneStyle}
               className={`flex-shrink-0 min-h-0 flex flex-col ${layoutMode === 'three-column' ? 'border-r border-mail-border' : 'border-b border-mail-border'}`}
             >
-              <EmailList />
+              <EmailList stacked={layoutMode === 'two-column'} />
             </div>
 
             {/* Divider and reader. Both stand down in the stacked layout while
@@ -957,9 +982,10 @@ function App() {
       </Suspense>
       </ChunkErrorBoundary>
 
-      {/* Minimized compose bubbles — stacked top-right */}
-      {composeWindows.filter(w => w.minimized).length > 0 && (
+      {/* Minimized windows share one stack so their restore buttons never overlap. */}
+      {(settingsMinimized || composeWindows.some(w => w.minimized)) && (
         <div className="fixed top-16 right-4 z-40 flex flex-col gap-2">
+          {settingsMinimized && <SettingsBubble location={settingsLocation} onRestore={openSettings} onClose={closeSettings} />}
           {composeWindows.filter(w => w.minimized).map(w => {
             const subject = w.initialData?.subject || w.replyTo?.subject || '';
             const displaySubject = w.mode === 'reply' || w.mode === 'replyAll'
@@ -1009,8 +1035,17 @@ function App() {
       <ChunkErrorBoundary name="Settings">
       <Suspense fallback={null}>
         <AnimatePresence>
-          {showSettings && (
-            <SettingsPage onClose={() => { setShowSettings(false); setSettingsInitialTab(null); setSettingsInitialAccountId(null); }} onAddAccount={() => { setShowSettings(false); setShowAccountModal(true); }} onReportBug={handleReportBug} initialTab={settingsInitialTab} initialAccountId={settingsInitialAccountId} />
+          {settingsMounted && (
+            <SettingsPage key={settingsWindowRequest.id}
+              minimized={settingsMinimized}
+              onMinimize={minimizeSettings}
+              onClose={closeSettings}
+              onAddAccount={() => { closeSettings(); setShowAccountModal(true); }}
+              onReportBug={handleReportBug}
+              onNavigationLabelChange={setSettingsLocation}
+              initialTab={settingsWindowRequest.tab}
+              initialAccountId={settingsWindowRequest.accountId}
+              initialSection={settingsWindowRequest.section} />
           )}
         </AnimatePresence>
       </Suspense>
@@ -1035,17 +1070,17 @@ function App() {
 
       <SelectionActionBar />
       <BulkSaveProgress />
-      <MigrationToast showSettings={showSettings} onOpenSettings={() => { setSettingsInitialTab('migration'); setShowSettings(true); }} />
+      <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
       <KeychainToast
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
-        onOpenAccounts={() => { setSettingsInitialTab('accounts'); setShowSettings(true); }}
+        onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <UndoToast />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
-      <ShareUnlockModal onSubscribe={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
-      <BackupUpsellModal onUpgrade={() => { setSettingsInitialTab('billing'); setShowSettings(true); }} />
+      <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
+      <BackupUpsellModal onUpgrade={() => openSettings({ tab: 'billing' })} />
 
       {/* Export — one dialog and one upsell for all four entry points */}
       <ExportDialog
@@ -1054,13 +1089,13 @@ function App() {
         account={exportTarget?.account}
         mailbox={exportTarget?.mailbox}
         onClose={closeExport}
-        onUpgrade={() => { closeExport(); setSettingsInitialTab('billing'); setShowSettings(true); }}
+        onUpgrade={() => { closeExport(); openSettings({ tab: 'billing' }); }}
         onShowSamples={() => { closeExport(); openSamples(); }}
       />
       <ExportUpsellModal
         open={showExportSamples}
         onClose={closeSamples}
-        onUpgrade={() => { closeSamples(); setSettingsInitialTab('billing'); setShowSettings(true); }}
+        onUpgrade={() => { closeSamples(); openSettings({ tab: 'billing' }); }}
       />
       <RestoreModal />
       <ChangeServerModal />

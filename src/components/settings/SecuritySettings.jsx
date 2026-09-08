@@ -17,12 +17,12 @@ export function SecuritySettings() {
   const setLinkSafetyClickConfirm = useSettingsStore(s => s.setLinkSafetyClickConfirm);
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center gap-2 mb-2">
-        <Shield size={18} className="text-mail-accent-text" />
-      </div>
-
-      <div className="space-y-4">
+    <div className="settings-form space-y-6">
+      <section className="settings-section">
+        <h4 className="flex items-center gap-2 font-semibold text-mail-text mb-5">
+          <Shield size={18} className="text-mail-accent-text" />{t('settings.tab.security')}
+        </h4>
+      <div className="space-y-5">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-sm font-medium text-mail-text">{t('settings.security.linkSafetyScanning')}</div>
@@ -30,7 +30,7 @@ export function SecuritySettings() {
               {t('settings.security.detectSuspiciousLinksEmailsDon')}
             </div>
           </div>
-          <ToggleSwitch active={linkSafetyEnabled} onClick={() => setLinkSafetyEnabled(!linkSafetyEnabled)} />
+          <ToggleSwitch label={t('settings.security.linkSafetyScanning')} active={linkSafetyEnabled} onClick={() => setLinkSafetyEnabled(!linkSafetyEnabled)} />
         </div>
 
         <div className="flex items-center justify-between">
@@ -40,9 +40,11 @@ export function SecuritySettings() {
               {t('settings.security.showWarningModalBeforeOpening')}
             </div>
           </div>
-          <ToggleSwitch active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
+          <ToggleSwitch label={t('settings.security.clickConfirmation')} active={linkSafetyClickConfirm} onClick={() => setLinkSafetyClickConfirm(!linkSafetyClickConfirm)} />
         </div>
       </div>
+
+      </section>
 
       {/* Every mark the app can put on a message, with the screenshot of the
           alert it opens. This used to be two lines covering only the LINK
@@ -52,7 +54,7 @@ export function SecuritySettings() {
       <div className="pt-4 border-t border-mail-border">
         <h4 className="text-sm font-medium text-mail-text mb-2">{t('settings.security.howWorks')}</h4>
         <SafetyAlertLegend locale={locale} showShots />
-        <p className="mt-3 text-xs text-mail-text-muted/70">
+        <p className="mt-3 text-xs text-mail-text-muted">
           {t('settings.security.allScanningPerformedLocallyDevice')}
         </p>
       </div>

@@ -54,7 +54,7 @@ function StarToggle({ email, actions, size }) {
       aria-pressed={!!isFlagged}
       aria-label={label}
       title={label}
-      className={`shrink-0 p-0.5 rounded press ${isFlagged ? '' : 'invisible group-hover:visible'}`}
+      className={`shrink-0 p-0.5 rounded press ${isFlagged ? '' : 'invisible group-hover:visible group-focus-within:visible'}`}
       onClick={(e) => { e.stopPropagation(); actions.toggleFlagged?.(selectionKey(email, useMailStore.getState())); }}
     >
       <Star size={size} className={isFlagged ? 'text-amber-400 fill-amber-400' : 'text-mail-text-muted hover:text-amber-400'} />
@@ -114,7 +114,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
           type="checkbox"
           checked={isChecked}
           onChange={() => {}}
-          className="custom-checkbox"
+          aria-label={t('workspace.selectMessage')} className="custom-checkbox"
         />
       </div>
 
@@ -127,7 +127,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         now sit after the name. The name span truncates instead, which is what
         was meant all along.
       */}
-      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
         {unifiedInbox && email._accountEmail && (
           <span
             data-testid="account-dot"
@@ -171,7 +171,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         </span>
       </div>
 
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
           <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleSave}
@@ -238,7 +238,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       onClick={() => onSelect(email.uid, email.source, email._mailbox)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
-        <input type="checkbox" checked={isChecked} onChange={() => {}} className="custom-checkbox" />
+        <input type="checkbox" checked={isChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
       </div>
 
       {/* Source icon */}
@@ -258,7 +258,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
               title={email._accountEmail}
             />
           )}
-          <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+          <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(getSenderName(email))}
           </span>
           <StarToggle email={email} actions={actions} size={13} />
@@ -284,7 +284,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       </div>
 
       {/* Hover actions */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         {!email.isArchived && (
           <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleSave} disabled={isSaving} title={t('common.archive')}>
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />

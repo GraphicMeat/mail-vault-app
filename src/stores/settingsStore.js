@@ -76,7 +76,8 @@ export const DEFAULT_SHORTCUTS = {
   undo: 'Meta+z',
 };
 
-// Shallow, EXCEPT the shortcut map: a persisted object replaces the default
+// Persisted preferences override defaults; sidebar layouts reject invalid values.
+// Merge the shortcut map: a persisted object otherwise replaces the default
 // whole, so every binding added after a user's first launch would be missing
 // for them for ever (rendered "—", firing nothing). A binding the user
 // cleared is stored as an empty string, not dropped, so it survives this
@@ -84,9 +85,12 @@ export const DEFAULT_SHORTCUTS = {
 //
 // Exported (test-only name) so a spec can exercise the shortcut-merge
 // behaviour directly, without standing up zustand/persist's storage plumbing.
+const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
+
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
+  sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -228,7 +232,7 @@ export const useSettingsStore = create(
       // Layout settings
       layoutMode: 'three-column', // 'three-column' | 'two-column'
       viewStyle: 'list', // 'list' | 'chat'
-      emailListStyle: 'default', // 'default' | 'compact'
+      emailListStyle: 'compact', // 'default' | 'compact'
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
@@ -243,16 +247,17 @@ export const useSettingsStore = create(
       // the store already holds still repaints. Not meaningful across restarts.
       localeEpoch: 0,
       signatureDisplay: 'smart', // 'smart' | 'always-show' | 'always-hide' | 'collapsed'
-      actionButtonDisplay: 'icon-only', // 'icon-only' | 'icon-label' | 'text-only'
+      actionButtonDisplay: 'icon-label', // 'icon-only' | 'icon-label' | 'text-only'
       emailViewerTheme: 'system', // 'light' | 'dark' | 'system' — default theme for email content rendering
       sidebarCollapsed: false, // Whether sidebar is in compact/collapsed mode
-      sidebarAccountsRatio: 0.4, // Ratio of accounts section height vs total available (0.2 - 0.8)
-      sidebarStyle: 'list', // 'list' | 'tagcloud' — render accounts & folders as list rows or wrapped bubble tags
+      sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
+      sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
+      sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
       // Which folders are open in the sidebar tree, per account. Session state
       // lost the whole expansion on every account switch, which on a five-level
       // server means re-opening four folders to get back where you were.
       expandedFolders: {}, // { [accountId]: string[] } — server paths
-      listPaneSize: 350, // Width of the email list in three-column
+      listPaneSize: 420, // Width of the email list in three-column
       // Height of the email list when the panes are stacked. Separate from the
       // width above: one number read on two axes let a legal list width become
       // a list height that pushed the reading pane off the bottom of the window.
@@ -731,6 +736,7 @@ export const useSettingsStore = create(
       toggleSidebarCollapsed: () => set(state => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
       setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
+      setSidebarLayout: (layout) => set({ sidebarLayout: normalizeSidebarLayout(layout) }),
       setExpandedFolders: (accountId, paths) => set(state => ({
         expandedFolders: { ...state.expandedFolders, [accountId]: [...paths] },
       })),
@@ -914,7 +920,7 @@ export const useSettingsStore = create(
           updateTrack: null,
           layoutMode: 'three-column',
           viewStyle: 'list',
-          emailListStyle: 'default',
+          emailListStyle: 'compact',
           emailListGrouping: 'chronological',
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
@@ -924,12 +930,13 @@ export const useSettingsStore = create(
           customDateFormat: '',
           timeFormat: 'auto',
           signatureDisplay: 'smart',
-          actionButtonDisplay: 'icon-only',
+          actionButtonDisplay: 'icon-label',
           emailViewerTheme: 'system',
           sidebarCollapsed: false,
           sidebarStyle: 'list',
+          sidebarLayout: 'stacked',
           expandedFolders: {},
-          listPaneSize: 350,
+          listPaneSize: 420,
           listPaneHeight: 320,
           viewerPaneSize: 50,
           onboardingComplete: false,

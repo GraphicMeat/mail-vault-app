@@ -158,7 +158,7 @@ export function UpdateModal({ updateInfo, onClose }) {
       size="lg"
       padded={false}
       aria-labelledby={titleId}
-      panelClassName="overflow-hidden"
+      panelClassName="overflow-y-auto"
     >
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-mail-border">

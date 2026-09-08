@@ -251,11 +251,12 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
       * { box-sizing: border-box; }
       html, body {
         margin: 0;
-        padding: 16px;
+        padding: 0;
         background: #ffffff;
         color: #333333;
       }
       body {
+        padding: 24px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
         font-size: 14px;
         line-height: 1.6;
@@ -264,6 +265,7 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
         overflow-x: hidden;
         max-width: 100%;
       }
+      @media (max-width: 480px) { body { padding: 16px; } }
       img { max-width: 100%; height: auto; }
       * { overflow-wrap: break-word; word-wrap: break-word; }
       ${tableCss}

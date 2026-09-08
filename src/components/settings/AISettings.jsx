@@ -80,7 +80,7 @@ export function AISettings() {
 
   if (!isPremium) {
     return (
-      <div className="p-6">
+      <div className="settings-form">
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-mail-text mb-2">{t('settings.ai.aiFeaturesRequirePremium')}</h3>
@@ -94,7 +94,7 @@ export function AISettings() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       {error && (
         <div className="p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-xs text-mail-danger flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
@@ -104,7 +104,7 @@ export function AISettings() {
       )}
 
       {/* How It Works */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Info size={20} className="text-mail-accent-text" />
@@ -123,7 +123,7 @@ export function AISettings() {
       </div>
 
       {/* Learned Rules */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
@@ -152,15 +152,15 @@ export function AISettings() {
           <div className="grid grid-cols-3 gap-2 mb-4">
             <div className="p-2.5 rounded-lg bg-mail-surface-hover text-center">
               <p className="text-lg font-bold text-mail-text">{stats.rulesCount}</p>
-              <p className="text-[10px] text-mail-text-muted">{t('settings.ai.rules')}</p>
+              <p className="text-xs text-mail-text-muted">{t('settings.ai.rules')}</p>
             </div>
             <div className="p-2.5 rounded-lg bg-mail-surface-hover text-center">
               <p className="text-lg font-bold text-mail-text">{stats.correctionsCount || 0}</p>
-              <p className="text-[10px] text-mail-text-muted">{t('settings.ai.corrections')}</p>
+              <p className="text-xs text-mail-text-muted">{t('settings.ai.corrections')}</p>
             </div>
             <div className="p-2.5 rounded-lg bg-mail-surface-hover text-center">
-              <p className="text-lg font-bold text-mail-text">{stats.accuracyRate ? `${Math.round(stats.accuracyRate * 100)}%` : '--'}</p>
-              <p className="text-[10px] text-mail-text-muted">{t('settings.ai.accuracy')}</p>
+              <p className="text-lg font-bold text-mail-text">{stats.totalClassified > 0 && Number.isFinite(stats.accuracyRate) ? `${Math.round(stats.accuracyRate * 100)}%` : '—'}</p>
+              <p className="text-xs text-mail-text-muted">{t('settings.ai.accuracy')}</p>
             </div>
           </div>
         )}
@@ -196,7 +196,7 @@ export function AISettings() {
                     <span className="font-medium text-mail-text">{rule.pattern?.fromDomain || rule.pattern?.fromAddress || rule.pattern?.subjectContains || '?'}</span>
                     <span className="text-mail-text-muted">&rarr; {rule.category || rule.action}</span>
                     {rule.source === 'imported' && (
-                      <span className="text-[10px] px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">{t('settings.ai.imported')}</span>
+                      <span className="text-xs px-1 py-0.5 rounded bg-mail-surface-hover text-mail-text-muted">{t('settings.ai.imported')}</span>
                     )}
                   </div>
                   <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20 hover:text-mail-danger"
@@ -209,32 +209,32 @@ export function AISettings() {
                   <div className="px-3 pb-3 pt-1 border-t border-mail-border space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.domain')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.domain')}</span>
                         <input value={editForm.fromDomain} onChange={e => setEditForm(f => ({ ...f, fromDomain: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.exampleCom')} />
                       </label>
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.address')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.address')}</span>
                         <input value={editForm.fromAddress} onChange={e => setEditForm(f => ({ ...f, fromAddress: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.userExampleCom')} />
                       </label>
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
                         <input value={editForm.subjectContains} onChange={e => setEditForm(f => ({ ...f, subjectContains: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.keyword')} />
                       </label>
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.bodyContains')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.bodyContains')}</span>
                         <input value={editForm.bodyContains} onChange={e => setEditForm(f => ({ ...f, bodyContains: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.keyword')} />
                       </label>
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.category')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.category')}</span>
                         <input value={editForm.category} onChange={e => setEditForm(f => ({ ...f, category: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" />
                       </label>
                       <label className="space-y-0.5">
-                        <span className="text-[10px] text-mail-text-muted">{t('settings.ai.action')}</span>
+                        <span className="text-xs text-mail-text-muted">{t('settings.ai.action')}</span>
                         <select value={editForm.action} onChange={e => setEditForm(f => ({ ...f, action: e.target.value }))}
                           className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text">
                           <option value="keep">{t('settings.ai.keep')}</option>
@@ -273,7 +273,7 @@ export function AISettings() {
       </div>
 
       {/* Custom Categories */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Sparkles size={20} className="text-mail-accent-text" />
@@ -334,7 +334,7 @@ export function AISettings() {
           setNewRuleForm({ domain: '', address: '', subject: '' });
         }} className="space-y-2">
           <div className="flex gap-2">
-            <input
+            <input aria-label={t('settings.ai.customCategories')}
               name="categoryName"
               type="text"
               placeholder={t('settings.ai.newCategoryName')}
@@ -360,17 +360,17 @@ export function AISettings() {
           {newCategoryRule && (
             <div className="grid grid-cols-3 gap-2 p-3 rounded-lg bg-mail-surface-hover border border-mail-border">
               <label className="space-y-0.5">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.ai.senderDomain')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.ai.senderDomain')}</span>
                 <input value={newRuleForm.domain} onChange={e => setNewRuleForm(f => ({ ...f, domain: e.target.value }))}
                   className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.bookingCom')} />
               </label>
               <label className="space-y-0.5">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.ai.senderAddress')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.ai.senderAddress')}</span>
                 <input value={newRuleForm.address} onChange={e => setNewRuleForm(f => ({ ...f, address: e.target.value }))}
                   className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.noreply')} />
               </label>
               <label className="space-y-0.5">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.ai.subjectContains')}</span>
                 <input value={newRuleForm.subject} onChange={e => setNewRuleForm(f => ({ ...f, subject: e.target.value }))}
                   className="w-full px-2 py-1 text-xs rounded border border-mail-border bg-mail-bg text-mail-text" placeholder={t('settings.ai.keyword')} />
               </label>

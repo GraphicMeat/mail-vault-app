@@ -41,17 +41,17 @@ export function LogsSettings() {
   }, []);
 
   return (
-    <div className="p-6 space-y-6 h-full flex flex-col">
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex-1 flex flex-col min-h-0">
-        <div className="flex items-center justify-between mb-4">
+    <div className="settings-form space-y-6 h-full flex flex-col">
+      <div className="settings-section flex-1 flex flex-col min-h-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
           <h4 className="font-semibold text-mail-text flex items-center gap-2">
             <ScrollText size={18} className="text-mail-accent-text" />
             {t('settings.logs.applicationLogs')}
           </h4>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={loadLogs}
-              disabled={loadingLogs}
+              disabled={loadingLogs || !invoke}
               className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text
                         hover:bg-mail-border rounded-lg transition-colors flex items-center gap-2"
             >
@@ -155,7 +155,7 @@ export function LogsSettings() {
                   setLoadingLogs(false);
                 }
               }}
-              disabled={loadingLogs}
+              disabled={loadingLogs || !invoke}
               className="px-3 py-1.5 text-sm text-mail-danger hover:text-mail-danger
                         hover:bg-mail-danger/10 rounded-lg transition-colors flex items-center gap-2"
             >

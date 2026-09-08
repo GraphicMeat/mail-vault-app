@@ -34,6 +34,7 @@ vi.mock('@tanstack/react-virtual', () => ({
         })),
       getTotalSize: () => config.count * (config.estimateSize?.() ?? 56),
       scrollToIndex: vi.fn(),
+      measure: vi.fn(),
     };
   }),
 }));
@@ -887,20 +888,15 @@ describe('thread modes', () => {
     expect(container.querySelector('[data-thread-count]')).toBeNull();
   });
 
-  it('header button cycles grouped → expandable → flat → grouped', async () => {
+  it('header selector lets users choose each conversation mode directly', async () => {
     await mount('grouped');
     const { useSettingsStore } = await import('../../stores/settingsStore');
-    const btn = screen.getByTestId('thread-mode-toggle');
-    expect(btn.getAttribute('data-thread-mode')).toBe('grouped');
-    fireEvent.click(btn);
-    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('expandable');
-    useSettingsStore.setState({ threadMode: 'expandable' });
-    cleanup(); await mount('expandable');
-    fireEvent.click(screen.getByTestId('thread-mode-toggle'));
-    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('flat');
-    cleanup(); await mount('flat');
-    fireEvent.click(screen.getByTestId('thread-mode-toggle'));
-    expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith('grouped');
+    const select = screen.getByRole('combobox', { name: 'Conversations' });
+    expect(select.value).toBe('grouped');
+    for (const value of ['flat', 'expandable', 'grouped']) {
+      fireEvent.change(select, { target: { value } });
+      expect(useSettingsStore.getState().setThreadMode).toHaveBeenLastCalledWith(value);
+    }
   });
 
   it('header button is hidden while the list is grouped by sender', async () => {

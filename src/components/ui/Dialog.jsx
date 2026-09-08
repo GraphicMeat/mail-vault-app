@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { useDialogA11y } from '../../hooks/useDialogA11y';
 import { Z } from './layers';
+import { useT } from '../../i18n';
 
 /**
  * The app's modal dialog.
@@ -20,6 +21,8 @@ import { Z } from './layers';
  * border.
  *
  * @param {boolean} open
+ * @param {boolean} [keepMounted=false] retain a minimized working surface's
+ *                                     forms and scroll containers while inert
  * @param {Function} onClose            backdrop click, Escape, and the X
  * @param {string}   [title]            renders the header and the close button
  * @param {React.ReactNode} [description] sets `aria-describedby`
@@ -55,6 +58,7 @@ const SIZES = {
 
 export function Dialog({
   open,
+  keepMounted = false,
   onClose,
   title,
   description,
@@ -67,19 +71,20 @@ export function Dialog({
   portal = false,
   panelBg = 'bg-mail-bg',
   panelBorder = 'border-mail-border',
-  closeLabel = 'Close',
+  closeLabel,
   z = Z.dialog,
   className = '',
   panelClassName = '',
   children,
   ...rest
 }) {
+  const t = useT();
   const titleId = useId();
   const descId = useId();
   const dismiss = dismissable ? onClose : undefined;
-  const panelRef = useDialogA11y(open, dismiss);
+  const panelRef = useDialogA11y(open, dismiss, { preventScroll: keepMounted });
 
-  if (!open) return null;
+  if (!open && !keepMounted) return null;
 
   const isFull = size === 'full' || size === 'custom';
   // A caller-sized panel lays itself out (Settings is a flex row, the full
@@ -91,6 +96,11 @@ export function Dialog({
     <AnimatePresence>
       <div
         className={`fixed inset-0 ${z} flex items-center justify-center ${isFull ? '' : 'p-4'} ${className}`}
+        /* Retain layout as well as React state: display:none can discard
+           nested scroll positions. The inactive surface cannot receive input. */
+        style={open ? undefined : { visibility: 'hidden', pointerEvents: 'none' }}
+        inert={open ? undefined : ''}
+        aria-hidden={open ? undefined : true}
         onClick={dismiss}
       >
         <motion.div
@@ -103,8 +113,8 @@ export function Dialog({
 
         <motion.div
           ref={panelRef}
-          role={role}
-          aria-modal="true"
+          role={open ? role : undefined}
+          aria-modal={open ? true : undefined}
           aria-labelledby={title ? titleId : undefined}
           aria-describedby={description ? descId : undefined}
           initial={{ opacity: 0, scale: 0.95 }}
@@ -113,7 +123,7 @@ export function Dialog({
           /* A sized panel never outgrows the window: it stops at the
              container's padding and scrolls, instead of losing its footer
              below the bottom edge on a short window. */
-          className={`relative ${SIZES[size]} ${isFull ? '' : `max-w-[92vw] max-h-full overflow-y-auto rounded-2xl ${isPadded ? 'p-6' : ''}`} ${panelBg} border ${panelBorder} ${panelClassName}`}
+          className={`mail-dialog relative min-w-0 ${SIZES[size]} ${isFull ? '' : `max-h-full overflow-y-auto rounded-2xl ${isPadded ? 'p-6' : ''}`} ${panelBg} border ${panelBorder} ${panelClassName}`}
           onClick={e => e.stopPropagation()}
           {...rest}
         >
@@ -123,8 +133,8 @@ export function Dialog({
                 type="button"
                 onClick={onClose}
                 disabled={!dismissable}
-                aria-label={closeLabel}
-                className="absolute top-4 right-4 p-1 rounded-lg text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
+                aria-label={closeLabel || t('common.close')}
+                className="absolute top-4 right-4 p-2 rounded-lg text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover transition-colors disabled:opacity-50"
               >
                 <X size={18} />
               </button>
@@ -150,7 +160,7 @@ export function Dialog({
             </div>
           )}
 
-          {footer && <div className="flex gap-3 mt-6">{footer}</div>}
+          {footer && <div className="flex flex-wrap gap-3 mt-6">{footer}</div>}
         </motion.div>
       </div>
     </AnimatePresence>

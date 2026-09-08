@@ -34,7 +34,7 @@ const LOCATION_OPTIONS = [
   { id: 'local', labelKey: 'search.location.vault', icon: HardDrive },
 ];
 
-export function SearchBar() {
+export function SearchBar({ autoFocus = false }) {
   const t = useT();
   const searchQuery = useSearchStore(s => s.searchQuery);
   const searchFilters = useSearchStore(s => s.searchFilters);
@@ -208,6 +208,7 @@ export function SearchBar() {
 
           <input
             ref={inputRef}
+            data-testid="mail-search-input" autoFocus={autoFocus} aria-label={t('search.searchEmails')}
             type="text"
             value={localQuery}
             onChange={(e) => setLocalQuery(e.target.value)}

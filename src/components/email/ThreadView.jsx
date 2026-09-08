@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { useMailStore } from '../../stores/mailStore';
 import { useMessageListStore } from '../../stores/messageListStore';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -34,7 +34,7 @@ import { emailScopeKey } from '../../stores/slices/unifiedHelpers';
 import { getSenderName, threadRowMembers } from '../../utils/emailParser';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { LinkAlertIcon } from '../LinkAlertIcon';
-import { MAIL_DARK_BG, MAIL_DARK_TEXT } from '../../utils/mailChrome';
+import { getEmailColors } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
 import { ConnectedStateIcon } from './MessageStateIcon';
@@ -54,8 +54,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
   const appTheme = useThemeStore(s => s.theme);
+  const palette = useThemeStore(s => s.palette);
   const theme = effectiveTheme ?? appTheme;
   const isDark = theme === 'dark';
+  const emailColors = getEmailColors(theme, palette);
 
   const { newContent, quotedContent } = useMemo(
     () => splitQuotedContent(loadedEmail?.text || loadedEmail?.textBody || ''),
@@ -97,7 +99,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     }
     // Light baseline; DR inlined when dark so it runs during load —
     // no post-load injection race, no flash on theme toggle.
-    const extraHead = `${isDark ? getDarkReaderInlineScripts() : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    const extraHead = `${isDark ? getDarkReaderInlineScripts({ palette }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: theme,
@@ -105,7 +107,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
-  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme]);
+  }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
 
   // The thread is a second reader of the same body: what it finds has to reach
   // the row, or the glyph means "you opened this in the reading pane".
@@ -203,7 +205,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       {loadedEmail.html ? (
         <div
           className="rounded-lg overflow-hidden mt-2 max-w-full"
-          style={{ backgroundColor: isDark ? MAIL_DARK_BG : '#ffffff' }}
+          style={{ backgroundColor: emailColors.background }}
         >
           <iframe
             ref={iframeRef}
@@ -216,10 +218,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
         </div>
       ) : (
         <div
-          className="email-content whitespace-pre-wrap mt-2 text-sm break-words overflow-hidden rounded-lg p-3"
+          className="email-content email-plain-body whitespace-pre-wrap mt-2 text-sm break-words overflow-hidden rounded-lg"
           style={{
-            backgroundColor: isDark ? MAIL_DARK_BG : '#ffffff',
-            color: isDark ? MAIL_DARK_TEXT : '#333333',
+            backgroundColor: emailColors.background,
+            color: emailColors.text,
           }}
         >
           <AddressText text={bodyWithoutSig || 'No content'} accountId={email?._accountId} />
@@ -290,6 +292,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
   const [showInsights, setShowInsights] = useState(false);
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const appTheme = useThemeStore(s => s.theme);
+  const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
   // Default: user preference ('light'|'dark') or follow app theme.
   const defaultEmailTheme = emailViewerTheme === 'system' ? appTheme : emailViewerTheme;
@@ -405,7 +408,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts() : '',
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette }) : '',
               });
               invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });
             }}
@@ -572,11 +575,19 @@ export function ThreadView({ thread, onComposeReply }) {
     setExpandedMessages({});
     setSelectedMessage(null);
   }, [threadId]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     virtualizer.measure();
+    // measure() clears the size cache. An expanded message can keep exactly
+    // the same height across layouts, so ResizeObserver won't report it again.
+    // Rebuild the estimated positions, then restore every mounted row's real
+    // height before painting or scrolling. Otherwise later rows overlap it.
+    virtualizer.getTotalSize();
+    scrollContainerRef.current?.querySelectorAll('[data-index]').forEach(node => {
+      virtualizer.measureElement(node);
+    });
     const index = sortedEmails.findIndex(email => emailKey(email) === newestKey);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: 'start' });
-  }, [threadId, threadSortOrder, readerLayout, newestKey]);
+  }, [threadId, threadSortOrder, readerLayout, newestKey, virtualizer]);
 
   // Archive All acts on the part of the thread that lives in the folder on
   // screen — the same rule as the row's archive button (see threadRowMembers).

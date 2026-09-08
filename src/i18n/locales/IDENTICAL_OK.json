@@ -66,6 +66,7 @@
   "settings.ai.noreply",
   "settings.ai.userExampleCom",
   "settings.appearance.layout",
+  "settings.appearance.section.layout",
   "settings.appearance.threadMode",
   "settings.backup.account.b",
   "settings.backup.account.gb",
@@ -86,6 +87,8 @@
   "settings.cleanup.notification",
   "settings.cleanup.personal",
   "settings.cleanup.spam",
+  "settings.colors.graphite",
+  "settings.colors.indigo",
   "settings.daemon.versionAndDataDir",
   "settings.dataUsage.account.download",
   "settings.dataUsage.account.upload",
@@ -112,6 +115,7 @@
   "settings.tracking.mailtrackerblocker",
   "settings.tracking.newsMailerExampleCom",
   "settings.tracking.uglyEmail",
+  "sidebar.details",
   "sidebar.mail",
   "sidebar.mailvaultVersion",
   "sidebar.offline",
@@ -142,5 +146,10 @@
   "util.exportSampleData.brisketSansLicenceRenews4",
   "util.exportSampleData.pressSlotFriday0600",
   "util.exportSampleData.rePressSlotFriday06",
-  "util.imapUtf7.bokelmHle"
+  "util.imapUtf7.bokelmHle",
+  "workspace.chatView",
+  "workspace.conversations",
+  "workspace.emailView",
+  "workspace.messages",
+  "workspace.threads"
 ]

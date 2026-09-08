@@ -61,6 +61,23 @@ describe('useKeyboardShortcuts — typing targets', () => {
     expect(handlers.escape).toHaveBeenCalledTimes(1);
   });
 
+  it('leaves native select navigation and type-ahead to the control', () => {
+    const select = document.createElement('select');
+    document.body.appendChild(select);
+    press(select, 'c');
+    press(select, '/');
+    expect(handlers.compose).not.toHaveBeenCalled();
+    expect(handlers.focusSearch).not.toHaveBeenCalled();
+  });
+
+  it('does not repeat a key already handled by a focused control', () => {
+    const control = document.createElement('button');
+    document.body.appendChild(control);
+    control.addEventListener('keydown', event => event.preventDefault());
+    control.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true, cancelable: true }));
+    expect(handlers.compose).not.toHaveBeenCalled();
+  });
+
   it('plain letter shortcuts stay blocked while typing', () => {
     const input = document.createElement('input');
     document.body.appendChild(input);

@@ -4,6 +4,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
 import DataUsageAccountCard from './DataUsageAccountCard';
 import { ToggleSwitch } from './ToggleSwitch';
+import { Button } from '../ui/Button';
 import { useT } from '../../i18n/index.js';
 
 const REFRESH_MS = 30_000;
@@ -24,6 +25,7 @@ export default function DataUsageSettings({ initialAccountId }) {
   const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
 
   const refresh = useCallback(() => {
+    setLoading(true);
     api.getTransferStats()
       .then(res => { setStats(res?.accounts || {}); setError(null); })
       .catch(e => setError(typeof e === 'string' ? e : e.message || 'Could not load transfer stats'))
@@ -52,20 +54,21 @@ export default function DataUsageSettings({ initialAccountId }) {
   }, [initialAccountId]);
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="settings-form space-y-6">
       {error && (
-        <div className="text-xs text-mail-warning bg-mail-warning/10 border border-mail-warning/20 rounded-lg p-3">
-          {error}
+        <div role="alert" className="flex items-center justify-between gap-4 text-sm text-mail-warning bg-mail-warning-tint border border-mail-warning/20 rounded-lg p-4">
+          <div><p className="font-medium">{t('settings.dataUsage.loadFailed')}</p><p className="text-xs mt-1 break-words">{error}</p></div>
+          <Button size="sm" disabled={loading} onClick={refresh}>{t('common.retry')}</Button>
         </div>
       )}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex items-center justify-between gap-4">
+      <div className="settings-section flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className="text-sm font-medium text-mail-text">{t('settings.dataUsage.showUsageHover')}</div>
           <div className="text-xs text-mail-text-muted mt-0.5">
             {t('settings.dataUsage.hoveringAccountSidebarShowsIts')}
           </div>
         </div>
-        <ToggleSwitch active={transferHoverEnabled !== false} onClick={() => setTransferHoverEnabled(transferHoverEnabled === false)} />
+        <ToggleSwitch label={t('settings.dataUsage.showUsageHover')} active={transferHoverEnabled !== false} onClick={() => setTransferHoverEnabled(transferHoverEnabled === false)} />
       </div>
 
       {visibleAccounts.length > 0 ? (
@@ -76,11 +79,12 @@ export default function DataUsageSettings({ initialAccountId }) {
             account={account}
             stats={stats?.[account.id]}
             loading={loading}
+            unavailable={!!error && !stats}
             highlighted={highlightedId === account.id}
           />
         ))
       ) : (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5 text-center">
+        <div className="settings-section text-center">
           <h4 className="font-semibold text-mail-text mb-2">{t('common.noAccountsConfigured')}</h4>
           <p className="text-sm text-mail-text-muted">{t('settings.dataUsage.addEmailAccountFirstSee')}</p>
         </div>

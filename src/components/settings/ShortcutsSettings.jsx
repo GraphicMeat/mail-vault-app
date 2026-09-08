@@ -4,7 +4,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { Keyboard, ChevronUp, ChevronDown, RotateCcw } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
 
-export function ShortcutsSettings() {
+export function ShortcutsSettings({ active = true }) {
   const t = useT();
   const {
     keyboardShortcuts,
@@ -20,6 +20,15 @@ export function ShortcutsSettings() {
 
   // Keyboard shortcut rebind listener
   useEffect(() => {
+    // Minimized Settings retains this form, but must not record keys typed
+    // in mail or commit the first key of an unfinished sequence.
+    if (!active) {
+      setRebindingAction(null);
+      setRebindFirstKey(null);
+      if (rebindTimer) clearTimeout(rebindTimer);
+      setRebindTimer(null);
+      return;
+    }
     if (!rebindingAction) return;
 
     const handleRebindKey = (e) => {
@@ -78,7 +87,7 @@ export function ShortcutsSettings() {
       window.removeEventListener('keydown', handleRebindKey, true);
       if (rebindTimer) clearTimeout(rebindTimer);
     };
-  }, [rebindingAction, rebindFirstKey, rebindTimer, setKeyboardShortcut]);
+  }, [active, rebindingAction, rebindFirstKey, rebindTimer, setKeyboardShortcut]);
 
   // Helper: find duplicate bindings
   const findDuplicateBinding = (action, binding) => {
@@ -136,7 +145,7 @@ export function ShortcutsSettings() {
   return (
     <>
       {/* Keyboard Shortcuts */}
-      <div data-testid="settings-shortcuts" className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div data-testid="settings-shortcuts" className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Keyboard size={18} className="text-mail-accent-text" />
           {t('settings.shortcuts.keyboardShortcuts')}
@@ -156,7 +165,7 @@ export function ShortcutsSettings() {
               </div>
             </div>
             <ToggleSwitch
-              active={keyboardShortcutsEnabled}
+              label={t('settings.shortcuts.enableKeyboardShortcuts')} active={keyboardShortcutsEnabled}
               onClick={() => setKeyboardShortcutsEnabled(!keyboardShortcutsEnabled)}
             />
           </div>
@@ -193,6 +202,8 @@ export function ShortcutsSettings() {
                               </span>
                             )}
                             <button
+                              aria-label={`${SHORTCUT_ACTION_LABELS[action] || action}: ${isRebinding ? t('settings.shortcuts.pressKeyU2026') : formatKeybindingDisplay(binding)}`}
+                              aria-pressed={isRebinding}
                               onClick={() => {
                                 if (isRebinding) {
                                   setRebindingAction(null);
@@ -222,6 +233,7 @@ export function ShortcutsSettings() {
                             {isModified && !isRebinding && (
                               <button
                                 onClick={() => setKeyboardShortcut(action, defaultBinding)}
+                                aria-label={`${t('common.resetToDefault')}: ${SHORTCUT_ACTION_LABELS[action] || action}`}
                                 className="p-1 text-mail-text-muted hover:text-mail-text rounded transition-colors"
                                 title={t('common.resetToDefault')}
                               >

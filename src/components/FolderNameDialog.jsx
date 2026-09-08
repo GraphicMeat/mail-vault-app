@@ -31,13 +31,14 @@ export function FolderNameDialog({ open, title, initial = '', confirmLabel, onSu
       size="sm"
       footer={
         <>
-          <Button variant="secondary" fullWidth onClick={onClose}>{t('common.cancel')}</Button>
-          <Button variant="primary" fullWidth disabled={!name.trim()} onClick={submit}>{confirmLabel}</Button>
+          <Button variant="secondary" className="flex-1" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button variant="primary" className="flex-1" disabled={!name.trim()} onClick={submit}>{confirmLabel}</Button>
         </>
       }
     >
       <input
         autoFocus
+        data-autofocus
         type="text"
         data-testid="folder-name-input"
         aria-label={t('sidebar.folderName')}

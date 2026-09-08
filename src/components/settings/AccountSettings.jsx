@@ -11,6 +11,8 @@ import { isFastmailAccount } from '../AccountModal.jsx';
 import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
+import { SettingsTabs } from './SettingsTabs';
+import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
 import { Toast } from '../Toast';
 import {
@@ -20,14 +22,12 @@ import {
   Shield,
   Check,
   Trash2,
-  ChevronRight,
   ChevronUp,
   ChevronDown,
   Loader,
   RefreshCw,
   Key,
-  Link,
-  Unlink,
+  AlertCircle,
   Plus,
   Eye,
   EyeOff,
@@ -55,9 +55,9 @@ function SavedBadge({ visible }) {
   );
 }
 
-export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
+export function AccountSettings({ accounts, onAddAccount, initialAccountId, initialSection = 'profile', onSectionChange }) {
   const t = useT();
-  const { removeAccount } = useAccountStore();
+  const { removeAccount, activeAccountId, activeMailbox, connectionStatus, connectionError, connectionErrorType, activateAccount } = useAccountStore();
   const {
     signatures,
     setSignature,
@@ -80,6 +80,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   } = useSettingsStore();
 
   const [selectedAccountId, setSelectedAccountId] = useState(initialAccountId || accounts[0]?.id || null);
+  const [section, setSection] = useState(['profile', 'connection', 'advanced'].includes(initialSection) ? initialSection : 'profile');
+  const panelRef = useRef(null);
   const [signatureHtml, setSignatureHtml] = useState('');
   const [accountDisplayName, setAccountDisplayName] = useState('');
   const [sendAs, setSendAs] = useState('');
@@ -92,7 +94,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   const [editingPassword, setEditingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [oauthReconnecting, setOauthReconnecting] = useState(false);
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(null);
   const [billingWarning, setBillingWarning] = useState(null);
   const [accountMailboxes, setAccountMailboxes] = useState([]);
   const [sentOverride, setSentOverride] = useState('');
@@ -101,9 +103,47 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
 
   const orderedAccounts = getOrderedAccounts(accounts);
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+  const isActiveAccount = selectedAccountId === activeAccountId;
+  const hasConnectionError = isActiveAccount && connectionStatus === 'error';
+  const needsSignIn = hasConnectionError && ['passwordMissing', 'oauthExpired'].includes(connectionErrorType);
+  const needsPassword = needsSignIn && selectedAccount?.authType !== 'oauth2';
+  const isHidden = !!hiddenAccounts[selectedAccountId];
+  const statusLabel = isHidden ? t('settings.accounts.accountHidden')
+    : needsPassword ? t('settings.accounts.passwordRequired')
+    : needsSignIn ? t('settings.accounts.reconnectRequired')
+    : hasConnectionError ? t(connectionErrorType === 'offline' ? 'sidebar.noInternet'
+      : connectionErrorType === 'timeout' ? 'sidebar.timedOut'
+      : connectionErrorType === 'outlookOAuth' ? 'sidebar.microsoftIssue'
+      : 'settings.accounts.connectionFailed')
+    : isActiveAccount && connectionStatus === 'connected' ? t('settings.accounts.connected')
+    : isActiveAccount && connectionStatus === 'connecting' ? t('sidebar.connecting')
+    : isActiveAccount ? t('settings.accounts.disconnected')
+    : t('settings.accounts.inactiveStatus');
   // Shape check only — whether the server will accept it is what Verify answers.
   const sendAsIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(sendAs.trim());
   const invoke = window.__TAURI__?.core?.invoke;
+
+  const changeSection = value => {
+    setSection(value);
+    onSectionChange?.(value);
+  };
+
+  useEffect(() => {
+    if (['profile', 'connection', 'advanced'].includes(initialSection)) setSection(initialSection);
+  }, [initialSection]);
+
+  useEffect(() => {
+    if (initialAccountId && accounts.some(account => account.id === initialAccountId)) setSelectedAccountId(initialAccountId);
+  }, [initialAccountId]);
+
+  useEffect(() => {
+    if (!accounts.some(account => account.id === selectedAccountId)) setSelectedAccountId(accounts[0]?.id || null);
+  }, [accounts, selectedAccountId]);
+
+  useEffect(() => {
+    const panel = panelRef.current?.querySelector('[role="tabpanel"]');
+    if (panel) panel.scrollTop = 0;
+  }, [section, selectedAccountId]);
 
   const moveAccount = (accountId, direction) => {
     const ids = orderedAccounts.map(a => a.id);
@@ -123,6 +163,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
       setAccountDisplayName(getDisplayName(selectedAccountId) || '');
       setSendAs(getSendAsAddress(selectedAccountId) || '');
       setShowRemoveConfirm(false);
+      setEditingPassword(false);
+      setNewPassword('');
+      setVerifyOpen(false);
     }
   }, [selectedAccountId]);
 
@@ -373,11 +416,11 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
   };
 
   return (
-    <div className="flex h-full">
+    <div className="account-settings-layout">
       {/* Account List - Left Column */}
-      <div className="w-72 border-r border-mail-border bg-mail-surface/50 overflow-y-auto">
+      <div className="account-settings-list">
         <div className="p-4">
-          <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-3">
+          <div className="text-sm font-medium text-mail-text-muted mb-3">
             {t('settings.accounts.accounts')}
           </div>
           {accounts.length === 0 ? (
@@ -387,37 +430,15 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
             </div>
           ) : (
             <div className="space-y-1">
-              {orderedAccounts.map((account, index) => (
+              {orderedAccounts.map(account => (
                 <div
                   key={account.id}
-                  onClick={() => setSelectedAccountId(account.id)}
-                  className={`group/acct flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all
-                             ${account.id === selectedAccountId
-                               ? 'bg-mail-accent/10 border border-mail-accent/30'
-                               : 'hover:bg-mail-surface-hover border border-transparent'}`}
+                  className={`account-settings-account ${account.id === selectedAccountId ? 'account-settings-account-selected' : ''}`}
                 >
-                  {orderedAccounts.length > 1 && (
-                    <div className="flex flex-col opacity-0 group-hover/acct:opacity-100 transition-opacity">
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveAccount(account.id, -1); }}
-                        disabled={index === 0}
-                        className={`p-0.5 rounded transition-colors ${index === 0 ? 'opacity-0' : 'hover:bg-mail-border'}`}
-                        title={t('settings.accounts.moveUp')}
-                      >
-                        <ChevronUp size={12} className="text-mail-text-muted" />
-                      </button>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); moveAccount(account.id, 1); }}
-                        disabled={index === orderedAccounts.length - 1}
-                        className={`p-0.5 rounded transition-colors ${index === orderedAccounts.length - 1 ? 'opacity-0' : 'hover:bg-mail-border'}`}
-                        title={t('settings.accounts.moveDown')}
-                      >
-                        <ChevronDown size={12} className="text-mail-text-muted" />
-                      </button>
-                    </div>
-                  )}
+                  <button type="button" className="account-settings-account-button"
+                    aria-pressed={account.id === selectedAccountId} onClick={() => setSelectedAccountId(account.id)}>
                   <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-bold select-none${hiddenAccounts[account.id] ? ' opacity-40' : ''}`}
+                    className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-white text-sm font-bold select-none${hiddenAccounts[account.id] ? ' opacity-40' : ''}`}
                     style={{ backgroundColor: getAccountColor(accountColors, account) }}
                   >
                     {getAccountInitial(account, getDisplayName(account.id))}
@@ -436,9 +457,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                       {account.email}
                     </div>
                   </div>
-                  {account.id === selectedAccountId && (
-                    <ChevronRight size={16} className="text-mail-accent-text" />
-                  )}
+                  </button>
                 </div>
               ))}
             </div>
@@ -457,16 +476,59 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
         </div>
       </div>
 
+      <div className="account-settings-mobile">
+        <select aria-label={t('settings.accounts.accounts')} value={selectedAccountId || ''}
+          onChange={event => setSelectedAccountId(event.target.value)}>
+          {orderedAccounts.map(account => <option key={account.id} value={account.id}>{getDisplayName(account.id) || account.email}</option>)}
+        </select>
+        {onAddAccount && <button type="button" onClick={onAddAccount} className="p-2 rounded-lg text-mail-accent-text"
+          aria-label={t('settings.accounts.addAccount')}><Plus size={18} /></button>}
+      </div>
       {/* Account Settings - Right Column */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div ref={panelRef} className="account-settings-detail">
         {selectedAccount ? (
-          <div className="space-y-6">
+          <>
+            <header className="account-settings-identity">
+              <div className="account-settings-identity-line">
+                <span className="account-settings-avatar" aria-hidden="true"
+                  style={{ backgroundColor: getAccountColor(accountColors, selectedAccount) }}>
+                  {getAccountInitial(selectedAccount, getDisplayName(selectedAccountId))}
+                </span>
+                <div className="account-settings-identity-copy">
+                  <h3>{getDisplayName(selectedAccountId) || selectedAccount.name || selectedAccount.email}</h3>
+                  <p>{selectedAccount.email}</p>
+                </div>
+                <SavedBadge visible={autoSaved || saved} />
+              </div>
+              <div role="status" className={`account-settings-status ${hasConnectionError && !isHidden ? 'account-settings-status-error' : ''}`}>
+                {hasConnectionError && !isHidden ? <AlertCircle size={15} aria-hidden="true" />
+                  : isActiveAccount && connectionStatus === 'connected' && !isHidden ? <Check size={15} aria-hidden="true" />
+                  : isHidden ? <EyeOff size={15} aria-hidden="true" /> : <Mail size={15} aria-hidden="true" />}
+                <span>{statusLabel}</span>
+                {hasConnectionError && !isHidden && <Button variant="subtle" size="sm" disabled={oauthReconnecting}
+                  onClick={() => {
+                    if (needsPassword) { changeSection('connection'); setEditingPassword(true); }
+                    else if (needsSignIn) handleOAuth2Reconnect();
+                    else activateAccount(selectedAccountId, activeMailbox || 'INBOX');
+                  }}>
+                  {oauthReconnecting ? t('settings.accounts.reconnecting') : needsPassword ? t('settings.accounts.enterPassword')
+                    : needsSignIn ? t('settings.accounts.reconnect') : t('common.retry')}
+                </Button>}
+              </div>
+            </header>
+            <SettingsTabs value={section} onChange={changeSection} label={t('settings.accounts.preferences')}
+              tabs={[
+                { id: 'profile', label: t('settings.accounts.sectionProfile') },
+                { id: 'connection', label: t('settings.accounts.sectionConnection') },
+                { id: 'advanced', label: t('settings.accounts.sectionAdvanced') },
+              ]}>
+              <p className="account-settings-section-intro">{t(`settings.accounts.${section}Intro`)}</p>
+              {section === 'profile' && <>
             {/* Account Info */}
-            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+            <div className="settings-section">
               <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
                 <User size={18} className="text-mail-accent-text" />
                 {t('settings.accounts.accountSettings')}
-                <SavedBadge visible={autoSaved} />
               </h4>
 
               <div className="space-y-4">
@@ -474,7 +536,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   <label className="block text-sm font-medium text-mail-text mb-2">
                     {isFastmailAccount(selectedAccount) ? t('account.loginAddress') : t('account.emailAddress')}
                   </label>
-                  <input
+                  <input aria-label={isFastmailAccount(selectedAccount) ? t('account.loginAddress') : t('account.emailAddress')}
                     type="text"
                     value={selectedAccount.email}
                     disabled
@@ -490,7 +552,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   <p className="text-sm text-mail-text-muted mb-2">
                     {t('settings.accounts.nameShownFromFieldSending')}
                   </p>
-                  <input
+                  <input aria-label={t('settings.accounts.displayName')}
                     type="text"
                     value={accountDisplayName}
                     onChange={(e) => setAccountDisplayName(e.target.value)}
@@ -512,14 +574,14 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                        parts={[(s) => <span className="font-mono">{s}</span>]} />
                   </p>
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label={t('settings.accounts.sendMail')}
                       type="email"
                       value={sendAs}
                       onChange={(e) => setSendAs(e.target.value)}
                       placeholder={selectedAccount.email}
                       list={`send-as-suggestions-${selectedAccountId}`}
                       data-testid="send-as-input"
-                      className="flex-1 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      className="flex-1 min-w-0 px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
                                 text-mail-text placeholder-mail-text-muted
                                 focus:border-mail-accent transition-all"
                     />
@@ -559,6 +621,262 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   )}
                 </div>
 
+              </div>
+            </div>
+
+            {/* Signature */}
+            <div className="settings-section">
+              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                <FileText size={18} className="text-mail-accent-text" />
+                {t('settings.accounts.emailSignature')}
+              </h4>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-mail-text">{t('settings.accounts.enableSignature')}</div>
+                    <div className="text-sm text-mail-text-muted">
+                      {t('settings.accounts.automaticallyAddOutgoingEmails')}
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    label={t('settings.accounts.enableSignature')} active={getSignature(selectedAccountId).enabled}
+                    onClick={() => {
+                      const sig = getSignature(selectedAccountId);
+                      setSignature(selectedAccountId, { ...sig, enabled: !sig.enabled });
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-mail-text mb-2">
+                    {t('settings.accounts.signatureContent')}
+                  </label>
+                  <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
+                    <RichTextEditor
+                      content={signatureHtml}
+                      onUpdate={(html) => setSignatureHtml(html)}
+                      placeholder={t('settings.accounts.bestRegardsJohnDoe')}
+                    />
+                  </div>
+                  <p className="text-xs text-mail-text-muted mt-2">
+                    {t('settings.accounts.boldItalicLinksListsSupported')}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+              </>}
+              {section === 'connection' && <>
+                {hasConnectionError && connectionError && (
+                  <details className="account-settings-error-details" key={selectedAccountId}>
+                    <summary>{t('settings.accounts.technicalDetails')}</summary>
+                    <p>{connectionError}</p>
+                  </details>
+                )}
+            {/* Password / Authentication */}
+            <div className="settings-section">
+              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                <Key size={18} className="text-mail-accent-text" />
+                {t('settings.accounts.authentication')}
+              </h4>
+
+              {/* Auth type badge */}
+              <div className="flex items-center gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-mail-accent-tint text-mail-accent-text">
+                  {selectedAccount.authType === 'oauth2' ? (
+                    <><Shield size={12} /> {t('settings.accounts.providerOauth2', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</>
+                  ) : (
+                    <><Key size={12} /> {t('settings.accounts.password')}</>
+                  )}
+                </span>
+              </div>
+
+              {/* OAuth2 account */}
+              {selectedAccount.authType === 'oauth2' ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-mail-text">{t('settings.accounts.providerAccount', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</div>
+                      <div className="text-sm text-mail-text-muted">
+                        {t('settings.accounts.authenticatedViaOauth2TokensRefresh')}
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleOAuth2Reconnect}
+                      disabled={oauthReconnecting}
+                      className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                                text-mail-text rounded-lg transition-colors flex items-center gap-2
+                                disabled:opacity-50"
+                    >
+                      {oauthReconnecting ? (
+                        <Loader size={16} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={16} />
+                      )}
+                      {oauthReconnecting ? t('settings.accounts.reconnecting') : t('settings.accounts.reconnect')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Password auth */}
+                  {editingPassword ? (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-mail-text mb-2">
+                          {t('settings.accounts.newPassword')}
+                        </label>
+                        <input aria-label={t('settings.accounts.newPassword')}
+                          type="password"
+                          autoFocus
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder={t('settings.accounts.enterEmailPassword')}
+                          className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                                    text-mail-text placeholder-mail-text-muted
+                                    focus:border-mail-accent transition-all"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={handleUpdatePassword}
+                          disabled={!newPassword.trim()}
+                          className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
+                                    text-white rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {t('settings.accounts.savePassword')}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingPassword(false);
+                            setNewPassword('');
+                          }}
+                          className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                                    text-mail-text rounded-lg transition-colors"
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-mail-text">{t('settings.accounts.password')}</div>
+                        <div className="text-sm text-mail-text-muted">
+                          {selectedAccount.password ? t('settings.accounts.storedSecurelySystemKeychain') : t('settings.accounts.configured')}
+                        </div>
+                      </div>
+                      <Button variant="subtle"
+                        onClick={() => setEditingPassword(true)}
+                      >
+                        <Key size={16} />
+                        {selectedAccount.password ? t('settings.accounts.update') : t('settings.accounts.setPassword')}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Mail Server (password / IMAP accounts only) */}
+            {selectedAccount.authType !== 'oauth2' && (
+              <div className="settings-section">
+                <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                  <Server size={18} className="text-mail-accent-text" />
+                  {t('settings.accounts.mailServer')}
+                </h4>
+
+                <p className="text-sm text-mail-text-muted mb-4">
+                  {t('settings.accounts.changedHostingKeptSameAddress')}
+                </p>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-mail-text-muted space-y-0.5">
+                    <div>
+                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
+                      {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
+                        <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
+                      )}
+                    </div>
+                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
+                  </div>
+                  <button
+                    onClick={() => openChangeServer(selectedAccountId)}
+                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border text-mail-text
+                              rounded-lg transition-colors flex items-center gap-2 text-sm"
+                  >
+                    <Server size={16} />
+                    {t('settings.accounts.changeServer')}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Sent Folder */}
+            <div className="settings-section">
+              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+                <Send size={18} className="text-mail-accent-text" />
+                {t('settings.accounts.sentFolder')}
+              </h4>
+
+              <p className="text-sm text-mail-text-muted mb-4">
+                {t('settings.accounts.mailvaultAutoDetectsSentFolder')}
+              </p>
+
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-mail-text mb-2">
+                    {t('settings.accounts.sentFolder2')}
+                  </label>
+                  <select aria-label={t('settings.accounts.sentFolder2')}
+                    value={sentOverride}
+                    onChange={(e) => setSentOverride(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                              text-mail-text focus:border-mail-accent transition-all"
+                  >
+                    <option value="">
+                      {autoDetectedSentPath ? t('settings.accounts.autoDetectCurrently', { path: autoDetectedSentPath }) : t('settings.accounts.autoDetectNoMatchYet')}
+                    </option>
+                    {flattenedMailboxes.map(m => (
+                      <option key={m.path} value={m.path}>{m.label}</option>
+                    ))}
+                  </select>
+                  {selectedAccount.sentFolderOverride && (
+                    <p className="text-xs text-mail-text-muted mt-2">
+                      {t('settings.accounts.currentSavedOverride')} <code className="text-mail-text">{selectedAccount.sentFolderOverride}</code>
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handleSaveSentFolder}
+                    disabled={savingSent || sentOverride === (selectedAccount.sentFolderOverride || '')}
+                    className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
+                              text-white rounded-lg transition-colors text-sm font-medium
+                              disabled:opacity-50"
+                  >
+                    {savingSent ? t('settings.accounts.saving') : t('settings.accounts.saveSentFolder')}
+                  </button>
+                  <button
+                    onClick={handleAutoCreateSent}
+                    disabled={autoCreatingSent}
+                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
+                              text-mail-text rounded-lg transition-colors text-sm font-medium
+                              flex items-center gap-2 disabled:opacity-50"
+                    title={t('settings.accounts.askServerAutoDetectCreate')}
+                  >
+                    {autoCreatingSent ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                    {autoCreatingSent ? t('settings.accounts.working') : t('settings.accounts.autoDetectCreate')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+              </>}
+              {section === 'advanced' && <>
+<div className="settings-section">
                 {/* Avatar Color */}
                 <div>
                   <label className="block text-sm font-medium text-mail-text mb-2">
@@ -583,6 +901,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                             '--tw-ring-color': color
                           }}
                           title={color}
+                          aria-label={`${t('settings.accounts.avatarColor')}: ${color}`} aria-pressed={isSelected}
                         />
                       );
                     })}
@@ -597,11 +916,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                     )}
                   </div>
                 </div>
-              </div>
             </div>
-
             {/* Hide Account */}
-            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+            <div className="settings-section">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   {isAccountHidden(selectedAccountId) ? (
@@ -619,7 +936,7 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                   </div>
                 </div>
                 <ToggleSwitch
-                  active={!isAccountHidden(selectedAccountId)}
+                  label={t('settings.accounts.accountVisible')} active={!isAccountHidden(selectedAccountId)}
                   onClick={() => {
                     const currentlyHidden = isAccountHidden(selectedAccountId);
                     setAccountHidden(selectedAccountId, !currentlyHidden);
@@ -673,275 +990,25 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
               </div>
             </div>
 
-            {/* Signature */}
-            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <FileText size={18} className="text-mail-accent-text" />
-                {t('settings.accounts.emailSignature')}
-                <SavedBadge visible={autoSaved} />
-              </h4>
-
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="font-medium text-mail-text">{t('settings.accounts.enableSignature')}</div>
-                    <div className="text-sm text-mail-text-muted">
-                      {t('settings.accounts.automaticallyAddOutgoingEmails')}
-                    </div>
-                  </div>
-                  <ToggleSwitch
-                    active={getSignature(selectedAccountId).enabled}
-                    onClick={() => {
-                      const sig = getSignature(selectedAccountId);
-                      setSignature(selectedAccountId, { ...sig, enabled: !sig.enabled });
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-mail-text mb-2">
-                    {t('settings.accounts.signatureContent')}
-                  </label>
-                  <div className="flex h-52 rounded-lg border border-mail-border overflow-hidden">
-                    <RichTextEditor
-                      content={signatureHtml}
-                      onUpdate={(html) => setSignatureHtml(html)}
-                      placeholder={t('settings.accounts.bestRegardsJohnDoe')}
-                    />
-                  </div>
-                  <p className="text-xs text-mail-text-muted mt-2">
-                    {t('settings.accounts.boldItalicLinksListsSupported')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Sent Folder */}
-            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <Send size={18} className="text-mail-accent-text" />
-                {t('settings.accounts.sentFolder')}
-                <SavedBadge visible={saved} />
-              </h4>
-
-              <p className="text-sm text-mail-text-muted mb-4">
-                {t('settings.accounts.mailvaultAutoDetectsSentFolder')}
-              </p>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-mail-text mb-2">
-                    {t('settings.accounts.sentFolder2')}
-                  </label>
-                  <select
-                    value={sentOverride}
-                    onChange={(e) => setSentOverride(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                              text-mail-text focus:border-mail-accent transition-all"
-                  >
-                    <option value="">
-                      {autoDetectedSentPath ? t('settings.accounts.autoDetectCurrently', { path: autoDetectedSentPath }) : t('settings.accounts.autoDetectNoMatchYet')}
-                    </option>
-                    {flattenedMailboxes.map(m => (
-                      <option key={m.path} value={m.path}>{m.label}</option>
-                    ))}
-                  </select>
-                  {selectedAccount.sentFolderOverride && (
-                    <p className="text-xs text-mail-text-muted mt-2">
-                      {t('settings.accounts.currentSavedOverride')} <code className="text-mail-text">{selectedAccount.sentFolderOverride}</code>
-                    </p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={handleSaveSentFolder}
-                    disabled={savingSent || sentOverride === (selectedAccount.sentFolderOverride || '')}
-                    className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
-                              text-white rounded-lg transition-colors text-sm font-medium
-                              disabled:opacity-50"
-                  >
-                    {savingSent ? t('settings.accounts.saving') : t('settings.accounts.saveSentFolder')}
-                  </button>
-                  <button
-                    onClick={handleAutoCreateSent}
-                    disabled={autoCreatingSent}
-                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                              text-mail-text rounded-lg transition-colors text-sm font-medium
-                              flex items-center gap-2 disabled:opacity-50"
-                    title={t('settings.accounts.askServerAutoDetectCreate')}
-                  >
-                    {autoCreatingSent ? <Loader size={14} className="animate-spin" /> : <RefreshCw size={14} />}
-                    {autoCreatingSent ? t('settings.accounts.working') : t('settings.accounts.autoDetectCreate')}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Mail Server (password / IMAP accounts only) */}
-            {selectedAccount.authType !== 'oauth2' && (
-              <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-                <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                  <Server size={18} className="text-mail-accent-text" />
-                  {t('settings.accounts.mailServer')}
-                </h4>
-
-                <p className="text-sm text-mail-text-muted mb-4">
-                  {t('settings.accounts.changedHostingKeptSameAddress')}
-                </p>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-mail-text-muted space-y-0.5">
-                    <div>
-                      {t('settings.accounts.imap')} <code className="text-mail-text">{selectedAccount.imapHost || '—'}:{selectedAccount.imapPort || 993}</code>
-                      {selectedAccount.imapSecurity && selectedAccount.imapSecurity !== 'ssl' && (
-                        <span className="ml-1">({selectedAccount.imapSecurity.toUpperCase()})</span>
-                      )}
-                    </div>
-                    <div>{t('settings.accounts.smtp')} <code className="text-mail-text">{selectedAccount.smtpHost || '—'}:{selectedAccount.smtpPort || 587}</code></div>
-                  </div>
-                  <button
-                    onClick={() => openChangeServer(selectedAccountId)}
-                    className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border text-mail-text
-                              rounded-lg transition-colors flex items-center gap-2 text-sm"
-                  >
-                    <Server size={16} />
-                    {t('settings.accounts.changeServer')}
-                  </button>
-                </div>
-              </div>
+            {orderedAccounts.length > 1 && (
+              <section className="settings-section">
+                <h4 className="font-semibold text-mail-text mb-2">{t('settings.accounts.accountOrder')}</h4>
+                <p className="text-sm text-mail-text-muted mb-4">{t('settings.accounts.accountOrderHint')}</p>
+                <ol className="account-settings-order">
+                  {orderedAccounts.map((account, index) => (
+                    <li key={account.id}>
+                      <span>{getDisplayName(account.id) || account.name || account.email}</span>
+                      <div role="group" aria-label={account.email}>
+                        <button type="button" disabled={index === 0} onClick={() => moveAccount(account.id, -1)}
+                          aria-label={t('settings.accounts.moveUp')}><ChevronUp size={16} /></button>
+                        <button type="button" disabled={index === orderedAccounts.length - 1} onClick={() => moveAccount(account.id, 1)}
+                          aria-label={t('settings.accounts.moveDown')}><ChevronDown size={16} /></button>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             )}
-
-            {/* Password / Authentication */}
-            <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
-              <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
-                <Key size={18} className="text-mail-accent-text" />
-                {t('settings.accounts.authentication')}
-              </h4>
-
-              {/* Auth type badge */}
-              <div className="flex items-center gap-2 mb-4">
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-                  ${selectedAccount.authType === 'oauth2'
-                    ? 'bg-mail-accent-tint text-mail-accent-text border border-mail-accent/20'
-                    : 'bg-mail-accent/10 text-mail-accent-text border border-mail-accent/20'}`}>
-                  {selectedAccount.authType === 'oauth2' ? (
-                    <><Shield size={12} /> {t('settings.accounts.providerOauth2', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</>
-                  ) : (
-                    <><Key size={12} /> {t('settings.accounts.password')}</>
-                  )}
-                </span>
-                {selectedAccount.authType === 'oauth2' && (
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
-                    ${selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
-                      ? 'bg-mail-success/10 text-mail-success border border-mail-success/20'
-                      : 'bg-mail-warning/10 text-mail-warning border border-mail-warning/20'}`}>
-                    {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now() ? (
-                      <><Link size={12} /> {t('settings.accounts.connected')}</>
-                    ) : (
-                      <><Unlink size={12} /> {t('settings.accounts.tokenExpired')}</>
-                    )}
-                  </span>
-                )}
-              </div>
-
-              {/* OAuth2 account */}
-              {selectedAccount.authType === 'oauth2' ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="font-medium text-mail-text">{t('settings.accounts.providerAccount', { provider: selectedAccount.oauth2Provider === 'google' ? 'Google' : 'Microsoft' })}</div>
-                      <div className="text-sm text-mail-text-muted">
-                        {selectedAccount.oauth2ExpiresAt && selectedAccount.oauth2ExpiresAt > Date.now()
-                          ? t('settings.accounts.authenticatedViaOauth2TokensRefresh')
-                          : t('settings.accounts.tokenExpiredTokensRefreshAutomatically')}
-                      </div>
-                    </div>
-                    <button
-                      onClick={handleOAuth2Reconnect}
-                      disabled={oauthReconnecting}
-                      className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                                text-mail-text rounded-lg transition-colors flex items-center gap-2
-                                disabled:opacity-50"
-                    >
-                      {oauthReconnecting ? (
-                        <Loader size={16} className="animate-spin" />
-                      ) : (
-                        <RefreshCw size={16} />
-                      )}
-                      {oauthReconnecting ? t('settings.accounts.reconnecting') : t('settings.accounts.reconnect')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  {/* Password auth */}
-                  {!selectedAccount.password && (
-                    <div className="flex items-center gap-3 p-3 bg-mail-warning/10 border border-mail-warning/20 rounded-lg mb-4">
-                      <div className="w-3 h-3 bg-mail-warning rounded-full" />
-                      <span className="text-sm text-mail-text">
-                        {t('settings.accounts.passwordNotFoundPleaseRe')}
-                      </span>
-                    </div>
-                  )}
-
-                  {editingPassword ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-mail-text mb-2">
-                          {t('settings.accounts.newPassword')}
-                        </label>
-                        <input
-                          type="password"
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder={t('settings.accounts.enterEmailPassword')}
-                          className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
-                                    text-mail-text placeholder-mail-text-muted
-                                    focus:border-mail-accent transition-all"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={handleUpdatePassword}
-                          disabled={!newPassword.trim()}
-                          className="px-4 py-2 bg-mail-accent-fill hover:bg-mail-accent-hover
-                                    text-white rounded-lg transition-colors disabled:opacity-50"
-                        >
-                          {t('settings.accounts.savePassword')}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingPassword(false);
-                            setNewPassword('');
-                          }}
-                          className="px-4 py-2 bg-mail-surface-hover hover:bg-mail-border
-                                    text-mail-text rounded-lg transition-colors"
-                        >
-                          {t('common.cancel')}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium text-mail-text">{t('settings.accounts.password')}</div>
-                        <div className="text-sm text-mail-text-muted">
-                          {selectedAccount.password ? t('settings.accounts.storedSecurelySystemKeychain') : t('settings.accounts.configured')}
-                        </div>
-                      </div>
-                      <Button variant="subtle"
-                        onClick={() => setEditingPassword(true)}
-                      >
-                        <Key size={16} />
-                        {selectedAccount.password ? t('settings.accounts.update') : t('settings.accounts.setPassword')}
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
             {/* Remove Account */}
             <div className="bg-mail-surface border border-mail-danger/30 rounded-xl p-5 mt-6">
               <h4 className="font-semibold text-mail-danger mb-4 flex items-center gap-2">
@@ -953,14 +1020,14 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 {t('settings.accounts.removingDeletesEverythingLocal')}
               </p>
               <Button variant="dangerTint"
-                onClick={() => setShowRemoveConfirm(true)}
+                onClick={() => setShowRemoveConfirm(selectedAccountId)}
               >
                 <Trash2 size={16} />
                 {t('settings.accounts.removeAccount2')}
               </Button>
 
-              <AnimatePresence>
-                {showRemoveConfirm && (
+              <AnimatePresence key={selectedAccountId}>
+                {showRemoveConfirm === selectedAccountId && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
@@ -1011,7 +1078,9 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId }) {
                 )}
               </AnimatePresence>
             </div>
-          </div>
+              </>}
+            </SettingsTabs>
+          </>
         ) : (
           <div className="flex items-center justify-center h-full text-mail-text-muted">
             <div className="text-center">

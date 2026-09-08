@@ -42,8 +42,8 @@ export function HelpSettings({ onClose, onReportBug }) {
 
   return (
     <>
-    <div className="p-6 space-y-6">
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+    <div className="settings-form space-y-6">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Mail size={18} className="text-mail-accent-text" />
           Help & Support

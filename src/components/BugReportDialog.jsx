@@ -90,7 +90,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
       onClose={onClose}
       title={t('bugReport.reportBugSuggestFeature')}
       icon={<Bug size={20} className="text-mail-accent-text" />}
-      description="Report something broken, or ask for something missing."
+      description={t('bugReport.description')}
       size="lg"
       data-testid="bug-report-dialog"
     >
@@ -106,7 +106,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
               <div className="text-sm font-medium text-mail-text">{title}</div>
               <div className="text-xs text-mail-text-muted">{subtitle}</div>
             </div>
-            <Button variant={variant} size="sm" onClick={onClick} data-url={url}>{action}</Button>
+            <Button variant={variant} size="sm" onClick={onClick} data-url={url} aria-label={`${action}: ${title}`}>{action}</Button>
           </div>
         ))}
       </div>
@@ -136,7 +136,7 @@ export function BugReportDialog({ open, onClose, onEmail }) {
             onClick={openAndClose(MAKER_SITE)}
             className="hover:opacity-80 transition-opacity"
           >
-            <img src={logoUrl} alt={t('bugReport.graphicMeat')} width="128" height="128" className="w-32 h-32" />
+            <img src={logoUrl} alt={t('bugReport.graphicMeat')} width="128" height="128" className="w-16 h-16" />
           </button>
         </div>
       </div>

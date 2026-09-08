@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { SafetyAlertLegend } from '../SafetyAlertLegend.jsx';
 import { LEGEND_ENTRIES } from '../email/stateLegend.jsx';
 import { previewRows } from '../../data/previewMail.js';
-import { useT } from '../../i18n/index.js';
+import { SampleConversation } from '../ui/SampleConversation';
 
 /**
  * The small drawings beside each free feature.
@@ -23,7 +23,7 @@ import { useT } from '../../i18n/index.js';
 
 const Frame = ({ id, children }) => (
   <div data-testid={`free-sample-${id}`}
-       className="rounded-lg border border-mail-border bg-mail-bg p-2 text-[10px] leading-tight select-none">
+       className="rounded-lg border border-mail-border bg-mail-bg p-3 text-xs leading-relaxed select-none">
     {children}
   </div>
 );
@@ -32,12 +32,12 @@ const Frame = ({ id, children }) => (
 export function VaultSample() {
   return (
     <Frame id="vault">
-      <div className="grid grid-cols-2 gap-x-2 gap-y-1">
+      <div className="grid grid-cols-2 gap-x-2 gap-y-2">
         {LEGEND_ENTRIES().map(entry => (
           <div key={entry.id} data-testid={`free-legend-${entry.id}`}
                className="flex items-center gap-1.5 text-mail-text-muted min-w-0">
             <span className="flex-shrink-0 flex items-center justify-center w-3">{entry.glyph}</span>
-            <span className="truncate" title={entry.detail}>{entry.text}</span>
+            <span title={entry.detail}>{entry.text}</span>
           </div>
         ))}
       </div>
@@ -47,23 +47,7 @@ export function VaultSample() {
 
 /** Read by sender: the same correspondence as two bubbles instead of two rows. */
 export function ChatSample() {
-  const rows = previewRows();
-  return (
-    <Frame id="chat">
-      <div className="space-y-1">
-        <div className="flex">
-          <span className="rounded-lg rounded-bl-sm bg-mail-surface text-mail-text px-2 py-1 max-w-[80%] truncate">
-            {rows[1].subject}
-          </span>
-        </div>
-        <div className="flex justify-end">
-          <span className="rounded-lg rounded-br-sm bg-mail-accent/15 text-mail-accent-text px-2 py-1 max-w-[80%] truncate">
-            {rows[5].subject}
-          </span>
-        </div>
-      </div>
-    </Frame>
-  );
+  return <Frame id="chat"><SampleConversation compact /></Frame>;
 }
 
 /**
@@ -79,13 +63,13 @@ export function SearchSample() {
   return (
     <Frame id="search">
       <div className="flex items-center gap-1.5 rounded border border-mail-border bg-mail-surface px-1.5 py-1 mb-1.5">
-        <Search size={10} className="text-mail-text-muted flex-shrink-0" />
+        <Search size={14} className="text-mail-text-muted flex-shrink-0" />
         <span className="text-mail-text">{SEARCH_TERM}</span>
       </div>
       <div className="space-y-1">
         {hits.map(r => (
           <div key={r.id} className="flex items-baseline gap-1 min-w-0">
-            <mark className="bg-mail-accent/25 text-mail-text rounded px-0.5 flex-shrink-0">{r.sender}</mark>
+            <mark className="bg-mail-accent-tint text-mail-accent-text rounded px-0.5 flex-shrink-0">{r.sender}</mark>
             <span className="truncate text-mail-text-muted">{r.subject}</span>
           </div>
         ))}

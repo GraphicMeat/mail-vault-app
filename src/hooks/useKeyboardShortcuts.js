@@ -17,7 +17,7 @@ const ALLOWED_IN_INPUT = new Set(['escape']);
 function isTypingTarget(el) {
   if (!el) return false;
   const tag = el.tagName;
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
   if (el.isContentEditable) return true;
   return false;
 }
@@ -106,6 +106,7 @@ export function useKeyboardShortcuts(actionHandlers) {
     const shortcutMap = buildShortcutMap(shortcuts);
 
     const handleKeyDown = (e) => {
+      if (e.defaultPrevented) return;
       // Ignore bare modifier presses
       if (['Meta', 'Control', 'Alt', 'Shift'].includes(e.key)) return;
 

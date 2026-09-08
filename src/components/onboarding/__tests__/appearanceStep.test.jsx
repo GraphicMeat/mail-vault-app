@@ -1,95 +1,87 @@
-// src/components/onboarding/__tests__/appearanceStep.test.jsx
 // @vitest-environment jsdom
-
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
-
-const setLayoutMode = vi.fn();
-const setSidebarStyle = vi.fn();
-const setViewStyle = vi.fn();
-const setEmailListStyle = vi.fn();
-const setThreadMode = vi.fn();
-const setAfterDeleteSelect = vi.fn();
-const toggleTheme = vi.fn();
-const setTheme = vi.fn();
-
-vi.mock('../../../stores/settingsStore', () => ({
-  useSettingsStore: (sel) => sel({
-    layoutMode: 'three-column', sidebarStyle: 'list', viewStyle: 'list', emailListStyle: 'default',
-    setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle,
-    threadMode: 'grouped', setThreadMode,
-    afterDeleteSelect: 'none', setAfterDeleteSelect,
-    localeEpoch: 0,
-  }),
-}));
-vi.mock('../../../stores/themeStore', () => ({
-  useThemeStore: (sel) => sel({ theme: 'dark', toggleTheme, setTheme }),
-}));
-
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { useThemeStore } from '../../../stores/themeStore';
+import { t } from '../../../i18n';
 import { AppearanceStep } from '../AppearanceStep';
 
-afterEach(() => { cleanup(); [setLayoutMode, setSidebarStyle, setViewStyle, setEmailListStyle, setThreadMode, setAfterDeleteSelect, toggleTheme, setTheme].forEach(m => m.mockClear()); });
+beforeEach(() => {
+  useThemeStore.setState({ theme: 'dark', palette: 'indigo' });
+  useSettingsStore.setState({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'grouped', afterDeleteSelect: 'none', emailRowHighlight: 'hover', emailViewerTheme: 'system', actionButtonDisplay: 'icon-label' });
+});
+afterEach(cleanup);
+const tab = name => screen.getByRole('tab', { name: t(`settings.appearance.section.${name}`) });
 
 describe('appearance step', () => {
-  it('offers exactly the seven first-run controls', () => {
+  it('shows two color choices groups, with secondary preferences kept out of initial setup', () => {
     render(<AppearanceStep onContinue={() => {}} />);
-    expect(screen.getAllByTestId(/^appearance-control-/).map(n => n.dataset.testid || n.getAttribute('data-testid')))
-      .toEqual([
-        'appearance-control-theme',
-        'appearance-control-layout',
-        'appearance-control-sidebar',
-        'appearance-control-view',
-        'appearance-control-density',
-        'appearance-control-threads',
-        'appearance-control-after-delete',
-      ]);
+    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getAllByTestId(/^appearance-control-/)).toHaveLength(2);
+    expect(screen.getByTestId('appearance-control-palette')).toBeTruthy();
+    expect(screen.queryByTestId('appearance-control-after-delete')).toBeNull();
+    expect(screen.queryByTestId('appearance-control-sidebar')).toBeNull();
   });
 
-  // The one control the preview cannot show. It still writes to the live store
-  // like the rest — a first run that only *looks* configured is the failure.
-  it('writes the after-delete choice straight to the live store', () => {
+  it('lets the keyboard move between focused sections without losing the preview', () => {
     render(<AppearanceStep onContinue={() => {}} />);
-    fireEvent.click(screen.getByTestId('appearance-after-delete-next'));
-    expect(setAfterDeleteSelect).toHaveBeenCalledWith('next');
+    fireEvent.keyDown(tab('colors'), { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(tab('layout'));
+    expect(screen.getByTestId('appearance-control-layout')).toBeTruthy();
+    expect(screen.queryByTestId('appearance-control-theme')).toBeNull();
+    fireEvent.keyDown(tab('layout'), { key: 'End' });
+    expect(screen.getByTestId('appearance-control-threads')).toBeTruthy();
+    expect(screen.getAllByTestId('appearance-preview')).toHaveLength(1);
   });
 
-  it('writes straight to the live stores', () => {
+  it('updates the sample and persisted choices across tabs', () => {
     render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(screen.getByTestId('appearance-theme-light'));
+    fireEvent.click(screen.getByTestId('appearance-palette-graphite'));
+    fireEvent.click(tab('layout'));
     fireEvent.click(screen.getByTestId('appearance-layout-two-column'));
-    expect(setLayoutMode).toHaveBeenCalledWith('two-column');
-    fireEvent.click(screen.getByTestId('appearance-theme-toggle'));
-    expect(toggleTheme).toHaveBeenCalled();
+    fireEvent.click(tab('reading'));
+    fireEvent.click(screen.getByTestId('appearance-threads-flat'));
+    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'two-column', threadMode: 'flat' });
+    expect(useThemeStore.getState()).toMatchObject({ theme: 'light', palette: 'graphite' });
+    expect(screen.getByTestId('preview-panes').dataset.layout).toBe('two-column');
+    expect(screen.getByTestId('appearance-preview').dataset).toMatchObject({ theme: 'light', palette: 'graphite' });
+    fireEvent.click(tab('colors'));
+    expect(screen.getByTestId('appearance-palette-graphite').getAttribute('aria-pressed')).toBe('true');
   });
 
-  // One click has to move every one of the six controls: a partial preset
-  // leaves the screen half-recommended and nobody can tell which half.
-  it('applies the recommended settings in one click', () => {
+  it('preserves email preferences and explains unavailable controls in Chat', () => {
+    render(<AppearanceStep onContinue={() => {}} />);
+    fireEvent.click(tab('layout'));
+    fireEvent.click(screen.getByTestId('appearance-layout-two-column'));
+    fireEvent.click(screen.getByTestId('appearance-view-chat'));
+    expect(screen.getByTestId('preview-chat')).toBeTruthy();
+    for (const button of within(screen.getByTestId('appearance-control-layout')).getAllByRole('button')) expect(button.disabled).toBe(true);
+    fireEvent.click(tab('reading'));
+    for (const id of ['density', 'threads']) for (const button of within(screen.getByTestId(`appearance-control-${id}`)).getAllByRole('button')) expect(button.disabled).toBe(true);
+    expect(screen.getByText(t('workspace.emailViewOnly'))).toBeTruthy();
+    fireEvent.click(tab('layout'));
+    fireEvent.click(screen.getByTestId('appearance-view-list'));
+    expect(screen.getByTestId('preview-panes').dataset.layout).toBe('two-column');
+  });
+
+  it('applies current recommended defaults, including Follow the pointer', () => {
+    useThemeStore.setState({ theme: 'light', palette: 'graphite' });
+    useSettingsStore.setState({ layoutMode: 'two-column', sidebarStyle: 'tagcloud', sidebarLayout: 'switcher', viewStyle: 'chat', emailListStyle: 'default', threadMode: 'flat', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
     render(<AppearanceStep onContinue={() => {}} />);
     fireEvent.click(screen.getByTestId('appearance-recommended'));
-    expect(setTheme).toHaveBeenCalledWith('dark');
-    expect(setLayoutMode).toHaveBeenCalledWith('three-column');
-    expect(setSidebarStyle).toHaveBeenCalledWith('tagcloud');
-    expect(setViewStyle).toHaveBeenCalledWith('list');
-    expect(setEmailListStyle).toHaveBeenCalledWith('compact');
-    expect(setThreadMode).toHaveBeenCalledWith('grouped');
+    expect(useThemeStore.getState()).toMatchObject({ theme: 'dark', palette: 'indigo' });
+    expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'grouped', afterDeleteSelect: 'none', emailRowHighlight: 'hover' });
   });
 
-  it('writes the thread mode straight to the store', () => {
-    render(<AppearanceStep onContinue={() => {}} />);
-    fireEvent.click(screen.getByTestId('appearance-threads-flat'));
-    expect(setThreadMode).toHaveBeenCalledWith('flat');
-  });
-
-  it('renders the preview beside the controls', () => {
-    render(<AppearanceStep onContinue={() => {}} />);
-    expect(screen.getByTestId('appearance-preview')).toBeTruthy();
-  });
-
-  it('continues to the next step', () => {
+  it('can continue from any tab without resetting existing preferences', () => {
     const onContinue = vi.fn();
+    useSettingsStore.setState({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
     render(<AppearanceStep onContinue={onContinue} />);
+    fireEvent.click(tab('reading'));
     fireEvent.click(screen.getByTestId('onboarding-continue'));
-    expect(onContinue).toHaveBeenCalled();
+    expect(onContinue).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState()).toMatchObject({ sidebarStyle: 'tagcloud', afterDeleteSelect: 'next', emailRowHighlight: 'selection' });
   });
 });

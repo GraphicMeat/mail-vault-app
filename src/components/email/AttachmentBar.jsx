@@ -367,7 +367,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 
   const iconSize = compact ? 14 : 20;
   const badgeIconSize = compact ? 12 : 16;
-  const iconButton = 'p-1 rounded-md text-mail-text-muted hover:text-mail-accent-text hover:bg-mail-accent/10 transition-colors';
+  const iconButton = 'p-1 min-w-7 min-h-7 inline-flex items-center justify-center rounded-md text-mail-text-muted hover:text-mail-accent-text hover:bg-mail-accent/10 transition-colors';
 
   return (
     <>
@@ -375,6 +375,11 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
         className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group cursor-pointer
                    ${error ? 'border-mail-danger' : justDownloaded ? 'border-mail-success/50' : 'border-mail-border hover:border-mail-accent/50'}`}
         onClick={handleRowClick}
+        onKeyDown={event => {
+          if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+          handleRowClick(event);
+        }}
         onContextMenu={handleContextMenu}
         role="button"
         tabIndex={0}
@@ -391,7 +396,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
           <div className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-mail-text truncate`}>
             {displayText(attachment.filename, t('email.attachments.unnamed'))}
           </div>
-          <div className={`${compact ? 'text-[10px]' : 'text-xs'} text-mail-text-muted`}>
+          <div className={`text-xs text-mail-text-muted`}>
             {error ? (
               <span className="text-mail-danger">{error}</span>
             ) : justDownloaded ? (

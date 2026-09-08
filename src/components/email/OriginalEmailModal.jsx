@@ -1,7 +1,8 @@
 import React from 'react';
-import { Paperclip, X, Download } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
+import { AttachmentItem } from './AttachmentBar';
 import { formatDateTime } from '../../utils/dateFormat';
 import { useT } from '../../i18n/index.js';
 
@@ -15,7 +16,7 @@ export function OriginalEmailModal({ email, onClose }) {
       size="xl"
       padded={false}
       aria-label={t('email.original.originalEmail')}
-      panelClassName="max-h-[80vh] overflow-hidden"
+      panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
     >
       <>
           {/* Header */}
@@ -27,34 +28,34 @@ export function OriginalEmailModal({ email, onClose }) {
           </div>
 
           {/* Email Details */}
-          <div className="p-4 border-b border-mail-border space-y-2 text-sm">
+          <div className="p-4 border-b border-mail-border space-y-2 text-sm shrink-0 overflow-y-auto max-h-[35vh]">
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">{t('email.original.from')}</span>
-              <span className="text-mail-text">
+              <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.from')}</span>
+              <span className="text-mail-text min-w-0 break-words">
                 {email?.from?.name} &lt;{email?.from?.address}&gt;
               </span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">{t('email.original.to')}</span>
-              <span className="text-mail-text">
+              <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.to')}</span>
+              <span className="text-mail-text min-w-0 break-words">
                 {email?.to?.map(t => `${t.name || ''} <${t.address}>`).join(', ')}
               </span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">{t('email.original.subject')}</span>
+              <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.subject')}</span>
               <span className="text-mail-text font-medium">{email?.subject}</span>
             </div>
             <div className="flex gap-2">
-              <span className="text-mail-text-muted w-16">{t('email.original.date')}</span>
-              <span className="text-mail-text">
+              <span className="text-mail-text-muted w-16 shrink-0">{t('email.original.date')}</span>
+              <span className="text-mail-text min-w-0 break-words">
                 {formatDateTime(email?.date)}
               </span>
             </div>
           </div>
 
           {/* Body */}
-          <div className="p-4 overflow-y-auto max-h-[50vh]">
-            <pre className="whitespace-pre-wrap text-sm text-mail-text font-sans">
+          <div className="p-5 overflow-y-auto min-h-0 flex-1">
+            <pre className="whitespace-pre-wrap break-words text-sm text-mail-text font-sans">
               {email?.text || email?.textBody || '(No text content)'}
             </pre>
           </div>
@@ -65,16 +66,8 @@ export function OriginalEmailModal({ email, onClose }) {
               <h4 className="text-sm font-medium text-mail-text mb-2">{t('email.original.attachments')}</h4>
               <div className="flex flex-wrap gap-2">
                 {email.attachments.map((att, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-mail-bg border border-mail-border rounded-lg text-sm"
-                  >
-                    <Paperclip size={14} className="text-mail-text-muted" />
-                    <span className="text-mail-text">{att.filename}</span>
-                    <Button variant="ghost" icon size="xs" aria-label={`Download ${att.filename}`}>
-                      <Download size={14} className="text-mail-accent-text" />
-                    </Button>
-                  </div>
+                  <AttachmentItem key={i} compact attachment={att} attachmentIndex={att._originalIndex ?? i}
+                    emailUid={email.uid} accountId={email._accountId} mailbox={email._mailbox} />
                 ))}
               </div>
             </div>

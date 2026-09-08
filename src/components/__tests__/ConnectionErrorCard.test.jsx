@@ -21,6 +21,7 @@ vi.mock('../../stores/settingsStore', () => ({
 }));
 
 import { ConnectionErrorCard } from '../Sidebar';
+import { t } from '../../i18n';
 
 const account = { id: 'acct-1', email: 'user@example.com', authType: 'password' };
 
@@ -43,18 +44,21 @@ describe('ConnectionErrorCard', () => {
     openChangeServer.mockClear();
   });
 
-  it('shows password-missing state with retry + re-enter password actions', () => {
+  it('offers one password repair action that opens the affected account', () => {
     const props = baseProps();
     render(<ConnectionErrorCard {...props} />);
     expect(screen.getByText('Password missing')).toBeTruthy();
-    fireEvent.click(screen.getByText('Re-enter Password in Settings'));
-    expect(props.onOpenAccounts).toHaveBeenCalledWith('acct-1');
+    fireEvent.click(screen.getByRole('button', { name: t('sidebar.enterPassword') }));
+    expect(props.onOpenAccounts).toHaveBeenCalledWith('acct-1', 'connection');
+    expect(screen.queryByTitle('Retry')).toBeNull();
   });
 
-  it('shows Change server for a non-OAuth account and wires it to openChangeServer', () => {
-    render(<ConnectionErrorCard {...baseProps()} />);
-    fireEvent.click(screen.getByText('Change server'));
-    expect(openChangeServer).toHaveBeenCalledWith('acct-1');
+  it('keeps server configuration behind account connection details', () => {
+    const props = baseProps();
+    render(<ConnectionErrorCard {...props} />);
+    expect(screen.queryByText('Change server')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: t('sidebar.details') }));
+    expect(props.setShowErrorModal).toHaveBeenCalledWith(true);
   });
 
   it('never shows Migrate mail (button removed from the card)', () => {
@@ -68,13 +72,21 @@ describe('ConnectionErrorCard', () => {
     expect(screen.queryByText('Change server')).toBeNull();
   });
 
+  it('reconnects an expired sign-in through its account settings', () => {
+    const props = baseProps({ account: { ...account, authType: 'oauth2' }, connectionErrorType: 'oauthExpired' });
+    render(<ConnectionErrorCard {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: t('sidebar.reconnect') }));
+    expect(props.onOpenAccounts).toHaveBeenCalledWith('acct-1', 'connection');
+    expect(props.activateAccount).not.toHaveBeenCalled();
+  });
+
   it('shows generic server-error state with retry + view-details actions', () => {
     const props = baseProps({ connectionErrorType: 'serverError' });
     render(<ConnectionErrorCard {...props} />);
-    expect(screen.getByText('Server error')).toBeTruthy();
-    fireEvent.click(screen.getByTitle('View error details'));
+    expect(screen.getByText(t('sidebar.connectionProblem'))).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: t('sidebar.details') }));
     expect(props.setShowErrorModal).toHaveBeenCalledWith(true);
-    fireEvent.click(screen.getByTitle('Retry connection'));
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(props.activateAccount).toHaveBeenCalledWith('acct-1', 'INBOX');
   });
 });

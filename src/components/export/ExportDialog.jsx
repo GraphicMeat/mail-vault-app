@@ -106,7 +106,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
   };
 
   return (
-    <Dialog open={open} onClose={onClose} z={Z.dialog} portal size="md"
+    <Dialog open={open} onClose={onClose} dismissable={!busy} z={Z.dialog} portal size="md"
       title={isThread ? t('export.dialog.exportMessagesTitle', { count: messages.length }) : t('export.dialog.exportMessageTitle')}
       panelBg="bg-mail-surface">
       {!isPremium ? (
@@ -163,7 +163,7 @@ export function ExportDialog({ open, messages, account, mailbox, onClose, onUpgr
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>{t('common.cancel')}</Button>
             <Button variant="primary" size="sm" onClick={run} disabled={busy}>
-              {busy ? <Loader size={14} className="animate-spin" /> : t('common.export')}
+              {busy && <Loader size={14} className="animate-spin" />}{t('common.export')}
             </Button>
           </div>
         </>

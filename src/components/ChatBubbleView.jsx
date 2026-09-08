@@ -142,7 +142,7 @@ export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail,
       {/* Header */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 px-4 py-[14px] border-b border-mail-border bg-mail-surface">
         <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
-          onClick={onBack}
+          aria-label={t('workspace.backTopics')} title={t('workspace.backTopics')} onClick={onBack}
         >
           <ChevronLeft size={18} className="text-mail-text-muted" />
         </Button>

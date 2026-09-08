@@ -19,7 +19,7 @@ function bytesToMbInput(bytes) {
   return bytes == null ? '' : String(Math.round(bytes / (1024 * 1024)));
 }
 
-const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, highlighted }, ref) {
+const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account, stats, loading, unavailable, highlighted }, ref) {
   const t = useT();
   const [period, setPeriod] = useState('day');
   const accountColors = useSettingsStore(s => s.accountColors);
@@ -81,6 +81,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
         {PERIODS.map(p => (
           <button
             key={p.id}
+            aria-pressed={period === p.id}
             onClick={() => setPeriod(p.id)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
               period === p.id ? 'bg-mail-accent-fill text-white' : 'text-mail-text-muted hover:text-mail-text'
@@ -92,19 +93,19 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       </div>
 
       {/* Totals for the selected period */}
-      <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border">
+      {unavailable ? <p className="text-sm text-mail-text-muted py-3" role="status">{t('settings.dataUsage.unavailable')}</p> : <div className="grid grid-cols-2 gap-4 pt-3 border-t border-mail-border" aria-busy={loading}>
         <div>
           <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowDown size={12} className="text-mail-accent" /> {t('settings.dataUsage.account.downloaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.down)}</div>
+          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '—' : formatBytes(periodStats.down)}</div>
         </div>
         <div>
           <div className="text-xs text-mail-text-muted flex items-center gap-1"><ArrowUp size={12} className="text-mail-text-muted" /> {t('settings.dataUsage.account.uploaded')}</div>
-          <div className="text-sm font-semibold text-mail-text">{formatBytes(periodStats.up)}</div>
+          <div className="text-sm font-semibold text-mail-text">{loading && !stats ? '—' : formatBytes(periodStats.up)}</div>
         </div>
-      </div>
+      </div>}
 
       {/* Progress vs today's daily limit — always today, independent of the period switcher above */}
-      {(downLimit.limitBytes != null || upLimit.limitBytes != null) && (
+      {!unavailable && !loading && (downLimit.limitBytes != null || upLimit.limitBytes != null) && (
         <div className="space-y-2 pt-3 mt-3 border-t border-mail-border">
           <div className="text-xs text-mail-text-muted">{t('settings.dataUsage.account.todayVsDailyLimit')}</div>
           {downLimit.limitBytes != null && (
@@ -148,16 +149,16 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
       <div className="space-y-3 pt-3 mt-3 border-t border-mail-border">
         <div className="flex items-center justify-between">
           <span className="text-xs text-mail-text">{t('settings.dataUsage.account.warnWhenNearingDailyLimit')}</span>
-          <ToggleSwitch active={warnEnabled} onClick={() => setTransferLimit(account.id, { warnEnabled: !warnEnabled })} />
+          <ToggleSwitch label={t('settings.dataUsage.account.warnWhenNearingDailyLimit')} active={warnEnabled} onClick={() => setTransferLimit(account.id, { warnEnabled: !warnEnabled })} />
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-mail-text">{t('settings.dataUsage.account.pauseSyncDailyLimit')}</span>
-          <ToggleSwitch active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
+          <ToggleSwitch label={t('settings.dataUsage.account.pauseSyncDailyLimit')} active={capEnabled} onClick={() => setTransferLimit(account.id, { capEnabled: !capEnabled })} />
         </div>
         <div className="grid grid-cols-2 gap-3 pt-1">
           <div>
             <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyDownloadLimitMb')}</label>
-            <input
+            <input aria-label={t('settings.dataUsage.account.dailyDownloadLimitMb')}
               type="number"
               min="0"
               defaultValue={bytesToMbInput(config.dailyDownLimitBytes)}
@@ -168,7 +169,7 @@ const DataUsageAccountCard = forwardRef(function DataUsageAccountCard({ account,
           </div>
           <div>
             <label className="text-[11px] text-mail-text-muted mb-1 block">{t('settings.dataUsage.account.dailyUploadLimitMb')}</label>
-            <input
+            <input aria-label={t('settings.dataUsage.account.dailyUploadLimitMb')}
               type="number"
               min="0"
               defaultValue={bytesToMbInput(config.dailyUpLimitBytes)}

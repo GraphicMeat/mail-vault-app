@@ -3,7 +3,7 @@ name: MailVault
 description: A local-first mail client whose interface is a dark desk — where every saturated colour is a claim about who holds your mail.
 colors:
   accent: "#6366f1"
-  accent-hover: "#818cf8"
+  accent-hover: "#5d53dc"
   accent-text: "#a5b4fc"
   accent-fill: "#4f46e5"
   accent-tint: "#262759"
@@ -20,7 +20,7 @@ colors:
   border-strong: "#5f5f8a"
   input-bg: "#0a0a12"
   text: "#e8e8ef"
-  text-muted: "#8b8ba3"
+  text-muted: "#a0a0b6"
   text-on-tint: "#c9c9d8"
   success: "#22c55e"
   success-tint: "#113e27"
@@ -28,6 +28,7 @@ colors:
   warning-tint: "#4d301e"
   danger: "#f87171"
   danger-fill: "#dc2626"
+  danger-hover: "#b91c1c"
   danger-tint: "#4d272d"
   chat-sent-bg: "#4338ca"
   chat-received-bg: "#1e1e2c"
@@ -218,6 +219,12 @@ An indigo-cast near-black field carrying four named roles, each with a solid tin
 ### Primary
 - **Desk Lamp Indigo** (`accent`): the live thing. Active folder, focus ring, selection highlight, control borders, the 2px left edge on a selected row, the checkbox and toggle fills. It splits three ways for contrast and the split is load-bearing: `accent` is the *identity* value (rings, borders, tints, edges), `accent-text` is indigo **as text or an icon** on a dark surface (9.09:1 on `surface`), and `accent-fill` is indigo **as a filled control under white text** (6.29:1 against white). `accent-hover` is the hover pair for both fills. In light theme `accent-text` deepens to the same value as `accent-hover` so it survives a white ground.
 
+### Optional Graphite palette
+
+Settings → Appearance → Colors offers Indigo and Graphite, each with light and dark modes. Indigo remains the default. Graphite uses warm neutral surfaces, violet controls and a subdued green-grey selection; the existing server, vault, only-copy and operation colors retain their meanings. Theme and palette persist independently. Palette previews use the same CSS tokens as the workspace. Dark email rendering uses the selected palette in single-message, thread, expanded and standalone-window readers, including a dark email inside a light app. Light email rendering preserves white paper. JavaScript iframe colors in `src/utils/mailChrome.js` are checked against the CSS tokens.
+
+Graphite dark uses `bg #121313`, `surface #1b1d1c`, `text #edece7`, and `text-muted #a3aaa4`. Graphite light uses `bg #f4f3ee`, `surface #fffefa`, `text #252c27`, and `text-muted #566057`. Both use `accent-fill #6351a8`; token definitions in `src/styles/index.css` are authoritative. Ordinary, hovered and selected text meets 4.5:1 in all four combinations. Filled controls use separate hover colors; links retain `accent-text` and underline on hover.
+
 ### Secondary — the custody vocabulary
 - **Vault Emerald** (`local`): the message is in your vault, on your disk. `HardDrive` glyph, the filled backup dot, archive affordances, the fill of the custody meter.
 - **Server Blue** (`server`): the message is on the server and only there. `Cloud` glyph, and the track of the custody meter — the track *is* the server side of the claim, so it is mixed to 45% against the surface rather than left at its tint, where it vanished.
@@ -259,7 +266,7 @@ Vault Emerald (`#10b981`) and Confirm Green (`#22c55e`) are **1.11:1** apart in 
 
 The palette is checked as a *system*, not colour by colour. Every value must clear all of these:
 
-- Text on its surface ≥ 4.5:1; `text` measures 14.86:1 and `text-muted` 5.45:1 on `surface`.
+- Text on its surface ≥ 4.5:1; `text` measures 14.86:1 and `text-muted` 7.07:1 on `surface`.
 - A role colour used as an icon **on its own tint** ≥ 3:1 — emerald 4.67:1, blue 3.38:1, gold 6.30:1, indigo 3.10:1.
 - `text-on-tint` ≥ 4.5:1 on every tint. **The worst case is the gold hover row, not any flat tint** — 5.08:1 dark, 4.81:1 light. Check it there.
 - A filled control's label ≥ 4.5:1: that is what `accent-fill` and `danger-fill` exist for.
@@ -269,7 +276,7 @@ The palette is checked as a *system*, not colour by colour. Every value must cle
 
 ### The account identity colour
 
-An account's identity colour is **not** part of the four roles and is the one place a user picks a hue. `AVATAR_COLORS` in `src/stores/settingsStore.js` is de-conflicted against every reserved value — violet, pink, teal, cyan, lime, slate, fuchsia, rose — precisely because the identity colour is now structural rather than a 7px dot: `Sidebar.jsx` marks the active account with a **3px spine** in that colour over a `color-mix(in srgb, <color> 10%, transparent)` wash of the same colour. An account hashed to emerald would have claimed "in your vault" down the whole rail; one hashed to red would have read as destructive. This wash is the single derived fill in a system of solid tints, and it is derived because the source colour is the user's, so no token can precompute it.
+An account's identity colour is **not** part of the four roles and is the one place a user picks a hue. `AVATAR_COLORS` in `src/stores/settingsStore.js` avoids reserved custody and status values. Identity colour belongs to the account avatar; the selected row uses the shared accent tint and readable accent text. Connection and backup indicators retain their own glyphs and accessible labels so identity, selection, connection, and custody stay distinct.
 
 ### Surface divergence, recorded not blessed
 
@@ -368,7 +375,7 @@ Soft-but-not-rounded rectangles, with a pill reserved for anything that is a pie
 
 ### Navigation
 - **Sidebar folder rows:** 8px corners, `8px 6px` padding, 16px glyph + 14px label at `gap-2`. Rest is `text` on transparent; hover fills `surface-hover`; **active is `accent/10` fill with `accent-text`** — the accent tint plus the readable accent, not a solid fill, so the list stays quiet and the label still clears 4.5:1.
-- **Account rail:** the active account is marked by a **3px spine in its own identity colour** at the rail edge, over a 10% `color-mix` wash of the same colour. Not a generic accent, and not a fill.
+- **Accounts:** aligned rows use a colored identity avatar, optional secondary address, and the shared accent tint for selection. Collapsed accounts retain the same avatar and selected state. Backup controls remain separate from account activation.
 
 ### Message rows
 - Flex row at fixed height, 16px side padding, `gap-3` (comfortable) or `gap-2` (compact), separated by a bottom hairline.
@@ -400,6 +407,16 @@ Five files own the chrome that used to be copied by hand. Reach for these before
 - **`Popover` / `MenuItem`** — portal, transparent outside-click catcher, Escape, and the panel itself in two shapes: `menu` (ground ink, 8px, `py-1`) and `panel` (surface ink, 12px, `p-4`). The anchor maths stays with the caller, because a row menu clamping to a viewport edge and a submenu opening beside its parent are genuinely different sums.
 - **`ToastShell`** — the fixed card a transient message lives in: position preset, entrance from the edge it is pinned to, `role="status"` (or `alert`), and the surface chrome. `bare` for a toast that draws its own.
 - **`layers.js`** — the named z-scale, bottom to top: `hud` → `surface` → `popover` → `toast` → `dialog` → `alert` → `tooltip` → `fatal`. The numbers are the ones the app already used; what is new is that they have names and a documented order, so a new overlay is a choice rather than a guess.
+
+### Settings and working dialogs
+
+Settings groups destinations under Mail, Vault & privacy, and Support & system. Appearance is a direct destination with Colors, Layout, Reading, and Date & time tabs. Mail preferences contains Behavior, Notifications, and Keyboard shortcuts. Search uses translated setting names and shows the exact destination; selecting a result opens the matching section and moves focus into it. Appearance, Mail preferences, Accounts, and Backup share keyboard-operated tabs. Sections use a centered 920px reading width, 28px page padding, 20px card padding and 24px vertical separation; small windows reduce padding and use native page/account selectors. Controls retain visible labels and clear selected states. Controls align beside their labels at desktop widths and stack in narrow panes; compact theme and palette choices each show a token-based mail sample before selection. Every other Appearance control has a small, immediately updating example directly below it; the control/preview column takes 60% of the desktop form. Examples use fictional mail and never read from or write to live accounts. Inactive Chat preferences label their samples as saved Email layouts. Simple two-way choices use compact segments, and longer choices use native selects. Email colors sit beside the app theme and palette.
+
+Account settings keeps the selected account and its actual connection status above Profile, Connection, and Advanced tabs. Profile contains identity, aliases, and signature; Connection contains credentials and servers; Advanced contains ordering, color, visibility, and removal. A repair action opens Connection, and opening a password editor focuses the input. Short windows allow the identity header to scroll away so the form remains usable.
+
+The workspace sidebar offers three saved layouts independently of folder styling: Stacked shares one scroll region, Split sections reserves up to 35% of the navigation space for accounts and scrolls each list separately, and Account switcher places a searchable account picker above a full-height folder list. Stacked remains the default. Section headings, source filters, and folder search stay outside the independent lists. Windows below the native 600px minimum can fall back to outer scrolling to keep controls reachable. Accounts always use aligned rows with a name, optional address, and quiet status; Bubbles changes folder presentation only. All mail, Server, and Vault remain directly accessible above folders. Refresh, Settings, and Collapse share 32px header targets. Focus and support actions share an aligned footer, with version and theme secondary. Connection failures stay next to the affected active account with a specific repair action and a separate Details dialog. Backup and account activation are independent buttons. The account picker contains keyboard focus and shortcuts, offers All Inboxes and Add Account, and restores focus when it closes. Ten or more folders expose Find folder; results show their parent path and retain real server paths and context-menu metadata. Searching never rewrites saved expansion state. Appearance → Layout shows all three structural samples before selection.
+
+Dialogs share focus containment, Escape behavior and 28–40px icon targets. Long forms and secondary content scroll within the available window. Compose keeps its send controls reachable; the expanded reader occupies the full available window. Destructive controls use `danger-fill` with `danger-hover #b91c1c` under white labels.
 
 ### Motion
 
@@ -461,3 +478,8 @@ Framer Motion under `<MotionConfig reducedMotion="user">`, used sparingly and al
 - **Don't** put a pill on an action or a rectangle on a piece of state.
 - **Don't** import the marketing site's Inter, hero styling, or illustration style into the client — the two surfaces share the indigo and the custody trio, and nothing else.
 - **Don't** let a resting window look busy: if three elements are competing for attention, two are wrong.
+
+
+The email reader gives the subject and sender clear priority. Reply, forward, archive, delete, move, read/unread, star and export stay directly visible whenever that reader supports them. Only Open and Source use the keyboard-operated More menu. Toolbar buttons wrap individually at narrow widths; the message tools stay together at the end of the last available row. Move anchors its folder picker to its own button and exposes its expanded state. The message Light/Dark control stays visible. HTML mail retains its own document layout with a single responsive body inset; plain text uses the same palette background and a comfortable line height.
+
+Onboarding appearance has three tabs with two choices each: Colors (theme and palette), Layout (Email/Chat and reading-pane position), and Reading (message rows and conversation grouping). A single sample-mail preview stays beside the controls on desktop; Continue and Use recommended settings remain in a consistent footer. Tab changes and Continue preserve preferences. Folder style, pointer behavior, and after-deletion behavior remain in Settings, where the latter has its own result preview. Recommended settings restore List navigation and Follow the pointer. The selected Chat topic fills its sample pane and uses the same conversation as Settings and free-feature examples. Indigo and Graphite use real theme tokens; email backgrounds use the reader’s palette helper. Preview copy and timestamps follow the selected language, and controls that only affect Email are disabled in Chat without discarding their saved values. Sample panes contain their own overflow in narrow windows.

@@ -450,7 +450,7 @@ export function BillingSettings({ onNavigate }) {
   };
 
   return (
-    <div ref={rootRef} className="p-6 space-y-6">
+    <div ref={rootRef} className="settings-form space-y-6">
       {/* Transient warning banners — cleared immediately on next successful refresh */}
       {rateLimitMsg && (
         <div className="p-3 rounded-lg bg-mail-warning-tint border border-mail-warning/20 text-xs text-mail-warning">
@@ -465,7 +465,7 @@ export function BillingSettings({ onNavigate }) {
       )}
 
       {/* Current Plan */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-4">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isPremium ? 'bg-mail-accent-tint' : 'bg-mail-accent/10'}`}>
             {isPremium ? <CheckCircle2 size={20} className="text-mail-accent-text" /> : <CreditCard size={20} className="text-mail-accent-text" />}
@@ -519,7 +519,7 @@ export function BillingSettings({ onNavigate }) {
         ) : (
           /* Signed out: account dropdown + sign in */
           <div className="flex gap-2">
-            <select
+            <select aria-label={t('account.emailAddress')}
               value={selectedEmail}
               onChange={e => { setSelectedEmail(e.target.value); setSignInNotice(null); }}
               className="flex-1 min-w-0 px-3 py-2 text-sm bg-mail-bg border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
@@ -595,7 +595,7 @@ export function BillingSettings({ onNavigate }) {
             )}
             <div className="grid grid-cols-2 gap-4">
               {monthlyPlan && (
-                <div className="bg-mail-surface border border-mail-border rounded-xl p-5 flex flex-col">
+                <div className="settings-section flex flex-col">
                   <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.monthly')}</h4>
                   <div className="text-2xl font-bold text-mail-text mb-1">{monthlyPlan.formattedAmount}<span className="text-sm font-normal text-mail-text-muted">/mo</span></div>
                   <p className="text-xs text-mail-text-muted mb-4 flex-1">{t('settings.billing.cancelAnytime')}</p>
@@ -609,11 +609,11 @@ export function BillingSettings({ onNavigate }) {
               {yearlyPlan && (
                 <div className="bg-mail-surface border-2 border-mail-accent rounded-xl p-5 flex flex-col relative">
                   {yearlyPlan.trialEligible && yearlyPlan.trialDays ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent-fill text-white rounded-full">
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-xs font-bold uppercase bg-mail-accent-fill text-white rounded-full">
                       {yearlyPlan.trialDays}-day free trial
                     </span>
                   ) : yearlyPlan.savingsPercent > 0 ? (
-                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-[10px] font-bold uppercase bg-mail-accent-fill text-white rounded-full">
+                    <span className="absolute -top-2.5 right-4 px-2 py-0.5 text-xs font-bold uppercase bg-mail-accent-fill text-white rounded-full">
                       {t('settings.billing.savePercent', { percent: yearlyPlan.savingsPercent })}
                     </span>
                   ) : null}
@@ -642,7 +642,7 @@ export function BillingSettings({ onNavigate }) {
       )}
       {/* Plans unreachable — never leave the user without a way to subscribe */}
       {!IS_APPSTORE_BUILD && !isPremium && !pricing && !pricingLoading && pricingError && (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="settings-section">
           <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.billing.plansCouldNotLoaded')}</h4>
           <p className="text-xs text-mail-text-muted mb-3">{pricingError}</p>
           <div className="flex gap-2">
@@ -661,7 +661,7 @@ export function BillingSettings({ onNavigate }) {
       {/* MAS, no subscription: say where premium comes from without pitching a
           purchase — otherwise the tab is a dead end for an existing subscriber. */}
       {IS_APPSTORE_BUILD && !isPremium && (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="settings-section">
           <h4 className="text-sm font-semibold text-mail-text mb-1">{t('common.premium')}</h4>
           <p className="text-xs text-mail-text-muted">
             {t('settings.billing.premiumFeaturesComeMailvaultSubscription')}
@@ -695,7 +695,7 @@ export function BillingSettings({ onNavigate }) {
 
       {/* Active Devices */}
       {isPremium && activeClients.length > 0 && (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="settings-section">
           <div className="flex items-center justify-between mb-3">
             <h4 className="text-sm font-semibold text-mail-text flex items-center gap-2">
               <Monitor size={16} /> {t('settings.billing.devices')}
@@ -720,9 +720,9 @@ export function BillingSettings({ onNavigate }) {
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-mail-text truncate">
                         {client.clientName || client.platform || 'Unknown device'}
-                        {isCurrent && <span className="ml-1.5 text-[10px] text-mail-accent-text font-semibold">(this device)</span>}
+                        {isCurrent && <span className="ml-1.5 text-xs text-mail-accent-text font-semibold">(this device)</span>}
                       </p>
-                      <p className="text-[10px] text-mail-text-muted">
+                      <p className="text-xs text-mail-text-muted">
                         {[client.platform, client.appVersion && `v${client.appVersion}`].filter(Boolean).join(' · ')}
                         {client.lastSeenAt && ` · ${timeAgo(client.lastSeenAt)}`}
                       </p>
@@ -744,7 +744,7 @@ export function BillingSettings({ onNavigate }) {
       )}
 
       {/* Feature Comparison */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="text-sm font-semibold text-mail-text mb-4">{t('settings.billing.whatSIncluded')}</h4>
         <div className="grid grid-cols-2 gap-6">
           <div>

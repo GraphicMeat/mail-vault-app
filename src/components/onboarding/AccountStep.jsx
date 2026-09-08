@@ -36,13 +36,13 @@ export function AccountStep({ onAdded, onSkip }) {
         {MECHANISMS().map((m) => {
           const Icon = m.icon;
           return (
-            <div key={m.title} className="p-2 rounded-lg border border-mail-border bg-mail-bg flex items-start gap-2">
+            <div key={m.title} className="py-3 border-b border-mail-border bg-mail-bg flex items-start gap-2">
               <div className="w-7 h-7 rounded bg-mail-accent/10 flex items-center justify-center flex-shrink-0">
                 <Icon size={14} className="text-mail-accent-text" />
               </div>
               <div className="min-w-0">
-                <h3 className="font-medium text-xs text-mail-text leading-tight">{m.title}</h3>
-                <p className="text-[10px] text-mail-text-muted leading-tight">{m.description}</p>
+                <h3 className="font-medium text-sm text-mail-text leading-relaxed">{m.title}</h3>
+                <p className="text-xs text-mail-text-muted leading-relaxed">{m.description}</p>
               </div>
             </div>
           );
@@ -50,12 +50,12 @@ export function AccountStep({ onAdded, onSkip }) {
       </div>
 
       <div data-testid="onboarding-keychain-notice"
-           className="bg-mail-warning/10 border border-mail-warning/20 rounded-lg p-2 mb-4">
+           className="bg-mail-warning/10 border border-mail-warning/20 rounded-lg p-3 mb-4">
         <div className="flex items-start gap-2">
           <Key size={14} className="text-mail-warning flex-shrink-0 mt-0.5" />
           <div>
-            <h4 className="font-medium text-xs text-mail-warning">{t('onboarding.keychainWillAskPermission')}</h4>
-            <p className="text-[10px] text-mail-text-muted">{t('onboarding.chooseAlwaysAllow')}</p>
+            <h4 className="font-medium text-sm text-mail-warning">{t('onboarding.keychainWillAskPermission')}</h4>
+            <p className="text-xs text-mail-text-on-tint">{t('onboarding.chooseAlwaysAllow')}</p>
           </div>
         </div>
       </div>

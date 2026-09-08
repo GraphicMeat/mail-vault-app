@@ -14,7 +14,7 @@ export function LanguageSettings() {
   const active = useSettingsStore(s => s.language);
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       <div>
         <h4 className="text-sm font-semibold text-mail-text mb-1">{t('settings.language.title')}</h4>
         <p className="text-xs text-mail-text-muted mb-4">{t('settings.language.subtitle')}</p>
@@ -27,6 +27,17 @@ export function LanguageSettings() {
                 key={l.code}
                 role="radio"
                 aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                onKeyDown={event => {
+                  const index = LOCALES.indexOf(l);
+                  const next = ['ArrowDown', 'ArrowRight'].includes(event.key) ? (index + 1) % LOCALES.length
+                    : ['ArrowUp', 'ArrowLeft'].includes(event.key) ? (index - 1 + LOCALES.length) % LOCALES.length
+                    : event.key === 'Home' ? 0 : event.key === 'End' ? LOCALES.length - 1 : null;
+                  if (next === null) return;
+                  event.preventDefault();
+                  event.currentTarget.parentElement.children[next].focus();
+                  setLocale(LOCALES[next].code).catch(() => {});
+                }}
                 data-testid={`language-row-${l.code}`}
                 onClick={() => { setLocale(l.code).catch(() => {}); }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left
@@ -37,7 +48,7 @@ export function LanguageSettings() {
               >
                 <span className="text-lg leading-none" aria-hidden="true">{l.flag}</span>
                 <span className="text-sm font-medium text-mail-text">{l.native}</span>
-                <span className="text-xs text-mail-text-muted">{l.english}</span>
+                {l.english !== l.native && <span className="text-xs text-mail-text-muted">{l.english}</span>}
                 {selected && <Check size={16} className="ml-auto text-mail-accent-text" />}
               </button>
             );

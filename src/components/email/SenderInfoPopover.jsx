@@ -146,7 +146,7 @@ export const SenderInfoPopover = memo(function SenderInfoPopover({
 
         {/* "via" mailing list indicator */}
         {listName && (
-          <div className="text-[10px] text-mail-text-muted italic mt-1">
+          <div className="text-xs text-mail-text-muted italic mt-1">
             {t('email.viaList', { listName })}
           </div>
         )}

@@ -1,5 +1,5 @@
 import { Button } from '../ui/Button';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AlertCircle, ExternalLink, FolderOpen, HardDrive, Loader } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import * as api from '../../services/api';
@@ -27,9 +27,14 @@ export default function MailStorageLocation({ readOnly = false }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [confirmReset, setConfirmReset] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(!vaultStatus);
+  const loadStatus = useCallback(() => {
+    setLoadingStatus(true);
+    return api.vaultGetStatus().then(setVaultStatus).catch(() => {}).finally(() => setLoadingStatus(false));
+  }, [setVaultStatus]);
 
   useEffect(() => {
-    api.vaultGetStatus().then(setVaultStatus).catch(() => {});
+    loadStatus();
     let unlisten;
     (async () => {
       try {
@@ -38,7 +43,7 @@ export default function MailStorageLocation({ readOnly = false }) {
       } catch { /* web dev mode */ }
     })();
     return () => { if (unlisten) unlisten(); };
-  }, [setVaultStatus]);
+  }, [loadStatus]);
 
   const pickFolder = async (title) => {
     const { open } = await import('@tauri-apps/plugin-dialog');
@@ -125,7 +130,7 @@ export default function MailStorageLocation({ readOnly = false }) {
   const pct = progress?.total ? Math.min(100, Math.round((progress.copied / progress.total) * 100)) : 0;
 
   return (
-    <div className="bg-mail-surface border border-mail-border rounded-xl p-5 space-y-4">
+    <div className="settings-section space-y-4">
       <h4 className="font-semibold text-mail-text flex items-center gap-2">
         <HardDrive size={18} className="text-mail-accent-text" />
         {t('settings.mailLocation.whereMailStored')}
@@ -137,15 +142,16 @@ export default function MailStorageLocation({ readOnly = false }) {
 
       <div className="flex items-center gap-2">
         <div data-testid="vault-path" className="flex-1 text-xs text-mail-text font-mono bg-mail-bg rounded-lg px-3 py-2 truncate border border-mail-border">
-          {vaultStatus?.displayPath || 'Loading...'}
+          {vaultStatus?.displayPath || t(loadingStatus ? 'chat.bubble.loading' : 'settings.backup.config.unavailable')}
         </div>
-        <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
+        {vaultStatus && <span className={`text-xs px-2 py-0.5 rounded-full whitespace-nowrap ${
           missing ? 'bg-mail-danger-tint text-mail-danger'
             : isCustom ? 'bg-mail-accent-tint text-mail-accent-text'
             : 'bg-mail-bg text-mail-text-muted'
         }`}>
           {missing ? t('settings.mailLocation.found') : isCustom ? t('settings.mailLocation.customFolder') : t('settings.appearance.default')}
-        </span>
+        </span>}
+        {!vaultStatus && !loadingStatus && <Button size="sm" onClick={loadStatus}>{t('common.retry')}</Button>}
       </div>
 
       {(busy === 'move' || (busy === 'reset' && progress)) && (

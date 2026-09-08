@@ -84,7 +84,7 @@ export function SendAsVerifyModal({ isOpen, account, sendAsAddress, displayName,
     >
       <div>
           <label className="block text-sm font-medium text-mail-text mb-2">{t('settings.sendAs.sendTest')}</label>
-          <input
+          <input aria-label={t('settings.sendAs.sendTest')}
             type="email"
             value={recipient}
             onChange={(e) => { setRecipient(e.target.value); setStatus('idle'); }}

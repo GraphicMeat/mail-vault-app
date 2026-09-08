@@ -14,7 +14,7 @@ const mailColors = Object.fromEntries(
     'text', 'text-muted',
     'local', 'local-tint', 'server', 'server-tint', 'only-copy', 'only-copy-tint',
     'success', 'success-tint', 'warning', 'warning-tint', 'text-on-tint',
-    'danger', 'danger-fill', 'danger-tint',
+    'danger', 'danger-fill', 'danger-hover', 'danger-tint',
   ].map((name) => [`mail-${name}`, mailColor(name)])
 )
 

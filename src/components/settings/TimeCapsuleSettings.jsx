@@ -15,7 +15,7 @@ export function TimeCapsuleSettings() {
 
   if (!isPremium) {
     return (
-      <div className="p-6">
+      <div className="settings-form">
         <div className="bg-mail-surface border border-mail-border rounded-xl p-8 text-center">
           <Lock size={32} className="text-mail-text-muted mx-auto mb-4" />
           <h3 className="text-sm font-semibold text-mail-text mb-2">{t('settings.timeCapsule.timeCapsuleRequiresPremium')}</h3>
@@ -29,9 +29,9 @@ export function TimeCapsuleSettings() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       {/* Explainer */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-3">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Info size={20} className="text-mail-accent-text" />
@@ -47,7 +47,7 @@ export function TimeCapsuleSettings() {
       </div>
 
       {/* Auto snapshots toggle */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-full bg-mail-accent/10 flex items-center justify-center">
             <Clock size={20} className="text-mail-accent-text" />

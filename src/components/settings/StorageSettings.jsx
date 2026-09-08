@@ -52,6 +52,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
   const [movingStorage, setMovingStorage] = useState(false);
   const [supportsFileSystem, setSupportsFileSystem] = useState(false);
   const [localStorageUsage, setLocalStorageUsage] = useState(null);
+  const [usageError, setUsageError] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
   const [clearCacheConfirm, setClearCacheConfirm] = useState(false);
   const [clearCacheResult, setClearCacheResult] = useState(null);
@@ -85,6 +86,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         setLocalStorageUsage(usage);
         setOrphanStats(orphans);
       } catch (error) {
+        setUsageError(true);
         console.error('Failed to get storage usage:', error);
       }
     };
@@ -126,16 +128,16 @@ export function StorageSettings({ accounts, onUpgrade }) {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="settings-form space-y-6">
       {/* Current Storage Status */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Database size={18} className="text-mail-accent-text" />
           {t('settings.storage.storageStatus')}
         </h4>
 
         <div className="flex items-center gap-3 p-3 bg-mail-local-tint border border-mail-local/20 rounded-lg mb-4">
-          <div className="w-3 h-3 bg-mail-success rounded-full animate-pulse" />
+          <div className="w-3 h-3 bg-mail-success rounded-full" />
           <span className="text-sm text-mail-text">
             {t('settings.storage.emailsStoredSecurelyLocalStorage')}
           </span>
@@ -147,7 +149,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       </div>
 
       {/* Local Email Caching */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <HardDrive size={18} className="text-mail-accent-text" />
           {t('settings.storage.localEmailCaching')}
@@ -169,7 +171,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
             {/* Slider - 5 steps: 1, 3, 6, 12 months, All */}
             <div className="relative">
-              <input
+              <input aria-label={t('settings.storage.cacheDuration')}
                 type="range"
                 min="0"
                 max="4"
@@ -188,11 +190,11 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
               {/* Tick marks */}
               <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo1')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo3')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.mo6')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.year1')}</span>
-                <span className="text-[10px] text-mail-text-muted">{t('settings.storage.all')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo1')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo3')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.storage.mo6')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.storage.year1')}</span>
+                <span className="text-xs text-mail-text-muted">{t('settings.storage.all')}</span>
               </div>
             </div>
           </div>
@@ -212,7 +214,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                     {' '}{t('settings.storage.emailsSavedParen', { count: (localStorageUsage.emailCount || 0).toLocaleString() })}
                   </>
                 ) : (
-                  'Calculating...'
+                  usageError ? t('settings.storage.usageUnavailable') : t('settings.storage.calculating')
                 )}
               </div>
             </div>
@@ -368,70 +370,22 @@ export function StorageSettings({ accounts, onUpgrade }) {
       </div>
 
       {/* Auto-Cleanup Rules */}
-      <div data-testid="settings-auto-cleanup" className="bg-mail-surface border border-mail-border rounded-xl p-5 relative overflow-hidden">
+      <div data-testid="settings-auto-cleanup" className="settings-section relative overflow-hidden">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Clock size={18} className="text-mail-accent-text" />
           Auto-Cleanup
           {!isPaidUser && (
-            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
+            <span className="ml-auto inline-flex items-center gap-1 px-2 py-0.5 text-xs font-bold uppercase tracking-wider bg-mail-accent-fill text-white rounded-full">
               {t('common.premium')}
             </span>
           )}
         </h4>
 
         {!isPaidUser ? (
-          /* Locked state for non-paid users */
-          <div className="relative">
-            {/* Blurred preview of what the UI looks like */}
-            <div className="opacity-30 blur-[1px] pointer-events-none select-none" aria-hidden="true">
-              <div className="space-y-2 mb-3">
-                <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
-                  <div className="flex items-center gap-3 text-sm text-mail-text">
-                    <span>{t('settings.storage.inbox')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.allAccounts')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.olderThan90Days')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.archiveLocallyThenDelete')}</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between p-2.5 bg-mail-bg rounded-lg">
-                  <div className="flex items-center gap-3 text-sm text-mail-text">
-                    <span>{t('settings.storage.trash')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.allAccounts')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.olderThan30Days')}</span>
-                    <span className="text-mail-text-muted">{t('settings.storage.deleteServer')}</span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <div className="px-3 py-1.5 text-sm bg-mail-accent/10 text-mail-accent-text rounded-lg">{t('settings.storage.addRule')}</div>
-                <div className="px-3 py-1.5 text-sm bg-mail-surface-hover text-mail-text rounded-lg">{t('settings.storage.runAllNow')}</div>
-              </div>
-            </div>
-
-            {/* Lock overlay */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-mail-surface/60 backdrop-blur-[1px] rounded-lg">
-              <div className="flex flex-col items-center gap-3 text-center px-6">
-                <div className="w-12 h-12 rounded-full bg-mail-accent-tint border border-mail-accent/30 flex items-center justify-center">
-                  <Clock size={20} className="text-mail-accent-text" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-mail-text mb-1">{t('common.premiumFeature')}</p>
-                  <p className="text-xs text-mail-text-muted max-w-[280px]">
-                    {t('settings.storage.automaticallyCleanUpOldEmails')}
-                  </p>
-                  {/* MAS builds must not advertise the web subscription — no external
-                      purchase price, no path to Stripe checkout. */}
-                  {!IS_APPSTORE_BUILD && (
-                    <p className="text-xs text-mail-text-muted mt-1">{priceBlurb}</p>
-                  )}
-                </div>
-                {!IS_APPSTORE_BUILD && onUpgrade && (
-                  <Button variant="primary" size="sm" pill className="text-xs font-semibold" onClick={onUpgrade}>
-                    {t('common.upgrade')}
-                  </Button>
-                )}
-              </div>
-            </div>
+          <div className="space-y-4">
+            <p className="text-sm text-mail-text-muted max-w-xl">{t('settings.storage.automaticallyCleanUpOldEmails')}</p>
+            {!IS_APPSTORE_BUILD && <p className="text-xs text-mail-text-muted">{priceBlurb}</p>}
+            {!IS_APPSTORE_BUILD && onUpgrade && <Button variant="primary" size="sm" onClick={onUpgrade}>{t('common.upgrade')}</Button>}
           </div>
         ) : (
           /* Full rule management UI for paid users */
@@ -479,7 +433,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 ml-3 shrink-0">
-                      <ToggleSwitch
+                      <ToggleSwitch label={t('settings.storage.enableRule', { folder: decodeImapUtf7(rule.folder) })}
                         active={rule.enabled}
                         onClick={() => toggleCleanupRule(rule.id)}
                       />
@@ -557,7 +511,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   {/* Account dropdown */}
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.account')}</label>
-                    <select
+                    <select aria-label={t('settings.storage.account')}
                       value={cleanupAccount}
                       onChange={(e) => setCleanupAccount(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
@@ -575,7 +529,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   {/* Folder dropdown */}
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 block">{t('common.folder')}</label>
-                    <select
+                    <select aria-label={t('common.folder')}
                       value={cleanupFolder}
                       onChange={(e) => setCleanupFolder(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
@@ -590,7 +544,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.olderThan')}</label>
                     <div className="flex gap-2">
-                      <input
+                      <input aria-label={t('settings.storage.olderThan')}
                         type="number"
                         min={cleanupUnit === 'days' ? 7 : 1}
                         value={cleanupAge}
@@ -600,7 +554,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                         }}
                         className="w-20 px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                       />
-                      <select
+                      <select aria-label={t('settings.storage.olderThan')}
                         value={cleanupUnit}
                         onChange={(e) => {
                           setCleanupUnit(e.target.value);
@@ -613,14 +567,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       </select>
                     </div>
                     {cleanupUnit === 'days' && cleanupAge < 7 && cleanupAge > 0 && (
-                      <p className="text-[10px] text-mail-danger mt-1">{t('settings.storage.minimum7Days')}</p>
+                      <p className="text-xs text-mail-danger mt-1">{t('settings.storage.minimum7Days')}</p>
                     )}
                   </div>
 
                   {/* Action dropdown */}
                   <div>
                     <label className="text-xs text-mail-text-muted mb-1 block">{t('settings.storage.action')}</label>
-                    <select
+                    <select aria-label={t('settings.storage.action')}
                       value={cleanupAction}
                       onChange={(e) => setCleanupAction(e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
@@ -728,7 +682,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
 
       {/* Advanced: Folder Selection (only for supported browsers) */}
       {supportsFileSystem && (
-        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+        <div className="settings-section">
           <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
             <FolderOpen size={18} className="text-mail-accent-text" />
             {t('settings.storage.advancedCustomStorageFolder')}
@@ -759,7 +713,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
       )}
 
       {/* Security */}
-      <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+      <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Shield size={18} className="text-mail-accent-text" />
           {t('settings.storage.security')}

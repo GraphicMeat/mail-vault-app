@@ -141,7 +141,7 @@ export default function ShareUnlockModal({ onSubscribe }) {
       padded={false}
       panelBg="bg-mail-surface"
       aria-labelledby={titleId}
-      panelClassName="overflow-hidden"
+      panelClassName="overflow-y-auto"
     >
           {/* Header */}
           <div className="p-5 pb-4 border-b border-mail-border">

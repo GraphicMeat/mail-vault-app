@@ -1,6 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef, memo } from 'react';
+import '../styles/sidebar-navigation.css';
 import { Dialog } from './ui/Dialog';
 import { Button } from './ui/Button';
+import { Popover } from './ui/Popover';
+import { useDialogA11y } from '../hooks/useDialogA11y';
 import { createPortal } from 'react-dom';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
@@ -11,11 +14,10 @@ import { useUiStore } from '../stores/uiStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../stores/settingsStore';
 import { useBackupStore } from '../stores/backupStore';
-import { motion } from 'framer-motion';
 import * as api from '../services/api';
 import { formatBytes } from '../utils/formatBytes';
 import { lastDaysSeries } from '../utils/transferLimits';
-import { t as tr, t, useT   } from '../i18n/index.js';
+import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
@@ -41,16 +43,13 @@ import {
   PenSquare,
   Sun,
   Moon,
-  WifiOff,
-  Key,
-  ServerOff,
   RefreshCw,
-  Info,
-  X,
   PanelLeftClose,
   PanelLeftOpen,
   Loader,
   Gift,
+  ChevronDown,
+  Search,
 } from 'lucide-react';
 
 const UNIFIED_FOLDERS = () => ([
@@ -61,17 +60,31 @@ const UNIFIED_FOLDERS = () => ([
   { id: tr('common.archive'), name: tr('common.archive'), icon: Archive, specialUse: '\\Archive' },
 ]);
 
-function UnifiedFolderList({ tagCloud = false }) {
-  const t = useT();
+function UnifiedFolderList({ tagCloud = false, compact = false }) {
   const unifiedFolder = useAccountStore(s => s.unifiedFolder);
   const switchUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
 
+  if (compact) {
+    return (
+      <div className="flex-1 min-h-0 overflow-y-auto w-full py-2">
+        {UNIFIED_FOLDERS().map(folder => {
+          const Icon = folder.icon;
+          return (
+            <button key={folder.id} type="button" title={folder.name} aria-label={folder.name}
+              aria-current={unifiedFolder === folder.id ? 'true' : undefined}
+              onClick={() => switchUnifiedFolder(folder.id)}
+              className={`flex items-center justify-center w-10 h-8 mx-auto mb-1 rounded-lg transition-colors ${unifiedFolder === folder.id ? 'bg-mail-accent-tint text-mail-accent-text' : 'text-mail-text-muted hover:bg-mail-surface-hover'}`}>
+              <Icon size={16} />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
   if (tagCloud) {
     return (
-      <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
-        <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          {t('sidebar.allAccounts')}
-        </div>
+      <div>
         <div className="flex flex-wrap gap-1.5">
           {UNIFIED_FOLDERS().map(folder => {
             const isActive = unifiedFolder === folder.id;
@@ -79,10 +92,11 @@ function UnifiedFolderList({ tagCloud = false }) {
             return (
               <button
                 key={folder.id}
+                aria-current={isActive ? 'true' : undefined}
                 onClick={() => switchUnifiedFolder(folder.id)}
                 className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                            ${isActive
-                             ? 'bg-mail-accent-fill text-white border-mail-accent'
+                             ? 'bg-mail-accent-tint text-mail-accent-text border-mail-accent'
                              : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
                 title={folder.name}
               >
@@ -97,16 +111,15 @@ function UnifiedFolderList({ tagCloud = false }) {
   }
 
   return (
-    <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
-      <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-        {t('sidebar.allAccounts')}
-      </div>
+    <div>
       {UNIFIED_FOLDERS().map(folder => {
         const isActive = unifiedFolder === folder.id;
         const Icon = folder.icon;
         return (
           <div
             key={folder.id}
+            role="button" tabIndex={0} aria-current={isActive ? 'true' : undefined}
+            onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchUnifiedFolder(folder.id); } }}
             className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
                        ${isActive ? 'bg-mail-accent/10 text-mail-accent-text' : 'text-mail-text hover:bg-mail-surface-hover'}`}
             onClick={() => switchUnifiedFolder(folder.id)}
@@ -162,7 +175,7 @@ function BackupStatusIcon({ accountId, onClick }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); onClick?.(accountId); }}
-      className="hover:opacity-70 transition-opacity"
+      className="sidebar-backup-status hover:opacity-70 transition-opacity"
       title={title}
     >
       {icon}
@@ -223,259 +236,101 @@ function BackupIndicator({ onOpenBackup }) {
 
 /** Collapsed sidebar: one button per account — memoized so backup badge changes only rerender this row */
 const CollapsedAccountButton = memo(function CollapsedAccountButton({
-  account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
-  unreadCount, onActivate, onOpenBackup
+  account, label, isActive, color, initial, unifiedInbox, connectionStatus,
+  unreadCount, onActivate, onActivateInbox, onOpenBackup
 }) {
   const t = useT();
   return (
-    // Same active marker as the expanded rail: the identity spine over a 10%
-    // wash of the same colour. A ring here was the last box-shadow in the
-    // app's own chrome, and it said "active" in a language nothing else
-    // in the client speaks. (The email-body iframe keeps its own.)
-    <button
-      className={`relative p-1.5 rounded-lg transition-colors
-                 ${isActive && !unifiedInbox ? '' : 'hover:bg-mail-surface-hover'}`}
-      style={isActive && !unifiedInbox
-        ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
-        : undefined}
-      onClick={onActivate}
-      aria-label={account.name || account.email}
-      aria-current={isActive && !unifiedInbox ? 'true' : undefined}
-      title={account.name || account.email}
-    >
-      {isActive && !unifiedInbox && (
-        <span
-          aria-hidden="true"
-          className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      )}
-      <div
-        className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
-        style={{ backgroundColor: color }}
-      >
-        {initial}
-      </div>
-      <div className="absolute -top-0.5 -right-0.5">
-        <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
-      </div>
-      {unreadCount > 0 && (
-        <div className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-mail-danger-fill flex items-center justify-center">
-          <span className="text-[9px] font-bold text-white leading-none">
-            {unreadCount > 99 ? '99+' : unreadCount}
+    <div className="relative">
+      <button type="button"
+        className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}
+        onClick={onActivate}
+        onDoubleClick={onActivateInbox}
+        aria-label={label === account.email ? label : `${label}, ${account.email}`}
+        aria-current={isActive && !unifiedInbox ? 'true' : undefined}
+        title={label === account.email ? label : `${label} — ${account.email}`}>
+        <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none" style={{ backgroundColor: color }}>
+          {initial}
+        </span>
+        {unreadCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-0.5 rounded-full bg-mail-danger-fill flex items-center justify-center">
+            <span className="text-[11px] font-bold text-white leading-none">{unreadCount > 99 ? '99+' : unreadCount}</span>
           </span>
-        </div>
-      )}
-      {isActive && !unifiedInbox && (
-        <div
-          className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface
-                     ${connectionStatus === 'connected' ? 'bg-mail-success' :
-                       connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-          title={
-            connectionStatus === 'connected' ? t('settings.accounts.connected') :
-            connectionStatus === 'error' ? (connectionError || 'Connection error — retrying...') :
-            'Reconnecting...'
-          }
-        />
-      )}
-    </button>
+        )}
+        {isActive && !unifiedInbox && (
+          <span className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface ${connectionStatus === 'connected' ? 'bg-mail-success' : connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
+            title={connectionStatus === 'connected' ? t('settings.accounts.connected') : connectionStatus === 'error' ? t('sidebar.connectionProblem') : t('sidebar.connecting')} />
+        )}
+      </button>
+      <div className="sidebar-collapsed-backup"><BackupStatusIcon accountId={account.id} onClick={onOpenBackup} /></div>
+    </div>
   );
 });
 
-/** Expanded sidebar: one row per account — memoized so backup badge changes only rerender this row */
+/** Account identity is the same in both navigation styles. Folder style is independent. */
 const ExpandedAccountRow = memo(function ExpandedAccountRow({
-  account, isActive, color, initial, unifiedInbox, connectionStatus, connectionError,
-  unreadCount, onActivate, onOpenBackup
+  account, label, isActive, color, initial, unifiedInbox, connectionStatus,
+  unreadCount, onActivate, onActivateInbox, onOpenBackup,
 }) {
   const t = useT();
-  // The active account is marked by its own identity colour, not by a generic
-  // accent: a 3px spine at the rail edge over a 10% wash of the same colour.
-  // color-mix keeps one source of truth (the account colour) instead of a
-  // second stored tint that could drift out of sync with it.
+  const selected = isActive && !unifiedInbox;
+  const showAddress = label !== account.email;
   return (
-    <div
-      className={`relative flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all text-mail-text
-                 ${isActive && !unifiedInbox ? '' : 'hover:bg-mail-surface-hover'}`}
-      style={isActive && !unifiedInbox
-        ? { backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)` }
-        : undefined}
-      onClick={onActivate}
-    >
-      {isActive && !unifiedInbox && (
-        <span
-          aria-hidden="true"
-          className="absolute left-0 top-0 bottom-0 w-[3px] rounded-full"
-          style={{ backgroundColor: color }}
-        />
-      )}
-      <div className="relative flex-shrink-0">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold select-none"
-          style={{ backgroundColor: color }}
-        >
-          {initial}
-        </div>
-        {unreadCount > 0 && (
-          <div className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-mail-danger-fill flex items-center justify-center">
-            <span className="text-[10px] font-bold text-white leading-none">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </span>
-          </div>
-        )}
-        {isActive && !unifiedInbox && (
-          <div
-            className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-mail-surface
-                       ${connectionStatus === 'connected' ? 'bg-mail-success' :
-                         connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-            title={connectionStatus === 'connected' ? t('settings.accounts.connected') :
-                   connectionStatus === 'error' ? t('sidebar.offline', { connectionError }) : t('sidebar.connecting')}
-          />
-        )}
-      </div>
-      <div className="flex-1 min-w-0">
-        {account.name ? (
-          <>
-            <div className="text-sm font-medium truncate">
-              {account.name}
-            </div>
-            <div className="text-xs text-mail-text-muted truncate">
-              {account.email}
-            </div>
-          </>
-        ) : (
-          <div className="text-sm font-medium truncate">
-            {account.email}
-          </div>
-        )}
-      </div>
+    <div className={`sidebar-account-row ${selected ? 'sidebar-account-selected' : ''}`}>
+      <button type="button" className="sidebar-account-open"
+        aria-label={showAddress ? `${label}, ${account.email}` : account.email}
+        aria-current={selected ? 'true' : undefined}
+        title={showAddress ? `${label} — ${account.email}` : account.email}
+        onClick={onActivate} onDoubleClick={onActivateInbox}>
+        <span className="sidebar-account-avatar" style={{ backgroundColor: color }} aria-hidden="true">{initial}</span>
+        <span className="sidebar-account-label">
+          <span className="sidebar-account-name">{label}</span>
+          {showAddress && <span className="sidebar-account-address">{account.email}</span>}
+        </span>
+        <span className="sidebar-account-indicators">
+          {unreadCount > 0 && <span className="sidebar-unread-count">{unreadCount > 99 ? '99+' : unreadCount}</span>}
+          {selected && connectionStatus !== 'connected' && (
+            connectionStatus === 'error'
+              ? <AlertCircle size={14} className="text-mail-warning" aria-label={t('sidebar.connectionProblem')} />
+              : <Loader size={13} className="text-mail-text-muted animate-spin" aria-label={t('sidebar.connecting')} />
+          )}
+        </span>
+      </button>
       <BackupStatusIcon accountId={account.id} onClick={onOpenBackup} />
     </div>
   );
 });
 
-/** Password-missing / connection-error card with retry + change-server actions.
- * Shared between the tag-cloud (collapsed) and expanded sidebar layouts so
- * both stay in sync (see feedback_virtualized_list_portal-style parity note). */
+/** A readable status and the next useful action. Technical repair lives in Details. */
 export const ConnectionErrorCard = memo(function ConnectionErrorCard({
   account, connectionErrorType, activeMailbox, activateAccount,
-  retryKeychainAccess, setShowErrorModal, onOpenAccounts, wrapperClassName = 'mt-2',
+  setShowErrorModal, onOpenAccounts, wrapperClassName = '',
 }) {
   const t = useT();
-  return (
-    <div className={`${wrapperClassName} p-2 rounded-lg border ${
-      connectionErrorType === 'passwordMissing'
-        ? 'bg-mail-warning/10 border-mail-warning/20'
-        : 'bg-mail-danger/10 border-mail-danger/20'
-    }`}>
-      {connectionErrorType === 'passwordMissing' ? (
-        <div className="text-xs text-mail-warning">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Key size={14} />
-              <span>{t('sidebar.passwordMissing')}</span>
-            </div>
-            <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
-              onClick={retryKeychainAccess}
-              title={t('common.retry')}
-            >
-              <RefreshCw size={12} />
-            </Button>
-          </div>
-          <button
-            onClick={() => onOpenAccounts?.(account.id)}
-            className="mt-1.5 w-full px-2 py-1 text-xs font-medium bg-mail-warning/20
-                       hover:bg-mail-warning/30 rounded transition-colors text-center"
-          >
-            {t('sidebar.reenterPassword')}
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between text-xs text-mail-danger">
-          <div className="flex items-center gap-2">
-            {connectionErrorType === 'offline' ? (
-              <><WifiOff size={14} /><span>{t('sidebar.noInternet')}</span></>
-            ) : connectionErrorType === 'outlookOAuth' ? (
-              <><ServerOff size={14} /><span>{t('sidebar.microsoftIssue')}</span></>
-            ) : connectionErrorType === 'oauthExpired' ? (
-              <><Key size={14} /><span>{t('sidebar.oauth2Expired')}</span></>
-            ) : connectionErrorType === 'timeout' ? (
-              <><RefreshCw size={14} /><span>{t('sidebar.timedOut')}</span></>
-            ) : (
-              <><ServerOff size={14} /><span>{t('sidebar.serverError')}</span></>
-            )}
-          </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
-              onClick={() => setShowErrorModal(true)}
-              title={t('sidebar.viewErrorDetails')}
-            >
-              <Info size={12} />
-            </Button>
-            <Button variant="ghost" icon size="xs" className="hover:bg-mail-danger/20"
-              onClick={() => activateAccount(account.id, activeMailbox)}
-              title={t('sidebar.retryConnection')}
-            >
-              <RefreshCw size={12} />
-            </Button>
-          </div>
-        </div>
-      )}
-      {account.authType !== 'oauth2' && (connectionErrorType === 'passwordMissing' ||
-        connectionErrorType === 'oauthExpired' ||
-        connectionErrorType === 'serverError') && (
-        <div className="mt-1.5">
-          <div className="text-[11px] text-mail-text-muted text-center mb-1">
-            {t('sidebar.switchedProviders')}
-          </div>
-          <button
-            onClick={() => useSettingsStore.getState().openChangeServer(account.id)}
-            className="w-full px-2 py-1 text-[11px] font-medium text-mail-text-muted
-                       hover:text-mail-text hover:bg-mail-surface-hover rounded transition-colors text-center"
-            title={t('sidebar.repointAccount')}
-          >
-            {t('sidebar.changeServer')}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-});
+  const needsPassword = connectionErrorType === 'passwordMissing';
+  const needsSignIn = connectionErrorType === 'oauthExpired';
+  const statusKey = needsPassword ? 'sidebar.passwordMissing'
+    : needsSignIn ? 'sidebar.signInRequired'
+    : connectionErrorType === 'offline' ? 'sidebar.noInternet'
+    : connectionErrorType === 'outlookOAuth' ? 'sidebar.microsoftIssue'
+    : connectionErrorType === 'timeout' ? 'sidebar.timedOut'
+    : 'sidebar.connectionProblem';
+  const repair = () => needsPassword || needsSignIn
+    ? onOpenAccounts?.(account.id, 'connection')
+    : activateAccount(account.id, activeMailbox);
 
-/** Tag-cloud account bubble — compact pill form of ExpandedAccountRow */
-const TagCloudAccountBubble = memo(function TagCloudAccountBubble({
-  account, isActive, color, initial, unifiedInbox, connectionStatus,
-  unreadCount, label, onActivate,
-}) {
-  const t = useT();
   return (
-    <button
-      onClick={onActivate}
-      title={account.name ? `${account.name} — ${account.email}` : account.email}
-      className={`relative inline-flex items-center gap-1.5 pl-0.5 pr-2.5 py-0.5 rounded-full text-xs transition-all border max-w-full min-w-0
-                 ${isActive && !unifiedInbox
-                   ? 'bg-mail-accent-fill text-white border-mail-accent'
-                   : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
-    >
-      <span
-        className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold select-none flex-shrink-0"
-        style={{ backgroundColor: color }}
-      >
-        {initial}
-      </span>
-      <span className="truncate min-w-0">{label}</span>
-      {unreadCount > 0 && (
-        <span className="min-w-[16px] h-4 px-1 rounded-full bg-mail-danger-fill text-[9px] font-bold text-white flex items-center justify-center leading-none">
-          {unreadCount > 99 ? '99+' : unreadCount}
-        </span>
-      )}
-      {isActive && !unifiedInbox && (
-        <span
-          className={`w-1.5 h-1.5 rounded-full flex-shrink-0
-                     ${connectionStatus === 'connected' ? 'bg-mail-success' :
-                       connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
-        />
-      )}
-    </button>
+    <div className={`sidebar-connection-notice ${wrapperClassName}`}>
+      <p role="status"><AlertCircle size={13} aria-hidden="true" /><span>{t(statusKey)}</span></p>
+      <div className="sidebar-connection-actions">
+        <Button variant="link" size="xs" onClick={repair}>
+          {t(needsPassword ? 'sidebar.enterPassword' : needsSignIn ? 'sidebar.reconnect' : 'common.retry')}
+        </Button>
+        <Button variant="ghost" size="xs" onClick={() => setShowErrorModal(true)} title={t('sidebar.viewErrorDetails')}>
+          {t('sidebar.details')}
+        </Button>
+      </div>
+    </div>
   );
 });
 
@@ -517,7 +372,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
         <>
           <div className="flex items-center justify-between mb-2">
             <span className="text-mail-text-muted">{t('sidebar.lastNDays', { n: 7 })}</span>
-            <span className="flex items-center gap-2 text-[10px] text-mail-text-muted">
+            <span className="flex items-center gap-2 text-[11px] text-mail-text-muted">
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent" />{t('sidebar.down')}</span>
               <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-mail-accent/45" />{t('sidebar.up')}</span>
             </span>
@@ -549,7 +404,7 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
               );
             })}
           </div>
-          <div className="flex gap-1 mt-1 mb-2 text-[10px] text-mail-text-muted">
+          <div className="flex gap-1 mt-1 mb-2 text-[11px] text-mail-text-muted">
             {week.map(d => <div key={d.key} className="flex-1 text-center">{d.label}</div>)}
           </div>
 
@@ -569,6 +424,54 @@ function TransferStatsHoverBubble({ pos, stats, onClick, onMouseEnter, onMouseLe
     </div>,
     document.body
   );
+}
+
+/** Searchable account selection stays anchored to the current account. */
+function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow, onAddAccount }) {
+  const t = useT();
+  const [query, setQuery] = useState('');
+  const panelRef = useDialogA11y(true, onClose);
+  const normalized = query.trim().toLocaleLowerCase();
+  const matches = accounts.filter(({ label, account }) =>
+    `${label} ${account.email}`.toLocaleLowerCase().includes(normalized));
+  const showUnified = !!unifiedRow && (!normalized || t('sidebar.allInboxes').toLocaleLowerCase().includes(normalized));
+
+  const moveFocus = (event) => {
+    // Keyboard interaction belongs to this picker while it covers the mail
+    // view, including printable keys on results that would delete or reply.
+    event.stopPropagation();
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    const fromInput = event.target.tagName === 'INPUT';
+    if (fromInput && (event.key === 'Home' || event.key === 'End')) return;
+    const choices = [...panelRef.current.querySelectorAll('[data-account-choice], .sidebar-account-open')];
+    if (!choices.length) return;
+    event.preventDefault();
+    const current = choices.indexOf(document.activeElement);
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? choices.length - 1
+      : event.key === 'ArrowDown' ? (current + 1) % choices.length
+        : current <= 0 ? choices.length - 1 : current - 1;
+    choices[index].focus();
+    choices[index].scrollIntoView?.({ block: 'nearest' });
+  };
+
+  return <Popover open onClose={onClose} ref={panelRef} variant="panel" role="dialog"
+    aria-label={t('workspace.accounts')} aria-modal="true" className="sidebar-account-chooser"
+    style={position} onKeyDown={moveFocus}>
+    <label className="sidebar-find-field">
+      <Search size={14} aria-hidden="true" />
+      <input data-autofocus type="search" aria-label={t('sidebar.findAccount')}
+        placeholder={t('sidebar.findAccount')} value={query} onChange={event => setQuery(event.target.value)} />
+    </label>
+    <div className="sidebar-chooser-list">
+      {showUnified && unifiedRow}
+      {matches.map(({ account }) => renderAccount(account, true))}
+      {matches.length === 0 && !showUnified && <p className="sidebar-no-results" role="status">{t('sidebar.noAccountsFound')}</p>}
+    </div>
+    <div className="sidebar-chooser-footer">
+      <Button variant="primary" fullWidth size="sm" data-account-choice
+        onClick={() => { onClose(); onAddAccount?.(); }}><Plus size={15} />{t('sidebar.addAccount')}</Button>
+    </div>
+  </Popover>;
 }
 
 export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend }) {
@@ -619,24 +522,23 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   const { theme, toggleTheme } = useThemeStore();
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
-  const getDisplayName = useSettingsStore(s => s.getDisplayName);
+  const displayNames = useSettingsStore(s => s.displayNames);
   const accountColors = useSettingsStore(s => s.accountColors);
   const hiddenAccounts = useSettingsStore(s => s.hiddenAccounts);
   const sidebarCollapsed = useSettingsStore(s => s.sidebarCollapsed);
   const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
   const sidebarStyle = useSettingsStore(s => s.sidebarStyle);
+  const sidebarLayout = useSettingsStore(s => s.sidebarLayout) || 'stacked';
   const accountOrder = useSettingsStore(s => s.accountOrder);
-  const sidebarAccountsRatio = useSettingsStore(s => s.sidebarAccountsRatio);
-  const setSidebarAccountsRatio = useSettingsStore(s => s.setSidebarAccountsRatio);
-
-  const billingProfile = useSettingsStore(s => s.billingProfile);
-  const isPremium = hasPremiumAccess(billingProfile);
 
   const storedExpanded = useSettingsStore(s => s.expandedFolders);
   const setStoredExpanded = useSettingsStore(s => s.setExpandedFolders);
 
   const [showErrorModal, setShowErrorModal] = useState(false);
   const [showError, setShowError] = useState(false);
+  const [folderQuery, setFolderQuery] = useState('');
+  const [chooserPosition, setChooserPosition] = useState(null);
+  const accountTriggerRef = useRef(null);
 
   // Account hover bubble: today/month transfer stats, shown after a short delay
   const [hoverAccountId, setHoverAccountId] = useState(null);
@@ -713,15 +615,18 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   // Delay showing connection errors by 3 seconds — transient errors on launch resolve quickly
   useEffect(() => {
+    setShowError(false);
     if (connectionStatus === 'error') {
       const timer = setTimeout(() => setShowError(true), 3000);
       return () => clearTimeout(timer);
     }
-    setShowError(false);
   }, [connectionStatus, activeAccountId]);
 
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
+
+  useEffect(() => { setFolderQuery(''); }, [activeAccountId, unifiedInbox]);
+  useEffect(() => { setChooserPosition(null); }, [sidebarLayout, sidebarCollapsed, activeAccountId, unifiedInbox]);
 
   const orderedAccounts = useMemo(
     () => getOrderedAccounts(accounts).filter(a => !hiddenAccounts[a.id]),
@@ -855,55 +760,49 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     />
   );
 
-  // Shared error modal (rendered in both collapsed and expanded views)
+  // Recovery details stay out of navigation, but every existing repair remains available.
   const errorModal = (
-        <Dialog
-          open={Boolean(showErrorModal && connectionError)}
-          onClose={() => setShowErrorModal(false)}
-          padded={false}
-          aria-label={t('sidebar.errorDetailsLabel')}
-          panelClassName="overflow-hidden"
-        >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-mail-border">
-              <h3 className="text-sm font-semibold text-mail-text">{t('sidebar.errorDetails')}</h3>
-              <Button
-                variant="ghost"
-                icon
-                size="xs"
-                onClick={() => setShowErrorModal(false)}
-                aria-label={t('common.close')}
-              >
-                <X size={14} />
-              </Button>
-            </div>
-            <div className="p-4">
-              <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">
-                {connectionError}
-              </p>
-              {connectionErrorType === 'outlookOAuth' && (
-                <button
-                  onClick={async () => {
-                    const url = 'https://mailvaultapp.com/faq.html#microsoft-outlook-oauth2';
-                    if (window.__TAURI__) {
-                      const { open } = await import('@tauri-apps/plugin-shell');
-                      await open(url);
-                    } else {
-                      window.open(url, '_blank');
-                    }
-                  }}
-                  className="mt-3 text-sm text-mail-accent-text hover:text-mail-accent-hover transition-colors underline"
-                >
-                  {t('sidebar.learnMoreFaq')}
-                </button>
-              )}
-            </div>
-        </Dialog>
+    <Dialog
+      open={Boolean(showErrorModal && activeAccount)}
+      onClose={() => setShowErrorModal(false)}
+      size="sm"
+      title={t('sidebar.accountConnection')}
+      description={activeAccount?.email}
+    >
+      {connectionError && <p className="text-sm text-mail-text-muted whitespace-pre-wrap break-words">{connectionError}</p>}
+      {connectionErrorType === 'passwordMissing' && (
+        <Button variant="secondary" size="sm" onClick={retryKeychainAccess}>
+          <RefreshCw size={14} />{t('common.retry')}
+        </Button>
+      )}
+      {activeAccount?.authType !== 'oauth2' && ['passwordMissing', 'oauthExpired', 'serverError'].includes(connectionErrorType) && (
+        <div className="pt-3 border-t border-mail-border">
+          <p className="text-xs text-mail-text-muted mb-2">{t('sidebar.switchedProviders')}</p>
+          <Button variant="secondary" size="sm" title={t('sidebar.repointAccount')}
+            onClick={() => { setShowErrorModal(false); useSettingsStore.getState().openChangeServer(activeAccount.id); }}>
+            {t('sidebar.changeServer')}
+          </Button>
+        </div>
+      )}
+      {connectionErrorType === 'outlookOAuth' && (
+        <button
+          onClick={async () => {
+            const url = 'https://mailvaultapp.com/faq.html#microsoft-outlook-oauth2';
+            if (window.__TAURI__) {
+              const { open } = await import('@tauri-apps/plugin-shell');
+              await open(url);
+            } else window.open(url, '_blank');
+          }}
+          className="text-sm text-mail-accent-text hover:underline"
+        >{t('sidebar.learnMoreFaq')}</button>
+      )}
+    </Dialog>
   );
 
   // --- COLLAPSED SIDEBAR ---
   if (collapsed) {
     return (
-      <div className="w-14 h-full bg-mail-surface border-r border-mail-border flex flex-col items-center relative transition-all duration-200">
+      <div className="w-14 h-full bg-mail-surface border-r border-mail-border flex flex-col items-center relative">
         {/* Expand button */}
         <div data-tauri-drag-region className="w-full py-3 flex justify-center border-b border-mail-border flex-shrink-0">
           <Button variant="ghost" icon size="md"
@@ -915,7 +814,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Compose */}
-        <div className="w-full py-2 flex justify-center border-b border-mail-border">
+        <div className="w-full py-2 flex justify-center border-b border-mail-border shrink-0">
           <button
             onClick={onCompose}
             className="p-2.5 bg-mail-accent-fill hover:bg-mail-accent-hover text-white rounded-lg transition-colors"
@@ -927,7 +826,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {/* All Inboxes (collapsed) */}
         {showUnifiedInbox && (
-          <div className="w-full py-2 border-b border-mail-border flex justify-center">
+          <div className="w-full py-2 border-b border-mail-border flex justify-center shrink-0">
             <button
               data-testid="all-inboxes-btn"
               onClick={() => setUnifiedInbox(true)}
@@ -943,24 +842,24 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         )}
 
         {/* Account icons */}
-        <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1">
+        <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
               key={account.id}
               ref={el => { hoverRowRefs.current[account.id] = el; }}
               onMouseEnter={() => handleAccountHoverStart(account.id)}
               onMouseLeave={scheduleHoverClose}
-              onDoubleClick={() => activateInbox(account.id)}
             >
               <CollapsedAccountButton
                 account={account}
+                label={displayNames[account.id] || account.name || account.email}
                 isActive={account.id === activeAccountId}
                 color={getAccountColor(accountColors, account)}
-                initial={getAccountInitial(account, getDisplayName(account.id))}
+                initial={getAccountInitial(account, displayNames[account.id])}
                 unifiedInbox={unifiedInbox}
                 connectionStatus={connectionStatus}
-                connectionError={connectionError}
                 unreadCount={unreadPerAccount[account.id] || 0}
+                onActivateInbox={() => activateInbox(account.id)}
                 onActivate={() => {
                   const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
                   openFolder(account.id, lastMailbox || 'INBOX');
@@ -982,8 +881,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Folder icons with expandable children — hidden in unified inbox mode */}
-        {unifiedInbox && <div className="flex-1" />}
-        {!unifiedInbox && <div className="flex-1 overflow-y-auto w-full py-2 text-sm">
+        {unifiedInbox && <UnifiedFolderList compact />}
+        {!unifiedInbox && <div className="flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
             mailboxes={mailboxes}
@@ -997,7 +896,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>}
 
         {/* Footer icons */}
-        <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-0.5">
+        <div className="w-full py-2 border-t border-mail-border flex flex-col items-center gap-0.5 shrink-0">
           <Button variant="ghost" icon size="sm"
             onClick={toggleTheme}
             title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
@@ -1016,7 +915,6 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           </Button>
           {/* Backup in progress indicator (collapsed) */}
           <CollapsedBackupIcon onOpenBackup={onOpenBackup} />
-          <FocusTimerButton collapsed onUpgrade={() => onOpenSettings('billing')} />
           <Button variant="ghost" icon size="sm"
             onClick={onOpenSettings}
             data-testid="open-settings"
@@ -1024,6 +922,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           >
             <Settings size={15} className="text-mail-text-muted" />
           </Button>
+          <FocusTimerButton collapsed onUpgrade={() => onOpenSettings('billing')} />
           <Button variant="ghost" icon size="sm"
             onClick={onReportBug}
             title={t('sidebar.reportABug')}
@@ -1060,42 +959,80 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   }
 
   // --- EXPANDED SIDEBAR ---
+  const closeChooser = () => setChooserPosition(null);
+  const openChooser = () => {
+    handleAccountHoverEnd();
+    const rect = accountTriggerRef.current.getBoundingClientRect();
+    // Keep the selected account as the visual anchor; shared Popover clamps
+    // the complete panel if a short window cannot fit it underneath.
+    accountTriggerRef.current.focus();
+    setChooserPosition({ left: rect.left, top: rect.bottom + 6, width: Math.max(280, rect.width) });
+  };
+  const useSwitcher = sidebarLayout === 'switcher';
+  const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
+    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox ? 'true' : undefined}
+      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox ? 'sidebar-account-selected' : ''}`}
+      onClick={() => { if (chooser) closeChooser(); setUnifiedInbox(true); }}>
+      <span className="sidebar-unified-icon"><Inbox size={17} /></span>
+      <span>{t('sidebar.allInboxes')}</span>
+    </button>
+  );
+  const renderAccount = (account, chooser = false) => (
+    <div key={account.id}
+      ref={el => { if (!chooser) hoverRowRefs.current[account.id] = el; }}
+      onMouseEnter={chooser ? undefined : () => handleAccountHoverStart(account.id)}
+      onMouseLeave={chooser ? undefined : scheduleHoverClose}>
+      <ExpandedAccountRow account={account} label={displayNames[account.id] || account.name || account.email}
+        isActive={account.id === activeAccountId} color={getAccountColor(accountColors, account)}
+        initial={getAccountInitial(account, displayNames[account.id])} unifiedInbox={unifiedInbox}
+        connectionStatus={connectionStatus} unreadCount={unreadPerAccount[account.id] || 0}
+        onActivateInbox={() => { if (chooser) closeChooser(); activateInbox(account.id); }}
+        onActivate={() => {
+          if (chooser) closeChooser();
+          const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
+          openFolder(account.id, lastMailbox || 'INBOX');
+        }}
+        onOpenBackup={id => { if (chooser) closeChooser(); onOpenBackup?.(id); }} />
+    </div>
+  );
+  const renderAccountNotice = account => account && <>
+    {suspectEmptyServerData?.accountId === account.id && (
+      <div data-testid="cached-data-banner" className="sidebar-connection-notice">
+        <p role="status"><AlertTriangle size={13} aria-hidden="true" /><span>{t('sidebar.showingCachedData')}</span></p>
+        <p className="sidebar-cache-explanation">{suspectEmptyServerData.message}</p>
+        <Button variant="link" size="xs" onClick={refreshCurrentView} title={t('sidebar.retryConnection')}>{t('common.retry')}</Button>
+      </div>
+    )}
+    {showError && connectionStatus === 'error' && (
+      <ConnectionErrorCard account={account} connectionErrorType={connectionErrorType}
+        activeMailbox={activeMailbox} activateAccount={activateAccount}
+        setShowErrorModal={setShowErrorModal} onOpenAccounts={onOpenAccounts} />
+    )}
+  </>;
+  const selectedAccountLabel = unifiedInbox ? t('sidebar.allInboxes')
+    : activeAccount ? displayNames[activeAccount.id] || activeAccount.name || activeAccount.email : t('sidebar.addAccount');
+
   return (
-    <div className="w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative transition-all duration-200">
-      {/* Logo */}
-      <div data-tauri-drag-region className="px-4 py-3 border-b border-mail-border flex items-center justify-between flex-shrink-0">
-        <h1 className="text-xl font-display font-bold">
-          <span className="text-mail-accent-text">{t('sidebar.mail')}</span>
-          <span className="text-mail-text">{t('sidebar.vault')}</span>
+    <div className="mail-sidebar w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative">
+      <div data-tauri-drag-region data-testid="sidebar-header" className="sidebar-header">
+        <h1 className="sidebar-brand font-display font-bold">
+          <span className="text-mail-accent-text">{t('sidebar.mail')}</span><span>{t('sidebar.vault')}</span>
         </h1>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" icon size="md"
-            onClick={toggleTheme}
-            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}
-          >
-            {theme === 'dark' ? (
-              <Sun size={18} className="text-mail-text-muted" />
-            ) : (
-              <Moon size={18} className="text-mail-text-muted" />
-            )}
+        <div className="sidebar-header-tools">
+          <Button variant="ghost" icon size="sm" onClick={refreshCurrentView} title={t('sidebar.refreshEmails')}>
+            <RefreshCw size={16} className={loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''} />
           </Button>
-          <Button variant="ghost" icon size="md"
-            onClick={refreshCurrentView}
-            title={t('sidebar.refreshEmails')}
-          >
-            <RefreshCw size={18} className={`text-mail-text-muted ${loading || loadingMore || manualRefreshSpinning ? 'animate-spin' : ''}`} />
+          <Button variant="ghost" icon size="sm" onClick={onOpenSettings} title={t('sidebar.settings')} aria-label={t('sidebar.settings')} data-testid="open-settings">
+            <Settings size={16} />
           </Button>
-          <Button variant="ghost" icon size="md"
-            onClick={toggleSidebarCollapsed}
-            title={t('sidebar.collapseSidebar')}
-          >
-            <PanelLeftClose size={18} className="text-mail-text-muted" />
+          <Button variant="ghost" icon size="sm" onClick={toggleSidebarCollapsed} title={t('sidebar.collapseSidebar')}>
+            <PanelLeftClose size={16} />
           </Button>
         </div>
       </div>
 
       {/* Compose Button */}
-      <div className="p-3 border-b border-mail-border">
+      <div className="px-3 pt-3 pb-2">
         <button
           onClick={onCompose}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
@@ -1107,329 +1044,105 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </button>
       </div>
 
-      {/* Account Selector */}
-      <div className="p-3 overflow-y-auto flex-shrink-0" style={{ flex: `0 0 ${sidebarAccountsRatio * 100}%`, minHeight: 60, maxHeight: 'calc(100% - 260px)' }}>
-        <div className="relative">
-          {tagCloud && (
-            <>
-              <div className="flex flex-wrap gap-1.5">
-                {showUnifiedInbox && (
-                  <button
-                    data-testid="all-inboxes-btn"
-                    onClick={() => setUnifiedInbox(true)}
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
-                               ${unifiedInbox
-                                 ? 'bg-mail-accent-fill text-white border-mail-accent'
-                                 : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
-                    title={t('sidebar.allInboxes')}
-                  >
-                    <Inbox size={12} />
-                    <span>{t('sidebar.allInboxes')}</span>
-                  </button>
-                )}
-                {orderedAccounts.map(account => (
-                  <div
-                    key={account.id}
-                    ref={el => { hoverRowRefs.current[account.id] = el; }}
-                    onMouseEnter={() => handleAccountHoverStart(account.id)}
-                    onMouseLeave={scheduleHoverClose}
-                    onDoubleClick={() => activateInbox(account.id)}
-                  >
-                    <TagCloudAccountBubble
-                      account={account}
-                      isActive={account.id === activeAccountId}
-                      color={getAccountColor(accountColors, account)}
-                      initial={getAccountInitial(account, getDisplayName(account.id))}
-                      label={getDisplayName(account.id) || account.name || account.email}
-                      unifiedInbox={unifiedInbox}
-                      connectionStatus={connectionStatus}
-                      unreadCount={unreadPerAccount[account.id] || 0}
-                      onActivate={() => {
-                        const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                        openFolder(account.id, lastMailbox || 'INBOX');
-                      }}
-                    />
-                  </div>
-                ))}
-              </div>
-
-              {activeAccount && suspectEmptyServerData?.accountId === activeAccount.id && (
-                <div data-testid="cached-data-banner" className="mt-2 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
-                  <div className="flex items-center justify-between text-xs text-mail-warning">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle size={14} />
-                      <span>{t('sidebar.showingCachedData')}</span>
-                    </div>
-                    <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
-                      // Not activateAccount: that lands in the sync probe's 10s
-                      // "checked moments ago" window and returns without asking
-                      // the server anything, which is why this button was
-                      // reported as doing nothing. refreshCurrentView clears the
-                      // probe first, so an explicit retry always reaches the server.
-                      onClick={refreshCurrentView}
-                      title={t('sidebar.retryConnection')}
-                    >
-                      <RefreshCw size={12} />
-                    </Button>
-                  </div>
-                  <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
-                    {suspectEmptyServerData.message}
-                  </p>
-                </div>
-              )}
-
-              {activeAccount && showError && connectionStatus === 'error' && (
-                <ConnectionErrorCard
-                  account={activeAccount}
-                  connectionErrorType={connectionErrorType}
-                  activeMailbox={activeMailbox}
-                  activateAccount={activateAccount}
-                  retryKeychainAccess={retryKeychainAccess}
-                  setShowErrorModal={setShowErrorModal}
-                  onOpenAccounts={onOpenAccounts}
-                  wrapperClassName="mt-2"
-                />
-              )}
-            </>
-          )}
-
-          {/* All Inboxes (expanded) */}
-          {!tagCloud && showUnifiedInbox && (
-            <div
-              data-testid="all-inboxes-btn"
-              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all mb-1
-                         ${unifiedInbox
-                           ? 'bg-mail-accent/10 text-mail-accent-text'
-                           : 'hover:bg-mail-surface-hover text-mail-text'}`}
-              onClick={() => setUnifiedInbox(true)}
-            >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-mail-accent/15">
-                <Inbox size={16} className={unifiedInbox ? 'text-mail-accent-text' : 'text-mail-text-muted'} />
-              </div>
-              <div className="text-sm font-medium">{t('sidebar.allInboxes')}</div>
+      <div className="sidebar-navigation-scroll" data-sidebar-layout={sidebarLayout}>
+        <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
+          {useSwitcher ? <>
+            <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>
+              <Button variant="accentTint" icon size="xs" onClick={onAddAccount} title={t('sidebar.addAccount')} aria-label={t('sidebar.addAccount')}><Plus size={14} /></Button>
             </div>
-          )}
-
-          {!tagCloud && orderedAccounts.map(account => {
-            const color = getAccountColor(accountColors, account);
-            const initial = getAccountInitial(account, getDisplayName(account.id));
-            return (
-            <React.Fragment key={account.id}>
-              <div className="mb-1"
-                ref={el => { hoverRowRefs.current[account.id] = el; }}
-                onMouseEnter={() => handleAccountHoverStart(account.id)}
-                onMouseLeave={scheduleHoverClose}
-                onDoubleClick={() => activateInbox(account.id)}
-              >
-                <ExpandedAccountRow
-                  account={account}
-                  isActive={account.id === activeAccountId}
-                  color={color}
-                  initial={initial}
-                  unifiedInbox={unifiedInbox}
-                  connectionStatus={connectionStatus}
-                  connectionError={connectionError}
-                  unreadCount={unreadPerAccount[account.id] || 0}
-                  onActivate={() => {
-                    const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                    activateAccount(account.id, lastMailbox || 'INBOX');
-                  }}
-                  onOpenBackup={onOpenBackup}
-                />
-              </div>
-
-              {/* Suspect empty data warning — server returned empty but cache had data */}
-              {account.id === activeAccountId && suspectEmptyServerData?.accountId === account.id && (
-                <div data-testid="cached-data-banner" className="mt-1 mb-1 p-2 rounded-lg border bg-mail-warning/10 border-mail-warning/20">
-                  <div className="flex items-center justify-between text-xs text-mail-warning">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle size={14} />
-                      <span>{t('sidebar.showingCachedData')}</span>
-                    </div>
-                    <Button variant="ghost" icon size="xs" className="hover:bg-mail-warning/20"
-                      // Not activateAccount: that lands in the sync probe's 10s
-                      // "checked moments ago" window and returns without asking
-                      // the server anything, which is why this button was
-                      // reported as doing nothing. refreshCurrentView clears the
-                      // probe first, so an explicit retry always reaches the server.
-                      onClick={refreshCurrentView}
-                      title={t('sidebar.retryConnection')}
-                    >
-                      <RefreshCw size={12} />
-                    </Button>
-                  </div>
-                  <p className="mt-1 text-[10px] text-mail-text-muted leading-tight">
-                    {suspectEmptyServerData.message}
-                  </p>
-                </div>
-              )}
-
-              {/* Inline error banner — shown directly below the account that has the error */}
-              {account.id === activeAccountId && showError && connectionStatus === 'error' && (
-                <ConnectionErrorCard
-                  account={account}
-                  connectionErrorType={connectionErrorType}
-                  activeMailbox={activeMailbox}
-                  activateAccount={activateAccount}
-                  retryKeychainAccess={retryKeychainAccess}
-                  setShowErrorModal={setShowErrorModal}
-                  onOpenAccounts={onOpenAccounts}
-                  wrapperClassName="mt-1 mb-1"
-                />
-              )}
-            </React.Fragment>
-            );
-          })}
-
-          {orderedAccounts.length === 0 && (
-            <button
-              data-testid="add-account-btn"
-              onClick={onAddAccount}
-              className="w-full mt-2 flex items-center gap-2 p-2 text-sm text-mail-text-muted
-                        hover:text-mail-text hover:bg-mail-surface-hover rounded-lg transition-all"
-            >
-              <Plus size={16} />
-              {t('sidebar.addAccount')}
+            <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
+              aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}`}
+              aria-haspopup="dialog" aria-expanded={!!chooserPosition}
+              onClick={chooserPosition ? closeChooser : openChooser}
+              onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>
+              {unifiedInbox ? <span className="sidebar-unified-icon"><Inbox size={17} /></span>
+                : activeAccount ? <span className="sidebar-account-avatar" style={{ backgroundColor: getAccountColor(accountColors, activeAccount) }} aria-hidden="true">
+                  {getAccountInitial(activeAccount, displayNames[activeAccount.id])}
+                </span> : <Plus size={17} />}
+              <span className="sidebar-account-label"><span className="sidebar-account-name">{selectedAccountLabel}</span>
+                {!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email && <span className="sidebar-account-address">{activeAccount.email}</span>}
+              </span>
+              {!unifiedInbox && activeAccount && unreadPerAccount[activeAccount.id] > 0 && <span className="sidebar-unread-count">{unreadPerAccount[activeAccount.id] > 99 ? '99+' : unreadPerAccount[activeAccount.id]}</span>}
+              {!unifiedInbox && activeAccount && connectionStatus !== 'connected' && (connectionStatus === 'error'
+                ? <AlertCircle size={14} className="text-mail-warning shrink-0" aria-label={t('sidebar.connectionProblem')} />
+                : <Loader size={13} className="text-mail-text-muted animate-spin shrink-0" aria-label={t('sidebar.connecting')} />)}
+              <ChevronDown size={15} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
             </button>
-          )}
-        </div>
+            {!unifiedInbox && renderAccountNotice(activeAccount)}
+            <BackupIndicator onOpenBackup={onOpenBackup} />
+          </> : <>
+            <div className="sidebar-section-heading">
+              <h2>{t('workspace.accounts')}</h2>
+              <Button variant="accentTint" icon size="xs" onClick={onAddAccount} title={t('sidebar.addAccount')} aria-label={t('sidebar.addAccount')}><Plus size={14} /></Button>
+            </div>
+            <div className="sidebar-account-list" data-testid="sidebar-account-list">
+              {renderUnifiedRow()}
+              {orderedAccounts.map(account => <React.Fragment key={account.id}>
+                {renderAccount(account)}
+                {account.id === activeAccountId && renderAccountNotice(account)}
+              </React.Fragment>)}
+              {orderedAccounts.length === 0 && <Button variant="ghost" fullWidth className="justify-start" size="sm" onClick={onAddAccount} data-testid="add-account-btn"><Plus size={16} />{t('sidebar.addAccount')}</Button>}
+              <BackupIndicator onOpenBackup={onOpenBackup} />
+            </div>
+          </>}
+        </section>
 
-        {/* Backup progress indicator */}
-        <BackupIndicator onOpenBackup={onOpenBackup} />
-      </div>
-
-      {/* Drag divider between accounts and folders */}
-      <div
-        className="h-1 border-y border-mail-border cursor-row-resize hover:bg-mail-accent/20 active:bg-mail-accent/30 transition-colors flex-shrink-0"
-        onMouseDown={(e) => {
-          e.preventDefault();
-          const sidebar = e.currentTarget.closest('.flex.flex-col');
-          if (!sidebar) return;
-          const sidebarHeight = sidebar.getBoundingClientRect().height;
-          if (sidebarHeight <= 0) return;
-          const startY = e.clientY;
-          const startRatio = useSettingsStore.getState().sidebarAccountsRatio;
-          const prevUserSelect = document.body.style.userSelect;
-          document.body.style.userSelect = 'none';
-
-          const handleMouseMove = (moveEvent) => {
-            const delta = (moveEvent.clientY - startY) / sidebarHeight;
-            setSidebarAccountsRatio(startRatio + delta);
-          };
-          const handleMouseUp = () => {
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-            document.body.style.userSelect = prevUserSelect;
-          };
-          document.addEventListener('mousemove', handleMouseMove);
-          document.addEventListener('mouseup', handleMouseUp);
-        }}
-        title={t('sidebar.dragToResize')}
-      />
-
-      {/* View Mode Toggle */}
-      <div className="p-3 border-b border-mail-border flex-shrink-0">
-        <div className="text-xs text-mail-text-muted uppercase tracking-wide mb-2">
-          {t('sidebar.viewMode')}
-        </div>
-        <div className="flex gap-1 bg-mail-bg rounded-lg p-1">
-          {[
-            // Labels, not ids: the `local` filter shows exactly what the vault
-            // holds, and the product calls that place the vault everywhere
-            // else — on the row glyph, in every delete confirmation, on the
-            // website. "Local" was the one surface still using another word
-            // for it. The id stays `local`; only what the user reads changed.
-            { id: 'all', icon: Layers, label: t('sidebar.viewAll') },
-            { id: 'server', icon: Cloud, label: t('sidebar.viewServer') },
-            { id: 'local', icon: HardDrive, label: t('sidebar.viewVault') }
-          ].map(mode => (
-            <button
-              key={mode.id}
-              onClick={() => setViewMode(mode.id)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2
-                         rounded-md text-xs font-medium transition-all
-                         ${viewMode === mode.id
-                           ? 'bg-mail-accent-fill text-white'
-                           : 'text-mail-text-muted hover:text-mail-text'}`}
-            >
-              <mode.icon size={12} />
-              {mode.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Mailboxes — show common folders in unified mode, full tree otherwise */}
-      {unifiedInbox && (
-        <UnifiedFolderList tagCloud={tagCloud} />
-      )}
-      {!unifiedInbox && (
-        <div className="overflow-y-auto p-3 flex-1" style={{ minHeight: 60 }}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-mail-text-muted uppercase tracking-wide">
-              {t('sidebar.folders')}
-            </span>
-            <Button
-              variant="ghost" icon size="xs"
-              data-testid="new-folder-btn"
-              aria-label={t('sidebar.newFolder')}
-              title={t('sidebar.newFolder')}
-              onClick={() => setNameDialog({ mode: 'create', node: null })}
-            >
-              <Plus size={14} />
-            </Button>
+        <section className="sidebar-folder-section" aria-label={t('sidebar.folders')}>
+          <div className="sidebar-section-heading">
+            <h2>{t('sidebar.folders')}</h2>
+            {!unifiedInbox && <Button variant="ghost" icon size="xs" data-testid="new-folder-btn" aria-label={t('sidebar.newFolder')} title={t('sidebar.newFolder')} onClick={() => setNameDialog({ mode: 'create', node: null })}><Plus size={14} /></Button>}
           </div>
-          <Folders
-            mailboxes={mailboxes}
-            activeMailbox={activeMailbox}
-            expanded={expandedFolders}
-            onToggle={toggleFolder}
-            onSelect={selectFolder}
-            counts={folderStatus?.[activeAccountId]}
-            onContextMenu={onFolderContextMenu}
-          />
-        </div>
-      )}
-
-      {/* Footer */}
-      <div className="p-3 border-t border-mail-border space-y-0.5">
-        <FocusTimerButton onUpgrade={() => onOpenSettings('billing')} />
-        <Button variant="ghost" fullWidth size="xs" className="justify-start"
-          onClick={onOpenSettings}
-          data-testid="open-settings"
-        >
-          <Settings size={14} />
-          {t('sidebar.settings')}
-        </Button>
-        <Button variant="ghost" fullWidth size="xs" className="justify-start"
-          onClick={onReportBug}
-          title={t('sidebar.reportABug')}
-        >
-          <Bug size={14} />
-          {t('sidebar.reportABug')}
-        </Button>
-        <Button variant="ghost" fullWidth size="xs" className="justify-start"
-          onClick={onReferFriend}
-          title={t('sidebar.referAFriend')}
-        >
-          <Gift size={14} />
-          {t('sidebar.referAFriend')}
-        </Button>
-        {totalEmails > 0 && (
-          <div className="flex items-center gap-1 px-2 mt-1 text-xs text-mail-text-muted">
-            <span className="w-3.5 flex justify-center"><HardDrive size={12} /></span>
-            {cacheFilling ? (
-              <span>{t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })}</span>
-            ) : (
-              <span>{t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}</span>
-            )}
-            {(loading || cacheFilling) && (
-              <RefreshCw size={10} className="animate-spin text-mail-accent-text" />
+          <div className="sidebar-source-filter" role="group" aria-label={t('sidebar.mailSource')}>
+            {[
+              { id: 'all', icon: Layers, label: t('sidebar.allMail') },
+              { id: 'server', icon: Cloud, label: t('sidebar.viewServer') },
+              { id: 'local', icon: HardDrive, label: t('sidebar.viewVault') },
+            ].map(mode => (
+              <button key={mode.id} type="button" onClick={() => setViewMode(mode.id)} aria-pressed={viewMode === mode.id}
+                title={t(`workspace.sourceHint.${mode.id}`)}>
+                <mode.icon size={13} aria-hidden="true" /><span>{mode.label}</span>
+              </button>
+            ))}
+          </div>
+          {!unifiedInbox && (mailboxes.length >= 10 || folderQuery) && <label className="sidebar-find-field">
+            <Search size={14} aria-hidden="true" />
+            <input type="search" value={folderQuery} onChange={event => setFolderQuery(event.target.value)}
+              aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
+          </label>}
+          <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
+            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} /> : (
+              <Folders mailboxes={mailboxes} activeMailbox={activeMailbox} expanded={expandedFolders}
+                onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
+                onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />
             )}
           </div>
-        )}
-        <div className="text-xs text-mail-text-muted text-center mt-2">
-          {t('sidebar.mailvaultVersion', { version })}
+        </section>
+      </div>
+      {chooserPosition && useSwitcher && <AccountChooser position={chooserPosition} onClose={closeChooser}
+        accounts={orderedAccounts.map(account => ({ account, label: displayNames[account.id] || account.name || account.email }))}
+        renderAccount={renderAccount} unifiedRow={renderUnifiedRow(true)} onAddAccount={onAddAccount} />}
+
+      <div className="sidebar-footer">
+        <div className="sidebar-footer-tools">
+          <div className="flex-1 min-w-0"><FocusTimerButton onUpgrade={() => onOpenSettings('billing')} /></div>
+          <Button variant="ghost" icon size="sm" onClick={onReportBug} title={t('sidebar.reportABug')} aria-label={t('sidebar.reportABug')}><Bug size={14} /></Button>
+          <Button variant="ghost" icon size="sm" onClick={onReferFriend} title={t('sidebar.referAFriend')} aria-label={t('sidebar.referAFriend')}><Gift size={14} /></Button>
+        </div>
+        <div className="sidebar-footer-meta">
+          <div className="min-w-0">
+            {totalEmails > 0 && <div className="sidebar-mail-count">
+              <HardDrive size={12} />
+              <span>{cacheFilling
+                ? t('sidebar.emailsDownloaded', { cachedCount: cachedCount.toLocaleString(), totalEmails: totalEmails.toLocaleString() })
+                : t('sidebar.emails', { totalEmails: totalEmails.toLocaleString() })}</span>
+              {(loading || cacheFilling) && <RefreshCw size={10} className="animate-spin text-mail-accent-text" />}
+            </div>}
+            <div className="sidebar-version">{t('sidebar.mailvaultVersion', { version })}</div>
+          </div>
+          <Button variant="ghost" icon size="sm" onClick={toggleTheme}
+            title={theme === 'dark' ? t('sidebar.switchLightMode') : t('sidebar.switchDarkMode')}>
+            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
+          </Button>
         </div>
       </div>
 

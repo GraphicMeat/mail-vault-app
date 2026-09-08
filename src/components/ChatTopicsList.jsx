@@ -1,6 +1,5 @@
 import { Button } from './ui/Button';
 import React, { memo, useMemo } from 'react';
-import { motion } from 'framer-motion';
 import {
   getAvatarColor,
   getInitials,
@@ -22,11 +21,12 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div data-tauri-drag-region className="flex items-center gap-2.5 px-4 py-[13px] border-b border-mail-border bg-mail-surface">
-        <Button variant="ghost" icon size="xs" className="hover:bg-mail-border"
-          onClick={onBack}
+      <div className="border-b border-mail-border bg-mail-surface">
+      <div data-tauri-drag-region className="chat-content-column flex items-center gap-2.5 px-6 py-3">
+        <Button variant="ghost" size="sm" className="shrink-0"
+          title={t('workspace.backConversations')} aria-label={t('workspace.backConversations')} onClick={onBack}
         >
-          <ChevronLeft size={18} className="text-mail-text-muted" />
+          <ChevronLeft size={18} className="text-mail-text-muted" /><span>{t('workspace.conversations')}</span>
         </Button>
 
         <div
@@ -51,22 +51,25 @@ export function ChatTopicsList({ correspondent, topics, onBack, onSelectTopic })
         </div>
       </div>
 
+      </div>
+
       {/* Topics List */}
       <div className="flex-1 overflow-y-auto">
-        {topics.map((topic, index) => (
+        <div className="chat-content-column">
+        {topics.map(topic => (
           <TopicRow
             key={topic.threadId}
             topic={topic}
             onClick={() => onSelectTopic(topic)}
-            index={index}
           />
         ))}
+        </div>
       </div>
     </div>
   );
 }
 
-const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
+const TopicRow = memo(function TopicRow({ topic, onClick }) {
   const t = useT();
   const unreadCount = topic.emails.filter(e => !e.flags?.includes('\\Seen')).length;
   const hasAttachments = topic.emails.some(e => e.hasAttachments);
@@ -87,12 +90,11 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
   }, [topic.dateRange]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0 }}
+    <div
+      role="button" tabIndex={0}
+      onKeyDown={e => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick(); } }}
       onClick={onClick}
-      className="flex items-start gap-3 px-4 py-3 border-b border-mail-border
+      className="flex items-start gap-3 px-6 py-4 border-b border-mail-border
                 cursor-pointer hover:bg-mail-surface-hover transition-colors"
     >
       {/* Topic Icon */}
@@ -103,7 +105,7 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
-          <h3 className={`truncate min-w-0 flex items-center gap-1 ${unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
+          <h3 className={`text-sm truncate min-w-0 flex items-center gap-1 ${unreadCount > 0 ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {(() => { const sa = getSenderAlertLevel(topic.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} size={14} /> : null; })()}
             <LinkAlertIcon level={getLinkAlertLevel(topic.emails)} size={14} alerts={getAlertsForEmails(topic.emails, useMailStore.getState())} />
             <span className="truncate">{topic.subject}</span>
@@ -138,6 +140,6 @@ const TopicRow = memo(function TopicRow({ topic, onClick, index }) {
 
       {/* Arrow */}
       <ChevronLeft size={16} className="text-mail-text-muted rotate-180 flex-shrink-0 mt-1" />
-    </motion.div>
+    </div>
   );
 });

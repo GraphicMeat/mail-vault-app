@@ -117,7 +117,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
+        <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
       </div>
 
       <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
@@ -130,7 +130,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         No `truncate` on the column itself — that clips the alert icons that
         now sit after the names. The names span truncates instead.
       */}
-      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+      <div className={`w-[32%] max-w-48 min-w-[80px] flex-shrink flex items-center gap-1.5 ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
         <span data-testid="row-sender" className="truncate min-w-0">{participantNames}</span>
         {(() => { const sa = getSenderAlertLevel(thread.emails); return sa ? <SenderAlertIcon level={sa.level} email={sa.email} /> : null; })()}
         <ReplyToAlertIcon mismatch={getThreadReplyToMismatch(thread.emails)} />
@@ -169,7 +169,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         </span>
       </div>
 
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
           <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
             onClick={handleArchiveThread}
@@ -262,7 +262,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       onClick={() => onSelectThread(thread)}
     >
       <div onClick={(e) => { e.stopPropagation(); onSetSelection(members, !anyChecked); }}>
-        <input type="checkbox" checked={anyChecked} onChange={() => {}} className="custom-checkbox" />
+        <input type="checkbox" checked={anyChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />
       </div>
 
       <ThreadDisclosure expandable={expandable} expanded={expanded} threadId={thread.threadId} onToggleExpand={onToggleExpand} />
@@ -274,7 +274,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       <div className="flex-1 min-w-0 py-1.5">
         {/* Line 1: participants, count, alerts ... date */}
         <div className="flex items-center gap-1.5">
-          <span data-testid="row-sender" className={`truncate min-w-0 text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text-muted'}`}>
+          <span data-testid="row-sender" className={`truncate min-w-0 text-xs ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {participantNames}
           </span>
           {thread.messageCount > 1 && (
@@ -305,7 +305,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
       </div>
 
       {/* Hover actions */}
-      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible bg-mail-surface-hover rounded-md px-1">
+      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
         {!allArchived && (
           <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleArchiveThread} disabled={isSaving} title={t('thread.archiveThread')}>
             {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
