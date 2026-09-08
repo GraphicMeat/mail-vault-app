@@ -75,3 +75,44 @@
   .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 16px; }
   .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: none; overflow: visible; }
 }
+
+/* Density changes spacing without changing the account/folder arrangement.
+   The icon-only collapsed rail and account chooser keep their own sizing. */
+[data-sidebar-density="compact"] .sidebar-header { min-height: 48px; padding: 6px 12px; }
+[data-sidebar-density="compact"] .sidebar-compose { padding-top: 4px; padding-bottom: 4px; }
+[data-sidebar-density="compact"] .sidebar-compose > button { min-height: 32px; padding: 5px 12px; font-size: 13px; line-height: 22px; }
+[data-sidebar-density="compact"] .sidebar-compose > button > svg { width: 16px; height: 16px; }
+[data-sidebar-density="compact"] .sidebar-navigation-scroll { padding: 4px 8px 8px; gap: 8px; }
+[data-sidebar-density="compact"] .sidebar-section-heading { min-height: 24px; margin-bottom: 2px; }
+[data-sidebar-density="compact"] .sidebar-folder-section { margin-top: 8px; }
+[data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 0; }
+[data-sidebar-density="compact"] .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { min-height: 60px; }
+[data-sidebar-density="compact"] .sidebar-account-row { min-height: 32px; margin-bottom: 0; border-radius: 6px; }
+[data-sidebar-density="compact"] .sidebar-account-open { min-height: 32px; gap: 8px; padding: 4px 8px; border-radius: 6px; }
+[data-sidebar-density="compact"] .sidebar-account-avatar { width: 22px; height: 22px; }
+[data-sidebar-density="compact"] .sidebar-account-address { display: none; }
+[data-sidebar-density="compact"] .sidebar-unified-row { gap: 8px; padding: 4px 8px; }
+[data-sidebar-density="compact"] .sidebar-unified-icon { width: 22px; }
+[data-sidebar-density="compact"] .sidebar-account-switcher { min-height: 34px; padding: 5px 8px; gap: 8px; }
+[data-sidebar-density="compact"] .sidebar-connection-notice { margin-left: 38px; }
+[data-sidebar-density="compact"] .sidebar-switcher-section .sidebar-connection-notice { margin-left: 8px; }
+[data-sidebar-density="compact"] .sidebar-source-filter { margin-bottom: 6px; padding: 2px; }
+[data-sidebar-density="compact"] .sidebar-source-filter button { min-height: 28px; padding: 4px 3px; }
+[data-sidebar-density="compact"] .sidebar-find-field { min-height: 28px; margin-bottom: 6px; border-radius: 6px; }
+[data-sidebar-density="compact"] .sidebar-find-field input { min-height: 26px; padding: 3px 0; }
+[data-sidebar-density="compact"] .sidebar-folder-row,
+[data-sidebar-density="compact"] .sidebar-folder-search-result { min-height: 28px; margin-bottom: 0; padding-top: 2px; padding-bottom: 2px; gap: 6px; border-radius: 6px; }
+[data-sidebar-density="compact"] .sidebar-folder-row .text-sm,
+[data-sidebar-density="compact"] .sidebar-folder-search-result .text-sm { font-size: 13px; line-height: 20px; }
+[data-sidebar-density="compact"] .sidebar-folder-row > svg,
+[data-sidebar-density="compact"] .sidebar-folder-search-result > svg { width: 14px; height: 14px; }
+[data-sidebar-density="compact"] .sidebar-folder-toggle { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; }
+[data-sidebar-density="compact"] .sidebar-folder-row > .w-5 { width: 24px; }
+[data-sidebar-density="compact"] .sidebar-folder-bubbles { gap: 4px; }
+[data-sidebar-density="compact"] .sidebar-folder-chip { min-height: 24px; padding-top: 2px; padding-bottom: 2px; padding-left: 8px; gap: 4px; }
+[data-sidebar-density="compact"] .sidebar-folder-chip:has(.sidebar-folder-toggle) { padding-top: 0; padding-bottom: 0; }
+[data-sidebar-density="compact"] .sidebar-footer { padding: 4px 8px 6px; }
+
+@media (max-height: 520px) {
+  [data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 8px; }
+}

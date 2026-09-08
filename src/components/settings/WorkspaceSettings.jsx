@@ -16,6 +16,8 @@ export function WorkspaceSettings({ windowIsNarrow }) {
     { key: 'layoutMode', setter: 'setLayoutMode', title: 'readingPane', disabled: chat,
       options: [['three-column', 'besideList', 'besideListHint', Columns], ['two-column', 'belowList', 'belowListHint', Rows]] },
     { key: 'sidebarLayout', title: 'sidebarLayout' },
+    { key: 'sidebarDensity', setter: 'setSidebarDensity', title: 'sidebarDensity',
+      options: [['comfortable', 'sidebarDensityComfortable', 'sidebarDensityComfortableHint'], ['compact', 'sidebarDensityCompact', 'sidebarDensityCompactHint']] },
     { key: 'sidebarStyle', setter: 'setSidebarStyle', title: 'navigation',
       options: [['list', 'navigationList', 'navigationListHint'], ['tagcloud', 'navigationBubbles', 'navigationBubblesHint']] },
     { key: 'emailListStyle', setter: 'setEmailListStyle', title: 'messageRows', disabled: chat,

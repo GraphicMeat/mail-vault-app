@@ -85,7 +85,7 @@ function UnifiedFolderList({ tagCloud = false, compact = false }) {
   if (tagCloud) {
     return (
       <div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="sidebar-folder-bubbles flex flex-wrap gap-1.5">
           {UNIFIED_FOLDERS().map(folder => {
             const isActive = unifiedFolder === folder.id;
             const Icon = folder.icon;
@@ -94,7 +94,7 @@ function UnifiedFolderList({ tagCloud = false, compact = false }) {
                 key={folder.id}
                 aria-current={isActive ? 'true' : undefined}
                 onClick={() => switchUnifiedFolder(folder.id)}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
+                className={`sidebar-folder-chip inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs transition-colors border
                            ${isActive
                              ? 'bg-mail-accent-tint text-mail-accent-text border-mail-accent'
                              : 'text-mail-text border-mail-border hover:bg-mail-surface-hover'}`}
@@ -120,7 +120,7 @@ function UnifiedFolderList({ tagCloud = false, compact = false }) {
             key={folder.id}
             role="button" tabIndex={0} aria-current={isActive ? 'true' : undefined}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchUnifiedFolder(folder.id); } }}
-            className={`flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+            className={`sidebar-folder-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
                        ${isActive ? 'bg-mail-accent/10 text-mail-accent-text' : 'text-mail-text hover:bg-mail-surface-hover'}`}
             onClick={() => switchUnifiedFolder(folder.id)}
           >
@@ -529,6 +529,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const toggleSidebarCollapsed = useSettingsStore(s => s.toggleSidebarCollapsed);
   const sidebarStyle = useSettingsStore(s => s.sidebarStyle);
   const sidebarLayout = useSettingsStore(s => s.sidebarLayout) || 'stacked';
+  const sidebarDensity = useSettingsStore(s => s.sidebarDensity) || 'comfortable';
   const accountOrder = useSettingsStore(s => s.accountOrder);
 
   const storedExpanded = useSettingsStore(s => s.expandedFolders);
@@ -1013,7 +1014,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     : activeAccount ? displayNames[activeAccount.id] || activeAccount.name || activeAccount.email : t('sidebar.addAccount');
 
   return (
-    <div className="mail-sidebar w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative">
+    <div className="mail-sidebar w-64 h-full bg-mail-surface border-r border-mail-border flex flex-col relative" data-sidebar-density={sidebarDensity}>
       <div data-tauri-drag-region data-testid="sidebar-header" className="sidebar-header">
         <h1 className="sidebar-brand font-display font-bold">
           <span className="text-mail-accent-text">{t('sidebar.mail')}</span><span>{t('sidebar.vault')}</span>
@@ -1032,7 +1033,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       {/* Compose Button */}
-      <div className="px-3 pt-3 pb-2">
+      <div className="sidebar-compose px-3 pt-3 pb-2">
         <button
           onClick={onCompose}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5
@@ -1051,7 +1052,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               <Button variant="accentTint" icon size="xs" onClick={onAddAccount} title={t('sidebar.addAccount')} aria-label={t('sidebar.addAccount')}><Plus size={14} /></Button>
             </div>
             <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
-              aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}`}
+              aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${activeAccount.email}` : ''}`}
+              title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${selectedAccountLabel} — ${activeAccount.email}` : selectedAccountLabel}
               aria-haspopup="dialog" aria-expanded={!!chooserPosition}
               onClick={chooserPosition ? closeChooser : openChooser}
               onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>

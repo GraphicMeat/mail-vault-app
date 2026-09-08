@@ -10,7 +10,7 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 vi.mock('../../../i18n/index.js', async importOriginal => ({ ...(await importOriginal()), useT: () => key => key }));
 
 beforeEach(() => {
-  useSettingsStore.setState({ sidebarLayout: 'stacked', sidebarStyle: 'list', viewStyle: 'list', layoutMode: 'three-column', emailListStyle: 'compact' });
+  useSettingsStore.setState({ sidebarLayout: 'stacked', sidebarDensity: 'comfortable', sidebarStyle: 'list', viewStyle: 'list', layoutMode: 'three-column', emailListStyle: 'compact' });
 });
 afterEach(cleanup);
 
@@ -52,4 +52,18 @@ it('keeps sidebar alternatives usable in Chat and explains every option', () => 
     const hint = document.getElementById(button.getAttribute('aria-describedby'));
     expect(hint?.textContent).toBe(`workspace.sidebarLayout${label}Hint`);
   }
+});
+
+it('lets users change density independently of their layout and folder style', () => {
+  useSettingsStore.setState({ sidebarLayout: 'split', sidebarStyle: 'tagcloud', viewStyle: 'chat' });
+  render(<WorkspaceSettings windowIsNarrow />);
+  const group = screen.getByRole('group', { name: 'workspace.sidebarDensity' });
+  const compact = within(group).getByRole('button', { name: 'workspace.sidebarDensityCompact' });
+  fireEvent.click(compact);
+  expect(useSettingsStore.getState().sidebarDensity).toBe('compact');
+  expect(compact.getAttribute('aria-pressed')).toBe('true');
+  expect(useSettingsStore.getState().sidebarLayout).toBe('split');
+  expect(useSettingsStore.getState().sidebarStyle).toBe('tagcloud');
+  fireEvent.click(within(group).getByRole('button', { name: 'workspace.sidebarDensityComfortable' }));
+  expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
 });

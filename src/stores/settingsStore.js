@@ -86,11 +86,13 @@ export const DEFAULT_SHORTCUTS = {
 // Exported (test-only name) so a spec can exercise the shortcut-merge
 // behaviour directly, without standing up zustand/persist's storage plumbing.
 const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
+const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
+  sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -253,6 +255,7 @@ export const useSettingsStore = create(
       sidebarAccountsRatio: 0.4, // Maximum account share of the navigation area (0.1 - 0.85)
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
       sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
+      sidebarDensity: 'comfortable', // 'comfortable' | 'compact' — independent of layout and folder style
       // Which folders are open in the sidebar tree, per account. Session state
       // lost the whole expansion on every account switch, which on a five-level
       // server means re-opening four folders to get back where you were.
@@ -744,6 +747,7 @@ export const useSettingsStore = create(
       setSidebarAccountsRatio: (ratio) => set({ sidebarAccountsRatio: Math.max(0.1, Math.min(0.85, ratio)) }),
       setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
       setSidebarLayout: (layout) => set({ sidebarLayout: normalizeSidebarLayout(layout) }),
+      setSidebarDensity: (density) => set({ sidebarDensity: normalizeSidebarDensity(density) }),
       setExpandedFolders: (accountId, paths) => set(state => ({
         expandedFolders: { ...state.expandedFolders, [accountId]: [...paths] },
       })),
@@ -948,6 +952,7 @@ export const useSettingsStore = create(
           sidebarCollapsed: false,
           sidebarStyle: 'list',
           sidebarLayout: 'stacked',
+          sidebarDensity: 'comfortable',
           expandedFolders: {},
           listPaneSize: 420,
           listPaneHeight: 320,

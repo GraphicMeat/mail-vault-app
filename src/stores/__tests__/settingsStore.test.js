@@ -362,3 +362,24 @@ describe('sidebarLayout', () => {
     expect(_mergePersistedSettings({ sidebarLayout: 'obsolete' }, current).sidebarLayout).toBe('stacked');
   });
 });
+
+describe('sidebar density persistence', () => {
+  it('saves compact density, restores it on hydration, and resets to comfortable', async () => {
+    const { safeStorage } = await import('../safeStorage');
+    useSettingsStore.getState().setSidebarDensity('compact');
+    const persisted = JSON.parse(safeStorage.getItem('mailvault-settings'));
+    expect(persisted.state.sidebarDensity).toBe('compact');
+    const current = useSettingsStore.getInitialState();
+    expect(_mergePersistedSettings(persisted.state, current).sidebarDensity).toBe('compact');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
+  });
+
+  it('uses comfortable spacing for old settings and invalid saved choices', () => {
+    const current = useSettingsStore.getInitialState();
+    expect(_mergePersistedSettings({}, current).sidebarDensity).toBe('comfortable');
+    expect(_mergePersistedSettings({ sidebarDensity: 'invalid' }, current).sidebarDensity).toBe('comfortable');
+    useSettingsStore.getState().setSidebarDensity('invalid');
+    expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
+  });
+});

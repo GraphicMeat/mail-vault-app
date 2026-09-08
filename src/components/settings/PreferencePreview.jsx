@@ -1,5 +1,5 @@
 import React from 'react';
-import { previewRows } from '../../data/previewMail';
+import { PREVIEW_ACCOUNTS, previewRows } from '../../data/previewMail';
 import { SampleConversation } from '../ui/SampleConversation';
 import { Archive, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { useT } from '../../i18n';
@@ -9,6 +9,7 @@ import { getEmailColors } from '../../utils/mailChrome';
 import { formatDateOnly, formatTime } from '../../utils/dateFormat';
 import { listRowGround } from '../../utils/listRowGround';
 import '../../styles/sidebar-layout-previews.css';
+import '../../styles/sidebar-navigation.css';
 
 // Draw only illustrative content. These examples never mount a real mail
 // component or put sample messages into the user's accounts or mail stores.
@@ -77,6 +78,23 @@ export function WorkspacePreview({ setting, value, label, disabled }) {
   let content;
   if (setting === 'viewStyle' || setting === 'layoutMode') {
     content = <PanePreview chat={setting === 'viewStyle' && value === 'chat'} below={(setting === 'layoutMode' ? value : layoutMode) === 'two-column'} />;
+  } else if (setting === 'sidebarDensity') {
+    content = <div className="sidebar-density-preview" data-sidebar-density={value} aria-hidden="true">
+      <div>
+        <span className="preview-pane-label">{t('workspace.accounts')}</span>
+        {PREVIEW_ACCOUNTS.slice(0, 2).map((account, index) => <div key={account.id} className={`sidebar-account-row ${index === 0 ? 'sidebar-account-selected' : ''}`}>
+          <span className="sidebar-account-open">
+            <span className="sidebar-account-avatar">{account.name[0]}</span>
+            <span className="sidebar-account-label"><span className="sidebar-account-name">{account.name}</span><span className="sidebar-account-address">{account.email}</span></span>
+          </span>
+        </div>)}
+      </div>
+      <div>
+        <span className="preview-pane-label">{t('sidebar.folders')}</span>
+        {[[Inbox, 'sidebar.inbox'], [Archive, 'common.archive'], [Send, 'list.sent']].map(([Icon, key]) =>
+          <span key={key} className="sidebar-folder-row flex items-center gap-2 px-2 py-1.5 mb-1"><Icon size={16} /><span className="text-sm truncate">{t(key)}</span></span>)}
+      </div>
+    </div>;
   } else if (setting === 'sidebarStyle') {
     content = <div className={`preview-navigation ${value === 'tagcloud' ? 'preview-navigation-bubbles' : ''}`}>
       <div><span className="preview-pane-label">{t('workspace.accounts')}</span><span className="preview-nav-item preview-nav-active"><span className="preview-account-initial">P</span>Prime Cut Studio</span><span className="preview-nav-item"><span className="preview-account-initial">R</span>Rowan Marsh</span></div>

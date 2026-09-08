@@ -1,4 +1,11 @@
 /* Structural choices show every alternative before the user commits to one. */
+.sidebar-density-preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.sidebar-density-preview > div { min-width: 0; }
+.sidebar-density-preview .sidebar-account-avatar { background: var(--mail-surface-hover); color: var(--mail-text); }
+.sidebar-density-preview .sidebar-account-selected .sidebar-account-avatar { color: var(--mail-accent-text); }
+@container (max-width: 360px) {
+  .sidebar-density-preview { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
 .appearance-settings .setting-row.sidebar-layout-setting {
   grid-template-columns: minmax(0, 1fr);
   gap: 12px;

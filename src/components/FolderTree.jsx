@@ -40,7 +40,7 @@ function FolderToggle({ node, isOpen, onToggle, size = 14 }) {
       data-testid="folder-toggle"
       data-path={node.path}
       aria-label={isOpen ? t('sidebar.collapseFolder') : t('sidebar.expandFolder')}
-      className="p-0.5 shrink-0"
+      className="sidebar-folder-toggle p-0.5 shrink-0"
       onClick={(e) => { e.stopPropagation(); onToggle(node.path); }}
     >
       {isOpen ? <ChevronDown size={size} /> : <ChevronRight size={size} />}
@@ -84,7 +84,7 @@ function FolderRow({ node, activeMailbox, expanded, onToggle, onSelect, compact,
         aria-current={isActive ? 'true' : undefined}
         title={label}
         style={{ paddingLeft: compact ? (hasChildren ? 2 : 20) : 8 + node.depth * INDENT }}
-        className={`relative flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
+        className={`sidebar-folder-row relative flex items-center gap-2 pr-2 py-1.5 mb-1 rounded-lg transition-colors
                    ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                    ${isActive
                      ? 'bg-mail-accent/10 text-mail-accent-text'
@@ -165,7 +165,7 @@ function FolderSearchResults({ tree, query, activeMailbox, onSelect, counts, onC
       aria-label={fullPath} aria-current={active ? 'true' : undefined} title={fullPath}
       onClick={() => onSelect(node.path)}
       onContextMenu={contextMenuHandler(node, onContextMenu)}
-      className={`w-full min-w-0 flex items-center gap-2 px-2 py-2 mb-1 rounded-lg text-left ${active
+      className={`sidebar-folder-search-result w-full min-w-0 flex items-center gap-2 px-2 py-2 mb-1 rounded-lg text-left ${active
         ? 'bg-mail-accent-tint text-mail-accent-text'
         : 'text-mail-text hover:bg-mail-surface-hover'}`}>
       <Icon size={16} className="shrink-0" aria-hidden="true" />
@@ -225,7 +225,7 @@ function FolderChip({ node, trail, activeMailbox, expanded, onToggle, onSelect, 
       data-depth={node.depth}
       aria-current={isActive ? 'true' : undefined}
       title={[...trail, label].join(' › ')}
-      className={`max-w-full min-w-0 inline-flex items-center gap-1.5 pl-2.5 py-1.5 rounded-full text-xs transition-colors border
+      className={`sidebar-folder-chip max-w-full min-w-0 inline-flex items-center gap-1.5 pl-2.5 py-1.5 rounded-full text-xs transition-colors border
                  ${hasChildren ? 'pr-1' : 'pr-2.5'}
                  ${node.noselect && !hasChildren ? 'cursor-default' : 'cursor-pointer'}
                  ${isActive
@@ -262,11 +262,11 @@ function BubbleLevel({ nodes, trail, ...rest }) {
 
   return runs.map(({ chips, open }, i) => (
     <React.Fragment key={open ? open.path : `run-${i}`}>
-      <div className="flex flex-wrap gap-1.5">
+      <div className="sidebar-folder-bubbles flex flex-wrap gap-1.5">
         {chips.map(n => <FolderChip key={n.path} node={n} trail={trail} {...rest} />)}
       </div>
       {open && (
-        <div className="ml-2 pl-2 border-l border-mail-border flex flex-col gap-1.5">
+        <div className="sidebar-folder-bubbles ml-2 pl-2 border-l border-mail-border flex flex-col gap-1.5">
           <BubbleLevel nodes={open.children} trail={[...trail, mailboxLabel(open.name)]} {...rest} />
         </div>
       )}
@@ -288,7 +288,7 @@ export function FolderBubbles({ mailboxes, activeMailbox, expanded, onToggle, on
     activeMailbox={activeMailbox} onSelect={onSelect} counts={counts} onContextMenu={onContextMenu} />;
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="sidebar-folder-bubbles flex flex-col gap-1.5">
       <BubbleLevel
         nodes={tree}
         trail={[]}
