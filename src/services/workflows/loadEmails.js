@@ -2,7 +2,6 @@
 
 import * as db from '../db';
 import * as api from '../api';
-import { useSettingsStore } from '../../stores/settingsStore';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
@@ -666,11 +665,6 @@ export async function loadEmails() {
       hasMoreEmails,
     });
 
-    if (activeMailbox === 'INBOX') {
-      const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-      useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
-    }
-
     // Descriptor saved on switch-away, not after every load
     db.saveEmailHeaders(activeAccountId, activeMailbox, mergedEmails, serverTotal, {
       uidValidity: newUidValidity,
@@ -840,11 +834,6 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
     });
 
     get().updateSortedEmails();
-
-    if (activeMailbox === 'INBOX') {
-      const unread = get().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-      useSettingsStore.getState().setUnreadForAccount(activeAccountId, unread);
-    }
 
     // Graph has no UIDVALIDITY/UID SEARCH, so the only expunge signal is a
     // message vanishing from this listing. Name the gone UIDs explicitly —

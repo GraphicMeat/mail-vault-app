@@ -265,7 +265,7 @@ export const createMessageListSlice = (set, get) => ({
 
   // Update sorted emails (memoization for performance) — pure synchronous derivation
   updateSortedEmails: () => {
-    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids, unifiedInbox, activeAccountId, activeMailbox, deleteTombstones, _sortedEmailsFingerprint } = get();
+    const { emails, localEmails, viewMode, savedEmailIds, archivedEmailIds, serverUids, unifiedInbox, activeAccountId, activeMailbox, mailboxScope, deleteTombstones, _sortedEmailsFingerprint } = get();
 
     // Fingerprint check: skip if the input set hasn't materially changed.
     //
@@ -363,6 +363,27 @@ export const createMessageListSlice = (set, get) => ({
           if (mismatch) e._replyToMismatch = mismatch;
         }
       }
+    }
+
+    // ── the sidebar's unread badge ──
+    //
+    // Recounted here, from the list this derivation just ran on, because this
+    // is the one point EVERY change to the inbox list already passes through.
+    // It used to be written by the loads (activateAccount, loadEmails) and by a
+    // \Seen change and nowhere else, so every other way an unread message
+    // leaves the inbox — delete, move, purge, an undo putting one back — left
+    // the badge on its old value until the next server round trip finished.
+    // That is the "0 emails in this folder, 1 on the badge" report: the message
+    // was already in the Bin, and the badge caught up a round trip later.
+    //
+    // INBOX only, and never a scoped branch listing (that list holds the
+    // descendant folders' mail too) or the unified list (its rows span
+    // accounts — messageMutations counts those per account).
+    if (activeAccountId && !unifiedInbox && !mailboxScope && activeMailbox === 'INBOX') {
+      useSettingsStore.getState().setUnreadForAccount(
+        activeAccountId,
+        emails.reduce((n, e) => n + (e.flags?.includes('\\Seen') ? 0 : 1), 0),
+      );
     }
 
     _chatEmailsFingerprint = '';

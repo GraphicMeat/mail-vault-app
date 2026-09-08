@@ -72,6 +72,9 @@ const mockSettingsState = {
   setLastMailbox: () => {},
   emailListStyle: 'default',
   linkAlerts: {},
+  // updateSortedEmails recounts the sidebar's unread badge from the list it
+  // just derived, so every spec that drives it needs the setter.
+  setUnreadForAccount: () => {},
 };
 vi.mock('../settingsStore', () => ({
   useSettingsStore: {

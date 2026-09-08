@@ -319,6 +319,20 @@ describe('deleteSelectedFromServer', () => {
     expect(useMailStore.getState().selectedEmailIds.size).toBe(0);
   });
 
+  // The badge used to be written only by the loads and by a \Seen change, so a
+  // deleted unread message left it on the old number until the reconcile came
+  // back — an empty inbox under a badge that said 1. `loadEmails` is a stub
+  // here (as it is a round trip away in the app), so nothing but the
+  // optimistic removal can move this count.
+  it('drops the sidebar unread badge with the row, before any reload', async () => {
+    primeStore(seedThread(), [1]);
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 2);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
+  });
+
   // The INBOX list merges the account's Sent copies in, and a uid names a
   // message only inside one folder. The map the delete resolved its rows
   // through was keyed by bare uid and let the LAST entry win — the Sent copy —

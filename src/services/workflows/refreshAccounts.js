@@ -76,8 +76,11 @@ export async function refreshAllAccounts(options = {}) {
 
   console.log('[mailStore] Refreshing all accounts...');
 
-  let totalUnread = 0;
-  const updatedUnreadPerAccount = { ...useSettingsStore.getState().unreadPerAccount };
+  // Only the accounts this run counted, merged into the store after the loop.
+  // Seeding it from the store instead would carry a value read BEFORE
+  // loadEmails() ran below, and writing that back at the end would undo the
+  // recount loadEmails just made for the account on screen.
+  const countedUnread = {};
   let previousEmailCount = get().emails.length;
   const perAccountResults = [];
 
@@ -94,13 +97,14 @@ export async function refreshAllAccounts(options = {}) {
 
     try {
       if (account.id === activeAccountId && !refreshingUnifiedView) {
-        const beforeCount = get().emails.length;
         const beforeUids = new Set(get().emails.map(e => e.uid));
+        // No badge write here. This branch reloads whatever folder is OPEN, and
+        // it counted that folder — so a refresh landing while the Bin was on
+        // screen put the Bin's unread on the account's badge, and a branch
+        // listing put the whole subtree's. loadEmails' own derivation owns the
+        // badge now, and it only writes when the open folder really is this
+        // account's inbox (see updateSortedEmails).
         await get().loadEmails();
-        const currentEmails = get().emails;
-        const accountUnread = currentEmails.filter(e => !e.flags?.includes('\\Seen')).length;
-        totalUnread += accountUnread;
-        updatedUnreadPerAccount[account.id] = accountUnread;
         const afterEmails = get().emails;
         const newForAccount = afterEmails.filter(e => !beforeUids.has(e.uid));
         if (newForAccount.length > 0) {
@@ -135,8 +139,7 @@ export async function refreshAllAccounts(options = {}) {
             }
             if (normalizedMailbox === 'INBOX') {
               const graphUnread = headers.filter(e => !e.flags?.includes('\\Seen')).length;
-              totalUnread += graphUnread;
-              updatedUnreadPerAccount[account.id] = graphUnread;
+              countedUnread[account.id] = graphUnread;
             }
 
             const newHeaders = headers.filter(e => !cachedUids.has(e.uid));
@@ -185,8 +188,7 @@ export async function refreshAllAccounts(options = {}) {
 
           if (resolvedMailbox === 'INBOX') {
             const imapUnread = allEmails.filter(e => !e.flags?.includes('\\Seen')).length;
-            totalUnread += imapUnread;
-            updatedUnreadPerAccount[account.id] = imapUnread;
+            countedUnread[account.id] = imapUnread;
           }
 
           const newHeaders = allEmails.filter(e => !cachedUids.has(e.uid));
@@ -210,8 +212,18 @@ export async function refreshAllAccounts(options = {}) {
     }
   }
 
+  // Read the store LAST: the account on screen had its badge recounted by the
+  // loadEmails() above, and that is the fresher number for it.
+  const settings = useSettingsStore.getState();
+  const unreadPerAccount = { ...settings.unreadPerAccount, ...countedUnread };
+  settings.setUnreadPerAccount(unreadPerAccount);
+  // Summed from the map rather than accumulated in the loop, so the accounts
+  // this run skipped (already fresh, no credentials, the active one) still
+  // count towards the dock badge instead of silently dropping out of it.
+  const totalUnread = Object.entries(unreadPerAccount)
+    .filter(([id]) => !settings.isAccountHidden(id))
+    .reduce((n, [, count]) => n + (count || 0), 0);
   useMailStore.setState({ totalUnreadCount: totalUnread });
-  useSettingsStore.getState().setUnreadPerAccount(updatedUnreadPerAccount);
 
   const newEmailCount = get().emails.length;
   const newEmails = Math.max(0, newEmailCount - previousEmailCount);

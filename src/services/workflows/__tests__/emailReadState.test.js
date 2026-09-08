@@ -382,3 +382,43 @@ describe('markEmailReadStatus', () => {
     expect(useMailStore.getState().selectedEmail).toBe(null);
   });
 });
+
+// The badge is a count of the inbox, and it used to be written only by the
+// loads and by a \Seen change — so a message deleted or moved out of the inbox
+// left it on the old number until the next server round trip finished. Both
+// cases below run with no round trip at all (`loadEmails` is a stub in
+// primeStore), which is what the report looked like: an empty folder under a
+// badge that said 1, catching up "after a while".
+describe('sidebar unread badge', () => {
+  it('drops as soon as the unread row leaves the inbox list', () => {
+    primeStore([]);
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
+
+    // What every delete/move does first: the row goes, optimistically.
+    useMailStore.setState({ emails: [], totalEmails: 0 });
+    useMailStore.getState().updateSortedEmails();
+
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 0);
+  });
+
+  it('is not overwritten by another folder that is on screen', () => {
+    primeStore([]);
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
+
+    // The deleted message, unread, in the Bin — the folder the user is now
+    // looking at. Its unread is not the account's inbox count.
+    useMailStore.setState({
+      activeMailbox: 'Trash',
+      emails: [{
+        uid: 9, messageId: 'b@mock', subject: 'Binned', flags: [],
+        from: { address: 'them@mock.test' }, date: '2026-08-02T10:00:00Z',
+      }],
+      totalEmails: 1,
+      serverUids: serverUids(new Set([9]), { complete: false }),
+    });
+    useMailStore.getState().updateSortedEmails();
+
+    // Still the inbox's count, not the Bin's one unread.
+    expect(mockSetUnreadForAccount).toHaveBeenLastCalledWith('acct1', 1);
+  });
+});

@@ -871,10 +871,17 @@ function _refreshAfterFlagChange(useMailStore) {
   useMailStore.getState().updateSortedEmails();
 }
 
-function _syncUnreadBadge(useMailStore, accountId, mailbox) {
-  if (mailbox !== 'INBOX') return;
-  const unread = useMailStore.getState().emails.filter(e => !e.flags?.includes('\\Seen')).length;
-  useSettingsStore.getState().setUnreadForAccount(accountId, unread);
+// Unified rows span accounts, so one \Seen change there has to be counted per
+// account. Every single-account list is recounted by updateSortedEmails, which
+// deliberately leaves this one alone — it cannot tell whose inbox it is looking
+// at. An account with no row in the list keeps the count it already had.
+function _syncUnifiedUnreadBadges(useMailStore) {
+  const byAccount = new Map();
+  for (const e of useMailStore.getState().emails) {
+    if (!e._accountId) continue;
+    byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
+  }
+  for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
 }
 
 // The vault half of a flag change.
@@ -971,7 +978,10 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   if (entry) entry.email = { ...entry.email, flags: _withSeen(entry.email.flags, read) };
 
   _refreshAfterFlagChange(useMailStore);
-  _syncUnreadBadge(useMailStore, accountId, mailbox);
+  // …which recounts the badge for a single-account list. The unified one is on
+  // us: counting its rows against `accountId` would put every account's unread
+  // on whichever account owns the row that was clicked.
+  if (isUnified) _syncUnifiedUnreadBadges(useMailStore);
   _persistVaultSeen(useMailStore, accountId, mailbox, [uid], read, isUnified);
 }
 
@@ -1117,20 +1127,8 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     });
   }
 
-  if (flag === '\\Seen') {
-    if (isUnified) {
-      // Unified rows span accounts, so the sidebar badges have to be counted
-      // per account. The unified list is INBOX-only, so no mailbox check here.
-      const byAccount = new Map();
-      for (const e of get().emails) {
-        if (!e._accountId) continue;
-        byAccount.set(e._accountId, (byAccount.get(e._accountId) || 0) + (e.flags?.includes('\\Seen') ? 0 : 1));
-      }
-      for (const [id, unread] of byAccount) useSettingsStore.getState().setUnreadForAccount(id, unread);
-    } else {
-      _syncUnreadBadge(useMailStore, state.activeAccountId, state.activeMailbox);
-    }
-  }
+  // Single-account lists were recounted by _refreshAfterFlagChange above.
+  if (flag === '\\Seen' && isUnified) _syncUnifiedUnreadBadges(useMailStore);
 
   // The vault copies are written whatever the server says — a vault-only
   // message has no server copy to fail against, and the rows on screen have
