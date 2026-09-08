@@ -3,8 +3,9 @@ import React from 'react';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
 import { DefaultMailApp } from './DefaultMailApp';
-import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2 } from 'lucide-react';
+import { RefreshCw, SendHorizontal, Eye, Search, Clock, Filter, Paperclip, Trash2, Download } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 
 export function BehaviorSettings() {
   const t = useT();
@@ -34,7 +35,53 @@ export function BehaviorSettings() {
     clearFilterHistory,
     sendDelay,
     setSendDelay,
+    updateTrack,
+    setUpdateTrack,
   } = useSettingsStore();
+
+  // Sparkle is the macOS Developer ID updater: Linux has its own and the App
+  // Store build has none. Read at render, not at import — jsdom has no platform.
+  const showUpdateTrack = !IS_APPSTORE_BUILD
+    && (navigator.platform?.startsWith('Mac') || navigator.userAgent?.includes('Mac'));
+
+  // Which build this is decides the track when the user has never chosen one.
+  const [isNightlyBuild, setIsNightlyBuild] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const { getVersion } = await import('@tauri-apps/api/app');
+        const version = await getVersion();
+        if (alive) setIsNightlyBuild(version.includes('-nightly'));
+      } catch {
+        // Web preview: no Tauri, so this is not a nightly.
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const changeUpdateTrack = async (track) => {
+    setUpdateTrack(track);
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_update_track', { track });
+    } catch (e) {
+      // The setting is persisted either way and re-applied at next launch.
+      console.warn('Could not apply the update track now:', e);
+    }
+  };
+
+  // No saved choice means "follow the build" — the same rule Rust applies.
+  const effectiveTrack = updateTrack ?? (isNightlyBuild ? 'nightly' : 'stable');
+
+  const checkForUpdatesNow = async () => {
+    try {
+      const { checkForUpdates } = await import('tauri-plugin-sparkle-updater-api');
+      await checkForUpdates();
+    } catch (e) {
+      console.warn('Update check failed:', e);
+    }
+  };
 
   return (
     <>
@@ -273,6 +320,51 @@ export function BehaviorSettings() {
           </p>
         </div>
       </div>
+
+      {/* Software updates */}
+      {showUpdateTrack && (
+        <div className="bg-mail-surface border border-mail-border rounded-xl p-5">
+          <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+            <Download size={18} className="text-mail-accent-text" />
+            {t('settings.behavior.updateTrackTitle')}
+          </h4>
+
+          <p className="text-sm text-mail-text-muted mb-4">
+            {t('settings.behavior.updateTrackDescription')}
+          </p>
+
+          <div>
+            <label className="block text-sm font-medium text-mail-text mb-2">
+              {t('settings.behavior.updateTrackLabel')}
+            </label>
+            <select
+              data-testid="update-track-select"
+              value={effectiveTrack}
+              onChange={(e) => changeUpdateTrack(e.target.value)}
+              className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                        text-mail-text focus:border-mail-accent transition-all
+                        cursor-pointer"
+            >
+              <option value="stable">{t('settings.behavior.updateTrackStable')}</option>
+              <option value="nightly">{t('settings.behavior.updateTrackNightly')}</option>
+            </select>
+            <p className="text-xs text-mail-text-muted mt-1">
+              {effectiveTrack === 'nightly'
+                ? t('settings.behavior.updateTrackNightlyHint')
+                : t('settings.behavior.updateTrackStableHint')}
+            </p>
+          </div>
+
+          <div className="mt-4">
+            <Button variant="ghost" size="sm" className="hover:bg-mail-border"
+              data-testid="update-track-check-now"
+              onClick={checkForUpdatesNow}
+            >
+              {t('settings.behavior.updateTrackCheckNow')}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Search Settings */}
       <div className="bg-mail-surface border border-mail-border rounded-xl p-5">

@@ -52,6 +52,13 @@ NOTARYTOOL_PROFILE="${NOTARYTOOL_PROFILE:-notarytool-profile}"
 # Get version from package.json
 VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version": *"\([^"]*\)".*/\1/')
 
+# Sparkle compares the appcast's <sparkle:version> against CFBundleVersion, and it
+# drops everything after a "-". A nightly therefore needs a numeric, monotonic
+# CFBundleVersion of its own; RELEASE_TAG names the release the DMG is attached to.
+# Unset, both reproduce a stable build exactly.
+BUNDLE_VERSION="${BUNDLE_VERSION:-$VERSION}"
+RELEASE_TAG="${RELEASE_TAG:-v$VERSION}"
+
 # Determine build target and output paths
 if [ -n "$BUILD_TARGET" ]; then
     TAURI_ARGS="--target $BUILD_TARGET"
@@ -227,6 +234,14 @@ APP_PATH="$TARGET_DIR/bundle/macos/${APP_NAME}.app"
 if [ ! -d "$APP_PATH" ]; then
     echo -e "${RED}❌ App bundle not found at $APP_PATH${NC}"
     exit 1
+fi
+
+# tauri-bundler writes the dash version into both CFBundleVersion and
+# CFBundleShortVersionString. Sparkle compares CFBundleVersion, so give it the
+# numeric one; the short string stays the display version.
+if [ "$BUNDLE_VERSION" != "$VERSION" ]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" "$APP_PATH/Contents/Info.plist"
+    echo "   ✓ CFBundleVersion set to $BUNDLE_VERSION (display version stays $VERSION)"
 fi
 
 # ── Replace Tauri's lipo'd daemon with the pre-built universal binary ──
@@ -514,10 +529,10 @@ if [ "$SPARKLE_SIGN" = true ]; then
     <item>
       <title>Version ${VERSION}</title>
       <pubDate>${PUB_DATE}</pubDate>
-      <sparkle:version>${VERSION}</sparkle:version>
+      <sparkle:version>${BUNDLE_VERSION}</sparkle:version>
       <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>11.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/GraphicMeat/mail-vault-app/releases/download/v${VERSION}/${DMG_NAME}"
+      <enclosure url="https://github.com/GraphicMeat/mail-vault-app/releases/download/${RELEASE_TAG}/${DMG_NAME}"
                  sparkle:edSignature="${EDDSA_SIGNATURE}"
                  length="${DMG_SIZE}"
                  type="application/octet-stream" />

@@ -4559,6 +4559,79 @@ async fn install_pending_update(_handle: tauri::AppHandle) -> Result<(), String>
     Err("macOS updates are installed via DMG download".to_string())
 }
 
+// ── Update track ────────────────────────────────────────────────────────────
+// Two Sparkle feeds: the stable one is SUFeedURL in Info.plist, the nightly one
+// rides the rolling `nightly` prerelease and is applied through the delegate's
+// feed-URL override.
+
+const NIGHTLY_APPCAST_URL: &str =
+    "https://github.com/GraphicMeat/mail-vault-app/releases/download/nightly/appcast.xml";
+
+/// Sparkle feed override for the chosen update track. `None` = use the
+/// stable feed from Info.plist. With no saved choice a nightly build follows
+/// the nightly feed and a stable build the stable one.
+#[allow(dead_code)] // Only the macOS + Sparkle build applies it; the tests read it everywhere.
+fn update_feed_override(track: Option<&str>, app_version: &str) -> Option<String> {
+    match track {
+        Some("nightly") => Some(NIGHTLY_APPCAST_URL.to_string()),
+        Some("stable") => None,
+        // Anything else is "no choice made": follow the build.
+        _ => app_version
+            .contains("-nightly")
+            .then(|| NIGHTLY_APPCAST_URL.to_string()),
+    }
+}
+
+/// The frontend's persisted `updateTrack`, read straight off disk — this runs in
+/// `setup()`, long before a window could be asked. Any problem reads as "unset".
+fn persisted_update_track(handle: &tauri::AppHandle) -> Option<String> {
+    let path = handle
+        .path()
+        .app_data_dir()
+        .ok()?
+        .join("frontend-settings.json");
+    let raw = fs::read_to_string(path).ok()?;
+    let settings: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    settings["mailvault-settings"]["state"]["updateTrack"]
+        .as_str()
+        .map(String::from)
+}
+
+#[cfg(all(target_os = "macos", feature = "sparkle"))]
+fn apply_update_track(handle: &tauri::AppHandle, track: Option<&str>) {
+    use tauri_plugin_sparkle_updater::SparkleUpdaterExt;
+
+    let sparkle = match handle.sparkle_updater() {
+        Some(s) => s,
+        None => {
+            warn!("Sparkle updater not available (dev mode?) — update track not applied");
+            return;
+        }
+    };
+
+    let feed = update_feed_override(track, env!("CARGO_PKG_VERSION"));
+    let in_effect = feed.clone().unwrap_or_else(|| "stable feed".to_string());
+    match sparkle.set_feed_url_override(feed) {
+        Ok(()) => info!(
+            "Update track '{}' — {}",
+            track.unwrap_or("(unset)"),
+            in_effect
+        ),
+        Err(e) => error!("Failed to set the Sparkle feed override: {}", e),
+    }
+}
+
+// Linux uses tauri-plugin-updater and MAS builds update through the App Store:
+// neither has a feed to override.
+#[cfg(not(all(target_os = "macos", feature = "sparkle")))]
+fn apply_update_track(_handle: &tauri::AppHandle, _track: Option<&str>) {}
+
+#[tauri::command]
+fn set_update_track(handle: tauri::AppHandle, track: String) -> Result<(), String> {
+    apply_update_track(&handle, Some(&track));
+    Ok(())
+}
+
 /// Shared update check logic for both manual menu trigger and startup auto-check.
 /// `show_no_update` controls whether to show a dialog when already up-to-date.
 #[cfg(target_os = "linux")]
@@ -5103,6 +5176,7 @@ fn main() {
             spellcheck::spellcheck_status,
             log_from_frontend,
             install_pending_update,
+            set_update_track,
             get_client_info,
             get_app_data_dir,
             read_settings_json,
@@ -5534,6 +5608,10 @@ fn main() {
                 })
                 .build(app)?;
 
+            // Point Sparkle at the right feed before anything can check it —
+            // both the delayed check below and Sparkle's own schedule.
+            apply_update_track(&app.handle(), persisted_update_track(&app.handle()).as_deref());
+
             // Check for updates in background
             let update_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -5621,6 +5699,31 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_explicit_update_track_wins_over_the_build() {
+        // The whole point of the setting: a nightly can go back to stable, and a
+        // stable build can opt into nightlies, whatever version it was built as.
+        assert_eq!(
+            update_feed_override(Some("nightly"), "2.12.0").as_deref(),
+            Some(NIGHTLY_APPCAST_URL)
+        );
+        assert_eq!(
+            update_feed_override(Some("stable"), "2.12.0-nightly.abc1234"),
+            None
+        );
+    }
+
+    #[test]
+    fn with_no_choice_saved_the_build_picks_its_own_feed() {
+        assert_eq!(
+            update_feed_override(None, "2.12.0-nightly.abc1234").as_deref(),
+            Some(NIGHTLY_APPCAST_URL)
+        );
+        assert_eq!(update_feed_override(None, "2.12.0"), None);
+        // A value from an older or newer catalogue reads as "unset", not as nightly.
+        assert_eq!(update_feed_override(Some("beta"), "2.12.0"), None);
+    }
 
     #[test]
     fn a_vault_file_name_reports_its_flags_by_both_names() {

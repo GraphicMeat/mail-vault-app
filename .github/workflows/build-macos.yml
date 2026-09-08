@@ -8,6 +8,16 @@ on:
         required: false
         type: string
         default: ''
+      bundle_version:
+        description: 'Numeric CFBundleVersion for Sparkle comparison; empty = same as the app version'
+        required: false
+        type: string
+        default: ''
+      release_tag:
+        description: 'GitHub release tag the DMG will be uploaded to; empty = v<version>'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   build-macos:
@@ -115,6 +125,8 @@ jobs:
           BUILD_TARGET: universal-apple-darwin
           SKIP_SERVER_BUILD: 'true'
           SPARKLE_FRAMEWORK_PATH: ${{ github.workspace }}/src-tauri
+          BUNDLE_VERSION: ${{ inputs.bundle_version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
           SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
           SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SPARKLE_EDDSA_PRIVATE_KEY }}

@@ -258,6 +258,23 @@ describe('afterDeleteSelect', () => {
   });
 });
 
+describe('updateTrack', () => {
+  it('is unset by default so the build picks its own feed', () => {
+    expect(useSettingsStore.getState().updateTrack).toBeNull();
+  });
+
+  it('setUpdateTrack writes the value', () => {
+    useSettingsStore.getState().setUpdateTrack('nightly');
+    expect(useSettingsStore.getState().updateTrack).toBe('nightly');
+  });
+
+  it('resetSettings restores the unset default', () => {
+    useSettingsStore.getState().setUpdateTrack('nightly');
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().updateTrack).toBeNull();
+  });
+});
+
 describe('autoDownloadAttachments', () => {
   it('is off by default', () => {
     expect(useSettingsStore.getState().autoDownloadAttachments).toBe(false);

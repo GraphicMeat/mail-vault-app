@@ -23,6 +23,7 @@ jobs:
     outputs:
       changed: ${{ steps.gate.outputs.changed }}
       version: ${{ steps.gate.outputs.version }}
+      bundle_version: ${{ steps.gate.outputs.bundle_version }}
       last: ${{ steps.gate.outputs.last }}
     steps:
       - name: Checkout repository
@@ -39,8 +40,14 @@ jobs:
           LAST=$(git ls-remote origin 'refs/tags/nightly' 'refs/tags/nightly^{}' | tail -1 | cut -f1)
           BASE=$(grep -m1 '"version"' package.json | sed 's/.*"version": *"\([^"]*\)".*/\1/')
           SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
+          # Sparkle drops everything after a "-", so the dash version compares equal
+          # to stable. Five numeric components — an extra component reads as newer —
+          # beat stable ${BASE}, lose to the next stable, and order among themselves.
+          BUNDLE="${BASE}.$(date -u +%Y%m%d).$(date -u +%H%M)"
           echo "last=${LAST}" >> "$GITHUB_OUTPUT"
           echo "version=${BASE}-nightly.${SHORT}" >> "$GITHUB_OUTPUT"
+          echo "bundle_version=${BUNDLE}" >> "$GITHUB_OUTPUT"
+          echo "CFBundleVersion for Sparkle: ${BUNDLE}"
           if [ "$FORCE" = "true" ]; then
             echo "Forced run"; echo "changed=true" >> "$GITHUB_OUTPUT"
           elif [ "$LAST" = "$GITHUB_SHA" ]; then
@@ -60,6 +67,8 @@ jobs:
     secrets: inherit
     with:
       version: ${{ needs.check.outputs.version }}
+      bundle_version: ${{ needs.check.outputs.bundle_version }}
+      release_tag: nightly
 
   publish:
     needs: [check, build]
@@ -84,10 +93,21 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           LAST: ${{ needs.check.outputs.last }}
           VERSION: ${{ needs.check.outputs.version }}
+          BUNDLE_VERSION: ${{ needs.check.outputs.bundle_version }}
         run: |
           set -euo pipefail
           DMG=$(find artifacts -name "MailVault-v${VERSION}.dmg" | head -1)
           if [ -z "$DMG" ]; then echo "::error::No DMG for ${VERSION}"; find artifacts -type f; exit 1; fi
+          # The nightly feed lives on this rolling tag, so the enclosure must point
+          # at it — a stable-shaped URL would 404 for every nightly that installs it.
+          APPCAST=$(find artifacts -name appcast.xml | head -1)
+          if [ -z "$APPCAST" ]; then echo "::error::No appcast.xml in the artifacts"; find artifacts -type f; exit 1; fi
+          if ! grep -q '/releases/download/nightly/' "$APPCAST"; then
+            echo "::error::appcast enclosure does not point at the nightly tag"; cat "$APPCAST"; exit 1
+          fi
+          if ! grep -q "<sparkle:version>${BUNDLE_VERSION}</sparkle:version>" "$APPCAST"; then
+            echo "::error::appcast sparkle:version is not ${BUNDLE_VERSION}"; cat "$APPCAST"; exit 1
+          fi
           SHORT=$(git rev-parse --short=7 "$GITHUB_SHA")
           DATE=$(date -u +%Y-%m-%d)
           if [ -n "$LAST" ] && git cat-file -e "${LAST}^{commit}" 2>/dev/null; then
@@ -102,5 +122,6 @@ jobs:
             --prerelease \
             --title "Nightly ${DATE} (${SHORT})" \
             --notes "$NOTES" \
-            "$DMG"
+            "$DMG" \
+            "$APPCAST"
           echo "Published nightly ${VERSION} from ${GITHUB_SHA}"

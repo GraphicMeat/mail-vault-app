@@ -217,6 +217,10 @@ export const useSettingsStore = create(
       // itself the moment it is selected and that marks it read.
       afterDeleteSelect: 'none', // 'none' | 'next'
 
+      // Which Sparkle feed this install follows. Rust reads it out of the
+      // persisted file at startup, before any window exists.
+      updateTrack: null, // null = follow the build (nightly build -> nightly feed), 'stable' | 'nightly'
+
       // After a mailbox's bodies are cached, write its attachments to the
       // attachment cache newest-first so they open without a round trip.
       autoDownloadAttachments: false,
@@ -708,6 +712,7 @@ export const useSettingsStore = create(
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
+      setUpdateTrack: (track) => set({ updateTrack: track }),
       setAutoDownloadAttachments: (on) => set({ autoDownloadAttachments: on }),
 
       // Layout settings
@@ -906,6 +911,7 @@ export const useSettingsStore = create(
           markAsReadMode: 'delay',
           markAsReadDelay: 3,
           afterDeleteSelect: 'none',
+          updateTrack: null,
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'default',
