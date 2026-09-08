@@ -78,3 +78,9 @@ website/*/search-index.json
 
 # Serena MCP workspace — local only
 .serena/
+
+# Python bytecode
+__pycache__/
+
+# impeccable skill critique reports — session output, never repo content
+.impeccable/critique/
