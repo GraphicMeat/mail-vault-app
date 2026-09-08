@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "Elige dónde vive tu bóveda. Sirve cualquier carpeta de este equipo o de una unidad conectada.",
   "settings.storage.cleanedUp_one": "Se limpió {{count}} correo",
   "settings.storage.cleanedUp_other": "Se limpiaron {{count}} correos",
+  "settings.storage.cleanupLastRun": "Última ejecución {{date}}: {{deleted}} eliminados, {{archived}} archivados, {{skipped}} omitidos (sin copia verificada)",
   "settings.storage.clearCache": "Vaciar la caché",
   "settings.storage.clearCachedEmails": "Vaciar los correos en caché",
   "settings.storage.clearing": "Vaciando…",

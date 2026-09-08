@@ -21,6 +21,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
+import { formatDateTime } from '../../utils/dateFormat';
 import { CLEANUP_FOLDERS } from '../../utils/cleanupFolders';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { t, useT  } from '../../i18n/index.js';
@@ -46,8 +47,14 @@ export function StorageSettings({ accounts, onUpgrade }) {
     toggleCleanupRule,
     cleanupRulesDisarmed,
     dismissCleanupRulesDisarmed,
+    cleanupLastRun,
   } = useSettingsStore();
   const isPaidUser = hasPremiumAccess(billingProfile);
+
+  // 'all' is a sentinel, not a mailbox name - decodeImapUtf7 would print it raw.
+  const folderLabel = (folder) => (
+    folder === 'all' ? t('settings.backup.account.allFolders') : decodeImapUtf7(folder)
+  );
 
   const [movingStorage, setMovingStorage] = useState(false);
   const [supportsFileSystem, setSupportsFileSystem] = useState(false);
@@ -417,7 +424,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                 {cleanupRules.map((rule) => (
                   <div key={rule.id} className="flex items-center justify-between p-3 bg-mail-bg rounded-lg group">
                     <div className="flex items-center gap-3 text-sm min-w-0 flex-1">
-                      <span className="font-medium text-mail-text">{decodeImapUtf7(rule.folder)}</span>
+                      <span className="font-medium text-mail-text">{folderLabel(rule.folder)}</span>
                       <span className="text-mail-text-muted truncate">
                         {rule.account === 'all' ? t('contacts.allAccounts') : rule.account}
                       </span>
@@ -535,7 +542,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       className="w-full px-3 py-2 text-sm bg-mail-surface border border-mail-border rounded-lg text-mail-text focus:outline-none focus:ring-1 focus:ring-mail-accent"
                     >
                       {CLEANUP_FOLDERS.map(f => (
-                        <option key={f} value={f}>{decodeImapUtf7(f)}</option>
+                        <option key={f} value={f}>{folderLabel(f)}</option>
                       ))}
                     </select>
                   </div>
@@ -649,17 +656,15 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       setCleanupRunning(true);
                       setCleanupResult(null);
                       try {
-                        const result = await runCleanupRules();
-                        if (result.archived > 0 || result.deleted > 0) {
-                          setCleanupResult(`${t('settings.storage.cleanedUp', { count: result.deleted })}${result.archived > 0 ? ` (${result.archived} archived)` : ''}`);
-                        } else {
-                          setCleanupResult('No emails matched cleanup criteria');
-                        }
+                        // What the run did is read back off the stored last
+                        // run, which a scheduled run writes too - a line that
+                        // faded after five seconds could never report one.
+                        await runCleanupRules();
                       } catch (e) {
                         setCleanupResult(`Cleanup failed: ${e.message}`);
+                        setTimeout(() => setCleanupResult(null), 5000);
                       } finally {
                         setCleanupRunning(false);
-                        setTimeout(() => setCleanupResult(null), 5000);
                       }
                     }}
                     disabled={cleanupRunning}
@@ -670,9 +675,16 @@ export function StorageSettings({ accounts, onUpgrade }) {
                   </button>
                 )}
               </div>
-              {cleanupResult && (
-                <p className={`text-xs mt-2 ${cleanupResult.startsWith('Cleanup failed') ? 'text-mail-danger' : 'text-mail-text-muted'}`}>
-                  {cleanupResult}
+              {cleanupResult ? (
+                <p className="text-xs mt-2 text-mail-danger">{cleanupResult}</p>
+              ) : cleanupLastRun && (
+                <p className="text-xs mt-2 text-mail-text-muted">
+                  {t('settings.storage.cleanupLastRun', {
+                    date: formatDateTime(cleanupLastRun.at),
+                    deleted: cleanupLastRun.deleted ?? 0,
+                    archived: cleanupLastRun.archived ?? 0,
+                    skipped: cleanupLastRun.skipped ?? 0,
+                  })}
                 </p>
               )}
             </>)}

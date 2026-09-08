@@ -364,6 +364,10 @@ export const useSettingsStore = create(
       // Set by the v4 → v5 migration when it switches previously-inert rules
       // off. Purely a notice for StorageSettings; cleared once acknowledged.
       cleanupRulesDisarmed: false,
+      // What the last cleanup run did: { at, archived, deleted, skipped }. The
+      // 24h guard used to live in a module variable, so it re-armed on every
+      // launch and the user never saw what a scheduled run had done.
+      cleanupLastRun: null,
 
       // Helper mode: 'on-demand' (default) or 'always-on' (recommended)
       // on-demand: helper starts with app, stops when app quits
@@ -867,6 +871,8 @@ export const useSettingsStore = create(
 
       dismissCleanupRulesDisarmed: () => set({ cleanupRulesDisarmed: false }),
 
+      setCleanupLastRun: (run) => set({ cleanupLastRun: run }),
+
       toggleCleanupRule: (id) => {
         if (!hasPremiumAccess(get().billingProfile)) return;
         set((state) => ({
@@ -959,6 +965,7 @@ export const useSettingsStore = create(
           trackerAlerts: {},
           cleanupRules: [],
           cleanupRulesDisarmed: false,
+          cleanupLastRun: null,
           activeMigration: null,
           migrationHistory: [],
           incompleteMigration: null,

@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "选择保险库的存放位置。本机或已连接磁盘上的任意文件夹均可。",
   "settings.storage.cleanedUp_one": "已清理 {{count}} 封邮件",
   "settings.storage.cleanedUp_other": "已清理 {{count}} 封邮件",
+  "settings.storage.cleanupLastRun": "上次运行 {{date}}：删除 {{deleted}} 封，归档 {{archived}} 封，跳过 {{skipped}} 封（无已验证副本）",
   "settings.storage.clearCache": "清空缓存",
   "settings.storage.clearCachedEmails": "清除缓存的邮件",
   "settings.storage.clearing": "正在清除…",

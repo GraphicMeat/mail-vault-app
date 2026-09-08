@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "Scegli dove vive la tua cassaforte. Va bene qualsiasi cartella su questo computer o su un disco collegato.",
   "settings.storage.cleanedUp_one": "Pulita {{count}} email",
   "settings.storage.cleanedUp_other": "Pulite {{count}} email",
+  "settings.storage.cleanupLastRun": "Ultima esecuzione {{date}}: {{deleted}} eliminate, {{archived}} archiviate, {{skipped}} ignorate (nessuna copia verificata)",
   "settings.storage.clearCache": "Svuota la cache",
   "settings.storage.clearCachedEmails": "Svuota le email in cache",
   "settings.storage.clearing": "Svuotamento…",

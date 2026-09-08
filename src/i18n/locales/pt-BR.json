@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "Escolha onde seu cofre fica. Qualquer pasta neste computador ou em um disco conectado serve.",
   "settings.storage.cleanedUp_one": "{{count}} e-mail limpo",
   "settings.storage.cleanedUp_other": "{{count}} e-mails limpos",
+  "settings.storage.cleanupLastRun": "Última execução {{date}}: {{deleted}} excluídos, {{archived}} arquivados, {{skipped}} ignorados (sem cópia verificada)",
   "settings.storage.clearCache": "Limpar cache",
   "settings.storage.clearCachedEmails": "Limpar e-mails em cache",
   "settings.storage.clearing": "Limpando…",

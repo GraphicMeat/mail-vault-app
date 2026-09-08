@@ -520,11 +520,17 @@ export async function dnsMailHealth(domain, newImapHost) {
   throw new ApiError('DNS health check requires desktop app', 0);
 }
 
-export async function verifyArchivedEmails(accountId, mailbox, uids) {
+/**
+ * Which of these uids the vault actually holds. `expectedIds` is an optional
+ * { [uid]: messageId } map: where a uid's file carries a different Message-ID
+ * the copy is not this message, and it comes back as `mismatched` rather than
+ * as verified. Omitting it verifies on the file's presence alone.
+ */
+export async function verifyArchivedEmails(accountId, mailbox, uids, expectedIds = null) {
   if (IS_TAURI) {
-    return tauriInvoke('verify_archived_emails', { accountId, mailbox, uids });
+    return tauriInvoke('verify_archived_emails', { accountId, mailbox, uids, expectedIds });
   }
-  return { verified: uids, missing: [] };
+  return { verified: uids, missing: [], mismatched: [] };
 }
 
 // ── Local index ───────────────────────────────────────────────────────────────

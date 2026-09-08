@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "Choisissez où réside votre coffre. N'importe quel dossier de cet ordinateur ou d'un disque connecté convient.",
   "settings.storage.cleanedUp_one": "{{count}} e-mail nettoyé",
   "settings.storage.cleanedUp_other": "{{count}} e-mails nettoyés",
+  "settings.storage.cleanupLastRun": "Dernière exécution {{date}} : {{deleted}} supprimés, {{archived}} archivés, {{skipped}} ignorés (aucune copie vérifiée)",
   "settings.storage.clearCache": "Vider le cache",
   "settings.storage.clearCachedEmails": "Vider les e-mails en cache",
   "settings.storage.clearing": "Nettoyage…",

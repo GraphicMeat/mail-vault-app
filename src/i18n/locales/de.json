@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "Wähl, wo dein Tresor liegt. Jeder Ordner auf diesem Rechner oder einem angeschlossenen Laufwerk geht.",
   "settings.storage.cleanedUp_one": "{{count}} E-Mail aufgeräumt",
   "settings.storage.cleanedUp_other": "{{count}} E-Mails aufgeräumt",
+  "settings.storage.cleanupLastRun": "Letzter Lauf {{date}}: {{deleted}} gelöscht, {{archived}} archiviert, {{skipped}} übersprungen (keine geprüfte Kopie)",
   "settings.storage.clearCache": "Cache leeren",
   "settings.storage.clearCachedEmails": "Zwischengespeicherte E-Mails löschen",
   "settings.storage.clearing": "Wird geleert …",

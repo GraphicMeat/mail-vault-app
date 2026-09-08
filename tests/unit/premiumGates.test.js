@@ -30,7 +30,12 @@ vi.mock('../../src/stores/mailStore', () => ({
 }));
 
 const getEmailHeaders = vi.fn().mockResolvedValue({ emails: [] });
-vi.mock('../../src/services/db', () => ({ getEmailHeaders }));
+// The engine resolves the rule's folder against this list before it reads a
+// single header, so "did it reach the mailbox at all" needs one.
+const getCachedMailboxEntry = vi.fn().mockResolvedValue({
+  lastKnownGoodMailboxes: [{ path: 'INBOX', name: 'INBOX' }],
+});
+vi.mock('../../src/services/db', () => ({ getEmailHeaders, getCachedMailboxEntry }));
 vi.mock('../../src/services/api', () => ({
   archiveEmail: vi.fn().mockResolvedValue({}),
   deleteEmail: vi.fn().mockResolvedValue({}),

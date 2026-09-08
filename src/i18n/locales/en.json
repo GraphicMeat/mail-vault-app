@@ -1480,6 +1480,7 @@
   "settings.cleanup.willSaveToArchive_other": "{{count}} emails will be saved to your local archive.",
   "settings.storage.cleanedUp_one": "Cleaned up {{count}} email",
   "settings.storage.cleanedUp_other": "Cleaned up {{count}} emails",
+  "settings.storage.cleanupLastRun": "Last run {{date}}: {{deleted}} deleted, {{archived}} archived, {{skipped}} skipped (no verified copy)",
   "alert.tracker.removed_one": "MailVault removed a tracking pixel from this email before it rendered. The sender was not told that you opened it.",
   "alert.tracker.removed_other": "MailVault removed {{count}} tracking pixels from this email before it rendered. The sender was not told that you opened it.",
   "alert.tracker.loaded_one": "A hidden tracking pixel loaded when this email opened. The sender now knows when you read it, how often, and roughly where you were.",

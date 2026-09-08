@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "보관함을 둘 위치를 고르세요. 이 컴퓨터나 연결된 드라이브의 어떤 폴더든 됩니다.",
   "settings.storage.cleanedUp_one": "메일 {{count}}건 정리됨",
   "settings.storage.cleanedUp_other": "메일 {{count}}건 정리됨",
+  "settings.storage.cleanupLastRun": "마지막 실행 {{date}}: {{deleted}}개 삭제, {{archived}}개 보관, {{skipped}}개 건너뜀 (확인된 사본 없음)",
   "settings.storage.clearCache": "캐시 지우기",
   "settings.storage.clearCachedEmails": "캐시된 메일 지우기",
   "settings.storage.clearing": "지우는 중…",

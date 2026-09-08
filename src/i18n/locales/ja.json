@@ -1192,6 +1192,7 @@
   "settings.storage.chooseWhereVaultLivesAny": "保管庫の置き場所を選びます。このコンピューターや接続したドライブの任意のフォルダが使えます。",
   "settings.storage.cleanedUp_one": "{{count}} 件を整理しました",
   "settings.storage.cleanedUp_other": "{{count}} 件を整理しました",
+  "settings.storage.cleanupLastRun": "前回の実行 {{date}}: {{deleted}} 件削除、{{archived}} 件保存、{{skipped}} 件スキップ (確認済みのコピーなし)",
   "settings.storage.clearCache": "キャッシュを消去",
   "settings.storage.clearCachedEmails": "キャッシュしたメールを消去",
   "settings.storage.clearing": "消去中…",
