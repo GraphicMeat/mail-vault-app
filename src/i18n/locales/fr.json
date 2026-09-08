@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "Rechercher un compte",
   "sidebar.noAccountsFound": "Aucun compte trouvé",
   "sidebar.findFolder": "Rechercher un dossier",
-  "sidebar.noFoldersFound": "Aucun dossier trouvé"
+  "sidebar.noFoldersFound": "Aucun dossier trouvé",
+  "onboarding.refreshTitle": "Personnalisez davantage MailVault",
+  "onboarding.refreshDescription": "De nouvelles options d’apparence et de disposition sont disponibles. Reprenez le parcours de démarrage pour les découvrir et adapter MailVault à votre façon de lire vos e-mails.",
+  "onboarding.refreshRestart": "Reprendre le parcours"
 }

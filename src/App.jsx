@@ -18,6 +18,7 @@ import { Toast } from './components/Toast';
 import { BulkSaveProgress } from './components/BulkSaveProgress';
 import { SelectionActionBar } from './components/SelectionActionBar';
 import { Onboarding } from './components/Onboarding';
+import { OnboardingRefreshPrompt } from './components/onboarding/OnboardingRefreshPrompt';
 import { ChatViewWrapper } from './components/ChatViewWrapper';
 import { UndoSendToast } from './components/UndoSendToast';
 import { UndoToast } from './components/UndoToast';
@@ -1075,6 +1076,9 @@ function App() {
         onRetry={() => useMailStore.getState().retryKeychainAccess()}
         onOpenAccounts={() => openSettings({ tab: 'accounts' })}
       />
+      <OnboardingRefreshPrompt ready={initialized && !settingsMounted && !showAccountModal
+        && composeWindows.length === 0 && !updateInfo && !showShortcutsModal && !showBugModal
+        && !pendingOperation && !exportTarget && !showExportSamples} />
       <UndoSendToast onUndo={(cs) => openCompose(cs)} />
       <UndoToast />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />

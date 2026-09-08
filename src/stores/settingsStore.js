@@ -266,6 +266,9 @@ export const useSettingsStore = create(
 
       // Onboarding
       onboardingComplete: false,
+      // One invitation for installs that completed onboarding before the
+      // appearance update. Completing today's flow opts new users out too.
+      appearanceOnboardingPromptSeen: false,
 
       // Search settings
       searchHistoryLimit: 20, // Max number of searches to keep (20-500)
@@ -752,7 +755,11 @@ export const useSettingsStore = create(
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
 
       // Onboarding
-      setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
+      setOnboardingComplete: (complete) => set({
+        onboardingComplete: complete,
+        ...(complete ? { appearanceOnboardingPromptSeen: true } : {}),
+      }),
+      markAppearanceOnboardingPromptSeen: () => set({ appearanceOnboardingPromptSeen: true }),
 
       // Search settings
       setSearchHistoryLimit: (limit) => set({ searchHistoryLimit: Math.min(500, Math.max(20, limit)) }),

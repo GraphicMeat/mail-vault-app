@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "Buscar cuenta",
   "sidebar.noAccountsFound": "No se encontraron cuentas",
   "sidebar.findFolder": "Buscar carpeta",
-  "sidebar.noFoldersFound": "No se encontraron carpetas"
+  "sidebar.noFoldersFound": "No se encontraron carpetas",
+  "onboarding.refreshTitle": "Más formas de personalizar MailVault",
+  "onboarding.refreshDescription": "Hemos añadido nuevas opciones de apariencia y diseño. Vuelve a la configuración inicial para descubrirlas y adaptar MailVault a tu forma de leer el correo.",
+  "onboarding.refreshRestart": "Reiniciar configuración inicial"
 }

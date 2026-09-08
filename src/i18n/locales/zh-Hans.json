@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "查找账户",
   "sidebar.noAccountsFound": "未找到任何账户",
   "sidebar.findFolder": "查找文件夹",
-  "sidebar.noFoldersFound": "未找到任何文件夹"
+  "sidebar.noFoldersFound": "未找到任何文件夹",
+  "onboarding.refreshTitle": "让 MailVault 更合你心意",
+  "onboarding.refreshDescription": "我们新增了外观和布局选项。重新打开入门引导，探索新选项，让 MailVault 更符合你的邮件阅读习惯。",
+  "onboarding.refreshRestart": "重新开始入门引导"
 }

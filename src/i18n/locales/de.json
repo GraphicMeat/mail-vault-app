@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "Konto suchen",
   "sidebar.noAccountsFound": "Keine Konten gefunden",
   "sidebar.findFolder": "Ordner suchen",
-  "sidebar.noFoldersFound": "Keine Ordner gefunden"
+  "sidebar.noFoldersFound": "Keine Ordner gefunden",
+  "onboarding.refreshTitle": "Mehr Möglichkeiten, MailVault anzupassen",
+  "onboarding.refreshDescription": "Es gibt neue Optionen für Aussehen und Layout. Starte die Einführung erneut, um sie kennenzulernen und MailVault so einzurichten, wie du deine E-Mails am liebsten liest.",
+  "onboarding.refreshRestart": "Einführung neu starten"
 }

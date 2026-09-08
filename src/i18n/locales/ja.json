@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "アカウントを検索",
   "sidebar.noAccountsFound": "アカウントが見つかりません",
   "sidebar.findFolder": "フォルダを検索",
-  "sidebar.noFoldersFound": "フォルダが見つかりません"
+  "sidebar.noFoldersFound": "フォルダが見つかりません",
+  "onboarding.refreshTitle": "MailVaultをもっと自分好みに",
+  "onboarding.refreshDescription": "外観やレイアウトの設定が新しく増えました。初期設定ガイドをもう一度開いて、新しい設定を確認し、メールを読みやすい画面に整えましょう。",
+  "onboarding.refreshRestart": "初期設定ガイドを再開"
 }

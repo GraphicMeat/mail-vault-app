@@ -2146,5 +2146,8 @@
   "sidebar.findAccount": "Find account",
   "sidebar.noAccountsFound": "No accounts found",
   "sidebar.findFolder": "Find folder",
-  "sidebar.noFoldersFound": "No folders found"
+  "sidebar.noFoldersFound": "No folders found",
+  "onboarding.refreshTitle": "More ways to make MailVault yours",
+  "onboarding.refreshDescription": "We’ve added new appearance and layout options. Restart onboarding to explore them and tailor MailVault to the way you read your mail.",
+  "onboarding.refreshRestart": "Restart onboarding"
 }
