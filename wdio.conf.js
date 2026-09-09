@@ -217,12 +217,13 @@ export const config = {
     'ui-headless': ['./tests/e2e/ui-*.test.js'],
     // CI-safe: seeded mock-IMAP accounts, no real credentials or network
     'connected-ci': ['./tests/e2e/connected-*.test.js'],
-    // Developer-only: backup, migration, visual, archive
+    // Developer-only: backup, migration, visual, archive, native OS input
     'local-manual': [
       './tests/e2e/backup-*.test.js',
       './tests/e2e/migration-*.test.js',
       './tests/e2e/archive-*.test.js',
       './tests/e2e/visual-*.test.js',
+      './tests/e2e/native-*.test.js',
     ],
   },
   maxInstances: 1,

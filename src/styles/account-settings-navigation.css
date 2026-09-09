@@ -46,18 +46,59 @@
 .account-settings-status-error { color: var(--mail-warning); }
 .account-settings-section-intro { color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; margin-bottom: 24px; }
 
-.account-settings-account { border-radius: 8px; }
+.account-settings-account { position: relative; display: flex; align-items: center; border-radius: 8px; }
 .account-settings-account:hover { background: var(--mail-surface-hover); }
 .account-settings-account-selected, .account-settings-account-selected:hover { background: var(--mail-accent-tint); }
 .account-settings-account-selected .text-mail-text-muted { color: var(--mail-accent-text); }
-.account-settings-account-button { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; padding: 10px; text-align: left; border-radius: 8px; }
-.account-settings-order { display: flex; flex-direction: column; gap: 4px; }
-.account-settings-order > li { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; color: var(--mail-text); }
-.account-settings-order > li > span { min-width: 0; overflow-wrap: anywhere; }
-.account-settings-order [role="group"] { display: flex; margin-left: auto; flex-shrink: 0; gap: 4px; }
-.account-settings-order button { display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); }
-.account-settings-order button:hover:not(:disabled) { color: var(--mail-text); background: var(--mail-surface-hover); }
-.account-settings-order button:disabled { opacity: .4; }
+.account-settings-account-button { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; padding: 10px; text-align: left; border-radius: 8px; }
+.account-settings-reorder-list { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.account-settings-drag-handle {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 28px;
+  min-height: 36px;
+  border-radius: 6px;
+  color: var(--mail-text-muted);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.account-settings-drag-handle + .account-settings-account-button { padding-left: 2px; }
+.account-settings-drag-handle:hover { color: var(--mail-text); background: var(--mail-surface-hover); }
+.account-settings-account-selected .account-settings-drag-handle { color: var(--mail-accent-text); }
+.account-settings-drag-handle:focus-visible { outline: 2px solid var(--mail-accent); outline-offset: -2px; }
+.account-settings-drag-handle:active, .is-reordering .account-settings-drag-handle { cursor: grabbing; }
+.account-settings-account.is-dragging > * { opacity: .45; }
+.account-settings-account[data-drop-before]::before, .account-settings-reorder-list[data-drop-end]::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--mail-accent);
+  pointer-events: none;
+}
+.account-settings-account[data-drop-before]::before { top: -3px; }
+.account-settings-reorder-list[data-drop-end]::after { bottom: -3px; }
+.account-settings-drag-preview {
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  padding: 10px 12px;
+  border: 1px solid var(--mail-border);
+  border-radius: 8px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font-size: 13px;
+  pointer-events: none;
+}
+.account-settings-drag-preview svg { flex-shrink: 0; }
+.account-settings-drag-preview span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .account-settings-error-details { padding-bottom: 20px; border-bottom: 1px solid var(--mail-border); color: var(--mail-text-muted); font-size: 13px; line-height: 1.6; }
 .account-settings-error-details summary { cursor: pointer; color: var(--mail-text); }
 .account-settings-error-details p { margin-top: 12px; overflow-wrap: anywhere; }

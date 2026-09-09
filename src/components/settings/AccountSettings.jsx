@@ -12,6 +12,7 @@ import { SendAsVerifyModal } from './SendAsVerifyModal';
 import { Send } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import { SettingsTabs } from './SettingsTabs';
+import { AccountReorderList } from './AccountReorderList';
 import '../../styles/account-settings-navigation.css';
 import { RichTextEditor, textToHtml, htmlToText } from '../RichTextEditor';
 import { Toast } from '../Toast';
@@ -22,8 +23,6 @@ import {
   Shield,
   Check,
   Trash2,
-  ChevronUp,
-  ChevronDown,
   Loader,
   RefreshCw,
   Key,
@@ -67,7 +66,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
     getDisplayName,
     setSendAsAddress,
     getSendAsAddress,
-    accountOrder,
     getOrderedAccounts,
     setAccountOrder,
     accountColors,
@@ -144,16 +142,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
     const panel = panelRef.current?.querySelector('[role="tabpanel"]');
     if (panel) panel.scrollTop = 0;
   }, [section, selectedAccountId]);
-
-  const moveAccount = (accountId, direction) => {
-    const ids = orderedAccounts.map(a => a.id);
-    const idx = ids.indexOf(accountId);
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= ids.length) return;
-    ids.splice(idx, 1);
-    ids.splice(newIdx, 0, accountId);
-    setAccountOrder(ids);
-  };
 
   // Load signature and display name when account changes
   useEffect(() => {
@@ -429,12 +417,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
               <p className="text-sm">{t('common.noAccountsConfigured')}</p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {orderedAccounts.map(account => (
-                <div
-                  key={account.id}
-                  className={`account-settings-account ${account.id === selectedAccountId ? 'account-settings-account-selected' : ''}`}
-                >
+            <AccountReorderList accounts={orderedAccounts} selectedAccountId={selectedAccountId} onReorder={setAccountOrder}>
+              {account => (
                   <button type="button" className="account-settings-account-button"
                     aria-pressed={account.id === selectedAccountId} onClick={() => setSelectedAccountId(account.id)}>
                   <div
@@ -458,9 +442,8 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
                     </div>
                   </div>
                   </button>
-                </div>
-              ))}
-            </div>
+              )}
+            </AccountReorderList>
           )}
           {onAddAccount && (
             <button
@@ -476,14 +459,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
         </div>
       </div>
 
-      <div className="account-settings-mobile">
-        <select aria-label={t('settings.accounts.accounts')} value={selectedAccountId || ''}
-          onChange={event => setSelectedAccountId(event.target.value)}>
-          {orderedAccounts.map(account => <option key={account.id} value={account.id}>{getDisplayName(account.id) || account.email}</option>)}
-        </select>
-        {onAddAccount && <button type="button" onClick={onAddAccount} className="p-2 rounded-lg text-mail-accent-text"
-          aria-label={t('settings.accounts.addAccount')}><Plus size={18} /></button>}
-      </div>
       {/* Account Settings - Right Column */}
       <div ref={panelRef} className="account-settings-detail">
         {selectedAccount ? (
@@ -990,25 +965,6 @@ export function AccountSettings({ accounts, onAddAccount, initialAccountId, init
               </div>
             </div>
 
-            {orderedAccounts.length > 1 && (
-              <section className="settings-section">
-                <h4 className="font-semibold text-mail-text mb-2">{t('settings.accounts.accountOrder')}</h4>
-                <p className="text-sm text-mail-text-muted mb-4">{t('settings.accounts.accountOrderHint')}</p>
-                <ol className="account-settings-order">
-                  {orderedAccounts.map((account, index) => (
-                    <li key={account.id}>
-                      <span>{getDisplayName(account.id) || account.name || account.email}</span>
-                      <div role="group" aria-label={account.email}>
-                        <button type="button" disabled={index === 0} onClick={() => moveAccount(account.id, -1)}
-                          aria-label={t('settings.accounts.moveUp')}><ChevronUp size={16} /></button>
-                        <button type="button" disabled={index === orderedAccounts.length - 1} onClick={() => moveAccount(account.id, 1)}
-                          aria-label={t('settings.accounts.moveDown')}><ChevronDown size={16} /></button>
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-              </section>
-            )}
             {/* Remove Account */}
             <div className="bg-mail-surface border border-mail-danger/30 rounded-xl p-5 mt-6">
               <h4 className="font-semibold text-mail-danger mb-4 flex items-center gap-2">

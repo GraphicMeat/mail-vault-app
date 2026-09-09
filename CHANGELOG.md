@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **Accounts can be reordered directly in Your Accounts.** Drag an account by its grip to change the order in the sidebar and account menus. The separate Account order controls have been removed; keyboard users can move accounts with the arrow keys while a grip is focused.
+
 ### Added
 - **Incoming mail can play a Mac sound.** Settings → Mail preferences → Notifications offers Glass, Ping, Pop, Purr, and Tink, with a preview button and an Off option. Sound is off by default and waits with notifications during a Focus session.
 - **Explorer gives your mailbox another way to browse.** Switch between List and Explorer, then browse by Date, Sender, or Date → Conversation. Groups show email, unread and vault counts, support selection and local search, and remember where you left off. Optional day groups add detail; opening a message uses the existing reader and actions. These are automatic views of your mail, with explicit loading for larger mailboxes.

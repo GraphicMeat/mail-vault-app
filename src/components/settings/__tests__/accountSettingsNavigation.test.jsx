@@ -34,7 +34,7 @@ it('keeps identity visible while revealing only the chosen category', () => {
   expect(screen.queryByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeNull();
   fireEvent.click(tab('Advanced'));
   expect(screen.getByRole('button', { name: t('settings.accounts.removeAccount2') })).toBeTruthy();
-  expect(screen.getByRole('heading', { name: t('settings.accounts.accountOrder') })).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Account order' })).toBeNull();
 });
 
 it('opens the requested section and honors a new search destination', () => {

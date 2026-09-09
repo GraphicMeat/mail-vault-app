@@ -1,25 +1,16 @@
 /**
- * E2E Test: the settings path the docs print is the path the app has
- *
- * The changelog, the FAQ and one onboarding line all tell a reader to go to
- * Settings > General > Appearance > Highlighting. For a long time they said
- * Settings > Appearance, which names a top-level tab that does not exist:
- * Appearance is a sub-tab of General. A unit spec keeps the copy honest
- * (tests/unit/settingsPathCopy.test.js), but only the running app can say
- * whether the path itself is real.
- *
- * So this walks it, and pins the shape that made the old copy wrong: no
- * Appearance control until General is open.
+ * Appearance is a direct Settings destination. Walk its current navigation
+ * and verify that Reading exposes both message-highlighting choices.
  */
 
 import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
 /** Is a visible button carrying exactly this label on screen? */
 const hasNav = (label) => browser.execute((wanted) =>
-  [...document.querySelectorAll('button')]
+  [...document.querySelectorAll('[data-testid="settings-page"] .settings-nav-item')]
     .some((b) => b.offsetHeight > 0 && b.textContent.trim() === wanted), label);
 
-describe('The documented settings path', function () {
+describe('Settings appearance navigation', function () {
   this.timeout(90_000);
 
   before(async function () {
@@ -29,49 +20,41 @@ describe('The documented settings path', function () {
   });
 
   after(async function () {
-    // The next spec file boots into whatever this one leaves behind, Settings
-    // included: an open Settings page hides the message list entirely.
     await closeSettings();
     await browser.pause(1000);
   });
 
-  it('has no Appearance control while another top-level tab is open', async function () {
-    // Storage is top level and its panel carries no sub-tabs, so an Appearance
-    // button here would mean Appearance really is a top-level tab, which is
-    // exactly what the old copy claimed.
+  it('keeps Appearance available while another Settings page is open', async function () {
     expect(await clickSettingsNav('Storage')).toBe(true);
-    expect(await hasNav('Appearance')).toBe(false);
+    expect(await hasNav('Appearance')).toBe(true);
+    expect(await browser.execute(() => document.querySelector('[data-testid="settings-content"]')?.dataset.page)).toBe('storage');
   });
 
-  it('offers General at the top level', async function () {
-    expect(await clickSettingsNav('General')).toBe(true);
-  });
-
-  it('reveals Appearance, Behavior, Notifications and Shortcuts under General', async function () {
-    // One assertion over the whole set: wdio's expect takes no message
-    // argument, so a per-item check would only ever say "false is not true".
-    const subs = ['Appearance', 'Behavior', 'Notifications', 'Keyboard Shortcuts'];
-    const present = {};
-    for (const sub of subs) present[sub] = await hasNav(sub);
-    expect(present).toEqual(Object.fromEntries(subs.map((s) => [s, true])));
-  });
-
-  it('ends at the Highlighting card, with both of its options', async function () {
+  it('opens Appearance directly from the sidebar', async function () {
     expect(await clickSettingsNav('Appearance')).toBe(true);
-    const card = await browser.execute(() => {
-      const hover = document.querySelector('[data-testid="row-highlight-hover"]');
-      const selection = document.querySelector('[data-testid="row-highlight-selection"]');
-      if (!hover || !selection) return null;
-      // The heading of the card those two buttons live in, so the last segment
-      // of the documented path is asserted by name and not only by testid.
-      const heading = hover.closest('div.bg-mail-surface')?.querySelector('h4');
+    expect(await browser.execute(() => document.querySelector('[data-testid="settings-content"]')?.dataset.page)).toBe('appearance');
+  });
+
+  it('offers Colors, Layout, Reading and Date & time sections', async function () {
+    const sections = await browser.execute(() => [...document.querySelectorAll('[data-testid="settings-content"] [role="tab"]')]
+      .filter(tab => tab.offsetHeight > 0).map(tab => tab.textContent.trim()));
+    expect(sections).toEqual(['Colors', 'Layout', 'Reading', 'Date & time']);
+  });
+
+  it('exposes both Highlighting options under Reading with an associated label', async function () {
+    expect(await clickSettingsNav('Reading')).toBe(true);
+    const control = await browser.execute(() => {
+      const label = [...document.querySelectorAll('[data-testid="settings-content"] label')]
+        .find(element => element.textContent.trim() === 'Highlighting');
+      const select = label?.control;
+      if (!select) return null;
       return {
-        visible: hover.offsetHeight > 0 && selection.offsetHeight > 0,
-        heading: (heading?.textContent || '').trim(),
+        visible: select.offsetHeight > 0,
+        options: [...select.options].map(option => [option.value, option.textContent.trim()]),
       };
     });
-    expect(card).not.toBe(null);
-    expect(card.visible).toBe(true);
-    expect(card.heading).toBe('Highlighting');
+    expect(control).toEqual({ visible: true, options: [
+      ['hover', 'Follow the pointer'], ['selection', "Mark what I'm reading"],
+    ] });
   });
 });

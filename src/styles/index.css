@@ -1130,12 +1130,9 @@ input[type="range"]::-moz-range-thumb:hover {
 .account-settings-layout { display: flex; height: 100%; min-width: 0; min-height: 0; }
 .account-settings-list { width: 260px; flex-shrink: 0; border-right: 1px solid var(--mail-border); overflow-y: auto; }
 .account-settings-detail { flex: 1; min-width: 0; overflow-y: auto; }
-.account-settings-mobile { display: none; }
 @container (max-width: 820px) {
   .account-settings-layout { flex-direction: column; }
-  .account-settings-list { display: none; }
-  .account-settings-mobile { display: flex; align-items: center; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--mail-border); }
-  .account-settings-mobile select { flex: 1; min-width: 0; padding: 8px; background: var(--mail-surface); border: 1px solid var(--mail-border-strong); border-radius: 8px; }
+  .account-settings-list { width: 100%; max-height: 200px; border-right: 0; border-bottom: 1px solid var(--mail-border); }
 }
 @container (max-width: 520px) {
   .settings-form { padding: 20px 16px; }
