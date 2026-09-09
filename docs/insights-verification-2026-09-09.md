@@ -1,6 +1,6 @@
 # Mail Insights verification — 9 September 2026
 
-Status: implementation and required verification complete. Local main integration is recorded in git history; no push or release is included.
+Status: implementation and required verification complete. Feature commit `ffd499d9` is merged into local main. The full frontend suite passed again from merged main; no push or release is included.
 
 ## Delivered scope
 
@@ -20,7 +20,7 @@ Counts describe locally available cached and vaulted headers, not complete serve
 
 | Check | Verified result | Controller log in `/private/tmp` |
 | --- | --- | --- |
-| Final full frontend, including staged transfer | 299 files, 3,466 tests passed | `mv-insights-full-unit-7.log` |
+| Full frontend from merged main | 299 files, 3,466 tests passed | `mv-insights-main-unit-8.log` |
 | Staged worker/session regression | 28 passed | `mv-insights-worker-batch-green.log` |
 | Core and daemon suites | 329 passed, no ignored tests | `mv-insights-core-daemon-full.log` |
 | Final native inventory | 21 passed, no ignored tests | `mv-insights-native-cutoff-green.log` |
@@ -56,7 +56,7 @@ The Impeccable mechanical source detector was rerun after the final visual chang
 
 ## Source parity and integration
 
-The final native source and build manifests match all 831 compiled source/build-input files exactly. The complete 2,963-file source manifest also matched the implementation worktree at final native acceptance, with no unexplained differences. The SHA-256 of the sorted compiled path/hash map is `210a1890a1e8cbd5d0604c765bd39dd3401c7b6255c18eadd3beec9596c05386`. Controller evidence: `/private/tmp/mv-insights-final-compiled-manifest.json`, `mv-insights-remote-final-source-manifest.json`, and `mv-insights-remote-final-build-manifest.json`. The staged whitespace check removed one trailing blank line from `chartFormat.js` after the full frontend run. Rebuild 13 preserved all 152 frontend artifacts byte for byte, but changed the native binary checksum. Both the complete 21-case native suite and all three 50,000-header cases were therefore rerun successfully against build 13. The full frontend result covers the same behavior; the whitespace-only cleanup is the sole source difference since that run. Subsequent documentation edits do not alter the compiled-source digest.
+The final native source and build manifests match all 831 compiled source/build-input files exactly. The complete 2,963-file source manifest also matched the implementation worktree at final native acceptance, with no unexplained differences. The SHA-256 of the sorted compiled path/hash map is `210a1890a1e8cbd5d0604c765bd39dd3401c7b6255c18eadd3beec9596c05386`. Controller evidence: `/private/tmp/mv-insights-final-compiled-manifest.json`, `mv-insights-remote-final-source-manifest.json`, and `mv-insights-remote-final-build-manifest.json`. The staged whitespace check removed one trailing blank line from `chartFormat.js` after the full frontend run. Rebuild 13 preserved all 152 frontend artifacts byte for byte, but changed the native binary checksum. Both the complete 21-case native suite and all three 50,000-header cases were therefore rerun successfully against build 13. After the feature was merged, the full frontend suite was rerun from main and all 3,466 tests passed on the final formatted source (`mv-insights-main-unit-8.log`). Subsequent documentation edits do not alter the compiled-source digest.
 
 Astra's final source and runtime reviews found no remaining blocker. The patch includes the three views, shared local-header model, strict reader identity, translations, test fixtures, runner isolation, and documentation. Integration is a local commit and merge to main; no version bump, signed package, release, or push is part of this work.
 
