@@ -8,6 +8,7 @@ import * as db from '../services/db';
 import { watchAccount, waitForSyncChanges } from '../services/syncService';
 import { hasValidCredentials } from '../services/authUtils';
 import { isGraphAccount } from '../services/graphConfig';
+import { normalizeNotificationSound } from '../utils/notificationSounds';
 
 // Tauri invoke for notifications and badge
 const invoke = window.__TAURI__?.core?.invoke;
@@ -36,7 +37,11 @@ export function useEmailScheduler() {
     if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
 
     const { shouldNotify } = useSettingsStore.getState();
-    const { showPreview } = useSettingsStore.getState().notificationSettings;
+    const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
+    const selectedSound = normalizeNotificationSound(sound);
+    const notifyEmail = (title, body) => selectedSound === 'none'
+      ? notify(title, body)
+      : notify(title, body, selectedSound);
 
     for (const result of perAccountResults) {
       const { accountId, accountEmail, folder, newCount, newestSender, newestSubject } = result;
@@ -49,21 +54,21 @@ export function useEmailScheduler() {
         if (showPreview) {
           const sender = newestSender || 'Unknown sender';
           const subject = newestSubject || '(No subject)';
-          notify(sender, subject);
+          notifyEmail(sender, subject);
         } else {
-          notify('New Email', `New email in ${accountEmail}`);
+          notifyEmail('New Email', `New email in ${accountEmail}`);
         }
       } else {
         // Multiple new emails
         if (showPreview) {
           const sender = newestSender || 'Unknown sender';
           const subject = newestSubject || '(No subject)';
-          notify(
+          notifyEmail(
             `${newCount} New Emails`,
             `${sender}: ${subject} (and ${newCount - 1} more)`
           );
         } else {
-          notify('New Email', `${newCount} new emails in ${accountEmail}`);
+          notifyEmail('New Email', `${newCount} new emails in ${accountEmail}`);
         }
       }
     }

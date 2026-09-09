@@ -174,6 +174,32 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere');
   });
 
+  it('attaches the selected sound to incoming mail', async () => {
+    settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, sound: 'Ping' } });
+    mailStore.setState({ accounts: [IMAP_A] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Hello' }] });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping');
+  });
+
+  it('does not send a sound or banner for a muted folder', async () => {
+    settingsStore.setState({
+      notificationSettings: { ...settingsState().notificationSettings, sound: 'Ping' },
+      shouldNotify: () => false,
+    });
+    mailStore.setState({ accounts: [IMAP_A] });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
   // Flag-only changes on a folder nobody is looking at are silent.
   it('says nothing when a change carries no new mail', async () => {
     mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });

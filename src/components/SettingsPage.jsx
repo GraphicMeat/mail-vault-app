@@ -127,6 +127,7 @@ const settingSearchGroups = [
   { id: 'mail-preferences', section: 'notifications', sectionKey: 'settings.notifications.notifications', settings: [
     ['settings.notifications.enableDesktopNotifications', 'notifications alerts desktop'],
     ['settings.notifications.showEmailPreview', 'notification message preview'],
+    ['settings.notifications.newEmailSound', 'notification sound chime audio mac preview'],
     ['settings.notifications.perAccountSettings', 'notifications account folders'],
     ['settings.notifications.badge', 'badge dock unread count'],
     ['settings.notifications.showBadgeCount', 'dock badge counter count'],

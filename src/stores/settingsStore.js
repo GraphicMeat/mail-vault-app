@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
+import { normalizeNotificationSound } from '../utils/notificationSounds';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -101,6 +102,11 @@ const normalizeExplorerPaths = value => Object.fromEntries(
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
+  notificationSettings: {
+    ...current.notificationSettings,
+    ...persisted?.notificationSettings,
+    sound: normalizeNotificationSound(persisted?.notificationSettings?.sound ?? current.notificationSettings?.sound),
+  },
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
   sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(persisted?.sidebarBackupStatusLocation ?? current.sidebarBackupStatusLocation),
@@ -221,6 +227,7 @@ export const useSettingsStore = create(
       notificationSettings: {
         enabled: true,
         showPreview: true,
+        sound: 'none',
         accounts: {},
         // New accounts get default: { enabled: true, folders: ['INBOX'] }
       },
@@ -704,6 +711,10 @@ export const useSettingsStore = create(
         notificationSettings: { ...state.notificationSettings, showPreview: show },
       })),
 
+      setNotificationSound: (sound) => set((state) => ({
+        notificationSettings: { ...state.notificationSettings, sound: normalizeNotificationSound(sound) },
+      })),
+
       setAccountNotificationEnabled: (accountId, enabled) => set((state) => ({
         notificationSettings: {
           ...state.notificationSettings,
@@ -957,6 +968,7 @@ export const useSettingsStore = create(
           notificationSettings: {
             enabled: true,
             showPreview: true,
+            sound: 'none',
             accounts: {},
           },
           badgeEnabled: true,
@@ -1039,7 +1051,7 @@ export const useSettingsStore = create(
         if (state && 'notificationsEnabled' in state && !state.notificationSettings) {
           const enabled = state.notificationsEnabled;
           setTimeout(() => useSettingsStore.setState({
-            notificationSettings: { enabled, showPreview: true, accounts: {} },
+            notificationSettings: { enabled, showPreview: true, sound: 'none', accounts: {} },
             notificationsEnabled: undefined,
           }), 0);
         }

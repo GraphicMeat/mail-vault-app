@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 import { t } from '../i18n/index.js';
 import { sendNotification } from '../services/api';
+import { normalizeNotificationSound } from '../utils/notificationSounds';
 
 /**
  * A focus session: a countdown that covers the whole window while it runs.
@@ -68,10 +69,15 @@ function arm(get) {
 function flushHeld(held) {
   if (!held.length) return;
   if (held.length > 3) {
-    notify(t('focus.heldTitle'), t('focus.heldBody', { count: held.length }));
+    notify(t('focus.heldTitle'), t('focus.heldBody', { count: held.length }), held.find(n => n.sound)?.sound);
     return;
   }
-  for (const n of held) notify(n.title, n.body);
+  // A released batch gets one chime, even when it has several banners.
+  let playedSound = false;
+  for (const n of held) {
+    notify(n.title, n.body, playedSound ? undefined : n.sound);
+    if (n.sound) playedSound = true;
+  }
 }
 
 export const useFocusStore = create(
@@ -80,7 +86,7 @@ export const useFocusStore = create(
       durationMin: 25,      // persisted — the last preset chosen
       endsAt: null,         // persisted — epoch ms while a session runs
 
-      // { title, body } held while a session runs.
+      // { title, body, sound? } held while a session runs.
       // ponytail: a relaunch drops held notifications; persist them if anyone misses one
       held: [],
 
@@ -149,13 +155,15 @@ export const useFocusStore = create(
  * one. Never rejects: a notification that could not be shown is not worth
  * failing a backup or a sync over.
  */
-export function notify(title, body) {
+export function notify(title, body, sound) {
+  const selectedSound = normalizeNotificationSound(sound);
+  const audible = selectedSound !== 'none';
   const s = useFocusStore.getState();
   if (s.endsAt) {
-    s.hold({ title, body });
+    s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}) });
     return Promise.resolve();
   }
-  return sendNotification(title, body)
+  return (audible ? sendNotification(title, body, selectedSound) : sendNotification(title, body))
     .catch(err => console.error('[focus] notification failed:', err));
 }
 

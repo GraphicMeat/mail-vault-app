@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
 import { ToggleSwitch } from './ToggleSwitch';
-import { Bell, ChevronUp, ChevronDown, HardDrive, Mail } from 'lucide-react';
+import { Bell, ChevronUp, ChevronDown, HardDrive, Mail, Volume2 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { useT } from '../../i18n/index.js';
+import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
+import { previewNotificationSound } from '../../services/api';
 
 export function NotificationSettings({ accounts }) {
   const t = useT();
@@ -11,6 +13,7 @@ export function NotificationSettings({ accounts }) {
     notificationSettings,
     setNotificationEnabled,
     setNotificationShowPreview,
+    setNotificationSound,
     setAccountNotificationEnabled,
     setAccountNotificationFolders,
     badgeEnabled,
@@ -28,6 +31,22 @@ export function NotificationSettings({ accounts }) {
   } = useSettingsStore();
 
   const [expandedNotifAccounts, setExpandedNotifAccounts] = useState({});
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState(false);
+  const isMac = typeof navigator !== 'undefined' && navigator.platform?.startsWith('Mac');
+  const selectedSound = normalizeNotificationSound(notificationSettings.sound);
+
+  const previewSound = async () => {
+    setPreviewing(true);
+    setPreviewError(false);
+    try {
+      await previewNotificationSound(selectedSound);
+    } catch {
+      setPreviewError(true);
+    } finally {
+      setPreviewing(false);
+    }
+  };
 
   const orderedAccounts = getOrderedAccounts(accounts);
 
@@ -72,6 +91,49 @@ export function NotificationSettings({ accounts }) {
                   onClick={() => setNotificationShowPreview(!notificationSettings.showPreview)}
                 />
               </div>
+
+              {isMac && (
+                <div className="py-2">
+                  <label htmlFor="new-email-sound" className="block font-medium text-mail-text">
+                    {t('settings.notifications.newEmailSound')}
+                  </label>
+                  <p id="new-email-sound-hint" className="text-sm text-mail-text-muted mt-1 mb-3">
+                    {t('settings.notifications.newEmailSoundHint')}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      id="new-email-sound"
+                      aria-describedby="new-email-sound-hint"
+                      value={selectedSound}
+                      disabled={previewing}
+                      onChange={(e) => {
+                        setNotificationSound(e.target.value);
+                        setPreviewError(false);
+                      }}
+                      className="min-w-0 flex-1 px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text cursor-pointer disabled:opacity-50"
+                    >
+                      <option value="none">{t('settings.notifications.soundOff')}</option>
+                      {NOTIFICATION_SOUNDS.map(sound => <option key={sound} value={sound}>{sound}</option>)}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={previewSound}
+                      disabled={selectedSound === 'none' || previewing}
+                      aria-label={t('settings.notifications.previewSound')}
+                      aria-busy={previewing}
+                      className="inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-mail-border text-sm text-mail-text hover:bg-mail-surface-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      <Volume2 size={16} aria-hidden="true" />
+                      {t('settings.notifications.previewSound')}
+                    </button>
+                  </div>
+                  {previewError && (
+                    <p role="alert" className="text-sm text-mail-danger mt-2">
+                      {t('settings.notifications.soundPreviewFailed')}
+                    </p>
+                  )}
+                </div>
+              )}
 
               {/* Per-account notification settings */}
               <div className="border-t border-mail-border pt-3">

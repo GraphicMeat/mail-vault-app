@@ -88,6 +88,7 @@ mod iap;
 mod mailto;
 pub use mailvault_core::imap;
 mod migration;
+mod notification_sound;
 mod op_journal;
 mod restore;
 pub use mailvault_core::oauth2;
@@ -807,15 +808,23 @@ async fn check_network_connectivity() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn send_notification(app_handle: tauri::AppHandle, title: String, body: String) -> Result<(), String> {
+fn send_notification(app_handle: tauri::AppHandle, title: String, body: String, sound: Option<String>) -> Result<(), String> {
     info!("send_notification called: {} - {}", title, body);
 
     use tauri_plugin_notification::NotificationExt;
-    app_handle
+    let notification = app_handle
         .notification()
         .builder()
         .title(&title)
-        .body(&body)
+        .body(&body);
+    #[cfg(target_os = "macos")]
+    let notification = match notification_sound::sound_name(sound.as_deref()) {
+        Some(name) => notification.sound(name),
+        None => notification,
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _ = sound;
+    notification
         .show()
         .map_err(|e| format!("Failed to send notification: {}", e))?;
 
@@ -5223,6 +5232,7 @@ fn main() {
             request_notification_permission,
             check_network_connectivity,
             send_notification,
+            notification_sound::preview_notification_sound,
             set_badge_count,
             check_running_from_dmg,
             save_email_cache,

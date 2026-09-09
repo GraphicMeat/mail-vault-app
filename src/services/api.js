@@ -657,8 +657,12 @@ export async function backupCancel() {
   return tauriInvoke('backup_cancel', {});
 }
 
-export async function sendNotification(title, body) {
-  return tauriInvoke('send_notification', { title, body });
+export async function sendNotification(title, body, sound) {
+  return tauriInvoke('send_notification', { title, body, ...(sound ? { sound } : {}) });
+}
+
+export async function previewNotificationSound(sound) {
+  return tauriInvoke('preview_notification_sound', { sound });
 }
 
 // ── Migration ────────────────────────────────────────────────────────────────
