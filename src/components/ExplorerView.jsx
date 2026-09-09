@@ -79,6 +79,25 @@ export function ExplorerView({
   }, [location]);
   useEffect(() => { virtualizer.measure(); }, [virtualizer, itemHeight]);
 
+  // A message body may arrive after keyboard navigation has already scrolled.
+  // Opening its reader then shrinks a stacked pane; reveal the still-focused
+  // row again using the new bounds, without moving focus from another control.
+  useEffect(() => {
+    const root = rootRef.current;
+    let frame;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const focused = document.activeElement;
+        if (root.contains(focused) && focused.closest('[data-explorer-index]')) {
+          focused.scrollIntoView?.({ block: 'nearest' });
+        }
+      });
+    });
+    observer.observe(root);
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
+  }, []);
+
   // App-level j/k is routed here while Explorer owns the list, so it cannot
   // open a message hidden in a different group. Native arrows work locally.
   const step = useCallback(delta => {

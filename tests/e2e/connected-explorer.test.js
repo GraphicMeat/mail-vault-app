@@ -191,19 +191,38 @@ describe('Explorer in the native mailbox', function () {
       document.querySelector('[data-testid="mail-view-explorer"]').focus();
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'j', bubbles: true }));
     });
-    await wait(() => browser.execute(() => {
-      const focus = document.activeElement;
-      if (!focus?.hasAttribute('data-explorer-index')) return false;
-      const rect = focus.getBoundingClientRect();
-      const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-      return !!hit && focus.contains(hit) && !!window.__MAIL_STORE__.getState().selectedEmailId;
-    }), 'Keyboard navigation reveals the active virtual row below short-pane controls');
+    let keyboardState;
+    await wait(async () => {
+      keyboardState = await browser.execute(() => {
+        const focus = document.activeElement;
+        const rect = focus.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        const root = document.querySelector('[data-testid="explorer-view"]');
+        const scroller = root.querySelector('.explorer-scroll');
+        const mail = window.__MAIL_STORE__.getState();
+        const readerLoaded = !!mail.selectedEmail && !mail.loadingEmail;
+        return { reachable: readerLoaded && focus.hasAttribute('data-explorer-index') && !!hit && focus.contains(hit) && !!mail.selectedEmailId,
+          focus: focus.tagName, index: focus.dataset.explorerIndex, key: focus.dataset.explorerKey,
+          selected: mail.selectedEmailId, readerLoaded, hit: hit?.className,
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          root: { height: root.clientHeight, top: root.getBoundingClientRect().top, scroll: root.scrollTop },
+          inner: { height: scroller.clientHeight, top: scroller.getBoundingClientRect().top, scroll: scroller.scrollTop } };
+      });
+      return keyboardState.reachable;
+    }, 'Keyboard navigation reveals the active virtual row below short-pane controls')
+      .catch(error => { throw new Error(`${error.message}: ${JSON.stringify(keyboardState)}`); });
   });
 
   it('keeps cross-account selection and message opening distinct in All Inboxes', async () => {
     await enter();
-    await browser.execute(async () => { await window.__MAIL_STORE__.getState().setUnifiedInbox(true); });
-    await wait(() => browser.execute(() => { const s=window.__MAIL_STORE__.getState(); return s.activeMailbox === 'UNIFIED' && new Set(s.sortedEmails.map(e=>e._accountId)).size === 2; }), 'Both accounts are present');
+    // Seed the third fixture's headers too, so the selection snapshot does not
+    // depend on whether its background sync arrived before this test began.
+    await browser.execute(async () => {
+      const mail = window.__MAIL_STORE__.getState();
+      await mail.activateAccount('33333333-3333-4333-8333-333333333333', 'INBOX');
+      await mail.setUnifiedInbox(true);
+    });
+    await wait(() => browser.execute(() => { const s=window.__MAIL_STORE__.getState(); return s.activeMailbox === 'UNIFIED' && new Set(s.sortedEmails.map(e=>e._accountId)).size === 3; }), 'All fixture accounts are present');
     const expected = await browser.execute(() => window.__MAIL_STORE__.getState().sortedEmails.map(e=>`${e._accountId}:${e._mailbox}:${e.uid}`).sort());
     await click('[data-testid="explorer-view"] .explorer-summary input[type="checkbox"]');
     assert.deepEqual(await browser.execute(() => [...window.__MAIL_STORE__.getState().selectedEmailIds].sort()), expected);

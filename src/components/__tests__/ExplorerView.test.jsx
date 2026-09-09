@@ -150,4 +150,27 @@ describe('Explorer browsing', () => {
       expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
     } finally { HTMLElement.prototype.scrollIntoView = previous; }
   });
+
+  it('keeps the focused message visible when the reader later shrinks the list pane', async () => {
+    const observers = [];
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback) { this.callback = callback; observers.push(this); }
+      observe(element) { this.element = element; }
+      unobserve() {}
+      disconnect() {}
+    });
+    const scroll = vi.fn();
+    const previous = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = scroll;
+    try {
+      mount(); enter('2026'); enter('September');
+      act(() => window.dispatchEvent(new CustomEvent('mailvault:explorer-step', { detail: 1 })));
+      await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      expect(document.activeElement.dataset.explorerIndex).toBe('0');
+      scroll.mockClear();
+      act(() => observers.forEach(observer => observer.callback([{ target: observer.element }])));
+      await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+    } finally { HTMLElement.prototype.scrollIntoView = previous; }
+  });
 });
