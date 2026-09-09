@@ -94,6 +94,7 @@ mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
 mod spellcheck;
+mod insights;
 mod vault;
 mod vault_flags;
 
@@ -5200,6 +5201,7 @@ fn main() {
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
+        .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default());
 
     #[cfg(target_os = "linux")]
@@ -5207,6 +5209,9 @@ fn main() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
+            insights::insights_begin_snapshot,
+            insights::insights_read_page,
+            insights::insights_release_snapshot,
             apply_menu_labels,
             dropped_files::read_dropped_files,
             take_pending_mailto,
@@ -5372,6 +5377,7 @@ fn main() {
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset
         ])
         .setup(|app| {
+            app.state::<insights::InsightsSnapshots>().start_cleanup();
             // `mailto:` from the OS. The queue is the source of truth and the
             // event is only a wake-up: when the click *launches* the app the URL
             // lands here before the webview exists, so a listener alone would

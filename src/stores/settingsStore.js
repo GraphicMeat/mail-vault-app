@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
+import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -114,6 +115,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerGrouping: normalizeExplorerGrouping(persisted?.explorerGrouping ?? current.explorerGrouping),
   explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
+  insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -262,6 +264,7 @@ export const useSettingsStore = create(
       explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
       explorerDateDepth: 'month',
       explorerPaths: {},
+      insightsPreferences: normalizeInsightsPreferences(),
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
@@ -766,6 +769,7 @@ export const useSettingsStore = create(
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
+      setInsightsPreferences: value => set({ insightsPreferences: normalizeInsightsPreferences(value) }),
       setEmailListView: value => set({ emailListView: normalizeEmailListView(value) }),
       setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
       setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
@@ -985,6 +989,7 @@ export const useSettingsStore = create(
           explorerGrouping: 'date',
           explorerDateDepth: 'month',
           explorerPaths: {},
+      insightsPreferences: normalizeInsightsPreferences(),
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
           threadMode: 'grouped',

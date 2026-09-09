@@ -56,7 +56,7 @@ import { t, tErr, useT  } from '../i18n/index.js';
 
 // ── Single Email Viewer ─────────────────────────────────────────────────────
 
-function EmailViewerComponent({ onComposeReply }) {
+function EmailViewerComponent({ onComposeReply, onClose }) {
   const t = useT();
   const navigationShortcuts = useSettingsStore(s => s.keyboardShortcuts);
   const shortcutsEnabled = useSettingsStore(s => s.keyboardShortcutsEnabled);
@@ -102,6 +102,7 @@ function EmailViewerComponent({ onComposeReply }) {
   const [rawSource, setRawSource] = useState(null);
   const [rawError, setRawError] = useState(null);
   const [loadingRaw, setLoadingRaw] = useState(false);
+  const rawRequest = useRef(0);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   // Per-email theme override. null = follow app theme; 'light'|'dark' = forced.
@@ -131,8 +132,14 @@ function EmailViewerComponent({ onComposeReply }) {
   // 'local-only' was unreachable here by construction.
   //
   // The third field would have failed too. Read the row the list derived.
-  const custodyRow = useMailStore(s => custodyRowFor(selectedEmail, s));
-  const custodySubject = custodyRow || {
+  const insightsCustody = selectedEmail?._insightsReadOnly ? {
+    isArchived: !!selectedEmail.isArchived,
+    _origin: selectedEmail._origin,
+    serverDeleted: selectedEmail.serverDeleted,
+    serverAbsent: selectedEmail.serverAbsent,
+  } : null;
+  const custodyRow = useMailStore(s => insightsCustody ? null : custodyRowFor(selectedEmail, s));
+  const custodySubject = insightsCustody || custodyRow || {
     isArchived: isArchived || !!selectedEmail?.isArchived,
     _origin: selectedEmail?._origin,
     serverDeleted: selectedEmail?.serverDeleted,
@@ -142,16 +149,16 @@ function EmailViewerComponent({ onComposeReply }) {
   // never mention the drive — while ConnectedStateIcon in the sender line right
   // below it read the store and did. Same message, two statements, 40px apart.
   // Read the row, through the same key builder the rows use.
-  const backedUp = useBackedUp(custodyRow || selectedEmail);
-  const custody = describeMessageState(custodySubject, { serverKnown, backedUp });
+  const backedUp = useBackedUp(insightsCustody ? selectedEmail : custodyRow || selectedEmail);
+  const custody = describeMessageState(custodySubject, { serverKnown: insightsCustody ? false : serverKnown, backedUp });
   // Who may be asked. A vault copy the app has no proof about, obviously — and
   // also a gold row whose proof is a sweep, because a server can change its
   // mind: a message restored from the Bin, or re-delivered, leaves that verdict
   // a lie on disk with nothing able to overturn it. The other two proofs are
   // facts about this app's own actions and no sweep can disprove them, and a
   // message with no vault copy has nothing riding on the answer.
-  const canCheckServer = custody.tone === 'local'
-    || custodyProof(custodySubject) === 'server-lost-it';
+  const canCheckServer = !selectedEmail?._insightsReadOnly && !selectedEmail?._insightsNoServerActions
+    && (custody.tone === 'local' || custodyProof(custodySubject) === 'server-lost-it');
 
   // ── "Check the server" ──
   //
@@ -198,35 +205,44 @@ function EmailViewerComponent({ onComposeReply }) {
 
   // Reset view states when switching emails
   useEffect(() => {
+    ++rawRequest.current;
     setProbeResult(null);
     setShowRaw(false);
     setRawSource(null);
     setRawError(null);
+    setLoadingRaw(false);
     setConfirmDelete(false);
     setConfirmUnarchive(false);
     setShowInsights(false);
     setEmailThemeOverride(null);
-  }, [selectedEmail?.uid]);
+    return () => { ++rawRequest.current; };
+  }, [selectedEmail?.uid, selectedEmail?._accountId, selectedEmail?._mailbox, selectedEmail?.messageId]);
 
   // The header's "View Source" and the action bar's open the same panel, and
   // both used to read the vault file for this uid unverified — see
   // db.getVerifiedRawSource for why that hands over another message.
   const toggleRawSource = async () => {
     if (showRaw) { setShowRaw(false); return; }
+    const request = ++rawRequest.current;
     if (!rawSource && !rawError) {
       setLoadingRaw(true);
       try {
-        const { b64, error } = await db.getVerifiedRawSource(activeAccountId, activeMailbox, selectedEmail.uid, selectedEmail);
+        const { b64, error } = await db.getVerifiedRawSource(
+          selectedEmail._accountId || activeAccountId,
+          selectedEmail._mailbox || activeMailbox,
+          selectedEmail.uid, selectedEmail);
+        if (request !== rawRequest.current) return;
         setRawSource(b64);
         setRawError(error);
       } catch (err) {
+        if (request !== rawRequest.current) return;
         console.error('[EmailViewer] Failed to load raw source:', err);
         setRawError('Could not read this message from the vault.');
       } finally {
-        setLoadingRaw(false);
+        if (request === rawRequest.current) setLoadingRaw(false);
       }
     }
-    setShowRaw(true);
+    if (request === rawRequest.current) setShowRaw(true);
   };
 
   const handleSave = async () => {
@@ -572,7 +588,7 @@ function EmailViewerComponent({ onComposeReply }) {
           />
           <span className="min-w-0 break-words">{selectedEmail.subject}</span>
         </h1>
-        <CloseViewerButton />
+        <CloseViewerButton onClose={onClose} />
       </div>
 
       {/* Custody band — the reading pane opens under the claim about where this

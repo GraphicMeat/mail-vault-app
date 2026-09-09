@@ -131,6 +131,12 @@ pub struct EmailHeader {
     pub to: Vec<EmailAddress>,
     pub cc: Vec<EmailAddress>,
     pub bcc: Vec<EmailAddress>,
+    #[serde(rename = "messageDate", skip_serializing_if = "Option::is_none")]
+    pub message_date: Option<String>,
+    #[serde(rename = "receivedAt", skip_serializing_if = "Option::is_none")]
+    pub received_at: Option<String>,
+    #[serde(rename = "sentAt", skip_serializing_if = "Option::is_none")]
+    pub sent_at: Option<String>,
     pub date: Option<String>,
     #[serde(rename = "internalDate")]
     pub internal_date: Option<String>,
@@ -2500,6 +2506,9 @@ fn parse_header_from_fetch(fetch: &Fetch) -> Result<EmailHeader, String> {
         to,
         cc,
         bcc,
+        message_date: date.clone(),
+        received_at: internal_date.clone(),
+        sent_at: date.clone(),
         date,
         internal_date,
         flags,

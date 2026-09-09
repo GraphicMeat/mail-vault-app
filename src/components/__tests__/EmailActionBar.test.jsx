@@ -44,7 +44,7 @@ function renderBar(props = {}) {
   const handlers = props.handlers ?? allHandlers();
   render(
     <EmailActionBar
-      email={EMAIL}
+      email={props.email ?? EMAIL}
       variant={props.variant ?? 'single'}
       isArchived={props.isArchived ?? false}
       isRead={props.isRead ?? true}
@@ -318,4 +318,14 @@ describe('reader toolbar action placement', () => {
     expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
     expect(screen.getAllByRole('button')).toHaveLength(4);
   });
+});
+
+
+it('keeps Insights detail read-only while retaining reply and source actions', () => {
+  renderBar({ email: { ...EMAIL, _insightsReadOnly: true }, handlers: allHandlers({ onToggleFlag: vi.fn() }) });
+  const visible = labels();
+  expect(visible).not.toContain('Delete'); expect(visible).not.toContain('Archive');
+  expect(visible).not.toContain('Move'); expect(visible).not.toContain('Mark unread');
+  expect(visible).not.toContain('Star');
+  expect(visible).toContain('Reply'); expect(visible).toContain('Forward'); expect(visible).toContain('Source');
 });

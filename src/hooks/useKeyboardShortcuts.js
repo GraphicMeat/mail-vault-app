@@ -77,7 +77,7 @@ const SEQUENCE_TIMEOUT = 500; // ms to wait for next key in a sequence
  * @param {Object} actionHandlers - Map of action name -> callback function
  *   e.g. { compose: () => openModal(), reply: () => handleReply() }
  */
-export function useKeyboardShortcuts(actionHandlers) {
+export function useKeyboardShortcuts(actionHandlers, { allowedActions = null } = {}) {
   const shortcuts = useSettingsStore((s) => s.keyboardShortcuts);
   const enabled = useSettingsStore((s) => s.keyboardShortcutsEnabled);
   // A focus lock covers the whole window. Compose behind it opens a window
@@ -87,6 +87,7 @@ export function useKeyboardShortcuts(actionHandlers) {
   // Keep handlers in a ref so the effect closure never goes stale
   const handlersRef = useRef(actionHandlers);
   handlersRef.current = actionHandlers;
+  const allowedKey = allowedActions?.join('|') ?? null;
 
   // Sequence tracking refs
   const sequenceRef = useRef('');      // current accumulated key sequence
@@ -103,7 +104,8 @@ export function useKeyboardShortcuts(actionHandlers) {
   useEffect(() => {
     if (!enabled || locked) return;
 
-    const shortcutMap = buildShortcutMap(shortcuts);
+    const allowed = allowedKey === null ? null : new Set(allowedKey.split('|'));
+    const shortcutMap = buildShortcutMap(Object.fromEntries(Object.entries(shortcuts).filter(([action]) => !allowed || allowed.has(action))));
 
     const handleKeyDown = (e) => {
       if (e.defaultPrevented) return;
@@ -180,5 +182,5 @@ export function useKeyboardShortcuts(actionHandlers) {
       window.removeEventListener('keydown', handleKeyDown);
       resetSequence();
     };
-  }, [shortcuts, enabled, locked, resetSequence]);
+  }, [shortcuts, enabled, locked, resetSequence, allowedKey]);
 }

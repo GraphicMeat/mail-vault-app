@@ -47,7 +47,7 @@ const BIG_INBOX = 700;
 // are: db/emails.js parses the `accountId-mailbox-uid` local id with a 36-char
 // prefix and silently no-ops when it doesn't match. Short readable ids made
 // every local-Maildir delete (unarchive, export) a no-op in the suite only.
-const MOCK_ACCOUNTS = [
+let MOCK_ACCOUNTS = [
   // Account 1 carries the one HTML message in the suite (newest in its INBOX):
   // plain-text bodies never reach the iframe render path that connected-html-render
   // asserts on.
@@ -187,6 +187,13 @@ const MOCK_ACCOUNTS = [
   },
 ];
 
+// Dedicated suites may supply actual Scenario payloads without changing the
+// default fixture accounts, server lifecycle or isolated-app cleanup.
+export function configureMockAccounts(accounts) {
+  if (!Array.isArray(accounts) || !accounts.length) throw new Error('Mock accounts are required');
+  MOCK_ACCOUNTS = accounts;
+}
+
 let tauriWd;
 let mockServers = [];
 let credentialsPath;
@@ -212,6 +219,9 @@ function seedOnboardingComplete(home) {
 export const config = {
   runner: 'local',
   specs: ['./tests/e2e/**/*.test.js'],
+  // These scenarios require the dedicated Insights accounts and mailbox data.
+  // Keep broad/default suites on their existing Luke/Vader fixtures.
+  exclude: ['./tests/e2e/connected-insights.test.js', './tests/e2e/ui-insights.test.js'],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
     'ui-headless': ['./tests/e2e/ui-*.test.js'],
@@ -295,7 +305,7 @@ export const config = {
 
     buildMockServer();
     mockServers = await Promise.all(
-      MOCK_ACCOUNTS.map((a) => startMockImap(scenario({
+      MOCK_ACCOUNTS.map((a) => startMockImap(a.scenario || scenario({
         owner: a.email,
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,

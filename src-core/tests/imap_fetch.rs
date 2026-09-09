@@ -597,3 +597,17 @@ async fn a_skip_list_fetches_the_page_around_the_poison() {
     uids.sort_unstable();
     assert_eq!(uids, vec![1, 3]);
 }
+
+#[async_std::test]
+async fn insights_imap_dates_preserve_rfc_date_and_receive_time() {
+    let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(Message::new(1, eml("dates", "ana@example.test", "body")).with_internal_date("09-Sep-2026 00:30:00 +0000"))));
+    let mut sess = session(&server).await;
+    select_mailbox(&mut sess, "INBOX").await.unwrap();
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.unwrap();
+    let row = serde_json::to_value(&emails[0]).unwrap();
+    assert_eq!(row["date"], "Thu, 01 Jan 2026 12:00:00 +0000");
+    assert_eq!(row["messageDate"], "Thu, 01 Jan 2026 12:00:00 +0000");
+    assert_eq!(row["sentAt"], "Thu, 01 Jan 2026 12:00:00 +0000");
+    assert_eq!(row["receivedAt"], "2026-09-09T00:30:00+00:00");
+    assert_eq!(row["receivedAt"], row["internalDate"]);
+}

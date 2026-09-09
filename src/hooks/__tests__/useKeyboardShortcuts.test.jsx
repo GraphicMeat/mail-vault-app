@@ -119,3 +119,16 @@ describe('useKeyboardShortcuts — focus lock', () => {
     expect(handlers.compose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('workspace shortcut boundaries', () => {
+  afterEach(cleanup);
+  it('suppresses background mail actions while preserving explicitly allowed global actions', () => {
+    useSettingsStore.setState({keyboardShortcuts:{...DEFAULT_SHORTCUTS},keyboardShortcutsEnabled:true});useFocusStore.setState({endsAt:null});
+    const handlers={compose:vi.fn(),escape:vi.fn(),delete:vi.fn(),nextEmail:vi.fn(),goToInbox:vi.fn()};
+    const {rerender}=renderHook(({allowedActions})=>useKeyboardShortcuts(handlers,{allowedActions}),{initialProps:{allowedActions:['compose','escape']}});
+    for(const key of ['#','j','g','i','c','Escape'])press(document.body,key);
+    expect(handlers.delete).not.toHaveBeenCalled();expect(handlers.nextEmail).not.toHaveBeenCalled();expect(handlers.goToInbox).not.toHaveBeenCalled();
+    expect(handlers.compose).toHaveBeenCalledOnce();expect(handlers.escape).toHaveBeenCalledOnce();
+    rerender({allowedActions:null});press(document.body,'j');expect(handlers.nextEmail).toHaveBeenCalledOnce();
+  });
+});

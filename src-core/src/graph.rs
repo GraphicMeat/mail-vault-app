@@ -65,7 +65,9 @@ pub struct GraphMessage {
     pub from: Option<GraphEmailAddress>,
     pub to_recipients: Option<Vec<GraphEmailAddress>>,
     pub cc_recipients: Option<Vec<GraphEmailAddress>>,
+    pub bcc_recipients: Option<Vec<GraphEmailAddress>>,
     pub received_date_time: Option<String>,
+    pub sent_date_time: Option<String>,
     pub is_read: Option<bool>,
     pub has_attachments: Option<bool>,
     pub internet_message_id: Option<String>,
@@ -178,7 +180,12 @@ impl GraphMessage {
             from,
             to,
             cc,
-            bcc: Vec::new(),
+            bcc: self.bcc_recipients.as_ref().map(|list| list.iter().map(|r| EmailAddress {
+                name: r.email_address.name.clone(), address: r.email_address.address.clone().unwrap_or_default(),
+            }).collect()).unwrap_or_default(),
+            message_date: self.get_header("Date"),
+            received_at: self.received_date_time.clone(),
+            sent_at: self.sent_date_time.clone(),
             date: self.received_date_time.clone(),
             internal_date: self.received_date_time.clone(),
             flags,
@@ -273,7 +280,7 @@ impl GraphClient {
         skip: u32,
     ) -> Result<(Vec<GraphMessage>, Option<String>), String> {
         let url = format!(
-            "{}/me/mailFolders/{}/messages?$top={}&$skip={}&$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc",
+            "{}/me/mailFolders/{}/messages?$top={}&$skip={}&$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc",
             GRAPH_BASE, folder_id, top, skip
         );
 
@@ -315,7 +322,7 @@ impl GraphClient {
     /// Get a single message with full body and internet headers.
     pub async fn get_message(&self, message_id: &str) -> Result<GraphMessage, String> {
         let url = format!(
-            "{}/me/messages/{}?$select=id,subject,from,toRecipients,ccRecipients,receivedDateTime,isRead,hasAttachments,internetMessageId,body,internetMessageHeaders",
+            "{}/me/messages/{}?$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,body,internetMessageHeaders",
             GRAPH_BASE, message_id
         );
 
@@ -755,6 +762,22 @@ mod tests {
     // -- Domain detection ---------------------------------------------------
 
     #[test]
+    fn insights_graph_dates_keep_receive_send_and_original_separate() {
+        let msg: GraphMessage = serde_json::from_value(serde_json::json!({
+            "id":"m1", "receivedDateTime":"2026-09-09T00:30:00Z",
+            "sentDateTime":"2026-09-08T23:30:00Z",
+            "bccRecipients":[{"emailAddress":{"address":"hidden@example.test","name":"Hidden"}}],
+            "internetMessageHeaders":[{"name":"Date","value":"Tue, 08 Sep 2026 23:00:00 +0000"}]
+        })).unwrap();
+        let row = serde_json::to_value(msg.to_email_header(17)).unwrap();
+        assert_eq!(row["date"], "2026-09-09T00:30:00Z");
+        assert_eq!(row["bcc"][0]["address"], "hidden@example.test");
+        assert_eq!(row["receivedAt"], "2026-09-09T00:30:00Z");
+        assert_eq!(row["sentAt"], "2026-09-08T23:30:00Z");
+        assert_eq!(row["messageDate"], "Tue, 08 Sep 2026 23:00:00 +0000");
+    }
+
+    #[test]
     fn test_personal_microsoft_detection() {
         assert!(is_personal_microsoft("user@outlook.com"));
         assert!(is_personal_microsoft("user@Outlook.COM"));
@@ -873,12 +896,14 @@ mod tests {
                     address: Some("recipient@example.com".to_string()),
                 },
             }]),
+            bcc_recipients: None,
             cc_recipients: Some(vec![GraphEmailAddress {
                 email_address: GraphEmail {
                     name: None,
                     address: Some("cc@example.com".to_string()),
                 },
             }]),
+            sent_date_time: None,
             received_date_time: Some("2025-01-15T10:30:00Z".to_string()),
             is_read: Some(true),
             has_attachments: Some(true),
@@ -953,7 +978,9 @@ mod tests {
             subject: None,
             from: None,
             to_recipients: None,
+            bcc_recipients: None,
             cc_recipients: None,
+            sent_date_time: None,
             received_date_time: None,
             is_read: None,
             has_attachments: None,
@@ -988,7 +1015,9 @@ mod tests {
                 },
             }),
             to_recipients: None,
+            bcc_recipients: None,
             cc_recipients: None,
+            sent_date_time: None,
             received_date_time: Some("2025-02-01T12:00:00Z".to_string()),
             is_read: Some(false),
             has_attachments: Some(false),

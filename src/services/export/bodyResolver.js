@@ -5,6 +5,7 @@ import { hydrateInlineImages } from '../attachmentUtils';
 import { getGraphMessageId, graphMessageToEmail } from '../../stores/mailStore';
 import { resolveEmailLocation, bodyMatchesHeader } from '../../stores/slices/unifiedHelpers';
 import { t } from '../../i18n/index.js';
+import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity';
 
 // Extracted from useChatBodyLoader.fetchOne so the export and the reading pane
 // resolve a body the same way. The guards are the point: the vault is keyed
@@ -20,6 +21,7 @@ export async function resolveMessageBody(header, store) {
   if (!loc) return { ok: false, reason: t('svc.bodyResolver.locationUnknown') };
 
   const { accountId, mailbox } = loc;
+  const matchesHeader = header._insightsReadOnly ? insightsBodyMatchesHeader : bodyMatchesHeader;
 
   let local = null;
   try {
@@ -32,7 +34,7 @@ export async function resolveMessageBody(header, store) {
   // message, not a dead end. Discard it and ask the server, which owns the uid
   // the header was built from. Treating it as a dead end printed the row's
   // subject where its body belongs.
-  if (local && !bodyMatchesHeader(header, local)) local = null;
+  if (local && !matchesHeader(header, local)) local = null;
   if (local) {
     const hydrated = await hydrateInlineImages(local, accountId, mailbox);
     return { ok: true, email: { ...hydrated, _accountId: accountId } };
@@ -65,7 +67,7 @@ export async function resolveMessageBody(header, store) {
   // Last line of defence: this is the server's own answer for this uid, so a
   // retry only asks the same blind question again.
   if (!remote) return { ok: false, reason: t('svc.bodyResolver.found') };
-  if (!bodyMatchesHeader(header, remote)) return { ok: false, reason: t('svc.bodyResolver.messageIdMismatch') };
+  if (!matchesHeader(header, remote)) return { ok: false, reason: t('svc.bodyResolver.messageIdMismatch') };
 
   const hydrated = await hydrateInlineImages(remote, accountId, mailbox);
   return { ok: true, email: { ...hydrated, _accountId: accountId } };

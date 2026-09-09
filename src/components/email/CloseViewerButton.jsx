@@ -18,7 +18,7 @@ import { useT } from '../../i18n/index.js';
  * view are separate returns of separate files, and a close button on only one
  * of them is a door that exists in half the rooms.
  */
-export function CloseViewerButton({ className = '' }) {
+export function CloseViewerButton({ className = '', onClose }) {
   const t = useT();
   const closeEmail = useSelectionStore(s => s.closeEmail);
   return (
@@ -30,7 +30,7 @@ export function CloseViewerButton({ className = '' }) {
       aria-label={t('common.close')}
       title={t('common.close')}
       className={`flex-shrink-0 ${className}`}
-      onClick={(e) => { e.stopPropagation(); closeEmail(); }}
+      onClick={(e) => { e.stopPropagation(); (onClose || closeEmail)(); }}
     >
       <X size={16} />
     </Button>

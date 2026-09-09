@@ -103,8 +103,15 @@ export function graphMessageToEmail(graphMsg, uid) {
     from,
     to,
     cc,
-    bcc: [],
+    bcc: (graphMsg.bccRecipients || []).map(r => ({
+      name: r.emailAddress?.name || null,
+      address: r.emailAddress?.address || '',
+    })),
     date: graphMsg.receivedDateTime || null,
+    receivedAt: graphMsg.receivedDateTime || null,
+    sentAt: graphMsg.sentDateTime || null,
+    // Keep the RFC Date distinct from Graph's receivedDateTime/legacy date.
+    messageDate: graphMsg.internetMessageHeaders?.find(h => h.name?.toLowerCase() === 'date')?.value || null,
     flags,
     messageId: graphMsg.internetMessageId || null,
     hasAttachments: graphMsg.hasAttachments || false,
@@ -112,5 +119,6 @@ export function graphMessageToEmail(graphMsg, uid) {
     text: bodyType === 'text' ? bodyContent : (bodyType === 'html' ? null : bodyContent),
     attachments: [],
     source: 'server',
+    provider: 'graph',
   };
 }

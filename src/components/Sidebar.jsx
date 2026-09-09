@@ -28,6 +28,7 @@ import { openFolder } from '../services/workflows/loadSubtree';
 import { mailboxLabel } from '../utils/imapUtf7';
 import {
   Inbox,
+  Network,
   Send,
   File,
   Trash2,
@@ -61,9 +62,10 @@ const UNIFIED_FOLDERS = () => ([
   { id: tr('common.archive'), name: tr('common.archive'), icon: Archive, specialUse: '\\Archive' },
 ]);
 
-function UnifiedFolderList({ tagCloud = false, compact = false }) {
+function UnifiedFolderList({ tagCloud = false, compact = false, onOpenMail }) {
   const unifiedFolder = useAccountStore(s => s.unifiedFolder);
-  const switchUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
+  const activateUnifiedFolder = useAccountStore(s => s.switchUnifiedFolder);
+  const switchUnifiedFolder = folder => { onOpenMail?.(); return activateUnifiedFolder(folder); };
 
   if (compact) {
     return (
@@ -503,7 +505,7 @@ function AccountChooser({ position, onClose, accounts, renderAccount, unifiedRow
   </Popover>;
 }
 
-export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend }) {
+export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup, onOpenAccounts, onOpenDataUsage, onReportBug, onReferFriend, onOpenInsights, onOpenMail, insightsOpen = false }) {
   const t = useT();
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -535,8 +537,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // last. activateAccount aborts whatever is in flight, so the later call is
   // the one that wins — as long as it is actually made.
   const activateInbox = useCallback(
-    (accountId) => activateAccount(accountId, 'INBOX'),
-    [activateAccount],
+    (accountId) => { onOpenMail?.(); return activateAccount(accountId, 'INBOX'); },
+    [activateAccount, onOpenMail],
   );
   const setViewMode = useUiStore(s => s.setViewMode);
   const retryKeychainAccess = useAccountStore(s => s.retryKeychainAccess);
@@ -697,7 +699,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // A folder with folders under it lists the whole branch; a leaf is an
   // ordinary folder and takes the ordinary path. The decision itself lives in
   // openFolder, because a remembered folder has to be restored the same way.
-  const selectFolder = (path) => openFolder(activeAccountId, path);
+  const openMailFolder = (accountId, path) => { onOpenMail?.(); return openFolder(accountId, path); };
+  const selectFolder = (path) => openMailFolder(activeAccountId, path);
 
   // ── Folder operations ──
   // `folderMenu` = { node, x, y }; `nameDialog` = { mode, node }; `confirmDelete`
@@ -837,6 +840,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
     </Dialog>
   );
 
+  const insightsEntry = <button type="button" data-testid="open-insights" onClick={onOpenInsights}
+    aria-label={t('insights.title')} title={t('insights.title')} aria-current={insightsOpen ? 'page' : undefined}
+    className={`sidebar-account-row ${insightsOpen ? 'sidebar-account-selected' : ''}`}>
+    <Network size={17} aria-hidden="true" />{!collapsed && <span>{t('insights.title')}</span>}
+  </button>;
+
   // --- COLLAPSED SIDEBAR ---
   if (collapsed) {
     return (
@@ -867,7 +876,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
           <div className="w-full py-2 border-b border-mail-border flex justify-center shrink-0">
             <button
               data-testid="all-inboxes-btn"
-              onClick={() => setUnifiedInbox(true)}
+              onClick={() => { onOpenMail?.(); setUnifiedInbox(true); }}
               className={`p-2 rounded-lg transition-all
                          ${unifiedInbox
                            ? 'bg-mail-accent/10 text-mail-accent-text'
@@ -878,6 +887,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </button>
           </div>
         )}
+
+        <div className="w-full py-2 flex justify-center shrink-0">{insightsEntry}</div>
 
         {/* Account icons */}
         <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
@@ -900,7 +911,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                 onActivateInbox={() => activateInbox(account.id)}
                 onActivate={() => {
                   const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-                  openFolder(account.id, lastMailbox || 'INBOX');
+                  openMailFolder(account.id, lastMailbox || 'INBOX');
                 }}
                 onOpenBackup={onOpenBackup}
               />
@@ -919,7 +930,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         </div>
 
         {/* Folder icons with expandable children — hidden in unified inbox mode */}
-        {unifiedInbox && <UnifiedFolderList compact />}
+        {unifiedInbox && <UnifiedFolderList compact onOpenMail={onOpenMail} />}
         {!unifiedInbox && <div className="flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
@@ -1010,7 +1021,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
     <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox ? 'true' : undefined}
       className={`sidebar-account-row sidebar-unified-row ${unifiedInbox ? 'sidebar-account-selected' : ''}`}
-      onClick={() => { if (chooser) closeChooser(); setUnifiedInbox(true); }}>
+      onClick={() => { if (chooser) closeChooser(); onOpenMail?.(); setUnifiedInbox(true); }}>
       <span className="sidebar-unified-icon"><Inbox size={17} /></span>
       <span>{t('sidebar.allInboxes')}</span>
     </button>
@@ -1028,7 +1039,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onActivate={() => {
           if (chooser) closeChooser();
           const lastMailbox = useSettingsStore.getState().getLastMailbox(account.id);
-          openFolder(account.id, lastMailbox || 'INBOX');
+          openMailFolder(account.id, lastMailbox || 'INBOX');
         }}
         onOpenBackup={id => { if (chooser) closeChooser(); onOpenBackup?.(id); }} />
     </div>
@@ -1124,6 +1135,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               </button>
               {!unifiedInbox && activeAccount && <BackupStatusIcon accountId={activeAccount.id} onClick={onOpenBackup} />}
             </div>
+            {insightsEntry}
             {!unifiedInbox && renderAccountNotice(activeAccount)}
             <BackupIndicator onOpenBackup={onOpenBackup} />
           </> : <>
@@ -1133,6 +1145,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             </div>
             <div className="sidebar-account-list" data-testid="sidebar-account-list">
               {renderUnifiedRow()}
+              {insightsEntry}
               {orderedAccounts.map(account => <React.Fragment key={account.id}>
                 {renderAccount(account)}
                 {account.id === activeAccountId && renderAccountNotice(account)}
@@ -1154,7 +1167,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               { id: 'server', icon: Cloud, label: t('sidebar.viewServer') },
               { id: 'local', icon: HardDrive, label: t('sidebar.viewVault') },
             ].map(mode => (
-              <button key={mode.id} type="button" onClick={() => setViewMode(mode.id)} aria-pressed={viewMode === mode.id}
+              <button key={mode.id} type="button" onClick={() => { onOpenMail?.(); setViewMode(mode.id); }} aria-pressed={viewMode === mode.id}
                 title={t(`workspace.sourceHint.${mode.id}`)}>
                 <mode.icon size={13} aria-hidden="true" /><span>{mode.label}</span>
               </button>
@@ -1166,7 +1179,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               aria-label={t('sidebar.findFolder')} placeholder={t('sidebar.findFolder')} />
           </label>}
           <div className="sidebar-folder-list" data-testid="sidebar-folder-list">
-            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} /> : (
+            {unifiedInbox ? <UnifiedFolderList tagCloud={tagCloud} onOpenMail={onOpenMail} /> : (
               <Folders mailboxes={mailboxes} activeMailbox={activeMailbox} expanded={expandedFolders}
                 onToggle={toggleFolder} onSelect={selectFolder} counts={folderStatus?.[activeAccountId]}
                 onContextMenu={onFolderContextMenu} searchQuery={folderQuery} />

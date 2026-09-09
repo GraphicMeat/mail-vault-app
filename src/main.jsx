@@ -64,6 +64,14 @@ if (import.meta.env.VITE_E2E === '1') {
   import('./stores/searchStore').then(({ useSearchStore }) => {
     window.__SEARCH_STORE__ = useSearchStore;
   });
+  // Read-only diagnostics distinguish native inventory errors from worker
+  // failures without exposing mail data or replacing application behavior.
+  import('./stores/insightsStore').then(({ useInsightsStore }) => {
+    window.__INSIGHTS_STATUS__ = () => {
+      const { status, error, progress } = useInsightsStore.getState();
+      return { status, error, progress: progress ? { loaded: progress.loaded, total: progress.total } : null };
+    };
+  });
   // The scheduler itself, because "automatic backups are premium" is invisible
   // from the DOM: a stored schedule looks identical whether or not the checker
   // will ever act on it. The queue after a checkAndQueueDue() IS the assertion.

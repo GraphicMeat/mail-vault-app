@@ -7,6 +7,7 @@ import { mailboxPathFromVaultDir } from '../../stores/slices/unifiedHelpers.js';
 import { normalizeMessageId } from '../../utils/emailParser.js';
 import { custodySource } from '../../stores/slices/custody.js';
 import { t } from '../../i18n/index.js';
+import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity.js';
 
 // Transport-aware invoke: tries daemon socket first, falls back to Tauri invoke
 const invoke = (cmd, args) => transportSend(cmd, args);
@@ -168,6 +169,16 @@ function readRawMessageId(raw) {
 export async function getVerifiedRawSource(accountId, mailbox, uid, headerRow) {
   await initDB();
   if (!invoke) return { b64: null, error: null };
+
+  // Insights can retain older physical copies with reused IDs. Verify all
+  // known identity fields against the file's parsed metadata before exposing
+  // its source, just as the Insights body reader does.
+  if (headerRow?._insightsReadOnly) {
+    const body = await invoke('maildir_read_light', { accountId, mailbox, uid: parseInt(uid, 10) });
+    if (!body || (body.uid != null && Number(body.uid) !== Number(uid)) || !insightsBodyMatchesHeader(headerRow, body)) {
+      return { b64: null, error: t('insights.messageChanged') };
+    }
+  }
 
   const b64 = await invoke('maildir_read_raw_source', { accountId, mailbox, uid: parseInt(uid, 10) });
   if (!b64) return { b64: null, error: null };

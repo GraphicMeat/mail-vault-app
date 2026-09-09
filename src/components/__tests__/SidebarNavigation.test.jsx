@@ -198,3 +198,25 @@ describe('Sidebar navigation', () => {
     expect(screen.getByRole('button', { name: t('sidebar.reconnect') })).toBeTruthy();
   });
 });
+
+describe('Insights workspace entry', () => {
+  it.each(['account','current folder','all inboxes','mail source'])('leaves Insights before navigating to %s',async target=>{
+    const onOpenMail=vi.fn();render(<Sidebar onOpenMail={onOpenMail} insightsOpen />);
+    const control = target==='account' ? screen.getByRole('button',{name:'Design studio, studio@example.com'})
+      : target==='current folder' ? screen.getByTestId('sidebar-folder-list').querySelector('[title="INBOX"]')
+      : target==='all inboxes' ? screen.getByTestId('all-inboxes-btn')
+      : within(screen.getByRole('group',{name:t('sidebar.mailSource')})).getByRole('button',{name:'Server'});
+    expect(control).toBeTruthy();await act(async()=>fireEvent.click(control));
+    expect(onOpenMail).toHaveBeenCalledOnce();
+  });
+  it.each([
+    ['list','stacked',false],['tagcloud','stacked',false],['list','split',false],['list','switcher',false],['list','stacked',true],
+  ])('is independently reachable in %s / %s / collapsed %s', (style,layout,collapsed) => {
+    useSettingsStore.setState({sidebarStyle:style,sidebarLayout:layout,sidebarCollapsed:collapsed});
+    const open=vi.fn();render(<Sidebar onOpenInsights={open} insightsOpen />);
+    const button=screen.getByRole('button',{name:t('insights.title')});
+    expect(button.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(button);expect(open).toHaveBeenCalledOnce();
+    expect(useMailStore.getState().activeMailbox).toBe('INBOX');
+  });
+});

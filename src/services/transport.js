@@ -236,5 +236,20 @@ async function tauriInvoke(command, args) {
     await new Promise(r => setTimeout(r, 100));
     if (!invoke) throw new Error(t('errors.tauriUnavailable'));
   }
-  return invoke(command, args);
+  const realPromise = invoke(command, args);
+  // Native WebKit defines its invoke hook as non-writable. E2E diagnostics
+  // observe the actual call here and may hold delivery of its real response.
+  // Normal builds remove this branch; the hook cannot replace native data.
+  if (import.meta.env.VITE_E2E === '1' && typeof window.__INSIGHTS_NATIVE_OBSERVER__ === 'function') {
+    try {
+      const barrier = window.__INSIGHTS_NATIVE_OBSERVER__(command, realPromise);
+      if (barrier && typeof barrier.then === 'function') {
+        return Promise.allSettled([realPromise, barrier]).then(([native]) => {
+          if (native.status === 'rejected') throw native.reason;
+          return native.value;
+        });
+      }
+    } catch { /* Observation must not change the native outcome. */ }
+  }
+  return realPromise;
 }

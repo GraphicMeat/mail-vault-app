@@ -1,5 +1,8 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { useMailStore } from './stores/mailStore';
+import { useInsightsStore } from './stores/insightsStore';
+import { createInsightsReaderScope } from './services/insightsReaderScope';
+import * as selectionWorkflow from './services/workflows/selectEmail';
 import { useAccountStore } from './stores/accountStore';
 import { useSyncStore } from './stores/syncStore';
 import { useUiStore } from './stores/uiStore';
@@ -70,6 +73,9 @@ import { tErr, t as tr, useT  } from './i18n/index.js';
 // startup chunk cost ~1.1 MB of JavaScript that has to parse before the first
 // message list can paint — ComposeModal alone drags in TipTap and ProseMirror.
 // Each one is warmed at idle below, so the first click still opens instantly.
+const InsightsPage = lazy(() => import('./components/insights/InsightsPage'));
+const INSIGHTS_SHORTCUTS = ['compose', 'escape', 'openSettings', 'showShortcuts'];
+
 const AccountModal = lazy(() => import('./components/AccountModal').then(m => ({ default: m.AccountModal })));
 const ComposeModal = lazy(() => import('./components/ComposeModal').then(m => ({ default: m.ComposeModal })));
 const SettingsPage = lazy(() => import('./components/SettingsPage').then(m => ({ default: m.SettingsPage })));
@@ -141,6 +147,29 @@ const debugLog = (...args) => {
 
 function App() {
   const t = useT();
+  const insightsOpen = useInsightsStore(s => s.isOpen);
+  const insightsReaderScope = useRef(null);
+  if (!insightsReaderScope.current) insightsReaderScope.current = createInsightsReaderScope(useMailStore, {
+    cancelSelection: () => selectionWorkflow.cancelInsightsSelection?.(),
+    getSelectionGeneration: () => selectionWorkflow.getSelectionGeneration(),
+  });
+  const openInsights = useCallback(() => {
+    if (useInsightsStore.getState().isOpen) return;
+    insightsReaderScope.current.enter();
+    void useInsightsStore.getState().openInsights();
+  }, []);
+  const closeInsights = useCallback(() => {
+    useInsightsStore.getState().closeInsights();
+    void insightsReaderScope.current.exit();
+    requestAnimationFrame(() => document.querySelector('[data-testid="open-insights"]')?.focus());
+  }, []);
+  const openMailFromSidebar = useCallback(() => {
+    insightsReaderScope.current.cancelRestore();
+    if (!useInsightsStore.getState().isOpen) return;
+    useInsightsStore.getState().closeInsights();
+    void insightsReaderScope.current.exit({restoreSelection:false});
+  }, []);
+  useEffect(() => () => useInsightsStore.getState().resetSession(), []);
   const init = useAccountStore(s => s.init);
   const accounts = useAccountStore(s => s.accounts);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -459,6 +488,13 @@ function App() {
       }
     },
     escape: () => {
+      if (insightsOpen && !composeState && !showSettings && !showShortcutsModal) {
+        const insights = useInsightsStore.getState();
+        if (insights.detailOpen) { selectionWorkflow.cancelInsightsSelection?.(); insights.setDetailOpen(false); }
+        else if (insights.selection) insights.closeMessages();
+        else closeInsights();
+        return;
+      }
       const {
         selectedEmailIds, clearSelection, bulkModalOpen, bulkSession, endBulkSession,
       } = useMailStore.getState();
@@ -492,7 +528,7 @@ function App() {
         setShowMoveDropdown(true);
       }
     },
-  });
+  }, { allowedActions: insightsOpen ? INSIGHTS_SHORTCUTS : null });
 
   // Handle resize for email list pane
   const handleListResize = useCallback((position) => {
@@ -908,6 +944,9 @@ function App() {
           onOpenDataUsage={(accountId) => openSettings({ tab: 'data-usage', accountId })}
           onReportBug={handleReportBug}
           onReferFriend={handleReferFriend}
+          onOpenInsights={openInsights}
+          onOpenMail={openMailFromSidebar}
+          insightsOpen={insightsOpen}
         />
       </div>
 
@@ -921,6 +960,10 @@ function App() {
           sidebar off-screen. */}
       <div
         ref={mainContainerRef}
+        hidden={insightsOpen}
+        inert={insightsOpen ? '' : undefined}
+        style={insightsOpen ? {display:'none'} : undefined}
+        aria-hidden={insightsOpen || undefined}
         className={`flex-1 flex min-w-0 min-h-0 ${layoutMode === 'two-column' ? 'flex-col' : 'flex-row'}`}
       >
         {viewStyle === 'chat' ? (
@@ -950,13 +993,17 @@ function App() {
                   className="flex-1 min-h-0 min-w-0 flex flex-col"
                   style={layoutMode === 'three-column' ? { minWidth: 300 } : { minHeight: MIN_VIEWER_HEIGHT }}
                 >
-                  <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />
+                  {!insightsOpen && <EmailViewer onComposeReply={(mode, email) => setComposeState({ mode, replyTo: email })} />}
                 </div>
               </>
             )}
           </>
         )}
       </div>
+
+      {insightsOpen && <ChunkErrorBoundary name="Insights"><Suspense fallback={<div className="flex-1 bg-mail-bg" />}>
+        <InsightsPage onClose={closeInsights} onComposeReply={(mode, email) => setComposeState({mode,replyTo:email})} />
+      </Suspense></ChunkErrorBoundary>}
 
       <ChunkErrorBoundary name="Add account">
       <Suspense fallback={null}>
@@ -1073,7 +1120,7 @@ function App() {
         )}
       </AnimatePresence>
 
-      <SelectionActionBar />
+      {!insightsOpen && <SelectionActionBar />}
       <BulkSaveProgress />
       <MigrationToast showSettings={showSettings} onOpenSettings={() => openSettings({ tab: 'migration' })} />
       <KeychainToast

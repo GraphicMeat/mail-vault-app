@@ -40,15 +40,16 @@ export const EmailActionBar = memo(function EmailActionBar({
   // A newly selected message never inherits an open menu from the previous one.
   useEffect(() => setAnchor(null), [email?.uid, email?._accountId, email?._mailbox]);
 
+  const readOnly = !!email?._insightsReadOnly || !!email?._insightsNoServerActions;
   const primary = [
     !isSentEmail && onReply && { icon: Reply, label: t('emailActionBar.reply'), action: onReply, primary: true },
     !isSentEmail && !singleRecipient && onReplyAll && { icon: ReplyAll, label: t('emailActionBar.replyAll'), action: onReplyAll },
     onForward && { icon: Forward, label: t('emailActionBar.forward'), action: onForward },
-    (!isLocalOnly || isArchived) && onArchive && { icon: Archive, label: isArchived ? t('rowMenu.unarchive') : t('common.archive'), action: onArchive, disabled: disabled.archive },
-    onDelete && { icon: Trash2, label: t('common.delete'), action: onDelete, disabled: disabled.delete, isDestructive: true },
-    !isLocalOnly && onMove && { icon: FolderInput, label: t('emailActionBar.move'), action: onMove, disabled: disabled.move, buttonRef: moveButtonRef, expanded: moveDropdownOpen },
-    !isLocalOnly && onToggleRead && { icon: isRead ? Mail : MailOpen, label: isRead ? t('emailActionBar.markUnread') : t('emailActionBar.markRead'), action: onToggleRead, disabled: disabled.toggleRead },
-    !isLocalOnly && onToggleFlag && { icon: Star, label: isFlagged ? t('emailActionBar.unstar') : t('emailActionBar.star'), action: onToggleFlag, disabled: disabled.toggleFlag },
+    !readOnly && (!isLocalOnly || isArchived) && onArchive && { icon: Archive, label: isArchived ? t('rowMenu.unarchive') : t('common.archive'), action: onArchive, disabled: disabled.archive },
+    !readOnly && onDelete && { icon: Trash2, label: t('common.delete'), action: onDelete, disabled: disabled.delete, isDestructive: true },
+    !readOnly && !isLocalOnly && onMove && { icon: FolderInput, label: t('emailActionBar.move'), action: onMove, disabled: disabled.move, buttonRef: moveButtonRef, expanded: moveDropdownOpen },
+    !readOnly && !isLocalOnly && onToggleRead && { icon: isRead ? Mail : MailOpen, label: isRead ? t('emailActionBar.markUnread') : t('emailActionBar.markRead'), action: onToggleRead, disabled: disabled.toggleRead },
+    !readOnly && !isLocalOnly && onToggleFlag && { icon: Star, label: isFlagged ? t('emailActionBar.unstar') : t('emailActionBar.star'), action: onToggleFlag, disabled: disabled.toggleFlag },
     onExport && { icon: ImageDown, label: t('common.export'), action: onExport },
   ].filter(Boolean);
   const secondary = [

@@ -29,6 +29,7 @@ No account to create. No sync service in the middle. No telemetry.
 - **One-click sign-in** — Google and Microsoft 365 OAuth2, plus Microsoft Graph for Outlook.com. Everything else is plain IMAP, with server auto-detection from SRV records, Mozilla autoconfig and MX fallback.
 - **Threaded conversations** — JWZ threading, quote folding, signature folding, oldest- or newest-first.
 - **Explorer** — switch from List to browse by Date, Sender, or Date → Conversation. Open year, month and optional day groups, follow breadcrumbs, search the current group, or select its messages together. Your view and place are remembered; groups reflect loaded mail and offer Load more when another page is available.
+- **Insights** — open the sidebar workspace for a sender map, sender timeline, and daily activity calendar. Frequent contacts have larger bubbles; recent contacts sit closer to you. Filter by account, date, direction, or likely automated mail, then open matching messages. Counts describe available local headers and disclose incomplete coverage and estimated dates.
 - **Compose that behaves** — templates, contacts picker, attachments, undo send from 15 seconds to 5 minutes, and an outbox that stages locally so a failed send is recoverable rather than lost.
 - **Search with filters** — sender, date range, attachments, folder, with history and suggestions.
 
