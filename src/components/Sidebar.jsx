@@ -5,6 +5,7 @@ import { Button } from './ui/Button';
 import { Popover } from './ui/Popover';
 import { useDialogA11y } from '../hooks/useDialogA11y';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { version } from '../../package.json';
 import { useMailStore } from '../stores/mailStore';
 import { useAccountStore } from '../stores/accountStore';
@@ -308,6 +309,27 @@ const ExpandedAccountRow = memo(function ExpandedAccountRow({
   );
 });
 
+// Sidebar notices expand and collapse rather than snapping in and out: they
+// appear under a row the eye is already on, and a box that pops changes the
+// position of every folder below it in one frame. `height: auto` is measured
+// by motion; `overflow: hidden` on the wrapper both clips the reveal and opens
+// a block formatting context, so the notice's own margins are inside the
+// measured box instead of jumping at the end of the animation.
+const noticeMotion = {
+  initial: { height: 0, opacity: 0, overflow: 'hidden' },
+  // Overflow goes back to visible once expanded, or the box clips the focus
+  // ring of the Retry / Details buttons sitting inside it.
+  animate: { height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } },
+  exit: { height: 0, opacity: 0, overflow: 'hidden' },
+  style: { overflow: 'hidden' },
+  transition: {
+    height: { duration: 0.26, ease: [0.32, 0.72, 0, 1] },
+    // Opacity trails the expand on the way in and leads it on the way out, so
+    // the text is never legible at a height that cannot hold it.
+    opacity: { duration: 0.18, ease: 'easeOut' },
+  },
+};
+
 /** A readable status and the next useful action. Technical repair lives in Details. */
 export const ConnectionErrorCard = memo(function ConnectionErrorCard({
   account, connectionErrorType, activeMailbox, activateAccount,
@@ -543,7 +565,14 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const setStoredExpanded = useSettingsStore(s => s.setExpandedFolders);
 
   const [showErrorModal, setShowErrorModal] = useState(false);
-  const [showError, setShowError] = useState(false);
+  // WHICH account has held an error long enough to be worth a card - not a
+  // bare boolean. A boolean only went false in the effect that follows an
+  // account switch, so the incoming account's card rendered for one frame with
+  // a repair button the 3s gate had not offered yet. Harmless while the card
+  // appeared and vanished within a single render; once it animates out, that
+  // frame becomes a visible flash. Comparing against the current account makes
+  // it false in the switching render itself.
+  const [errorReadyFor, setErrorReadyFor] = useState(null);
   const [folderQuery, setFolderQuery] = useState('');
   const [chooserPosition, setChooserPosition] = useState(null);
   const accountTriggerRef = useRef(null);
@@ -623,12 +652,13 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   // Delay showing connection errors by 3 seconds — transient errors on launch resolve quickly
   useEffect(() => {
-    setShowError(false);
+    setErrorReadyFor(null);
     if (connectionStatus === 'error') {
-      const timer = setTimeout(() => setShowError(true), 3000);
+      const timer = setTimeout(() => setErrorReadyFor(activeAccountId), 3000);
       return () => clearTimeout(timer);
     }
   }, [connectionStatus, activeAccountId]);
+  const showError = errorReadyFor !== null && errorReadyFor === activeAccountId;
 
   const unifiedInbox = useAccountStore(s => s.unifiedInbox);
   const setUnifiedInbox = useAccountStore(s => s.setUnifiedInbox);
@@ -1003,20 +1033,34 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         onOpenBackup={id => { if (chooser) closeChooser(); onOpenBackup?.(id); }} />
     </div>
   );
-  const renderAccountNotice = account => account && <>
-    {suspectEmptyServerData?.accountId === account.id && (
-      <div data-testid="cached-data-banner" className="sidebar-connection-notice">
-        <p role="status"><AlertTriangle size={13} aria-hidden="true" /><span>{t('sidebar.showingCachedData')}</span></p>
-        <p className="sidebar-cache-explanation">{suspectEmptyServerData.message}</p>
-        <Button variant="link" size="xs" onClick={refreshCurrentView} title={t('sidebar.retryConnection')}>{t('common.retry')}</Button>
-      </div>
-    )}
-    {showError && connectionStatus === 'error' && (
-      <ConnectionErrorCard account={account} connectionErrorType={connectionErrorType}
-        activeMailbox={activeMailbox} activateAccount={activateAccount}
-        setShowErrorModal={setShowErrorModal} onOpenAccounts={onOpenAccounts} />
-    )}
-  </>;
+  // Keyed by account: switching accounts must swap the notice, not collapse it.
+  // Without the key React keeps the same AnimatePresence and the outgoing
+  // account's card plays its exit animation while already showing the INCOMING
+  // account's error - including a repair button the 3s persistence gate has not
+  // offered yet. A new key remounts the subtree, so the swap is instant and only
+  // a notice that appears or clears within one account animates.
+  const renderAccountNotice = account => account && (
+    <div key={`notice-${account.id}`}>
+      <AnimatePresence initial={false}>
+        {suspectEmptyServerData?.accountId === account.id && (
+          <motion.div key="cached-data" {...noticeMotion}>
+            <div data-testid="cached-data-banner" className="sidebar-connection-notice">
+              <p role="status"><AlertTriangle size={13} aria-hidden="true" /><span>{t('sidebar.showingCachedData')}</span></p>
+              <p className="sidebar-cache-explanation">{suspectEmptyServerData.message}</p>
+              <Button variant="link" size="xs" onClick={refreshCurrentView} title={t('sidebar.retryConnection')}>{t('common.retry')}</Button>
+            </div>
+          </motion.div>
+        )}
+        {showError && connectionStatus === 'error' && (
+          <motion.div key="connection-error" {...noticeMotion}>
+            <ConnectionErrorCard account={account} connectionErrorType={connectionErrorType}
+              activeMailbox={activeMailbox} activateAccount={activateAccount}
+              setShowErrorModal={setShowErrorModal} onOpenAccounts={onOpenAccounts} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
   const selectedAccountLabel = unifiedInbox ? t('sidebar.allInboxes')
     : activeAccount ? displayNames[activeAccount.id] || activeAccount.name || activeAccount.email : t('sidebar.addAccount');
 

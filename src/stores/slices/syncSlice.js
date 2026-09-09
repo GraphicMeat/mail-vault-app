@@ -32,6 +32,30 @@ export function shortWindowPatch(shownCount, meta) {
   return { hasMoreEmails: true, totalEmails: total };
 }
 
+// ── "the server says this mailbox is empty" ──
+// The local evidence that contradicts an empty answer - a cached total, vault
+// copies - never goes back to zero once a mailbox has held mail, so a mailbox
+// that genuinely emptied looks suspicious for ever. loadEmails refuses such an
+// answer ONCE and re-asks; a second identical answer is believed, and the
+// counter is kept (not reset on acceptance) so the same folder is not
+// re-verified on every load for the rest of the session. A real, non-empty
+// answer clears it, so a mailbox that empties later still gets its free look.
+const _emptyRefusals = new Map();
+
+/** How long to wait before re-asking a server that claimed a mailbox is empty. */
+export const EMPTY_REVERIFY_MS = 1200;
+
+/** True the first time this mailbox answers empty; false on every later ask. */
+export function refuseEmptyOnce(key) {
+  const seen = _emptyRefusals.get(key) || 0;
+  _emptyRefusals.set(key, seen + 1);
+  return seen === 0;
+}
+
+export function clearEmptyRefusals(key) {
+  _emptyRefusals.delete(key);
+}
+
 export function serverVerifiedPatch(extra = {}) {
   return {
     connectionStatus: 'connected',

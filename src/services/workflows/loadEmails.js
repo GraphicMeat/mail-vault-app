@@ -8,6 +8,7 @@ import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, grap
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
+import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIFY_MS } from '../../stores/slices/syncSlice';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { waitForSentMailboxPath } from '../../utils/sentFolder';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
@@ -63,6 +64,9 @@ export async function proveServerUidsIfUnproven(account, mailbox, serverTotal) {
 
 
 // ── Suspicious empty result detection helper ──
+
+let _emptyVerifyTimer = null;
+
 function isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) {
   if (serverTotal > 0) return false;
   const cachedTotal = cachedHeaders?.totalEmails || cachedHeaders?.lastKnownGoodTotalEmails || 0;
@@ -595,38 +599,55 @@ export async function loadEmails() {
     }
 
     // ── Suspicious empty guard ──
+    // Refuse the first "this mailbox is empty" that contradicts local
+    // evidence, re-ask, then believe the answer. The guard used to refuse it
+    // for ever and park a banner: it returned BEFORE the cache write, so
+    // `cachedHeaders.totalEmails` kept the stale count (and caches.js
+    // deliberately preserves `lastKnownGoodTotalEmails` across empty saves),
+    // and vault copies count as evidence too - so a folder that genuinely
+    // emptied, everything archived into the vault or drained by a filter,
+    // re-tripped the same guard on every sync tick, folder switch and app
+    // start. "Showing cached data while verifying" promised a verification
+    // nothing ever ran.
+    //
+    // What makes believing it safe is a layer down: `imap/mod.rs::selected()`
+    // rejects the dead-socket SELECT shape (no UIDVALIDITY, no FLAGS) as
+    // `connection lost`, and every producer of `serverTotal` here - page
+    // fetch and CONDSTORE status alike - is behind it. A lost connection now
+    // throws into the catch below and takes the retry path; an EXISTS 0 that
+    // reaches this line came off a live socket that answered properly.
+    const emptyKey = `${activeAccountId}:${activeMailbox}`;
     if (isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) && (!mergedEmails || mergedEmails.length === 0)) {
+      if (refuseEmptyOnce(emptyKey)) {
+        console.warn(
+          '[loadEmails] Server returned 0 emails for %s/%s but prior cache had %d, Maildir has %d - re-verifying once',
+          account.email, activeMailbox,
+          cachedHeaders?.totalEmails || cachedHeaders?.lastKnownGoodTotalEmails || 0,
+          savedEmailIds?.size || 0
+        );
+        useMailStore.setState(serverVerifiedPatch());
+        if (_emptyVerifyTimer) clearTimeout(_emptyVerifyTimer);
+        _emptyVerifyTimer = setTimeout(() => {
+          _emptyVerifyTimer = null;
+          const now = get();
+          if (now.activeAccountId === activeAccountId && now.activeMailbox === activeMailbox) now.loadEmails();
+        }, EMPTY_REVERIFY_MS);
+        loadTrace.end('suspicious-empty-reverifying', {
+          serverTotal,
+          cachedTotal: cachedHeaders?.totalEmails || 0,
+          savedCount: savedEmailIds?.size || 0,
+        });
+        return;
+      }
       console.warn(
-        '[loadEmails] Server returned 0 emails for %s/%s but prior cache had %d, Maildir has %d — rejecting as suspicious',
-        account.email, activeMailbox,
-        cachedHeaders?.totalEmails || cachedHeaders?.lastKnownGoodTotalEmails || 0,
-        savedEmailIds?.size || 0
+        '[loadEmails] Server says %s/%s is empty on a second look - accepting it',
+        account.email, activeMailbox
       );
-      useMailStore.setState({
-        suspectEmptyServerData: {
-          accountId: activeAccountId,
-          type: 'emails',
-          message: t('svc.loadEmails.serverReturnedEmptyInboxUnexpectedly'),
-          timestamp: Date.now(),
-        },
-        connectionStatus: 'connected',
-        connectionError: null,
-        connectionErrorType: null,
-        loading: false,
-        loadingMore: false,
-      });
-      loadTrace.end('suspicious-empty-rejected', {
-        serverTotal,
-        cachedTotal: cachedHeaders?.totalEmails || 0,
-        savedCount: savedEmailIds?.size || 0,
-      });
-      return;
-    }
-
-    // Clear suspect state
-    const currentSuspect = get().suspectEmptyServerData;
-    if (currentSuspect?.accountId === activeAccountId && currentSuspect?.type === 'emails') {
-      useMailStore.setState({ suspectEmptyServerData: null });
+      mergedEmails = [];
+    } else if (serverTotal > 0) {
+      // A real answer re-arms the single refusal, so a mailbox that empties
+      // later still gets its one free re-verify.
+      clearEmptyRefusals(emptyKey);
     }
 
     const currentPage = Math.ceil(mergedEmails.length / 200) || 1;
