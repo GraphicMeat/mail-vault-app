@@ -172,6 +172,20 @@ describe('Sidebar navigation', () => {
     expect(within(dialog).getByText('studio@example.com')).toBeTruthy();
   });
 
+  it('scopes the cached-data notice to its own account', () => {
+    // The notice group is keyed by account so switching accounts SWAPS it
+    // rather than collapsing the outgoing card. Without the key the exiting
+    // card lingers for the length of its animation, over the incoming
+    // account's row.
+    render(<Sidebar />);
+    act(() => useMailStore.setState({
+      suspectEmptyServerData: { accountId: 'studio', type: 'emails', message: 'Cached copy shown.', timestamp: 1 },
+    }));
+    expect(screen.getByTestId('cached-data-banner')).toBeTruthy();
+    act(() => useMailStore.setState({ activeAccountId: 'personal' }));
+    expect(screen.queryByTestId('cached-data-banner')).toBeNull();
+  });
+
   it('waits for a persistent error on each account before offering its repair', () => {
     vi.useFakeTimers();
     useMailStore.setState({ connectionStatus: 'error', connectionErrorType: 'serverError', connectionError: 'Connection failed' });

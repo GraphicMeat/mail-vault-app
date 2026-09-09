@@ -332,6 +332,12 @@ export async function loadEmails() {
     const cachedUidNext = cachedHeaders?.uidNext;
     const cachedHighestModseq = cachedHeaders?.highestModseq;
     const hasCachedSync = cachedUidValidity != null && cachedUidNext != null && existingEmails.length > 0;
+    // Re-armed the moment the server reports ANY mail, so a mailbox that
+    // empties later still gets its one free re-verify. This has to happen
+    // where serverTotal is first known, not at the guard below: the
+    // CONDSTORE-noop, flag-only and delta-noop fast paths all return before
+    // the guard, and those are the branches a healthy mailbox takes.
+    const emptyKey = `${activeAccountId}:${activeMailbox}`;
 
     let mergedEmails;
     // UIDs the delta-sync found gone server-side — the only thing allowed to
@@ -360,6 +366,7 @@ export async function loadEmails() {
       newUidNext = status.uidNext;
       newHighestModseq = status.highestModseq ?? null;
       serverTotal = status.exists;
+      if (serverTotal > 0) clearEmptyRefusals(emptyKey);
 
       if (newUidValidity !== cachedUidValidity) {
         console.log('[loadEmails] UIDVALIDITY changed (%d -> %d), full reload', cachedUidValidity, newUidValidity);
@@ -538,6 +545,7 @@ export async function loadEmails() {
       console.log('[loadEmails] Fresh fetch: %s mailbox=%s authType=%s', account.email, activeMailbox, account.authType);
       const serverResult = await api.fetchEmails(account, activeMailbox, 1);
       serverTotal = serverResult.total;
+      if (serverTotal > 0) clearEmptyRefusals(emptyKey);
       console.log('[loadEmails] Fresh fetch result: %d emails, total=%d', serverResult.emails?.length || 0, serverTotal);
       newUidValidity = null;
       newUidNext = null;
@@ -616,7 +624,6 @@ export async function loadEmails() {
     // fetch and CONDSTORE status alike - is behind it. A lost connection now
     // throws into the catch below and takes the retry path; an EXISTS 0 that
     // reaches this line came off a live socket that answered properly.
-    const emptyKey = `${activeAccountId}:${activeMailbox}`;
     if (isSuspiciousEmptyEmailResult(serverTotal, cachedHeaders, savedEmailIds) && (!mergedEmails || mergedEmails.length === 0)) {
       if (refuseEmptyOnce(emptyKey)) {
         console.warn(
@@ -644,10 +651,6 @@ export async function loadEmails() {
         account.email, activeMailbox
       );
       mergedEmails = [];
-    } else if (serverTotal > 0) {
-      // A real answer re-arms the single refusal, so a mailbox that empties
-      // later still gets its one free re-verify.
-      clearEmptyRefusals(emptyKey);
     }
 
     const currentPage = Math.ceil(mergedEmails.length / 200) || 1;
