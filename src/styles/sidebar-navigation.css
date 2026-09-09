@@ -5,15 +5,21 @@
 .sidebar-section-heading { display: flex; align-items: center; justify-content: space-between; min-height: 32px; margin: 0 0 4px; padding-left: 8px; }
 .sidebar-section-heading h2 { font-size: 12px; line-height: 1.5; font-weight: 600; color: var(--mail-text-muted); }
 .sidebar-folder-section { margin-top: 20px; }
-.sidebar-account-row { display: flex; align-items: center; width: 100%; min-width: 0; min-height: 44px; margin-bottom: 2px; border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-account-row { --sidebar-avatar-size: 26px; --sidebar-row-bg: var(--mail-surface); position: relative; display: flex; align-items: center; width: 100%; min-width: 0; min-height: 44px; margin-bottom: 2px; border-radius: 8px; color: var(--mail-text); text-align: left; }
 .sidebar-account-open { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 7px 8px; border-radius: 8px; color: inherit; text-align: left; }
 .sidebar-backup-status { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 28px; flex-shrink: 0; border-radius: 6px; }
 .sidebar-account-row > .sidebar-backup-status { margin-right: 4px; }
+.sidebar-backup-status[data-health="success"] { color: var(--mail-success); }
+.sidebar-backup-status[data-health="warning"] { color: var(--mail-warning); }
+.sidebar-backup-status[data-location="avatar"][data-health="success"] { color: var(--mail-text-muted); }
+.sidebar-account-row > .sidebar-backup-status[data-location="avatar"] { position: absolute; inset-inline-start: calc(8px + var(--sidebar-avatar-size) - 16px); top: min(calc(50% - 6px), calc(100% - 24px)); min-width: 24px; min-height: 24px; margin: 0; border-radius: 50%; }
+.sidebar-account-row > .sidebar-backup-status[data-location="avatar"] > svg { transform: translateY(2px); }
+.sidebar-backup-status[data-location="avatar"] > svg { box-sizing: content-box; padding: 2px; border-radius: 50%; background: var(--sidebar-row-bg, var(--mail-surface)); }
 .sidebar-collapsed-backup { position: absolute; bottom: -5px; left: -5px; }
 .sidebar-collapsed-backup:empty { display: none; }
-.sidebar-collapsed-backup .sidebar-backup-status { min-width: 22px; min-height: 22px; background: var(--mail-surface); }
-.sidebar-account-row:hover { background: var(--mail-surface-hover); }
-.sidebar-account-selected, .sidebar-account-selected:hover { background: var(--mail-accent-tint); color: var(--mail-accent-text); }
+.sidebar-collapsed-backup .sidebar-backup-status { min-width: 24px; min-height: 24px; background: var(--mail-surface); }
+.sidebar-account-row:hover { --sidebar-row-bg: var(--mail-surface-hover); background: var(--mail-surface-hover); }
+.sidebar-account-selected, .sidebar-account-selected:hover { --sidebar-row-bg: var(--mail-accent-tint); background: var(--mail-accent-tint); color: var(--mail-accent-text); }
 .sidebar-account-avatar { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex-shrink: 0; border-radius: 50%; color: white; font-size: 11px; font-weight: 600; }
 .sidebar-account-label { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 2px; }
 .sidebar-account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; line-height: 1.35; }
@@ -52,7 +58,8 @@
 .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; overscroll-behavior: contain; }
 .sidebar-navigation-scroll .sidebar-section-heading, .sidebar-navigation-scroll .sidebar-source-filter, .sidebar-navigation-scroll .sidebar-find-field { flex-shrink: 0; }
 .sidebar-switcher-section { flex-shrink: 0; }
-.sidebar-account-switcher { display: flex; align-items: center; width: 100%; min-height: 48px; gap: 8px; padding: 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-account-switcher { display: flex; flex: 1; align-items: center; min-width: 0; width: 100%; min-height: 48px; gap: 8px; padding: 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-switcher-row:has([aria-expanded="true"]) { --sidebar-row-bg: var(--mail-surface-hover); }
 .sidebar-account-switcher:hover, .sidebar-account-switcher[aria-expanded="true"] { background: var(--mail-surface-hover); }
 .sidebar-switcher-section .sidebar-connection-notice { margin: 8px 8px 0; }
 .sidebar-find-field { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 34px; margin: 0 0 10px; padding: 0 8px; border: 1px solid var(--mail-border); border-radius: 8px; color: var(--mail-text-muted); background: var(--mail-bg); }
@@ -87,7 +94,7 @@
 [data-sidebar-density="compact"] .sidebar-folder-section { margin-top: 8px; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 0; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { min-height: 60px; }
-[data-sidebar-density="compact"] .sidebar-account-row { min-height: 32px; margin-bottom: 0; border-radius: 6px; }
+[data-sidebar-density="compact"] .sidebar-account-row { --sidebar-avatar-size: 22px; min-height: 32px; margin-bottom: 0; border-radius: 6px; }
 [data-sidebar-density="compact"] .sidebar-account-open { min-height: 32px; gap: 8px; padding: 4px 8px; border-radius: 6px; }
 [data-sidebar-density="compact"] .sidebar-account-avatar { width: 22px; height: 22px; }
 [data-sidebar-density="compact"] .sidebar-account-address { display: none; }

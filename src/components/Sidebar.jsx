@@ -140,9 +140,11 @@ function BackupStatusIcon({ accountId, onClick }) {
   const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const schedule = useSettingsStore(s => s.backupSchedules?.[accountId]);
   const billingProfile = useSettingsStore(s => s.billingProfile);
+  const location = useSettingsStore(s => s.sidebarBackupStatusLocation);
   // No premium, no automatic runs — so no schedule health to report.
   if (!hasPremiumAccess(billingProfile)) return null;
   if (!schedule?.enabled && !backupGlobalEnabled) return null;
+  if (location === 'hidden') return null;
 
   const isFailed = backupState?.lastStatus === 'failed';
   const isSuccess = backupState?.lastStatus === 'success';
@@ -157,14 +159,14 @@ function BackupStatusIcon({ accountId, onClick }) {
   // Give 50% grace period before showing overdue (e.g. daily = 36 hours grace)
   const isOverdue = lastBackup > 0 && (Date.now() - lastBackup) > intervalMs * 1.5;
 
-  // Show green if last backup succeeded — even if slightly overdue, it means the backup
+  // Show a healthy status if the last backup succeeded — even if slightly overdue, it means the backup
   // ran fine and the scheduler just hasn't had a chance to run again yet.
   // Show amber only for failures, never-backed-up, or overdue WITHOUT a success status.
   const showWarning = isFailed || isDegraded || neverBackedUp || (isOverdue && !isSuccess);
 
   const icon = showWarning
-    ? <AlertCircle size={12} className="text-mail-warning flex-shrink-0" />
-    : <CheckCircle2 size={12} className="text-mail-success flex-shrink-0" />;
+    ? <AlertCircle size={12} aria-hidden="true" />
+    : <CheckCircle2 size={12} aria-hidden="true" />;
 
   const title = isFailed ? t('sidebar.backupFailedClickView')
     : isDegraded ? t('sidebar.backupIncompleteClickView')
@@ -174,8 +176,13 @@ function BackupStatusIcon({ accountId, onClick }) {
 
   return (
     <button
+      type="button"
       onClick={(e) => { e.stopPropagation(); onClick?.(accountId); }}
+      onDoubleClick={e => e.stopPropagation()}
       className="sidebar-backup-status hover:opacity-70 transition-opacity"
+      data-location={location}
+      data-health={showWarning ? 'warning' : 'success'}
+      aria-label={title}
       title={title}
     >
       {icon}
@@ -1051,25 +1058,28 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>
               <Button variant="accentTint" icon size="xs" onClick={onAddAccount} title={t('sidebar.addAccount')} aria-label={t('sidebar.addAccount')}><Plus size={14} /></Button>
             </div>
-            <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
-              aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${activeAccount.email}` : ''}`}
-              title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${selectedAccountLabel} — ${activeAccount.email}` : selectedAccountLabel}
-              aria-haspopup="dialog" aria-expanded={!!chooserPosition}
-              onClick={chooserPosition ? closeChooser : openChooser}
-              onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>
-              {unifiedInbox ? <span className="sidebar-unified-icon"><Inbox size={17} /></span>
-                : activeAccount ? <span className="sidebar-account-avatar" style={{ backgroundColor: getAccountColor(accountColors, activeAccount) }} aria-hidden="true">
-                  {getAccountInitial(activeAccount, displayNames[activeAccount.id])}
-                </span> : <Plus size={17} />}
-              <span className="sidebar-account-label"><span className="sidebar-account-name">{selectedAccountLabel}</span>
-                {!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email && <span className="sidebar-account-address">{activeAccount.email}</span>}
-              </span>
-              {!unifiedInbox && activeAccount && unreadPerAccount[activeAccount.id] > 0 && <span className="sidebar-unread-count">{unreadPerAccount[activeAccount.id] > 99 ? '99+' : unreadPerAccount[activeAccount.id]}</span>}
-              {!unifiedInbox && activeAccount && connectionStatus !== 'connected' && (connectionStatus === 'error'
-                ? <AlertCircle size={14} className="text-mail-warning shrink-0" aria-label={t('sidebar.connectionProblem')} />
-                : <Loader size={13} className="text-mail-text-muted animate-spin shrink-0" aria-label={t('sidebar.connecting')} />)}
-              <ChevronDown size={15} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
-            </button>
+            <div className="sidebar-account-row sidebar-switcher-row">
+              <button type="button" ref={accountTriggerRef} className="sidebar-account-switcher"
+                aria-label={`${t('sidebar.switchAccount')}: ${selectedAccountLabel}${!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `, ${activeAccount.email}` : ''}`}
+                title={!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email ? `${selectedAccountLabel} — ${activeAccount.email}` : selectedAccountLabel}
+                aria-haspopup="dialog" aria-expanded={!!chooserPosition}
+                onClick={chooserPosition ? closeChooser : openChooser}
+                onDoubleClick={() => { if (activeAccount && !unifiedInbox) activateInbox(activeAccount.id); }}>
+                {unifiedInbox ? <span className="sidebar-unified-icon"><Inbox size={17} /></span>
+                  : activeAccount ? <span className="sidebar-account-avatar" style={{ backgroundColor: getAccountColor(accountColors, activeAccount) }} aria-hidden="true">
+                    {getAccountInitial(activeAccount, displayNames[activeAccount.id])}
+                  </span> : <Plus size={17} />}
+                <span className="sidebar-account-label"><span className="sidebar-account-name">{selectedAccountLabel}</span>
+                  {!unifiedInbox && activeAccount && selectedAccountLabel !== activeAccount.email && <span className="sidebar-account-address">{activeAccount.email}</span>}
+                </span>
+                {!unifiedInbox && activeAccount && unreadPerAccount[activeAccount.id] > 0 && <span className="sidebar-unread-count">{unreadPerAccount[activeAccount.id] > 99 ? '99+' : unreadPerAccount[activeAccount.id]}</span>}
+                {!unifiedInbox && activeAccount && connectionStatus !== 'connected' && (connectionStatus === 'error'
+                  ? <AlertCircle size={14} className="text-mail-warning shrink-0" aria-label={t('sidebar.connectionProblem')} />
+                  : <Loader size={13} className="text-mail-text-muted animate-spin shrink-0" aria-label={t('sidebar.connecting')} />)}
+                <ChevronDown size={15} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
+              </button>
+              {!unifiedInbox && activeAccount && <BackupStatusIcon accountId={activeAccount.id} onClick={onOpenBackup} />}
+            </div>
             {!unifiedInbox && renderAccountNotice(activeAccount)}
             <BackupIndicator onOpenBackup={onOpenBackup} />
           </> : <>

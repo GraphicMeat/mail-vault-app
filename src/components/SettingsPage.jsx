@@ -95,6 +95,7 @@ const settingSearchGroups = [
     ['workspace.mailExperience', 'mail view email chat'],
     ['workspace.readingPane', 'reading pane layout columns beside below'],
     ['workspace.sidebarLayout', 'sidebar accounts folders split stacked account switcher'],
+    ['workspace.backupStatusLocation', 'backup status location indicator icon badge avatar green check info hide hidden sidebar'],
     ['workspace.navigation', 'sidebar navigation folders bubbles list'],
     ['workspace.messageRows', 'message rows density compact single two lines'],
   ] },

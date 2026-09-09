@@ -1,4 +1,5 @@
 /* Structural choices show every alternative before the user commits to one. */
+.sidebar-backup-preview { max-width: 320px; padding: 8px; border-radius: 8px; background: var(--mail-surface); }
 .sidebar-density-preview { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .sidebar-density-preview > div { min-width: 0; }
 .sidebar-density-preview .sidebar-account-avatar { background: var(--mail-surface-hover); color: var(--mail-text); }

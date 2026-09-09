@@ -79,6 +79,7 @@ describe('settings page search', () => {
     ['date', 'Date Format', 'Date & time'],
     ['reading pane', 'Reading pane', 'Layout'],
     ['account switcher', 'Sidebar layout', 'Layout'],
+    ['backup icon', 'Backup status location', 'Layout'],
   ])('finds %s and opens its Appearance section', (query, result, section) => {
     render(<SettingsPage onClose={() => {}} />);
     const nav = within(screen.getByRole('navigation', { name: 'Settings' }));

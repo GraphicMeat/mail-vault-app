@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { Sidebar } from '../Sidebar';
 import { useMailStore } from '../../stores/mailStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useBackupStore } from '../../stores/backupStore';
 import { t } from '../../i18n';
 
 vi.mock('../../services/db', async importOriginal => ({
@@ -22,10 +23,12 @@ const accounts = [
 
 beforeEach(() => {
   useSettingsStore.setState({
-    sidebarCollapsed: false, sidebarStyle: 'list', displayNames: { studio: 'Design studio' },
+    sidebarCollapsed: false, sidebarStyle: 'list', sidebarLayout: 'stacked', sidebarBackupStatusLocation: 'avatar',
+    backupGlobalEnabled: false, backupSchedules: {}, backupState: {}, displayNames: { studio: 'Design studio' },
     hiddenAccounts: {}, accountOrder: [], accountColors: {}, unreadPerAccount: { personal: 3 },
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null,
   });
+  useBackupStore.setState({ activeBackup: null });
   useMailStore.setState({
     accounts, activeAccountId: 'studio', activeMailbox: 'INBOX', unifiedInbox: false,
     mailboxes: [{ name: 'INBOX', path: 'INBOX' }, { name: 'Archive', path: 'Archive', specialUse: '\\Archive' }],
@@ -82,6 +85,65 @@ describe('Sidebar navigation', () => {
     expect(backup.closest('[role="button"]')).toBeNull();
     fireEvent.click(backup);
     expect(onOpenBackup).toHaveBeenCalledWith('studio');
+  });
+
+  describe.each(['avatar', 'row'])('backup health with %s placement', placement => {
+    it.each([
+      ['success', 1, 'sidebar.backupUpDate'],
+      ['success', 72, 'sidebar.backupUpDate'],
+      ['failed', 1, 'sidebar.backupFailedClickView'],
+      ['degraded', 1, 'sidebar.backupIncompleteClickView'],
+      [null, null, 'sidebar.neverBackedUpClickConfigure'],
+      [null, 72, 'sidebar.backupOverdueClickView'],
+    ])('preserves the meaning of %s after %s hours', (lastStatus, hoursAgo, labelKey) => {
+      useSettingsStore.setState({
+        sidebarBackupStatusLocation: placement,
+        billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' },
+        backupSchedules: { studio: { enabled: true, interval: 'daily' } },
+        backupState: { studio: { lastStatus, lastBackupTime: hoursAgo === null ? 0 : Date.now() - hoursAgo * 3600_000 } },
+      });
+      render(<Sidebar />);
+      expect(screen.getByRole('button', { name: t(labelKey) }).title).toBe(t(labelKey));
+      expect(document.querySelectorAll('.sidebar-backup-status')).toHaveLength(1);
+    });
+
+    it('only exposes schedule health when automatic backups can run', () => {
+      useSettingsStore.setState({ sidebarBackupStatusLocation: placement, backupGlobalEnabled: true });
+      render(<Sidebar />);
+      expect(document.querySelector('.sidebar-backup-status')).toBeNull();
+      act(() => useSettingsStore.setState({ billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' } }));
+      expect(screen.getAllByRole('button', { name: t('sidebar.neverBackedUpClickConfigure') })).toHaveLength(2);
+      act(() => useSettingsStore.setState({ backupGlobalEnabled: false }));
+      expect(document.querySelector('.sidebar-backup-status')).toBeNull();
+    });
+  });
+
+  it('shows the latest failure when a hidden indicator is restored on a memoized account row', () => {
+    useSettingsStore.setState({
+      sidebarBackupStatusLocation: 'hidden',
+      billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' },
+      backupSchedules: { studio: { enabled: true, interval: 'daily' } },
+      backupState: { studio: { lastStatus: 'success', lastBackupTime: Date.now() } },
+    });
+    render(<Sidebar />);
+    act(() => useSettingsStore.getState().updateBackupState('studio', { lastStatus: 'failed' }));
+    expect(screen.queryByRole('button', { name: t('sidebar.backupFailedClickView') })).toBeNull();
+    act(() => useSettingsStore.getState().setSidebarBackupStatusLocation('row'));
+    expect(screen.getByRole('button', { name: t('sidebar.backupFailedClickView') })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: t('sidebar.backupUpDate') })).toBeNull();
+  });
+
+  it.each([false, true])('keeps live backup progress available with hidden account icons (collapsed: %s)', collapsed => {
+    useSettingsStore.setState({ sidebarCollapsed: collapsed, sidebarBackupStatusLocation: 'hidden' });
+    useBackupStore.setState({ activeBackup: {
+      active: true, done: false, accountId: 'studio', accountEmail: 'studio@example.com',
+      totalFolders: 4, completedFolders: 2, queueLength: 0,
+    } });
+    const onOpenBackup = vi.fn();
+    render(<Sidebar onOpenBackup={onOpenBackup} />);
+    expect(document.querySelector('.sidebar-backup-status')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Backing up studio@example.com/ }));
+    expect(onOpenBackup).toHaveBeenCalledOnce();
   });
 
   it('keeps all mail locations directly accessible and changes the actual filter', async () => {

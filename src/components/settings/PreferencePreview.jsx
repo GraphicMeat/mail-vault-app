@@ -1,10 +1,10 @@
 import React from 'react';
 import { PREVIEW_ACCOUNTS, previewRows } from '../../data/previewMail';
 import { SampleConversation } from '../ui/SampleConversation';
-import { Archive, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
+import { AlertCircle, Archive, CheckCircle2, ChevronDown, Cloud, FileText, Folder, Inbox, MousePointer2, Reply, Send } from 'lucide-react';
 import { useT } from '../../i18n';
 import { useThemeStore } from '../../stores/themeStore';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { getAccountColor, useSettingsStore } from '../../stores/settingsStore';
 import { getEmailColors } from '../../utils/mailChrome';
 import { formatDateOnly, formatTime } from '../../utils/dateFormat';
 import { listRowGround } from '../../utils/listRowGround';
@@ -75,6 +75,7 @@ function PanePreview({ below = false, chat = false }) {
 export function WorkspacePreview({ setting, value, label, disabled }) {
   const t = useT();
   const layoutMode = useSettingsStore(s => s.layoutMode);
+  const sidebarDensity = useSettingsStore(s => s.sidebarDensity);
   let content;
   if (setting === 'viewStyle' || setting === 'layoutMode') {
     content = <PanePreview chat={setting === 'viewStyle' && value === 'chat'} below={(setting === 'layoutMode' ? value : layoutMode) === 'two-column'} />;
@@ -94,6 +95,18 @@ export function WorkspacePreview({ setting, value, label, disabled }) {
         {[[Inbox, 'sidebar.inbox'], [Archive, 'common.archive'], [Send, 'list.sent']].map(([Icon, key]) =>
           <span key={key} className="sidebar-folder-row flex items-center gap-2 px-2 py-1.5 mb-1"><Icon size={16} /><span className="text-sm truncate">{t(key)}</span></span>)}
       </div>
+    </div>;
+  } else if (setting === 'sidebarBackupStatusLocation') {
+    content = <div className="sidebar-backup-preview" data-sidebar-density={sidebarDensity} aria-hidden="true">
+      {PREVIEW_ACCOUNTS.slice(0, 2).map((account, index) => <div key={account.id} className="sidebar-account-row">
+        <span className="sidebar-account-open">
+          <span className="sidebar-account-avatar" style={{ backgroundColor: getAccountColor({}, account) }}>{account.name[0]}</span>
+          <span className="sidebar-account-label"><span className="sidebar-account-name">{account.email}</span></span>
+        </span>
+        {value !== 'hidden' && <span className="sidebar-backup-status" data-location={value} data-health={index ? 'warning' : 'success'}>
+          {index ? <AlertCircle size={12} /> : <CheckCircle2 size={12} />}
+        </span>}
+      </div>)}
     </div>;
   } else if (setting === 'sidebarStyle') {
     content = <div className={`preview-navigation ${value === 'tagcloud' ? 'preview-navigation-bubbles' : ''}`}>

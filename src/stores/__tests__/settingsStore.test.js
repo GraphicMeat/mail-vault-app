@@ -383,3 +383,36 @@ describe('sidebar density persistence', () => {
     expect(useSettingsStore.getState().sidebarDensity).toBe('comfortable');
   });
 });
+
+describe('backup status placement persistence', () => {
+  it.each(['avatar', 'row', 'hidden'])('persists and restores %s without changing sidebar layout or density', async placement => {
+    const { safeStorage } = await import('../safeStorage');
+    useSettingsStore.setState({ sidebarLayout: 'switcher', sidebarDensity: 'compact' });
+    useSettingsStore.getState().setSidebarBackupStatusLocation(placement);
+    const restored = _mergePersistedSettings(JSON.parse(safeStorage.getItem('mailvault-settings')).state, useSettingsStore.getInitialState());
+    expect(restored.sidebarBackupStatusLocation).toBe(placement);
+    expect(restored.sidebarLayout).toBe('switcher');
+    expect(restored.sidebarDensity).toBe('compact');
+    useSettingsStore.getState().resetSettings();
+  });
+
+  it('restores a hidden indicator without changing backup configuration and resets its placement', async () => {
+    const { safeStorage } = await import('../safeStorage');
+    useSettingsStore.setState({ backupGlobalEnabled: true });
+    useSettingsStore.getState().setSidebarBackupStatusLocation('hidden');
+    const persisted = JSON.parse(safeStorage.getItem('mailvault-settings'));
+    const restored = _mergePersistedSettings(persisted.state, useSettingsStore.getInitialState());
+    expect(restored.sidebarBackupStatusLocation).toBe('hidden');
+    expect(restored.backupGlobalEnabled).toBe(true);
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().sidebarBackupStatusLocation).toBe('avatar');
+  });
+
+  it('defaults missing or invalid placement to the avatar', () => {
+    const current = useSettingsStore.getInitialState();
+    expect(_mergePersistedSettings({}, current).sidebarBackupStatusLocation).toBe('avatar');
+    expect(_mergePersistedSettings({ sidebarBackupStatusLocation: 'obsolete' }, current).sidebarBackupStatusLocation).toBe('avatar');
+    useSettingsStore.getState().setSidebarBackupStatusLocation('obsolete');
+    expect(useSettingsStore.getState().sidebarBackupStatusLocation).toBe('avatar');
+  });
+});

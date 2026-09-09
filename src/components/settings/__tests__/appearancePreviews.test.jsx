@@ -84,6 +84,18 @@ it('shows grouped, expanded and separate messages, and reverses the sample reply
   expect(messages()).toEqual(['Two works for me.', 'Shall we meet at two?']);
 });
 
+it('changes backup placement immediately without changing the backup schedule', () => {
+  useSettingsStore.setState({ sidebarBackupStatusLocation: 'avatar', backupGlobalEnabled: true });
+  render(<AppearanceSettings initialSection="layout" />);
+  const group = screen.getByRole('group', { name: 'Backup status location' });
+  for (const [name, value] of [['End of row', 'row'], ['Hidden', 'hidden'], ['On avatar', 'avatar']]) {
+    fireEvent.click(within(group).getByRole('button', { name, exact: true }));
+    expect(useSettingsStore.getState().sidebarBackupStatusLocation).toBe(value);
+    expect(useSettingsStore.getState().backupGlobalEnabled).toBe(true);
+    expect(example('Backup status location').querySelectorAll('.sidebar-backup-status')).toHaveLength(value === 'hidden' ? 0 : 2);
+  }
+});
+
 it('demonstrates signature deduplication, hiding, and disclosure for every signature choice', () => {
   render(<AppearanceSettings initialSection="reading" />);
   const signatures = () => within(example('Signature Display')).queryAllByText('Prime Cut Studio', { exact: false });

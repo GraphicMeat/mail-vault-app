@@ -87,12 +87,14 @@ export const DEFAULT_SHORTCUTS = {
 // behaviour directly, without standing up zustand/persist's storage plumbing.
 const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
 const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
+const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].includes(location) ? location : 'avatar';
 
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
   ...(persisted || {}),
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
+  sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(persisted?.sidebarBackupStatusLocation ?? current.sidebarBackupStatusLocation),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -256,6 +258,7 @@ export const useSettingsStore = create(
       sidebarStyle: 'list', // 'list' | 'tagcloud' — folder rows or wrapped bubble tags
       sidebarLayout: 'stacked', // 'stacked' | 'split' | 'switcher' — account and folder arrangement
       sidebarDensity: 'comfortable', // 'comfortable' | 'compact' — independent of layout and folder style
+      sidebarBackupStatusLocation: 'avatar', // 'avatar' | 'row' | 'hidden' — display only; backups keep running
       // Which folders are open in the sidebar tree, per account. Session state
       // lost the whole expansion on every account switch, which on a five-level
       // server means re-opening four folders to get back where you were.
@@ -748,6 +751,7 @@ export const useSettingsStore = create(
       setSidebarStyle: (style) => set({ sidebarStyle: style === 'tagcloud' ? 'tagcloud' : 'list' }),
       setSidebarLayout: (layout) => set({ sidebarLayout: normalizeSidebarLayout(layout) }),
       setSidebarDensity: (density) => set({ sidebarDensity: normalizeSidebarDensity(density) }),
+      setSidebarBackupStatusLocation: (location) => set({ sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(location) }),
       setExpandedFolders: (accountId, paths) => set(state => ({
         expandedFolders: { ...state.expandedFolders, [accountId]: [...paths] },
       })),
@@ -953,6 +957,7 @@ export const useSettingsStore = create(
           sidebarStyle: 'list',
           sidebarLayout: 'stacked',
           sidebarDensity: 'comfortable',
+          sidebarBackupStatusLocation: 'avatar',
           expandedFolders: {},
           listPaneSize: 420,
           listPaneHeight: 320,

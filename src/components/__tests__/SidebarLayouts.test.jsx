@@ -25,7 +25,7 @@ const setUnifiedInbox = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   useSettingsStore.setState({
-    sidebarLayout: 'stacked', sidebarCollapsed: false, sidebarStyle: 'list',
+    sidebarLayout: 'stacked', sidebarCollapsed: false, sidebarStyle: 'list', sidebarBackupStatusLocation: 'avatar',
     displayNames: { studio: 'Design studio' }, hiddenAccounts: { hidden: true },
     accountOrder: [], accountColors: {}, unreadPerAccount: { personal: 3 },
     expandedFolders: {}, transferHoverEnabled: false, billingProfile: null,
@@ -202,5 +202,26 @@ describe('Sidebar layouts', () => {
     act(() => useSettingsStore.setState({ sidebarCollapsed: true, sidebarLayout: 'switcher' }));
     expect(screen.queryByRole('button', { name: new RegExp(t('sidebar.switchAccount')) })).toBeNull();
     expect(screen.getByRole('button', { name: 'Personal, personal@example.com' })).toBeTruthy();
+  });
+
+  it.each(['stacked', 'split', 'switcher', 'collapsed'])('hides backup status in %s without disabling backups, then restores the account action', layout => {
+    useSettingsStore.setState({
+      sidebarLayout: layout === 'collapsed' ? 'stacked' : layout, sidebarCollapsed: layout === 'collapsed',
+      sidebarBackupStatusLocation: 'hidden', backupGlobalEnabled: true,
+      billingProfile: { hasSubscription: true, premiumAccess: true, status: 'active' },
+      backupState: { studio: { lastStatus: 'degraded', lastBackupTime: Date.now() } },
+    });
+    const onOpenBackup = vi.fn();
+    render(<Sidebar onOpenBackup={onOpenBackup} />);
+    if (layout === 'switcher') openChooser();
+    expect(screen.queryByRole('button', { name: t('sidebar.backupIncompleteClickView') })).toBeNull();
+    act(() => useSettingsStore.getState().setSidebarBackupStatusLocation('avatar'));
+    const scope = layout === 'switcher' ? within(screen.getByRole('dialog', { name: t('workspace.accounts') })) : screen;
+    const backup = scope.getByRole('button', { name: t('sidebar.backupIncompleteClickView') });
+    expect(backup.closest('button')?.parentElement.closest('button')).toBeNull();
+    fireEvent.click(backup);
+    expect(onOpenBackup).toHaveBeenCalledWith('studio');
+    expect(openFolder).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().backupGlobalEnabled).toBe(true);
   });
 });
