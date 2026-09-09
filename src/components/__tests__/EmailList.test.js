@@ -166,6 +166,10 @@ vi.mock('../../stores/settingsStore', () => {
   const state = {
     emailListStyle: 'default',
     emailListGrouping: 'chronological',
+    emailListView: 'list',
+    explorerGrouping: 'date',
+    explorerDateDepth: 'month',
+    explorerPaths: {},
     setEmailListGrouping: vi.fn(),
     threadMode: 'grouped',
     setThreadMode: vi.fn(),
@@ -1227,5 +1231,39 @@ describe('the related set marks the open message’s thread', () => {
     }
     // And today's mark is untouched.
     expect(rows[0]).toContain('bg-mail-accent-tint');
+  });
+});
+
+describe('Explorer search conversation scope', () => {
+  it('keeps loaded conversation members while search narrows the browsed emails', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const settings = useSettingsStore.getState();
+    const search = useSearchStore.getState();
+    const previousMail = { ...mail };
+    const previousSettings = { ...settings };
+    const previousSearch = { ...search };
+    const previousChat = mail.getChatEmails.getMockImplementation();
+    const members = makeEmails(2).map(e => ({ ...e, subject: 'Shared conversation', _mailbox: 'INBOX' }));
+    try {
+      Object.assign(settings, { emailListView: 'explorer', explorerGrouping: 'conversation', explorerPaths: {} });
+      Object.assign(search, { searchActive: true, searchResults: [members[0]] });
+      Object.assign(mail, { sortedEmails: members, selectedThread: { emails: members }, selectedEmailIds: new Set(), activeMailbox: 'INBOX', unreadOnly: false });
+      mail.getChatEmails.mockReturnValue(members);
+      mail.syncSelectedThread.mockClear();
+      const { container } = render(React.createElement(EmailList));
+      const threads = mail.syncSelectedThread.mock.lastCall[0];
+      expect([...threads.values()].find(thread => thread.subject === 'Shared conversation').emails.map(e => e.uid)).toEqual([1, 2]);
+      expect(container.querySelector('.explorer-summary').textContent).toContain('1 email');
+    } finally {
+      cleanup();
+      Object.assign(mail, previousMail);
+      Object.assign(settings, previousSettings);
+      Object.assign(search, previousSearch);
+      mail.getChatEmails.mockImplementation(previousChat);
+    }
   });
 });

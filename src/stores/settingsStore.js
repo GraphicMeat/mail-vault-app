@@ -88,6 +88,15 @@ export const DEFAULT_SHORTCUTS = {
 const normalizeSidebarLayout = layout => ['split', 'switcher'].includes(layout) ? layout : 'stacked';
 const normalizeSidebarDensity = density => density === 'compact' ? 'compact' : 'comfortable';
 const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].includes(location) ? location : 'avatar';
+const normalizeEmailListView = value => value === 'explorer' ? 'explorer' : 'list';
+const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(value) ? value : 'date';
+const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
+const normalizeExplorerPaths = value => Object.fromEntries(
+  Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
+    .filter(([key, path]) => key.length <= 2048 && Array.isArray(path) && path.length <= 6
+      && path.every(id => typeof id === 'string' && id.length <= 4096))
+    .slice(-100).map(([key, path]) => [key, [...path]])
+);
 
 export const _mergePersistedSettings = (persisted, current) => ({
   ...current,
@@ -95,6 +104,10 @@ export const _mergePersistedSettings = (persisted, current) => ({
   sidebarLayout: normalizeSidebarLayout(persisted?.sidebarLayout ?? current.sidebarLayout),
   sidebarDensity: normalizeSidebarDensity(persisted?.sidebarDensity ?? current.sidebarDensity),
   sidebarBackupStatusLocation: normalizeSidebarBackupStatusLocation(persisted?.sidebarBackupStatusLocation ?? current.sidebarBackupStatusLocation),
+  emailListView: normalizeEmailListView(persisted?.emailListView ?? current.emailListView),
+  explorerGrouping: normalizeExplorerGrouping(persisted?.explorerGrouping ?? current.explorerGrouping),
+  explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
+  explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -238,6 +251,10 @@ export const useSettingsStore = create(
       viewStyle: 'list', // 'list' | 'chat'
       emailListStyle: 'compact', // 'default' | 'compact'
       emailListGrouping: 'chronological', // 'chronological' | 'sender'
+      emailListView: 'list', // 'list' | 'explorer'
+      explorerGrouping: 'date', // 'date' | 'sender' | 'conversation'
+      explorerDateDepth: 'month',
+      explorerPaths: {},
       threadReaderLayout: 'timeline',
       threadSortOrder: 'oldest-first', // 'oldest-first' | 'newest-first'
       threadMode: 'grouped', // 'grouped' (one row per thread) | 'expandable' (thread row unfolds its replies) | 'flat' (no threading)
@@ -738,6 +755,15 @@ export const useSettingsStore = create(
       setViewStyle: (style) => set({ viewStyle: style }),
       setEmailListStyle: (style) => set({ emailListStyle: style }),
       setEmailListGrouping: (grouping) => set({ emailListGrouping: grouping }),
+      setEmailListView: value => set({ emailListView: normalizeEmailListView(value) }),
+      setExplorerGrouping: value => set({ explorerGrouping: normalizeExplorerGrouping(value) }),
+      setExplorerDateDepth: value => set({ explorerDateDepth: normalizeExplorerDateDepth(value) }),
+      setExplorerPath: (scope, path) => set(state => {
+        // Reinsert the touched scope so the bounded history evicts the oldest.
+        const paths = { ...state.explorerPaths };
+        delete paths[scope];
+        return { explorerPaths: normalizeExplorerPaths({ ...paths, [scope]: path }) };
+      }),
       setThreadReaderLayout: (layout) => set({ threadReaderLayout: layout }),
       setThreadSortOrder: (order) => set({ threadSortOrder: order }),
       setThreadMode: (mode) => set({ threadMode: mode }),
@@ -943,6 +969,10 @@ export const useSettingsStore = create(
           viewStyle: 'list',
           emailListStyle: 'compact',
           emailListGrouping: 'chronological',
+          emailListView: 'list',
+          explorerGrouping: 'date',
+          explorerDateDepth: 'month',
+          explorerPaths: {},
           threadReaderLayout: 'timeline',
           threadSortOrder: 'oldest-first',
           threadMode: 'grouped',

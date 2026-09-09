@@ -40,6 +40,8 @@
   "errors.imapPrefixed",
   "errors.imapTimeout",
   "errors.smtpPrefixed",
+  "explorer.date",
+  "explorer.name",
   "export.dialog.formatHtmlLabel",
   "export.dialog.formatImageLabel",
   "focus.min",

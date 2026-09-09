@@ -53,6 +53,16 @@ describe('buildThreads subject fallback', () => {
     expect([...threads.values()][0].emails).toHaveLength(2);
   });
 
+  it('can disable subject fallback for RFC-only conversation views', () => {
+    const emails = [
+      mk({ uid: 1, messageId: '<project-a@x>', subject: 'Project' }),
+      mk({ uid: 2, messageId: '<project-b@x>', subject: 'Re: Project' }),
+    ];
+
+    expect(buildThreads(emails, { subjectFallback: false }).size).toBe(2);
+    expect(buildThreads(emails).size).toBe(1);
+  });
+
   it('still threads via References chains regardless of subject', () => {
     const root = mk({ uid: 1, messageId: '<root@x>', subject: 'Topic' });
     const reply = mk({ uid: 2, messageId: '<r1@x>', subject: 'Totally different', references: ['<root@x>'] });

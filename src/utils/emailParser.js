@@ -558,9 +558,10 @@ function ancestryChain(email) {
  * 4. Return a Map of threadId → thread object
  *
  * @param {Array} emails - email objects with messageId, inReplyTo, references fields
+ * @param {{ subjectFallback?: boolean }} options - disable for RFC-only grouping
  * @returns {Map<string, { threadId, subject, emails[], lastDate, participants, unreadCount }>}
  */
-export function buildThreads(emails) {
+export function buildThreads(emails, { subjectFallback = true } = {}) {
   if (!emails || emails.length === 0) return new Map();
 
   // Step 1: union every id a message names — its own, its In-Reply-To and its
@@ -671,32 +672,38 @@ export function buildThreads(emails) {
   // Merge threads with same normalized subject if they have no RFC threading headers
   // Two-pass: first add all non-orphan threads, then merge orphans into canonical threads
   const mergedGroups = new Map();
-  const orphans = []; // [threadId, threadEmails][] — single-email threads without RFC headers
-
-  for (const [threadId, threadEmails] of threadGroups) {
-    const email = threadEmails[0];
-    // Chain length 1 means the message named no ancestor at all.
-    const hasRfcHeaders = chains.get(email).length > 1;
-    const isReplyLike = REPLY_PREFIX.test((email.subject || '').trim());
-
-    if (threadEmails.length === 1 && !hasRfcHeaders && isReplyLike) {
-      orphans.push([threadId, threadEmails]);
-    } else {
+  if (!subjectFallback) {
+    for (const [threadId, threadEmails] of threadGroups) {
       mergedGroups.set(threadId, [...threadEmails]);
     }
-  }
+  } else {
+    const orphans = []; // [threadId, threadEmails][] — single-email threads without RFC headers
 
-  // Second pass: merge reply-like orphans into canonical threads by subject (within same account)
-  for (const [threadId, threadEmails] of orphans) {
-    const key = threadIdToSubjectKey.get(threadId);
-    const canonicalThreadId = subjectToThreadId.get(key);
+    for (const [threadId, threadEmails] of threadGroups) {
+      const email = threadEmails[0];
+      // Chain length 1 means the message named no ancestor at all.
+      const hasRfcHeaders = chains.get(email).length > 1;
+      const isReplyLike = REPLY_PREFIX.test((email.subject || '').trim());
 
-    if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
-      mergedGroups.get(canonicalThreadId).push(...threadEmails);
-    } else {
-      // First orphan with this subject becomes the canonical target for future orphans
-      mergedGroups.set(threadId, [...threadEmails]);
-      subjectToThreadId.set(key, threadId);
+      if (threadEmails.length === 1 && !hasRfcHeaders && isReplyLike) {
+        orphans.push([threadId, threadEmails]);
+      } else {
+        mergedGroups.set(threadId, [...threadEmails]);
+      }
+    }
+
+    // Second pass: merge reply-like orphans into canonical threads by subject (within same account)
+    for (const [threadId, threadEmails] of orphans) {
+      const key = threadIdToSubjectKey.get(threadId);
+      const canonicalThreadId = subjectToThreadId.get(key);
+
+      if (canonicalThreadId !== threadId && mergedGroups.has(canonicalThreadId)) {
+        mergedGroups.get(canonicalThreadId).push(...threadEmails);
+      } else {
+        // First orphan with this subject becomes the canonical target for future orphans
+        mergedGroups.set(threadId, [...threadEmails]);
+        subjectToThreadId.set(key, threadId);
+      }
     }
   }
 

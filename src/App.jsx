@@ -383,6 +383,10 @@ function App() {
   // Every comparison goes through rowKey. Comparing the open message's id to a
   // bare `e.uid` is what made this do nothing at all in the unified inbox.
   const step = (delta) => {
+    if (useSettingsStore.getState().emailListView === 'explorer' && useSettingsStore.getState().viewStyle !== 'chat') {
+      window.dispatchEvent(new CustomEvent('mailvault:explorer-step', { detail: delta }));
+      return;
+    }
     const state = useMailStore.getState();
     const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = state;
     const spans = spansMailboxes(state);

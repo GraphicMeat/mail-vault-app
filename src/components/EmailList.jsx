@@ -21,6 +21,7 @@ import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatEmailDate, formatDateOnly } from '../utils/dateFormat';
 import { SearchBar } from './SearchBar';
+import { ExplorerView } from './ExplorerView';
 import { LEGEND_ENTRIES } from './email/stateLegend.jsx';
 import {
   RefreshCw,
@@ -38,6 +39,7 @@ import {
   MessageSquare,
   Users,
   Mail,
+  Network,
 } from 'lucide-react';
 import { BulkOperationsModal } from './BulkOperationsModal';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
@@ -154,6 +156,7 @@ function EmailListComponent({ stacked = false }) {
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const selectThread = useSelectionStore(s => s.selectThread);
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
+  const selectedThread = useSelectionStore(s => s.selectedThread);
   const toggleEmailSelection = useSelectionStore(s => s.toggleEmailSelection);
   const setEmailsSelected = useSelectionStore(s => s.setEmailsSelected);
   const clearSelection = useSelectionStore(s => s.clearSelection);
@@ -176,6 +179,11 @@ function EmailListComponent({ stacked = false }) {
 
   const emailListStyle = useSettingsStore(s => s.emailListStyle);
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
+  const emailListView = useSettingsStore(s => s.emailListView);
+  const setEmailListView = useSettingsStore(s => s.setEmailListView);
+  const isExplorer = emailListView === 'explorer';
+  const explorerContext = useMemo(() => ({ activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope }),
+    [activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope]);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
   const threadMode = useSettingsStore(s => s.threadMode);
   const emailRowHighlight = useSettingsStore(s => s.emailRowHighlight);
@@ -273,7 +281,7 @@ function EmailListComponent({ stacked = false }) {
   useEffect(() => { senderGroupsRef.current = senderGroups; }, [senderGroups]);
 
   useEffect(() => {
-    if (emailListGrouping !== 'sender') return;
+    if (isExplorer || emailListGrouping !== 'sender') return;
 
     const handleKeyDown = (e) => {
       if (e.defaultPrevented || ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -347,7 +355,7 @@ function EmailListComponent({ stacked = false }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [emailListGrouping, selectEmail]);
+  }, [isExplorer, emailListGrouping, selectEmail]);
 
   useEffect(() => {
     setFocusedRow(null);
@@ -450,8 +458,10 @@ function EmailListComponent({ stacked = false }) {
 
   // Fingerprint for thread computation — only merge INBOX + Sent for INBOX view
   const mergedEmails = useMemo(
-    () => searchActive ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
-    [searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
+    // Explorer search narrows the groups, while its reader retains all loaded
+    // conversation members. A search hit alone is not a complete thread pool.
+    () => searchActive && !isExplorer ? null : (activeMailbox === 'INBOX' ? getChatEmails() : sortedEmails),
+    [isExplorer, searchActive, getChatEmails, sortedEmails, sentEmails, activeMailbox]
   );
   // The `_accountId` stamps belong in the key. `threadedDisplay` matches cached
   // threads to rows by `accountId:uid`, and entering unified inbox swaps the
@@ -470,7 +480,7 @@ function EmailListComponent({ stacked = false }) {
   useEffect(() => {
     // Flat mode still builds threads when the marking mode needs them: they
     // answer "which rows are siblings", never "which rows group".
-    if (!mergedEmails || searchActive || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
+    if (isExplorer || !mergedEmails || searchActive || (threadMode === 'flat' && emailRowHighlight !== 'selection')) {
       setDeferredThreads(null);
       return;
     }
@@ -497,11 +507,11 @@ function EmailListComponent({ stacked = false }) {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
+  }, [isExplorer, mergedEmails, threadFingerprint, searchActive, viewMode, threadMode, emailRowHighlight, syncSelectedThread]);
 
   // Deferred sender grouping computation
   useEffect(() => {
-    if (emailListGrouping !== 'sender') {
+    if (isExplorer || emailListGrouping !== 'sender') {
       setSenderGroups(null);
       return;
     }
@@ -527,7 +537,7 @@ function EmailListComponent({ stacked = false }) {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, selectedEmailId]);
+  }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, selectedEmailId]);
 
   // ── Cached display-row builder ──
   // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
@@ -717,7 +727,7 @@ function EmailListComponent({ stacked = false }) {
     },
     getItemKey: getSenderItemKey,
     overscan: 5,
-    enabled: emailListGrouping === 'sender',
+    enabled: !isExplorer && emailListGrouping === 'sender',
   });
 
   const virtualizer = useVirtualizer({
@@ -726,7 +736,7 @@ function EmailListComponent({ stacked = false }) {
     estimateSize: () => ROW_HEIGHT,
     getItemKey: getChronoItemKey,
     overscan: 5,
-    enabled: emailListGrouping !== 'sender',
+    enabled: !isExplorer && emailListGrouping !== 'sender',
   });
 
   useEffect(() => { virtualizer.measure(); }, [virtualizer, ROW_HEIGHT]);
@@ -749,14 +759,14 @@ function EmailListComponent({ stacked = false }) {
 
   // Auto-load more emails when approaching the end of the loaded list
   useEffect(() => {
-    if (searchActive || loadingMore || !hasMoreEmails || viewMode === 'local') return;
+    if (isExplorer || searchActive || loadingMore || !hasMoreEmails || viewMode === 'local') return;
     const items = virtualizer.getVirtualItems();
     const lastVisible = items[items.length - 1];
     if (lastVisible && lastVisible.index >= threadedDisplay.length - 20) {
       const timer = setTimeout(() => { loadMoreEmails(); }, 100);
       return () => clearTimeout(timer);
     }
-  }, [virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
+  }, [isExplorer, virtualizer, threadedDisplay.length, hasMoreEmails, loadingMore, searchActive, viewMode, loadMoreEmails]);
 
   // Tracker verdicts for rows nobody has opened. The scan needs a body and the
   // header cache has none, so the glyph used to appear only on messages that
@@ -764,6 +774,7 @@ function EmailListComponent({ stacked = false }) {
   // Bodies already in the vault answer for free; this reads only what is on
   // screen, and only once per message.
   useEffect(() => {
+    if (isExplorer) return;
     const container = scrollContainerRef.current;
     let timer = null;
     const run = () => {
@@ -782,7 +793,7 @@ function EmailListComponent({ stacked = false }) {
     arm();
     container?.addEventListener('scroll', arm, { passive: true });
     return () => { clearTimeout(timer); container?.removeEventListener('scroll', arm); };
-  }, [virtualizer, threadedDisplay]);
+  }, [isExplorer, virtualizer, threadedDisplay]);
 
   // Idle memory trim — after scrolling settles, check pressure and trim if needed
   const scrollIdleTimerRef = useRef(null);
@@ -797,7 +808,8 @@ function EmailListComponent({ stacked = false }) {
       // which left the list permanently stuck when the chain died silently
       // (offline blip, aborted probe). loadMoreEmails self-guards against
       // double-entry via `loadingMore`.
-      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 20 * ROW_HEIGHT_DEFAULT) {
+      if (useSettingsStore.getState().emailListView !== 'explorer'
+        && container.scrollTop + container.clientHeight >= container.scrollHeight - 20 * ROW_HEIGHT_DEFAULT) {
         const { hasMoreEmails, loadingMore, viewMode, loadMoreEmails } = useMailStore.getState();
         if (hasMoreEmails && !loadingMore && viewMode !== 'local' && !useSearchStore.getState().searchActive) {
           loadMoreEmails();
@@ -933,10 +945,14 @@ function EmailListComponent({ stacked = false }) {
             </div>
           </div>
           <button type="button" data-testid="mail-search-toggle" onClick={e => {
+            if (isExplorer) {
+              e.currentTarget.closest('.mail-list')?.querySelector('[data-testid="explorer-search"]')?.focus();
+              return;
+            }
             if (searchActive) e.currentTarget.closest('.mail-list')?.querySelector('[data-testid="mail-search-input"]')?.focus();
             else setShowSearch(!showSearch);
           }}
-            aria-expanded={showSearch || searchActive} aria-controls="mail-search-panel"
+            aria-expanded={isExplorer ? undefined : showSearch || searchActive} aria-controls={isExplorer ? undefined : 'mail-search-panel'}
             className={`mail-toolbar-button shrink-0 ${showSearch || searchActive ? 'is-active' : ''}`}
             title={t('list.searchEmails')}>
             <Search size={16} /><span>{t('workspace.search')}</span>
@@ -971,24 +987,30 @@ function EmailListComponent({ stacked = false }) {
           title={unreadOnly ? t('list.showAllMessages') : t('list.showUnreadOnly')} aria-pressed={unreadOnly}>
           <Mail size={14} /><span>{t('workspace.unread')}</span>
         </button>
-        <button type="button" onClick={() => setEmailListGrouping(emailListGrouping === 'chronological' ? 'sender' : 'chronological')}
+        {!isExplorer && <button type="button" onClick={() => setEmailListGrouping(emailListGrouping === 'chronological' ? 'sender' : 'chronological')}
           className={`mail-toolbar-button ${emailListGrouping === 'sender' ? 'is-active' : ''}`}
           aria-pressed={emailListGrouping === 'sender'}
           title={emailListGrouping === 'sender' ? t('list.switchChronologicalView') : t('list.groupSender')}>
           <Users size={14} /><span>{t('workspace.senders')}</span>
-        </button>
-        {emailListGrouping !== 'sender' && (
+        </button>}
+        {!isExplorer && emailListGrouping !== 'sender' && (
           <select value={threadMode} onChange={e => setThreadMode(e.target.value)}
             aria-label={t('settings.appearance.threadMode')} title={t('settings.appearance.threadMode')}
             className="mail-thread-select" data-testid="thread-mode-toggle" data-thread-mode={threadMode}>
             {Object.entries(THREAD_MODE_LABEL).map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
           </select>
         )}
+        <div className="mail-list-view-switch" role="group" aria-label={t('explorer.view')}>
+          <button type="button" data-testid="mail-view-list" className="mail-toolbar-button" aria-pressed={!isExplorer}
+            onClick={() => setEmailListView('list')}><List size={14} /><span>{t('explorer.list')}</span></button>
+          <button type="button" data-testid="mail-view-explorer" className="mail-toolbar-button" aria-pressed={isExplorer}
+            onClick={() => { setEmailListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
+        </div>
       </div>
 
       {/* Search Bar */}
       <AnimatePresence>
-        {(showSearch || searchActive) && (
+        {!isExplorer && (showSearch || searchActive) && (
           <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
@@ -1008,7 +1030,7 @@ function EmailListComponent({ stacked = false }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="flex-1 overflow-y-auto min-h-0"
+        className={`flex-1 min-h-0 ${isExplorer ? 'flex flex-col overflow-hidden' : 'overflow-y-auto'}`}
       >
         {/* Pull-to-refresh indicator */}
         {(pullDistance > 0 || isRefreshing) && (
@@ -1026,7 +1048,30 @@ function EmailListComponent({ stacked = false }) {
             />
           </div>
         )}
-        {(loading && rowCount === 0) || showSkeleton ? (
+        {isExplorer ? (
+          <ExplorerView emails={searchActive ? searchResults : sortedEmails}
+            conversationEmails={mergedEmails || (searchActive ? searchResults : sortedEmails)}
+            context={explorerContext} rootLabel={searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox)}
+            unreadOnly={unreadOnly} selectedEmailIds={selectedEmailIds} getSelectionKey={selKey}
+            onSetSelection={setEmailsSelected} onOpenThread={selectThread} rowHeight={ROW_HEIGHT}
+            hasOpenThread={!!selectedThread} onThreadsChanged={syncSelectedThread}
+            onSelectEmail={email => selectEmail(selKey(email), email.source, email._mailbox)}
+            onSearchMailbox={() => { setEmailListView('list'); setShowSearch(true); }}
+            partial={!searchActive && windowIsPartial} hasMore={!searchActive && viewMode !== 'local' && hasMoreEmails}
+            loadingMore={loadingMore} loading={loading || showSkeleton} onLoadMore={loadMoreEmails} searchActive={searchActive}
+            renderEmail={email => {
+              const key = selKey(email);
+              return <RowComponent rowId={key} email={email} style={rowStyle}
+                isSelected={selectedEmailId === key} isRelated={relatedKeys.has(key)} isChecked={selectedEmailIds.has(key)}
+                onSelect={() => selectEmail(key, email.source, email._mailbox)}
+                onToggleSelection={() => setEmailsSelected([email], !selectedEmailIds.has(key))}
+                actions={{ ...rowActions, saveEmailLocally: () => saveEmailsLocally([email]) }}
+                unifiedInbox={unifiedInbox} accountColors={accountColors}
+                menuOpen={activeMenuRowId === key} onOpenMenu={openRowMenu} onCloseMenu={closeRowMenu}
+                onRequestDelete={requestRowDelete} isSaving={savingRowIds.has(key)} onStartSaving={startSaving} onStopSaving={stopSaving}
+                derivedFrom={searchActive ? searchResults : sortedEmails} />;
+            }} />
+        ) : (loading && rowCount === 0) || showSkeleton ? (
           /* Skeleton rows — lightweight placeholders during transitions */
           <div className="flex flex-col">
             {Array.from({ length: 12 }, (_, i) => (

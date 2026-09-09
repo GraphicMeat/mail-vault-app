@@ -1,0 +1,38 @@
+.mail-explorer { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: auto; color: var(--mail-text); background: var(--mail-bg); container-type: inline-size; }
+.mail-explorer > :not(.explorer-scroll) { flex-shrink: 0; }
+.explorer-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 10px 16px; padding: 10px 16px; background: var(--mail-surface); border-bottom: 1px solid var(--mail-border); }
+.explorer-controls label { display: flex; flex: 1; min-width: 100px; align-items: center; flex-wrap: wrap; gap: 5px 8px; color: var(--mail-text-muted); font-size: 12px; }
+.explorer-controls select { min-width: 0; max-width: 100%; flex: 1; min-height: 30px; padding: 4px 7px; border: 1px solid var(--mail-border); border-radius: 6px; background: var(--mail-bg); color: var(--mail-text); font-size: 12px; }
+.explorer-breadcrumbs { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 7px 10px; border-bottom: 1px solid var(--mail-border); }
+.explorer-crumb { min-width: 0; max-width: 100%; padding: 5px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; font-size: 12px; color: var(--mail-text-muted); }
+.explorer-crumb[aria-current] { color: var(--mail-text); }
+.explorer-crumb:hover { background: var(--mail-surface-hover); }
+.explorer-search { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 16px; color: var(--mail-text-muted); border-bottom: 1px solid var(--mail-border); }
+.explorer-search input { flex: 1; min-width: 80px; width: 0; min-height: 28px; border: 0; background: transparent; color: var(--mail-text); font-size: 12px; }
+.explorer-search input::placeholder { color: var(--mail-text-muted); }
+.explorer-mailbox-search { padding: 4px 0; text-align: left; font-size: 12px; color: var(--mail-accent-text); }
+.explorer-mailbox-search:hover { text-decoration: underline; }
+.explorer-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 16px; font-size: 12px; color: var(--mail-text-muted); border-bottom: 1px solid var(--mail-border); }
+.explorer-scroll { flex: 1 0 128px; min-height: 128px; overflow: auto; }
+.explorer-group-row { display: flex; align-items: center; gap: 12px; height: 64px; padding: 0 16px; border-bottom: 1px solid var(--mail-border); }
+.explorer-group-row:hover { background: var(--mail-surface-hover); }
+.explorer-group-row[data-selected] { background: var(--mail-accent-tint); }
+.explorer-group-row[data-selected] .explorer-group-meta { color: var(--mail-text-on-tint); }
+.explorer-group-open { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; align-self: stretch; text-align: left; }
+.explorer-group-copy { flex: 1; min-width: 0; }
+.explorer-group-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
+.explorer-group-meta { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; font-size: 12px; color: var(--mail-text-muted); }
+.explorer-sender-address { unicode-bidi: isolate; }
+.explorer-group-date { flex-shrink: 0; white-space: nowrap; font-size: 12px; color: var(--mail-text-muted); }
+.explorer-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 16px; border-top: 1px solid var(--mail-border); background: var(--mail-surface); color: var(--mail-text-muted); font-size: 12px; }
+.explorer-empty { padding: 28px 16px; color: var(--mail-text-muted); font-size: 14px; text-align: center; }
+.mail-list-view-switch { display: flex; margin-left: auto; border: 1px solid var(--mail-border); border-radius: 6px; padding: 2px; gap: 2px; }
+.mail-list-view-switch .mail-toolbar-button { min-height: 26px; }
+.mail-list-view-switch [aria-pressed="true"] { color: var(--mail-accent-text); background: var(--mail-accent-tint); }
+@container (max-width: 400px) {
+  .explorer-controls, .explorer-search, .explorer-summary, .explorer-group-row, .explorer-footer { padding-inline: 10px; }
+  .explorer-group-row, .explorer-group-open { gap: 8px; }
+  .explorer-group-date { display: none; }
+  .explorer-controls label { display: grid; }
+  .explorer-mailbox-search { flex-basis: 100%; }
+}
