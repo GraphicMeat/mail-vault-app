@@ -483,7 +483,7 @@ describe('Storage matrix diagnostics', function () {
     it('omits any backup mention when no backup location is configured', async function () {
       await switchToFolder(LUKE, 'Archive');
       expect(await browser.execute(() => {
-        const btn = document.querySelector('[data-testid="email-list-header"] button');
+        const btn = document.querySelector('.mail-list-toolbar button[aria-label="Select messages…"]');
         if (!btn) return false;
         btn.click();
         return true;
@@ -1138,11 +1138,12 @@ describe('Storage matrix diagnostics', function () {
   describe('unified inbox: delete, churn accounts, reload', function () {
     async function switchToUnified() {
       // "All Inboxes" is the sidebar's actual label (see connected-unified-inbox.test.js).
-      expect(await browser.execute(() => {
-        const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
+      await browser.waitUntil(() => browser.execute(() => {
+        const btn = [...document.querySelectorAll('[data-testid="all-inboxes-btn"]')]
+          .find(button => button.offsetHeight > 0);
         if (btn && btn.offsetHeight > 0) { btn.click(); return true; }
         return false;
-      })).toBe(true);
+      }), { timeout: 15_000, interval: 150, timeoutMsg: 'All Inboxes did not appear in the sidebar after reload' });
       await waitForEmails();
     }
 

@@ -63,11 +63,15 @@ const SURFACES = [
   },
 ];
 
-/** Does the Auto-Cleanup card on the Storage tab show its blurred fake preview? */
-const storageAutoCleanupLocked = () => browser.execute(() => {
+/** Free profiles see an upgrade explanation; paid profiles get rule controls. */
+const storageAutoCleanupState = () => browser.execute(() => {
   const card = document.querySelector('[data-testid="settings-auto-cleanup"]');
   if (!card) return null;
-  return !!card.querySelector('[aria-hidden="true"].pointer-events-none');
+  return {
+    premiumBadge: [...card.querySelectorAll('h4 span')].some(span => span.textContent.trim() === 'Premium'),
+    ruleControls: [...card.querySelectorAll('button')]
+      .some(button => button.textContent.trim() === 'Add Rule' && !button.disabled),
+  };
 });
 
 describe('Premium gates — what a subscription actually unlocks', function () {
@@ -99,9 +103,9 @@ describe('Premium gates — what a subscription actually unlocks', function () {
       });
     }
 
-    it('Storage blurs the Auto-Cleanup rules behind a Premium badge', async function () {
+    it('Storage keeps the Auto-Cleanup rules behind a Premium badge', async function () {
       await openTab('Storage');
-      expect(await storageAutoCleanupLocked()).toBe(true);
+      expect(await storageAutoCleanupState()).toEqual({ premiumBadge: true, ruleControls: false });
     });
   });
 
@@ -119,7 +123,7 @@ describe('Premium gates — what a subscription actually unlocks', function () {
 
     it('Storage shows the real Auto-Cleanup rules', async function () {
       await openTab('Storage');
-      expect(await storageAutoCleanupLocked()).toBe(false);
+      expect(await storageAutoCleanupState()).toEqual({ premiumBadge: false, ruleControls: true });
     });
   });
 

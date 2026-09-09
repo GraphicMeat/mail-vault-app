@@ -63,7 +63,7 @@ describe('Dovecot INBOX prefix', function () {
     [...document.querySelectorAll('[data-testid="email-row"]')].map(r => (r.textContent || '').trim()));
 
   const title = () => browser.execute(() =>
-    document.querySelector('[data-testid="mailbox-title"]')?.innerText || '');
+    document.querySelector('[data-testid="email-list-header"]')?.innerText || '');
 
   const clickFolder = (path) => browser.execute((p) => {
     const row = [...document.querySelectorAll('[data-testid="folder-row"]')]

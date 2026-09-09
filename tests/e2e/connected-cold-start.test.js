@@ -98,19 +98,11 @@ async function clickAccount(index) {
   return browser.execute((idx) => {
     const sidebar = document.querySelector('[data-testid="sidebar"]');
     if (!sidebar) return { clicked: false };
-    const circles = sidebar.querySelectorAll('div[class*="rounded-full"]');
-    const accounts = [];
-    for (const circle of circles) {
-      if (!circle.style.backgroundColor) continue;
-      const initial = circle.textContent.trim();
-      if (initial.length === 0 || initial.length > 2) continue;
-      const container = circle.closest('[class*="cursor-pointer"]') || circle.closest('button');
-      if (!container || container.offsetHeight === 0) continue;
-      accounts.push({ container, initial });
-    }
+    const accounts = [...sidebar.querySelectorAll('.sidebar-account-open')]
+      .filter(button => button.offsetHeight > 0);
     if (idx < accounts.length) {
-      accounts[idx].container.click();
-      return { clicked: true, title: accounts[idx].initial };
+      accounts[idx].click();
+      return { clicked: true, title: accounts[idx].textContent.trim() };
     }
     return { clicked: false };
   }, index);
@@ -131,16 +123,8 @@ async function getAccountCount() {
   return browser.execute(() => {
     const sidebar = document.querySelector('[data-testid="sidebar"]');
     if (!sidebar) return 0;
-    const circles = sidebar.querySelectorAll('div[class*="rounded-full"]');
-    let count = 0;
-    for (const circle of circles) {
-      if (!circle.style.backgroundColor) continue;
-      const initial = circle.textContent.trim();
-      if (initial.length === 0 || initial.length > 2) continue;
-      const container = circle.closest('[class*="cursor-pointer"]') || circle.closest('button');
-      if (container && container.offsetHeight > 0) count++;
-    }
-    return count;
+    return [...sidebar.querySelectorAll('.sidebar-account-open')]
+      .filter(button => button.offsetHeight > 0).length;
   });
 }
 

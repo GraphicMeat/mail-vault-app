@@ -62,6 +62,11 @@ describe('Default email app', function () {
       await openSettings();
       await clickSettingsNav('General');
       await clickSettingsNav('Behavior');
+      await browser.waitUntil(async () => (await row()) !== null, {
+        timeout: 10_000,
+        interval: 150,
+        timeoutMsg: 'Default mail status did not load from the backend',
+      });
     });
 
     after(async function () {

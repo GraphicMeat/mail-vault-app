@@ -10,6 +10,7 @@ import {
   waitForApp,
   openSettings,
   closeSettings,
+  clickSettingsNav,
 } from './helpers.js';
 
 describe('Connected Account Setup', function () {
@@ -67,7 +68,10 @@ describe('Connected Account Setup', function () {
       return false;
     }
 
-    await browser.pause(500);
+    // Account removal lives in Advanced; selecting an account opens Profile.
+    if (!(await clickSettingsNav('Advanced'))) {
+      throw new Error(`Could not open Advanced settings for ${email}`);
+    }
 
     const clickedRemove = await browser.execute(() => {
       for (const btn of document.querySelectorAll('[data-testid="settings-page"] button')) {

@@ -224,7 +224,7 @@ describe('Bulk delete everywhere', function () {
   async function switchToVaderArchive({ expectEmails = true } = {}) {
     const [, vaderEmail] = browser.mockAccounts.map(a => a.email);
 
-    expect(await clickSidebarItem(vaderEmail)).toBe(true);
+    await waitClick(() => clickSidebarItem(vaderEmail), 'Vader account did not appear in the sidebar after reload');
     try {
       await browser.waitUntil(sidebarHasArchive, { timeout: 8_000, interval: 300 });
     } catch {
@@ -299,9 +299,9 @@ describe('Bulk delete everywhere', function () {
   });
 
   it('checkmarks the rows a range selects', async function () {
-    // Header select-all checkbox opens the bulk modal at step 1.
+    // The list toolbar's selection button opens the bulk modal at step 1.
     expect(await browser.execute(() => {
-      const btn = document.querySelector('[data-testid="email-list-header"] button');
+      const btn = document.querySelector('.mail-list-toolbar button[aria-label="Select messages…"]');
       if (!btn) return false;
       btn.click();
       return true;
@@ -382,7 +382,7 @@ describe('Bulk delete everywhere', function () {
 
   it('minimizes to a bubble naming the folder and count', async function () {
     expect(await browser.execute(() => {
-      const btn = document.querySelector('[data-testid="email-list-header"] button');
+      const btn = document.querySelector('.mail-list-toolbar button[aria-label="Select messages…"]');
       if (!btn) return false;
       btn.click();
       return true;

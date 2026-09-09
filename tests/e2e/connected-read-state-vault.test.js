@@ -84,6 +84,7 @@ function invoke(cmd, args) {
 const rows = () => browser.execute(() =>
   [...document.querySelectorAll('[data-testid="email-row"]')].map((row) => ({
     text: (row.innerText || '').replace(/\s*\n\s*/g, ' | ').trim(),
+    subject: row.querySelector('[data-testid="row-subject"]')?.textContent.trim() || '',
     // The unread marker EmailRow/ThreadRow put on the row root.
     unread: row.classList.contains('bg-mail-surface'),
   })));
@@ -95,11 +96,9 @@ async function vaultFlags(accountId, mailbox, uid) {
   return light ? light.flags : null;
 }
 
-// Whole segment, not substring: the row text is "Sender 4 | Luke message 4 |
-// Jan 5", and "Luke message 4" is also inside "Luke message 41".
-const hasSubject = (text, subject) => text.split(' | ').includes(subject);
-
-const rowFor = async (subject) => (await rows()).find((r) => hasSubject(r.text, subject));
+// Compare the subject itself: layout whitespace must not affect row identity,
+// and "Luke message 4" must not match "Luke message 41".
+const rowFor = async (subject) => (await rows()).find((r) => r.subject === subject);
 
 /** Plain single-message rows the store holds, with what it believes about them. */
 const storeRows = (prefix) => browser.execute((p) => {

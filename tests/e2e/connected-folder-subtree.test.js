@@ -31,8 +31,10 @@ describe('Folder subtree listing', function () {
     [...document.querySelectorAll('[data-testid="email-row"]')]
       .map(r => (r.textContent || '').trim()));
 
-  const title = () => browser.execute(() =>
-    document.querySelector('[data-testid="mailbox-title"]')?.innerText || '');
+  const header = () => browser.execute(() => ({
+    title: document.querySelector('[data-testid="mailbox-title"]')?.innerText || '',
+    count: document.querySelector('[data-testid="email-list-count"]')?.innerText || '',
+  }));
 
   // The folder list arrives after the first messages do, so a click issued the
   // moment the app is up lands on nothing.
@@ -67,10 +69,10 @@ describe('Folder subtree listing', function () {
   });
 
   it('says the count covers a branch, not one folder', async function () {
-    // The heading itself, not the whole page — "6" appears all over a mail app.
-    const heading = await title();
-    expect(heading).toContain('Kunden');
-    expect(heading).toMatch(/6/);
+    // The count itself, not the whole header — its date range can contain 6.
+    const heading = await header();
+    expect(heading.title).toContain('Kunden');
+    expect(heading.count).toMatch(/^6\b/);
   });
 
   it('goes back to one folder when a leaf is opened', async function () {

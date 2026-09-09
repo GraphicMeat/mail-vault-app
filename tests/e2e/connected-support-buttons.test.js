@@ -13,7 +13,7 @@
  */
 
 import { waitForApp } from './helpers.js';
-import { MODAL } from './composeHelpers.js';
+import { MODAL, closeComposeHard } from './composeHelpers.js';
 
 const DIALOG = '[data-testid="bug-report-dialog"]';
 
@@ -24,29 +24,18 @@ describe('Sidebar support buttons', function () {
     await waitForApp();
   });
 
-  /** Click a footer button by its label — the sidebar renders plain buttons. */
+  /** Footer icons expose their names through accessible labels. */
   const clickFooter = (label) => browser.execute((needle) => {
     const sidebar = document.querySelector('[data-testid="sidebar"]');
     const btn = [...sidebar.querySelectorAll('button')]
-      .find(b => (b.textContent || '').trim() === needle);
+      .find(b => b.offsetHeight > 0 && (b.getAttribute('aria-label') || b.textContent || '').trim() === needle);
     if (!btn) return false;
     btn.click();
     return true;
   }, label);
 
   const closeCompose = async () => {
-    await browser.execute(() => {
-      const discard = [...document.querySelectorAll('button')]
-        .find(b => (b.textContent || '').trim() === 'Discard');
-      if (discard) discard.click();
-    });
-    // The discard confirmation is a second dialog; take its Discard too.
-    await browser.pause(300);
-    await browser.execute(() => {
-      const confirm = [...document.querySelectorAll('[role="dialog"] button, [role="alertdialog"] button')]
-        .find(b => (b.textContent || '').trim() === 'Discard');
-      if (confirm) confirm.click();
-    });
+    await closeComposeHard();
     await browser.waitUntil(async () => !(await $(MODAL).isExisting()),
       { timeout: 10_000, timeoutMsg: 'compose stayed open' });
   };
@@ -59,7 +48,8 @@ describe('Sidebar support buttons', function () {
   it('offers both support buttons in the sidebar footer', async function () {
     const labels = await browser.execute(() => {
       const sidebar = document.querySelector('[data-testid="sidebar"]');
-      return [...sidebar.querySelectorAll('button')].map(b => (b.textContent || '').trim());
+      return [...sidebar.querySelectorAll('button')].filter(b => b.offsetHeight > 0)
+        .map(b => (b.getAttribute('aria-label') || b.textContent || '').trim());
     });
     expect(labels).toContain('Report a bug');
     expect(labels).toContain('Refer a friend');

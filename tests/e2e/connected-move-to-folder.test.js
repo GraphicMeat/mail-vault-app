@@ -115,7 +115,7 @@ describe('Move to Folder', function () {
     const hasFilterInput = await browser.execute(() => {
       const input = document.querySelector('[data-testid="move-folder-search"]');
       if (input && input.offsetHeight > 0) return true;
-      const inputs = document.querySelectorAll('input');
+      const inputs = document.querySelectorAll('[data-testid="move-folder-search"]');
       for (const input of inputs) {
         if (input.offsetHeight > 0 &&
             ((input.getAttribute('placeholder') || '').toLowerCase().includes('filter') ||
@@ -154,7 +154,7 @@ describe('Move to Folder', function () {
     await browser.pause(800);
 
     let dropdownGone = await browser.execute(() => {
-      const inputs = document.querySelectorAll('input');
+      const inputs = document.querySelectorAll('[data-testid="move-folder-search"]');
       for (const input of inputs) {
         const ph = (input.getAttribute('placeholder') || '').toLowerCase();
         if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
@@ -174,7 +174,7 @@ describe('Move to Folder', function () {
       await browser.pause(800);
 
       dropdownGone = await browser.execute(() => {
-        const inputs = document.querySelectorAll('input');
+        const inputs = document.querySelectorAll('[data-testid="move-folder-search"]');
         for (const input of inputs) {
           const ph = (input.getAttribute('placeholder') || '').toLowerCase();
           if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
@@ -224,7 +224,7 @@ describe('Move to Folder', function () {
     await browser.pause(800);
 
     let closed = await browser.execute(() => {
-      const inputs = document.querySelectorAll('input');
+      const inputs = document.querySelectorAll('[data-testid="move-folder-search"]');
       for (const input of inputs) {
         const ph = (input.getAttribute('placeholder') || '').toLowerCase();
         if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {
@@ -244,7 +244,7 @@ describe('Move to Folder', function () {
       await browser.pause(800);
 
       closed = await browser.execute(() => {
-        const inputs = document.querySelectorAll('input');
+        const inputs = document.querySelectorAll('[data-testid="move-folder-search"]');
         for (const input of inputs) {
           const ph = (input.getAttribute('placeholder') || '').toLowerCase();
           if (input.offsetHeight > 0 && (ph.includes('filter') || ph.includes('folder'))) {

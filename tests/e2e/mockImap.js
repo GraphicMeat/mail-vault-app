@@ -1010,7 +1010,9 @@ export async function trackMailbox({ host, port }, mailbox) {
     const c = await connect();
     try {
       await c.mailboxOpen(mailbox);
-      await c.messageDelete(`${uidNext}:*`, { uid: true });
+      // '*' means the highest existing UID. With no additions it is below
+      // uidNext, and IMAP reverses the range, including an original fixture.
+      await c.messageDelete(`${uidNext}:4294967295`, { uid: true });
     } finally {
       await c.logout();
     }

@@ -23,6 +23,7 @@ import {
   waitForEmails,
   openSettings,
   closeSettings,
+  clickSettingsNav,
   pressKey,
 } from './helpers.js';
 
@@ -37,21 +38,10 @@ describe('Connected Features', function () {
   // Undo Send
   // ---------------------------------------------------------------------------
   describe('Undo Send', function () {
-    // Send Delay lives under General → Behavior → Sending; settings opens on
-    // another tab, so both hops are needed before the panel exists.
+    // Send Delay lives under Mail preferences → Behavior → Sending.
     async function openSendingSettings() {
       await openSettings();
-      for (const label of ['general', 'behavior']) {
-        await browser.execute((want) => {
-          for (const btn of document.querySelectorAll('[data-testid="settings-page"] button, [data-testid="settings-page"] [role="tab"]')) {
-            if ((btn.textContent || '').trim().toLowerCase() === want && btn.offsetHeight > 0) {
-              btn.click();
-              return;
-            }
-          }
-        }, label);
-        await browser.pause(300);
-      }
+      expect(await clickSettingsNav('Behavior')).toBe(true);
       await browser.waitUntil(
         async () => browser.execute(() => document.querySelector('[data-testid="settings-undo-send"]') !== null),
         { timeout: 10_000, interval: 250, timeoutMsg: 'Sending settings panel never appeared' },

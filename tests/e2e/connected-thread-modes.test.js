@@ -3,7 +3,7 @@
  *
  * `threadMode` decides what a conversation looks like in the list: one row
  * (grouped), one row that unfolds its replies in place (expandable), or no
- * threading at all (flat). The header button cycles them, so the whole feature
+ * threading at all (flat). The list toolbar's selector offers them, so the whole feature
  * is reachable without opening Settings — and each mode has a different row
  * shape, which is what this spec asserts.
  *
@@ -33,18 +33,19 @@ async function visibleRows() {
       + `${(r.textContent || '').trim().slice(0, 50)}`));
 }
 
-/** The mode the header button reports, or null when the button isn't there. */
+/** The mode the toolbar selector reports, or null when it isn't there. */
 const headerMode = () => browser.execute(() =>
   document.querySelector('[data-testid="thread-mode-toggle"]')?.getAttribute('data-thread-mode') ?? null);
 
-/** Cycle the mode the way a user does. */
-async function clickToggle() {
-  const clicked = await browser.execute(() => {
-    const btn = document.querySelector('[data-testid="thread-mode-toggle"]');
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  });
+/** Select a mode using the real toolbar control. */
+async function selectMode(mode) {
+  const clicked = await browser.execute(value => {
+    const select = document.querySelector('[data-testid="thread-mode-toggle"]');
+    if (!select || select.offsetHeight === 0) return false;
+    Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(select, value);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return select.value === value;
+  }, mode);
   expect(clicked).toBe(true);
 }
 
@@ -151,7 +152,7 @@ describe('Thread modes from the list header', function () {
   });
 
   it('expandable: the chevron unfolds the whole conversation without opening the thread', async function () {
-    await clickToggle();
+    await selectMode('expandable');
     await browser.waitUntil(
       async () => (await headerMode()) === 'expandable' && (await disclosure()) === 'false',
       {
@@ -215,7 +216,7 @@ describe('Thread modes from the list header', function () {
   });
 
   it('flat: every message is its own row', async function () {
-    await clickToggle();
+    await selectMode('flat');
     await browser.waitUntil(
       async () => {
         if ((await headerMode()) !== 'flat') return false;
@@ -239,8 +240,8 @@ describe('Thread modes from the list header', function () {
     expect(await anyDisclosure()).toBe(0);
   });
 
-  it('cycles back to grouped', async function () {
-    await clickToggle();
+  it('switches back to grouped', async function () {
+    await selectMode('grouped');
     await browser.waitUntil(
       async () => {
         if ((await headerMode()) !== 'grouped') return false;

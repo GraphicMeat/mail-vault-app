@@ -21,6 +21,7 @@ import {
   pressKey,
 } from './helpers.js';
 import { SEND_REFUSED_TO } from './mockImap.js';
+import { closeComposeHard } from './composeHelpers.js';
 
 const ALIAS = 'alias@mock.test';
 const OTHER_DOMAIN_ALIAS = 'hello@graphicmeat.com';
@@ -193,9 +194,10 @@ describe('Connected Send-As Alias', function () {
       // Reopening the tab must show the stored value, not an empty field.
       await clickSettingsNav('General');
       await clickSettingsNav('Accounts');
-      const shown = await browser.execute(() =>
-        document.querySelector('[data-testid="send-as-input"]')?.value || '');
-      expect(shown).toBe(ALIAS);
+      await browser.waitUntil(() => browser.execute(address =>
+        document.querySelector('[data-testid="send-as-input"]')?.value === address, ALIAS), {
+        timeout: 5000, interval: 100, timeoutMsg: 'Saved send-as address did not load when reopening Accounts',
+      });
     });
 
     it('disables Verify until the address is a plausible mailbox', async function () {
@@ -321,14 +323,23 @@ describe('Connected Send-As Alias', function () {
 
       await browser.execute(() => {
         const modal = document.querySelector('[data-testid="send-as-verify-modal"]');
-        modal?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        modal?.querySelector('button[aria-label="Close"]')?.click();
       });
-      await browser.pause(200);
+      await browser.waitUntil(() => browser.execute(() =>
+        !document.querySelector('[data-testid="send-as-verify-modal"]')), {
+        timeout: 5000, interval: 100, timeoutMsg: 'Verify dialog did not close',
+      });
       await closeSettings();
     });
   });
 
   describe('compose', function () {
+    beforeEach(async () => {
+      // The compose shortcut deliberately ignores typing in a focused input.
+      await browser.execute(() => document.activeElement?.blur());
+    });
+    afterEach(async () => { await closeComposeHard(); });
+
     /** The From `<select>`: every option plus which one is selected. */
     const fromSelect = () => browser.execute(() => {
       const el = document.querySelector('[data-testid="compose-from"]');

@@ -7,9 +7,9 @@ export default defineConfig({
     // tests/integration/** drives the mock IMAP server through imapflow —
     // hermetic but needs a cargo build, so it runs as its own tier:
     // `npm run test:integration`.
-    // `.claude/worktrees/**` holds checkouts of other branches — vitest would
+    // `.claude/worktrees/**` and `.worktrees/**` hold other checkouts — vitest would
     // otherwise run their (often stale) copies of this same suite.
-    exclude: ['tests/e2e/**', 'tests/integration/**', 'node_modules/**', '**/.claude/**'],
+    exclude: ['tests/e2e/**', 'tests/integration/**', '**/node_modules/**', '**/.claude/**', '**/.worktrees/**'],
     environmentMatchGlobs: [
       ['src/components/**', 'jsdom'],
     ],
