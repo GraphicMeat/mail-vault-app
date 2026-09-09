@@ -2,7 +2,12 @@ name: Nightly
 
 on:
   schedule:
-    - cron: '0 3 * * *'
+    # Target: a finished build before 08:00 in Lithuania (UTC+3 EEST / UTC+2 EET),
+    # i.e. before 05:00 UTC year-round. GitHub queues scheduled runs and the top of
+    # the hour is the worst slot: at '0 3' this job started 4h30m-4h50m late every
+    # time. An odd minute cuts the contention, and 23:47 UTC leaves room for the
+    # worst observed delay plus the ~16m build.
+    - cron: '47 23 * * *'
   workflow_dispatch:
     inputs:
       force:
