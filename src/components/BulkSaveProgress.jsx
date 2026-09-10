@@ -2,7 +2,8 @@ import { Button } from './ui/Button';
 import React, { useEffect } from 'react';
 import { useUiStore } from '../stores/uiStore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { HardDrive, Check, X, AlertCircle, Download, Upload } from 'lucide-react';
+import { HardDrive, Check, X, AlertCircle, Download, Upload, FolderSymlink } from 'lucide-react';
+import { mailboxLabel } from '../utils/imapUtf7';
 import { t as tr, t, useT   } from '../i18n/index.js';
 
 // Use targeted selectors to avoid re-rendering on every store change
@@ -11,6 +12,8 @@ const selectDismiss = (s) => s.dismissBulkProgress;
 const selectCancel = (s) => s.cancelArchive;
 const selectExportProgress = (s) => s.exportProgress;
 const selectDismissExport = (s) => s.dismissExportProgress;
+const selectMoveProgress = (s) => s.moveProgress;
+const selectDismissMove = (s) => s.dismissMoveProgress;
 
 export function BulkSaveProgress() {
   const bulkSaveProgress = useUiStore(selectProgress);
@@ -18,19 +21,24 @@ export function BulkSaveProgress() {
   const cancelArchive = useUiStore(selectCancel);
   const exportProgress = useUiStore(selectExportProgress);
   const dismissExportProgress = useUiStore(selectDismissExport);
+  const moveProgress = useUiStore(selectMoveProgress);
+  const dismissMoveProgress = useUiStore(selectDismissMove);
 
-  // Show archive progress or export/import progress (archive takes priority)
-  const activeProgress = bulkSaveProgress || exportProgress;
-  const isExportMode = !bulkSaveProgress && !!exportProgress;
+  // Show archive, move, or export/import progress (archive takes priority)
+  const activeProgress = bulkSaveProgress || moveProgress || exportProgress;
+  const mode = bulkSaveProgress ? 'archive'
+    : moveProgress ? 'move'
+      : (exportProgress?.mode || 'export');
+  const dismiss = { archive: dismissBulkProgress, move: dismissMoveProgress }[mode] || dismissExportProgress;
 
   return (
     <AnimatePresence>
       {activeProgress && (
         <BulkSaveProgressInner
           progress={activeProgress}
-          onDismiss={isExportMode ? dismissExportProgress : dismissBulkProgress}
-          onCancel={isExportMode ? null : cancelArchive}
-          mode={isExportMode ? (exportProgress.mode || 'export') : 'archive'}
+          onDismiss={dismiss}
+          onCancel={mode === 'archive' ? cancelArchive : null}
+          mode={mode}
         />
       )}
     </AnimatePresence>
@@ -56,6 +64,18 @@ const MODE_CONFIG = () => ({
     successLabel: tr('bulk.save.backupImported'),
     errorLabel: (n) => `Imported with ${n} error(s)`,
   },
+  move: {
+    icon: FolderSymlink,
+    activeLabel: tr('moveTo.moving'),
+    // The only label here that names its subject, so it reads off the progress
+    // object, and it is the same sentence the undo toast uses for this move.
+    successLabel: (p) => tr('undo.moved', {
+      count: p.completed,
+      folder: mailboxLabel(String(p.folder || '').split(/[./]/).pop()),
+    }),
+    // Unreachable: a failed move clears moveProgress and reports inline.
+    errorLabel: (n) => tr('settings.migration.emailsFailedCount', { count: n }),
+  },
 });
 
 function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive' }) {
@@ -64,7 +84,10 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
   // Treat as complete when all emails are processed, even if active flag is stale
   const isComplete = total > 0 && completed + errors >= total;
-  const config = MODE_CONFIG()[mode] || MODE_CONFIG().archive;
+  const base = MODE_CONFIG()[mode] || MODE_CONFIG().archive;
+  const config = typeof base.successLabel === 'function'
+    ? { ...base, successLabel: base.successLabel(progress) }
+    : base;
   const Icon = config.icon;
 
   // Same reasoning as BulkOperationProgress: quarter milestones and the
@@ -89,6 +112,8 @@ function BulkSaveProgressInner({ progress, onDismiss, onCancel, mode = 'archive'
   return (
     <motion.div
       key="bulk-save-progress"
+      data-testid="bulk-save-progress"
+      data-mode={mode}
       initial={{ y: 100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 100, opacity: 0 }}

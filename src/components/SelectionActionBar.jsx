@@ -31,7 +31,9 @@ export function SelectionActionBar() {
   // triggered it. null means the popover is closed.
   const [deleteMode, setDeleteMode] = useState(null);
   const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const [moveLeft, setMoveLeft] = useState(0);
   const moveButtonRef = useRef(null);
+  const barRef = useRef(null);
 
   const hasSelection = selectedEmailIds.size > 0;
 
@@ -99,6 +101,23 @@ export function SelectionActionBar() {
     }
   };
 
+  // The dropdown cannot live inside the bar's inner div: that div scrolls
+  // horizontally on a narrow window (`overflow-x-auto`), and per CSS an
+  // auto overflow-x makes overflow-y auto too, so the box above the bar was
+  // clipped away: it mounted, measured non-zero, and nothing on screen took
+  // the click. It hangs off the fixed wrapper instead, like the delete
+  // popover, and carries the Move button's own offset as its `left`.
+  const toggleMoveDropdown = () => {
+    if (showMoveDropdown) {
+      setShowMoveDropdown(false);
+      return;
+    }
+    const btn = moveButtonRef.current?.getBoundingClientRect();
+    const bar = barRef.current?.getBoundingClientRect();
+    setMoveLeft(btn && bar ? btn.left - bar.left : 0);
+    setShowMoveDropdown(true);
+  };
+
   const handleDelete = () => {
     setDeleteMode('server');
   };
@@ -148,6 +167,7 @@ export function SelectionActionBar() {
       {hasSelection && (
         <motion.div
           key="selection-bar"
+          ref={barRef}
           initial={{ y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
@@ -217,26 +237,15 @@ export function SelectionActionBar() {
                 <span className="text-xs font-medium">{t('selection.unarchive')}</span>
               </button>
             )}
-            <div className="relative">
-              <button
-                ref={moveButtonRef}
-                onClick={() => setShowMoveDropdown(v => !v)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-text-muted hover:bg-mail-surface-hover"
-                title={t('selection.moveFolder')}
-              >
-                <FolderSymlink size={15} />
-                <span className="text-xs font-medium">{t('selection.move')}</span>
-              </button>
-              {showMoveDropdown && (
-                <div className="absolute bottom-full mb-2 left-0">
-                  <MoveToFolderDropdown
-                    uids={[...selectedEmailIds]}
-                    onClose={() => setShowMoveDropdown(false)}
-                    anchorRect={null}
-                  />
-                </div>
-              )}
-            </div>
+            <button
+              ref={moveButtonRef}
+              onClick={toggleMoveDropdown}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-text-muted hover:bg-mail-surface-hover"
+              title={t('selection.moveFolder')}
+            >
+              <FolderSymlink size={15} />
+              <span className="text-xs font-medium">{t('selection.move')}</span>
+            </button>
             <button
               onClick={handleDelete}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg transition-colors text-mail-danger"
@@ -268,6 +277,16 @@ export function SelectionActionBar() {
               <X size={16} className="text-mail-text-muted" />
             </Button>
           </div>
+
+          {/* Move dropdown: a sibling of the scrolling bar, not a child of it */}
+          {showMoveDropdown && (
+            <div className="absolute bottom-full mb-2 pointer-events-auto" style={{ left: moveLeft }}>
+              <MoveToFolderDropdown
+                uids={[...selectedEmailIds]}
+                onClose={() => setShowMoveDropdown(false)}
+              />
+            </div>
+          )}
 
           {/* Delete confirmation popover — shared by both delete buttons, copy
               branches on which one was requested */}

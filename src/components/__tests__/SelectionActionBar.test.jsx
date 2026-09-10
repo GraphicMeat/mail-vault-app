@@ -259,6 +259,42 @@ describe('SelectionActionBar selection count', () => {
   });
 });
 
+// The bar's inner div scrolls horizontally on a narrow window
+// (`max-w-[calc(100vw-1.5rem)] overflow-x-auto`), and an auto overflow-x makes
+// overflow-y compute to auto as well, so a popover placed above the bar from
+// INSIDE that div is clipped away. It still mounts and still measures non-zero,
+// which is why every wait in the e2e suite stayed green while the button did
+// nothing on screen. The dropdown must hang off the fixed wrapper, like the
+// delete confirmation already does.
+describe('SelectionActionBar move dropdown', () => {
+  beforeEach(() => {
+    useMailStoreMock.setState({
+      selectedEmailIds: new Set([1, 2]),
+      archivedEmailIds: new Set(),
+      getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 2 })),
+      clearSelection: vi.fn(),
+    });
+  });
+  afterEach(() => cleanup());
+
+  it('opens the dropdown outside the bar\'s horizontal scroller', () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Move to folder'));
+
+    const dropdown = screen.getByTestId('move-dropdown');
+    expect(dropdown.closest('[class*="overflow-x"]')).toBe(null);
+  });
+
+  it('closes again on a second click', () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(screen.getByTitle('Move to folder'));
+    expect(screen.queryByTestId('move-dropdown')).not.toBe(null);
+
+    fireEvent.click(screen.getByTitle('Move to folder'));
+    expect(screen.queryByTestId('move-dropdown')).toBe(null);
+  });
+});
+
 describe('SelectionActionBar export', () => {
   const row = (uid, accountId, mailbox = 'INBOX') => ({ uid, subject: `m${uid}`, _accountId: accountId, _mailbox: mailbox });
 

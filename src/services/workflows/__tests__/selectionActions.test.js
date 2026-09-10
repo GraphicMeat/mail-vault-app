@@ -162,6 +162,9 @@ function primeStore(emails, selected) {
     selectedEmailIds: new Set(selected),
     selectedEmail: null,
     selectedEmailId: null,
+    // The move toast is store state that outlives a case by design (it stays
+    // 4s after the run finishes), so every case starts from nothing.
+    moveProgress: null,
     // The real one is a server round-trip; these workflows only use it to reconcile.
     loadEmails: vi.fn(),
     // Every case seeds the same uids in the same mailbox, so the memo
@@ -967,6 +970,52 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledTimes(1);
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [1], 'INBOX', 'Archive');
     onlyNumbersReachedTheWire();
+  });
+
+  // A move is several server round trips with nothing on screen: the rows
+  // vanish from the list at once and the run itself is invisible. Same tally
+  // shape as an archive, painted into the same bottom-right toast.
+  it('reports progress per group and finishes at the full count', async () => {
+    primeStore(seedThread(), []);
+    useMailStore.setState({
+      mailboxes: MAILBOXES,
+      sentEmails: [{
+        uid: 1, messageId: 's@mock', subject: 'Sent copy', flags: ['\\Seen'],
+        from: { address: 'me@mock.test' }, date: '2026-08-03T10:00:00Z',
+        _accountId: ACCOUNT.id, _fromSentFolder: true, _mailbox: 'Sent',
+      }],
+    });
+    const state = useMailStore.getState();
+    const keys = [state.emails[0], state.sentEmails[0]].map(e => selectionKey(e, state));
+
+    let midRun;
+    mockMoveEmails.mockImplementationOnce(() => {
+      midRun = useMailStore.getState().moveProgress;
+    });
+
+    await state.moveEmails(keys, 'Archive');
+
+    expect(midRun).toEqual({ total: 2, completed: 0, errors: 0, active: true, folder: 'Archive' });
+    expect(useMailStore.getState().moveProgress)
+      .toEqual({ total: 2, completed: 2, errors: 0, active: false, folder: 'Archive' });
+  });
+
+  it('clears the progress toast when a group fails, and still throws', async () => {
+    primeStore(seedThread(), []);
+    mockMoveEmails.mockRejectedValueOnce(new Error('MOVE refused'));
+
+    await expect(useMailStore.getState().moveEmails([1], 'Archive')).rejects.toThrow('MOVE refused');
+
+    expect(useMailStore.getState().moveProgress).toBe(null);
+  });
+
+  it('shows no progress toast for a selection that resolves to no group', async () => {
+    primeStore(seedThread(), []);
+
+    await useMailStore.getState().moveEmails(['no-such-account:INBOX:9'], 'Archive');
+
+    expect(mockMoveEmails).not.toHaveBeenCalled();
+    expect(useMailStore.getState().moveProgress).toBe(null);
   });
 });
 

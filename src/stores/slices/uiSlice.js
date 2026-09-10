@@ -31,6 +31,7 @@ export const createUiSlice = (set, get) => ({
   // Bulk save progress
   bulkSaveProgress: null, // { total, completed, errors, active }
   exportProgress: null, // { total, completed, active, mode: 'export'|'import' }
+  moveProgress: null, // { total, completed, errors, active, folder }
 
   // Bulk operations modal + session.
   // The session outlives the modal: closing the modal minimizes to
@@ -151,6 +152,7 @@ export const createUiSlice = (set, get) => ({
   dismissBulkProgress: () => {
     set({ bulkSaveProgress: null });
   },
+  dismissMoveProgress: () => set({ moveProgress: null }),
 
   // Clear error
   clearError: () => set({ error: null, errorType: 'error', errorTypeFor: null }),

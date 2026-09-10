@@ -1942,34 +1942,54 @@ export async function moveEmails(keys, targetMailbox) {
   // Where each group came from and where it landed — the destination uids
   // (COPYUID) included, which is what an undo addresses the moved copy by.
   const records = [];
-  for (const group of groups.values()) {
-    const account = await ensureFreshToken(group.account);
-    const record = (dstUids, extra) => ({
-      account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
-      srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
-      ...extra,
-    });
-    if (isGraphAccount(account)) {
-      // Addressed by a per-session message id, not a replayable uid: a
-      // journalled entry is something no later launch could act on, and there
-      // is no destination uid to hand an undo either.
-      await _graphMoveGroup(state, account, group, targetMailbox);
-      continue;
+  // A move across a big selection is several round trips with nothing on
+  // screen; same tally as saveEmailsLocally, painted into the same toast.
+  // ponytail: progress advances per (account, folder) group; chunk the uid list here if a single-folder move ever needs a live bar.
+  const tally = { total: [...groups.values()].reduce((n, g) => n + g.uids.length, 0), completed: 0, errors: 0 };
+  const paintMove = (active) => useMailStore.setState({ moveProgress: { ...tally, active, folder: targetMailbox } });
+  if (groups.size) paintMove(true);
+  try {
+    for (const group of groups.values()) {
+      const account = await ensureFreshToken(group.account);
+      const record = (dstUids, extra) => ({
+        account, accountId: group.accountId, from: group.mailbox, to: targetMailbox,
+        srcUids: group.uids, dstUids, messageIds: group.rows.map(r => r?.messageId || null),
+        ...extra,
+      });
+      if (isGraphAccount(account)) {
+        // Addressed by a per-session message id, not a replayable uid: a
+        // journalled entry is something no later launch could act on, and there
+        // is no destination uid to hand an undo either.
+        await _graphMoveGroup(state, account, group, targetMailbox);
+        tally.completed += group.uids.length;
+        paintMove(true);
+        continue;
+      }
+      // Same ordering as every other mutation: the journal is written before the
+      // round trip (the rows are about to leave the list, so a reload or a quit
+      // in between must not lose the intent) and cleared only after it.
+      await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      if (!useConnectivityStore.getState().online) {
+        console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
+        records.push(record(null, { deferred: true }));
+        tally.completed += group.uids.length;
+        paintMove(true);
+        continue;
+      }
+      const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
+      await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
+      // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
+      records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
+      tally.completed += group.uids.length;
+      paintMove(true);
     }
-    // Same ordering as every other mutation: the journal is written before the
-    // round trip (the rows are about to leave the list, so a reload or a quit
-    // in between must not lose the intent) and cleared only after it.
-    await db.queueOp({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
-    if (!useConnectivityStore.getState().online) {
-      console.log(`[moveEmails] offline — ${group.mailbox} → ${targetMailbox} journalled, replayOps will finish it`);
-      records.push(record(null, { deferred: true }));
-      continue;
-    }
-    const res = await api.moveEmails(account, group.uids, group.mailbox, targetMailbox);
-    await db.clearOps({ op: 'move', accountId: group.accountId, mailbox: group.mailbox, uids: group.uids, arg: { target: targetMailbox } });
-    // Null when the server reported no COPYUID (no UIDPLUS) — never a guess.
-    records.push(record(Array.isArray(res?.newUids) ? res.newUids : null));
+  } catch (e) {
+    // The dropdown reports the failure inline; a toast left mid-move would
+    // claim a run that is not happening and has no way to be dismissed.
+    useMailStore.setState({ moveProgress: null });
+    throw e;
   }
+  if (groups.size) paintMove(false);
 
   // Resolved rows only. A key nothing could place named no folder, so nothing
   // moved for it: taking its row off the list (or its tick off the selection)

@@ -222,16 +222,35 @@ describe('Selection Action Bar effects', function () {
   it('moves a selected row to another folder and drops it from the list', async function () {
     await ensureMoveTargets();
 
-    const [subject] = await pickSubjects(r => !r.archived);
-    expect(subject).toBeDefined();
+    const subjects = await pickSubjects(r => !r.archived, 2);
+    expect(subjects.length).toBe(2);
 
-    expect(await toggleRow(subject)).toBe(true);
+    for (const s of subjects) expect(await toggleRow(s)).toBe(true);
     expect(await clickBarButton('Move to folder')).toBe(true);
     await browser.waitUntil(
       async () => browser.execute(() =>
         document.querySelector('[data-testid="move-to-folder-dropdown"]')?.offsetHeight > 0),
       { timeout: 10_000, interval: 200, timeoutMsg: 'Move-to-folder dropdown never opened' },
     );
+
+    // The wait above is satisfied by a dropdown nothing can click: the bar's
+    // inner div scrolls horizontally, an auto overflow-x makes overflow-y auto
+    // too, and the box above the bar was clipped away while still mounting and
+    // still measuring non-zero. Only a hit test tells them apart, and it names
+    // whatever it hit instead, so the red points at the clipper.
+    const hit = await browser.execute(() => {
+      const dropdown = document.querySelector('[data-testid="move-to-folder-dropdown"]');
+      const option = dropdown && dropdown.querySelector('[data-testid="move-folder-option"]');
+      if (!option) return 'the dropdown listed no folder option';
+      const r = option.getBoundingClientRect();
+      const cx = Math.round(r.left + r.width / 2);
+      const cy = Math.round(r.top + r.height / 2);
+      const at = document.elementFromPoint(cx, cy);
+      if (!at) return `nothing at all sits at (${cx}, ${cy})`;
+      if (dropdown.contains(at)) return 'visible';
+      return `(${cx}, ${cy}) belongs to <${at.tagName.toLowerCase()} class="${String(at.getAttribute('class') || '')}">`;
+    });
+    expect(hit).toBe('visible');
 
     const picked = await browser.execute(() => {
       const dropdown = document.querySelector('[data-testid="move-to-folder-dropdown"]');
@@ -242,7 +261,23 @@ describe('Selection Action Bar effects', function () {
     });
     expect(picked).toBe('Archive');
 
-    await waitForRowGone(subject, `Row "${subject}" is still in the list after being moved`);
+    // A move is several round trips with the rows already gone from the list;
+    // the toast is the only thing that says it is happening. It stays 4s after
+    // completion, so a 100ms poll cannot miss it.
+    await browser.waitUntil(
+      async () => browser.execute(() => {
+        const el = document.querySelector('[data-testid="bulk-save-progress"][data-mode="move"]');
+        if (!el || !(el.offsetHeight > 0)) return false;
+        const r = el.getBoundingClientRect();
+        const at = document.elementFromPoint(Math.round(r.left + r.width / 2), Math.round(r.top + r.height / 2));
+        return !!at && el.contains(at);
+      }),
+      { timeout: 10_000, interval: 100, timeoutMsg: 'The move never reported progress on screen' },
+    );
+
+    for (const s of subjects) {
+      await waitForRowGone(s, `Row "${s}" is still in the list after being moved`);
+    }
   });
 
   // ── delete ───────────────────────────────────────────────────────────────
