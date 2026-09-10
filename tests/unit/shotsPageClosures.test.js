@@ -17,23 +17,27 @@ const SRC = readFileSync(resolve(HERE, '../../scripts/screenshots/shots.js'), 'u
  * waiting ten minutes to be told about it.
  */
 function pageClosures(src) {
-  const lines = src.split('\n');
   const found = [];
-  for (let i = 0; i < lines.length; i++) {
-    if (!lines[i].includes('browser.execute(')) continue;
-    let brace = 0;
-    let started = false;
-    const body = [];
-    for (let j = i; j < lines.length; j++) {
-      body.push(lines[j]);
-      brace += (lines[j].match(/\{/g) || []).length - (lines[j].match(/\}/g) || []).length;
-      if (lines[j].includes('{')) started = true;
-      if (started && brace <= 0) break;
+  const CALL = 'browser.execute(';
+  for (let at = src.indexOf(CALL); at !== -1; at = src.indexOf(CALL, at + 1)) {
+    // Walk to the call's own closing paren. A brace counter cannot find the
+    // end of `browser.execute(() => el?.click())` — there is no brace to
+    // count — so it reads on into the next block and reports whatever it
+    // finds there against this line.
+    let depth = 1;
+    let i = at + CALL.length;
+    for (; i < src.length && depth > 0; i++) {
+      if (src[i] === '(') depth++;
+      else if (src[i] === ')') depth--;
     }
-    const text = body.join('\n');
-    const inner = text.slice(0, text.lastIndexOf('}'));
+    // Only the callback is serialised; the arguments after it are host-side by
+    // design and `L(...)` is exactly how a label is meant to reach the page.
+    const args = src.slice(at + CALL.length, i - 1);
+    const brace = args.lastIndexOf('}');
+    const body = brace === -1 ? args : args.slice(0, brace);
+    const line = src.slice(0, at).split('\n').length;
     for (const token of ['L(', 'MARKERS', 'THREAD_NEEDLE']) {
-      if (inner.includes(token)) found.push(`line ${i + 1}: ${token}`);
+      if (body.includes(token)) found.push(`line ${line}: ${token}`);
     }
   }
   return found;
@@ -86,5 +90,16 @@ describe('shots.js page callbacks', () => {
       });
     `;
     expect(pageClosures(bad)).toEqual(['line 2: L(']);
+  });
+
+  // The shape that broke the scan: no braces to count, so the body ends at the
+  // call's closing paren or nowhere.
+  it('reads a brace-less callback, and reads no further than it', () => {
+    expect(pageClosures("await browser.execute(() => document.title = L('x'));"))
+      .toEqual(['line 1: L(']);
+    expect(pageClosures([
+      "await browser.execute(() => document.querySelector('[data-testid=\"x\"]')?.click());",
+      'await expectState((s) => s.text.includes(L(\'settings.colors.palette\')));',
+    ].join('\n'))).toEqual([]);
   });
 });
