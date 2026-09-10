@@ -107,8 +107,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 <link rel="stylesheet" href="/assets/features-page.css">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
@@ -178,7 +178,7 @@
     </div>
   </section>
 
-<div class="mv-feature-layout mv-wrap"><aside class="mv-feature-nav"><details open><summary>Browse features</summary><nav aria-label="Feature categories"><a href="#email-management">Email Management</a><a href="#threading">Threading</a><a href="#chat-view">Chat View</a><a href="#security">Security</a><a href="#storage">Storage</a><a href="#bulk-operations">Bulk Operations</a><a href="#multi-account">Multi-Account</a><a href="#customization">Customization</a><a href="#performance">Performance</a><a href="#premium">Premium</a></nav></details></aside><div class="mv-feature-content">  <!-- ============================================================ -->
+<div class="mv-feature-layout mv-wrap"><aside class="mv-feature-nav"><details open><summary>Browse features</summary><nav aria-label="Feature categories"><a href="#email-management">Email Management</a><a href="#threading">Threading</a><a href="#chat-view">Chat View</a><a href="#explorer">Explorer</a><a href="#insights">Insights</a><a href="#security">Security</a><a href="#storage">Storage</a><a href="#bulk-operations">Bulk Operations</a><a href="#multi-account">Multi-Account</a><a href="#customization">Customization</a><a href="#performance">Performance</a><a href="#premium">Premium</a></nav></details></aside><div class="mv-feature-content">  <!-- ============================================================ -->
   <!-- 1. Email Management (text left, image right) -->
   <!-- ============================================================ -->
   <section id="email-management" class="py-20 scroll-mt-32">
@@ -247,9 +247,9 @@
         </div>
         <!-- Screenshots: email list → sender grouped → expanded topic -->
         <div class="flex gap-3 justify-center">
-          <img src="screenshots/email-list-view-1440.webp" srcset="screenshots/email-list-view-720.webp 720w, screenshots/email-list-view-1440.webp 1440w, screenshots/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault email list view showing inbox with threaded conversations" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="screenshots/sender-grouped-view-1440.webp" srcset="screenshots/sender-grouped-view-720.webp 720w, screenshots/sender-grouped-view-1440.webp 1440w, screenshots/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault group by sender view showing emails organized by contact" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="screenshots/sender-grouped-expanded-1440.webp" srcset="screenshots/sender-grouped-expanded-720.webp 720w, screenshots/sender-grouped-expanded-1440.webp 1440w, screenshots/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault sender grouped view with expanded topic showing sent replies interleaved" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/email-list-view-720.webp 720w, /screenshots/email-list-view-1440.webp 1440w, /screenshots/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/email-list-view-light-1440.webp" srcset="/screenshots/email-list-view-light-720.webp 720w, /screenshots/email-list-view-light-1440.webp 1440w, /screenshots/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault email list view showing inbox with threaded conversations" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/sender-grouped-view-720.webp 720w, /screenshots/sender-grouped-view-1440.webp 1440w, /screenshots/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/sender-grouped-view-light-1440.webp" srcset="/screenshots/sender-grouped-view-light-720.webp 720w, /screenshots/sender-grouped-view-light-1440.webp 1440w, /screenshots/sender-grouped-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault group by sender view showing emails organized by contact" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/sender-grouped-expanded-720.webp 720w, /screenshots/sender-grouped-expanded-1440.webp 1440w, /screenshots/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/sender-grouped-expanded-light-1440.webp" srcset="/screenshots/sender-grouped-expanded-light-720.webp 720w, /screenshots/sender-grouped-expanded-light-1440.webp 1440w, /screenshots/sender-grouped-expanded-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault sender grouped view with expanded topic showing sent replies interleaved" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -263,7 +263,7 @@
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
-          <img src="screenshots/chat-view-thread-1440.webp" srcset="screenshots/chat-view-thread-720.webp 720w, screenshots/chat-view-thread-1440.webp 1440w, screenshots/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault threaded conversation view with emails stacked chronologically and quote folding" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/chat-view-thread-720.webp 720w, /screenshots/chat-view-thread-1440.webp 1440w, /screenshots/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/chat-view-thread-light-1440.webp" srcset="/screenshots/chat-view-thread-light-720.webp 720w, /screenshots/chat-view-thread-light-1440.webp 1440w, /screenshots/chat-view-thread-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault threaded conversation view with emails stacked chronologically and quote folding" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
         <!-- Text -->
         <div class="order-1 lg:order-2">
@@ -335,8 +335,8 @@
         </div>
         <!-- Screenshots side by side -->
         <div class="flex gap-4 justify-center">
-          <img src="screenshots/chat-view-1440.webp" srcset="screenshots/chat-view-720.webp 720w, screenshots/chat-view-1440.webp 1440w, screenshots/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault chat view showing topic list with conversation previews and unread counts" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="screenshots/chat-view-chat-1440.webp" srcset="screenshots/chat-view-chat-720.webp 720w, screenshots/chat-view-chat-1440.webp 1440w, screenshots/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault chat bubble view showing messaging-style email conversation with sender avatars" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/chat-view-720.webp 720w, /screenshots/chat-view-1440.webp 1440w, /screenshots/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/chat-view-light-1440.webp" srcset="/screenshots/chat-view-light-720.webp 720w, /screenshots/chat-view-light-1440.webp 1440w, /screenshots/chat-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault chat view showing topic list with conversation previews and unread counts" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/chat-view-chat-720.webp 720w, /screenshots/chat-view-chat-1440.webp 1440w, /screenshots/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/chat-view-chat-light-1440.webp" srcset="/screenshots/chat-view-chat-light-720.webp 720w, /screenshots/chat-view-chat-light-1440.webp 1440w, /screenshots/chat-view-chat-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault chat bubble view showing messaging-style email conversation with sender avatars" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -345,17 +345,119 @@
   <!-- ============================================================ -->
   <!-- 4. Security & Privacy (image left, icons right) -->
   <!-- ============================================================ -->
+  <!-- 4. Explorer (text left, image right) -->
+  <!-- ============================================================ -->
+  <section id="explorer" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl lamp-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Explorer</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            A second way through the same mailbox. Explorer folds the messages you already have into groups &mdash; by date, by sender, or by conversation &mdash; so you walk down into what you are looking for instead of scrolling past everything else.
+          </p>
+          <ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Browse by date, at month or day detail</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Browse by sender &mdash; every message from one person in one group</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Date &rarr; Conversation &mdash; a month opens into the threads inside it</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Every group shows how many messages it holds, how many are in your vault, and how many are unread</span>
+            </li></ul><details class="mv-feature-more"><summary>See all 8 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Search inside the group you are standing in, or jump straight out to a whole-mailbox search</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Tick a group to select every message in it, then archive, delete or export the lot</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Breadcrumbs remember where you were, per folder and per account, across a restart</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Keyboard: j and k step through groups and messages without leaving the list</span>
+            </li></ul></details>
+        </div>
+        <!-- Screenshot -->
+        <div class="flex justify-center">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/explorer-sender-720.webp 720w, /screenshots/explorer-sender-1440.webp 1440w, /screenshots/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/explorer-sender-light-1440.webp" srcset="/screenshots/explorer-sender-light-720.webp 720w, /screenshots/explorer-sender-light-1440.webp 1440w, /screenshots/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault Explorer grouping a mailbox by sender, each group showing message, vault and unread counts" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 5. Insights (image left, text right) -->
+  <!-- ============================================================ -->
+  <section id="insights" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Screenshot -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/insights-map-720.webp 720w, /screenshots/insights-map-1440.webp 1440w, /screenshots/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/insights-map-light-1440.webp" srcset="/screenshots/insights-map-light-720.webp 720w, /screenshots/insights-map-light-1440.webp 1440w, /screenshots/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault Insights sender map, with each correspondent drawn as a bubble sized by message count and placed by recency" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl lamp-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Insights</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            A picture of who you actually hear from. Insights reads the message headers already on your disk &mdash; who wrote, who you wrote to, and when &mdash; and draws three views of your correspondence. No bodies are read and nothing is uploaded.
+          </p>
+          <ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Sender map &mdash; every correspondent a bubble, sized by how much they write and placed by how recently</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Timeline &mdash; one lane per sender, with received and sent marks along a real time axis</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Activity &mdash; a calendar grid showing how busy each day was</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Click any bubble, lane or day to see the messages behind it and read them without leaving the page</span>
+            </li></ul><details class="mv-feature-more"><summary>See all 8 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Scope it by account, by date range &mdash; 30 days, 90 days, 12 months, or dates you pick &mdash; and by direction</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Hide likely automated senders in one tick, so newsletters stop crowding out people</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Says what it is based on: which folders are cached locally, and how much of the mailbox that covers</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">Built from local headers only &mdash; no cloud service, no account, and nothing leaves your machine</span>
+            </li></ul></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
   <section id="security" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshots -->
         <div class="flex flex-col gap-4 justify-center order-2 lg:order-1">
           <div class="flex gap-3 justify-center">
-            <img src="screenshots/link-safety-1440.webp" srcset="screenshots/link-safety-720.webp 720w, screenshots/link-safety-1440.webp 1440w, screenshots/link-safety-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault link safety detecting phishing links in spam emails with warning icons next to suspicious subjects" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
-            <img src="screenshots/link-safety-modal-1440.webp" srcset="screenshots/link-safety-modal-720.webp 720w, screenshots/link-safety-modal-1440.webp 1440w, screenshots/link-safety-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault suspicious link modal showing link text vs actual redirect destination" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/link-safety-720.webp 720w, /screenshots/link-safety-1440.webp 1440w, /screenshots/link-safety-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/link-safety-light-1440.webp" srcset="/screenshots/link-safety-light-720.webp 720w, /screenshots/link-safety-light-1440.webp 1440w, /screenshots/link-safety-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault link safety detecting phishing links in spam emails with warning icons next to suspicious subjects" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/link-safety-modal-720.webp 720w, /screenshots/link-safety-modal-1440.webp 1440w, /screenshots/link-safety-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/link-safety-modal-light-1440.webp" srcset="/screenshots/link-safety-modal-light-720.webp 720w, /screenshots/link-safety-modal-light-1440.webp 1440w, /screenshots/link-safety-modal-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="MailVault suspicious link modal showing link text vs actual redirect destination" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
           </div>
           <div class="flex justify-center">
-            <img src="screenshots/reply-to-mismatch-1440.webp" srcset="screenshots/reply-to-mismatch-720.webp 720w, screenshots/reply-to-mismatch-1440.webp 1440w, screenshots/reply-to-mismatch-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px" alt="MailVault sender details popover showing Reply-To address differs from sender — phishing detection" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 max-w-[540px] w-full" data-expandable-image width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/reply-to-mismatch-720.webp 720w, /screenshots/reply-to-mismatch-1440.webp 1440w, /screenshots/reply-to-mismatch-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px"><img src="/screenshots/reply-to-mismatch-light-1440.webp" srcset="/screenshots/reply-to-mismatch-light-720.webp 720w, /screenshots/reply-to-mismatch-light-1440.webp 1440w, /screenshots/reply-to-mismatch-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px" alt="MailVault sender details popover showing Reply-To address differs from sender — phishing detection" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 max-w-[540px] w-full" data-expandable-image width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <!-- Text -->
@@ -454,8 +556,8 @@
         <!-- Screenshot -->
         <div class="flex justify-center">
           <div class="flex flex-col gap-4 w-full max-w-lg">
-            <img src="screenshots/state-icons-1440.webp" srcset="screenshots/state-icons-720.webp 720w, screenshots/state-icons-1440.webp 1440w, screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault inbox showing per-message state icons for server-only, archived locally, and local-only emails" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="screenshots/settings-backup-1440.webp" srcset="screenshots/settings-backup-720.webp 720w, screenshots/settings-backup-1440.webp 1440w, screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault backup and restore settings with ZIP export, import, and MBOX export for Thunderbird or Apple Mail" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/state-icons-720.webp 720w, /screenshots/state-icons-1440.webp 1440w, /screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/state-icons-light-1440.webp" srcset="/screenshots/state-icons-light-720.webp 720w, /screenshots/state-icons-light-1440.webp 1440w, /screenshots/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault inbox showing per-message state icons for server-only, archived locally, and local-only emails" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/settings-backup-light-1440.webp" srcset="/screenshots/settings-backup-light-720.webp 720w, /screenshots/settings-backup-light-1440.webp 1440w, /screenshots/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault backup and restore settings with ZIP export, import, and MBOX export for Thunderbird or Apple Mail" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
       </div>
@@ -471,8 +573,8 @@
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
           <div class="flex flex-col gap-4 w-full max-w-lg">
-            <img src="screenshots/selection-dialog-1440.webp" srcset="screenshots/selection-dialog-720.webp 720w, screenshots/selection-dialog-1440.webp 1440w, screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault bulk selection dialog with date range picker, year shortcuts, and action buttons for archive, delete, or archive and delete" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image width="1440" height="928" decoding="async">
-            <img src="screenshots/archive-progress-1440.webp" srcset="screenshots/archive-progress-720.webp 720w, screenshots/archive-progress-1440.webp 1440w, screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault archive progress showing 3 of 66 emails downloaded with a cancel button" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/selection-dialog-720.webp 720w, /screenshots/selection-dialog-1440.webp 1440w, /screenshots/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/selection-dialog-light-1440.webp" srcset="/screenshots/selection-dialog-light-720.webp 720w, /screenshots/selection-dialog-light-1440.webp 1440w, /screenshots/selection-dialog-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault bulk selection dialog with date range picker, year shortcuts, and action buttons for archive, delete, or archive and delete" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/archive-progress-720.webp 720w, /screenshots/archive-progress-1440.webp 1440w, /screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/archive-progress-light-1440.webp" srcset="/screenshots/archive-progress-light-720.webp 720w, /screenshots/archive-progress-light-1440.webp 1440w, /screenshots/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault archive progress showing 3 of 66 emails downloaded with a cancel button" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <!-- Text -->
@@ -547,12 +649,12 @@
               <span class="text-slate-700 dark:text-slate-300">Per-account mailbox memory — remembers your last folder</span>
             </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">Sender insights — exchange history and frequency per contact</span>
+              <span class="text-slate-700 dark:text-slate-300">Sender panel — exchange history and frequency per contact, beside the message you are reading</span>
             </li></ul></details>
         </div>
         <!-- Screenshot -->
         <div class="flex justify-center">
-          <img src="screenshots/unified-inbox-1440.webp" srcset="screenshots/unified-inbox-720.webp 720w, screenshots/unified-inbox-1440.webp 1440w, screenshots/unified-inbox-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault unified inbox merging three accounts into one list with per-account avatar colours" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/unified-inbox-720.webp 720w, /screenshots/unified-inbox-1440.webp 1440w, /screenshots/unified-inbox-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/unified-inbox-light-1440.webp" srcset="/screenshots/unified-inbox-light-720.webp 720w, /screenshots/unified-inbox-light-1440.webp 1440w, /screenshots/unified-inbox-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault unified inbox merging three accounts into one list with per-account avatar colours" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -566,7 +668,7 @@
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
-          <img src="screenshots/settings-appearance-1440.webp" srcset="screenshots/settings-appearance-720.webp 720w, screenshots/settings-appearance-1440.webp 1440w, screenshots/settings-appearance-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault appearance settings with dark mode toggle, email viewer theme, and date and time format pickers" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-appearance-720.webp 720w, /screenshots/settings-appearance-1440.webp 1440w, /screenshots/settings-appearance-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/settings-appearance-light-1440.webp" srcset="/screenshots/settings-appearance-light-720.webp 720w, /screenshots/settings-appearance-light-1440.webp 1440w, /screenshots/settings-appearance-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVault appearance settings with dark mode toggle, email viewer theme, and date and time format pickers" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
         </div>
         <!-- Text -->
         <div class="order-1 lg:order-2">
@@ -761,11 +863,11 @@
             </li></ul></details>
           <!-- Screenshots: backup schedule → set hours → Time Capsule → tracker blocking → focus session -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 justify-items-center mt-6">
-            <img src="screenshots/premium-backup-schedule-1440.webp" srcset="screenshots/premium-backup-schedule-720.webp 720w, screenshots/premium-backup-schedule-1440.webp 1440w, screenshots/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="screenshots/premium-backup-hours-1440.webp" srcset="screenshots/premium-backup-hours-720.webp 720w, screenshots/premium-backup-hours-1440.webp 1440w, screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault backup schedule set to At set hours, with 07, 12 and 22 picked in the 24-hour grid" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="screenshots/premium-time-capsule-1440.webp" srcset="screenshots/premium-time-capsule-720.webp 720w, screenshots/premium-time-capsule-1440.webp 1440w, screenshots/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault Time Capsule showing a point-in-time snapshot of a mailbox" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="screenshots/premium-tracker-blocking-1440.webp" srcset="screenshots/premium-tracker-blocking-720.webp 720w, screenshots/premium-tracker-blocking-1440.webp 1440w, screenshots/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault email tracker blocking showing tracking pixels stripped from a message before it renders" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="screenshots/premium-focus-session-1440.webp" srcset="screenshots/premium-focus-session-720.webp 720w, screenshots/premium-focus-session-1440.webp 1440w, screenshots/premium-focus-session-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault focus session dialog with preset minutes, a custom minutes field and Start" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-backup-schedule-720.webp 720w, /screenshots/premium-backup-schedule-1440.webp 1440w, /screenshots/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/premium-backup-schedule-light-1440.webp" srcset="/screenshots/premium-backup-schedule-light-720.webp 720w, /screenshots/premium-backup-schedule-light-1440.webp 1440w, /screenshots/premium-backup-schedule-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault scheduled backup settings showing daily, weekly, and custom schedules with time-of-day control" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-backup-hours-720.webp 720w, /screenshots/premium-backup-hours-1440.webp 1440w, /screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/premium-backup-hours-light-1440.webp" srcset="/screenshots/premium-backup-hours-light-720.webp 720w, /screenshots/premium-backup-hours-light-1440.webp 1440w, /screenshots/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault backup schedule set to At set hours, with 07, 12 and 22 picked in the 24-hour grid" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-time-capsule-720.webp 720w, /screenshots/premium-time-capsule-1440.webp 1440w, /screenshots/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/premium-time-capsule-light-1440.webp" srcset="/screenshots/premium-time-capsule-light-720.webp 720w, /screenshots/premium-time-capsule-light-1440.webp 1440w, /screenshots/premium-time-capsule-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault Time Capsule showing a point-in-time snapshot of a mailbox" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-tracker-blocking-720.webp 720w, /screenshots/premium-tracker-blocking-1440.webp 1440w, /screenshots/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/premium-tracker-blocking-light-1440.webp" srcset="/screenshots/premium-tracker-blocking-light-720.webp 720w, /screenshots/premium-tracker-blocking-light-1440.webp 1440w, /screenshots/premium-tracker-blocking-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault email tracker blocking showing tracking pixels stripped from a message before it renders" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-focus-session-720.webp 720w, /screenshots/premium-focus-session-1440.webp 1440w, /screenshots/premium-focus-session-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/premium-focus-session-light-1440.webp" srcset="/screenshots/premium-focus-session-light-720.webp 720w, /screenshots/premium-focus-session-light-1440.webp 1440w, /screenshots/premium-focus-session-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault focus session dialog with preset minutes, a custom minutes field and Start" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <div class="flex justify-center">
@@ -904,8 +1006,21 @@
       // A thumbnail's srcset serves the variant that fits its slot (720w for the
       // narrow cards), which is far too small once the lightbox blows it up.
       // Always open the widest candidate instead.
+      // The screenshots are two sets now, light on the <img> and dark on a
+      // <source>. Reading the img's own srcset would enlarge the light shot
+      // over a dark page, so take the srcset of whichever source is matching.
+      function activeSrcset(el) {
+        var picture = el.closest('picture');
+        var sources = picture ? picture.querySelectorAll('source') : [];
+        for (var i = 0; i < sources.length; i++) {
+          var candidate = sources[i];
+          if (candidate.srcset && (!candidate.media || matchMedia(candidate.media).matches)) return candidate.srcset;
+        }
+        return el.getAttribute('srcset') || '';
+      }
+
       function hiRes(el) {
-        var best = (el.getAttribute('srcset') || '').split(',').reduce(function(a, c) {
+        var best = activeSrcset(el).split(',').reduce(function(a, c) {
           var p = c.trim().split(/\s+/), w = parseInt(p[1], 10);
           return p[0] && w > a.w ? { url: p[0], w: w } : a;
         }, { url: '', w: 0 });
@@ -933,6 +1048,6 @@
 
   <script defer src="/pricing-localize.js?v=20260905-savings"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

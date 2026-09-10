@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explorer et Statistiques — FAQ MailVault</title>
+  <meta name="description" content="Comment Explorer, dans MailVault, groupe une boîte aux lettres par date, par expéditeur ou par discussion, et ce que montrent les vues carte des expéditeurs, chronologie et activité d'Statistiques — les deux gratuits, les deux construits à partir du courrier déjà présent sur votre disque.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/fr/faq/explorer-and-insights.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/fr/faq/explorer-and-insights.html">
+  <meta property="og:title" content="Explorer et Statistiques — FAQ MailVault">
+  <meta property="og:description" content="Comment Explorer, dans MailVault, groupe une boîte aux lettres par date, par expéditeur ou par discussion, et ce que montrent les vues carte des expéditeurs, chronologie et activité d'Statistiques — les deux gratuits, les deux construits à partir du courrier déjà présent sur votre disque.">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="fr_FR">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Explorer et Statistiques — FAQ MailVault">
+  <meta name="twitter:description" content="Comment Explorer, dans MailVault, groupe une boîte aux lettres par date, par expéditeur ou par discussion, et ce que montrent les vues carte des expéditeurs, chronologie et activité d'Statistiques — les deux gratuits, les deux construits à partir du courrier déjà présent sur votre disque.">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce qu'Explorer ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Explorer est une seconde façon de parcourir le courrier que vous avez déjà. Au lieu d'une seule longue liste, il replie les messages du dossier courant en groupes dans lesquels vous pouvez descendre — par date, par expéditeur, ou par date puis discussion. Activez-le avec le contrôle Liste / Explorer au-dessus de la liste des messages ; rien n'est déplacé, copié ni reclassé, et revenir à Liste laisse tout tel quel. Chaque groupe vous dit ce qu'il contient avant même que vous l'ouvriez : combien de messages il contient, combien sont déjà enregistrés dans votre coffre, et combien ne sont pas lus. Ouvrez un groupe et les messages s'affichent exactement comme dans la liste habituelle, avec le même lecteur et les mêmes actions."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Puis-je voir tout ce qu'une personne m'a envoyé ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui — réglez Parcourir par sur Expéditeur. Chaque correspondant devient un groupe qui contient tous ses messages du dossier courant, les plus récents en premier, avec la date du plus récent sur la ligne. La case à cocher sur la ligne d'un groupe sélectionne tous ses messages d'un coup : « archiver tout ce que cette newsletter a jamais envoyé » tient en deux clics plutôt qu'un long clic-Maj. Cela vaut aussi pour la suppression et l'export."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que fait « Date → Discussion » ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Il ajoute un niveau d'imbrication. Le niveau supérieur reste les mois (ou les jours), mais en ouvrir un affiche les discussions qui ont eu lieu sur cette période plutôt que des messages isolés. Ouvrez une discussion pour la lire, ou utilisez Ouvrir la conversation complète pour la confier à la vue de conversation habituelle. C'est la vue pour retrouver quelque chose dont vous vous rappelez à peu près la date plutôt que l'expéditeur."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "La recherche fonctionne-t-elle toujours dans Explorer ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Oui, et cela fonctionne à deux niveaux. Le champ de recherche d'Explorer filtre le groupe où vous vous trouvez, ce qui est le moyen le plus rapide de retrouver un message dans un gros groupe d'expéditeur ou de mois. Si vous voulez plutôt toute la boîte aux lettres, Rechercher dans toute la boîte aux lettres revient à la liste et ouvre la recherche habituelle. Explorer retient aussi où vous en étiez. Votre groupement, votre précision de la date et le groupe que vous aviez ouvert sont conservés par dossier et par compte, et survivent à un redémarrage."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qu'est-ce qu'Statistiques ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Statistiques est une vue plein écran de vos correspondants, accessible depuis Statistiques dans la barre latérale. Il lit les en-têtes des messages que MailVault détient déjà sur votre disque — expéditeur, destinataires et dates — et les dessine de trois façons. La Carte des expéditeurs vous place au centre et dispose chaque correspondant autour de vous sous forme de bulle. L'aire d'une bulle correspond au nombre de messages que cette personne représente ; la distance au centre indique le temps écoulé depuis ses dernières nouvelles. Les personnes récentes et bavardes sont proches et grandes ; quelqu'un qui a écrit une fois, il y a des années, est loin et petit. Cliquez sur une bulle pour voir les messages correspondants et les lire sans quitter la page."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Que montrent les vues Chronologie et Activité ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Chronologie donne à chaque expéditeur une ligne le long d'un vrai axe du temps, avec des cercles pour les messages reçus et des losanges pour les messages envoyés. C'est la vue qui montre une relation qui commence, qui s'éteint, ou qui devient à sens unique. Zoomez entre les semaines, les jours et les messages individuels. Activité est une grille de calendrier, un carré par jour, teinté selon la quantité de courrier échangé ce jour-là. Cliquez sur un jour pour voir exactement ce qui est arrivé. Les trois vues partagent les mêmes contrôles en haut : quel compte, quelle période — 30 jours, 90 jours, 12 mois ou des dates que vous choisissez — et si vous regardez le courrier reçu, le courrier envoyé, ou les deux. Masquer les expéditeurs probablement automatisés retire les newsletters et les adresses no-reply du tableau en une case cochée."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Statistiques envoie-t-il mes e-mails quelque part ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Statistiques est entièrement construit à partir de données d'en-tête déjà stockées sur votre propre machine — les en-têtes en cache des dossiers que vous avez ouverts et les messages de votre coffre. Aucun corps de message n'est lu, aucune pièce jointe n'est touchée, et rien n'est envoyé à un service. Il n'y a pas de compte à créer et cela fonctionne sans connexion. Comme il ne peut décrire que le courrier présent sur cet appareil, Statistiques le dit clairement : une note de couverture sous les contrôles indique quels dossiers il a lus et quelle part de chacun est en cache local, pour qu'un mois d'apparence calme ne soit jamais pris pour un fait alors qu'il s'agit d'un trou."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Explorer et Statistiques font-ils partie de Premium ?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Non. Les deux sont gratuits, dans la version gratuite, sans compte ni connexion. Ils sont arrivés dans MailVault 2.13.0. Notez qu'Statistiques n'est pas la même chose que l'ancien panneau de l'expéditeur du volet de lecture, qui montre l'historique des échanges avec la personne qui a écrit le message ouvert. Celui-ci est toujours là et lui aussi gratuit ; Statistiques est la vue de toute la boîte aux lettres."
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Accueil",
+      "item": "https://mailvaultapp.com/fr/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/fr/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Stockage et votre coffre",
+      "item": "https://mailvaultapp.com/fr/faq/explorer-and-insights.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/fr/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/fr/#how-it-works">Comment ça marche</a><a href="/fr/features.html">Fonctionnalités</a><a href="/fr/pricing.html">Tarifs</a><a href="/fr/blog.html">Blog</a><a href="/fr/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, Français selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">Français</span><span class="mv-language-code" aria-hidden="true">FR</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/faq/explorer-and-insights.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/faq/explorer-and-insights.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/faq/explorer-and-insights.html" lang="fr" hreflang="fr" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/faq/explorer-and-insights.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/faq/explorer-and-insights.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/faq/explorer-and-insights.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/faq/explorer-and-insights.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/faq/explorer-and-insights.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/faq/explorer-and-insights.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/fr/get-started.html?plan=free">Télécharger</a>
+<details class="mv-mobile-menu">
+<summary>Menu</summary>
+<nav aria-label="Mobile navigation"><a href="/fr/#how-it-works">Comment ça marche</a><a href="/fr/features.html">Fonctionnalités</a><a href="/fr/pricing.html">Tarifs</a><a href="/fr/blog.html">Blog</a><a href="/fr/docs.html">Help</a><a href="/fr/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- Content -->
+  <main id="main" class="pt-32 pb-20">
+    <div class="mv-wrap mv-directory">
+
+      <nav aria-label="Fil d'Ariane" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/fr/" class="hover:text-primary-500 transition-colors">Accueil</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/fr/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Explorer et Statistiques</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Explorer et Statistiques</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Deux façons de regarder une boîte aux lettres que vous avez déjà : Explorer la groupe, Statistiques la met en graphiques. Les deux sont gratuites et ne lisent que ce qui se trouve sur votre disque.</p>
+
+      <div class="space-y-4">
+
+        <article id="what-is-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Qu'est-ce qu'Explorer ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Explorer est une seconde façon de parcourir le courrier que vous avez déjà. Au lieu d'une seule longue liste, il replie les messages du dossier courant en groupes dans lesquels vous pouvez descendre — par <strong>date</strong>, par <strong>expéditeur</strong>, ou par <strong>date puis discussion</strong>. Activez-le avec le contrôle <strong>Liste / Explorer</strong> au-dessus de la liste des messages ; rien n'est déplacé, copié ni reclassé, et revenir à Liste laisse tout tel quel.</p>
+              <p>Chaque groupe vous dit ce qu'il contient avant même que vous l'ouvriez : combien de messages il contient, combien sont déjà enregistrés dans votre coffre, et combien ne sont pas lus. Ouvrez un groupe et les messages s'affichent exactement comme dans la liste habituelle, avec le même lecteur et les mêmes actions.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/explorer-date-720.webp 720w, /screenshots/fr/explorer-date-1440.webp 1440w, /screenshots/fr/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/explorer-date-light-1440.webp" srcset="/screenshots/fr/explorer-date-light-720.webp 720w, /screenshots/fr/explorer-date-light-1440.webp 1440w, /screenshots/fr/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Explorer de MailVault groupant une boîte aux lettres par date, avec un groupe de mois indiquant le nombre de messages, le nombre dans le coffre et le nombre de non lus" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Parcourir par date : les mois, ou les jours si vous voulez un détail plus fin.</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-by-sender" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Puis-je voir tout ce qu'une personne m'a envoyé ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Oui — réglez <strong>Parcourir par</strong> sur <strong>Expéditeur</strong>. Chaque correspondant devient un groupe qui contient tous ses messages du dossier courant, les plus récents en premier, avec la date du plus récent sur la ligne.</p>
+              <p>La case à cocher sur la ligne d'un groupe sélectionne tous ses messages d'un coup : « archiver tout ce que cette newsletter a jamais envoyé » tient en deux clics plutôt qu'un long clic-Maj. Cela vaut aussi pour la suppression et l'export.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/explorer-sender-720.webp 720w, /screenshots/fr/explorer-sender-1440.webp 1440w, /screenshots/fr/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/explorer-sender-light-1440.webp" srcset="/screenshots/fr/explorer-sender-light-720.webp 720w, /screenshots/fr/explorer-sender-light-1440.webp 1440w, /screenshots/fr/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Explorer de MailVault groupé par expéditeur, avec un groupe par correspondant" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Parcourir par expéditeur : un groupe par correspondant, sélectionnable en bloc.</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-conversation" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Que fait « Date &rarr; Discussion » ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Il ajoute un niveau d'imbrication. Le niveau supérieur reste les mois (ou les jours), mais en ouvrir un affiche les <em>discussions</em> qui ont eu lieu sur cette période plutôt que des messages isolés. Ouvrez une discussion pour la lire, ou utilisez <strong>Ouvrir la conversation complète</strong> pour la confier à la vue de conversation habituelle.</p>
+              <p>C'est la vue pour retrouver quelque chose dont vous vous rappelez à peu près la date plutôt que l'expéditeur.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/explorer-conversation-720.webp 720w, /screenshots/fr/explorer-conversation-1440.webp 1440w, /screenshots/fr/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/explorer-conversation-light-1440.webp" srcset="/screenshots/fr/explorer-conversation-light-720.webp 720w, /screenshots/fr/explorer-conversation-light-1440.webp 1440w, /screenshots/fr/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Explorer de MailVault en mode date puis discussion, montrant les conversations groupées sous un mois" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Date &rarr; Discussion : les mois s'ouvrent sur les conversations qu'ils contiennent.</figcaption>
+            </figure>
+        </article>
+
+        <article id="searching-in-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">La recherche fonctionne-t-elle toujours dans Explorer ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Oui, et cela fonctionne à deux niveaux. Le champ de recherche d'Explorer filtre le groupe où vous vous trouvez, ce qui est le moyen le plus rapide de retrouver un message dans un gros groupe d'expéditeur ou de mois. Si vous voulez plutôt toute la boîte aux lettres, <strong>Rechercher dans toute la boîte aux lettres</strong> revient à la liste et ouvre la recherche habituelle.</p>
+              <p>Explorer retient aussi où vous en étiez. Votre groupement, votre précision de la date et le groupe que vous aviez ouvert sont conservés par dossier et par compte, et survivent à un redémarrage.</p>
+            </div>
+        </article>
+
+        <article id="what-is-insights" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Qu'est-ce qu'Statistiques ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Statistiques est une vue plein écran de vos correspondants, accessible depuis <strong>Statistiques</strong> dans la barre latérale. Il lit les en-têtes des messages que MailVault détient déjà sur votre disque — expéditeur, destinataires et dates — et les dessine de trois façons.</p>
+              <p>La <strong>Carte des expéditeurs</strong> vous place au centre et dispose chaque correspondant autour de vous sous forme de bulle. L'aire d'une bulle correspond au nombre de messages que cette personne représente ; la distance au centre indique le temps écoulé depuis ses dernières nouvelles. Les personnes récentes et bavardes sont proches et grandes ; quelqu'un qui a écrit une fois, il y a des années, est loin et petit.</p>
+              <p>Cliquez sur une bulle pour voir les messages correspondants et les lire sans quitter la page.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/insights-map-720.webp 720w, /screenshots/fr/insights-map-1440.webp 1440w, /screenshots/fr/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/insights-map-light-1440.webp" srcset="/screenshots/fr/insights-map-light-720.webp 720w, /screenshots/fr/insights-map-light-1440.webp 1440w, /screenshots/fr/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Carte des expéditeurs d'Statistiques dans MailVault, avec les correspondants dessinés en bulles dimensionnées selon le nombre de messages et placées selon la date du dernier contact" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">La carte des expéditeurs : l'aire de la bulle indique le volume, la distance le temps écoulé depuis le dernier message.</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-timeline-activity" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Que montrent les vues Chronologie et Activité ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p><strong>Chronologie</strong> donne à chaque expéditeur une ligne le long d'un vrai axe du temps, avec des cercles pour les messages reçus et des losanges pour les messages envoyés. C'est la vue qui montre une relation qui commence, qui s'éteint, ou qui devient à sens unique. Zoomez entre les semaines, les jours et les messages individuels.</p>
+              <p><strong>Activité</strong> est une grille de calendrier, un carré par jour, teinté selon la quantité de courrier échangé ce jour-là. Cliquez sur un jour pour voir exactement ce qui est arrivé.</p>
+              <p>Les trois vues partagent les mêmes contrôles en haut : quel compte, quelle période — 30 jours, 90 jours, 12 mois ou des dates que vous choisissez — et si vous regardez le courrier reçu, le courrier envoyé, ou les deux. <strong>Masquer les expéditeurs probablement automatisés</strong> retire les newsletters et les adresses no-reply du tableau en une case cochée.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/insights-timeline-720.webp 720w, /screenshots/fr/insights-timeline-1440.webp 1440w, /screenshots/fr/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/insights-timeline-light-1440.webp" srcset="/screenshots/fr/insights-timeline-light-720.webp 720w, /screenshots/fr/insights-timeline-light-1440.webp 1440w, /screenshots/fr/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Chronologie d'Statistiques dans MailVault, une ligne par expéditeur avec des repères de messages reçus et envoyés le long d'un axe du temps" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Chronologie : une ligne par expéditeur, reçus et envoyés marqués séparément.</figcaption>
+            </figure>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/insights-activity-720.webp 720w, /screenshots/fr/insights-activity-1440.webp 1440w, /screenshots/fr/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/fr/insights-activity-light-1440.webp" srcset="/screenshots/fr/insights-activity-light-720.webp 720w, /screenshots/fr/insights-activity-light-1440.webp 1440w, /screenshots/fr/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Calendrier d'activité d'Statistiques dans MailVault, une grille de jours teintés selon la quantité de courrier échangé" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Activité : une année de courrier d'un coup d'œil, un carré par jour.</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-privacy" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Statistiques envoie-t-il mes e-mails quelque part ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Non. Statistiques est entièrement construit à partir de données d'en-tête déjà stockées sur votre propre machine — les en-têtes en cache des dossiers que vous avez ouverts et les messages de votre coffre. Aucun corps de message n'est lu, aucune pièce jointe n'est touchée, et rien n'est envoyé à un service. Il n'y a pas de compte à créer et cela fonctionne sans connexion.</p>
+              <p>Comme il ne peut décrire que le courrier présent sur cet appareil, Statistiques le dit clairement : une note de couverture sous les contrôles indique quels dossiers il a lus et quelle part de chacun est en cache local, pour qu'un mois d'apparence calme ne soit jamais pris pour un fait alors qu'il s'agit d'un trou.</p>
+            </div>
+        </article>
+
+        <article id="insights-explorer-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorer et Statistiques font-ils partie de Premium ?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Non. Les deux sont gratuits, dans la version gratuite, sans compte ni connexion. Ils sont arrivés dans MailVault 2.13.0.</p>
+              <p>Notez qu'Statistiques n'est pas la même chose que l'ancien <strong>panneau de l'expéditeur</strong> du volet de lecture, qui montre l'historique des échanges avec la personne qui a écrit le message ouvert. Celui-ci est toujours là et lui aussi gratuit ; Statistiques est la vue de toute la boîte aux lettres.</p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/fr/faq.html" class="text-primary-500 hover:underline">Retour à tous les thèmes de la FAQ</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">D'autres questions ?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Poser une question sur GitHub
+          </a>
+          <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Nous contacter
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/fr/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/fr/use-cases.html">Use cases</a><a href="/fr/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/fr/mentioned-in.html">Mentions</a><a href="/fr/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Confidentialité</a><a href="/terms.html">Conditions</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
+</body>
+</html>

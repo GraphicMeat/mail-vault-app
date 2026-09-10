@@ -145,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -195,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -218,7 +218,7 @@
               MailVault는 IMAP 프로토콜로 메일 서버에 연결해 각 메일을 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일</a>로 내려받아 Mac이나 Linux 컴퓨터의 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식으로 저장합니다. 메일 하나가 디스크의 파일 하나입니다 — 사람이 읽을 수 있고, 이식 가능하며, 어떤 메일 클라이언트와도 호환됩니다. 메시지가 볼트에 들어오고 나면 서버 사본을 지워 공간을 비울 수 있고, 로컬 사본은 그대로입니다.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/archive-progress-1440.webp" srcset="/screenshots/ko/archive-progress-720.webp 720w, /screenshots/ko/archive-progress-1440.webp 1440w, /screenshots/ko/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="일괄 메일 백업이 진행 중인 MailVault 보관 진행 막대" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/archive-progress-720.webp 720w, /screenshots/ko/archive-progress-1440.webp 1440w, /screenshots/ko/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/archive-progress-light-1440.webp" srcset="/screenshots/ko/archive-progress-light-720.webp 720w, /screenshots/ko/archive-progress-light-1440.webp 1440w, /screenshots/ko/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="일괄 메일 백업이 진행 중인 MailVault 보관 진행 막대" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -242,7 +242,7 @@
               먼저 보관해 둔 것은 서버가 그 뒤에 무엇을 하든 손대지 않은 채 볼트에 남습니다 — 그것이 이 제품의 존재 이유 전부입니다. 보관하지 <em>않은</em> 것은 서버 사본과 함께 사라지므로, MailVault는 지우기 전에 메시지마다 그 상태를 각자의 행에 보여 줍니다. 서버에 있는지, 볼트에 있는지, 둘 다인지 말입니다. 안전한 길은 <strong>Archive &amp; Delete</strong>입니다. 각 메시지를 볼트로 복사하고 거기 있는지 확인한 뒤에야 서버에서 지웁니다.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/state-icons-1440.webp" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에만 있는 메일, 로컬에 보관된 메일, 로컬에만 있는 메일을 메시지마다 아이콘으로 표시한 MailVault 받은편지함" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/state-icons-720.webp 720w, /screenshots/ko/state-icons-1440.webp 1440w, /screenshots/ko/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/state-icons-light-1440.webp" srcset="/screenshots/ko/state-icons-light-720.webp 720w, /screenshots/ko/state-icons-light-1440.webp 1440w, /screenshots/ko/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="서버에만 있는 메일, 로컬에 보관된 메일, 로컬에만 있는 메일을 메시지마다 아이콘으로 표시한 MailVault 받은편지함" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -252,7 +252,7 @@
               MailVault는 메일을 모든 .eml 파일과 <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code>이 든 ZIP 아카이브로 내보냅니다. 이 manifest는 내부 ID가 아니라 이메일 주소로 메일과 계정을 이어 주므로, 백업을 다른 설치 환경으로도 그대로 옮길 수 있습니다. <strong>모든 메일</strong>을 내보낼지 <strong>보관된 것만</strong> 내보낼지 고를 수 있습니다. 가져오기는 몇 번을 해도 결과가 같습니다 — 로컬에 이미 있는 메일은 중복되지 않습니다. 백업에 아직 설정하지 않은 계정의 메일이 들어 있으면 MailVault가 그 계정을 자동으로 만들어 줍니다(설정에서 비밀번호만 다시 넣으면 됩니다).
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/settings-backup-1440.webp" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIP 내보내기와 가져오기, Thunderbird나 Apple Mail용 MBOX 내보내기가 있는 MailVault 백업·복원 설정" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-backup-720.webp 720w, /screenshots/ko/settings-backup-1440.webp 1440w, /screenshots/ko/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-backup-light-1440.webp" srcset="/screenshots/ko/settings-backup-light-720.webp 720w, /screenshots/ko/settings-backup-light-1440.webp 1440w, /screenshots/ko/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="ZIP 내보내기와 가져오기, Thunderbird나 Apple Mail용 MBOX 내보내기가 있는 MailVault 백업·복원 설정" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -265,7 +265,7 @@
               지정한 시각은 Time Machine처럼 다른 프로그램이 자체 일정으로 이미 사용하는 외장 드라이브의 볼트나 백업 사본을 위한 기능입니다. 그 드라이브가 비어 있는 시각을 고르세요. 선택한 시각이 왔을 때 MailVault가 다른 작업 중이면 그 회차는 나중에 따라잡지 않고 건너뛰며, 다음 실행은 그다음 선택한 시각입니다.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/premium-backup-hours-1440.webp" srcset="/screenshots/ko/premium-backup-hours-720.webp 720w, /screenshots/ko/premium-backup-hours-1440.webp 1440w, /screenshots/ko/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/premium-backup-hours-720.webp 720w, /screenshots/ko/premium-backup-hours-1440.webp 1440w, /screenshots/ko/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/premium-backup-hours-light-1440.webp" srcset="/screenshots/ko/premium-backup-hours-light-720.webp 720w, /screenshots/ko/premium-backup-hours-light-1440.webp 1440w, /screenshots/ko/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 백업 일정을 “지정한 시각에”로 설정하고 24시간 그리드에서 07, 12, 22를 선택한 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -310,6 +310,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

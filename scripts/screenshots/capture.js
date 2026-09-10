@@ -22,6 +22,16 @@ const SWIFT_BIN = join(HERE, '.windowid');
  */
 const LOCALE_DIR = process.env.SHOTS_LOCALE || 'en';
 
+/**
+ * Dark keeps the plain base name — every page on the site already points at it,
+ * and the app has shipped a dark default since the first capture. Light writes
+ * a `-light` sibling in the SAME directory rather than a `light/` subtree:
+ * `i18n.mjs`'s `localizeShot` only matches `/screenshots/<one-segment>`, so a
+ * nested path would silently stop being localized and every locale would serve
+ * the English light shot.
+ */
+const THEME_SUFFIX = process.env.SHOTS_THEME === 'light' ? '-light' : '';
+
 export const OUT_DIR = process.env.SHOTS_OUT
   || resolve(HERE, '../../website/screenshots', LOCALE_DIR === 'en' ? '' : LOCALE_DIR);
 
@@ -92,10 +102,30 @@ export function windowId(appName = 'MailVault', attempts = 4) {
  * Capture the app window to `<OUT_DIR>/<name>.png`.
  * `-o` drops the drop shadow, matching the existing screenshot set.
  */
+/**
+ * The byte size of the previous capture. Two DIFFERENT screens cannot produce
+ * byte-identical PNGs — when they do, the window is not being composited and
+ * `screencapture -l` is writing the same empty frame for every shot.
+ *
+ * It reports success either way, so nothing upstream notices: a whole sweep
+ * says "50 captured, 0 skipped" per locale and lands thousands of identical
+ * blank files. That has happened twice; the causes differ (the session showing
+ * `loginwindow`, a window on a Space that is not being drawn) and the tell is
+ * always the same, so check the tell rather than the cause.
+ */
+let previousBytes = 0;
+
 export function capture(name, { appName = 'MailVault' } = {}) {
-  const out = join(OUT_DIR, `${name}.png`);
+  const out = join(OUT_DIR, `${name}${THEME_SUFFIX}.png`);
   mkdirSync(dirname(out), { recursive: true });
   execFileSync('screencapture', ['-x', '-o', '-t', 'png', '-l', windowId(appName), out]);
+  const bytes = statSync(out).size;
+  if (bytes === previousBytes) {
+    throw new Error(`blank capture: ${name} is byte-identical to the previous shot (${bytes} B) — `
+      + 'the window is not being composited. Check `lsappinfo front`: a session showing '
+      + '`loginwindow` renders app windows to nothing, and screencapture still exits 0.');
+  }
+  previousBytes = bytes;
   console.log(`[shot] ${out}`);
   return out;
 }

@@ -36,8 +36,13 @@ const APP_LOCALE = appCode(LOCALE_DIR);
 
 // SHOTS_ONBOARDING=1 photographs the first-run tour instead of the app: no
 // mailbox is seeded and `onboardingComplete` stays false, so the tour renders
-// all six steps rather than the shortened replay someone with an account gets.
+// all seven steps rather than the shortened replay someone with an account gets.
 const ONBOARDING = process.env.SHOTS_ONBOARDING === '1';
+
+// SHOTS_THEME picks light or dark. The website serves both, so a full reshoot
+// runs every locale twice; dark keeps the existing paths and light writes a
+// `light/` subdirectory (scripts/screenshots/capture.js).
+const THEME = process.env.SHOTS_THEME === 'light' ? 'light' : 'dark';
 
 const { DEMO_ACCOUNTS } = demoScenarios(APP_LOCALE);
 
@@ -74,10 +79,33 @@ function seedFrontendSettings(accounts) {
         listPaneSize: 470,
         onboardingComplete: !ONBOARDING,
         sidebarCollapsed: false,
+        // "More ways to make MailVault yours" is a one-time toast that opens
+        // top-right on first launch and photobombs whatever is under it. It is
+        // gated on this flag, so seeding it is cheaper and steadier than
+        // clicking it away in every shot that follows.
+        appearanceOnboardingPromptSeen: true,
+        // The tracker panel derives its whole "found" summary from this map;
+        // without it the shot is a working feature reporting that it has never
+        // found anything.
+        trackerAlerts: {
+          'demo-html-200@primecut.studio': { count: 1, vendors: ['Mailchimp'] },
+          'demo-206@primecut.studio': { count: 2, vendors: ['SendGrid', 'HubSpot'] },
+          'demo-321@primecut.studio': { count: 1, vendors: ['Mailchimp'] },
+        },
         // `src/main.jsx` applies the persisted language before first paint, so
         // seeding it here IS "run the app in German" — no handle to drive, no
         // catalog to swap after boot, nothing for the first shot to race.
         language: APP_LOCALE,
+        // The appearance the marketing set is shot in. Every one of these is a
+        // non-default, so leaving one out silently reverts that surface to the
+        // store default and only the rendered PNG shows it.
+        viewStyle: 'list',            // Mail view: Email (not Chat)
+        layoutMode: 'three-column',   // Reading pane: Beside the list
+        sidebarLayout: 'stacked',     // Sidebar layout: Stacked
+        sidebarDensity: 'compact',    // Sidebar density: Compact
+        sidebarBackupStatusLocation: 'avatar', // Backup status: On avatar
+        emailListStyle: 'compact',    // Message rows: Two lines
+        threadMode: 'expandable',     // Conversations: Expandable
         // Without this the run photographs the upsell card instead of the
         // feature: hasPremiumAccess() reads the persisted profile, and a
         // packaged build cannot use the dev override.
@@ -127,6 +155,14 @@ function seedFrontendSettings(accounts) {
           ],
         } }),
       },
+    },
+    // Theme lives in its OWN persisted store, not in `mailvault-settings` —
+    // seeding only the settings key leaves every shot on the store defaults
+    // (dark / indigo), which is how the whole set came out indigo before.
+    // zustand defaults an absent `version` to 0, so 0 is what it must be here.
+    'mailvault-theme': {
+      version: 0,
+      state: { theme: THEME, palette: 'graphite' },
     },
   }, null, 2));
   console.log(`[shots] seeded ${path}`);

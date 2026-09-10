@@ -50,7 +50,7 @@
     .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <script type="application/ld+json">
+    <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Sí. Ajustes > General > Apariencia > Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. Seguir el puntero es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. Marcar lo que estoy leyendo le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Puedo cambiar el aspecto y la distribución de MailVault?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sí, en Ajustes › Apariencia. Tiene cuatro secciones: Colores, Distribución, Lectura y Fecha & hora. Cada elección se aplica a todas las cuentas y carpetas y se puede cambiar en cualquier momento. Colores contiene el modo claro u oscuro y la paleta de color — Índigo, una tinta fría con acentos índigo, o Grafito, neutros cálidos con un acento violeta suave. El contenido del correo tiene su propio ajuste de tema al lado, así que puedes mantener la app oscura y seguir leyendo los mensajes sobre blanco. Distribución es donde se da forma al espacio de trabajo: la vista de correo (una lista de mensajes o la vista de conversación estilo chat), el panel de lectura junto a la lista o debajo de ella, las filas de mensajes en dos líneas o en una línea, la barra lateral apilada / en secciones separadas / como selector de cuenta, su densidad cómoda o compacta, y si el distintivo de copia de una cuenta se sitúa en el avatar, al final de la fila, o se oculta. Lectura se ocupa de las conversaciones — Agrupadas contrae las respuestas en una sola fila, Desplegables las despliega en la lista, Desactivadas da a cada mensaje su propia fila — junto con el orden de los hilos, el tratamiento de las firmas, el resaltado de filas y el estilo de los botones de acción."
       }
     },
     {
@@ -137,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/getting-started.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/getting-started.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -187,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="Ruta de navegación" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -210,7 +218,7 @@
               MailVault es un cliente de correo de escritorio gratuito y de código abierto para macOS y Linux que guarda tus correos en una bóveda en tu propio disco. Se conecta a tus cuentas de correo por IMAP y guarda todos los mensajes como <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">archivos .eml estándar (RFC 5322)</a> en formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> en tu ordenador, lo que te da una copia de seguridad permanente y sin conexión, sin quedar atado a ningún proveedor.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/es/email-list-view-1440.webp" srcset="/screenshots/es/email-list-view-720.webp 720w, /screenshots/es/email-list-view-1440.webp 1440w, /screenshots/es/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Vista de lista de MailVault con la bandeja de entrada y las conversaciones agrupadas" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/email-list-view-720.webp 720w, /screenshots/es/email-list-view-1440.webp 1440w, /screenshots/es/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/email-list-view-light-1440.webp" srcset="/screenshots/es/email-list-view-light-720.webp 720w, /screenshots/es/email-list-view-light-1440.webp 1440w, /screenshots/es/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Vista de lista de MailVault con la bandeja de entrada y las conversaciones agrupadas" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -234,12 +242,26 @@
               Sí. Ajustes &rsaquo; General &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/es/list-highlight-hover-1440.webp" srcset="/screenshots/es/list-highlight-hover-720.webp 720w, /screenshots/es/list-highlight-hover-1440.webp 1440w, /screenshots/es/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault con el resaltado por defecto: el mensaje abierto lleva una banda teñida" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/list-highlight-hover-720.webp 720w, /screenshots/es/list-highlight-hover-1440.webp 1440w, /screenshots/es/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/list-highlight-hover-light-1440.webp" srcset="/screenshots/es/list-highlight-hover-light-720.webp 720w, /screenshots/es/list-highlight-hover-light-1440.webp 1440w, /screenshots/es/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault con el resaltado por defecto: el mensaje abierto lleva una banda teñida" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Seguir el puntero: las filas reaccionan al ratón y el mensaje abierto queda teñido.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/es/list-highlight-selection-1440.webp" srcset="/screenshots/es/list-highlight-selection-720.webp 720w, /screenshots/es/list-highlight-selection-1440.webp 1440w, /screenshots/es/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault marcando el mensaje abierto en gris firme y el resto de su conversación en un gris más claro" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/list-highlight-selection-720.webp 720w, /screenshots/es/list-highlight-selection-1440.webp 1440w, /screenshots/es/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/list-highlight-selection-light-1440.webp" srcset="/screenshots/es/list-highlight-selection-light-720.webp 720w, /screenshots/es/list-highlight-selection-light-1440.webp 1440w, /screenshots/es/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Lista de mensajes de MailVault marcando el mensaje abierto en gris firme y el resto de su conversación en un gris más claro" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Marcar lo que estoy leyendo: el puntero se queda quieto, el mensaje abierto queda relleno y su conversación, un tono más clara.</figcaption>
+            </figure>
+        </article>
+
+        <article id="change-the-layout" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">¿Puedo cambiar el aspecto y la distribución de MailVault?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Sí, en Ajustes &rsaquo; Apariencia. Tiene cuatro secciones: <strong>Colores</strong>, <strong>Distribución</strong>, <strong>Lectura</strong> y <strong>Fecha y hora</strong>. Cada elección se aplica a todas las cuentas y carpetas y se puede cambiar en cualquier momento.</p>
+              <p><strong>Colores</strong> contiene el modo claro u oscuro y la paleta de color &mdash; <em>Índigo</em>, una tinta fría con acentos índigo, o <em>Grafito</em>, neutros cálidos con un acento violeta suave. El contenido del correo tiene su propio ajuste de tema al lado, así que puedes mantener la app oscura y seguir leyendo los mensajes sobre blanco.</p>
+              <p><strong>Distribución</strong> es donde se da forma al espacio de trabajo: la vista de correo (una lista de mensajes o la vista de conversación estilo chat), el panel de lectura <em>junto a la lista</em> o <em>debajo</em> de ella, las filas de mensajes en <em>dos líneas</em> o en <em>una línea</em>, la barra lateral <em>apilada</em> / en <em>secciones separadas</em> / como <em>selector de cuenta</em>, su densidad <em>cómoda</em> o <em>compacta</em>, y si el distintivo de copia de una cuenta se sitúa <em>en el avatar</em>, al final de la fila, o se oculta.</p>
+              <p><strong>Lectura</strong> se ocupa de las conversaciones &mdash; <em>Agrupadas</em> contrae las respuestas en una sola fila, <em>Desplegables</em> las despliega en la lista, <em>Desactivadas</em> da a cada mensaje su propia fila &mdash; junto con el orden de los hilos, el tratamiento de las firmas, el resaltado de filas y el estilo de los botones de acción.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/es/settings-layout-720.webp 720w, /screenshots/es/settings-layout-1440.webp 1440w, /screenshots/es/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/es/settings-layout-light-1440.webp" srcset="/screenshots/es/settings-layout-light-720.webp 720w, /screenshots/es/settings-layout-light-1440.webp 1440w, /screenshots/es/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Sección Distribución de Apariencia en los Ajustes de MailVault, mostrando las opciones de panel de lectura, filas de mensajes, distribución de la barra lateral y densidad" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Ajustes &rsaquo; Apariencia &rsaquo; Distribución: panel de lectura, filas de mensajes, barra lateral y densidad en un mismo sitio.</figcaption>
             </figure>
         </article>
 
@@ -291,6 +313,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="ja" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explorerとメール分析 — MailVault FAQ</title>
+  <meta name="description" content="MailVaultのExplorerがメールボックスを日付・送信者・会話でどうグループ化するのか、そしてメール分析の送信者マップ、タイムライン、アクティビティが何を見せるのか — どちらも無料で、どちらもすでにディスクにあるメールから作られます。">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ja/faq/explorer-and-insights.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/ja/faq/explorer-and-insights.html">
+  <meta property="og:title" content="Explorerとメール分析 — MailVault FAQ">
+  <meta property="og:description" content="MailVaultのExplorerがメールボックスを日付・送信者・会話でどうグループ化するのか、そしてメール分析の送信者マップ、タイムライン、アクティビティが何を見せるのか — どちらも無料で、どちらもすでにディスクにあるメールから作られます。">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ja_JP">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Explorerとメール分析 — MailVault FAQ">
+  <meta name="twitter:description" content="MailVaultのExplorerがメールボックスを日付・送信者・会話でどうグループ化するのか、そしてメール分析の送信者マップ、タイムライン、アクティビティが何を見せるのか — どちらも無料で、どちらもすでにディスクにあるメールから作られます。">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Explorerとは何ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Explorerは、すでに手元にあるメールを通るもう一つの道です。一本の長い一覧のかわりに、いま開いているフォルダのメッセージを、降りていけるグループにまとめます — 日付ごと、送信者ごと、または日付、そして会話ごとに。切り替えはメッセージ一覧の上にある「一覧 / Explorer」のコントロールで行います。メッセージが移動・複製・整理し直されることはなく、一覧に戻せばすべて元のままです。どのグループも、開く前に中身を教えてくれます。含まれるメッセージの数、そのうち保管庫にすでに保存されている数、そして未読の数です。グループを開くと、中のメッセージは通常の一覧とまったく同じように表示され、同じ閲覧画面と同じ操作が使えます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "特定の相手から届いたメールをすべてまとめて見られますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい — 「分類方法」を「送信者」にしてください。相手ごとに一つのグループになり、いま開いているフォルダにあるその人のメッセージが新しい順に入って、行には一番新しいメッセージの日付が表示されます。グループ行のチェックボックスは中のメッセージを一度にすべて選択するので、「このニュースレターから届いたものを全部アーカイブする」が、長いShiftクリックではなく2クリックで済みます。削除と書き出しも同じです。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "「日付 → 会話」は何をするものですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "階層がもう一段深くなります。一番上は変わらず月（または日）ですが、開くとその期間にあった会話が並び、ばらばらのメッセージは出てきません。会話を開けばそのまま読めますし、「会話全体を開く」を使えば通常のスレッド表示に渡せます。誰が送ったかではなく、だいたいいつのことだったかで覚えているものを探すためのビューです。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Explorerでも検索は使えますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "はい、2つの段階で使えます。Explorer内の検索ボックスは、いま開いているグループを絞り込みます。大きな送信者グループや月グループの中から1通を探すには、これが一番速い方法です。メールボックス全体を対象にしたいときは、「メールボックス全体を検索」で一覧に戻り、通常の検索が開きます。Explorerはいた場所も覚えています。分類方法、日付の単位、開いていたグループが、フォルダごと・アカウントごとに保持され、再起動しても残ります。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メール分析とは何ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "メール分析は、誰とやり取りしているかを全画面で見るビューで、サイドバーのメール分析から開きます。MailVaultがすでにディスクに持っているメッセージのヘッダー — 送信者、宛先、日付 — を読み、3つの見せ方で描きます。送信者マップは自分を中央に置き、相手をバブルとして周りに並べます。バブルの面積はその人が占めるメッセージの数、中心からの距離は最後に連絡があってからの時間の長さです。最近よくやり取りする人は近く大きく、何年も前に一度だけ書いてきた人は遠く小さくなります。バブルをクリックすると、その裏にあるメッセージが表示され、ページを離れずに読めます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "タイムラインとアクティビティのビューは何を表示しますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "タイムラインは、送信者ごとに一本のレーンを実際の時間軸に沿って引き、受信したメッセージを丸、送信したメッセージをひし形で示します。関係が始まった時期、静かになった時期、一方通行になった時期が見えるのはこのビューです。週・日・個々のメッセージのあいだをズームできます。アクティビティは1日1マスのカレンダーで、その日に動いたメールの量に応じて濃淡がつきます。日をクリックすれば、その日に届いたものがそのまま確認できます。3つのビューは上部の同じコントロールを共有します。どのアカウントか、どの期間か — 30日、90日、12か月、または自分で選んだ日付 — そして受信したメール、送信したメール、その両方のどれを見るか。「自動送信と思われる送信者を非表示」にチェックを入れれば、ニュースレターやno-replyアドレスが図から外れます。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "メール分析はメールをどこかへ送信しますか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "いいえ。メール分析は、自分のマシンにすでに保存されているヘッダーのデータだけから作られます — 開いたことのあるフォルダのキャッシュ済みヘッダーと、保管庫にあるメッセージです。本文は読まれず、添付ファイルには触れず、どのサービスにも何もアップロードされません。作るアカウントもなく、ネットワークを切っていても動きます。この端末にあるメールしか説明できないため、メール分析はそのことをはっきり示します。コントロールの下にある範囲の注記が、どのフォルダを読んだか、それぞれどれだけがローカルにキャッシュされているかを挙げるので、静かに見える月が、実は欠けているだけなのに事実と取り違えられることはありません。"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Explorerとメール分析はPremiumの機能ですか？",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "いいえ。どちらも無料版に含まれ、アカウントもサインインも不要です。MailVault 2.13.0で登場しました。なお、メール分析は、閲覧ペインにある以前からの送信者パネルとは別のものです。送信者パネルは、開いているメッセージを書いた相手とのやり取りの履歴を表示します。そちらも引き続きあり、無料で使えます。メール分析はメールボックス全体を見るビューです。"
+      }
+    }
+  ]
+}
+  </script>
+
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "ホーム",
+      "item": "https://mailvaultapp.com/ja/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "FAQ",
+      "item": "https://mailvaultapp.com/ja/faq.html"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "保存場所と保管庫",
+      "item": "https://mailvaultapp.com/ja/faq/explorer-and-insights.html"
+    }
+  ]
+}
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/ja/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/ja/#how-it-works">仕組み</a><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/blog.html">ブログ</a><a href="/ja/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, 日本語 selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">日本語</span><span class="mv-language-code" aria-hidden="true">JA</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a data-i18n-abs href="/faq/explorer-and-insights.html" lang="en" hreflang="en" translate="no"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a data-i18n-abs href="/de/faq/explorer-and-insights.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a data-i18n-abs href="/fr/faq/explorer-and-insights.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a data-i18n-abs href="/es/faq/explorer-and-insights.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a data-i18n-abs href="/it/faq/explorer-and-insights.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a data-i18n-abs href="/ja/faq/explorer-and-insights.html" lang="ja" hreflang="ja" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a data-i18n-abs href="/ko/faq/explorer-and-insights.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a data-i18n-abs href="/zh/faq/explorer-and-insights.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a data-i18n-abs href="/pt-br/faq/explorer-and-insights.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/ja/get-started.html?plan=free">ダウンロード</a>
+<details class="mv-mobile-menu">
+<summary>メニュー</summary>
+<nav aria-label="Mobile navigation"><a href="/ja/#how-it-works">仕組み</a><a href="/ja/features.html">機能</a><a href="/ja/pricing.html">料金</a><a href="/ja/blog.html">ブログ</a><a href="/ja/docs.html">Help</a><a href="/ja/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- Content -->
+  <main id="main" class="pt-32 pb-20">
+    <div class="mv-wrap mv-directory">
+
+      <nav aria-label="パンくずリスト" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/ja/" class="hover:text-primary-500 transition-colors">ホーム</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="/ja/faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Explorerとメール分析</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Explorerとメール分析</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">すでに手元にあるメールボックスを見る2つの方法。Explorerはグループにまとめ、メール分析は図にします。どちらも無料で、どちらもディスクにあるものだけを読みます。</p>
+
+      <div class="space-y-4">
+
+        <article id="what-is-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorerとは何ですか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Explorerは、すでに手元にあるメールを通るもう一つの道です。一本の長い一覧のかわりに、いま開いているフォルダのメッセージを、降りていけるグループにまとめます — <strong>日付</strong>ごと、<strong>送信者</strong>ごと、または<strong>日付、そして会話</strong>ごとに。切り替えはメッセージ一覧の上にある<strong>一覧 / Explorer</strong>のコントロールで行います。メッセージが移動・複製・整理し直されることはなく、一覧に戻せばすべて元のままです。</p>
+              <p>どのグループも、開く前に中身を教えてくれます。含まれるメッセージの数、そのうち保管庫にすでに保存されている数、そして未読の数です。グループを開くと、中のメッセージは通常の一覧とまったく同じように表示され、同じ閲覧画面と同じ操作が使えます。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/explorer-date-720.webp 720w, /screenshots/ja/explorer-date-1440.webp 1440w, /screenshots/ja/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/explorer-date-light-1440.webp" srcset="/screenshots/ja/explorer-date-light-720.webp 720w, /screenshots/ja/explorer-date-light-1440.webp 1440w, /screenshots/ja/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVaultのExplorerがメールボックスを日付でグループ化し、月のグループにメッセージ数・保管庫の件数・未読数が表示されている画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">日付で分類: 月単位、細かく見たいときは日単位。</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-by-sender" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">特定の相手から届いたメールをすべてまとめて見られますか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>はい — <strong>分類方法</strong>を<strong>送信者</strong>にしてください。相手ごとに一つのグループになり、いま開いているフォルダにあるその人のメッセージが新しい順に入って、行には一番新しいメッセージの日付が表示されます。</p>
+              <p>グループ行のチェックボックスは中のメッセージを一度にすべて選択するので、「このニュースレターから届いたものを全部アーカイブする」が、長いShiftクリックではなく2クリックで済みます。削除と書き出しも同じです。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/explorer-sender-720.webp 720w, /screenshots/ja/explorer-sender-1440.webp 1440w, /screenshots/ja/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/explorer-sender-light-1440.webp" srcset="/screenshots/ja/explorer-sender-light-720.webp 720w, /screenshots/ja/explorer-sender-light-1440.webp 1440w, /screenshots/ja/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="送信者でグループ化されたMailVaultのExplorer。相手ごとに一つのグループが並んでいる画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">送信者で分類: 相手ごとに一つのグループ、まとめて選択できる。</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-conversation" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">「日付 &rarr; 会話」は何をするものですか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>階層がもう一段深くなります。一番上は変わらず月（または日）ですが、開くとその期間にあった<em>会話</em>が並び、ばらばらのメッセージは出てきません。会話を開けばそのまま読めますし、<strong>会話全体を開く</strong>を使えば通常のスレッド表示に渡せます。</p>
+              <p>誰が送ったかではなく、だいたいいつのことだったかで覚えているものを探すためのビューです。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/explorer-conversation-720.webp 720w, /screenshots/ja/explorer-conversation-1440.webp 1440w, /screenshots/ja/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/explorer-conversation-light-1440.webp" srcset="/screenshots/ja/explorer-conversation-light-720.webp 720w, /screenshots/ja/explorer-conversation-light-1440.webp 1440w, /screenshots/ja/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="日付から会話へとたどるモードのMailVaultのExplorer。月の下に会話がグループとしてまとめられている画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">日付 &rarr; 会話: 月を開くと、その中のスレッドが並ぶ。</figcaption>
+            </figure>
+        </article>
+
+        <article id="searching-in-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorerでも検索は使えますか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>はい、2つの段階で使えます。Explorer内の検索ボックスは、いま開いているグループを絞り込みます。大きな送信者グループや月グループの中から1通を探すには、これが一番速い方法です。メールボックス全体を対象にしたいときは、<strong>メールボックス全体を検索</strong>で一覧に戻り、通常の検索が開きます。</p>
+              <p>Explorerはいた場所も覚えています。分類方法、日付の単位、開いていたグループが、フォルダごと・アカウントごとに保持され、再起動しても残ります。</p>
+            </div>
+        </article>
+
+        <article id="what-is-insights" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メール分析とは何ですか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>メール分析は、誰とやり取りしているかを全画面で見るビューで、サイドバーの<strong>メール分析</strong>から開きます。MailVaultがすでにディスクに持っているメッセージのヘッダー — 送信者、宛先、日付 — を読み、3つの見せ方で描きます。</p>
+              <p><strong>送信者マップ</strong>は自分を中央に置き、相手をバブルとして周りに並べます。バブルの面積はその人が占めるメッセージの数、中心からの距離は最後に連絡があってからの時間の長さです。最近よくやり取りする人は近く大きく、何年も前に一度だけ書いてきた人は遠く小さくなります。</p>
+              <p>バブルをクリックすると、その裏にあるメッセージが表示され、ページを離れずに読めます。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/insights-map-720.webp 720w, /screenshots/ja/insights-map-1440.webp 1440w, /screenshots/ja/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/insights-map-light-1440.webp" srcset="/screenshots/ja/insights-map-light-720.webp 720w, /screenshots/ja/insights-map-light-1440.webp 1440w, /screenshots/ja/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVaultのメール分析の送信者マップ。相手がバブルとして描かれ、大きさはメッセージ数を、位置はやり取りの新しさを表している画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">送信者マップ: バブルの面積はやり取りの量、距離は最後のメッセージからの時間。</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-timeline-activity" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">タイムラインとアクティビティのビューは何を表示しますか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p><strong>タイムライン</strong>は、送信者ごとに一本のレーンを実際の時間軸に沿って引き、受信したメッセージを丸、送信したメッセージをひし形で示します。関係が始まった時期、静かになった時期、一方通行になった時期が見えるのはこのビューです。週・日・個々のメッセージのあいだをズームできます。</p>
+              <p><strong>アクティビティ</strong>は1日1マスのカレンダーで、その日に動いたメールの量に応じて濃淡がつきます。日をクリックすれば、その日に届いたものがそのまま確認できます。</p>
+              <p>3つのビューは上部の同じコントロールを共有します。どのアカウントか、どの期間か — 30日、90日、12か月、または自分で選んだ日付 — そして受信したメール、送信したメール、その両方のどれを見るか。<strong>自動送信と思われる送信者を非表示</strong>にチェックを入れれば、ニュースレターやno-replyアドレスが図から外れます。</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/insights-timeline-720.webp 720w, /screenshots/ja/insights-timeline-1440.webp 1440w, /screenshots/ja/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/insights-timeline-light-1440.webp" srcset="/screenshots/ja/insights-timeline-light-720.webp 720w, /screenshots/ja/insights-timeline-light-1440.webp 1440w, /screenshots/ja/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVaultのメール分析のタイムライン。送信者ごとに一本のレーンがあり、時間軸に沿って受信と送信の印が並んでいる画面" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">タイムライン: 送信者ごとに一本のレーン、受信と送信は別々の印。</figcaption>
+            </figure>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/insights-activity-720.webp 720w, /screenshots/ja/insights-activity-1440.webp 1440w, /screenshots/ja/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ja/insights-activity-light-1440.webp" srcset="/screenshots/ja/insights-activity-light-720.webp 720w, /screenshots/ja/insights-activity-light-1440.webp 1440w, /screenshots/ja/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVaultのメール分析のアクティビティカレンダー。動いたメールの量に応じて濃淡のついた日のグリッド" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">アクティビティ: 1日1マスで、1年分のメールをひと目で。</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-privacy" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">メール分析はメールをどこかへ送信しますか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>いいえ。メール分析は、自分のマシンにすでに保存されているヘッダーのデータだけから作られます — 開いたことのあるフォルダのキャッシュ済みヘッダーと、保管庫にあるメッセージです。本文は読まれず、添付ファイルには触れず、どのサービスにも何もアップロードされません。作るアカウントもなく、ネットワークを切っていても動きます。</p>
+              <p>この端末にあるメールしか説明できないため、メール分析はそのことをはっきり示します。コントロールの下にある範囲の注記が、どのフォルダを読んだか、それぞれどれだけがローカルにキャッシュされているかを挙げるので、静かに見える月が、実は欠けているだけなのに事実と取り違えられることはありません。</p>
+            </div>
+        </article>
+
+        <article id="insights-explorer-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Explorerとメール分析はPremiumの機能ですか？</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>いいえ。どちらも無料版に含まれ、アカウントもサインインも不要です。MailVault 2.13.0で登場しました。</p>
+              <p>なお、メール分析は、閲覧ペインにある以前からの<strong>送信者パネル</strong>とは別のものです。送信者パネルは、開いているメッセージを書いた相手とのやり取りの履歴を表示します。そちらも引き続きあり、無料で使えます。メール分析はメールボックス全体を見るビューです。</p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="/ja/faq.html" class="text-primary-500 hover:underline">FAQのすべてのトピックに戻る</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">まだ疑問がありますか</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            GitHubで質問する
+          </a>
+          <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            お問い合わせ
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/ja/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/ja/use-cases.html">Use cases</a><a href="/ja/blog.html">ブログ</a><a href="/changelog.html">What’s new</a><a href="/ja/mentioned-in.html">Mentions</a><a href="/ja/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">プライバシー</a><a href="/terms.html">利用規約</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
+</body>
+</html>

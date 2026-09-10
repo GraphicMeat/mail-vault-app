@@ -50,7 +50,7 @@
     .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <script type="application/ld+json">
+    <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "FAQPage",
@@ -85,6 +85,14 @@
         "acceptedAnswer": {
           "@type": "Answer",
           "text": "Yes. Settings > General > Appearance > Highlighting offers two ways for the message list to show where you are. Follow the pointer is the default and works the way MailVault always has: a row lights up as the mouse passes over it, and the message you opened carries a tinted band. Mark what I'm reading turns that around: the pointer changes nothing, the open message is filled with a solid grey, and the other messages of the same conversation take a lighter grey, so a glance tells you both what you are reading and what it belongs to. Either option applies to every account and folder, and you can switch between them at any time."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I change how MailVault looks and lays out?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, in Settings › Appearance. It has four sections: Colors, Layout, Reading and Date & time. Every choice applies to all accounts and folders and can be changed at any time. Colors holds light or dark mode and the colour palette — Indigo, a cool ink with indigo accents, or Graphite, warm neutrals with a soft violet accent. Email content has its own theme setting beside it, so you can keep a dark app and still read messages on white. Layout is where the workspace is shaped: the mail view (a message list, or the chat-style conversation view), the reading pane beside the list or below it, message rows on two lines or a single line, the sidebar stacked / split / as an account switcher, its density comfortable or compact, and whether an account’s backup badge sits on the avatar, at the end of the row, or is hidden. Reading covers conversations — Grouped collapses replies into one row, Expandable unfolds them in the list, Off gives every message its own row — along with thread order, signature handling, row highlighting and action-button style."
         }
       },
       {
@@ -137,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/getting-started.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/getting-started.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -187,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -210,7 +218,7 @@
               MailVault is a free, open-source desktop email client for macOS and Linux that stores your emails in a vault on your own disk. It connects to your email accounts via IMAP and saves all messages as standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml files (RFC 5322)</a> in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your computer, giving you a permanent offline backup with no vendor lock-in.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/email-list-view-1440.webp" srcset="/screenshots/email-list-view-720.webp 720w, /screenshots/email-list-view-1440.webp 1440w, /screenshots/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault email list view showing inbox with threaded conversations" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/email-list-view-720.webp 720w, /screenshots/email-list-view-1440.webp 1440w, /screenshots/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/email-list-view-light-1440.webp" srcset="/screenshots/email-list-view-light-720.webp 720w, /screenshots/email-list-view-light-1440.webp 1440w, /screenshots/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault email list view showing inbox with threaded conversations" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -234,12 +242,26 @@
               Yes. Settings &rsaquo; General &rsaquo; Appearance &rsaquo; Highlighting offers two ways for the message list to show where you are. <strong>Follow the pointer</strong> is the default and works the way MailVault always has: a row lights up as the mouse passes over it, and the message you opened carries a tinted band. <strong>Mark what I&rsquo;m reading</strong> turns that around: the pointer changes nothing, the open message is filled with a solid grey, and the other messages of the same conversation take a lighter grey, so a glance tells you both what you are reading and what it belongs to. Either option applies to every account and folder, and you can switch between them at any time.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/list-highlight-hover-1440.webp" srcset="/screenshots/list-highlight-hover-720.webp 720w, /screenshots/list-highlight-hover-1440.webp 1440w, /screenshots/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault message list with the default highlighting: the open message carries a tinted band" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/list-highlight-hover-720.webp 720w, /screenshots/list-highlight-hover-1440.webp 1440w, /screenshots/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/list-highlight-hover-light-1440.webp" srcset="/screenshots/list-highlight-hover-light-720.webp 720w, /screenshots/list-highlight-hover-light-1440.webp 1440w, /screenshots/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault message list with the default highlighting: the open message carries a tinted band" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Follow the pointer: rows react to the mouse and the open message is tinted.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/list-highlight-selection-1440.webp" srcset="/screenshots/list-highlight-selection-720.webp 720w, /screenshots/list-highlight-selection-1440.webp 1440w, /screenshots/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault message list marking the open message in solid grey with the rest of its conversation a lighter grey" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/list-highlight-selection-720.webp 720w, /screenshots/list-highlight-selection-1440.webp 1440w, /screenshots/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/list-highlight-selection-light-1440.webp" srcset="/screenshots/list-highlight-selection-light-720.webp 720w, /screenshots/list-highlight-selection-light-1440.webp 1440w, /screenshots/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault message list marking the open message in solid grey with the rest of its conversation a lighter grey" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Mark what I&rsquo;m reading: the pointer is quiet, the open message is filled, and its conversation stays a step lighter.</figcaption>
+            </figure>
+        </article>
+
+        <article id="change-the-layout" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I change how MailVault looks and lays out?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Yes, in Settings &rsaquo; Appearance. It has four sections: <strong>Colors</strong>, <strong>Layout</strong>, <strong>Reading</strong> and <strong>Date &amp; time</strong>. Every choice applies to all accounts and folders and can be changed at any time.</p>
+              <p><strong>Colors</strong> holds light or dark mode and the colour palette &mdash; <em>Indigo</em>, a cool ink with indigo accents, or <em>Graphite</em>, warm neutrals with a soft violet accent. Email content has its own theme setting beside it, so you can keep a dark app and still read messages on white.</p>
+              <p><strong>Layout</strong> is where the workspace is shaped: the mail view (a message list, or the chat-style conversation view), the reading pane <em>beside the list</em> or <em>below</em> it, message rows on <em>two lines</em> or a <em>single line</em>, the sidebar <em>stacked</em> / <em>split</em> / as an <em>account switcher</em>, its density <em>comfortable</em> or <em>compact</em>, and whether an account’s backup badge sits <em>on the avatar</em>, at the end of the row, or is hidden.</p>
+              <p><strong>Reading</strong> covers conversations &mdash; <em>Grouped</em> collapses replies into one row, <em>Expandable</em> unfolds them in the list, <em>Off</em> gives every message its own row &mdash; along with thread order, signature handling, row highlighting and action-button style.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-layout-720.webp 720w, /screenshots/settings-layout-1440.webp 1440w, /screenshots/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/settings-layout-light-1440.webp" srcset="/screenshots/settings-layout-light-720.webp 720w, /screenshots/settings-layout-light-1440.webp 1440w, /screenshots/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Settings Appearance Layout section, showing reading pane, message rows, sidebar layout and density options" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Settings &rsaquo; Appearance &rsaquo; Layout: reading pane, message rows, sidebar and density in one place.</figcaption>
             </figure>
         </article>
 
@@ -291,6 +313,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

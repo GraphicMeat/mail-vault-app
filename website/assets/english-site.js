@@ -28,10 +28,21 @@
   const theme = document.querySelector('.mv-theme');
   function labelTheme() { theme?.setAttribute('aria-label', html.classList.contains('dark') ? 'Switch to light theme' : 'Switch to dark theme'); }
   labelTheme();
+  // Screenshots ship in a light and a dark set. `<source media="(prefers-color-
+  // scheme: dark)">` gets the first paint right with scripting off; the site's
+  // own toggle is a class on <html>, which no media query can see, so once this
+  // script knows the answer it overrules the query outright.
+  const shotSources = document.querySelectorAll('picture source[data-shot-dark]');
+  function syncShots() {
+    const dark = html.classList.contains('dark');
+    shotSources.forEach(source => { source.media = dark ? 'all' : 'not all'; });
+  }
+  syncShots();
   theme?.addEventListener('click', () => {
     html.classList.toggle('dark');
     try { localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light'; } catch { /* preference is optional */ }
     labelTheme();
+    syncShots();
   });
   document.querySelectorAll('.mv-navlinks a, .mv-mobile-menu nav a').forEach(link => {
     const target = new URL(link.href);
@@ -105,7 +116,14 @@
     const source = button.querySelector('img');
     previousFocus = button;
     const image = dialog.querySelector('img');
-    image.src = source.srcset.split(',').pop().trim().split(/\s+/)[0] || source.src;
+    // The thumbnail may be the light or the dark candidate. Reading the img's
+    // own srcset would enlarge the light shot over a dark page, so ask the
+    // <picture> which source is actually matching right now.
+    const picture = source.closest('picture');
+    const active = picture && [...picture.querySelectorAll('source')]
+      .find((candidate) => candidate.srcset && (!candidate.media || matchMedia(candidate.media).matches));
+    const set = (active && active.srcset) || source.srcset;
+    image.src = set.split(',').pop().trim().split(/\s+/)[0] || source.src;
     image.alt = source.alt;
     dialog.querySelector('p').textContent = source.alt;
     dialog.showModal();

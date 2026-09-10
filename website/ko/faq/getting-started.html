@@ -50,7 +50,7 @@
     .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <script type="application/ld+json">
+    <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "네. 설정 > 일반 > 모양 > 강조 표시에서 메시지 목록이 현재 위치를 보여 주는 방식을 두 가지 중에서 고를 수 있습니다. 포인터 따라가기가 기본값이며, MailVault가 지금까지 해 온 방식 그대로입니다. 마우스가 지나가는 줄이 밝아지고, 열어 둔 메시지에는 옅게 색이 깔린 띠가 남습니다. 읽고 있는 항목 표시는 이를 뒤집습니다. 포인터로는 아무것도 바뀌지 않고, 열린 메시지는 짙은 회색으로 채워지며, 같은 대화의 나머지 메시지는 연한 회색이 됩니다. 그래서 한눈에 무엇을 읽고 있는지, 그것이 어디에 속하는지 알 수 있습니다. 두 가지 모두 모든 계정과 폴더에 적용되고, 언제든지 서로 바꿀 수 있습니다."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "MailVault의 모양과 레이아웃을 바꿀 수 있습니까?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "예, 설정 › 모양에서 바꿉니다. 네 개의 섹션이 있습니다. 색상, 레이아웃, 읽기, 날짜 & 시간입니다. 모든 선택은 전체 계정과 폴더에 적용되며 언제든지 바꿀 수 있습니다. 색상에는 라이트 모드와 다크 모드, 그리고 색 팔레트가 있습니다 — 인디고는 인디고 강조색을 쓴 차가운 잉크 톤이고, 그래파이트는 부드러운 보라 강조색을 쓴 따뜻한 중성색입니다. 그 옆에는 메일 본문 전용 테마 설정이 있어, 앱은 어둡게 두고도 메시지는 흰 바탕에서 읽을 수 있습니다. 레이아웃은 작업 공간의 모양을 정하는 곳입니다. 메일 보기(메시지 목록 또는 채팅형 대화 보기), 읽기 창을 목록 옆에 둘지 목록 아래에 둘지, 메시지 행을 두 줄로 할지 한 줄로 할지, 사이드바를 세로 배치 / 영역 분리 / 계정 전환 중 무엇으로 할지, 밀도를 여유롭게 할지 촘촘하게 할지, 계정의 백업 배지를 아바타 위에 둘지 행 끝에 둘지 숨길지를 여기에서 정합니다. 읽기는 대화를 다룹니다 — 그룹화는 답장을 한 행으로 접고, 펼치기는 목록 안에서 펼쳐 보여 주며, 끄기는 모든 메시지에 각자의 행을 줍니다 — 여기에 스레드 순서, 서명 처리, 행 강조, 동작 버튼 스타일이 함께 있습니다."
       }
     },
     {
@@ -137,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/getting-started.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/getting-started.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -187,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="탐색 경로" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -210,7 +218,7 @@
               MailVault는 메일을 사용자 자신의 디스크에 있는 볼트에 저장하는 macOS와 Linux용 무료 오픈소스 데스크톱 메일 클라이언트입니다. IMAP으로 이메일 계정에 연결해 모든 메시지를 표준 <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml 파일(RFC 5322)</a>로 컴퓨터의 <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> 형식 안에 저장하므로, 공급업체 종속 없는 영구 오프라인 백업이 생깁니다.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/email-list-view-1440.webp" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/email-list-view-720.webp 720w, /screenshots/ko/email-list-view-1440.webp 1440w, /screenshots/ko/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/email-list-view-light-1440.webp" srcset="/screenshots/ko/email-list-view-light-720.webp 720w, /screenshots/ko/email-list-view-light-1440.webp 1440w, /screenshots/ko/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="스레드 대화가 있는 받은편지함을 보여 주는 MailVault 메일 목록 화면" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -234,12 +242,26 @@
               네. 설정 &rsaquo; 일반 &rsaquo; 모양 &rsaquo; 강조 표시에서 메시지 목록이 현재 위치를 보여 주는 방식을 두 가지 중에서 고를 수 있습니다. <strong>포인터 따라가기</strong>가 기본값이며, MailVault가 지금까지 해 온 방식 그대로입니다. 마우스가 지나가는 줄이 밝아지고, 열어 둔 메시지에는 옅게 색이 깔린 띠가 남습니다. <strong>읽고 있는 항목 표시</strong>는 이를 뒤집습니다. 포인터로는 아무것도 바뀌지 않고, 열린 메시지는 짙은 회색으로 채워지며, 같은 대화의 나머지 메시지는 연한 회색이 됩니다. 그래서 한눈에 무엇을 읽고 있는지, 그것이 어디에 속하는지 알 수 있습니다. 두 가지 모두 모든 계정과 폴더에 적용되고, 언제든지 서로 바꿀 수 있습니다.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/list-highlight-hover-1440.webp" srcset="/screenshots/ko/list-highlight-hover-720.webp 720w, /screenshots/ko/list-highlight-hover-1440.webp 1440w, /screenshots/ko/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="기본 강조 표시를 적용한 MailVault 메시지 목록. 열린 메시지에 색이 깔린 띠가 있습니다" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-hover-720.webp 720w, /screenshots/ko/list-highlight-hover-1440.webp 1440w, /screenshots/ko/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-hover-light-1440.webp" srcset="/screenshots/ko/list-highlight-hover-light-720.webp 720w, /screenshots/ko/list-highlight-hover-light-1440.webp 1440w, /screenshots/ko/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="기본 강조 표시를 적용한 MailVault 메시지 목록. 열린 메시지에 색이 깔린 띠가 있습니다" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">포인터 따라가기: 줄이 마우스에 반응하고 열린 메시지에는 색이 깔립니다.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/ko/list-highlight-selection-1440.webp" srcset="/screenshots/ko/list-highlight-selection-720.webp 720w, /screenshots/ko/list-highlight-selection-1440.webp 1440w, /screenshots/ko/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="열린 메시지를 짙은 회색으로, 같은 대화의 나머지를 연한 회색으로 표시하는 MailVault 메시지 목록" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/list-highlight-selection-720.webp 720w, /screenshots/ko/list-highlight-selection-1440.webp 1440w, /screenshots/ko/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/list-highlight-selection-light-1440.webp" srcset="/screenshots/ko/list-highlight-selection-light-720.webp 720w, /screenshots/ko/list-highlight-selection-light-1440.webp 1440w, /screenshots/ko/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="열린 메시지를 짙은 회색으로, 같은 대화의 나머지를 연한 회색으로 표시하는 MailVault 메시지 목록" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">읽고 있는 항목 표시: 포인터는 조용하고, 열린 메시지는 채워지며, 그 대화는 한 단계 연하게 남습니다.</figcaption>
+            </figure>
+        </article>
+
+        <article id="change-the-layout" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">MailVault의 모양과 레이아웃을 바꿀 수 있습니까?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>예, 설정 &rsaquo; 모양에서 바꿉니다. 네 개의 섹션이 있습니다. <strong>색상</strong>, <strong>레이아웃</strong>, <strong>읽기</strong>, <strong>날짜 및 시간</strong>입니다. 모든 선택은 전체 계정과 폴더에 적용되며 언제든지 바꿀 수 있습니다.</p>
+              <p><strong>색상</strong>에는 라이트 모드와 다크 모드, 그리고 색 팔레트가 있습니다 &mdash; <em>인디고</em>는 인디고 강조색을 쓴 차가운 잉크 톤이고, <em>그래파이트</em>는 부드러운 보라 강조색을 쓴 따뜻한 중성색입니다. 그 옆에는 메일 본문 전용 테마 설정이 있어, 앱은 어둡게 두고도 메시지는 흰 바탕에서 읽을 수 있습니다.</p>
+              <p><strong>레이아웃</strong>은 작업 공간의 모양을 정하는 곳입니다. 메일 보기(메시지 목록 또는 채팅형 대화 보기), 읽기 창을 <em>목록 옆</em>에 둘지 <em>목록 아래</em>에 둘지, 메시지 행을 <em>두 줄</em>로 할지 <em>한 줄</em>로 할지, 사이드바를 <em>세로 배치</em> / <em>영역 분리</em> / <em>계정 전환</em> 중 무엇으로 할지, 밀도를 <em>여유롭게</em> 할지 <em>촘촘하게</em> 할지, 계정의 백업 배지를 <em>아바타 위</em>에 둘지 행 끝에 둘지 숨길지를 여기에서 정합니다.</p>
+              <p><strong>읽기</strong>는 대화를 다룹니다 &mdash; <em>그룹화</em>는 답장을 한 행으로 접고, <em>펼치기</em>는 목록 안에서 펼쳐 보여 주며, <em>끄기</em>는 모든 메시지에 각자의 행을 줍니다 &mdash; 여기에 스레드 순서, 서명 처리, 행 강조, 동작 버튼 스타일이 함께 있습니다.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/settings-layout-720.webp 720w, /screenshots/ko/settings-layout-1440.webp 1440w, /screenshots/ko/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/ko/settings-layout-light-1440.webp" srcset="/screenshots/ko/settings-layout-light-720.webp 720w, /screenshots/ko/settings-layout-light-1440.webp 1440w, /screenshots/ko/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault 설정 모양 화면의 레이아웃 섹션. 읽기 창, 메시지 행, 사이드바 레이아웃, 밀도 옵션이 보입니다" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">설정 &rsaquo; 모양 &rsaquo; 레이아웃: 읽기 창, 메시지 행, 사이드바, 밀도가 한곳에 있습니다.</figcaption>
             </figure>
         </article>
 
@@ -291,6 +313,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

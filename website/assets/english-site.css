@@ -50,7 +50,7 @@
 .mv-text-link:hover { text-decoration:underline; }
 .mv-small { font-size:.8rem; line-height:1.6; color:var(--mv-muted); }
 .mv-hero-copy>.mv-small { margin-bottom:4px; }
-.mv-shot { display:block; width:100%; padding:0; border-radius:12px; overflow:hidden; border:1px solid var(--mv-line); cursor:zoom-in; background:#10111a; }
+.mv-shot { display:block; width:100%; padding:0; border-radius:12px; overflow:hidden; border:1px solid var(--mv-line); cursor:zoom-in; background:var(--mv-surface); }
 .mv-shot img { display:block; width:100%; height:auto; }
 .mv-hero-product figcaption { display:flex; flex-direction:column; gap:3px; }
 .mv-section { padding-block:82px; }

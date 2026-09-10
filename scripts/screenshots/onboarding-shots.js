@@ -6,7 +6,7 @@
  *
  * The marketing run (shots.js) seeds `onboardingComplete: true` and three
  * mailboxes, so it can never see this screen. This one seeds neither: no
- * account means `onboardingSteps()` returns all six steps rather than the
+ * account means `onboardingSteps()` returns all seven steps rather than the
  * shortened replay, which is the flow a new install actually gets.
  *
  * Same rule as shots.js — every shot asserts the step it is about to
@@ -23,7 +23,7 @@ const APP_LOCALE = appCode(LOCALE_DIR);
 const SETTLE = 1200; // the splash logo animates in over 0.7s + 0.5s delay
 
 /** The step names src/components/onboarding/steps.js can return. */
-const STEPS = ['splash', 'account', 'appearance', 'free', 'premium', 'cta'];
+const STEPS = ['splash', 'account', 'appearance', 'defaultMail', 'free', 'premium', 'cta'];
 
 /** Which step the tour is showing — the wrapper carries `onboarding-<step>`. */
 const currentStep = () => browser.execute((steps) => {
@@ -84,6 +84,10 @@ describe('MailVault onboarding screenshots', function () {
     await step('splash', 'onboarding-continue');
     await step('account', 'onboarding-skip-account');
     await step('appearance', 'onboarding-continue');
+    // "Open mail links here", added between Appearance and Free. Same Continue
+    // control; before it was listed here the tour stalled on an unknown step
+    // and every locale reported `showing "null"`.
+    await step('defaultMail', 'onboarding-continue');
     await step('free', 'onboarding-continue');
     await step('premium', 'onboarding-continue');
     await step('cta', null); // last screen: advancing it ends the tour

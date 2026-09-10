@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explorer and Insights — MailVault FAQ</title>
+  <meta name="description" content="How MailVault Explorer groups a mailbox by date, sender or conversation, and what the Insights sender map, timeline and activity views show — both free, both built from mail already on your disk.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <meta name="theme-color" content="#6366f1">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <meta property="og:title" content="Explorer and Insights — MailVault FAQ">
+  <meta property="og:description" content="How MailVault Explorer groups a mailbox by date, sender or conversation, and what the Insights sender map, timeline and activity views show — both free, both built from mail already on your disk.">
+  <meta property="og:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="en_US">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Explorer and Insights — MailVault FAQ">
+  <meta name="twitter:description" content="How MailVault Explorer groups a mailbox by date, sender or conversation, and what the Insights sender map, timeline and activity views show — both free, both built from mail already on your disk.">
+  <meta name="twitter:image:alt" content="MailVault: Make room for new mail. Keep the old. Free for macOS and Linux, with a preview of the app.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:site" content="@GraphicMeat">
+
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+
+  <style>
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .dark .glass {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    /* The banner nav is fixed, so a #question link would land under it. */
+    .mv-anchor { scroll-margin-top: 8rem; }
+  </style>
+
+    <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Explorer?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Explorer is a second way through the mail you already have. Instead of one long list, it folds the messages in the current folder into groups you can walk down into — by date, by sender, or by date then conversation. Switch it on with the List / Explorer control above the message list; nothing is moved, copied or re-filed, and switching back to List leaves everything as it was. Each group tells you what is inside it before you open it: how many messages it holds, how many of those are already saved in your vault, and how many are unread. Open a group and the messages inside render exactly as they do in the normal list, with the same reader and the same actions."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I see everything one person ever sent me?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes — set Browse by to Sender. Every correspondent becomes one group holding all of their messages in the current folder, newest first, with the date of the most recent one on the row. The checkbox on a group row selects every message in it at once, so \"archive everything this newsletter ever sent\" is two clicks rather than a long shift-click. The same works for delete and export."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What does “Date → Conversation” do?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "It nests one level deeper. The top level is still months (or days), but opening one shows the conversations that happened in that period rather than loose messages. Open a conversation to read it, or use Open full conversation to hand it to the normal thread view. This is the view for finding something you remember by roughly when it happened rather than by who sent it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does search still work in Explorer?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, and it works at two levels. The search box inside Explorer filters the group you are standing in, which is the fastest way to find one message inside a large sender or month group. If you want the whole mailbox instead, Search whole mailbox takes you back to the list with the normal search box open. Explorer also remembers where you were. Your grouping, date detail and the group you had open are kept per folder and per account, and survive a restart."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is Insights?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Insights is a full-screen view of who you correspond with, reached from Insights in the sidebar. It reads the message headers MailVault already holds on your disk — sender, recipients and dates — and draws them three ways. The Sender map puts you in the middle and every correspondent around you as a bubble. The area of a bubble is how many messages that person accounts for; the distance from the centre is how long it has been since you last heard from them. Recent, talkative people sit close and large; someone who wrote once, years ago, sits far out and small. Click any bubble to see the messages behind it and read them without leaving the page."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What do the Timeline and Activity views show?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Timeline gives each sender a lane across a real time axis, with circles for messages you received and diamonds for messages you sent. It is the view that shows a relationship starting, going quiet, or turning one-sided. Zoom between weeks, days and individual messages. Activity is a calendar grid, one square per day, shaded by how much mail moved that day. Click a day to see exactly what arrived. All three views share the same controls at the top: which account, which date range — 30 days, 90 days, 12 months or dates you choose — and whether you are looking at mail received, mail sent, or both. Hide likely automated senders takes newsletters and no-reply addresses out of the picture in one tick."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Insights send my email anywhere?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Insights is built entirely from header data already stored on your own machine — the cached headers of folders you have opened and the messages in your vault. No message bodies are read, no attachments are touched, and nothing is uploaded to any service. There is no account to create and it works with the network off. Because it can only describe mail that is on this device, Insights says so plainly: a coverage note under the controls lists which folders it read and how much of each is cached locally, so a quiet-looking month is never mistaken for a fact when it is really a gap."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Are Explorer and Insights part of Premium?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Both are free, in the free version, with no account and no sign-in. They arrived in MailVault 2.13.0. Note that Insights is not the same thing as the older sender panel in the reading pane, which shows the exchange history with whoever wrote the message you have open. That one is still there and also free; Insights is the whole-mailbox view."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Home",
+        "item": "https://mailvaultapp.com/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "FAQ",
+        "item": "https://mailvaultapp.com/faq.html"
+      },
+      {
+        "@type": "ListItem",
+        "position": 3,
+        "name": "Storage and Your Vault",
+        "item": "https://mailvaultapp.com/faq/explorer-and-insights.html"
+      }
+    ]
+  }
+  </script>
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/explorer-and-insights.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/explorer-and-insights.html">
+  <!-- /i18n:alternates -->
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
+</head>
+
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+
+  <!-- Navigation -->
+  <header class="mv-header">
+<div class="mv-wrap mv-nav">
+<div class="mv-brand-family"><a class="mv-brand" href="/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/#how-it-works">How it works</a><a href="/features.html">Features</a><a href="/pricing.html">Pricing</a><a href="/blog.html">Blog</a><a href="/docs.html">Help</a>
+</nav>
+<div class="mv-navtools">
+<details class="mv-language" translate="no">
+<summary aria-label="Choose language, English selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">English</span><span class="mv-language-code" aria-hidden="true">EN</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+</summary>
+<ul>
+<li><a href="/faq/explorer-and-insights.html" lang="en" hreflang="en" translate="no" aria-current="page"><span class="mv-language-flag" aria-hidden="true">🇬🇧</span><span>English</span></a>
+</li>
+<li><a href="/de/faq/explorer-and-insights.html" lang="de" hreflang="de" translate="no"><span class="mv-language-flag" aria-hidden="true">🇩🇪</span><span>Deutsch</span></a>
+</li>
+<li><a href="/fr/faq/explorer-and-insights.html" lang="fr" hreflang="fr" translate="no"><span class="mv-language-flag" aria-hidden="true">🇫🇷</span><span>Français</span></a>
+</li>
+<li><a href="/es/faq/explorer-and-insights.html" lang="es" hreflang="es" translate="no"><span class="mv-language-flag" aria-hidden="true">🇪🇸</span><span>Español</span></a>
+</li>
+<li><a href="/it/faq/explorer-and-insights.html" lang="it" hreflang="it" translate="no"><span class="mv-language-flag" aria-hidden="true">🇮🇹</span><span>Italiano</span></a>
+</li>
+<li><a href="/ja/faq/explorer-and-insights.html" lang="ja" hreflang="ja" translate="no"><span class="mv-language-flag" aria-hidden="true">🇯🇵</span><span>日本語</span></a>
+</li>
+<li><a href="/ko/faq/explorer-and-insights.html" lang="ko" hreflang="ko" translate="no"><span class="mv-language-flag" aria-hidden="true">🇰🇷</span><span>한국어</span></a>
+</li>
+<li><a href="/zh/faq/explorer-and-insights.html" lang="zh-Hans" hreflang="zh-Hans" translate="no"><span class="mv-language-flag" aria-hidden="true">🇨🇳</span><span>简体中文</span></a>
+</li>
+<li><a href="/pt-br/faq/explorer-and-insights.html" lang="pt-BR" hreflang="pt-BR" translate="no"><span class="mv-language-flag" aria-hidden="true">🇧🇷</span><span>Português (Brasil)</span></a>
+</li>
+</ul>
+</details>
+<button class="mv-theme" aria-label="Switch color theme" title="Switch color theme"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg></button>
+<a class="mv-button mv-nav-download" href="/get-started.html?plan=free">Download</a>
+<details class="mv-mobile-menu">
+<summary>Menu</summary>
+<nav aria-label="Mobile navigation"><a href="/#how-it-works">How it works</a><a href="/features.html">Features</a><a href="/pricing.html">Pricing</a><a href="/blog.html">Blog</a><a href="/docs.html">Help</a><a href="/get-started.html?plan=free">Download free</a>
+</nav>
+</details>
+</div>
+</div>
+<svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg></header>
+
+  <!-- Content -->
+  <main id="main" class="pt-32 pb-20">
+    <div class="mv-wrap mv-directory">
+
+      <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
+        <ol class="flex flex-wrap items-center gap-2">
+          <li><a href="/" class="hover:text-primary-500 transition-colors">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li><a href="../faq.html" class="hover:text-primary-500 transition-colors">FAQ</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page" class="text-slate-700 dark:text-slate-300">Explorer and Insights</li>
+        </ol>
+      </nav>
+
+      <h1 class="text-4xl font-bold mb-2">Explorer and Insights</h1>
+      <p class="text-slate-500 dark:text-slate-400 mb-10">Two ways to look at a mailbox you already have: Explorer groups it, Insights charts it. Both are free and both read only what is on your disk.</p>
+
+      <div class="space-y-4">
+
+        <article id="what-is-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What is Explorer?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Explorer is a second way through the mail you already have. Instead of one long list, it folds the messages in the current folder into groups you can walk down into — by <strong>date</strong>, by <strong>sender</strong>, or by <strong>date then conversation</strong>. Switch it on with the <strong>List / Explorer</strong> control above the message list; nothing is moved, copied or re-filed, and switching back to List leaves everything as it was.</p>
+              <p>Each group tells you what is inside it before you open it: how many messages it holds, how many of those are already saved in your vault, and how many are unread. Open a group and the messages inside render exactly as they do in the normal list, with the same reader and the same actions.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/explorer-date-720.webp 720w, /screenshots/explorer-date-1440.webp 1440w, /screenshots/explorer-date-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/explorer-date-light-1440.webp" srcset="/screenshots/explorer-date-light-720.webp 720w, /screenshots/explorer-date-light-1440.webp 1440w, /screenshots/explorer-date-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer grouping a mailbox by date, with a month group showing message, vault and unread counts" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Browse by date: months, or days if you want finer detail.</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-by-sender" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Can I see everything one person ever sent me?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Yes — set <strong>Browse by</strong> to <strong>Sender</strong>. Every correspondent becomes one group holding all of their messages in the current folder, newest first, with the date of the most recent one on the row.</p>
+              <p>The checkbox on a group row selects every message in it at once, so "archive everything this newsletter ever sent" is two clicks rather than a long shift-click. The same works for delete and export.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/explorer-sender-720.webp 720w, /screenshots/explorer-sender-1440.webp 1440w, /screenshots/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/explorer-sender-light-1440.webp" srcset="/screenshots/explorer-sender-light-720.webp 720w, /screenshots/explorer-sender-light-1440.webp 1440w, /screenshots/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer grouped by sender, with one group per correspondent" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Browse by sender: one group per correspondent, selectable as a whole.</figcaption>
+            </figure>
+        </article>
+
+        <article id="explorer-conversation" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What does “Date &rarr; Conversation” do?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>It nests one level deeper. The top level is still months (or days), but opening one shows the <em>conversations</em> that happened in that period rather than loose messages. Open a conversation to read it, or use <strong>Open full conversation</strong> to hand it to the normal thread view.</p>
+              <p>This is the view for finding something you remember by roughly when it happened rather than by who sent it.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/explorer-conversation-720.webp 720w, /screenshots/explorer-conversation-1440.webp 1440w, /screenshots/explorer-conversation-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/explorer-conversation-light-1440.webp" srcset="/screenshots/explorer-conversation-light-720.webp 720w, /screenshots/explorer-conversation-light-1440.webp 1440w, /screenshots/explorer-conversation-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Explorer in date-then-conversation mode, showing conversations grouped under a month" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Date &rarr; Conversation: months open into the threads inside them.</figcaption>
+            </figure>
+        </article>
+
+        <article id="searching-in-explorer" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Does search still work in Explorer?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Yes, and it works at two levels. The search box inside Explorer filters the group you are standing in, which is the fastest way to find one message inside a large sender or month group. If you want the whole mailbox instead, <strong>Search whole mailbox</strong> takes you back to the list with the normal search box open.</p>
+              <p>Explorer also remembers where you were. Your grouping, date detail and the group you had open are kept per folder and per account, and survive a restart.</p>
+            </div>
+        </article>
+
+        <article id="what-is-insights" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What is Insights?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Insights is a full-screen view of who you correspond with, reached from <strong>Insights</strong> in the sidebar. It reads the message headers MailVault already holds on your disk — sender, recipients and dates — and draws them three ways.</p>
+              <p>The <strong>Sender map</strong> puts you in the middle and every correspondent around you as a bubble. The area of a bubble is how many messages that person accounts for; the distance from the centre is how long it has been since you last heard from them. Recent, talkative people sit close and large; someone who wrote once, years ago, sits far out and small.</p>
+              <p>Click any bubble to see the messages behind it and read them without leaving the page.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/insights-map-720.webp 720w, /screenshots/insights-map-1440.webp 1440w, /screenshots/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/insights-map-light-1440.webp" srcset="/screenshots/insights-map-light-720.webp 720w, /screenshots/insights-map-light-1440.webp 1440w, /screenshots/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Insights sender map, with correspondents drawn as bubbles sized by message count and placed by recency" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">The sender map: bubble area is volume, distance is time since the last message.</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-timeline-activity" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">What do the Timeline and Activity views show?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p><strong>Timeline</strong> gives each sender a lane across a real time axis, with circles for messages you received and diamonds for messages you sent. It is the view that shows a relationship starting, going quiet, or turning one-sided. Zoom between weeks, days and individual messages.</p>
+              <p><strong>Activity</strong> is a calendar grid, one square per day, shaded by how much mail moved that day. Click a day to see exactly what arrived.</p>
+              <p>All three views share the same controls at the top: which account, which date range — 30 days, 90 days, 12 months or dates you choose — and whether you are looking at mail received, mail sent, or both. <strong>Hide likely automated senders</strong> takes newsletters and no-reply addresses out of the picture in one tick.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/insights-timeline-720.webp 720w, /screenshots/insights-timeline-1440.webp 1440w, /screenshots/insights-timeline-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/insights-timeline-light-1440.webp" srcset="/screenshots/insights-timeline-light-720.webp 720w, /screenshots/insights-timeline-light-1440.webp 1440w, /screenshots/insights-timeline-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Insights timeline, one lane per sender with received and sent marks along a time axis" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Timeline: one lane per sender, received and sent marked separately.</figcaption>
+            </figure>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/insights-activity-720.webp 720w, /screenshots/insights-activity-1440.webp 1440w, /screenshots/insights-activity-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/insights-activity-light-1440.webp" srcset="/screenshots/insights-activity-light-720.webp 720w, /screenshots/insights-activity-light-1440.webp 1440w, /screenshots/insights-activity-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Insights activity calendar, a grid of days shaded by how much mail moved" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Activity: a year of mail at a glance, one square per day.</figcaption>
+            </figure>
+        </article>
+
+        <article id="insights-privacy" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Does Insights send my email anywhere?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>No. Insights is built entirely from header data already stored on your own machine — the cached headers of folders you have opened and the messages in your vault. No message bodies are read, no attachments are touched, and nothing is uploaded to any service. There is no account to create and it works with the network off.</p>
+              <p>Because it can only describe mail that is on this device, Insights says so plainly: a coverage note under the controls lists which folders it read and how much of each is cached locally, so a quiet-looking month is never mistaken for a fact when it is really a gap.</p>
+            </div>
+        </article>
+
+        <article id="insights-explorer-premium" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Are Explorer and Insights part of Premium?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>No. Both are free, in the free version, with no account and no sign-in. They arrived in MailVault 2.13.0.</p>
+              <p>Note that Insights is not the same thing as the older <strong>sender panel</strong> in the reading pane, which shows the exchange history with whoever wrote the message you have open. That one is still there and also free; Insights is the whole-mailbox view.</p>
+            </div>
+        </article>
+
+      </div>
+
+      <p class="mt-12 text-sm">
+        <a href="../faq.html" class="text-primary-500 hover:underline">Back to all FAQ topics</a>
+      </p>
+
+      <!-- CTA -->
+      <div class="mt-12 text-center">
+        <p class="text-slate-600 dark:text-slate-400 mb-4">Still have questions?</p>
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+          <a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" class="lamp-bg text-white px-6 py-3 rounded-xl font-semibold hover:opacity-90 transition-opacity inline-flex items-center justify-center gap-2">
+            Ask on GitHub
+          </a>
+          <a href="https://graphicmeat.com/contact" target="_blank" rel="noopener" class="px-6 py-3 rounded-xl font-semibold border-2 border-slate-300 dark:border-slate-600 hover:border-primary-500 transition-colors inline-flex items-center justify-center gap-2">
+            Contact Us
+          </a>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true" focusable="false"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>We’re Graphic Meat, an independent product studio building useful software since 2013. MailVault is one of the things we make. Come meet us and explore what else we’re working on.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Meet Graphic Meat <span aria-hidden="true">↗</span></a></div><a class="mv-studio-mark" href="https://graphicmeat.com" target="_blank" rel="noopener" aria-label="Visit Graphic Meat, the studio behind MailVault"><img src="/graphicmeat-logo.webp" width="512" height="512" loading="lazy" alt="Graphic Meat"></a></div><div class="mv-wrap mv-studio-products"><h3>More from Graphic Meat</h3><div class="mv-studio-product-links"><a href="https://graphicmeat.com/photobooks" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/photobooks/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>PhotoBooks <span aria-hidden="true">↗</span></strong><span>Turn your photos into a print-ready book.</span></a><a href="https://graphicmeat.com/meatpad" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/meatpad/images/icon.png" width="48" height="48" loading="lazy" alt=""><strong>MeatPad <span aria-hidden="true">↗</span></strong><span>A local workspace for notes and code.</span></a><a href="https://graphicmeat.com/mailmule" target="_blank" rel="noopener"><img class="mv-product-icon" src="https://graphicmeat.com/assets/mailmule/icon.svg" width="48" height="48" loading="lazy" alt=""><strong>MailMule <span aria-hidden="true">↗</span></strong><span>Move your email to a new provider.</span></a></div></div></aside><footer class="mv-footer">
+<div class="mv-wrap">
+<div class="mv-footer-top">
+<div><a class="mv-brand" href="/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a>
+<p>Read your mail. Keep your mail.</p>
+</div>
+<nav aria-label="Explore MailVault"><a href="/use-cases.html">Use cases</a><a href="/blog.html">Blog</a><a href="/changelog.html">What’s new</a><a href="/mentioned-in.html">Mentions</a><a href="/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a><a href="https://github.com/GraphicMeat/mail-vault-app/discussions" target="_blank" rel="noopener">Community ↗</a><a href="https://graphicmeat.com/contact" target="_blank" rel="noopener">Contact the team ↗</a>
+</nav>
+</div>
+<div class="mv-footer-bottom">
+<p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p>
+<div><a href="/privacy.html">Privacy</a><a href="/terms.html">Terms</a>
+</div>
+</div>
+</div>
+</footer>
+
+
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
+</body>
+</html>

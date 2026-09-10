@@ -7,6 +7,11 @@
 .mv-content-page .mv-directory>h1 { margin-inline:0; }
 .mv-content-page .mv-directory>a p,
 .mv-content-page .mv-directory .space-y-6>a p { max-width:85ch; }
+/* An FAQ answer is prose inside a 1200px card. The card wants the full width so
+   the screenshots are legible; the sentences do not — uncapped they run to ~135
+   characters a line. Cap the measure, leave the figures alone. */
+.mv-content-page article.mv-anchor :is(p,li) { max-width:78ch; }
+.mv-content-page article.mv-anchor figure :is(p,figcaption) { max-width:none; }
 .mv-content-page main p { line-height:1.75; }
 .mv-content-page main :is(.text-slate-600,.text-slate-500,.text-slate-400,.text-gray-400,.text-gray-300) { color:var(--mv-muted); }
 .mv-content-page main :is(.text-slate-900,.text-slate-800,.text-slate-700,.text-gray-900) { color:var(--mv-ink); }

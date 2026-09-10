@@ -50,7 +50,7 @@
     .mv-anchor { scroll-margin-top: 8rem; }
   </style>
 
-  <script type="application/ld+json">
+    <script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -85,6 +85,14 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Ja. Einstellungen > Allgemein > Erscheinungsbild > Hervorhebung bietet zwei Arten, wie die Nachrichtenliste zeigt, wo du gerade bist. Dem Zeiger folgen ist die Voreinstellung und arbeitet so, wie MailVault es immer getan hat: Eine Zeile leuchtet auf, wenn die Maus darüberfährt, und die geöffnete Nachricht trägt ein getöntes Band. Markieren, was ich lese dreht das um: Der Zeiger ändert nichts, die geöffnete Nachricht ist mit einem satten Grau gefüllt, und die übrigen Nachrichten derselben Konversation nehmen ein helleres Grau an, sodass ein Blick dir sagt, was du liest und wozu es gehört. Beide Optionen gelten für jedes Konto und jeden Ordner, und du kannst jederzeit zwischen ihnen wechseln."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Kann ich ändern, wie MailVault aussieht und angeordnet ist?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ja, in Einstellungen › Erscheinungsbild. Es hat vier Bereiche: Farben, Layout, Lesen und Datum & Uhrzeit. Jede Wahl gilt für alle Konten und Ordner und lässt sich jederzeit ändern. Farben enthält den hellen oder dunklen Modus und die Farbpalette — Indigo, ein kühles Tintenblau mit Indigo-Akzenten, oder Graphit, warme Neutraltöne mit einem sanften Violett-Akzent. E-Mail-Inhalte haben daneben ihre eigene Design-Einstellung, sodass du die App dunkel halten und Nachrichten trotzdem auf Weiß lesen kannst. In Layout wird der Arbeitsbereich geformt: die Mail-Ansicht (eine Nachrichtenliste oder die Chat-Ansicht für Konversationen), der Lesebereich neben der Liste oder unter der Liste, Nachrichtenzeilen mit zwei Zeilen oder einer Zeile, die Seitenleiste untereinander / getrennte Bereiche / als Kontowechsler, ihre Dichte geräumig oder kompakt, und ob das Backup-Abzeichen eines Kontos am Profilbild sitzt, am Ende der Zeile steht oder ausgeblendet ist. Lesen deckt Konversationen ab — Gruppiert klappt Antworten in eine Zeile zusammen, Aufklappbar entfaltet sie in der Liste, Aus gibt jeder E-Mail ihre eigene Zeile — dazu die Reihenfolge in der Konversation, den Umgang mit Signaturen, die Zeilenhervorhebung und den Stil der Aktionsschaltflächen."
       }
     },
     {
@@ -137,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/getting-started.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/getting-started.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -187,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="Brotkrümelnavigation" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -210,7 +218,7 @@
               MailVault ist ein kostenloser, quelloffener Desktop-Mailclient für macOS und Linux, der deine E-Mails in einem Vault auf deiner eigenen Festplatte ablegt. Er verbindet sich per IMAP mit deinen E-Mail-Konten und speichert alle Nachrichten als standardkonforme <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml-Dateien (RFC 5322)</a> im <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a>-Format auf deinem Computer, und gibt dir damit ein dauerhaftes Offline-Backup ohne Anbieterbindung.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/de/email-list-view-1440.webp" srcset="/screenshots/de/email-list-view-720.webp 720w, /screenshots/de/email-list-view-1440.webp 1440w, /screenshots/de/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault E-Mail-Listenansicht mit Posteingang und Konversations-Threads" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/email-list-view-720.webp 720w, /screenshots/de/email-list-view-1440.webp 1440w, /screenshots/de/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/email-list-view-light-1440.webp" srcset="/screenshots/de/email-list-view-light-720.webp 720w, /screenshots/de/email-list-view-light-1440.webp 1440w, /screenshots/de/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault E-Mail-Listenansicht mit Posteingang und Konversations-Threads" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -234,12 +242,26 @@
               Ja. Einstellungen &rsaquo; Allgemein &rsaquo; Erscheinungsbild &rsaquo; Hervorhebung bietet zwei Arten, wie die Nachrichtenliste zeigt, wo du gerade bist. <strong>Dem Zeiger folgen</strong> ist die Voreinstellung und arbeitet so, wie MailVault es immer getan hat: Eine Zeile leuchtet auf, wenn die Maus darüberfährt, und die geöffnete Nachricht trägt ein getöntes Band. <strong>Markieren, was ich lese</strong> dreht das um: Der Zeiger ändert nichts, die geöffnete Nachricht ist mit einem satten Grau gefüllt, und die übrigen Nachrichten derselben Konversation nehmen ein helleres Grau an, sodass ein Blick dir sagt, was du liest und wozu es gehört. Beide Optionen gelten für jedes Konto und jeden Ordner, und du kannst jederzeit zwischen ihnen wechseln.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/de/list-highlight-hover-1440.webp" srcset="/screenshots/de/list-highlight-hover-720.webp 720w, /screenshots/de/list-highlight-hover-1440.webp 1440w, /screenshots/de/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Nachrichtenliste von MailVault mit der voreingestellten Hervorhebung: Die geöffnete Nachricht trägt ein getöntes Band" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/list-highlight-hover-720.webp 720w, /screenshots/de/list-highlight-hover-1440.webp 1440w, /screenshots/de/list-highlight-hover-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/list-highlight-hover-light-1440.webp" srcset="/screenshots/de/list-highlight-hover-light-720.webp 720w, /screenshots/de/list-highlight-hover-light-1440.webp 1440w, /screenshots/de/list-highlight-hover-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Nachrichtenliste von MailVault mit der voreingestellten Hervorhebung: Die geöffnete Nachricht trägt ein getöntes Band" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Dem Zeiger folgen: Zeilen reagieren auf die Maus, und die geöffnete Nachricht ist getönt.</figcaption>
             </figure>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/de/list-highlight-selection-1440.webp" srcset="/screenshots/de/list-highlight-selection-720.webp 720w, /screenshots/de/list-highlight-selection-1440.webp 1440w, /screenshots/de/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Nachrichtenliste von MailVault, die die geöffnete Nachricht in sattem Grau markiert und den Rest ihrer Konversation in hellerem Grau" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/list-highlight-selection-720.webp 720w, /screenshots/de/list-highlight-selection-1440.webp 1440w, /screenshots/de/list-highlight-selection-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/list-highlight-selection-light-1440.webp" srcset="/screenshots/de/list-highlight-selection-light-720.webp 720w, /screenshots/de/list-highlight-selection-light-1440.webp 1440w, /screenshots/de/list-highlight-selection-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Nachrichtenliste von MailVault, die die geöffnete Nachricht in sattem Grau markiert und den Rest ihrer Konversation in hellerem Grau" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
               <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Markieren, was ich lese: Der Zeiger bleibt ruhig, die geöffnete Nachricht ist gefüllt, und ihre Konversation bleibt eine Stufe heller.</figcaption>
+            </figure>
+        </article>
+
+        <article id="change-the-layout" class="mv-anchor rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden">
+          <h2 class="text-lg font-semibold px-6 pt-6 pb-2">Kann ich ändern, wie MailVault aussieht und angeordnet ist?</h2>
+            <div class="text-slate-600 dark:text-slate-400 leading-relaxed px-6 pb-5 space-y-4">
+              <p>Ja, in Einstellungen &rsaquo; Erscheinungsbild. Es hat vier Bereiche: <strong>Farben</strong>, <strong>Layout</strong>, <strong>Lesen</strong> und <strong>Datum &amp; Uhrzeit</strong>. Jede Wahl gilt für alle Konten und Ordner und lässt sich jederzeit ändern.</p>
+              <p><strong>Farben</strong> enthält den hellen oder dunklen Modus und die Farbpalette &mdash; <em>Indigo</em>, ein kühles Tintenblau mit Indigo-Akzenten, oder <em>Graphit</em>, warme Neutraltöne mit einem sanften Violett-Akzent. E-Mail-Inhalte haben daneben ihre eigene Design-Einstellung, sodass du die App dunkel halten und Nachrichten trotzdem auf Weiß lesen kannst.</p>
+              <p>In <strong>Layout</strong> wird der Arbeitsbereich geformt: die Mail-Ansicht (eine Nachrichtenliste oder die Chat-Ansicht für Konversationen), der Lesebereich <em>neben der Liste</em> oder <em>unter der Liste</em>, Nachrichtenzeilen mit <em>zwei Zeilen</em> oder <em>einer Zeile</em>, die Seitenleiste <em>untereinander</em> / <em>getrennte Bereiche</em> / als <em>Kontowechsler</em>, ihre Dichte <em>geräumig</em> oder <em>kompakt</em>, und ob das Backup-Abzeichen eines Kontos <em>am Profilbild</em> sitzt, am Ende der Zeile steht oder ausgeblendet ist.</p>
+              <p><strong>Lesen</strong> deckt Konversationen ab &mdash; <em>Gruppiert</em> klappt Antworten in eine Zeile zusammen, <em>Aufklappbar</em> entfaltet sie in der Liste, <em>Aus</em> gibt jeder E-Mail ihre eigene Zeile &mdash; dazu die Reihenfolge in der Konversation, den Umgang mit Signaturen, die Zeilenhervorhebung und den Stil der Aktionsschaltflächen.</p>
+            </div>
+            <figure class="px-6 pb-5">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/de/settings-layout-720.webp 720w, /screenshots/de/settings-layout-1440.webp 1440w, /screenshots/de/settings-layout-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/de/settings-layout-light-1440.webp" srcset="/screenshots/de/settings-layout-light-720.webp 720w, /screenshots/de/settings-layout-light-1440.webp 1440w, /screenshots/de/settings-layout-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault Einstellungen, Erscheinungsbild, Bereich Layout mit den Optionen für Lesebereich, Nachrichtenzeilen, Seitenleisten-Layout und Dichte" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
+              <figcaption class="text-sm text-slate-500 dark:text-slate-400 pt-2">Einstellungen &rsaquo; Erscheinungsbild &rsaquo; Layout: Lesebereich, Nachrichtenzeilen, Seitenleiste und Dichte an einem Ort.</figcaption>
             </figure>
         </article>
 
@@ -291,6 +313,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

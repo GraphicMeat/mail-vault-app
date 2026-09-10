@@ -97,6 +97,21 @@ const clickTestId = (id) => browser.execute((t) => {
   return true;
 }, id);
 
+/**
+ * A `<select>` driven the way React can hear it. WebDriver's own select
+ * interaction sets `value` on the element, which React's onChange never sees —
+ * the control shows the new option and the app keeps the old state, which is a
+ * screenshot of a lie rather than an error.
+ */
+const setSelect = (testId, value) => browser.execute((id, v) => {
+  const el = document.querySelector(`[data-testid="${id}"]`);
+  if (!el || el.offsetHeight === 0) return false;
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set.call(el, v);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
+}, testId, value);
+
 const clickRowMaybe = (needle) => browser.execute((n) => {
   for (const row of document.querySelectorAll('[data-testid="email-row"], [data-testid="sender-row"]')) {
     if ((row.innerText || '').includes(n)) {
@@ -128,11 +143,33 @@ const probe = () => browser.execute((selectEmailRead, chronological) => {
   };
   const text = document.body.innerText || '';
   return {
+    // What the run actually photographed. The theme lives in its own persisted
+    // store, so a seed that misses it produces a whole set in the wrong colours
+    // and nothing in the log says so.
+    theme: document.documentElement.getAttribute('data-theme') || '',
+    palette: document.documentElement.getAttribute('data-palette') || '',
     settings: vis('[data-testid="settings-page"]'),
+    // Which Settings tab is open, in no language at all — the labels moved
+    // when Settings was redesigned and text finders moved with them.
+    settingsPage: document.querySelector('[data-testid="settings-content"]')?.dataset.page || '',
+    listTitle: (document.querySelector('[data-testid="mailbox-title"]')?.textContent || '').trim(),
+    snapshotRows: document.querySelectorAll('[data-testid="settings-content"][data-page="time-capsule"] div[role="button"]').length,
+    // The failure message truncates `text`, and the sidebar eats the whole
+    // budget before the settings panel starts. Carry the panel's own words.
+    settingsText: (document.querySelector('[data-testid="settings-content"]')?.innerText || '')
+      .replace(/\s+/g, ' ').slice(0, 260),
+    searchInput: !!document.querySelector('[data-testid="mail-search-input"]'),
     chat: vis('[data-testid="chat-view"]'),
     compose: vis('[data-testid="compose-modal"]'),
     shortcuts: vis('[data-testid="shortcuts-modal"]'),
     insights: vis('[data-testid="sender-insights-panel"]'),
+    // The Insights workspace, not the per-sender panel above it: two different
+    // features whose names collide. `data-status` is the store's own state, so
+    // a shot never has to guess whether the snapshot finished.
+    insightsPage: document.querySelector('[data-testid="insights-page"]')?.dataset.status || '',
+    insightsTab: document.querySelector('[role="tab"][aria-selected="true"]')?.dataset.testid || '',
+    explorer: document.querySelector('[data-testid="explorer-view"]')?.dataset.grouping || '',
+    explorerGroups: document.querySelectorAll('[data-testid="explorer-group-row"]').length,
     threadHeaders: document.querySelectorAll('[data-testid="thread-email-header"]').length,
     rows: document.querySelectorAll('[data-testid="email-row"]').length,
     senderRows: document.querySelectorAll('[data-testid="sender-group-row"]').length,
@@ -196,41 +233,48 @@ async function step(name, fn, settle) {
 
 // ── App-state helpers ───────────────────────────────────────────────────────
 
-/** Settings → General → Appearance, where layout / view style / list style live. */
-async function openAppearance() {
+/**
+ * Settings → Appearance. Appearance used to be a panel inside General and is
+ * now a top-level tab with its own sub-tabs (colors / layout / reading /
+ * date-time), so the old two-click path silently landed on General and every
+ * option lookup below it failed.
+ *
+ * `section` is a sub-tab id, asserted through `data-page` rather than a label:
+ * the tab strip is translated and the ids are not.
+ */
+async function openAppearance(section = 'colors') {
   await openSettings();
   await browser.pause(500);
-  await clickByText(L('settings.tab.general'));
-  await browser.pause(400);
-  await clickByText(L('settings.appearance.appearance'));
+  if (!(await clickByText(L('settings.appearance.appearance')))) {
+    throw new Error('Appearance tab not found in Settings');
+  }
   await browser.pause(500);
-}
-
-async function setAppearance(optionLabel) {
-  await openAppearance();
-  if (!(await clickByText(optionLabel))) throw new Error(`appearance option not found: ${optionLabel}`);
-  await browser.pause(500);
-  await closeSettings();
-  await browser.pause(SETTLE);
+  if (section !== 'colors') {
+    if (!(await clickByText(L(`settings.appearance.section.${section}`)))) {
+      throw new Error(`appearance section not found: ${section}`);
+    }
+    await browser.pause(400);
+  }
 }
 
 /**
- * Same, for the card grids whose labels are short enough to collide — "Off"
- * (threading) matches half a dozen other controls in some catalogs, and a
- * mis-click there is a silently wrong screenshot rather than an error.
+ * Appearance is a persisted setting, so a shot can set it at the store instead
+ * of clicking a Settings page whose tabs and labels have already moved once.
+ * The store's own setter runs first when there is one — some of them do more
+ * than assign.
  */
-async function setAppearanceOption(testId) {
-  await openAppearance();
-  const clicked = await browser.execute((id) => {
-    const btn = document.querySelector(`[data-testid="${id}"]`);
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
+async function setSetting(key, value) {
+  const ok = await browser.execute((k, v) => {
+    const store = window.__SETTINGS_STORE__;
+    if (!store) return false;
+    const state = store.getState();
+    const setter = `set${k.charAt(0).toUpperCase()}${k.slice(1)}`;
+    if (typeof state[setter] === 'function') state[setter](v);
+    else store.setState({ [k]: v });
     return true;
-  }, testId);
-  if (!clicked) throw new Error(`appearance option not found: ${testId}`);
-  await browser.pause(500);
-  await closeSettings();
-  await browser.pause(SETTLE);
+  }, key, value);
+  if (!ok) throw new Error(`__SETTINGS_STORE__ missing — is this a VITE_E2E build? (${key})`);
+  await browser.pause(600);
 }
 
 /**
@@ -256,13 +300,19 @@ async function settleListForHighlightShot() {
   await browser.pause(500);
 }
 
-/** The list header's checkbox opens the bulk operations modal. */
-const openBulkModal = () => browser.execute(() => {
-  const btn = document.querySelector('[data-testid="email-list-header"] button');
-  if (!btn) return false;
+/**
+ * The select-messages control opens the bulk operations modal. It used to be
+ * the only button in `email-list-header`; it now lives in the toolbar below,
+ * and "the first button in the header" is the search toggle — which opened
+ * search and cost three shots in a row before anything said so.
+ */
+const openBulkModal = (label) => browser.execute((selectMessages) => {
+  const btn = document.querySelector(`.mail-list-toolbar button[aria-label="${selectMessages}"]`)
+    || document.querySelector(`button[aria-label="${selectMessages}"]`);
+  if (!btn || btn.offsetHeight === 0) return false;
   btn.click();
   return true;
-});
+}, label);
 
 /**
  * Back to a clean inbox: no modal, no popover, no staged compose, no selection.
@@ -301,11 +351,16 @@ async function resetToInbox() {
     document.body.click(); // popovers and dropdowns close on an outside click
   }, L('common.cancel'), L('common.clear'), L('common.close'));
   await browser.pause(400);
-  await browser.execute((searchEmails) => {
-    const search = document.querySelector(`input[placeholder="${searchEmails}"]`)
-      || document.querySelector('input[type="search"], input[placeholder]');
-    if (search && search.offsetHeight > 0) document.querySelector(`button[title="${searchEmails}"]`)?.click();
-  }, L('list.searchEmails'));
+  // A search that actually RAN leaves the list filtered to its results, and
+  // every row finder below it then fails with "no row matching …". Nothing here
+  // used to clear it because the search step had been silently failing; the
+  // header's own control is labelled `list.clearSearch`, not `common.clear`.
+  await browser.execute(() => {
+    const store = window.__SEARCH_STORE__;
+    if (store && typeof store.getState().clearSearch === 'function') store.getState().clearSearch();
+    const search = document.querySelector('[data-testid="mail-search-input"]');
+    if (search && search.offsetHeight > 0) document.querySelector('[data-testid="mail-search-toggle"]')?.click();
+  });
   await pressKey('Escape');
   await browser.pause(400);
   await browser.execute((clearSel, cancel) => {
@@ -315,6 +370,33 @@ async function resetToInbox() {
     }
   }, L('selection.clearSelection'), L('common.cancel'));
   await browser.pause(500);
+}
+
+/**
+ * Back to the work account's own INBOX.
+ *
+ * `resetToInbox` clears modals and selection, not navigation: `unified-inbox`
+ * leaves the run in All Inboxes across three accounts and nothing switches
+ * back. The rows the shots below click live in ONE mailbox, so the account and
+ * the folder have to be named, not assumed. `aria-label` carries the address
+ * whatever the sidebar density hides, and folder rows carry an untranslated
+ * `data-path`.
+ */
+async function openWorkInbox() {
+  // The sidebar is behind the Settings page, and `resetToInbox` does not close
+  // it — the premium block before this leaves Settings open, so the account
+  // button this clicks was not on screen at all.
+  await closeSettings();
+  await browser.pause(500);
+  const email = browser.demoAccounts[0].email;
+  await browser.execute((mail) => {
+    document.querySelector(`.sidebar-account-open[aria-label*="${mail}"]`)?.click();
+  }, email);
+  await browser.pause(900);
+  await browser.execute(() => {
+    document.querySelector('[data-testid="folder-row"][data-path="INBOX"]')?.click();
+  });
+  await browser.pause(900);
 }
 
 describe('MailVault marketing screenshots', function () {
@@ -356,21 +438,21 @@ describe('MailVault marketing screenshots', function () {
     // REST of the open message's conversation, and grouped mode collapses that
     // conversation into the single row you just opened.
     await step('list-highlight-hover', async () => {
-      await setAppearanceOption('thread-mode-flat');
+      await setSetting('threadMode', 'flat');
       await clickRow(MARKERS.thread);
       await expectState((s) => !s.viewerEmpty, 'no message open for the highlighting shots');
       await settleListForHighlightShot();
     });
 
     await step('list-highlight-selection', async () => {
-      await setAppearanceOption('row-highlight-selection');
+      await setSetting('emailRowHighlight', 'selection');
       await expectState((s) => !s.viewerEmpty, 'the open message did not survive the setting change');
       await settleListForHighlightShot();
     });
 
-    // Back to the defaults the rest of the run assumes.
-    await setAppearanceOption('row-highlight-hover');
-    await setAppearanceOption('thread-mode-grouped');
+    // Back to the appearance the rest of the run — and the seed — assumes.
+    await setSetting('emailRowHighlight', 'hover');
+    await setSetting('threadMode', 'expandable');
     await resetToInbox();
 
     await step('email-invoice-attachment', async () => {
@@ -381,31 +463,47 @@ describe('MailVault marketing screenshots', function () {
     // ── Search ────────────────────────────────────────────────────────────
     await step('search-results', async () => {
       await resetToInbox();
-      if (!(await clickByTitle(L('list.searchEmails')))) throw new Error('search toggle not found');
-      await browser.pause(500);
-      await browser.execute((searchEmails) => {
-        const input = document.querySelector(`input[placeholder="${searchEmails}"]`)
-          || document.querySelector('input[type="search"], input[placeholder]');
-        if (!input) return;
+      // Both controls carry a testid now. The old finders keyed on
+      // `list.searchEmails`, which is the toggle's TITLE but not the input's
+      // placeholder (`search.searchEmails`), so the fallback selector typed
+      // into whichever input happened to be first in the document.
+      if (!(await clickTestId('mail-search-toggle'))) throw new Error('search toggle not found');
+      // The panel mounts on the next render. Typing into a null input used to
+      // fail silently here and the step died two asserts later on a screen that
+      // had never been searched.
+      await expectState((s) => s.searchInput, 'search panel did not open');
+      await browser.execute(() => {
+        const input = document.querySelector('[data-testid="mail-search-input"]');
         input.focus();
         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
         setter.call(input, 'Rack & Rind');
         input.dispatchEvent(new Event('input', { bubbles: true }));
-      }, L('list.searchEmails'));
+      });
       await browser.pause(900);
-      if (!(await clickByText(L('search.search')))) await browser.keys(['Enter']);
-      await expectState((s) => s.text.includes(L('list.searchResults')) || s.text.includes(L('search.found')),
+      // `search.search` and `workspace.search` are BOTH "Search", and the
+      // toggle in the header comes first in the DOM — clicking by text hit the
+      // toggle and closed the panel it had just opened. Submit the form the
+      // panel owns instead.
+      const submitted = await browser.execute(() => {
+        const btn = document.querySelector('#mail-search-panel button[type="submit"]');
+        if (!btn || btn.offsetHeight === 0) return false;
+        btn.click();
+        return true;
+      });
+      if (!submitted) await browser.keys(['Enter']);
+      // The list header is the one place that says a search actually ran: it
+      // swaps the mailbox name for "Search Results" only when searchActive.
+      await expectState((s) => s.listTitle === L('list.searchResults'),
         'search results header missing', 20000);
       await browser.pause(800);
     });
 
     // ── Security ──────────────────────────────────────────────────────────
     await step('link-safety', async () => {
-      await browser.execute((clear) => {
-        for (const b of document.querySelectorAll('button')) {
-          if (b.offsetHeight > 0 && (b.textContent || '').trim() === clear) b.click();
-        }
-      }, L('common.clear'));
+      // This used to click any button labelled `common.clear`, which is not the
+      // control that ends a search — `resetToInbox` knows how, and has to run
+      // here now that the search step actually searches.
+      await resetToInbox();
       await browser.pause(800);
       await clickRow(MARKERS.phishing);
       await expectState((s) => !s.viewerEmpty && s.text.includes(MARKERS.phishing.slice(0, 12)),
@@ -513,7 +611,7 @@ describe('MailVault marketing screenshots', function () {
     await step('selection-dialog', async () => {
       await resetToInbox();
       await browser.pause(600);
-      if (!(await openBulkModal())) throw new Error('bulk modal did not open');
+      if (!(await openBulkModal(L('workspace.selectMessages')))) throw new Error('bulk modal did not open');
       await expectState(hasText(L('bulk.ops.bulkEmailOperations')), 'bulk modal step 1 not on screen');
       await clickByText(L('bulk.ops.last90Days'));
       await expectState(hasText(SELECTED_COUNT), 'range selection produced no count');
@@ -547,12 +645,21 @@ describe('MailVault marketing screenshots', function () {
     await step('local-vault', async () => {
       await resetToInbox();
       await browser.pause(600);
-      if (!(await clickByText(L('sidebar.viewVault')))) throw new Error('vault view mode not found');
+      // The source chips carry a per-mode `title` (`workspace.sourceHint.<id>`)
+      // and that is an EXACT match; their visible labels are not what the
+      // harness thought. See state-icons below for what the text finder cost.
+      if (!(await clickByTitle(L('workspace.sourceHint.local')))) throw new Error('vault view mode not found');
       await expectState((s) => s.rows > 0, 'local view has no rows');
     });
 
     await step('state-icons', async () => {
-      if (!(await clickByText(L('sidebar.viewAll')))) throw new Error('all view mode not found');
+      // The chip renders `sidebar.allMail` ("All mail"), not `sidebar.viewAll`
+      // ("All") — and `clickByText` matches on startsWith, so English and
+      // German passed by luck ("All mail" starts with "All", "Alle E-Mails"
+      // with "Alle") while Italian skipped outright ("Tutta la posta" does not
+      // start with "Tutto") and French silently clicked whatever else began
+      // with "Tout". Match the exact per-mode title instead.
+      if (!(await clickByTitle(L('workspace.sourceHint.all')))) throw new Error('all view mode not found');
       await expectState((s) => s.rows > 0, 'all view has no rows');
     });
 
@@ -575,7 +682,7 @@ describe('MailVault marketing screenshots', function () {
     await step('chat-view', async () => {
       await clickByTitle(L('list.switchChronologicalView'));
       await browser.pause(600);
-      await setAppearance(L('settings.appearance.chatView'));
+      await setSetting('viewStyle', 'chat');
       await expectState((s) => s.chat, 'chat view did not render');
     });
 
@@ -615,7 +722,7 @@ describe('MailVault marketing screenshots', function () {
 
     // ── Multi-account ─────────────────────────────────────────────────────
     await step('unified-inbox', async () => {
-      await setAppearance(L('settings.appearance.listView'));
+      await setSetting('viewStyle', 'list');
       await browser.pause(800);
       if (!(await clickTestId('all-inboxes-btn'))) throw new Error('All Inboxes button not found');
       await expectState((s) => s.rows > 0 && s.text.includes(L('sidebar.allInboxes')), 'unified inbox did not load', 30000);
@@ -625,10 +732,100 @@ describe('MailVault marketing screenshots', function () {
       await expectState((s) => !s.viewerEmpty, 'unified inbox message did not open');
     });
 
+    // ── Explorer ──────────────────────────────────────────────────────────
+    // Explorer is a mode of the message list, so it has to be left again
+    // before anything downstream photographs a list: `resetToInbox` knows
+    // nothing about it.
+    await step('explorer-date', async () => {
+      await resetToInbox();
+      if (!(await clickTestId('mail-view-explorer'))) throw new Error('Explorer control not found');
+      if (!(await setSelect('explorer-grouping', 'date'))) throw new Error('grouping select not found');
+      await expectState((s) => s.explorer === 'date' && s.explorerGroups > 0, 'Explorer date groups did not render');
+    });
+
+    await step('explorer-sender', async () => {
+      if (!(await setSelect('explorer-grouping', 'sender'))) throw new Error('grouping select not found');
+      await expectState((s) => s.explorer === 'sender' && s.explorerGroups > 0, 'Explorer sender groups did not render');
+    });
+
+    await step('explorer-conversation', async () => {
+      if (!(await setSelect('explorer-grouping', 'conversation'))) throw new Error('grouping select not found');
+      await expectState((s) => s.explorer === 'conversation' && s.explorerGroups > 0,
+        'Explorer conversation groups did not render');
+    });
+
+    /**
+     * The panel is taller than the window, and the chart is the bottom half of
+     * it. Left at scroll 0 the shot is all toolbar and half a bubble map, so
+     * bring the tab strip up under the header and let the chart have the frame.
+     */
+    const frameInsights = () => browser.execute(() => {
+      const scroller = document.querySelector('[data-testid="insights-page"] .insights-scroll');
+      const tabs = document.querySelector('.insights-tabs');
+      if (!scroller || !tabs) return false;
+      // `offsetTop` is measured against the nearest positioned ancestor, which
+      // is not this scroller — using it overshoots and pushes the tab strip
+      // ("Sender map / Timeline / Activity") off the top edge, so the shot
+      // loses the one element that says there are three views. Measure the
+      // distance between the two rects instead.
+      const delta = tabs.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 16;
+      scroller.scrollTo({ top: Math.max(0, scroller.scrollTop + delta), behavior: 'instant' });
+      return true;
+    });
+
+    // ── Insights ──────────────────────────────────────────────────────────
+    // Insights hides the whole mail workspace while it is open, so it runs
+    // after every list shot and closes itself before Settings.
+    await step('insights-map', async () => {
+      if (!(await clickTestId('mail-view-list'))) throw new Error('list view control not found');
+      await browser.pause(600);
+      if (!(await clickTestId('open-insights'))) throw new Error('Insights sidebar entry not found');
+      // The snapshot reads every cached header, so `ready` can be several
+      // seconds out; the panel is `inert` until then and photographs blank.
+      await expectState((s) => s.insightsPage === 'ready', 'Insights snapshot never became ready', 60000);
+      await expectState((s) => !s.text.includes(L('insights.noMail')), 'Insights found no mail to draw');
+      await frameInsights();
+    }, 1800);
+
+    await step('insights-timeline', async () => {
+      if (!(await clickTestId('insights-tab-timeline'))) throw new Error('timeline tab not found');
+      await expectState((s) => s.insightsTab === 'insights-tab-timeline' && s.insightsPage === 'ready',
+        'timeline panel did not open');
+      await frameInsights();
+    }, 1800);
+
+    await step('insights-activity', async () => {
+      if (!(await clickTestId('insights-tab-activity'))) throw new Error('activity tab not found');
+      await expectState((s) => s.insightsTab === 'insights-tab-activity' && s.insightsPage === 'ready',
+        'activity panel did not open');
+      await frameInsights();
+    }, 1800);
+
+    // Leave Insights, or every shot below it photographs the workspace.
+    await browser.execute(() => document.querySelector('[data-testid="insights-close"]')?.click());
+    await browser.pause(1200);
+
+    // Back to a real account before Settings. `unified-inbox` leaves the run in
+    // All Inboxes, where `activeAccountId` resolves to no account — and Time
+    // Capsule disables Take Snapshot on exactly that (`accountEmail` is
+    // `accounts.find(a => a.id === resolvedAccountId)?.email`). `clickByText`
+    // does not check `disabled`, so the click reported success and the shot
+    // then waited 20s for a snapshot row that was never going to appear.
+    await openWorkInbox();
+
     // ── Settings ──────────────────────────────────────────────────────────
     await step('settings-appearance', async () => {
-      await openAppearance();
-      await expectState((s) => s.settings && s.text.includes(L('settings.appearance.theme')), 'appearance tab not on screen');
+      await openAppearance('colors');
+      await expectState((s) => s.settingsPage === 'appearance' && s.text.includes(L('settings.colors.palette')),
+        'appearance colors section not on screen');
+    });
+
+    // The layout section is what the website's "can I change the layout"
+    // answers point at: reading pane, sidebar, message rows in one frame.
+    await step('settings-layout', async () => {
+      await openAppearance('layout');
+      await expectState((s) => s.settingsPage === 'appearance' && s.text.includes(L('workspace.readingPane')),
+        'appearance layout section not on screen');
     });
 
     await step('settings-storage', async () => {
@@ -733,7 +930,18 @@ describe('MailVault marketing screenshots', function () {
       }
       // A real check against the mock IMAP server and the local maildir —
       // reachable at all only because the account card is unlocked.
-      await $('[data-testid="backup-verification-tree"]').waitForExist({ timeout: 15000 });
+      // The tree lost its testid to the i18n/a11y sweep, and so did the locked
+      // overlay — but the overlay still blurs a LIVE copy of the card under
+      // `aria-hidden="true"`, and pointer-events-none does not stop the
+      // el.click() clickByText uses, so a locked run still mounts the tree in
+      // there. The only table on this page is the folder tree; one that is NOT
+      // inside the aria-hidden copy is both "the tree rendered" and "the seed
+      // unlocked it".
+      await browser.waitUntil(async () => browser.execute(() =>
+        [...document.querySelectorAll('[data-testid="settings-content"][data-page="backup"] table')]
+          .some((el) => !el.closest('[aria-hidden="true"]'))),
+        { timeout: 15000, interval: 400,
+          timeoutMsg: 'backup verification tree not on screen, or still behind the locked overlay' });
       // BackupAccountCard does not omit the locked UI, it BLURS a live copy of
       // it (opacity/blur + pointer-events-none, with an upsell on top) — and
       // pointer-events-none does not stop the el.click() clickByText uses, so
@@ -748,11 +956,17 @@ describe('MailVault marketing screenshots', function () {
     await step('premium-cleanup', async () => {
       await openSettings();
       await browser.pause(500);
-      await clickByText(L('settings.tab.cleanup'));
-      // The classifier auto-runs against the demo mailbox the moment this
-      // view mounts unlocked; the summary cards exist only once premium AND
-      // real results have landed, never for the free lock screen.
-      await $('[data-testid="cleanup-summary"]').waitForExist({ timeout: 45000 });
+      if (!(await clickByText(L('settings.tab.cleanup')))) throw new Error('cleanup tab not found');
+      // Two failures wear the same message otherwise: a nav click that missed,
+      // and a panel that never finished. `data-page` separates them.
+      await expectState((s) => s.settingsPage === 'cleanup', 'cleanup tab did not open');
+      // The classifier auto-runs against the demo mailbox the moment this view
+      // mounts unlocked. The summary grid lost its testid to the i18n sweep; a
+      // row checkbox is the same branch and a stronger claim — it exists only
+      // once premium AND real results have landed, never on the lock screen or
+      // the "classifying" screen.
+      await $('[data-testid="settings-content"][data-page="cleanup"] input[type="checkbox"]')
+        .waitForExist({ timeout: 45000 });
     }, 1200);
 
     await step('premium-auto-cleanup', async () => {
@@ -762,7 +976,10 @@ describe('MailVault marketing screenshots', function () {
       await browser.pause(600);
       // Two seeded rules (wdio.screenshots.conf.js) so this shows configured
       // rules rather than "no rules yet".
-      const row = await $('[data-testid="cleanup-rule-row"]');
+      // Rule rows lost their testid; the section keeps `settings-auto-cleanup`
+      // and each rule still renders its enable switch, which the locked branch
+      // does not.
+      const row = await $('[data-testid="settings-auto-cleanup"] [role="switch"]');
       await row.waitForExist({ timeout: 8000 });
       await row.scrollIntoView({ block: 'center' });
     });
@@ -770,13 +987,31 @@ describe('MailVault marketing screenshots', function () {
     await step('premium-time-capsule', async () => {
       await openSettings();
       await browser.pause(500);
-      await clickByText(L('settings.tab.timeCapsule'));
+      if (!(await clickByText(L('settings.tab.timeCapsule')))) throw new Error('time capsule tab not found');
+      await expectState((s) => s.settingsPage === 'time-capsule', 'time capsule tab did not open');
       await browser.pause(400);
       // Snapshots live on disk, not in seeded settings — take a real one from
       // the already-synced demo mailbox so the list shows an actual entry
       // instead of "no snapshots yet".
-      if (!(await clickByText(L('timeCapsule.takeSnapshot')))) throw new Error('take snapshot control not found');
-      await $('[data-testid="snapshot-row"]').waitForExist({ timeout: 20000 });
+      // `clickByText` treats a disabled button as a hit, which is how this
+      // waited out its whole timeout instead of failing in one line.
+      const snapshot = await browser.execute((label) => {
+        for (const b of document.querySelectorAll('button')) {
+          if (b.offsetHeight > 0 && (b.textContent || '').trim().startsWith(label)) {
+            if (b.disabled) return 'disabled';
+            b.click();
+            return 'clicked';
+          }
+        }
+        return 'missing';
+      }, L('timeCapsule.takeSnapshot'));
+      if (snapshot !== 'clicked') throw new Error(`take snapshot control ${snapshot}`);
+      // Rows lost their testid and gained role="button" in the a11y sweep.
+      // Everything else clickable on this page is a real <button>, so the div
+      // is unambiguous — but a `waitForExist` that times out says only that,
+      // while the panel may be showing "creating", an error and a Retry, or an
+      // empty list. Assert through the probe so the failure carries the screen.
+      await expectState((s) => s.snapshotRows > 0, 'snapshot list never showed a row', 60000);
     }, 1000);
 
     // Tracker removal: the switch and the stripped-beacon sample, not the upsell
@@ -788,7 +1023,13 @@ describe('MailVault marketing screenshots', function () {
       await browser.pause(400);
       // Wait for a control that exists only when the feature is unlocked. Waiting
       // on the gate copy would pass forever and prove nothing.
-      await $('[data-testid="tracker-blocking-toggle"]').waitForExist({ timeout: 5000 });
+      // The toggle's testId became a label in the a11y sweep; the switch is
+      // still rendered only for premium, and the free branch shows a Lock chip
+      // with no switch at all.
+      await $('[data-testid="settings-tracker-blocking"] [role="switch"]').waitForExist({ timeout: 5000 });
+      if (await $('[data-testid="tracker-upsell"]').isExisting()) {
+        throw new Error('tracker panel is still showing the upsell — entitlement not applied');
+      }
     });
 
     await step('premium-migration', async () => {
@@ -798,14 +1039,15 @@ describe('MailVault marketing screenshots', function () {
       // A seeded in-flight job (wdio.screenshots.conf.js) so the shot shows
       // real progress and a folder checklist — "progress you can watch" —
       // instead of step 1 of an empty wizard.
-      await $('[data-testid="migration-progress"]').waitForExist({ timeout: 8000 });
-      // MigrationSettings does not omit mainContent when locked, it BLURS the
-      // same live tree (opacity/blur + pointer-events-none) under an upsell —
-      // so migration-progress mounts either way once activeMigration is
-      // seeded. Only this overlay's absence actually proves it is unlocked.
-      if (await $('[data-testid="migration-locked"]').isExisting()) {
-        throw new Error('migration panel is still behind the locked overlay — entitlement not applied');
-      }
+      // `migration-progress` is gone, and the blurred-live-tree gate with it:
+      // a locked run now renders only a static gate card with no accounts on
+      // it. The progress view draws the seeded job's source and destination
+      // addresses, so the seeded email IS the assertion — a value, not a
+      // translated string, so it holds in every locale and proves the unlock at
+      // the same time.
+      const migrationSource = browser.demoAccounts[0].email;
+      await expectState((s) => s.settingsPage === 'migration' && s.text.includes(migrationSource),
+        'seeded migration progress not on screen (or the panel is still gated)');
       await browser.pause(400);
     });
 
@@ -817,6 +1059,13 @@ describe('MailVault marketing screenshots', function () {
       // Unlike the rest of this section, Change Server has no entitlement gate
       // today — the modal opens for every user. This shot proves the guided
       // flow renders; it is not evidence of an unlock.
+      // Accounts grew sub-tabs and opens on Profile; Change Server lives in
+      // Connection, so the old single click looked at a page that no longer
+      // holds it.
+      if (!(await clickByText(L('settings.accounts.sectionConnection')))) {
+        throw new Error('accounts connection sub-tab not found');
+      }
+      await browser.pause(400);
       if (!(await clickByText(L('settings.accounts.changeServer')))) throw new Error('change server control not found');
       await expectState(hasText(L('changeServer.imapHost')), 'change server dialog not on screen');
     });
@@ -825,6 +1074,11 @@ describe('MailVault marketing screenshots', function () {
       await closeSettings();
       await browser.pause(500);
       await resetToInbox();
+      // `unified-inbox` left the run in All Inboxes and nothing switched back;
+      // this row lives in one mailbox, and the unified list is chunked and
+      // virtualized, so a row finder scanning mounted nodes never sees it.
+      await openWorkInbox();
+      await expectState((s) => s.rows > 0 && !s.settings, 'not back on the work inbox');
       await clickRow(MARKERS.newsletter);
       await browser.pause(500);
       // Was `clickByTitle('Export')` with a comment explaining that the action
@@ -863,6 +1117,9 @@ describe('MailVault marketing screenshots', function () {
     await step('final-inbox', async () => {
       await pressKey('Escape');
       await resetToInbox();
+      // Same reason as premium-export-image: without this the closing shot is
+      // whatever unified view the run happened to end in.
+      await openWorkInbox();
       await expectState((s) => s.rows > 0 && !s.settings, 'did not land back on the inbox');
     });
   });

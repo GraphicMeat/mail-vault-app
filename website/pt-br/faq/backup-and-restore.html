@@ -145,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -195,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="Trilha de navegação" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -218,7 +218,7 @@
               O MailVault conecta ao seu servidor de e-mail pelo protocolo IMAP e baixa cada mensagem como um <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">arquivo .eml</a> padrão, guardado em formato <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> na sua máquina Mac ou Linux. Cada e-mail é um arquivo no disco — legível por gente, portátil e compatível com qualquer cliente de e-mail. Assim que uma mensagem está no seu cofre, você pode apagar a cópia do servidor para liberar espaço; a local não é afetada.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/pt-br/archive-progress-1440.webp" srcset="/screenshots/pt-br/archive-progress-720.webp 720w, /screenshots/pt-br/archive-progress-1440.webp 1440w, /screenshots/pt-br/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Barra de progresso de arquivamento do MailVault mostrando um backup de e-mails em massa em andamento" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/archive-progress-720.webp 720w, /screenshots/pt-br/archive-progress-1440.webp 1440w, /screenshots/pt-br/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/archive-progress-light-1440.webp" srcset="/screenshots/pt-br/archive-progress-light-720.webp 720w, /screenshots/pt-br/archive-progress-light-1440.webp 1440w, /screenshots/pt-br/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Barra de progresso de arquivamento do MailVault mostrando um backup de e-mails em massa em andamento" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -242,7 +242,7 @@
               Tudo o que você arquivou antes fica no seu cofre, sem ser afetado pelo que o servidor fizer depois — é esse o sentido do produto. Tudo o que você <em>não</em> arquivou se vai junto com a cópia do servidor, então o MailVault mostra o estado de cada mensagem na própria linha dela antes de você apagar: no servidor, no seu cofre ou nos dois. O caminho seguro é <strong>Arquivar &amp; Apagar</strong>, que copia cada mensagem para o seu cofre e a confere lá antes de removê-la do servidor.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/pt-br/state-icons-1440.webp" srcset="/screenshots/pt-br/state-icons-720.webp 720w, /screenshots/pt-br/state-icons-1440.webp 1440w, /screenshots/pt-br/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Caixa de entrada do MailVault mostrando os ícones de estado por mensagem: só no servidor, arquivada localmente e só local" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/state-icons-720.webp 720w, /screenshots/pt-br/state-icons-1440.webp 1440w, /screenshots/pt-br/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/state-icons-light-1440.webp" srcset="/screenshots/pt-br/state-icons-light-720.webp 720w, /screenshots/pt-br/state-icons-light-1440.webp 1440w, /screenshots/pt-br/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Caixa de entrada do MailVault mostrando os ícones de estado por mensagem: só no servidor, arquivada localmente e só local" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -252,7 +252,7 @@
               O MailVault exporta seus e-mails como um arquivo ZIP com todos os arquivos .eml mais um <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> que associa os e-mails às contas pelo endereço de e-mail (e não por IDs internos), o que torna os backups portáteis entre instalações diferentes. Você pode escolher exportar <strong>todos os e-mails</strong> ou <strong>somente os arquivados</strong>. A importação é idempotente — se um e-mail já existe localmente, ele não é duplicado. Se um backup traz e-mails de uma conta que você ainda não configurou, o MailVault a cria automaticamente (você só precisa digitar a senha de novo em Configurações).
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/pt-br/settings-backup-1440.webp" srcset="/screenshots/pt-br/settings-backup-720.webp 720w, /screenshots/pt-br/settings-backup-1440.webp 1440w, /screenshots/pt-br/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Configurações de backup e restauração do MailVault com exportação ZIP, importação e exportação MBOX para Thunderbird ou Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/settings-backup-720.webp 720w, /screenshots/pt-br/settings-backup-1440.webp 1440w, /screenshots/pt-br/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/settings-backup-light-1440.webp" srcset="/screenshots/pt-br/settings-backup-light-720.webp 720w, /screenshots/pt-br/settings-backup-light-1440.webp 1440w, /screenshots/pt-br/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Configurações de backup e restauração do MailVault com exportação ZIP, importação e exportação MBOX para Thunderbird ou Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -265,7 +265,7 @@
               Horários definidos servem para um cofre ou uma cópia de backup em um disco externo que outra coisa já usa com a própria programação, na maioria das vezes o Time Machine: escolha os horários em que esse disco está livre. Um horário selecionado que chega enquanto o MailVault está ocupado é ignorado em vez de recuperado depois, então a próxima tentativa é o horário selecionado seguinte.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/pt-br/premium-backup-hours-1440.webp" srcset="/screenshots/pt-br/premium-backup-hours-720.webp 720w, /screenshots/pt-br/premium-backup-hours-1440.webp 1440w, /screenshots/pt-br/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Agendamento de backup do MailVault definido como “Em horários definidos”, com 07, 12 e 22 escolhidos na grade de 24 horas" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/premium-backup-hours-720.webp 720w, /screenshots/pt-br/premium-backup-hours-1440.webp 1440w, /screenshots/pt-br/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/pt-br/premium-backup-hours-light-1440.webp" srcset="/screenshots/pt-br/premium-backup-hours-light-720.webp 720w, /screenshots/pt-br/premium-backup-hours-light-1440.webp 1440w, /screenshots/pt-br/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="Agendamento de backup do MailVault definido como “Em horários definidos”, com 07, 12 e 22 escolhidos na grade de 24 horas" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -310,6 +310,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

@@ -145,8 +145,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/faq/backup-and-restore.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/faq/backup-and-restore.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
 <body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
@@ -195,7 +195,7 @@
 
   <!-- Content -->
   <main id="main" class="pt-32 pb-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="mv-wrap mv-directory">
 
       <nav aria-label="Breadcrumb" class="mb-6 text-sm text-slate-500 dark:text-slate-400">
         <ol class="flex flex-wrap items-center gap-2">
@@ -218,7 +218,7 @@
               MailVault connects to your email server using the IMAP protocol and downloads each email as a standard <a href="https://datatracker.ietf.org/doc/html/rfc5322" target="_blank" rel="noopener" class="text-primary-500 hover:underline">.eml file</a> stored in <a href="https://en.wikipedia.org/wiki/Maildir" target="_blank" rel="noopener" class="text-primary-500 hover:underline">Maildir</a> format on your Mac or Linux machine. Each email is one file on disk — human-readable, portable, and compatible with any mail client. Once a message is in your vault you can delete the server copy to free up space; the local one is unaffected.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/archive-progress-1440.webp" srcset="/screenshots/archive-progress-720.webp 720w, /screenshots/archive-progress-1440.webp 1440w, /screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault archive progress bar showing bulk email backup in progress" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/archive-progress-720.webp 720w, /screenshots/archive-progress-1440.webp 1440w, /screenshots/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/archive-progress-light-1440.webp" srcset="/screenshots/archive-progress-light-720.webp 720w, /screenshots/archive-progress-light-1440.webp 1440w, /screenshots/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault archive progress bar showing bulk email backup in progress" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -242,7 +242,7 @@
               Anything you archived first stays in your vault, untouched by what the server does afterwards — that is the whole point of the product. Anything you did <em>not</em> archive is gone with the server copy, so MailVault shows the state of every message on its own row before you delete: on the server, in your vault, or both. The safe route is <strong>Archive &amp; Delete</strong>, which copies each message into your vault and verifies it there before removing it from the server.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/state-icons-1440.webp" srcset="/screenshots/state-icons-720.webp 720w, /screenshots/state-icons-1440.webp 1440w, /screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault inbox showing per-message state icons for server-only, archived locally, and local-only emails" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/state-icons-720.webp 720w, /screenshots/state-icons-1440.webp 1440w, /screenshots/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/state-icons-light-1440.webp" srcset="/screenshots/state-icons-light-720.webp 720w, /screenshots/state-icons-light-1440.webp 1440w, /screenshots/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault inbox showing per-message state icons for server-only, archived locally, and local-only emails" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -252,7 +252,7 @@
               MailVault exports your emails as a ZIP archive containing all .eml files plus a <code class="bg-slate-100 dark:bg-slate-900 px-1.5 py-0.5 rounded text-sm">manifest.json</code> that maps emails to accounts by email address (not internal IDs), making backups portable across different installations. You can choose to export <strong>all emails</strong> or <strong>archived only</strong>. Importing is idempotent — if an email already exists locally, it won't be duplicated. If a backup contains emails for an account you haven't set up yet, MailVault creates it automatically (you just re-enter the password in Settings).
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/settings-backup-1440.webp" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup and restore settings with ZIP export, import, and MBOX export for Thunderbird or Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/settings-backup-720.webp 720w, /screenshots/settings-backup-1440.webp 1440w, /screenshots/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/settings-backup-light-1440.webp" srcset="/screenshots/settings-backup-light-720.webp 720w, /screenshots/settings-backup-light-1440.webp 1440w, /screenshots/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup and restore settings with ZIP export, import, and MBOX export for Thunderbird or Apple Mail" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -265,7 +265,7 @@
               Set hours are meant for a vault or backup mirror on an external drive that something else already uses on its own schedule, Time Machine most often: pick the hours that drive is free. A selected hour that comes round while MailVault is busy is skipped rather than caught up later, so the next selected hour is the next attempt.
             </p>
             <figure class="px-6 pb-5">
-              <img src="/screenshots/premium-backup-hours-1440.webp" srcset="/screenshots/premium-backup-hours-720.webp 720w, /screenshots/premium-backup-hours-1440.webp 1440w, /screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup schedule set to At set hours, with 07, 12 and 22 picked in the 24-hour grid" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async">
+              <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/premium-backup-hours-720.webp 720w, /screenshots/premium-backup-hours-1440.webp 1440w, /screenshots/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px"><img src="/screenshots/premium-backup-hours-light-1440.webp" srcset="/screenshots/premium-backup-hours-light-720.webp 720w, /screenshots/premium-backup-hours-light-1440.webp 1440w, /screenshots/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 640px" alt="MailVault backup schedule set to At set hours, with 07, 12 and 22 picked in the 24-hour grid" class="rounded-lg shadow border border-slate-200 dark:border-slate-700 w-full" width="1440" height="928" loading="lazy" decoding="async"></picture>
             </figure>
         </article>
 
@@ -310,6 +310,6 @@
 
 
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>

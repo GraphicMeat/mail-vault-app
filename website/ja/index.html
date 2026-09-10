@@ -48,8 +48,8 @@
   "operatingSystem": "macOS, Linux",
   "applicationCategory": "BusinessApplication",
   "applicationSubCategory": "EmailApplication",
-  "softwareVersion": "2.12.0",
-  "datePublished": "2026-09-07",
+  "softwareVersion": "2.13.0",
+  "datePublished": "2026-09-10",
   "offers": {
     "@type": "Offer",
     "price": "0",
@@ -86,7 +86,9 @@
     "フォルダへ移動 — サーバー上のフォルダ間でメールを整理し直せます",
     "遅延時間を設定できる送信の取り消し",
     "メールのテンプレート — 定型文を保存して再利用",
-    "スマートな送信者の傾向 — 連絡先ごとのやりとりの履歴と頻度",
+    "メール分析 — ローカルのヘッダーから作られる送信者マップ、タイムライン、アクティビティカレンダー",
+    "Explorer — 一枚の平らな一覧ではなく、日付・送信者・会話でメールボックスをたどる",
+    "送信者パネル — 連絡先ごとのやり取りの履歴と頻度を、読んでいるメッセージの横に",
     "送信者でグループ化 — 受信トレイを連絡先ごとに整理し、送信した返信も同じ流れに表示",
     "リンクの安全性 — フィッシングリンクの検出と、送信者のなりすましの警告",
     "通知のカスタマイズ — アカウントごと、フォルダごとに設定",
@@ -133,7 +135,7 @@
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/">
   <!-- /i18n:alternates -->
 
-  <link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
 </head>
@@ -195,7 +197,7 @@
 </div>
 <p id="vote-status" class="mv-community-status" role="status"></p>
 </div>
-<figure class="mv-hero-product"><button class="mv-shot " type="button" data-image aria-label="Enlarge: MailVault inbox with threaded email conversations"><img src="/screenshots/ja/thread-view-1440.webp" srcset="/screenshots/ja/thread-view-720.webp 720w, /screenshots/ja/thread-view-1440.webp 1440w, /screenshots/ja/thread-view-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="MailVault inbox with threaded email conversations" fetchpriority="high" decoding="async"></button>
+<figure class="mv-hero-product"><button class="mv-shot " type="button" data-image aria-label="Enlarge: MailVault inbox with threaded email conversations"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/thread-view-720.webp 720w, /screenshots/ja/thread-view-1440.webp 1440w, /screenshots/ja/thread-view-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px"><img src="/screenshots/ja/thread-view-light-1440.webp" srcset="/screenshots/ja/thread-view-light-720.webp 720w, /screenshots/ja/thread-view-light-1440.webp 1440w, /screenshots/ja/thread-view-light-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="MailVault inbox with threaded email conversations" fetchpriority="high" decoding="async"></picture></button>
 <figcaption>Your familiar inbox, with a vault behind it. <span>Click to explore the screenshot.</span>
 </figcaption>
 </figure>
@@ -265,7 +267,7 @@
 <p>Look for <strong>Saved in your vault</strong>, then open the message. When you’re ready to free space, use archive-then-delete to save and verify each copy before server removal.</p>
 </li>
 </ol>
-<figure><button class="mv-shot mv-archive-shot" type="button" data-image aria-label="Enlarge: Archive selected messages while keeping them on the server"><img src="/screenshots/ja/selection-dialog-archive-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="Archive selected messages while keeping them on the server" loading="lazy" decoding="async"></button>
+<figure><button class="mv-shot mv-archive-shot" type="button" data-image aria-label="Enlarge: Archive selected messages while keeping them on the server"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-archive-720.webp 720w, /screenshots/ja/selection-dialog-archive-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px"><img src="/screenshots/ja/selection-dialog-archive-light-1440.webp" srcset="/screenshots/ja/selection-dialog-archive-light-720.webp 720w, /screenshots/ja/selection-dialog-archive-light-1440.webp 1440w, /screenshots/ja/selection-dialog-archive-light-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="Archive selected messages while keeping them on the server" loading="lazy" decoding="async"></picture></button>
 <figcaption>The real Archive action tells you exactly what stays where.</figcaption>
 </figure>
 </div>
@@ -273,7 +275,7 @@
 <div><span class="mv-vault-label">✓ Saved in your vault</span>
 <p>Every message shows where its copies live. You can tell a saved copy from a message still only on the server.</p><a class="mv-text-link" href="/ja/docs.html">Read the archiving guide →</a>
 </div>
-<figure><button class="mv-shot mv-state-shot" type="button" data-image aria-label="Enlarge: Saved in your vault status and per-message state icons"><img src="/screenshots/ja/state-icons-1440.webp" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="Saved in your vault status and per-message state icons" loading="lazy" decoding="async"></button>
+<figure><button class="mv-shot mv-state-shot" type="button" data-image aria-label="Enlarge: Saved in your vault status and per-message state icons"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 760px) 92vw, 660px" width="1440" height="932" alt="Saved in your vault status and per-message state icons" loading="lazy" decoding="async"></picture></button>
 </figure>
 </div>
 </div>
@@ -294,7 +296,7 @@
 </article>
 <article>
 <h3>Feel at home in your inbox</h3>
-<p>Read, reply, and compose across accounts. Follow threads, switch to chat view, and find what you need.</p><a href="/ja/features.html">See the full mail client →</a>
+<p>複数のアカウントをまたいで読み、返信し、新規作成できます。スレッドを追い、チャット表示に切り替え、Explorerでメールボックスを日付や送信者でグループ化し、メール分析で実際に誰とやり取りしているかを確かめられます。</p><a href="/ja/features.html#explorer">Explorerとメール分析を見る →</a>
 </article>
 </div>
 <aside class="mv-story">
@@ -442,7 +444,7 @@
 <p>
 </p>
 </dialog>
-<script defer src="/assets/english-site.js?v=1">
+<script defer src="/assets/english-site.js?v=3">
 </script>
 <script defer src="/pricing-localize.js?v=20260905-savings">
 </script>

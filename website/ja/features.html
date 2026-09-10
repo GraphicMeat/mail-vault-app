@@ -107,8 +107,8 @@
   <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/features.html">
   <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/features.html">
   <!-- /i18n:alternates -->
-<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">
-<link rel="stylesheet" href="/assets/english-content.css?v=1">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
+<link rel="stylesheet" href="/assets/english-content.css?v=2">
 <link rel="stylesheet" href="/assets/features-page.css">
 <style>html.mv-prices-pending [data-mv-price],html.mv-prices-pending .mv-currency-control select{visibility:hidden}</style>
 <script>document.documentElement.classList.add('mv-prices-pending');window.mvPriceDeadline=Date.now()+4000;setTimeout(function(){document.documentElement.classList.remove('mv-prices-pending');},4500);</script>
@@ -178,7 +178,7 @@
     </div>
   </section>
 
-<div class="mv-feature-layout mv-wrap"><aside class="mv-feature-nav"><details open><summary>Browse features</summary><nav aria-label="Feature categories"><a href="#email-management">メール管理</a><a href="#threading">スレッド表示</a><a href="#chat-view">チャットビュー</a><a href="#security">セキュリティ</a><a href="#storage">保存</a><a href="#bulk-operations">一括操作</a><a href="#multi-account">マルチアカウント</a><a href="#customization">カスタマイズ</a><a href="#performance">パフォーマンス</a><a href="#premium">Premium</a></nav></details></aside><div class="mv-feature-content">  <!-- ============================================================ -->
+<div class="mv-feature-layout mv-wrap"><aside class="mv-feature-nav"><details open><summary>Browse features</summary><nav aria-label="Feature categories"><a href="#email-management">メール管理</a><a href="#threading">スレッド表示</a><a href="#chat-view">チャットビュー</a><a href="#explorer">Explorer</a><a href="#insights">メール分析</a><a href="#security">セキュリティ</a><a href="#storage">保存</a><a href="#bulk-operations">一括操作</a><a href="#multi-account">マルチアカウント</a><a href="#customization">カスタマイズ</a><a href="#performance">パフォーマンス</a><a href="#premium">Premium</a></nav></details></aside><div class="mv-feature-content">  <!-- ============================================================ -->
   <!-- 1. Email Management (text left, image right) -->
   <!-- ============================================================ -->
   <section id="email-management" class="py-20 scroll-mt-32">
@@ -247,9 +247,9 @@
         </div>
         <!-- Screenshots: email list → sender grouped → expanded topic -->
         <div class="flex gap-3 justify-center">
-          <img src="/screenshots/ja/email-list-view-1440.webp" srcset="/screenshots/ja/email-list-view-720.webp 720w, /screenshots/ja/email-list-view-1440.webp 1440w, /screenshots/ja/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="スレッド表示された会話とともに受信トレイを表示しているMailVaultのメール一覧" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="/screenshots/ja/sender-grouped-view-1440.webp" srcset="/screenshots/ja/sender-grouped-view-720.webp 720w, /screenshots/ja/sender-grouped-view-1440.webp 1440w, /screenshots/ja/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="連絡先ごとにメールを整理して表示しているMailVaultの送信者グループ表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="/screenshots/ja/sender-grouped-expanded-1440.webp" srcset="/screenshots/ja/sender-grouped-expanded-720.webp 720w, /screenshots/ja/sender-grouped-expanded-1440.webp 1440w, /screenshots/ja/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="送信した返信が交互に並ぶよう展開されたトピックを表示している、MailVaultの送信者グループ表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/email-list-view-720.webp 720w, /screenshots/ja/email-list-view-1440.webp 1440w, /screenshots/ja/email-list-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/email-list-view-light-1440.webp" srcset="/screenshots/ja/email-list-view-light-720.webp 720w, /screenshots/ja/email-list-view-light-1440.webp 1440w, /screenshots/ja/email-list-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="スレッド表示された会話とともに受信トレイを表示しているMailVaultのメール一覧" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/sender-grouped-view-720.webp 720w, /screenshots/ja/sender-grouped-view-1440.webp 1440w, /screenshots/ja/sender-grouped-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/sender-grouped-view-light-1440.webp" srcset="/screenshots/ja/sender-grouped-view-light-720.webp 720w, /screenshots/ja/sender-grouped-view-light-1440.webp 1440w, /screenshots/ja/sender-grouped-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="連絡先ごとにメールを整理して表示しているMailVaultの送信者グループ表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/sender-grouped-expanded-720.webp 720w, /screenshots/ja/sender-grouped-expanded-1440.webp 1440w, /screenshots/ja/sender-grouped-expanded-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/sender-grouped-expanded-light-1440.webp" srcset="/screenshots/ja/sender-grouped-expanded-light-720.webp 720w, /screenshots/ja/sender-grouped-expanded-light-1440.webp 1440w, /screenshots/ja/sender-grouped-expanded-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="送信した返信が交互に並ぶよう展開されたトピックを表示している、MailVaultの送信者グループ表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -263,7 +263,7 @@
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
-          <img src="/screenshots/ja/chat-view-thread-1440.webp" srcset="/screenshots/ja/chat-view-thread-720.webp 720w, /screenshots/ja/chat-view-thread-1440.webp 1440w, /screenshots/ja/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="メールが時系列に並び、引用が折りたたまれたMailVaultのスレッド会話表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/chat-view-thread-720.webp 720w, /screenshots/ja/chat-view-thread-1440.webp 1440w, /screenshots/ja/chat-view-thread-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/chat-view-thread-light-1440.webp" srcset="/screenshots/ja/chat-view-thread-light-720.webp 720w, /screenshots/ja/chat-view-thread-light-1440.webp 1440w, /screenshots/ja/chat-view-thread-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="メールが時系列に並び、引用が折りたたまれたMailVaultのスレッド会話表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
         <!-- Text -->
         <div class="order-1 lg:order-2">
@@ -335,8 +335,8 @@
         </div>
         <!-- Screenshots side by side -->
         <div class="flex gap-4 justify-center">
-          <img src="/screenshots/ja/chat-view-1440.webp" srcset="/screenshots/ja/chat-view-720.webp 720w, /screenshots/ja/chat-view-1440.webp 1440w, /screenshots/ja/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="会話のプレビューと未読件数を伴うトピック一覧を表示しているMailVaultのチャットビュー" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async">
-          <img src="/screenshots/ja/chat-view-chat-1440.webp" srcset="/screenshots/ja/chat-view-chat-720.webp 720w, /screenshots/ja/chat-view-chat-1440.webp 1440w, /screenshots/ja/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="送信者のアバター付きで、メッセージアプリ風のメール会話を表示しているMailVaultのチャット吹き出し表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/chat-view-720.webp 720w, /screenshots/ja/chat-view-1440.webp 1440w, /screenshots/ja/chat-view-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/ja/chat-view-light-1440.webp" srcset="/screenshots/ja/chat-view-light-720.webp 720w, /screenshots/ja/chat-view-light-1440.webp 1440w, /screenshots/ja/chat-view-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="会話のプレビューと未読件数を伴うトピック一覧を表示しているMailVaultのチャットビュー" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async"></picture>
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/chat-view-chat-720.webp 720w, /screenshots/ja/chat-view-chat-1440.webp 1440w, /screenshots/ja/chat-view-chat-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/ja/chat-view-chat-light-1440.webp" srcset="/screenshots/ja/chat-view-chat-light-720.webp 720w, /screenshots/ja/chat-view-chat-light-1440.webp 1440w, /screenshots/ja/chat-view-chat-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="送信者のアバター付きで、メッセージアプリ風のメール会話を表示しているMailVaultのチャット吹き出し表示" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-xs" data-expandable-image width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -345,17 +345,119 @@
   <!-- ============================================================ -->
   <!-- 4. Security & Privacy (image left, icons right) -->
   <!-- ============================================================ -->
+  <!-- 4. Explorer (text left, image right) -->
+  <!-- ============================================================ -->
+  <section id="explorer" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Text -->
+        <div>
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl lamp-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">Explorer</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            同じメールボックスを通るもう一つの道です。Explorerは手元にあるメッセージをグループにまとめ &mdash; 日付ごと、送信者ごと、会話ごとに &mdash; 他をすべてスクロールで通り過ぎるかわりに、探しているものへ降りていけるようにします。
+          </p>
+          <ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">日付で分類し、月単位または日単位の細かさで見る</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">送信者で分類 &mdash; 一人の相手からのメッセージがすべて一つのグループに</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">日付 &rarr; 会話 &mdash; 月を開くと、その中のスレッドが並ぶ</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">どのグループにも、含まれるメッセージの数、保管庫にある数、未読の数が表示される</span>
+            </li></ul><details class="mv-feature-more"><summary>See all 8 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">いま開いているグループの中を検索することも、そのままメールボックス全体の検索へ移ることもできる</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">グループにチェックを入れれば中のメッセージをすべて選択でき、まとめてアーカイブ・削除・書き出しができる</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">パンくずリストが、フォルダごと・アカウントごとにいた場所を覚え、再起動しても残る</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">キーボード: j と k で、一覧を離れずにグループとメッセージを行き来できる</span>
+            </li></ul></details>
+        </div>
+        <!-- Screenshot -->
+        <div class="flex justify-center">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/explorer-sender-720.webp 720w, /screenshots/ja/explorer-sender-1440.webp 1440w, /screenshots/ja/explorer-sender-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/explorer-sender-light-1440.webp" srcset="/screenshots/ja/explorer-sender-light-720.webp 720w, /screenshots/ja/explorer-sender-light-1440.webp 1440w, /screenshots/ja/explorer-sender-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVaultのExplorerがメールボックスを送信者でグループ化し、各グループにメッセージ数・保管庫の件数・未読数が表示されている画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- 5. Insights (image left, text right) -->
+  <!-- ============================================================ -->
+  <section id="insights" class="py-20 scroll-mt-32">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid lg:grid-cols-2 gap-12 items-center">
+        <!-- Screenshot -->
+        <div class="flex justify-center order-2 lg:order-1">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/insights-map-720.webp 720w, /screenshots/ja/insights-map-1440.webp 1440w, /screenshots/ja/insights-map-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/insights-map-light-1440.webp" srcset="/screenshots/ja/insights-map-light-720.webp 720w, /screenshots/ja/insights-map-light-1440.webp 1440w, /screenshots/ja/insights-map-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="MailVaultのメール分析の送信者マップ。相手ごとにバブルが描かれ、大きさはメッセージ数を、位置は最後のやり取りの新しさを表している画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image width="1440" height="928" decoding="async"></picture>
+        </div>
+        <!-- Text -->
+        <div class="order-1 lg:order-2">
+          <div class="inline-flex items-center justify-center w-14 h-14 rounded-2xl lamp-bg mb-6">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/>
+            </svg>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-bold mb-4">メール分析</h2>
+          <p class="text-lg text-slate-600 dark:text-slate-400 mb-8">
+            実際に誰とやり取りしているかを描き出します。メール分析はすでにディスクにあるメッセージのヘッダー &mdash; 誰が書き、誰に書き、それがいつだったか &mdash; を読み、やり取りを3つのビューに描きます。本文は読まれず、何もアップロードされません。
+          </p>
+          <ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">送信者マップ &mdash; 相手ごとに一つのバブル。大きさはやり取りの量、位置は最後に届いてからの近さ</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">タイムライン &mdash; 送信者ごとに一本のレーン。実際の時間軸に沿って受信と送信の印が並ぶ</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">アクティビティ &mdash; その日どれだけメールが動いたかを示すカレンダー</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">バブル・レーン・日をクリックすると、その裏にあるメッセージが表示され、ページを離れずに読める</span>
+            </li></ul><details class="mv-feature-more"><summary>See all 8 capabilities</summary><ul class="space-y-4"><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">絞り込みはアカウント別、期間別 &mdash; 30日、90日、12か月、または自分で選んだ日付 &mdash; そして送受信の向き別にできる</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">「自動送信と思われる送信者を非表示」にチェックを入れれば、ニュースレターが人を押しのけなくなる</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">何を根拠にしているかを明示する: どのフォルダがローカルにキャッシュされ、メールボックスのどれだけを覆っているか</span>
+            </li><li class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+              <span class="text-slate-700 dark:text-slate-300">ローカルのヘッダーだけから作られる &mdash; クラウドサービスもアカウントも不要で、何もマシンの外へ出ない</span>
+            </li></ul></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
   <section id="security" class="py-20 bg-slate-100/50 dark:bg-slate-800/30 scroll-mt-32">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshots -->
         <div class="flex flex-col gap-4 justify-center order-2 lg:order-1">
           <div class="flex gap-3 justify-center">
-            <img src="/screenshots/ja/link-safety-1440.webp" srcset="/screenshots/ja/link-safety-720.webp 720w, /screenshots/ja/link-safety-1440.webp 1440w, /screenshots/ja/link-safety-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="迷惑メールのフィッシングリンクを検出し、疑わしい件名の横に警告アイコンを表示しているMailVaultのリンク安全機能" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/link-safety-modal-1440.webp" srcset="/screenshots/ja/link-safety-modal-720.webp 720w, /screenshots/ja/link-safety-modal-1440.webp 1440w, /screenshots/ja/link-safety-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="リンクの表示文字列と実際のリダイレクト先を並べて示す、MailVaultの疑わしいリンクのダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/link-safety-720.webp 720w, /screenshots/ja/link-safety-1440.webp 1440w, /screenshots/ja/link-safety-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/ja/link-safety-light-1440.webp" srcset="/screenshots/ja/link-safety-light-720.webp 720w, /screenshots/ja/link-safety-light-1440.webp 1440w, /screenshots/ja/link-safety-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="迷惑メールのフィッシングリンクを検出し、疑わしい件名の横に警告アイコンを表示しているMailVaultのリンク安全機能" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/link-safety-modal-720.webp 720w, /screenshots/ja/link-safety-modal-1440.webp 1440w, /screenshots/ja/link-safety-modal-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px"><img src="/screenshots/ja/link-safety-modal-light-1440.webp" srcset="/screenshots/ja/link-safety-modal-light-720.webp 720w, /screenshots/ja/link-safety-modal-light-1440.webp 1440w, /screenshots/ja/link-safety-modal-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 260px" alt="リンクの表示文字列と実際のリダイレクト先を並べて示す、MailVaultの疑わしいリンクのダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-1/2 max-w-[260px]" data-expandable-image width="1440" height="928" decoding="async"></picture>
           </div>
           <div class="flex justify-center">
-            <img src="/screenshots/ja/reply-to-mismatch-1440.webp" srcset="/screenshots/ja/reply-to-mismatch-720.webp 720w, /screenshots/ja/reply-to-mismatch-1440.webp 1440w, /screenshots/ja/reply-to-mismatch-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px" alt="Reply-Toアドレスが送信者と異なることを示す、MailVaultの送信者詳細ポップオーバー — フィッシングの検出" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 max-w-[540px] w-full" data-expandable-image width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/reply-to-mismatch-720.webp 720w, /screenshots/ja/reply-to-mismatch-1440.webp 1440w, /screenshots/ja/reply-to-mismatch-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px"><img src="/screenshots/ja/reply-to-mismatch-light-1440.webp" srcset="/screenshots/ja/reply-to-mismatch-light-720.webp 720w, /screenshots/ja/reply-to-mismatch-light-1440.webp 1440w, /screenshots/ja/reply-to-mismatch-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 520px" alt="Reply-Toアドレスが送信者と異なることを示す、MailVaultの送信者詳細ポップオーバー — フィッシングの検出" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 max-w-[540px] w-full" data-expandable-image width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <!-- Text -->
@@ -453,8 +555,8 @@
         <!-- Screenshot -->
         <div class="flex justify-center">
           <div class="flex flex-col gap-4 w-full max-w-lg">
-            <img src="/screenshots/ja/state-icons-1440.webp" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/settings-backup-1440.webp" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="ZIPの書き出し、読み込み、ThunderbirdやApple Mail向けのMBOX書き出しを備えたMailVaultのバックアップと復元の設定" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/state-icons-720.webp 720w, /screenshots/ja/state-icons-1440.webp 1440w, /screenshots/ja/state-icons-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/state-icons-light-1440.webp" srcset="/screenshots/ja/state-icons-light-720.webp 720w, /screenshots/ja/state-icons-light-1440.webp 1440w, /screenshots/ja/state-icons-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="サーバーのみ、ローカルにアーカイブ済み、ローカルのみの各状態をメッセージごとにアイコンで示すMailVaultの受信トレイ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-backup-720.webp 720w, /screenshots/ja/settings-backup-1440.webp 1440w, /screenshots/ja/settings-backup-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/settings-backup-light-1440.webp" srcset="/screenshots/ja/settings-backup-light-720.webp 720w, /screenshots/ja/settings-backup-light-1440.webp 1440w, /screenshots/ja/settings-backup-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="ZIPの書き出し、読み込み、ThunderbirdやApple Mail向けのMBOX書き出しを備えたMailVaultのバックアップと復元の設定" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
       </div>
@@ -470,8 +572,8 @@
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
           <div class="flex flex-col gap-4 w-full max-w-lg">
-            <img src="/screenshots/ja/selection-dialog-1440.webp" srcset="/screenshots/ja/selection-dialog-720.webp 720w, /screenshots/ja/selection-dialog-1440.webp 1440w, /screenshots/ja/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="期間の選択、年のショートカット、アーカイブ・削除・アーカイブして削除の各ボタンを備えたMailVaultの一括選択ダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/archive-progress-1440.webp" srcset="/screenshots/ja/archive-progress-720.webp 720w, /screenshots/ja/archive-progress-1440.webp 1440w, /screenshots/ja/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="66通中3通をダウンロード済みと表示し、中止ボタンを備えたMailVaultのアーカイブ進捗" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/selection-dialog-720.webp 720w, /screenshots/ja/selection-dialog-1440.webp 1440w, /screenshots/ja/selection-dialog-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/selection-dialog-light-1440.webp" srcset="/screenshots/ja/selection-dialog-light-720.webp 720w, /screenshots/ja/selection-dialog-light-1440.webp 1440w, /screenshots/ja/selection-dialog-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="期間の選択、年のショートカット、アーカイブ・削除・アーカイブして削除の各ボタンを備えたMailVaultの一括選択ダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/archive-progress-720.webp 720w, /screenshots/ja/archive-progress-1440.webp 1440w, /screenshots/ja/archive-progress-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/archive-progress-light-1440.webp" srcset="/screenshots/ja/archive-progress-light-720.webp 720w, /screenshots/ja/archive-progress-light-1440.webp 1440w, /screenshots/ja/archive-progress-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="66通中3通をダウンロード済みと表示し、中止ボタンを備えたMailVaultのアーカイブ進捗" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <!-- Text -->
@@ -546,12 +648,12 @@
               <span class="text-slate-700 dark:text-slate-300">アカウントごとのメールボックス記憶 — 最後に見ていたフォルダを覚えています</span>
             </li><li class="flex items-start gap-3">
               <svg class="w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
-              <span class="text-slate-700 dark:text-slate-300">送信者の傾向 — 連絡先ごとのやりとりの履歴と頻度</span>
+              <span class="text-slate-700 dark:text-slate-300">送信者パネル — 連絡先ごとのやり取りの履歴と頻度を、読んでいるメッセージの横に</span>
             </li></ul></details>
         </div>
         <!-- Screenshot -->
         <div class="flex justify-center">
-          <img src="/screenshots/ja/unified-inbox-1440.webp" srcset="/screenshots/ja/unified-inbox-720.webp 720w, /screenshots/ja/unified-inbox-1440.webp 1440w, /screenshots/ja/unified-inbox-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="3つのアカウントを1つの一覧にまとめ、アカウントごとのアバター色を付けたMailVaultの統合受信トレイ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/unified-inbox-720.webp 720w, /screenshots/ja/unified-inbox-1440.webp 1440w, /screenshots/ja/unified-inbox-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/unified-inbox-light-1440.webp" srcset="/screenshots/ja/unified-inbox-light-720.webp 720w, /screenshots/ja/unified-inbox-light-1440.webp 1440w, /screenshots/ja/unified-inbox-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="3つのアカウントを1つの一覧にまとめ、アカウントごとのアバター色を付けたMailVaultの統合受信トレイ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
         </div>
       </div>
     </div>
@@ -565,7 +667,7 @@
       <div class="grid lg:grid-cols-2 gap-12 items-center">
         <!-- Screenshot -->
         <div class="flex justify-center order-2 lg:order-1">
-          <img src="/screenshots/ja/settings-appearance-1440.webp" srcset="/screenshots/ja/settings-appearance-720.webp 720w, /screenshots/ja/settings-appearance-1440.webp 1440w, /screenshots/ja/settings-appearance-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="ダークモードの切り替え、メール表示のテーマ、日付と時刻の形式の選択を備えたMailVaultの外観設定" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+          <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/settings-appearance-720.webp 720w, /screenshots/ja/settings-appearance-1440.webp 1440w, /screenshots/ja/settings-appearance-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px"><img src="/screenshots/ja/settings-appearance-light-1440.webp" srcset="/screenshots/ja/settings-appearance-light-720.webp 720w, /screenshots/ja/settings-appearance-light-1440.webp 1440w, /screenshots/ja/settings-appearance-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 512px" alt="ダークモードの切り替え、メール表示のテーマ、日付と時刻の形式の選択を備えたMailVaultの外観設定" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-lg" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
         </div>
         <!-- Text -->
         <div class="order-1 lg:order-2">
@@ -749,11 +851,11 @@
             </li></ul></details>
           <!-- Screenshots: backup schedule → set hours → Time Capsule → tracker blocking → focus session -->
           <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 justify-items-center mt-6">
-            <img src="/screenshots/ja/premium-backup-schedule-1440.webp" srcset="/screenshots/ja/premium-backup-schedule-720.webp 720w, /screenshots/ja/premium-backup-schedule-1440.webp 1440w, /screenshots/ja/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="毎日・毎週・任意のスケジュールと時刻指定に対応するMailVaultの自動バックアップ設定画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/premium-backup-hours-1440.webp" srcset="/screenshots/ja/premium-backup-hours-720.webp 720w, /screenshots/ja/premium-backup-hours-1440.webp 1440w, /screenshots/ja/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault のバックアップのスケジュールを「指定した時刻」にし、24 時間のグリッドで 07、12、22 を選んだ画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/premium-time-capsule-1440.webp" srcset="/screenshots/ja/premium-time-capsule-720.webp 720w, /screenshots/ja/premium-time-capsule-1440.webp 1440w, /screenshots/ja/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="メールボックスのある時点のスナップショットを表示するMailVaultのTime Capsule" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/premium-tracker-blocking-1440.webp" srcset="/screenshots/ja/premium-tracker-blocking-720.webp 720w, /screenshots/ja/premium-tracker-blocking-1440.webp 1440w, /screenshots/ja/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="メッセージが描画される前にトラッキングピクセルを取り除くMailVaultのメールトラッカーのブロック機能" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
-            <img src="/screenshots/ja/premium-focus-session-1440.webp" srcset="/screenshots/ja/premium-focus-session-720.webp 720w, /screenshots/ja/premium-focus-session-1440.webp 1440w, /screenshots/ja/premium-focus-session-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="プリセットの分数、カスタムの分数を入れる欄、そして「開始」がある MailVault の集中セッションのダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async">
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-schedule-720.webp 720w, /screenshots/ja/premium-backup-schedule-1440.webp 1440w, /screenshots/ja/premium-backup-schedule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/premium-backup-schedule-light-1440.webp" srcset="/screenshots/ja/premium-backup-schedule-light-720.webp 720w, /screenshots/ja/premium-backup-schedule-light-1440.webp 1440w, /screenshots/ja/premium-backup-schedule-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="毎日・毎週・任意のスケジュールと時刻指定に対応するMailVaultの自動バックアップ設定画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-backup-hours-720.webp 720w, /screenshots/ja/premium-backup-hours-1440.webp 1440w, /screenshots/ja/premium-backup-hours-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/premium-backup-hours-light-1440.webp" srcset="/screenshots/ja/premium-backup-hours-light-720.webp 720w, /screenshots/ja/premium-backup-hours-light-1440.webp 1440w, /screenshots/ja/premium-backup-hours-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="MailVault のバックアップのスケジュールを「指定した時刻」にし、24 時間のグリッドで 07、12、22 を選んだ画面" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-time-capsule-720.webp 720w, /screenshots/ja/premium-time-capsule-1440.webp 1440w, /screenshots/ja/premium-time-capsule-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/premium-time-capsule-light-1440.webp" srcset="/screenshots/ja/premium-time-capsule-light-720.webp 720w, /screenshots/ja/premium-time-capsule-light-1440.webp 1440w, /screenshots/ja/premium-time-capsule-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="メールボックスのある時点のスナップショットを表示するMailVaultのTime Capsule" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-tracker-blocking-720.webp 720w, /screenshots/ja/premium-tracker-blocking-1440.webp 1440w, /screenshots/ja/premium-tracker-blocking-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/premium-tracker-blocking-light-1440.webp" srcset="/screenshots/ja/premium-tracker-blocking-light-720.webp 720w, /screenshots/ja/premium-tracker-blocking-light-1440.webp 1440w, /screenshots/ja/premium-tracker-blocking-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="メッセージが描画される前にトラッキングピクセルを取り除くMailVaultのメールトラッカーのブロック機能" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full max-w-[220px]" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
+            <picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/premium-focus-session-720.webp 720w, /screenshots/ja/premium-focus-session-1440.webp 1440w, /screenshots/ja/premium-focus-session-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px"><img src="/screenshots/ja/premium-focus-session-light-1440.webp" srcset="/screenshots/ja/premium-focus-session-light-720.webp 720w, /screenshots/ja/premium-focus-session-light-1440.webp 1440w, /screenshots/ja/premium-focus-session-light-2880.webp 2880w" sizes="(max-width: 768px) 100vw, 173px" alt="プリセットの分数、カスタムの分数を入れる欄、そして「開始」がある MailVault の集中セッションのダイアログ" class="rounded-xl shadow-lg border border-slate-200 dark:border-slate-700 w-full" data-expandable-image loading="lazy" width="1440" height="928" decoding="async"></picture>
           </div>
         </div>
         <div class="flex justify-center">
@@ -892,8 +994,21 @@
       // A thumbnail's srcset serves the variant that fits its slot (720w for the
       // narrow cards), which is far too small once the lightbox blows it up.
       // Always open the widest candidate instead.
+      // The screenshots are two sets now, light on the <img> and dark on a
+      // <source>. Reading the img's own srcset would enlarge the light shot
+      // over a dark page, so take the srcset of whichever source is matching.
+      function activeSrcset(el) {
+        var picture = el.closest('picture');
+        var sources = picture ? picture.querySelectorAll('source') : [];
+        for (var i = 0; i < sources.length; i++) {
+          var candidate = sources[i];
+          if (candidate.srcset && (!candidate.media || matchMedia(candidate.media).matches)) return candidate.srcset;
+        }
+        return el.getAttribute('srcset') || '';
+      }
+
       function hiRes(el) {
-        var best = (el.getAttribute('srcset') || '').split(',').reduce(function(a, c) {
+        var best = activeSrcset(el).split(',').reduce(function(a, c) {
           var p = c.trim().split(/\s+/), w = parseInt(p[1], 10);
           return p[0] && w > a.w ? { url: p[0], w: w } : a;
         }, { url: '', w: 0 });
@@ -921,6 +1036,6 @@
 
   <script defer src="/pricing-localize.js?v=20260905-savings"></script>
   <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
-<script defer src="/assets/english-site.js?v=2"></script>
+<script defer src="/assets/english-site.js?v=3"></script>
 </body>
 </html>
