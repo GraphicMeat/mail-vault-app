@@ -124,11 +124,99 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.13.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.13.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 10, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </span>
+            Changed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Accounts can be reordered directly in Your Accounts.</strong> Drag an account by its grip to change the order in the sidebar and account menus. The separate Account order controls have been removed; keyboard users can move accounts with the arrow keys while a grip is focused.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Incoming mail can play a Mac sound.</strong> Settings → Mail preferences → Notifications offers Glass, Ping, Pop, Purr, and Tink, with a preview button and an Off option. Sound is off by default and waits with notifications during a Focus session.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Insights shows who you hear from and when.</strong> A new sidebar workspace combines a sender map, a timeline by sender, and a daily sent/received calendar. Bubble size reflects frequency and distance reflects recency. Shared filters and message drill-down use available cached and vaulted headers across folders; incomplete coverage and fallback dates are disclosed. Your ordinary mail view stays in place when you return.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Explorer gives your mailbox another way to browse.</strong> Switch between List and Explorer, then browse by Date, Sender, or Date → Conversation. Groups show email, unread and vault counts, support selection and local search, and remember where you left off. Optional day groups add detail; opening a message uses the existing reader and actions. These are automatic views of your mail, with explicit loading for larger mailboxes.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Settings can minimize beside your drafts.</strong> Use the minimize button to return to mail, then restore Settings from its bubble or the usual Settings button. Your page, section, scroll position and unfinished edits stay where you left them.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The message list can mark what you are reading instead of what the pointer touches.</strong> Settings → General → Appearance → Highlighting offers two ways for the list to show where you are. Follow the pointer is the default and is what MailVault has always done: a row lights up under the mouse, and the message you opened carries a tinted band. Mark what I'm reading turns it around, the way Apple Mail does: the pointer changes nothing, the open message is filled with a solid grey, and the other messages of the same conversation take a lighter grey, so one look tells you what you are reading and what it belongs to. Both work in every folder and every list layout, and the greys are tuned separately for the light and dark themes.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Deleting the message you are reading can open the next one.</strong> Settings → General → Behavior → After Deleting chooses what the reading pane does once the open message is deleted: nothing, which is what MailVault has always done and is still the default, or open the next message in the list. Delete the last message in a folder and the one above it opens instead. The selection bar's delete follows the same choice, and the setup screen on first run asks for it too.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Stars stay visible beside other message indicators.</strong> Rows with tracker, warning, or attachment icons keep their star visible; rows without those indicators still reveal an unmarked star on hover.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Explorer navigation keeps focus where it belongs.</strong> The main folder no longer shows an unusable Back button, and opening groups with the mouse no longer adds a keyboard focus outline to Back.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Insights has one clear selection.</strong> Its sidebar entry aligns with the account rows and is highlighted on its own. Insights uses one account at a time, and sender bubbles reveal their details immediately beside the pointer.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>The Sent folder catches up after a message goes out, even on a fast server.</strong> MailVault files its own copy of a sent message on the server and waits to hear that it landed before re-reading the Sent list. When the server answered that quickly, and one running on the same machine does (Proton Mail Bridge, for instance), the news arrived before MailVault was listening for it: the Sent list then kept MailVault's provisional copy of the message next to the server's, showing it twice, and the working copy in the vault was never tidied away.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A newsletter that ships its own dark mode is readable again.</strong> Some senders swap only their backgrounds when your Mac is set to dark and leave the writing black, and MailVault let that swap happen inside the message view: the mail painted itself black under its own black text, whether the message was drawn light or dark. Messages are now always drawn from the sender's ordinary design, and MailVault does the dark rendering itself, the way it was meant to.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.12.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.12.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 7, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

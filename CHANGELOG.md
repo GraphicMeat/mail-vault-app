@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-09-10
+
 ### Changed
 - **Accounts can be reordered directly in Your Accounts.** Drag an account by its grip to change the order in the sidebar and account menus. The separate Account order controls have been removed; keyboard users can move accounts with the arrow keys while a grip is focused.
 
