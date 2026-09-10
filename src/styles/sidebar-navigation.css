@@ -78,6 +78,35 @@
 .sidebar-chooser-footer { flex-shrink: 0; margin-top: 8px; border-top: 1px solid var(--mail-border); padding-top: 12px; }
 .sidebar-no-results { padding: 16px 8px; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; }
 
+/* The collapsed rail has two independent vertical scrollers.  Its account
+   badges intentionally sit just outside their buttons, so leaving the
+   horizontal axis at its overflow-y-auto default creates a second scrollbar
+   and lets the native vertical thumb cover the avatar column. */
+.sidebar-collapsed-rail { min-width: 0; flex-shrink: 0; overflow-x: hidden; overflow-y: auto; }
+.sidebar-collapsed-accounts,
+.sidebar-collapsed-folders { min-width: 0; overflow-x: hidden; }
+.sidebar-collapsed-accounts > div { min-width: 0; }
+.sidebar-collapsed-rail .sidebar-collapsed-accounts,
+.sidebar-collapsed-rail .sidebar-collapsed-folders { scrollbar-width: none; }
+:root .sidebar-collapsed-rail { scrollbar-width: none; }
+.sidebar-collapsed-rail .sidebar-collapsed-accounts::-webkit-scrollbar,
+.sidebar-collapsed-rail .sidebar-collapsed-folders::-webkit-scrollbar,
+:root .sidebar-collapsed-rail::-webkit-scrollbar { display: none; width: 0; height: 0; }
+
+.sidebar-collapsed-rail > .sidebar-collapsed-accounts,
+.sidebar-collapsed-rail > .sidebar-collapsed-folders { min-height: 64px; }
+
+/* Below the native window's supported height, let the rail itself scroll so
+   the fixed action stack remains reachable instead of starving both nested
+   navigation panes down to a one-pixel viewport. */
+@media (max-height: 520px) {
+  .sidebar-collapsed-rail > .sidebar-collapsed-accounts,
+  .sidebar-collapsed-rail > .sidebar-collapsed-folders {
+    flex: 0 0 auto;
+    overflow-y: visible;
+  }
+}
+
 /* In exceptionally short browser windows, keep every folder reachable. */
 @media (max-height: 520px) {
   .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) { display: block; overflow-y: auto; }
@@ -94,6 +123,7 @@
 [data-sidebar-density="compact"] .sidebar-compose > button > svg { width: 16px; height: 16px; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll { padding: 4px 8px 8px; gap: 8px; }
 [data-sidebar-density="compact"] .sidebar-section-heading { min-height: 24px; margin-bottom: 2px; }
+[data-sidebar-density="compact"] .sidebar-folder-section > .sidebar-section-heading { min-height: 28px; }
 [data-sidebar-density="compact"] .sidebar-folder-section { margin-top: 8px; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll:not([data-sidebar-layout="stacked"]) .sidebar-folder-section { margin-top: 0; }
 [data-sidebar-density="compact"] .sidebar-navigation-scroll[data-sidebar-layout="split"] .sidebar-account-section { min-height: 60px; }

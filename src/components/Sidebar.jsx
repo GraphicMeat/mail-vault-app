@@ -69,7 +69,7 @@ function UnifiedFolderList({ tagCloud = false, compact = false, onOpenMail }) {
 
   if (compact) {
     return (
-      <div className="flex-1 min-h-0 overflow-y-auto w-full py-2">
+      <div className="sidebar-collapsed-folders flex-1 min-h-0 overflow-y-auto w-full py-2">
         {UNIFIED_FOLDERS().map(folder => {
           const Icon = folder.icon;
           return (
@@ -123,10 +123,11 @@ function UnifiedFolderList({ tagCloud = false, compact = false, onOpenMail }) {
             key={folder.id}
             role="button" tabIndex={0} aria-current={isActive ? 'true' : undefined}
             onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); switchUnifiedFolder(folder.id); } }}
-            className={`sidebar-folder-row flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors
+            className={`sidebar-folder-row flex items-center gap-2 px-2 py-1.5 mb-1 rounded-lg cursor-pointer transition-colors
                        ${isActive ? 'bg-mail-accent/10 text-mail-accent-text' : 'text-mail-text hover:bg-mail-surface-hover'}`}
             onClick={() => switchUnifiedFolder(folder.id)}
           >
+            <div className="w-5 shrink-0" aria-hidden="true" />
             <Icon size={16} />
             <span className="text-sm truncate">{folder.name}</span>
           </div>
@@ -849,7 +850,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // --- COLLAPSED SIDEBAR ---
   if (collapsed) {
     return (
-      <div className="w-14 h-full bg-mail-surface border-r border-mail-border flex flex-col items-center relative">
+      <div className="sidebar-collapsed-rail w-14 h-full bg-mail-surface border-r border-mail-border flex flex-col items-center relative">
         {/* Expand button */}
         <div data-tauri-drag-region className="w-full py-3 flex justify-center border-b border-mail-border flex-shrink-0">
           <Button variant="ghost" icon size="md"
@@ -891,7 +892,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="w-full py-2 flex justify-center shrink-0">{insightsEntry}</div>
 
         {/* Account icons */}
-        <div className="w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
+        <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
               key={account.id}
@@ -932,7 +933,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         {/* Folder icons with expandable children — hidden in unified inbox mode */}
         {unifiedInbox && <UnifiedFolderList compact onOpenMail={onOpenMail} />}
-        {!unifiedInbox && <div className="flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
+        {!unifiedInbox && <div className="sidebar-collapsed-folders flex-1 min-h-0 overflow-y-auto w-full py-2 text-sm">
           <FolderTree
             compact
             mailboxes={mailboxes}
