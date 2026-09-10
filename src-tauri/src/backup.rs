@@ -844,6 +844,22 @@ async fn run_imap_backup_inner(
             }
         }
 
+        // The top-of-loop check only catches a cancel that landed between
+        // folders. One that landed mid-folder used to fall through to
+        // `completed_folders += 1`, and the checkpoint then told the next run to
+        // skip a folder it had half finished: 2026-09-10 left 1925 of INBOX's
+        // messages unstored and moved on to All Mail. The bandwidth-limit stop
+        // sets this same flag, so it re-scans its partial folder too — which is
+        // what its comment above already promises.
+        if cancel.load(Ordering::Relaxed) {
+            warn!(
+                "backup: cancelled for {} inside {} ({}/{} folders done)",
+                account.email, mailbox_path, completed_folders, total_folders
+            );
+            cancelled = true;
+            break;
+        }
+
         // A copy that predates a change made on the server — read on the
         // phone, starred elsewhere — carries the state it was stored with, and
         // that state is what restore uploads and the mirror keeps. The listing
@@ -1187,6 +1203,18 @@ async fn run_graph_backup(
                 break;
             }
             skip += page_size;
+        }
+
+        // Same shape as the IMAP loop: the page loop breaks on cancel, and
+        // counting the folder anyway would have the next run skip past the pages
+        // it never fetched.
+        if cancel.load(Ordering::Relaxed) {
+            warn!(
+                "backup(graph): cancelled for account {} inside {} ({}/{} folders done)",
+                account_id, mailbox_path, completed_folders, total_folders
+            );
+            cancelled = true;
+            break;
         }
 
         completed_folders += 1;

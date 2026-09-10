@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **A paused backup picks up where it stopped.** When MailVault paused an automatic backup because you came back to the app, went offline or the Mac slept, the queue never restarted: the card kept saying Cancelled with a spinner, the other accounts stayed queued, and Back up all accounts now stayed greyed out. The queue now resumes on its own, the card reflects the real state, a run that makes no progress for fifteen minutes is stopped and retried, and a folder the pause cut short is finished on the next run instead of being skipped.
+
 ## [2.13.1] - 2026-09-10
 
 ### Added
