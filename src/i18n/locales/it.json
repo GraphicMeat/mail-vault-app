@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "La password non è nel portachiavi. Reinseriscila in Impostazioni › Account per riconnetterti.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "Il server ha restituito inaspettatamente un elenco di cartelle vuoto. Mostro le cartelle in cache durante la verifica.",
   "svc.backupScheduler.complete": "Completo",
+  "svc.backupScheduler.stalled": "Nessun progresso da {{minutes}} minuti. L'esecuzione è stata interrotta e verrà ritentata.",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} email salvate. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} non sono stati copiati nel backup esterno.",
   "svc.backupScheduler.messageSCouldFetched": "{{entry}} messaggi non sono stati scaricati.",

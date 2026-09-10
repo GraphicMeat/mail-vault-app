@@ -13,6 +13,11 @@ const SHARE_UNLOCK_COOLDOWN_MS = 7 * 86_400_000;
 
 const RETRY_DELAYS = [30_000, 120_000, 300_000]; // 30s, 2min, 5min
 
+/** A run that has emitted no progress event for this long is not running. */
+export const BACKUP_STALL_MS = 15 * 60_000;
+/** How often the hook calls tick(). */
+export const TICK_MS = 60_000;
+
 /**
  * Body for the "partially complete" notification.
  *
@@ -55,6 +60,9 @@ class BackupCoordinator {
     this._checkpoints = new Map();   // accountId -> completedFolders (resume position)
     this._manualIds = new Set();     // accounts triggered manually (bypass gates)
     this._manualResolvers = new Map(); // accountId -> { resolve } for triggerManualBackup promise
+    this._lastProgressAt = 0;        // last backup-progress / archive-progress event
+    this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
+    this._flushTimer = null;         // trailing flush for the progress throttle
   }
 
   // ── Lifecycle transitions ──────────────────────────────────────────────
@@ -156,6 +164,30 @@ class BackupCoordinator {
   }
 
   /**
+   * Once-a-minute self-heal, called by the hook whether or not the user is idle.
+   *
+   * Two failure modes it exists for, both seen in the wild on 2026-09-10: a
+   * queue full of work with nobody driving it, and a run whose Rust side stopped
+   * answering while the card still spun.
+   */
+  tick() {
+    if (!this._queueRunning && this._queue.length > 0 && !this._isPaused()) {
+      console.warn('[backup] tick: queue was idle with work pending, resuming');
+      this._processQueue();
+    }
+
+    if (this._hasActiveWork() && Date.now() - this._lastProgressAt > BACKUP_STALL_MS) {
+      for (const [id, running] of this._running) {
+        if (running) this._stalled.add(id);
+      }
+      console.warn(`[backup] tick: no progress for ${BACKUP_STALL_MS / 60_000} minutes — cancelling the run`);
+      // Rust returns { cancelled: true, completed_folders } through the normal
+      // path; _runBackup routes it to a retry because the id is in _stalled.
+      api.backupCancel().catch(() => {});
+    }
+  }
+
+  /**
    * Check all enabled accounts and queue those that are due.
    * Called by the hook on idle / wake / visibility.
    */
@@ -221,38 +253,50 @@ class BackupCoordinator {
     if (this._isPaused() && !this._hasManualInQueue()) return;
 
     this._queueRunning = true;
+    // Whatever throws in here, the loop must hand the queue back. A single
+    // escaping rejection used to leave `_queueRunning` true forever, and every
+    // later queueBackup was a silent no-op.
+    let inFlight = null;
+    try {
+      while (this._queue.length > 0) {
+        const isManualNext = this._manualIds.has(this._queue[0]);
 
-    while (this._queue.length > 0) {
-      const isManualNext = this._manualIds.has(this._queue[0]);
+        // Check gates before each account
+        if (this._isPaused() && !isManualNext) {
+          // Paused and next item is automatic — stop processing
+          break;
+        }
 
-      // Check gates before each account
-      if (this._isPaused() && !isManualNext) {
-        // Paused and next item is automatic — stop processing
-        break;
+        const accountId = this._queue.shift();
+        if (this._running.get(accountId)) continue;
+
+        // Save paused state before manual backup — restore it afterward
+        // so automatic items remain blocked by the original pause reason
+        const savedState = this._isPaused() ? this._state : null;
+
+        this._state = State.RUNNING;
+        inFlight = accountId;
+        await this._runBackup(accountId);
+        inFlight = null;
+
+        // Restore paused state if we were running a manual job through a pause gate
+        if (savedState && !this._isPaused()) {
+          this._state = savedState;
+        }
+
+        // After each backup, check if we should continue
+        if (this._isPaused()) break;
       }
-
-      const accountId = this._queue.shift();
-      if (this._running.get(accountId)) continue;
-
-      // Save paused state before manual backup — restore it afterward
-      // so automatic items remain blocked by the original pause reason
-      const savedState = this._isPaused() ? this._state : null;
-
-      this._state = State.RUNNING;
-      await this._runBackup(accountId);
-
-      // Restore paused state if we were running a manual job through a pause gate
-      if (savedState && !this._isPaused()) {
-        this._state = savedState;
+    } finally {
+      // `_runBackup` awaits resolveServerAccount outside its own try, so a
+      // rejection there skips its finally and would leave the account marked
+      // running: never queueable again, and the stall watchdog cancelling a run
+      // nobody started.
+      if (inFlight) this._running.set(inFlight, false);
+      this._queueRunning = false;
+      if (this._state === State.RUNNING) {
+        this._state = State.IDLE;
       }
-
-      // After each backup, check if we should continue
-      if (this._isPaused()) break;
-    }
-
-    this._queueRunning = false;
-    if (this._state === State.RUNNING) {
-      this._state = State.IDLE;
     }
   }
 
@@ -262,6 +306,7 @@ class BackupCoordinator {
 
     console.log(`[backup] _runBackup started for ${accountId} (${isManual ? 'manual' : 'automatic'})`);
     this._running.set(accountId, true);
+    this._lastProgressAt = Date.now();
 
     const accounts = useMailStore.getState().accounts || [];
     let account = accounts.find(a => a.id === accountId);
@@ -319,18 +364,30 @@ class BackupCoordinator {
       if (skipFolders > 0) {
         console.log(`[backup] Resuming ${account.email} from folder ${skipFolders}`);
       }
+      // A stall mark set while this account was still resolving credentials
+      // belongs to no Rust run; only one set from here on counts.
+      this._stalled.delete(accountId);
       const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount), null, skipFolders);
 
       // Track checkpoint for potential resume
       if (result.cancelled) {
         this._checkpoints.set(accountId, result.completed_folders || 0);
         console.log(`[backup] Cancelled ${account.email} at folder ${result.completed_folders} — checkpoint saved`);
+        // Consume the watchdog's mark either way: a bandwidth stop that lands
+        // after a stall must not leave it behind for this account's next run.
+        const stalled = this._stalled.delete(accountId);
         // Server-initiated stop (e.g. Gmail daily bandwidth limit) — tell the user why
         if (result.error_message) {
           useSettingsStore.getState().updateBackupState(accountId, {
             lastStatus: 'failed',
             lastError: result.error_message,
           });
+        } else if (stalled) {
+          // Our own watchdog stopped this one. Reporting it as "cancelled" is
+          // how a run that died quietly stayed dead all evening — retry it.
+          this._running.set(accountId, false);
+          this._failOrRetry(accountId, account, t('svc.backupScheduler.stalled', { minutes: BACKUP_STALL_MS / 60_000 }));
+          return;
         }
         this._running.set(accountId, false);
         this._resolveManual(accountId, { status: 'cancelled' });
@@ -457,40 +514,7 @@ class BackupCoordinator {
         return;
       }
 
-      // Manual backups: resolve immediately with failure (user is watching the button).
-      // Automatic backups: retry up to 3 times with backoff.
-      const hasManualResolver = this._manualResolvers.has(accountId);
-      const retries = this._retryCount.get(accountId) || 0;
-      if (!hasManualResolver && retries < 3) {
-        this._retryCount.set(accountId, retries + 1);
-        const delay = RETRY_DELAYS[retries];
-        console.warn(`[backup] Retry ${retries + 1}/3 for ${account.email} — re-queuing in ${delay / 1000}s`);
-        setTimeout(() => {
-          this.queueBackup(accountId);
-        }, delay);
-      } else {
-        const storeNow = useSettingsStore.getState();
-        storeNow.updateBackupState(accountId, {
-          lastBackupTime: Date.now(),
-          lastStatus: 'failed',
-          lastError: err.message || String(err)
-        });
-        storeNow.addBackupHistoryEntry(accountId, {
-          timestamp: Date.now(),
-          emailsBackedUp: 0,
-          durationSecs: 0,
-          success: false,
-          error: err.message || String(err)
-        });
-        if (storeNow.backupNotifyOnFailure) {
-          notify(
-            `Backup failed - ${account.email}`,
-            `${err.message || 'Unknown error'}. Will retry on next idle.`
-          );
-        }
-        this._retryCount.delete(accountId);
-        this._resolveManual(accountId, { status: 'failed', message: err.message || String(err) });
-      }
+      this._failOrRetry(accountId, account, err.message || String(err));
     } finally {
       this._running.set(accountId, false);
       if (!this._isPaused()) {
@@ -500,6 +524,49 @@ class BackupCoordinator {
   }
 
   // ── Internal helpers ───────────────────────────────────────────────────
+
+  /**
+   * A run that did not finish: back off and try again, or give up and say so.
+   *
+   * Manual runs resolve immediately — the user is watching the button.
+   * Automatic runs get three retries with backoff, then a failed history entry.
+   * Called from the catch block and from the watchdog's stalled branch, so a
+   * run our own tick() killed is retried rather than filed as "cancelled".
+   */
+  _failOrRetry(accountId, account, message) {
+    const hasManualResolver = this._manualResolvers.has(accountId);
+    const retries = this._retryCount.get(accountId) || 0;
+    if (!hasManualResolver && retries < 3) {
+      this._retryCount.set(accountId, retries + 1);
+      const delay = RETRY_DELAYS[retries];
+      console.warn(`[backup] Retry ${retries + 1}/3 for ${account.email} — re-queuing in ${delay / 1000}s`);
+      setTimeout(() => {
+        this.queueBackup(accountId);
+      }, delay);
+      return;
+    }
+    const storeNow = useSettingsStore.getState();
+    storeNow.updateBackupState(accountId, {
+      lastBackupTime: Date.now(),
+      lastStatus: 'failed',
+      lastError: message,
+    });
+    storeNow.addBackupHistoryEntry(accountId, {
+      timestamp: Date.now(),
+      emailsBackedUp: 0,
+      durationSecs: 0,
+      success: false,
+      error: message,
+    });
+    if (storeNow.backupNotifyOnFailure) {
+      notify(
+        `Backup failed - ${account.email}`,
+        `${message || 'Unknown error'}. Will retry on next idle.`
+      );
+    }
+    this._retryCount.delete(accountId);
+    this._resolveManual(accountId, { status: 'failed', message });
+  }
 
   _isPaused() {
     return this._state === State.PAUSED_SLEEP
@@ -554,6 +621,11 @@ class BackupCoordinator {
         console.log(`[backup] Re-queued interrupted account ${accountId}`);
       }
     }
+    // Re-queuing is not resuming. `_processQueue` broke out of its loop when the
+    // pause landed, and `_scheduleCheck` cannot restart it: queueBackup returns
+    // early for an id already in the queue, before it ever reaches the loop.
+    // No-op on an empty queue.
+    this._processQueue();
   }
 
   _scheduleCheck() {
@@ -596,13 +668,11 @@ class BackupCoordinator {
       const { listen } = await import('@tauri-apps/api/event');
       let lastUpdate = 0;
       let pendingPayload = null;
-      await listen('backup-progress', (event) => {
-        pendingPayload = event.payload;
-        const now = Date.now();
-        // Throttle store updates to once per 2 seconds to avoid flooding re-renders
-        if (now - lastUpdate < 2000) return;
-        lastUpdate = now;
+      const apply = () => {
+        this._flushTimer = null;
         const p = pendingPayload;
+        if (!p) return;
+        lastUpdate = Date.now();
         const current = useBackupStore.getState().activeBackup;
         if (current && current.accountId === p.account_id) {
           useBackupStore.getState().setActiveBackup({
@@ -611,9 +681,37 @@ class BackupCoordinator {
             totalFolders: p.total_folders,
             completedFolders: p.completed_folders,
             completedEmails: p.completed_emails,
-            active: true,
+            // Rust's last word for a run is `active: false` with folder
+            // "Cancelled" or "Complete". Forcing true here is what left the card
+            // spinning on "Cancelled (2/9)" and "Back up all accounts now" greyed
+            // out for six hours.
+            active: p.active !== false,
           });
         }
+      };
+      await listen('backup-progress', (event) => {
+        this._lastProgressAt = Date.now();
+        pendingPayload = event.payload;
+        // The final event is the one that clears the spinner — never throttle it away.
+        if (event.payload.active === false) {
+          if (this._flushTimer) clearTimeout(this._flushTimer);
+          apply();
+          return;
+        }
+        // Throttle store updates to once per 2 seconds to avoid flooding re-renders,
+        // but keep a trailing flush so the last event of a burst still lands.
+        const elapsed = Date.now() - lastUpdate;
+        if (elapsed < 2000) {
+          if (this._flushTimer) clearTimeout(this._flushTimer);
+          this._flushTimer = setTimeout(apply, 2000 - elapsed);
+          return;
+        }
+        apply();
+      });
+      // Fires per stored message. No store write — it exists so the stall
+      // watchdog can tell a slow folder from a dead run.
+      await listen('archive-progress', () => {
+        this._lastProgressAt = Date.now();
       });
       console.log('[backup] Progress listener initialized');
     } catch (e) {

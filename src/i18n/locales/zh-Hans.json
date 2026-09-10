@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "你的密码不在钥匙串中。请在 设置 › 账户 中重新输入以恢复连接。",
   "svc.activateAccount.serverReturnedEmptyFolderList": "服务器意外返回了空的文件夹列表。校验期间显示缓存的文件夹。",
   "svc.backupScheduler.complete": "完成",
+  "svc.backupScheduler.stalled": "已有 {{minutes}} 分钟没有进展。运行已停止，将会重试。",
   "svc.backupScheduler.emailsBackedUp": "已备份 {{entry}} 封邮件。{{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "有 {{result}} 封无法复制到外部备份。",
   "svc.backupScheduler.messageSCouldFetched": "有 {{entry}} 封邮件无法获取。",

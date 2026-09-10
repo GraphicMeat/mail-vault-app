@@ -1,6 +1,12 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterEach } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
+
+// Tauri event bus — capture the handlers so specs can fire progress events.
+const mockEventHandlers = {};
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: vi.fn(async (name, cb) => { mockEventHandlers[name] = cb; return () => {}; }),
+}));
 
 // Mock api — all calls are no-ops by default
 vi.mock('../../src/services/api', () => ({
@@ -77,10 +83,18 @@ vi.mock('../../src/services/snapshotService', () => ({
 
 // ── Import after mocks ────────────────────────────────────────────────────
 
-const { backupScheduler, State, computeNextEligibleTime } = await import(
+// Destructured off a dynamic import on purpose: a named static import of an
+// export the module does not have yet is a link error that kills every test in
+// the file, which is not the RED we want to read.
+const { backupScheduler, State, computeNextEligibleTime, BACKUP_STALL_MS } = await import(
   '../../src/services/backupScheduler'
 );
 const api = await import('../../src/services/api');
+const { t } = await import('../../src/i18n/index.js');
+
+beforeAll(async () => {
+  await backupScheduler.initProgressListener();
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -93,10 +107,32 @@ function resetCoordinator() {
   backupScheduler._queueRunning = false;
   backupScheduler._pausedAccountId = null;
   backupScheduler._manualIds = new Set();
+  backupScheduler._manualResolvers = new Map();
+  backupScheduler._checkpoints = new Map();
+  backupScheduler._stalled = new Set();
+  backupScheduler._lastProgressAt = Date.now();
   mockBackupState.activeBackup = null;
   mockPremium = false;
   vi.clearAllMocks();
+  // clearAllMocks leaves a queued `...Once` implementation in place. A spec
+  // whose retry never fires (exactly what the RED run looks like) would hand
+  // its leftover to the next spec, which then fails for someone else's reason.
+  api.backupRunAccount.mockReset();
+  api.backupRunAccount.mockResolvedValue({ emails_backed_up: 5, duration_secs: 2, success: true });
 }
+
+/** A `backup-progress` payload in the shape Rust emits. */
+const progressPayload = (over = {}) => ({
+  account_id: 'acc-1',
+  folder: 'INBOX',
+  total_folders: 9,
+  completed_folders: 1,
+  total_emails: 0,
+  completed_emails: 100,
+  errors: 0,
+  active: true,
+  ...over,
+});
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -251,30 +287,36 @@ describe('BackupCoordinator — pause cancels active Rust backup', () => {
     expect(api.backupCancel).toHaveBeenCalled();
   });
 
-  it('resume re-queues interrupted account at front', () => {
+  // Front of the queue is only observable in the run order now: resume drives
+  // the queue instead of parking work in it, so by the time the caller looks
+  // the interrupted account has already been shifted off and started.
+  it('resume runs the interrupted account before the rest of the queue', async () => {
     backupScheduler._state = State.PAUSED_SLEEP;
     backupScheduler._pausedAccountId = 'acc-1';
     backupScheduler._queue = ['acc-2'];
     backupScheduler.onWake();
-    expect(backupScheduler._queue[0]).toBe('acc-1');
-    expect(backupScheduler._queue[1]).toBe('acc-2');
+    await new Promise(r => setTimeout(r, 50));
+    expect(api.backupRunAccount.mock.calls.map(c => c[0])).toEqual(['acc-1', 'acc-2']);
   });
 });
 
 describe('BackupCoordinator — user-active pause resumes interrupted account on idle', () => {
   beforeEach(resetCoordinator);
 
-  it('onUserIdle re-queues the interrupted account after user-active pause', () => {
+  it('onUserIdle re-queues the interrupted account after user-active pause', async () => {
     // Simulate: coordinator was running, user became active, backup was paused
     backupScheduler._state = State.PAUSED_USER_ACTIVE;
     backupScheduler._pausedAccountId = 'acc-1';
     backupScheduler._queue = [];
 
     backupScheduler.onUserIdle();
-
-    expect(backupScheduler.state).toBe(State.IDLE);
-    expect(backupScheduler._queue[0]).toBe('acc-1');
     expect(backupScheduler._pausedAccountId).toBeNull();
+
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).toHaveBeenCalledWith('acc-1', expect.any(String), null, 0);
+    expect(backupScheduler._queue).toEqual([]);
+    expect(backupScheduler.state).toBe(State.IDLE);
   });
 
   it('onUserIdle without a paused account just resumes without queuing', () => {
@@ -750,5 +792,326 @@ describe('BackupCoordinator — checkAndQueueDue', () => {
     mockSettingsState.backupGlobalEnabled = false;
     mockSettingsState.hiddenAccounts = {};
     backupScheduler._queueRunning = false;
+  });
+});
+
+// ── Recovery: a pause must actually resume ─────────────────────────────────
+//
+// 2026-09-10: two coordinator pauses (user-active, then the heartbeat's sleep
+// detector) left the card on "Cancelled (2/9)" with three accounts queued for
+// six hours. `_resumeInterrupted` re-queued the account and stopped there:
+// `checkAndQueueDue` -> `queueBackup` returns early for an id already in the
+// queue, BEFORE it reaches `_processQueue`, and `_processQueue` had already
+// broken out of its loop on the pause. Asserting `_queue` contents proves
+// nothing; these specs assert that something RUNS.
+
+describe('BackupCoordinator — resume drives the queue', () => {
+  beforeEach(resetCoordinator);
+
+  const expectRanBothInOrder = () => {
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    expect(api.backupRunAccount.mock.calls[0]).toEqual(['acc-1', expect.any(String), null, 1]);
+    expect(api.backupRunAccount.mock.calls[1][0]).toBe('acc-2');
+    expect(backupScheduler._queue).toEqual([]);
+    expect(backupScheduler.state).toBe(State.IDLE);
+  };
+
+  it('onUserIdle after a user-active pause runs the interrupted account, then the rest of the queue', async () => {
+    backupScheduler._state = State.PAUSED_USER_ACTIVE;
+    backupScheduler._pausedAccountId = 'acc-1';
+    backupScheduler._checkpoints.set('acc-1', 1);
+    backupScheduler._queue = ['acc-2'];
+
+    backupScheduler.onUserIdle();
+    await new Promise(r => setTimeout(r, 50));
+
+    expectRanBothInOrder();
+  });
+
+  it('onWake after a sleep pause runs the interrupted account, then the rest of the queue', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._pausedAccountId = 'acc-1';
+    backupScheduler._checkpoints.set('acc-1', 1);
+    backupScheduler._queue = ['acc-2'];
+
+    backupScheduler.onWake();
+    await new Promise(r => setTimeout(r, 50));
+
+    expectRanBothInOrder();
+  });
+
+  it('onOnline after an offline pause runs the interrupted account, then the rest of the queue', async () => {
+    backupScheduler._state = State.PAUSED_OFFLINE;
+    backupScheduler._pausedAccountId = 'acc-1';
+    backupScheduler._checkpoints.set('acc-1', 1);
+    backupScheduler._queue = ['acc-2'];
+
+    backupScheduler.onOnline();
+    await new Promise(r => setTimeout(r, 50));
+
+    expectRanBothInOrder();
+  });
+
+  it('a throw inside _runBackup does not wedge the queue', async () => {
+    // Today the rejection escapes `_processQueue` (the await sits outside
+    // `_runBackup`'s try), so `_queueRunning` stays true forever and every
+    // later queueBackup is a no-op. Swallow the unhandled rejection so the RED
+    // run fails on the assertion, not on the process crashing.
+    const swallow = () => {};
+    process.on('unhandledRejection', swallow);
+    try {
+      const authUtils = await import('../../src/services/authUtils');
+      authUtils.resolveServerAccount.mockRejectedValueOnce(new Error('boom'));
+
+      backupScheduler.queueBackup('acc-1');
+      await new Promise(r => setTimeout(r, 50));
+
+      backupScheduler.queueBackup('acc-2');
+      await new Promise(r => setTimeout(r, 50));
+
+      expect(api.backupRunAccount).toHaveBeenCalledWith('acc-2', expect.any(String), null, 0);
+      expect(backupScheduler._queueRunning).toBe(false);
+      // The account that threw must not stay marked running: that alone would
+      // block it from ever being queued again, and keep the stall watchdog
+      // cancelling a run nobody started.
+      expect(backupScheduler.isRunning('acc-1')).toBe(false);
+    } finally {
+      process.off('unhandledRejection', swallow);
+    }
+  });
+});
+
+// ── Recovery: the 60 s tick self-heals ────────────────────────────────────
+
+describe('BackupCoordinator — tick self-heal', () => {
+  beforeEach(resetCoordinator);
+
+  it('exports the stall window it advertises', () => {
+    expect(BACKUP_STALL_MS).toBe(15 * 60_000);
+  });
+
+  it('drives a populated idle queue', async () => {
+    backupScheduler._queue = ['acc-1'];
+    backupScheduler._queueRunning = false;
+    backupScheduler._state = State.IDLE;
+
+    backupScheduler.tick();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).toHaveBeenCalledWith('acc-1', expect.any(String), null, 0);
+  });
+
+  it('leaves a paused queue alone', async () => {
+    backupScheduler._state = State.PAUSED_USER_ACTIVE;
+    backupScheduler._queue = ['acc-1'];
+
+    backupScheduler.tick();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).not.toHaveBeenCalled();
+  });
+
+  it('does not re-enter a running queue', async () => {
+    backupScheduler._queueRunning = true;
+    backupScheduler._queue = ['acc-1'];
+
+    backupScheduler.tick();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).not.toHaveBeenCalled();
+  });
+
+  it('cancels a run with no progress for 15 minutes', () => {
+    backupScheduler._running.set('acc-1', true);
+    backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+
+    backupScheduler.tick();
+
+    expect(api.backupCancel).toHaveBeenCalledTimes(1);
+    expect(backupScheduler._stalled.has('acc-1')).toBe(true);
+  });
+
+  it('leaves a run that is still making progress alone', () => {
+    backupScheduler._running.set('acc-1', true);
+    backupScheduler._lastProgressAt = Date.now();
+
+    backupScheduler.tick();
+
+    expect(api.backupCancel).not.toHaveBeenCalled();
+    expect(backupScheduler._stalled.size).toBe(0);
+  });
+
+  it('leaves a stale stamp alone when nothing is running', () => {
+    backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+
+    backupScheduler.tick();
+
+    expect(api.backupCancel).not.toHaveBeenCalled();
+  });
+});
+
+// ── Recovery: a stalled run is retried, not silently abandoned ────────────
+
+describe('BackupCoordinator — a stalled run', () => {
+  beforeEach(resetCoordinator);
+  afterEach(() => { vi.useRealTimers(); });
+
+  const stalledMessage = () => t('svc.backupScheduler.stalled', { minutes: 15 });
+
+  /** First call: watchdog fires mid-run, Rust returns cancelled at folder 2. */
+  const mockStalledOnce = () => {
+    api.backupRunAccount.mockImplementationOnce(async () => {
+      backupScheduler._stalled.add('acc-1');
+      return { cancelled: true, completed_folders: 2, success: false, emails_backed_up: 0 };
+    });
+  };
+
+  it('is retried from its checkpoint', async () => {
+    vi.useFakeTimers();
+    mockStalledOnce();
+    api.backupRunAccount.mockResolvedValueOnce({ success: true, emails_backed_up: 1, duration_secs: 1 });
+
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(backupScheduler._retryCount.get('acc-1')).toBe(1);
+    expect(backupScheduler._checkpoints.get('acc-1')).toBe(2);
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    expect(api.backupRunAccount.mock.calls[1][3]).toBe(2);
+    expect(backupScheduler._retryCount.has('acc-1')).toBe(false);
+  });
+
+  it('resolves a manual run as failed with the catalog message, and never retries it', async () => {
+    vi.useFakeTimers();
+    mockStalledOnce();
+
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(10);
+    const result = await promise;
+
+    expect(result).toEqual({ status: 'failed', message: stalledMessage() });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the account failed once the retries are spent', async () => {
+    vi.useFakeTimers();
+    backupScheduler._retryCount.set('acc-1', 3);
+    mockStalledOnce();
+
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastStatus: 'failed',
+      lastError: stalledMessage(),
+    }));
+    expect(mockSettingsState.addBackupHistoryEntry).toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a server-side stop (bandwidth limit) reported as before', async () => {
+    api.backupRunAccount.mockResolvedValueOnce({
+      cancelled: true, completed_folders: 2, success: false,
+      error_message: 'Gmail daily bandwidth limit reached',
+    });
+    const result = await backupScheduler.triggerManualBackup('acc-1');
+    expect(result.status).toBe('cancelled');
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastError: 'Gmail daily bandwidth limit reached',
+    }));
+  });
+
+  it('discards a stall mark left from before the Rust run started', async () => {
+    // The watchdog fired while this account was still resolving credentials:
+    // that mark belongs to no run, and a later pause must not be read as a stall.
+    backupScheduler._stalled.add('acc-1');
+    api.backupRunAccount.mockResolvedValueOnce({ cancelled: true, completed_folders: 1, success: false });
+    const result = await backupScheduler.triggerManualBackup('acc-1');
+    expect(result.status).toBe('cancelled');
+    expect(backupScheduler._stalled.size).toBe(0);
+  });
+
+  it('consumes the stall mark when a bandwidth stop lands after the watchdog fired', async () => {
+    api.backupRunAccount.mockImplementationOnce(async () => {
+      backupScheduler._stalled.add('acc-1');
+      return {
+        cancelled: true, completed_folders: 2, success: false,
+        error_message: 'Gmail daily bandwidth limit reached',
+      };
+    });
+    const result = await backupScheduler.triggerManualBackup('acc-1');
+    expect(result.status).toBe('cancelled');
+    expect(backupScheduler._stalled.size).toBe(0);
+  });
+});
+
+// ── Recovery: the progress listener must not paint a finished run as active ─
+
+describe('BackupCoordinator — progress listener', () => {
+  beforeEach(resetCoordinator);
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('the final backup-progress event clears the active flag', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    mockBackupState.activeBackup = {
+      accountId: 'acc-1', active: true, folder: 'INBOX', totalFolders: 9, completedFolders: 1,
+    };
+
+    mockEventHandlers['backup-progress']({
+      payload: progressPayload({
+        folder: 'Cancelled', completed_folders: 2, completed_emails: 510, active: false,
+      }),
+    });
+
+    expect(mockBackupState.activeBackup.active).toBe(false);
+    expect(mockBackupState.activeBackup.folder).toBe('Cancelled');
+  });
+
+  it('flushes a payload caught inside the throttle window when the window closes', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-02T00:00:00Z'));
+    mockBackupState.activeBackup = { accountId: 'acc-1', active: true, folder: 'start' };
+
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'INBOX' }) });
+    expect(mockBackupState.activeBackup.folder).toBe('INBOX');
+
+    vi.advanceTimersByTime(500);
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'Sent' }) });
+    expect(mockBackupState.activeBackup.folder).toBe('INBOX'); // throttled
+
+    vi.advanceTimersByTime(2000);
+    expect(mockBackupState.activeBackup.folder).toBe('Sent');
+  });
+
+  it('archive-progress stamps the progress time', () => {
+    vi.useFakeTimers();
+    const at = new Date('2030-01-03T00:00:00Z');
+    vi.setSystemTime(at);
+
+    mockEventHandlers['archive-progress']({ payload: { active: true, total: 10, completed: 3 } });
+
+    expect(backupScheduler._lastProgressAt).toBe(at.getTime());
+  });
+
+  it('backup-progress stamps the progress time even when the update is throttled', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-04T00:00:00Z'));
+    mockBackupState.activeBackup = { accountId: 'acc-1', active: true, folder: 'start' };
+
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'INBOX' }) });
+    vi.advanceTimersByTime(100);
+    const at = Date.now();
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'Sent' }) });
+
+    expect(backupScheduler._lastProgressAt).toBe(at);
   });
 });

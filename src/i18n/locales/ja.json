@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "パスワードがキーチェーンにありません。設定 › アカウント で再入力して再接続してください。",
   "svc.activateAccount.serverReturnedEmptyFolderList": "サーバーが予期せず空のフォルダ一覧を返しました。確認中はキャッシュのフォルダを表示します。",
   "svc.backupScheduler.complete": "完了",
+  "svc.backupScheduler.stalled": "{{minutes}}分間進捗がありません。実行を停止し、再試行します。",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} 件のメールをバックアップしました。{{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} 件を外部バックアップにコピーできませんでした。",
   "svc.backupScheduler.messageSCouldFetched": "{{entry}} 件のメッセージを取得できませんでした。",

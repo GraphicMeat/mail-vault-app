@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "Dein Passwort liegt nicht im Schlüsselbund. Gib es unter Einstellungen › Konten neu ein, um die Verbindung wiederherzustellen.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "Der Server lieferte unerwartet eine leere Ordnerliste. Zeige die zwischengespeicherten Ordner, während geprüft wird.",
   "svc.backupScheduler.complete": "Vollständig",
+  "svc.backupScheduler.stalled": "Seit {{minutes}} Minuten kein Fortschritt. Der Vorgang wurde gestoppt und wird erneut versucht.",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} E-Mails gesichert. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} ließen sich nicht in die externe Sicherung kopieren.",
   "svc.backupScheduler.messageSCouldFetched": "{{entry}} Nachricht(en) konnten nicht geholt werden.",

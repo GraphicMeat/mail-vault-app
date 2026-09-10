@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "Sua senha não está no chaveiro. Digite-a novamente em Configurações › Contas para reconectar.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "O servidor retornou inesperadamente uma lista de pastas vazia. Exibindo as pastas em cache enquanto verifica.",
   "svc.backupScheduler.complete": "Completo",
+  "svc.backupScheduler.stalled": "Sem progresso por {{minutes}} minutos. A execução foi interrompida e será repetida.",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} e-mails salvos. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} não puderam ser copiados para o backup externo.",
   "svc.backupScheduler.messageSCouldFetched": "{{entry}} mensagem(ns) não puderam ser baixadas.",

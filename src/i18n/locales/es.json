@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "Tu contraseña no está en el llavero. Vuelve a introducirla en Ajustes › Cuentas para reconectar.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "El servidor devolvió inesperadamente una lista de carpetas vacía. Mostrando las carpetas en caché mientras se verifica.",
   "svc.backupScheduler.complete": "Completa",
+  "svc.backupScheduler.stalled": "Sin progreso durante {{minutes}} minutos. La ejecución se detuvo y se reintentará.",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} correos copiados. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} no se pudieron copiar a la copia externa.",
   "svc.backupScheduler.messageSCouldFetched": "No se pudieron descargar {{entry}} mensajes.",

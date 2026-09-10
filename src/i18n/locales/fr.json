@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "Votre mot de passe n'est pas dans le trousseau. Ressaisissez-le dans Paramètres › Comptes pour vous reconnecter.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "Le serveur a renvoyé une liste de dossiers vide de façon inattendue. Affichage des dossiers en cache pendant la vérification.",
   "svc.backupScheduler.complete": "Terminée",
+  "svc.backupScheduler.stalled": "Aucune progression depuis {{minutes}} minutes. L'exécution a été arrêtée et sera relancée.",
   "svc.backupScheduler.emailsBackedUp": "{{entry}} e-mails sauvegardés. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}} n'ont pas pu être copiés vers la sauvegarde externe.",
   "svc.backupScheduler.messageSCouldFetched": "{{entry}} message(s) n'ont pas pu être récupérés.",

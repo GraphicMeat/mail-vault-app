@@ -1376,6 +1376,7 @@
   "svc.activateAccount.passwordKeychainReEnterUnder": "비밀번호가 키체인에 없습니다. 설정 › 계정에서 다시 입력해 재연결하세요.",
   "svc.activateAccount.serverReturnedEmptyFolderList": "서버가 예기치 않게 빈 폴더 목록을 반환했습니다. 확인하는 동안 캐시된 폴더를 표시합니다.",
   "svc.backupScheduler.complete": "완료",
+  "svc.backupScheduler.stalled": "{{minutes}}분 동안 진행이 없습니다. 실행을 중지했으며 다시 시도합니다.",
   "svc.backupScheduler.emailsBackedUp": "메일 {{entry}}건을 백업했습니다. {{parts}}",
   "svc.backupScheduler.failedCopyExternalBackup": "{{result}}건을 외부 백업으로 복사하지 못했습니다.",
   "svc.backupScheduler.messageSCouldFetched": "메시지 {{entry}}건을 가져오지 못했습니다.",

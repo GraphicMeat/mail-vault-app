@@ -58,6 +58,9 @@ export function useBackupScheduler() {
     // ── Periodic idle check ────────────────────────────────────────────
 
     const idleInterval = setInterval(() => {
+      // Self-heal runs whether or not the user is idle: a wedged queue and a
+      // stalled run are exactly the states the idle path cannot reach.
+      backupScheduler.tick();
       const idleMs = Date.now() - lastActivityRef.current;
       if (idleMs >= IDLE_THRESHOLD_MS) {
         if (!wasIdleRef.current) {

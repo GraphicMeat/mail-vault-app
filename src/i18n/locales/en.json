@@ -1210,6 +1210,7 @@
   "svc.backupScheduler.emailsBackedUp": "{{entry}} emails backed up. {{parts}}",
   "svc.backupScheduler.queued": "Queued...",
   "svc.backupScheduler.complete": "Complete",
+  "svc.backupScheduler.stalled": "No progress for {{minutes}} minutes. The run was stopped and will be retried.",
   "util.senderCheck.displayNameShowsButActual": "Display name shows \"{{fromName}}\" but actual sender is {{email}} — likely impersonation",
   "util.senderCheck.senderNameImpersonatesDomainDiffers": "Sender name \"{{fromName}}\" impersonates domain that differs from actual sender ({{fromDomain}})",
   "util.senderCheck.replyAddressDiffersSender": "Reply-To address ({{replyToAddr}}) differs from sender",
