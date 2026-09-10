@@ -45,5 +45,7 @@
   "48e9b162137e": "Una bandeja de entrada real. Lista para explorar.",
   "be2d951351ae": "Busca correos, cambia de vista y prueba a archivarlos.",
   "3197ae330fe6": "Probar la demo en directo en una ventana nueva",
-  "0499bffe57aa": "Abrir la demo en una ventana nueva"
+  "0499bffe57aa": "Abrir la demo en una ventana nueva",
+  "36bf4cfd6777": "Sí. Ajustes > Apariencia > Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. Seguir el puntero es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. Marcar lo que estoy leyendo le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.",
+  "fdc278a8183a": "Sí. Ajustes &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras."
 }
