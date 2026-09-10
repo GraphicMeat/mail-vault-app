@@ -48,7 +48,7 @@ for p in root.rglob('*.html'):
    if marker in js:return '<script>\n'+js[js.index(marker):]+'</script>'
   return ''
  s=re.sub(r'<script>\s*([\s\S]*?)</script>',clean_script,s)
- s=s.replace('</head>','<link rel="stylesheet" href="/assets/english-site.css?v=20260905-community">\n<link rel="stylesheet" href="/assets/english-content.css?v=1">\n</head>')
- s=s.replace('</body>','<script defer src="/assets/english-site.js?v=2"></script>\n</body>')
+ s=s.replace('</head>','<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">\n<link rel="stylesheet" href="/assets/english-content.css?v=2">\n</head>')
+ s=s.replace('</body>','<script defer src="/assets/english-site.js?v=3"></script>\n</body>')
  p.write_text('\n'.join(line.rstrip() for line in s.splitlines())+'\n');changed.append(str(p.relative_to(root)))
 print('Styled',len(changed),'English pages:',', '.join(changed))
