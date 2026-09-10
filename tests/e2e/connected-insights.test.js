@@ -9,7 +9,7 @@ import { clickReachable, setControl, openInsights, waitForInsights, setInsightsR
   nativeInvoke, cacheScenarioHeaders, readNativeSnapshot, summaryText, captureInsights, startFrameProbe, stopFrameProbe, startNativeProbe, stopNativeProbe, waitForHeldNativeReply, releaseNativeReply, nativeProbeOutcomes } from './insightsHelpers.js';
 
 const LARGE = process.env.E2E_INSIGHTS_LARGE === '1';
-const expected = buildInsightsScenario({ inboxCount: LARGE ? 50000 : 700 }).expected;
+const expected = buildInsightsScenario({ inboxCount: LARGE ? 50000 : 700 }).firstAccountExpected;
 const displayedTotal = async expectedTotal => {
   const text = (await summaryText()).total || '';
   const match = text.match(/^\s*([\d.,\s\u00a0]+)/);
@@ -140,6 +140,7 @@ describe('Insights with real native mail data', function () {
   });
 
   it('opens exact account/folder messages from the day without UID cross-talk', async () => {
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[1].id); await waitForInsights();
     await clickReachable('[data-testid="insights-tab-map"]');
     await setControl('.insights-map-section input[type="search"]', 'other-account@insights.test');
     await clickReachable('.insights-sender-rows button[aria-label*="other-account@insights.test"]');
@@ -168,6 +169,7 @@ describe('Insights with real native mail data', function () {
     await clickReachable('[data-testid="insights-close"]');
     await openInsights(); await setInsightsRange();
     if (await browser.execute(() => !!document.querySelector('[data-testid="insights-clear-sender"]'))) { await clickReachable('[data-testid="insights-clear-sender"]'); await waitForInsights(); }
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[0].id); await waitForInsights();
   });
 
   it('shows incomplete coverage for a corrupt real header and recovers after repair', async () => {
@@ -255,7 +257,7 @@ describe('Insights with real native mail data', function () {
     await displayedTotal(expected.received + 1);
     await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[1].id); await waitForInsights();
     await displayedTotal(1);
-    await setControl('[data-testid="insights-accounts"]', ''); await waitForInsights();
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[0].id); await waitForInsights();
     await displayedTotal(expected.received + 1);
   });
 
@@ -332,7 +334,7 @@ describe('Insights with real native mail data', function () {
       await displayedTotal(1);
       console.log('[insights] Race tests delay one actual native page response without replacing its data.');
     } finally { await stopNativeProbe(); }
-    await setControl('[data-testid="insights-accounts"]', ''); await waitForInsights();
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[0].id); await waitForInsights();
   });
 
   it('distinguishes an unavailable real vault from empty mail and recovers the previous totals', async () => {

@@ -65,6 +65,13 @@ describe('Insights workspace lifecycle',()=>{
     await h.store.getState().refresh();
     expect(h.sessions[0].dispose).toHaveBeenCalledOnce();expect(h.store.getState().query.accountIds).toEqual([]);
   });
+  it('falls back to the remaining account when the chosen account disappears',async()=>{
+    const h=harness();
+    await h.store.getState().openInsights();
+    h.mail.accounts=[{id:'b',email:'other@example.test'}];
+    await h.store.getState().refresh();
+    expect(h.store.getState().query.accountIds).toEqual(['b']);
+  });
 });
 
 // Real store -> real session -> real worker/model. Only the native inventory

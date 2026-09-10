@@ -157,6 +157,15 @@ export async function summaryText() {
     coverage: document.querySelector('[data-testid="insights-coverage"]')?.textContent }));
 }
 export async function captureInsights(name) {
+  const nativeWindow = await browser.executeAsync(done => {
+    const win = window.__TAURI__.window.getCurrentWindow();
+    Promise.all([win.isVisible(), win.isMinimized(), win.isFocused(), win.outerPosition()])
+      .then(([visible, minimized, focused, position]) => done({ visible, minimized, focused, position }))
+      .catch(error => done({ error: String(error) }));
+  });
+  console.log('[insights] Native capture window:', JSON.stringify(nativeWindow));
+  assert.equal(nativeWindow.visible, true, `Capture requires a visible test window: ${JSON.stringify(nativeWindow)}`);
+  assert.equal(nativeWindow.minimized, false, 'Capture requires an unminimized test window');
   const style = await browser.execute(() => {
     const page = document.querySelector('[data-testid="insights-page"]');
     return { visibilityState: document.visibilityState, font: getComputedStyle(document.body).fontFamily, pageDisplay: page ? getComputedStyle(page).display : null,

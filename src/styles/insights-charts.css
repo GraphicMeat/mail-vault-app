@@ -43,6 +43,8 @@
 .insights-map-bubble { display: grid; place-items: center; flex: none; background: var(--insights-level-4); color: var(--insights-on-bubble); border-radius: 50%; font-size: 12px; font-weight: 600; }
 .insights-map-node:hover .insights-map-bubble { outline: 1px solid var(--mail-text); outline-offset: 2px; }
 .insights-map-node[aria-pressed="true"] { outline: 2px solid var(--mail-accent); outline-offset: 3px; }
+.insights-sender-tooltip { position: fixed; z-index: 20; display: flex; flex-direction: column; gap: 3px; width: 280px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow: auto; padding: 10px 12px; border: 1px solid var(--mail-border-strong); border-radius: 8px; background: var(--mail-surface); color: var(--mail-text); pointer-events: none; overflow-wrap: anywhere; }
+.insights-sender-tooltip span { color: var(--mail-text-muted); font-size: 12px; }
 .insights-sender-detail { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 16px; padding-block: 12px; margin-block: 12px 20px; border-block: 1px solid var(--mail-border); overflow-wrap: anywhere; }
 .insights-sender-detail span { color: var(--mail-text-muted); font-size: 12px; }
 .insights-sender-rows { list-style: none; margin: 0; padding: 0; max-height: 420px; overflow-y: auto; scrollbar-gutter: stable; }

@@ -27,7 +27,7 @@ export function createInsightsStore(options = {}) {
       const accounts = deps.getAccounts();
       const preferences = normalizeInsightsPreferences(candidate, accounts.map(a=>a.id));
       const query = {...get().query,...insightsDateRange(preferences,deps.now(),deps.timeZone()),
-        accountIds:preferences.accountIds || accounts.map(a=>a.id),timeZone:deps.timeZone(),direction:preferences.direction,
+        accountIds:preferences.accountIds || (accounts[0] ? [accounts[0].id] : []),timeZone:deps.timeZone(),direction:preferences.direction,
         hideAutomated:preferences.hideAutomated,senderAddress:get().query.senderAddress || null,timelineBucket:get().query.timelineBucket || 'week',senderSort:get().query.senderSort || 'recent'};
       const selectedDay=get().selectedDay;
       set({preferences,tab:preferences.tab,query,

@@ -3,8 +3,8 @@
 // The star on a list row, in both row variants.
 //
 // Three things it has to get right: a lit star is always drawn (it is the
-// information a starred-mail list exists for), an unlit one only on hover (an
-// empty star on every row of a long list is noise), and the click acts on the
+// information a starred-mail list exists for), an unlit one remains visible
+// beside status icons and otherwise appears on hover, and the click acts on the
 // row it is drawn in — by SELECTION key, not uid, since a merged Sent copy and
 // the folder's own message share a number — without also opening the message.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -23,7 +23,7 @@ vi.mock('lucide-react', () => {
 vi.mock('../LinkAlertIcon', () => ({ LinkAlertIcon: () => null }));
 vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAlertLevel: () => null }));
 vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadReplyToMismatch: () => null }));
-vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: () => null }));
+vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: ({ info }) => info?.count ? <span data-testid="tracker-alert-icon" /> : null }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({
@@ -88,6 +88,12 @@ for (const [name, renderRow] of variants) {
       expect(star.className).toMatch(/\binvisible\b/);
       expect(star.className).toMatch(/group-hover:visible/);
       expect(star.getAttribute('aria-label')).toBe('Star');
+    });
+    it('keeps an unflagged star visible when another status icon shares the sender cluster', () => {
+      render(renderRow(email({ _trackerInfo: { count: 1, vendors: ['tracker.test'] } })));
+      const star = screen.getByTestId('star-toggle');
+      expect(screen.getByTestId('tracker-alert-icon')).toBeTruthy();
+      expect(star.className).not.toMatch(/\binvisible\b/);
     });
 
     it('toggles this row and does not open the message', () => {

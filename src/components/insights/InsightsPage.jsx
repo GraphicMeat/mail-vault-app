@@ -58,9 +58,9 @@ export default function InsightsPage({onClose,onComposeReply}) {
     </header>
     <div className="insights-scroll">
       <div className="insights-toolbar">
-        <label><span>{t('insights.accounts')}</span><select data-testid="insights-accounts" value={preferences.accountIds?.length===1?preferences.accountIds[0]:''}
-          onChange={e=>state.setQuery({accountIds:e.target.value?[e.target.value]:null})}>
-          <option value="">{t('insights.allAccounts')}</option>{accounts.map(a=><option key={a.id} value={a.id}>{a.email}</option>)}</select></label>
+        <label><span>{t('insights.accounts')}</span><select data-testid="insights-accounts" value={preferences.accountIds?.[0] || accounts[0]?.id || ''}
+          onChange={e=>state.setQuery({accountIds:e.target.value ? [e.target.value] : []})}>
+          {accounts.map(a=><option key={a.id} value={a.id}>{a.email}</option>)}</select></label>
         <label><span>{t('insights.range')}</span><select data-testid="insights-range-preset" value={preferences.range || '12m'} onChange={e=>state.setQuery({range:e.target.value,...(e.target.value==='custom'?{startDate:query.startDate,endDate:query.endDate}:{})})}>
           <option value="30d">{t('insights.range30')}</option><option value="90d">{t('insights.range90')}</option><option value="12m">{t('insights.rangeYear')}</option><option value="custom">{t('insights.custom')}</option>
         </select></label>

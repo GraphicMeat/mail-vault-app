@@ -56,5 +56,9 @@ export function buildInsightsScenario({ inboxCount = 700 } = {}) {
       receivedWithoutAutomated: inboxCount + 2, physicalIncluded: inboxCount + 6,
       daysEuropeVilnius: { '2026-09-01': { received: 100, sent: 0 }, '2026-09-04': { received: inboxCount - 112, sent: 0 }, '2026-09-09': { received: 15, sent: 3 } },
       oldSenderReceived: 100, recentSenderReceived: 10, excludedDraftsTrashJunk: 3 },
+    // The Insights UI selects one account. Keep the cross-account inventory
+    // oracle above for native snapshot checks, and state this scope explicitly.
+    firstAccountExpected: { received: inboxCount + 2, sent: 3, both: inboxCount + 5,
+      receivedWithoutAutomated: inboxCount + 1 },
   };
 }

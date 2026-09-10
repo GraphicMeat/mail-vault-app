@@ -68,12 +68,13 @@ export function ExplorerView({
   const items = virtualized ? virtualizer.getVirtualItems()
     : entries.map((_, index) => ({ index, key: getItemKey(index) }));
 
-  const navigate = next => { focusAfterNavigation.current = true; setPath(scope, next); };
+  const navigate = (next, focus = false) => { focusAfterNavigation.current = focus; setPath(scope, next); };
   useEffect(() => {
     focusAnchor.current = null;
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     if (focusAfterNavigation.current) {
-      rootRef.current?.querySelector('[data-testid="explorer-back"]')?.focus();
+      (rootRef.current?.querySelector('[data-testid="explorer-back"]')
+        || rootRef.current?.querySelector('.explorer-crumb[aria-current="location"]'))?.focus();
       focusAfterNavigation.current = false;
     }
   }, [location]);
@@ -152,7 +153,7 @@ export function ExplorerView({
     aria-label={t('explorer.name')} onKeyDown={event => {
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); step(event.key === 'ArrowDown' ? 1 : -1); }
-      if (event.key === 'ArrowLeft' && event.altKey && path.length) { event.preventDefault(); navigate(path.slice(0, -1)); }
+      if (event.key === 'ArrowLeft' && event.altKey && path.length) { event.preventDefault(); navigate(path.slice(0, -1), true); }
       if (event.key === 'Enter' && event.target.hasAttribute('data-explorer-index')) {
         const email = entries[Number(event.target.dataset.explorerIndex)]?.email;
         if (email) { event.preventDefault(); onSelectEmail?.(email); }
@@ -169,12 +170,12 @@ export function ExplorerView({
       </select></label>
     </div>
     <nav className="explorer-breadcrumbs" aria-label={t('explorer.path')}>
-      <button type="button" data-testid="explorer-back" className="mail-toolbar-button" disabled={!path.length}
-        aria-label={t('explorer.back')} onClick={() => navigate(path.slice(0, -1))}><ArrowLeft size={16} /></button>
+      {path.length > 0 && <button type="button" data-testid="explorer-back" className="mail-toolbar-button"
+        aria-label={t('explorer.back')} onClick={event => navigate(path.slice(0, -1), event.detail === 0)}><ArrowLeft size={16} /></button>}
       {breadcrumbs.map((group, index) => <React.Fragment key={group.id}>
         {index > 0 && <ChevronRight size={12} className="shrink-0 text-mail-text-muted" aria-hidden="true" />}
         <button type="button" className="explorer-crumb" aria-current={index === breadcrumbs.length - 1 ? 'location' : undefined}
-          onClick={() => navigate(path.slice(0, index))} title={groupLabel(group)} dir="auto">{displayText(groupLabel(group))}</button>
+          onClick={event => navigate(path.slice(0, index), event.detail === 0)} title={groupLabel(group)} dir="auto">{displayText(groupLabel(group))}</button>
       </React.Fragment>)}
     </nav>
     <div className="explorer-search">
@@ -215,7 +216,7 @@ export function ExplorerView({
                 onSetSelection={onSetSelection} label={t('explorer.selectGroup', { name: group.label })} />
               <button type="button" data-testid="explorer-group-open" className="explorer-group-open"
                 aria-label={t('explorer.openGroup', { name: group.label })}
-                onClick={() => navigate([...path, group.id])}>
+                onClick={event => navigate([...path, group.id], event.detail === 0)}>
                 <GroupIcon size={20} className="shrink-0 text-mail-text-muted" aria-hidden="true" />
                 <span className="explorer-group-copy"><span className="explorer-group-name" dir="auto" title={group.label}>{displayText(group.label)}</span>
                   <span className="explorer-group-meta">{group.detail && <span className="explorer-sender-address" dir="auto" title={group.detail}>{displayText(group.detail)} · </span>}

@@ -45,11 +45,101 @@ describe('Insights native workspace and responsive states', function () {
       assert.equal(before.layout, layout);
       assert.ok(before.account && before.mailbox, 'Read actual mailbox state before opening Insights');
       await openInsights(); await setInsightsRange();
+      const navigation = await browser.execute(() => {
+        const sidebar = document.querySelector('[data-testid="sidebar"]');
+        const insights = sidebar.querySelector('[data-testid="open-insights"]');
+        const icon = insights.querySelector('svg').getBoundingClientRect();
+        const label = insights.querySelector('span:last-child').getBoundingClientRect();
+        const neighbor = sidebar.querySelector('.sidebar-unified-row') || sidebar.querySelector('.sidebar-account-switcher');
+        const neighborLabel = neighbor.querySelector('.sidebar-account-label') || neighbor.querySelector('span:last-child');
+        return { current: [...sidebar.querySelectorAll('.sidebar-account-section [aria-current]')].filter(el => el.getAttribute('aria-current') !== 'false').map(el => el.dataset.testid || el.getAttribute('aria-label')),
+          selectedRows: sidebar.querySelectorAll('.sidebar-account-selected').length,
+          iconGap: label.left - icon.right, labelLeft: label.left,
+          neighborLabelLeft: neighborLabel.getBoundingClientRect().left };
+      });
+      assert.deepEqual(navigation.current, ['open-insights'], `Insights is the only selected navigation entry in ${layout}`);
+      assert.equal(navigation.selectedRows, 1, `One visual navigation selection in ${layout}`);
+      assert.ok(navigation.iconGap >= 8, `Insights icon has label spacing: ${JSON.stringify(navigation)}`);
+      assert.ok(Math.abs(navigation.labelLeft - navigation.neighborLabelLeft) <= 2, `Insights text aligns with adjacent rows: ${JSON.stringify(navigation)}`);
       await clickReachable('[data-testid="insights-close"]');
       assert.equal(await browser.execute(() => !!document.querySelector('[data-testid="insights-page"]')), false);
       const after = await browser.execute(() => ({ mailbox: window.__MAIL_STORE__?.getState().activeMailbox, account: window.__MAIL_STORE__?.getState().activeAccountId }));
       assert.equal(after.mailbox, before.mailbox); assert.equal(after.account, before.account);
     }
+  });
+
+  it('offers only individual accounts and preserves the chosen account after reopening', async () => {
+    await openInsights(); await setInsightsRange();
+    const accounts = await browser.execute(() => {
+      const select = document.querySelector('[data-testid="insights-accounts"]');
+      return { value: select.value, options: [...select.options].map(option => ({ value: option.value, text: option.textContent })) };
+    });
+    assert.deepEqual(accounts.options.map(option => option.value), browser.mockAccounts.map(account => account.id));
+    assert.ok(accounts.value, 'A valid single account is selected on entry');
+    assert.ok(accounts.options.every(option => !/all accounts/i.test(option.text)));
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[1].id); await waitForInsights();
+    assert.match((await summaryText()).total, /^1\D/);
+    await clickReachable('[data-testid="insights-close"]');
+    await openInsights();
+    assert.equal(await browser.execute(() => document.querySelector('[data-testid="insights-accounts"]').value), browser.mockAccounts[1].id);
+    assert.match((await summaryText()).total, /^1\D/);
+    await setControl('[data-testid="insights-accounts"]', browser.mockAccounts[0].id); await waitForInsights();
+    await clickReachable('[data-testid="insights-close"]');
+  });
+
+  it('shows sender details immediately beside the pointer and dismisses them on exit or Escape', async () => {
+    await browser.setWindowSize(1200, 900);
+    await openInsights(); await setInsightsRange();
+    await clickReachable('[data-testid="insights-tab-map"]');
+    await browser.execute(() => document.querySelector('.insights-map').scrollIntoView({ block: 'center', behavior: 'instant' }));
+    const hover = await browser.executeAsync(done => {
+      const node = document.querySelector('.insights-map-node');
+      const rect = node.getBoundingClientRect();
+      const x = rect.x + rect.width / 2, y = rect.y + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      if (!node.contains(hit)) { done({ error: 'Bubble is covered' }); return; }
+      const address = node.getAttribute('aria-label').match(/[\w.+-]+@[\w.-]+/)?.[0];
+      const started = performance.now();
+      let finished = false;
+      const complete = () => {
+        const tooltip = document.querySelector('[role="tooltip"]');
+        if (tooltip && tooltip.getBoundingClientRect().width && !finished) {
+          finished = true; observer.disconnect(); clearTimeout(timeout);
+          const box = tooltip.getBoundingClientRect();
+          done({ elapsed: performance.now() - started, address, text: tooltip.textContent, nativeTitle: node.getAttribute('title'),
+            x, y, left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: innerWidth, height: innerHeight });
+        }
+      };
+      const observer = new MutationObserver(complete);
+      observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+      const timeout = setTimeout(() => { if (!finished) { finished = true; observer.disconnect(); done({ error: 'No immediate sender tooltip' }); } }, 100);
+      // WKWebView's driver synthesizes pointer events and cannot establish CSS
+      // :hover. Measure the shipped React handler and actual rendered overlay.
+      node.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse', clientX: x, clientY: y, relatedTarget: document.body }));
+      node.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse', clientX: x, clientY: y }));
+      node.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, clientX: x, clientY: y, relatedTarget: document.body }));
+      complete();
+    });
+    assert.ok(!hover.error, JSON.stringify(hover));
+    assert.ok(hover.elapsed < 100, `Immediate hover response: ${hover.elapsed}ms`);
+    assert.ok(hover.text.includes(hover.address), `Sender identity is visible: ${JSON.stringify(hover)}`);
+    assert.match(hover.text, /received.*sent/);
+    assert.ok(!hover.nativeTitle, 'No second delayed native tooltip');
+    assert.ok(hover.left >= 0 && hover.top >= 0 && hover.right <= hover.width && hover.bottom <= hover.height, 'Sender detail stays inside the window');
+    assert.ok(Math.min(Math.abs(hover.left - hover.x), Math.abs(hover.right - hover.x)) <= 32, 'Sender detail follows the pointer horizontally');
+    await captureInsights('instant-sender-hover');
+    await browser.execute(() => document.querySelector('.insights-map-node').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    assert.equal(await browser.execute(() => !!document.querySelector('[role="tooltip"]')), false);
+    assert.ok(await browser.execute(() => !!document.querySelector('[data-testid="insights-page"]')), 'Escape dismisses only the tooltip');
+    await browser.execute(() => {
+      const node = document.querySelector('.insights-map-node');
+      node.focus();
+    });
+    assert.ok(await browser.execute(() => !!document.querySelector('[role="tooltip"]')), 'Keyboard focus also exposes sender details');
+    await browser.execute(() => document.activeElement.blur());
+    assert.equal(await browser.execute(() => !!document.querySelector('[role="tooltip"]')), false);
+    await clickReachable('[data-testid="insights-close"]');
+    console.log('[insights] Instant tooltip measured through pointer handlers in the native WebView, not trusted OS hover.');
   });
 
   it('preserves a live search and the Explorer location/filter across Insights visits', async () => {
@@ -112,8 +202,23 @@ describe('Insights native workspace and responsive states', function () {
   });
 
   it('keeps the collapsed entry reachable and uses the sender list at narrow widths', async () => {
+    await clickReachable('[data-testid="all-inboxes-btn"]');
     await clickReachable('button[title="Collapse sidebar"]');
     await openInsights(); await setInsightsRange();
+    assert.deepEqual(await browser.execute(emails => [...document.querySelectorAll('[data-testid="sidebar"] [aria-current]')]
+      .filter(el => el.getAttribute('aria-current') !== 'false'
+        && (el.dataset.testid === 'open-insights' || emails.some(email => el.getAttribute('aria-label')?.includes(email))))
+      .map(el => el.dataset.testid || el.getAttribute('aria-label')), browser.mockAccounts.map(account => account.email)), ['open-insights']);
+    const collapsedSelection = await browser.execute(() => {
+      const sidebar = document.querySelector('[data-testid="sidebar"]');
+      const all = sidebar.querySelector('[data-testid="all-inboxes-btn"]');
+      return { unified: window.__MAIL_STORE__.getState().unifiedInbox, allClasses: all.className,
+        allSelected: all.classList.contains('bg-mail-accent/10'),
+        insightSelected: sidebar.querySelector('[data-testid="open-insights"]').classList.contains('sidebar-account-selected') };
+    });
+    assert.ok(collapsedSelection.unified, 'The underlying mail workspace remains All Inboxes');
+    assert.equal(collapsedSelection.allSelected, false, `All Inboxes loses its selection while Insights is open: ${JSON.stringify(collapsedSelection)}`);
+    assert.equal(collapsedSelection.insightSelected, true);
     await captureInsights('collapsed-sidebar');
     await clickReachable('[data-testid="insights-close"]');
     await clickReachable('button[title="Expand sidebar"]');

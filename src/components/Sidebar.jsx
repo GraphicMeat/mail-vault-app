@@ -247,17 +247,17 @@ function BackupIndicator({ onOpenBackup }) {
 /** Collapsed sidebar: one button per account — memoized so backup badge changes only rerender this row */
 const CollapsedAccountButton = memo(function CollapsedAccountButton({
   account, label, isActive, color, initial, unifiedInbox, connectionStatus,
-  unreadCount, onActivate, onActivateInbox, onOpenBackup
+  unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false
 }) {
   const t = useT();
   return (
     <div className="relative">
       <button type="button"
-        className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}
+        className={`relative p-1.5 rounded-lg transition-colors ${isActive && !unifiedInbox && !insightsOpen ? 'bg-mail-accent-tint' : 'hover:bg-mail-surface-hover'}`}
         onClick={onActivate}
         onDoubleClick={onActivateInbox}
         aria-label={label === account.email ? label : `${label}, ${account.email}`}
-        aria-current={isActive && !unifiedInbox ? 'true' : undefined}
+        aria-current={isActive && !unifiedInbox && !insightsOpen ? 'true' : undefined}
         title={label === account.email ? label : `${label} — ${account.email}`}>
         <span className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold select-none" style={{ backgroundColor: color }}>
           {initial}
@@ -267,7 +267,7 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
             <span className="text-[11px] font-bold text-white leading-none">{unreadCount > 99 ? '99+' : unreadCount}</span>
           </span>
         )}
-        {isActive && !unifiedInbox && (
+        {isActive && !unifiedInbox && !insightsOpen && (
           <span className={`absolute bottom-1 right-1 w-2.5 h-2.5 rounded-full border-2 border-mail-surface ${connectionStatus === 'connected' ? 'bg-mail-success' : connectionStatus === 'error' ? 'bg-mail-danger' : 'bg-mail-warning'}`}
             title={connectionStatus === 'connected' ? t('settings.accounts.connected') : connectionStatus === 'error' ? t('sidebar.connectionProblem') : t('sidebar.connecting')} />
         )}
@@ -280,10 +280,10 @@ const CollapsedAccountButton = memo(function CollapsedAccountButton({
 /** Account identity is the same in both navigation styles. Folder style is independent. */
 const ExpandedAccountRow = memo(function ExpandedAccountRow({
   account, label, isActive, color, initial, unifiedInbox, connectionStatus,
-  unreadCount, onActivate, onActivateInbox, onOpenBackup,
+  unreadCount, onActivate, onActivateInbox, onOpenBackup, insightsOpen = false,
 }) {
   const t = useT();
-  const selected = isActive && !unifiedInbox;
+  const selected = isActive && !unifiedInbox && !insightsOpen;
   const showAddress = label !== account.email;
   return (
     <div className={`sidebar-account-row ${selected ? 'sidebar-account-selected' : ''}`}>
@@ -842,8 +842,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
   const insightsEntry = <button type="button" data-testid="open-insights" onClick={onOpenInsights}
     aria-label={t('insights.title')} title={t('insights.title')} aria-current={insightsOpen ? 'page' : undefined}
-    className={`sidebar-account-row ${insightsOpen ? 'sidebar-account-selected' : ''}`}>
-    <Network size={17} aria-hidden="true" />{!collapsed && <span>{t('insights.title')}</span>}
+    className={`sidebar-account-row sidebar-insights-row ${collapsed ? 'sidebar-insights-collapsed' : ''} ${insightsOpen ? 'sidebar-account-selected' : ''}`}>
+    <span className="sidebar-unified-icon"><Network size={17} aria-hidden="true" /></span>{!collapsed && <span className="sidebar-account-name">{t('insights.title')}</span>}
   </button>;
 
   // --- COLLAPSED SIDEBAR ---
@@ -878,7 +878,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
               data-testid="all-inboxes-btn"
               onClick={() => { onOpenMail?.(); setUnifiedInbox(true); }}
               className={`p-2 rounded-lg transition-all
-                         ${unifiedInbox
+                         ${unifiedInbox && !insightsOpen
                            ? 'bg-mail-accent/10 text-mail-accent-text'
                            : 'text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover'}`}
               title={t('sidebar.allInboxes')}
@@ -914,6 +914,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
                   openMailFolder(account.id, lastMailbox || 'INBOX');
                 }}
                 onOpenBackup={onOpenBackup}
+                insightsOpen={insightsOpen}
               />
             </div>
           ))}
@@ -1019,8 +1020,8 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   };
   const useSwitcher = sidebarLayout === 'switcher';
   const renderUnifiedRow = (chooser = false) => showUnifiedInbox && (
-    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox ? 'true' : undefined}
-      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox ? 'sidebar-account-selected' : ''}`}
+    <button type="button" data-account-choice data-testid="all-inboxes-btn" aria-current={unifiedInbox && !insightsOpen ? 'true' : undefined}
+      className={`sidebar-account-row sidebar-unified-row ${unifiedInbox && !insightsOpen ? 'sidebar-account-selected' : ''}`}
       onClick={() => { if (chooser) closeChooser(); onOpenMail?.(); setUnifiedInbox(true); }}>
       <span className="sidebar-unified-icon"><Inbox size={17} /></span>
       <span>{t('sidebar.allInboxes')}</span>
@@ -1035,6 +1036,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         isActive={account.id === activeAccountId} color={getAccountColor(accountColors, account)}
         initial={getAccountInitial(account, displayNames[account.id])} unifiedInbox={unifiedInbox}
         connectionStatus={connectionStatus} unreadCount={unreadPerAccount[account.id] || 0}
+        insightsOpen={insightsOpen}
         onActivateInbox={() => { if (chooser) closeChooser(); activateInbox(account.id); }}
         onActivate={() => {
           if (chooser) closeChooser();

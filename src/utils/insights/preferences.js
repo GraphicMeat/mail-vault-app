@@ -6,7 +6,8 @@ export function normalizeInsightsPreferences(value = {}, availableAccountIds) {
   const candidate = value && typeof value === 'object' ? value : {};
   let accountIds = Array.isArray(candidate.accountIds)
     ? [...new Set(candidate.accountIds.filter(id => typeof id === 'string' && (!availableAccountIds || availableAccountIds.includes(id))))] : null;
-  if (!accountIds?.length) accountIds = null;
+  if (accountIds?.length > 1) accountIds = accountIds.slice(0, 1);
+  if (!accountIds?.length) accountIds = availableAccountIds?.length ? [availableAccountIds[0]] : null;
   const custom = candidate.range === 'custom' && validDate(candidate.startDate) && validDate(candidate.endDate) && candidate.startDate <= candidate.endDate;
   return {
     tab: ['timeline', 'activity'].includes(candidate.tab) ? candidate.tab : 'map',

@@ -13,6 +13,9 @@ describe('Insights preferences', () => {
       tab:'timeline', accountIds:['a'], range:'custom', startDate:'2024-02-29', endDate:'2024-03-02', direction:'both', hideAutomated:true,
     });
   });
+  it('truncates persisted Insights scope to one available account', () => {
+    expect(normalizeInsightsPreferences({ accountIds:['a','b'] }, ['a','b']).accountIds).toEqual(['a']);
+  });
   it('rejects reversed and impossible dates without coercing them into a real day', () => {
     expect(normalizeInsightsPreferences({range:'custom',startDate:'2026-02-30',endDate:'2026-03-01'}).range).toBe('12m');
     expect(normalizeInsightsPreferences({range:'custom',startDate:'2026-09-10',endDate:'2026-09-09'}).range).toBe('12m');

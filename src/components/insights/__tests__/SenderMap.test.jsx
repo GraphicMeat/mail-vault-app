@@ -23,6 +23,16 @@ describe('sender map and list', () => {
     fireEvent.click(within(list).getByRole('button', { name: /Undated.*Unknown date/i }));
     expect(onSelect).toHaveBeenLastCalledWith('unknown@test');
   });
+  it('shows sender details immediately on pointer hover without a native title', () => {
+    render(<SenderMap senders={senders} endAt={endAt} selectedAddress={null} onSelect={() => {}} />);
+    const map = screen.getByRole('group', { name: 'Sender map' });
+    const node = within(map).getByRole('button', { name: /Ana.*ana@test/ });
+    expect(node.hasAttribute('title')).toBe(false);
+    fireEvent.pointerOver(node, { clientX: 100, clientY: 120 });
+    expect(screen.getByRole('tooltip').textContent).toContain('ana@test');
+    fireEvent.keyDown(node, { key: 'Escape' });
+    expect(screen.queryByRole('tooltip')).toBeNull();
+  });
   it('finds and brings a sender outside the top thirty into the map', () => {
     const input = Array.from({ length: 50 }, (_, i) => ({ ...senders[0], address: `person${i}@test`, name: `Person ${i}`, count: 50 - i }));
     render(<SenderMap senders={input} endAt={endAt} selectedAddress={null} onSelect={() => {}} />);

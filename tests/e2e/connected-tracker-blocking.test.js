@@ -126,6 +126,47 @@ describe('Tracker blocking', function () {
     await browser.keys(['Escape']);
   });
 
+  it('keeps the star visible beside the tracker icon without row hover or keyboard focus', async function () {
+    const originalWindow = await browser.getWindowSize();
+    const original = await browser.execute(() => {
+      const settings = window.__SETTINGS_STORE__.getState();
+      return { emailListStyle: settings.emailListStyle, listPaneSize: settings.listPaneSize, threadMode: settings.threadMode, layoutMode: settings.layoutMode };
+    });
+    try {
+      await browser.setWindowSize(1440, 900);
+      for (const style of ['default', 'compact']) {
+        await browser.execute(style => window.__SETTINGS_STORE__.setState({ emailListStyle: style, listPaneSize: 640, threadMode: 'flat', layoutMode: 'three-column' }), style);
+        await browser.waitUntil(() => browser.execute((subject, size) => {
+          const row = [...document.querySelectorAll('[data-testid="email-row"]')].find(node => node.textContent.includes(subject));
+          return !!row?.querySelector('[data-testid="tracker-alert-icon"]')
+            && row.querySelector('[data-testid="star-toggle"] svg')?.getAttribute('width') === String(size);
+        }, TRACKER_SUBJECT, style === 'default' ? 14 : 13), { timeout: 15000, timeoutMsg: `Tracker row did not render the ${style} layout` });
+        const state = await browser.execute(subject => {
+          document.activeElement?.blur();
+          const row = [...document.querySelectorAll('[data-testid="email-row"]')].find(node => node.textContent.includes(subject));
+          const star = row?.querySelector('[data-testid="star-toggle"]');
+          const tracker = row?.querySelector('[data-testid="tracker-alert-icon"]');
+          if (!star || !tracker) return null;
+          return { starVisibility: getComputedStyle(star).visibility, rowFocused: row.matches(':focus-within'),
+            rowHovered: row.matches(':hover'), hasHoverGate: star.classList.contains('invisible'),
+            trackerVisible: getComputedStyle(tracker).visibility, unflagged: star.getAttribute('aria-pressed') === 'false' };
+        }, TRACKER_SUBJECT);
+        expect(state).not.toBeNull();
+        expect(state.unflagged).toBe(true);
+        expect(state.rowFocused).toBe(false);
+        // The native driver cannot establish CSS :hover. The absent hover
+        // gate proves visibility is unconditional even if the OS pointer
+        // happens to be over this row during the run.
+        expect(state.trackerVisible).toBe('visible');
+        expect(state.hasHoverGate).toBe(false);
+        expect(state.starVisibility).toBe('visible');
+      }
+    } finally {
+      await browser.execute(settings => window.__SETTINGS_STORE__.setState(settings), original);
+      await browser.setWindowSize(originalWindow.width, originalWindow.height);
+    }
+  });
+
   it('sells the feature on its own page, with the before/after and the code', async function () {
     await openTab('Tracker Blocking');
     const text = await settingsText();

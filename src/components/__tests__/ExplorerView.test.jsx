@@ -35,6 +35,24 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Explorer browsing', () => {
+  it('does not render a back control at the root', () => {
+    mount();
+    expect(screen.queryByTestId('explorer-back')).toBeNull();
+  });
+  it('keeps pointer navigation from creating a programmatic Back focus ring', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Open group 2026' }), { detail: 1 });
+    await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    expect(screen.getByTestId('explorer-back')).not.toBe(document.activeElement);
+  });
+  it('restores keyboard focus to the root breadcrumb after Alt+Left back navigation', async () => {
+    mount();
+    fireEvent.click(screen.getByRole('button', { name: 'Open group 2026' }), { detail: 0 });
+    await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    fireEvent.keyDown(screen.getByTestId('explorer-view'), { key: 'ArrowLeft', altKey: true });
+    await act(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    expect(screen.getByRole('button', { name: 'Inbox' })).toBe(document.activeElement);
+  });
   it('navigates date groups, breadcrumbs and back to real email leaves', () => {
     mount(); enter('2026'); enter('September');
     expect(screen.getByRole('button', { name: 'Invoice September' })).toBeTruthy();

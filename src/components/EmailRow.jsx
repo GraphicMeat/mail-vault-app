@@ -46,6 +46,11 @@ import { useT } from '../i18n/index.js';
 function StarToggle({ email, actions, size }) {
   const t = useT();
   const isFlagged = email.flags?.includes('\\Flagged');
+  // Keep the sender/status cluster stable when another glyph is present. An
+  // empty star may stay quiet on a plain row, but appearing beside tracker,
+  // warning, or attachment icons only on hover shifts the cluster visually.
+  const hasStatusIcon = Boolean(email.has_attachments || email.hasAttachments
+    || email._senderAlert || email._replyToMismatch || email._linkAlert || email._trackerInfo?.count);
   const label = isFlagged ? t('rowMenu.unstar') : t('rowMenu.star');
   return (
     <button
@@ -54,7 +59,7 @@ function StarToggle({ email, actions, size }) {
       aria-pressed={!!isFlagged}
       aria-label={label}
       title={label}
-      className={`shrink-0 p-0.5 rounded press ${isFlagged ? '' : 'invisible group-hover:visible group-focus-within:visible'}`}
+      className={`shrink-0 p-0.5 rounded press ${isFlagged || hasStatusIcon ? '' : 'invisible group-hover:visible group-focus-within:visible'}`}
       onClick={(e) => { e.stopPropagation(); actions.toggleFlagged?.(selectionKey(email, useMailStore.getState())); }}
     >
       <Star size={size} className={isFlagged ? 'text-amber-400 fill-amber-400' : 'text-mail-text-muted hover:text-amber-400'} />

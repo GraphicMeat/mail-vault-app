@@ -42,6 +42,18 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('Sidebar navigation', () => {
+  it('makes Insights the only selected navigation entry while open', () => {
+    render(<Sidebar insightsOpen onOpenInsights={() => {}} />);
+    expect(screen.getByTestId('open-insights').getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('button', { name: 'Design studio, studio@example.com' }).getAttribute('aria-current')).toBeNull();
+  });
+  it('does not visually select collapsed All Inboxes while Insights is open', () => {
+    useSettingsStore.setState({ sidebarCollapsed: true });
+    useMailStore.setState({ unifiedInbox: true });
+    render(<Sidebar insightsOpen onOpenInsights={() => {}} />);
+    expect(screen.getByTestId('all-inboxes-btn').className).not.toContain('bg-mail-accent/10');
+    expect(screen.getByTestId('open-insights').className).toContain('sidebar-account-selected');
+  });
   it.each(['list', 'tagcloud'])('uses the saved account name and address in %s navigation', style => {
     useSettingsStore.setState({ sidebarStyle: style });
     render(<Sidebar />);

@@ -72,6 +72,55 @@ describe('Explorer in the native mailbox', function () {
     assert.ok(await browser.execute(() => document.querySelectorAll('[data-testid="email-row"]').length > 0));
   });
 
+  it('hides Back at the root and does not move keyboard focus after pointer navigation', async () => {
+    await enter();
+    assert.equal(await browser.execute(() => !!document.querySelector('[data-testid="explorer-back"]')), false,
+      'The main folder has no Back action');
+    // Driver clicks synthesize events; deliberately do not use the helper's
+    // .focus() here, which would turn a pointer check into keyboard navigation.
+    const pointerClick = async selector => {
+      assert.equal(await browser.execute(sel => {
+        const button = document.querySelector(sel);
+        if (!button || button.disabled) return false;
+        button.scrollIntoView({ block: 'nearest', behavior: 'instant' });
+        const r = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        if (!button.contains(hit)) return false;
+        const at = { bubbles: true, cancelable: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 };
+        button.dispatchEvent(new PointerEvent('pointerdown', { ...at, pointerType: 'mouse' }));
+        button.dispatchEvent(new MouseEvent('mousedown', at));
+        button.dispatchEvent(new MouseEvent('mouseup', at));
+        button.dispatchEvent(new MouseEvent('click', { ...at, detail: 1 }));
+        return true;
+      }, selector), true, `Pointer target is reachable: ${selector}`);
+    };
+    await pointerClick('[data-testid="explorer-group-open"]');
+    await wait(() => browser.execute(() => !!document.querySelector('[data-testid="explorer-back"]')), 'Nested folder has Back');
+    const focus = await browser.execute(() => {
+      const back = document.querySelector('[data-testid="explorer-back"]');
+      return { focused: document.activeElement === back, outline: getComputedStyle(back).outlineStyle };
+    });
+    assert.equal(focus.focused, false, 'Pointer navigation must not programmatically focus Back');
+    assert.equal(focus.outline, 'none', 'Pointer navigation has no keyboard outline');
+    await pointerClick('[data-testid="explorer-back"]');
+    await wait(() => browser.execute(() => !document.querySelector('[data-testid="explorer-back"]')), 'Returning to main folder removes Back');
+
+    // Exercise the existing keyboard navigation handler independently.
+    await browser.execute(() => {
+      const group = document.querySelector('[data-testid="explorer-group-open"]');
+      group.focus();
+      group.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      // This driver does not perform the default button activation for an
+      // untrusted key event. A detail-zero click is its keyboard equivalent.
+      group.click();
+    });
+    await wait(() => browser.execute(() => document.activeElement?.matches('[data-testid="explorer-back"]')), 'Keyboard navigation restores focus to Back');
+    await browser.execute(() => document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true })));
+    await wait(() => browser.execute(() => !document.querySelector('[data-testid="explorer-back"]')
+      && document.activeElement?.matches('.explorer-crumb')), 'Keyboard Back at root focuses the surviving breadcrumb');
+    console.log('[explorer] Pointer and keyboard checks exercise native WebView handlers; they do not claim trusted OS input.');
+  });
+
   it('browses date groups and opens a real message in the existing reader', async () => {
     await enter(); await openFirst(); await openFirst();
     await wait(() => browser.execute(() => !!document.querySelector('[data-testid="explorer-view"] [data-testid="email-row"]')), 'Month has message rows');

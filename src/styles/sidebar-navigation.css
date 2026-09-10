@@ -6,6 +6,9 @@
 .sidebar-section-heading h2 { font-size: 12px; line-height: 1.5; font-weight: 600; color: var(--mail-text-muted); }
 .sidebar-folder-section { margin-top: 20px; }
 .sidebar-account-row { --sidebar-avatar-size: 26px; --sidebar-row-bg: var(--mail-surface); position: relative; display: flex; align-items: center; width: 100%; min-width: 0; min-height: 44px; margin-bottom: 2px; border-radius: 8px; color: var(--mail-text); text-align: left; }
+.sidebar-insights-row { gap: 10px; padding: 7px 8px; }
+.sidebar-insights-row svg { flex-shrink: 0; }
+.sidebar-insights-collapsed { width: auto; min-width: 36px; justify-content: center; }
 .sidebar-account-open { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; min-height: 44px; padding: 7px 8px; border-radius: 8px; color: inherit; text-align: left; }
 .sidebar-backup-status { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 28px; flex-shrink: 0; border-radius: 6px; }
 .sidebar-account-row > .sidebar-backup-status { margin-right: 4px; }
@@ -98,7 +101,8 @@
 [data-sidebar-density="compact"] .sidebar-account-open { min-height: 32px; gap: 8px; padding: 4px 8px; border-radius: 6px; }
 [data-sidebar-density="compact"] .sidebar-account-avatar { width: 22px; height: 22px; }
 [data-sidebar-density="compact"] .sidebar-account-address { display: none; }
-[data-sidebar-density="compact"] .sidebar-unified-row { gap: 8px; padding: 4px 8px; }
+[data-sidebar-density="compact"] .sidebar-unified-row,
+[data-sidebar-density="compact"] .sidebar-insights-row { gap: 8px; padding: 4px 8px; }
 [data-sidebar-density="compact"] .sidebar-unified-icon { width: 22px; }
 [data-sidebar-density="compact"] .sidebar-account-switcher { min-height: 34px; padding: 5px 8px; gap: 8px; }
 [data-sidebar-density="compact"] .sidebar-connection-notice { margin-left: 38px; }
