@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [2.13.1] - 2026-09-10
+
+### Added
+- **A move reports its progress.** Moving messages from the selection bar, a row menu or the M shortcut now shows the same bottom-right progress card an archive uses: "Moving..." with the count, then "Moved 3 messages to Done" once the server has them. A failed move clears the card, and the folder list says what went wrong, as before.
+
+### Fixed
+- **Move works again from the selection bar.** With rows ticked, the bar's Move button opened its folder list inside the bar's own scrolling strip, which clipped the list away: it was there, and nothing showed. The list now opens above the bar, beside the delete confirmation, in line with the button.
+- **The collapsed sidebar rail scrolls cleanly.** Its account and folder columns no longer grow a second scrollbar over the avatars, All mail, Server and Vault line up with the folder rows beneath them, and in a very short window the rail itself scrolls so the buttons at the bottom stay reachable.
+
 ## [2.13.0] - 2026-09-10
 
 ### Changed
