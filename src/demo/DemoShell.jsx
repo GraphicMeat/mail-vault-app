@@ -13,6 +13,15 @@ const TOUR = [
   { title: 'tour.settings.title', body: 'tour.settings.body', key: 'settings' },
 ];
 
+export function isMobileDemoDevice() {
+  if (typeof navigator === 'undefined') return false;
+  const userAgent = navigator.userAgent || '';
+  if (navigator.userAgentData?.mobile || /Android|iPad|iPhone|iPod|Windows Phone|IEMobile|Opera Mini|BlackBerry/i.test(userAgent)) return true;
+  // iPadOS can identify as a desktop Mac, while still exposing touch input.
+  return /Macintosh/i.test(userAgent) && navigator.maxTouchPoints > 1
+    && typeof screen !== 'undefined' && Math.min(screen.width || Infinity, screen.height || Infinity) <= 1024;
+}
+
 // Classify by action first, then use the active language's terms. Keeping
 // these phrases grouped prevents short words such as French "lu" from
 // matching unrelated controls and keeps "Senders" separate from "Send".
@@ -130,6 +139,7 @@ export function DemoShell({ children }) {
   const locale = normalizeDemoLocale(appLanguage) || 'en';
   const copy = (key) => ({ title: demoTranslate(locale, `copy.${key}.title`), body: demoTranslate(locale, `copy.${key}.body`) });
   const [panelOpen, setPanelOpen] = useState(true);
+  const [mobileNoticeOpen, setMobileNoticeOpen] = useState(isMobileDemoDevice);
   const [tourOpen, setTourOpen] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [explanationKey, setExplanationKey] = useState('default');
@@ -140,6 +150,10 @@ export function DemoShell({ children }) {
   const tourPanelRef = useRef(null);
   const previousFocusRef = useRef(null);
   const tourNavigatingRef = useRef(false);
+  const mobileNoticeRef = useRef(null);
+  const mobileNoticePreviousFocusRef = useRef(null);
+
+  const dismissMobileNotice = () => setMobileNoticeOpen(false);
 
   useEffect(() => demoBackend.on('demo:state', ({ payload }) => {
     if (payload?.type === 'storage-status' && payload.status) setStorageStatus(payload.mode === 'memory' && payload.status !== 'expired' ? 'memory' : payload.status);
@@ -194,6 +208,28 @@ export function DemoShell({ children }) {
       if (!tourNavigatingRef.current && previousFocusRef.current?.focus) requestAnimationFrame(() => previousFocusRef.current.focus());
     };
   }, [tourOpen]);
+
+  useEffect(() => {
+    if (!mobileNoticeOpen) return undefined;
+    mobileNoticePreviousFocusRef.current = document.activeElement;
+    mobileNoticeRef.current?.focus();
+    const onKeyDown = event => {
+      if (event.key === 'Escape') { event.preventDefault(); dismissMobileNotice(); return; }
+      if (event.key !== 'Tab') return;
+      const root = mobileNoticeRef.current?.closest('[role="dialog"]');
+      const focusable = [...(root?.querySelectorAll('button:not([disabled]),a[href],input,select,textarea') || [])];
+      if (!focusable.length) return;
+      const index = focusable.indexOf(document.activeElement);
+      const next = event.shiftKey ? (index <= 0 ? focusable.length - 1 : index - 1) : (index + 1) % focusable.length;
+      event.preventDefault();
+      focusable[next].focus();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      if (mobileNoticePreviousFocusRef.current?.focus) requestAnimationFrame(() => mobileNoticePreviousFocusRef.current.focus());
+    };
+  }, [mobileNoticeOpen]);
 
   useEffect(() => {
     document.body.dataset.demoPanel = panelOpen ? 'open' : 'closed';
@@ -298,6 +334,16 @@ export function DemoShell({ children }) {
               <button type="button" className="demo-button" disabled={tourStep === 0} onClick={() => setTourStep(step => step - 1)}><ChevronLeft size={15} /> {demoTranslate(locale, 'tour.back')}</button>
               {tourStep < TOUR.length - 1 ? <button type="button" className="demo-button demo-button-primary" onClick={() => setTourStep(step => step + 1)}>{demoTranslate(locale, 'tour.next')} <ChevronRight size={15} /></button> : <button type="button" className="demo-button demo-button-primary" onClick={() => setTourOpen(false)}>{demoTranslate(locale, 'tour.explore')} <ChevronRight size={15} /></button>}
             </div>
+          </section>
+        </div>
+      )}
+      {mobileNoticeOpen && (
+        <div className="demo-mobile-notice-backdrop" role="presentation">
+          <section className="demo-mobile-notice" role="dialog" aria-modal="true" aria-labelledby="demo-mobile-notice-title" aria-describedby="demo-mobile-notice-body">
+            <span className="demo-kicker">{demoTranslate(locale, 'mobileNotice.kicker')}</span>
+            <h2 id="demo-mobile-notice-title">{demoTranslate(locale, 'mobileNotice.title')}</h2>
+            <p id="demo-mobile-notice-body">{demoTranslate(locale, 'mobileNotice.body')}</p>
+            <button ref={mobileNoticeRef} type="button" className="demo-button demo-button-primary" onClick={dismissMobileNotice}>{demoTranslate(locale, 'mobileNotice.dismiss')}</button>
           </section>
         </div>
       )}

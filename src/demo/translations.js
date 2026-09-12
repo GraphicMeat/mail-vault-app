@@ -17,6 +17,10 @@ const EN = {
   'actions.reset': 'Reset',
   'actions.hideExplanation': 'Hide demo explanation',
   'actions.showExplanation': 'Show demo explanation',
+  'mobileNotice.kicker': 'MOBILE VIEW',
+  'mobileNotice.title': 'Best viewed on desktop',
+  'mobileNotice.body': 'This demo isn’t optimized for mobile yet. Like the MailVault app, it’s best viewed on desktop.',
+  'mobileNotice.dismiss': 'OK',
   'explanation.aria': 'Demo explanation',
   'explanation.heading': 'What just happened',
   'explanation.hide': 'Hide demo explanation',
@@ -173,6 +177,18 @@ const PERSISTENCE_COPY = {
   'zh-Hans': { 'explanation.simulation': '示例操作会在此浏览器中保存七天。', 'copy.delete.body': '此示例现在只保留本地副本。演示只会更改浏览器中的示例数据。', 'copy.move.body': '文件夹操作会更新列表、Explorer 和 Insights 共用的浏览器工作区。', 'copy.search.body': '搜索检查虚构的服务器和保管库行，包括发件人和主题。筛选范围来自同一个浏览器工作区。', 'copy.settings.title': '设置在此浏览器中有效', 'copy.appearance.title': '已更新此浏览器的外观', 'copy.tracker.body': '决定保留在浏览器的本地工作区中，不会加载远程资源。', 'copy.control.body': '这是 MailVault 的实时界面控件。状态会在虚构的浏览器工作区中保留七天。', 'tour.settings.body': '打开设置并更改偏好。此虚构浏览器工作区已解锁高级界面。' },
 };
 for (const [language, copy] of Object.entries(PERSISTENCE_COPY)) Object.assign(CATALOGS[language], copy);
+
+const MOBILE_NOTICE_COPY = {
+  de: { 'mobileNotice.kicker': 'MOBILE-ANSICHT', 'mobileNotice.title': 'Am besten auf dem Desktop', 'mobileNotice.body': 'Diese Demo ist noch nicht für Mobilgeräte optimiert. Wie die MailVault-App lässt sie sich am besten auf dem Desktop ansehen.', 'mobileNotice.dismiss': 'OK' },
+  fr: { 'mobileNotice.kicker': 'VUE MOBILE', 'mobileNotice.title': 'À consulter de préférence sur ordinateur', 'mobileNotice.body': 'Cette démo n’est pas encore optimisée pour mobile. Comme l’application MailVault, elle s’affiche mieux sur ordinateur.', 'mobileNotice.dismiss': 'OK' },
+  es: { 'mobileNotice.kicker': 'VISTA MÓVIL', 'mobileNotice.title': 'Se ve mejor en escritorio', 'mobileNotice.body': 'Esta demo aún no está optimizada para móviles. Como la aplicación MailVault, se ve mejor en un ordenador.', 'mobileNotice.dismiss': 'OK' },
+  it: { 'mobileNotice.kicker': 'VISTA MOBILE', 'mobileNotice.title': 'Meglio su desktop', 'mobileNotice.body': 'Questa demo non è ancora ottimizzata per dispositivi mobili. Come l’app MailVault, si vede meglio su desktop.', 'mobileNotice.dismiss': 'OK' },
+  'pt-BR': { 'mobileNotice.kicker': 'VISÃO MOBILE', 'mobileNotice.title': 'Melhor no desktop', 'mobileNotice.body': 'Esta demo ainda não está otimizada para dispositivos móveis. Assim como o app MailVault, ela funciona melhor no desktop.', 'mobileNotice.dismiss': 'OK' },
+  ja: { 'mobileNotice.kicker': 'モバイル表示', 'mobileNotice.title': 'デスクトップでの表示がおすすめ', 'mobileNotice.body': 'このデモはまだモバイル向けに最適化されていません。MailVaultアプリと同様に、デスクトップでの表示がおすすめです。', 'mobileNotice.dismiss': 'OK' },
+  ko: { 'mobileNotice.kicker': '모바일 보기', 'mobileNotice.title': '데스크톱에서 가장 잘 보입니다', 'mobileNotice.body': '이 데모는 아직 모바일에 최적화되지 않았습니다. MailVault 앱과 마찬가지로 데스크톱에서 보는 것이 가장 좋습니다.', 'mobileNotice.dismiss': '확인' },
+  'zh-Hans': { 'mobileNotice.kicker': '移动视图', 'mobileNotice.title': '建议在桌面设备上查看', 'mobileNotice.body': '此演示尚未针对移动设备优化。与 MailVault 应用一样，建议在桌面设备上查看。', 'mobileNotice.dismiss': '确定' },
+};
+for (const [language, copy] of Object.entries(MOBILE_NOTICE_COPY)) Object.assign(CATALOGS[language], copy);
 
 // French/Spanish/Italian contain a few deliberately concise fallbacks above;
 // these two full catalogs complete the supported set while retaining the same
