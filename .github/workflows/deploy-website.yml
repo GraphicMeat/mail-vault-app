@@ -115,6 +115,9 @@ jobs:
 
       - name: Sync demo assets and retain active chunks
         run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} \
+            'mkdir -p /var/www/mailvaultapp/demo/assets'
           find website/demo/assets -type f -printf '%f\n' | sort > /tmp/mailvault-demo-assets.manifest
           scp -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
             -p /tmp/mailvault-demo-assets.manifest \
