@@ -370,7 +370,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
       {/* Back up now button + live progress */}
       <div className="pt-3 border-t border-mail-border space-y-2">
         {live && (
-          <div className="space-y-2">
+          <div className="space-y-2" data-testid="backup-card-progress">
             <div className="flex items-center justify-between text-xs">
               <span className="text-mail-text font-medium">
                 {decodeImapUtf7(live.folder) || tr('settings.migration.starting')}
@@ -384,11 +384,12 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
               {barPercent === null ? (
                 // Nothing to measure yet (Starting...) - show motion, not an empty track.
-                <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+                <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" data-testid="backup-card-bar" />
               ) : (
                 <div
                   className="h-1.5 rounded-full bg-mail-accent transition-all"
                   style={{ width: `${barPercent}%` }}
+                  data-testid="backup-card-bar"
                 />
               )}
             </div>
@@ -411,6 +412,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           </div>
         )}
         <button
+          data-testid="backup-now-button"
           onClick={handleManualBackup}
           disabled={runningManual || isActive || isQueued}
           className="bg-mail-accent/10 text-mail-accent-text rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent/20 transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -446,6 +448,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   return (
     <div
       ref={ref}
+      data-testid="backup-account-card"
+      data-account-id={account.id}
       className={`bg-mail-surface border rounded-xl p-5 transition-all duration-500 ${
         highlighted ? 'border-mail-accent ring-2 ring-mail-accent/30' : 'border-mail-border'
       }`}
@@ -533,7 +537,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           {verificationSection}
           <div className="pt-2 border-t border-mail-border space-y-2">
             {live && (
-              <div className="space-y-1">
+              <div className="space-y-1" data-testid="backup-card-progress">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-mail-text">
                     {decodeImapUtf7(live.folder) || tr('settings.migration.starting')}
@@ -543,14 +547,15 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
                   {barPercent === null ? (
-                    <div className="h-1 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+                    <div className="h-1 w-1/3 rounded-full bg-mail-accent animate-pulse" data-testid="backup-card-bar" />
                   ) : (
-                    <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${barPercent}%` }} />
+                    <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${barPercent}%` }} data-testid="backup-card-bar" />
                   )}
                 </div>
               </div>
             )}
             <Button variant="accentTint" size="sm" className="text-xs"
+              data-testid="backup-now-button"
               onClick={handleManualBackup}
               disabled={runningManual || isActive || isQueued}
             >

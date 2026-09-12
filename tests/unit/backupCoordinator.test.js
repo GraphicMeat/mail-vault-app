@@ -68,9 +68,13 @@ vi.mock('../../src/stores/backupStore', () => ({
 }));
 
 // Mock mailStore
+// acc-3 exists so a spec can prove an ORDER: a manual id that jumps a queue of
+// two automatic ones has somewhere to jump to. `_runBackup` skips an id with no
+// account, so a third id only works if it is listed here.
 const mockAccounts = [
   { id: 'acc-1', email: 'luke@test.com', password: 'pass1' },
   { id: 'acc-2', email: 'vader@test.com', password: 'pass2' },
+  { id: 'acc-3', email: 'leia@test.com', password: 'pass3' },
 ];
 vi.mock('../../src/stores/mailStore', () => ({
   useMailStore: {
@@ -817,6 +821,7 @@ describe('BackupCoordinator — checkAndQueueDue', () => {
     mockSettingsState.backupState = {
       'acc-1': { lastBackupTime: Date.now() - 1 * 3600_000 }, // 1h ago, daily not due
       'acc-2': { lastBackupTime: Date.now() - 1 * 3600_000 },
+      'acc-3': { lastBackupTime: Date.now() - 1 * 3600_000 },
     };
     backupScheduler._queueRunning = true;
     backupScheduler.checkAndQueueDue();
@@ -1145,5 +1150,183 @@ describe('BackupCoordinator — progress listener', () => {
     mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'Sent' }) });
 
     expect(backupScheduler._lastProgressAt).toBe(at);
+  });
+});
+
+// ── Edge cases around the manual-queue fix ────────────────────────────────
+//
+// The specs above prove a manual click runs. These prove what happens around
+// it: a second click on the same card, a click on the account already running,
+// a click landing mid-loop, a stop while promises are still in flight. Every
+// one of them is a spinner that never stops if it goes wrong.
+
+describe('BackupCoordinator - manual trigger edge cases', () => {
+  beforeEach(resetCoordinator);
+  afterEach(() => { vi.useRealTimers(); });
+
+  /** A promise that never resolves must fail an assertion, not hang the run. */
+  const TIMED_OUT = { status: 'never resolved' };
+  const within = (promise, ms = 300) =>
+    Promise.race([promise, new Promise(r => setTimeout(() => r(TIMED_OUT), ms))]);
+
+  const settle = (ms = 50) => new Promise(r => setTimeout(r, ms));
+
+  /**
+   * Hold the next Rust call open. Returns the release, so a spec can put work
+   * behind a run that is genuinely still going.
+   */
+  function slowRun() {
+    let release;
+    const gate = new Promise((r) => { release = r; });
+    api.backupRunAccount.mockImplementationOnce(async () => {
+      await gate;
+      return { emails_backed_up: 1, duration_secs: 1, success: true };
+    });
+    return async () => { release(); await settle(); };
+  }
+
+  it('resolves both promises when one account is clicked twice', async () => {
+    // "Back up now" followed by "Back up all" used to overwrite the first
+    // resolver: one run, one resolved promise, and a card spinning forever.
+    backupScheduler._state = State.PAUSED_SLEEP;
+
+    const first = backupScheduler.triggerManualBackup('acc-1');
+    const second = backupScheduler.triggerManualBackup('acc-1');
+
+    expect(await within(first)).toMatchObject({ status: 'success' });
+    expect(await within(second)).toMatchObject({ status: 'success' });
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+  });
+
+  it('a click on the account already running resolves with that run, and is spent afterwards', async () => {
+    const finish = slowRun();
+    backupScheduler.queueBackup('acc-1');
+    await settle(10);
+    expect(backupScheduler.isRunning('acc-1')).toBe(true);
+
+    const clicked = backupScheduler.triggerManualBackup('acc-1');
+    // The run in flight stays what it was. Marking the id manual here is how a
+    // later automatic failure resolved a promise instead of retrying.
+    expect(backupScheduler._manualIds.has('acc-1')).toBe(false);
+
+    await finish();
+    expect(await within(clicked)).toMatchObject({ status: 'success' });
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    api.backupRunAccount.mockRejectedValueOnce(new Error('IMAP down'));
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(10);
+    expect(backupScheduler._retryCount.get('acc-1')).toBe(1);
+  });
+
+  it('a manual trigger mid-run goes next, ahead of the automatic work behind it', async () => {
+    const finish = slowRun();
+    backupScheduler._queue = ['acc-2', 'acc-3'];
+    backupScheduler._processQueue();
+    await settle(10);
+    expect(api.backupRunAccount.mock.calls.map(c => c[0])).toEqual(['acc-2']);
+
+    backupScheduler.triggerManualBackup('acc-1');
+    await finish();
+
+    expect(api.backupRunAccount.mock.calls.map(c => c[0])).toEqual(['acc-2', 'acc-1', 'acc-3']);
+  });
+
+  it('wake runs the interrupted account before a manual id already in the queue', async () => {
+    // Documents the order, it does not ask for one: the half-done account is
+    // resumed from its checkpoint first, the manual click follows.
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._pausedAccountId = 'acc-2';
+    backupScheduler._queue = ['acc-1'];
+    backupScheduler._manualIds.add('acc-1');
+
+    backupScheduler.onWake();
+    await settle();
+
+    expect(api.backupRunAccount.mock.calls.map(c => c[0])).toEqual(['acc-2', 'acc-1']);
+  });
+
+  it('tick does not start a second loop over a queue that is already running', async () => {
+    const finish = slowRun();
+    backupScheduler.queueBackup('acc-1');
+    await settle(10);
+    backupScheduler._queue = ['acc-2'];
+
+    backupScheduler.tick();
+    backupScheduler.tick();
+    await settle(10);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+
+    await finish();
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    expect(api.backupCancel).not.toHaveBeenCalled();
+  });
+
+  it('back up all keeps going past an account with no credentials', async () => {
+    const authUtils = await import('../../src/services/authUtils');
+    // acc-1 runs first and resolves credentials first, so the Once lands on it.
+    authUtils.resolveServerAccount.mockResolvedValueOnce({ ok: false, message: 'no creds' });
+
+    const first = backupScheduler.triggerManualBackup('acc-1');
+    const second = backupScheduler.triggerManualBackup('acc-2');
+
+    expect(await within(first)).toMatchObject({ status: 'failed_credentials' });
+    expect(await within(second)).toMatchObject({ status: 'success' });
+    await settle();
+    expect(mockSetQueue.mock.calls.at(-1)[0]).toEqual([]);
+    expect([...backupScheduler._running.values()]).not.toContain(true);
+  });
+
+  it('a manual run that throws while offline resolves failed, retries nothing, and stays paused', async () => {
+    backupScheduler._state = State.PAUSED_OFFLINE;
+    api.backupRunAccount.mockRejectedValueOnce(new Error('no route to host'));
+
+    const result = await within(backupScheduler.triggerManualBackup('acc-1'));
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result.message).toContain('no route to host');
+
+    await settle();
+    expect(backupScheduler._retryCount.size).toBe(0);
+    expect(backupScheduler.state).toBe(State.PAUSED_OFFLINE);
+    expect(backupScheduler._queueRunning).toBe(false);
+  });
+
+  it('stopAll resolves the promises a click is still holding', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    const finish = slowRun();
+    const running = backupScheduler.triggerManualBackup('acc-1');
+    const queued = backupScheduler.triggerManualBackup('acc-2');
+    await settle(10);
+
+    backupScheduler.stopAll();
+
+    expect(await within(queued)).toMatchObject({ status: 'cancelled' });
+    expect(await within(running)).toMatchObject({ status: 'cancelled' });
+    await finish();
+  });
+
+  it('a progress event for another account leaves the store alone', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-05T00:00:00Z'));
+    const before = { accountId: 'acc-1', active: true, folder: 'INBOX', totalFolders: 9, completedFolders: 1 };
+    mockBackupState.activeBackup = before;
+
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ account_id: 'acc-2', folder: 'Sent' }) });
+    expect(mockBackupState.activeBackup).toBe(before);
+
+    mockEventHandlers['backup-progress']({ payload: progressPayload({ folder: 'Complete', active: false }) });
+    expect(mockBackupState.activeBackup.active).toBe(false);
+  });
+
+  it('resume publishes the interrupted account at the front of the queue', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._pausedAccountId = 'acc-1';
+    backupScheduler._queue = ['acc-2'];
+
+    backupScheduler.onWake();
+
+    expect(mockSetQueue.mock.calls[0][0]).toEqual(['acc-1', 'acc-2']);
+    await settle();
   });
 });

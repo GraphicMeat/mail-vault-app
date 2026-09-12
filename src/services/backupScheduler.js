@@ -58,7 +58,7 @@ class BackupCoordinator {
     this._pausedAccountId = null;    // account that was interrupted by pause
     this._checkpoints = new Map();   // accountId -> completedFolders (resume position)
     this._manualIds = new Set();     // accounts triggered manually (bypass gates)
-    this._manualResolvers = new Map(); // accountId -> { resolve } for triggerManualBackup promise
+    this._manualResolvers = new Map(); // accountId -> { promise, resolve } for triggerManualBackup
     this._lastProgressAt = 0;        // last backup-progress / archive-progress event
     this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
     this._flushTimer = null;         // trailing flush for the progress throttle
@@ -122,12 +122,19 @@ class BackupCoordinator {
    *  status: 'success' | 'failed' | 'cancelled' | 'skipped_credentials'
    */
   triggerManualBackup(accountId) {
-    return new Promise((resolve) => {
-      this._manualResolvers.set(accountId, { resolve });
-      // A run already in flight resolves this promise on its terminal path.
-      // It stays whatever it was (manual or automatic); only a run we queue
-      // here is marked manual.
-      if (this._running.get(accountId)) return;
+    // One account, one pending promise. `_manualResolvers.set` used to overwrite
+    // the first resolver, so "Back up now" followed by "Back up all" left the
+    // card's promise dangling and its spinner stuck.
+    const pending = this._manualResolvers.get(accountId);
+    if (pending) return pending.promise;
+
+    let resolve;
+    const promise = new Promise((r) => { resolve = r; });
+    this._manualResolvers.set(accountId, { promise, resolve });
+    // A run already in flight resolves this promise on its terminal path.
+    // It stays whatever it was (manual or automatic); only a run we queue
+    // here is marked manual.
+    if (!this._running.get(accountId)) {
       this._manualIds.add(accountId);
       // Never through queueBackup: it returns early for an id already queued,
       // which is how a click on an account the schedule had queued resolved
@@ -137,7 +144,8 @@ class BackupCoordinator {
       this._queue.unshift(accountId);
       this._publishQueue();
       this._processQueue();
-    });
+    }
+    return promise;
   }
 
   /** Full stop — cancel active backup and clear queue */
@@ -146,6 +154,11 @@ class BackupCoordinator {
     this._publishQueue();
     this._manualIds.clear();
     this._checkpoints.clear();
+    // Nothing queued here will ever reach a terminal path, so every promise a
+    // click is still holding resolves now rather than dangling with its button.
+    for (const accountId of [...this._manualResolvers.keys()]) {
+      this._resolveManual(accountId, { status: 'cancelled' });
+    }
     if (this._hasActiveWork()) {
       api.backupCancel().catch(() => {});
     }

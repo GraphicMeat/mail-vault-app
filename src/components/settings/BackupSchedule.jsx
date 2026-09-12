@@ -134,7 +134,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
         {/* Back up all now button + live progress */}
         <div className={`${isPaidUser && backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'} space-y-2`}>
           {activeBackup && activeBackup.active && (
-            <div className="bg-mail-bg rounded-lg p-3 space-y-2">
+            <div className="bg-mail-bg rounded-lg p-3 space-y-2" data-testid="backup-all-progress">
               <div className="flex items-center gap-2">
                 <Loader size={14} className="text-mail-accent-text animate-spin flex-shrink-0" />
                 <span className="text-xs font-semibold text-mail-text truncate">
@@ -150,15 +150,16 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
               </div>
               <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
                 {activeBackup.totalFolders > 0 ? (
-                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} />
+                  <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} data-testid="backup-all-bar" />
                 ) : (
                   // Nothing to measure yet (Starting...) - show motion, not an empty track.
-                  <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+                  <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" data-testid="backup-all-bar" />
                 )}
               </div>
             </div>
           )}
           <button
+            data-testid="backup-all-button"
             onClick={() => {
               console.log('[backup] Back up all clicked, queuing', visibleAccounts.length, 'accounts');
               for (const account of visibleAccounts) {
