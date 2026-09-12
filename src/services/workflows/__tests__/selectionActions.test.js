@@ -18,6 +18,7 @@ if (!globalThis.window) {
 const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockGraphSetRead = vi.fn().mockResolvedValue(undefined);
 const mockDeleteEmail = vi.fn().mockResolvedValue(undefined);
+const mockDeleteLocalEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
@@ -55,7 +56,7 @@ vi.mock('../../db', () => ({
   getLocalEmails: vi.fn().mockResolvedValue([]),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
   getArchivedEmails: vi.fn().mockResolvedValue([]),
-  deleteLocalEmail: vi.fn().mockResolvedValue(undefined),
+  deleteLocalEmail: (...a) => mockDeleteLocalEmail(...a),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
   getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   queueOp: (...a) => mockQueueOp(...a),
@@ -188,6 +189,7 @@ beforeEach(() => {
   mockGetLocalIndexEntry.mockResolvedValue({ uid: 1, subject: 'General', flags: ['archived'], source: 'local' });
   mockAppendLocalIndex.mockResolvedValue(undefined);
   mockDeleteEmail.mockResolvedValue(undefined);
+  mockDeleteLocalEmail.mockResolvedValue(undefined);
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
   mockGraphDeleteMessage.mockResolvedValue(undefined);
@@ -1152,5 +1154,68 @@ describe('deleteEmailFromServer with a thread open', () => {
 
     expect(useMailStore.getState().selectedThread).toBeNull();
     expect(useMailStore.getState().selectedEmailId).toBeNull();
+  });
+});
+
+// ── the reader across an in-flight mutation ──
+//
+// Every one of these workflows decides the reader's fate from a snapshot taken
+// BEFORE its round trip. Delete a message, open another one while the server is
+// still answering, and the answer closed the one the user is reading. Nothing
+// covered that window, which is how all four paths drifted into the same bug.
+//
+// The race is deterministic without timers: the user's click is fired from
+// inside the mocked server call, so it always lands after the workflow's
+// snapshot and always before the workflow writes the reader.
+describe('a finished mutation does not close a message opened while it ran', () => {
+  const openFirst = () => useMailStore.setState({
+    selectedEmailId: 1, selectedEmail: { uid: 1 }, selectedThread: null,
+  });
+  const clickSecond = () => useMailStore.setState({ selectedEmailId: 2, selectedEmail: { uid: 2 } });
+  const stillOnSecond = () => {
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+    expect(useMailStore.getState().selectedEmail).toEqual({ uid: 2 });
+  };
+
+  it('the single delete', async () => {
+    primeStore(seedThread(), []);
+    openFirst();
+    mockDeleteEmail.mockImplementationOnce(async () => { clickSecond(); });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    stillOnSecond();
+  });
+
+  // The bulk delete's window is the journal write, which is awaited before the
+  // rows (and the reader) are cleared optimistically.
+  it('the selection bar\'s delete', async () => {
+    primeStore(seedThread(), [1]);
+    openFirst();
+    mockQueueOp.mockImplementationOnce(async () => { clickSecond(); });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    stillOnSecond();
+  });
+
+  it('the move', async () => {
+    primeStore(seedThread(), []);
+    openFirst();
+    mockMoveEmails.mockImplementationOnce(async () => { clickSecond(); });
+
+    await useMailStore.getState().moveEmails([1], 'Archive');
+
+    stillOnSecond();
+  });
+
+  it('the vault removal', async () => {
+    primeStore(seedThread(), []);
+    openFirst();
+    mockDeleteLocalEmail.mockImplementationOnce(async () => { clickSecond(); });
+
+    await useMailStore.getState().removeLocalEmail(1);
+
+    stillOnSecond();
   });
 });

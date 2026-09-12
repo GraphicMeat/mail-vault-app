@@ -388,7 +388,6 @@ export async function removeLocalEmail(uid) {
   const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
   const accountId = unified?.accountId || state.activeAccountId;
   const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
-  const selectedEmailId = state.selectedEmailId;
   const localId = `${accountId}-${mailbox}-${uid}`;
 
   await db.deleteLocalEmail(localId);
@@ -403,7 +402,7 @@ export async function removeLocalEmail(uid) {
   const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
   const localEmails = await db.getLocalEmails(accountId, mailbox);
 
-  if (selectedEmailId === uid) {
+  if (selectionStillNames(get, { uid: unified?.uid ?? uid, accountId, mailbox })) {
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null });
   } else {
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
@@ -753,6 +752,34 @@ export async function markServerDeleted(accountId, mailbox, uid) {
   return stampVaultEntry(accountId, mailbox, uid, { serverDeleted: true });
 }
 
+// ── selectionStillNames ──
+//
+// Does the reader STILL hold the message this mutation is about?
+//
+// Every selection clear below is decided from a snapshot taken before a round
+// trip that takes seconds. The snapshot says "this delete owned the reader",
+// which was true when the user clicked — and by the time the server answers
+// they have opened something else, which the clear then closes under them. The
+// caller's flag stays the intent; this is the fact. Same re-read
+// markEmailReadStatus does before it closes the viewer.
+//
+// `selectedEmailId` is the field to ask: selectEmail sets it on the click and
+// leaves `selectedEmail` null until the body lands, so a selection made inside
+// the window is invisible to anything that reads the object.
+//
+// Two shapes, because the callers have two: a single message (uid + where it
+// lives) and a batch (the selection keys it resolved).
+export function selectionStillNames(get, { uid, accountId, mailbox, keys } = {}) {
+  const id = get().selectedEmailId;
+  if (id == null) return false;
+  if (keys) return keys.has(id);
+  // A single folder's list keys by bare uid; a spanning one (and a merged Sent
+  // copy anywhere) by the full key, which has to agree on the folder too.
+  if (id === uid) return true;
+  const k = _parseSelKey(id);
+  return k.uid === uid && k.accountId === accountId && k.mailbox === mailbox;
+}
+
 // ── applyServerRemoval ──
 //
 // "The server does not hold this uid." Two callers with the same fact from
@@ -818,7 +845,7 @@ export async function applyServerRemoval(uid, {
     sentEmails: filteredSent,
     totalEmails: newTotal,
   };
-  if (clearSelection) {
+  if (clearSelection && selectionStillNames(get, { uid, accountId, mailbox })) {
     updates.selectedEmailId = null;
     updates.selectedEmail = null;
     updates.selectedEmailSource = null;
@@ -1437,20 +1464,30 @@ export async function deleteSelectedFromServer() {
   for (const key of keys) newTombstones.add(contextOf(key).tombstone);
 
   // The open message may be one of the ticked ones; if it is, the same setting
-  // the single delete honours decides what replaces it.
+  // the single delete honours decides what replaces it. Live, not `state`: the
+  // journal write above is an await, and a message opened across it is not this
+  // batch's to close or to replace.
+  const closesReader = selectionStillNames(get, { keys: realUidSet });
+  // …and the row it replaces is the one the reader holds NOW. Read from the
+  // snapshot, "what comes next" was measured from whichever message was open
+  // when the batch started, so a reselection inside the window handed the user
+  // the neighbour of a row they had already left.
+  const openId = get().selectedEmailId;
   const isDeletedRow = (e) => deletedKeySet.has(selectionKey(e, state));
-  const openNext = realUidSet.has(state.selectedEmailId)
-    ? _openAfterDelete(state, (e) => selectionKey(e, state) === state.selectedEmailId, isDeletedRow)
+  const openNext = closesReader
+    ? _openAfterDelete(state, (e) => selectionKey(e, state) === openId, isDeletedRow)
     : null;
 
+  // The reader's two fields are written only when this batch owns them —
+  // writing the snapshot back would null a fresh selection and resurrect a
+  // closed one just as readily.
   useMailStore.setState({
     deleteTombstones: newTombstones,
     selectedEmailIds: new Set(),
     emails: state.emails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
     sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
     totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
-    selectedEmailId: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmailId,
-    selectedEmail: realUidSet.has(state.selectedEmailId) ? null : state.selectedEmail,
+    ...(closesReader ? { selectedEmailId: null, selectedEmail: null } : {}),
   });
   get().updateSortedEmails();
   if (openNext) get().selectEmail(selectionKey(openNext, state));
@@ -1945,7 +1982,7 @@ export async function moveEmails(keys, targetMailbox) {
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const { activeAccountId, activeMailbox, selectedEmailId } = state;
+  const { activeAccountId, activeMailbox } = state;
 
   const emailMap = new Map([...state.emails, ...state.sentEmails, ...(state.localEmails || [])]
     .map(e => [selectionKey(e, state), e]));
@@ -2031,7 +2068,7 @@ export async function moveEmails(keys, targetMailbox) {
     selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => !keySet.has(k))),
   };
 
-  if (keySet.has(selectedEmailId)) {
+  if (selectionStillNames(get, { keys: keySet })) {
     updates.selectedEmailId = null;
     updates.selectedEmail = null;
     updates.selectedEmailSource = null;
