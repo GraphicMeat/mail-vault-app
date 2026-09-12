@@ -9,13 +9,12 @@ const VISIBILITY_SETTLE_MS = 15_000;      // Wait 15s after tab visible + verify
 /**
  * React bridge for the backup coordinator.
  *
- * Tracks user activity, visibility, online/offline, and sleep/wake,
+ * Tracks user idleness, visibility, online/offline, and sleep/wake,
  * then feeds lifecycle events to the coordinator which owns all
  * scheduling decisions (gates, queue, pause/resume).
  */
 export function useBackupScheduler() {
   const lastActivityRef = useRef(Date.now());
-  const wasIdleRef = useRef(false);
 
   useEffect(() => {
     // ── Activity tracking ──────────────────────────────────────────────
@@ -25,13 +24,6 @@ export function useBackupScheduler() {
       if (throttled) return;
       throttled = true;
       lastActivityRef.current = Date.now();
-
-      // If user becomes active during an automatic backup, notify coordinator
-      if (wasIdleRef.current) {
-        wasIdleRef.current = false;
-        backupScheduler.onUserActive();
-      }
-
       setTimeout(() => { throttled = false; }, 1000);
     };
     const events = ['keydown', 'click', 'scroll', 'touchstart'];
@@ -43,10 +35,6 @@ export function useBackupScheduler() {
       if (mouseThrottled) return;
       mouseThrottled = true;
       lastActivityRef.current = Date.now();
-      if (wasIdleRef.current) {
-        wasIdleRef.current = false;
-        backupScheduler.onUserActive();
-      }
       setTimeout(() => { mouseThrottled = false; }, 5000);
     };
     document.addEventListener('mousemove', markMouseActive, { passive: true });
@@ -62,12 +50,10 @@ export function useBackupScheduler() {
       // stalled run are exactly the states the idle path cannot reach.
       backupScheduler.tick();
       const idleMs = Date.now() - lastActivityRef.current;
+      // Idleness is the trigger for starting automatic work, never a reason to
+      // stop it: a backup that was running keeps running when the user comes
+      // back. Only sleep and going offline pause the coordinator.
       if (idleMs >= IDLE_THRESHOLD_MS) {
-        if (!wasIdleRef.current) {
-          wasIdleRef.current = true;
-          backupScheduler.onUserIdle();
-        }
-        // On each idle tick, also check if any backups are due
         backupScheduler.checkAndQueueDue();
       }
     }, IDLE_CHECK_INTERVAL_MS);

@@ -11,6 +11,11 @@ export const useBackupStore = create((set) => ({
   setActiveBackup: (backup) => set({ activeBackup: backup }),
   clearActiveBackup: () => set({ activeBackup: null }),
 
+  // Account ids waiting to back up, in run order. Mirrored from the
+  // coordinator's queue so every account card can show its place.
+  queue: [],
+  setQueue: (ids) => set({ queue: ids }),
+
   // Share-to-unlock prompt trigger. Set after an eligible successful backup;
   // ShareUnlockModal renders while non-null. { emailsBackedUp } | null
   shareUnlock: null,

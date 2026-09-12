@@ -46,7 +46,6 @@ export const State = {
   RUNNING: 'running',
   PAUSED_SLEEP: 'paused_sleep',
   PAUSED_OFFLINE: 'paused_offline',
-  PAUSED_USER_ACTIVE: 'paused_user_active',
 };
 
 class BackupCoordinator {
@@ -68,26 +67,6 @@ class BackupCoordinator {
   // ── Lifecycle transitions ──────────────────────────────────────────────
 
   get state() { return this._state; }
-
-  /** Called by hook when user becomes idle */
-  onUserIdle() {
-    if (this._state === State.PAUSED_USER_ACTIVE) {
-      console.log('[backup] User idle — resuming coordinator');
-      this._state = State.IDLE;
-      this._resumeInterrupted();
-      this._scheduleCheck();
-    }
-  }
-
-  /** Called by hook when user becomes active while backup is running */
-  onUserActive() {
-    // Only pause automatic backups, not manual ones
-    if (this._state === State.RUNNING && !this._isCurrentManual()) {
-      console.log('[backup] User active — pausing automatic backup');
-      this._state = State.PAUSED_USER_ACTIVE;
-      this._pauseCurrentBackup();
-    }
-  }
 
   /** Called by hook on sleep detection (heartbeat gap) */
   onSleep() {
@@ -134,6 +113,7 @@ class BackupCoordinator {
     if (this._running.get(accountId)) return;
     if (this._queue.includes(accountId)) return;
     this._queue.push(accountId);
+    this._publishQueue();
     this._processQueue();
   }
 
@@ -144,14 +124,26 @@ class BackupCoordinator {
   triggerManualBackup(accountId) {
     return new Promise((resolve) => {
       this._manualResolvers.set(accountId, { resolve });
+      // A run already in flight resolves this promise on its terminal path.
+      // It stays whatever it was (manual or automatic); only a run we queue
+      // here is marked manual.
+      if (this._running.get(accountId)) return;
       this._manualIds.add(accountId);
-      this.queueBackup(accountId);
+      // Never through queueBackup: it returns early for an id already queued,
+      // which is how a click on an account the schedule had queued resolved
+      // nothing and left the card spinning.
+      const at = this._queue.indexOf(accountId);
+      if (at !== -1) this._queue.splice(at, 1);
+      this._queue.unshift(accountId);
+      this._publishQueue();
+      this._processQueue();
     });
   }
 
   /** Full stop — cancel active backup and clear queue */
   stopAll() {
     this._queue = [];
+    this._publishQueue();
     this._manualIds.clear();
     this._checkpoints.clear();
     if (this._hasActiveWork()) {
@@ -171,7 +163,7 @@ class BackupCoordinator {
    * answering while the card still spun.
    */
   tick() {
-    if (!this._queueRunning && this._queue.length > 0 && !this._isPaused()) {
+    if (!this._queueRunning && this._queue.length > 0 && (!this._isPaused() || this._hasManualInQueue())) {
       console.warn('[backup] tick: queue was idle with work pending, resuming');
       this._processQueue();
     }
@@ -259,20 +251,24 @@ class BackupCoordinator {
     let inFlight = null;
     try {
       while (this._queue.length > 0) {
-        const isManualNext = this._manualIds.has(this._queue[0]);
-
-        // Check gates before each account
-        if (this._isPaused() && !isManualNext) {
-          // Paused and next item is automatic — stop processing
-          break;
+        // Paused: manual work still runs, from wherever it sits in the queue.
+        // Taking only the head is how 15 manual ids pushed behind the
+        // automatic ones ran nothing at all.
+        const paused = this._isPaused();
+        let accountId;
+        if (paused) {
+          const manualAt = this._queue.findIndex(id => this._manualIds.has(id));
+          if (manualAt === -1) break; // nothing but automatic work left
+          accountId = this._queue.splice(manualAt, 1)[0];
+        } else {
+          accountId = this._queue.shift();
         }
-
-        const accountId = this._queue.shift();
+        this._publishQueue();
         if (this._running.get(accountId)) continue;
 
         // Save paused state before manual backup — restore it afterward
         // so automatic items remain blocked by the original pause reason
-        const savedState = this._isPaused() ? this._state : null;
+        const savedState = paused ? this._state : null;
 
         this._state = State.RUNNING;
         inFlight = accountId;
@@ -283,9 +279,6 @@ class BackupCoordinator {
         if (savedState && !this._isPaused()) {
           this._state = savedState;
         }
-
-        // After each backup, check if we should continue
-        if (this._isPaused()) break;
       }
     } finally {
       // `_runBackup` awaits resolveServerAccount outside its own try, so a
@@ -570,8 +563,7 @@ class BackupCoordinator {
 
   _isPaused() {
     return this._state === State.PAUSED_SLEEP
-        || this._state === State.PAUSED_OFFLINE
-        || this._state === State.PAUSED_USER_ACTIVE;
+        || this._state === State.PAUSED_OFFLINE;
   }
 
   _hasActiveWork() {
@@ -581,9 +573,9 @@ class BackupCoordinator {
     return false;
   }
 
-  _isCurrentManual() {
-    const activeBackup = useBackupStore.getState().activeBackup;
-    return activeBackup?.manual === true;
+  /** Mirror the queue into the store so every account card can show its place. */
+  _publishQueue() {
+    useBackupStore.getState().setQueue([...this._queue]);
   }
 
   _hasManualInQueue() {
@@ -618,6 +610,7 @@ class BackupCoordinator {
       // Re-queue at the front so it picks up where it left off (Rust backup is incremental)
       if (!this._queue.includes(accountId) && !this._running.get(accountId)) {
         this._queue.unshift(accountId);
+        this._publishQueue();
         console.log(`[backup] Re-queued interrupted account ${accountId}`);
       }
     }

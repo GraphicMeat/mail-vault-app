@@ -51,7 +51,10 @@ vi.mock('../../src/stores/settingsStore', () => ({
 }));
 
 // Mock backupStore
-const mockBackupState = { activeBackup: null };
+const mockBackupState = { activeBackup: null, queue: [] };
+// Persistent across getState() calls: the queue-publishing specs assert on the
+// arguments of every call, which a per-call vi.fn() would throw away.
+const mockSetQueue = vi.fn((ids) => { mockBackupState.queue = ids; });
 vi.mock('../../src/stores/backupStore', () => ({
   useBackupStore: {
     getState: () => ({
@@ -59,6 +62,7 @@ vi.mock('../../src/stores/backupStore', () => ({
       setActiveBackup: vi.fn((v) => { mockBackupState.activeBackup = v; }),
       clearActiveBackup: vi.fn(() => { mockBackupState.activeBackup = null; }),
       setShareUnlock: vi.fn(),
+      setQueue: mockSetQueue,
     }),
   },
 }));
@@ -112,6 +116,7 @@ function resetCoordinator() {
   backupScheduler._stalled = new Set();
   backupScheduler._lastProgressAt = Date.now();
   mockBackupState.activeBackup = null;
+  mockBackupState.queue = [];
   mockPremium = false;
   vi.clearAllMocks();
   // clearAllMocks leaves a queued `...Once` implementation in place. A spec
@@ -175,26 +180,6 @@ describe('BackupCoordinator — lifecycle state', () => {
     backupScheduler._state = State.PAUSED_SLEEP;
     backupScheduler.onOnline();
     expect(backupScheduler.state).toBe(State.PAUSED_SLEEP);
-  });
-
-  it('transitions to paused_user_active on onUserActive when running automatic', () => {
-    backupScheduler._state = State.RUNNING;
-    mockBackupState.activeBackup = { manual: false };
-    backupScheduler.onUserActive();
-    expect(backupScheduler.state).toBe(State.PAUSED_USER_ACTIVE);
-  });
-
-  it('does not pause manual backups on onUserActive', () => {
-    backupScheduler._state = State.RUNNING;
-    mockBackupState.activeBackup = { manual: true };
-    backupScheduler.onUserActive();
-    expect(backupScheduler.state).toBe(State.RUNNING);
-  });
-
-  it('resumes from paused_user_active on onUserIdle', () => {
-    backupScheduler._state = State.PAUSED_USER_ACTIVE;
-    backupScheduler.onUserIdle();
-    expect(backupScheduler.state).toBe(State.IDLE);
   });
 });
 
@@ -300,36 +285,6 @@ describe('BackupCoordinator — pause cancels active Rust backup', () => {
   });
 });
 
-describe('BackupCoordinator — user-active pause resumes interrupted account on idle', () => {
-  beforeEach(resetCoordinator);
-
-  it('onUserIdle re-queues the interrupted account after user-active pause', async () => {
-    // Simulate: coordinator was running, user became active, backup was paused
-    backupScheduler._state = State.PAUSED_USER_ACTIVE;
-    backupScheduler._pausedAccountId = 'acc-1';
-    backupScheduler._queue = [];
-
-    backupScheduler.onUserIdle();
-    expect(backupScheduler._pausedAccountId).toBeNull();
-
-    await new Promise(r => setTimeout(r, 50));
-
-    expect(api.backupRunAccount).toHaveBeenCalledWith('acc-1', expect.any(String), null, 0);
-    expect(backupScheduler._queue).toEqual([]);
-    expect(backupScheduler.state).toBe(State.IDLE);
-  });
-
-  it('onUserIdle without a paused account just resumes without queuing', () => {
-    backupScheduler._state = State.PAUSED_USER_ACTIVE;
-    backupScheduler._pausedAccountId = null;
-
-    backupScheduler.onUserIdle();
-
-    expect(backupScheduler.state).toBe(State.IDLE);
-    expect(backupScheduler._queue).toEqual([]);
-  });
-});
-
 describe('BackupCoordinator — manual backup while paused preserves pause state', () => {
   beforeEach(resetCoordinator);
 
@@ -367,6 +322,95 @@ describe('BackupCoordinator — manual backup while paused preserves pause state
     expect(backupScheduler._queue).toContain('acc-2');
     // State should still be paused
     expect(backupScheduler.state).toBe(State.PAUSED_OFFLINE);
+  });
+});
+
+// ── A manual backup is the user watching a button: it runs, now, first ─────
+//
+// 2026-09-12: 13 automatic ids sat in the queue while the user clicked
+// "Back up now" and "Back up all accounts now" for three hours and nothing
+// ran. The click went through `queueBackup`, which returns early for an id
+// already queued, and landed behind automatic work the pause gate refused to
+// start. The specs below drive the queue from the BACK, which is where the
+// old ones never looked.
+
+describe('BackupCoordinator - a manual backup jumps the queue', () => {
+  beforeEach(resetCoordinator);
+
+  it('runs and resolves while paused with automatic work queued ahead of it', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._queue = ['acc-2'];
+
+    let resolved = null;
+    backupScheduler.triggerManualBackup('acc-1').then(r => { resolved = r; });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    expect(api.backupRunAccount.mock.calls[0][0]).toBe('acc-1');
+    expect(resolved).toMatchObject({ status: 'success' });
+    expect(backupScheduler._queue).toEqual(['acc-2']);
+    expect(backupScheduler.state).toBe(State.PAUSED_SLEEP);
+  });
+
+  it('runs an account that is already queued automatically', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._queue = ['acc-1'];
+
+    let resolved = null;
+    backupScheduler.triggerManualBackup('acc-1').then(r => { resolved = r; });
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    expect(api.backupRunAccount.mock.calls[0][0]).toBe('acc-1');
+    expect(resolved).toMatchObject({ status: 'success' });
+    expect(backupScheduler._queue).toEqual([]);
+  });
+
+  it('runs before automatic work that was queued first', async () => {
+    backupScheduler._queue = ['acc-2'];
+    backupScheduler._queueRunning = false;
+
+    backupScheduler.triggerManualBackup('acc-1');
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount.mock.calls.map(c => c[0])).toEqual(['acc-1', 'acc-2']);
+  });
+
+  it('tick drives a paused queue that holds a manual id', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._queue = ['acc-1'];
+    backupScheduler._manualIds.add('acc-1');
+
+    backupScheduler.tick();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).toHaveBeenCalledWith('acc-1', expect.any(String), null, 0);
+  });
+
+  it('tick leaves a paused queue of automatic ids alone', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+    backupScheduler._queue = ['acc-1'];
+
+    backupScheduler.tick();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(api.backupRunAccount).not.toHaveBeenCalled();
+  });
+
+  it('publishes the queue to the store on every mutation', async () => {
+    backupScheduler._state = State.PAUSED_SLEEP;
+
+    backupScheduler.queueBackup('acc-2');
+    backupScheduler.triggerManualBackup('acc-1');
+    await new Promise(r => setTimeout(r, 50));
+    backupScheduler.stopAll();
+
+    expect(mockSetQueue.mock.calls.map(c => c[0])).toEqual([
+      ['acc-2'],           // queueBackup push
+      ['acc-1', 'acc-2'],  // manual unshift, to the front
+      ['acc-2'],           // taken off by the queue loop
+      [],                  // stopAll clear
+    ]);
   });
 });
 
@@ -816,18 +860,6 @@ describe('BackupCoordinator — resume drives the queue', () => {
     expect(backupScheduler.state).toBe(State.IDLE);
   };
 
-  it('onUserIdle after a user-active pause runs the interrupted account, then the rest of the queue', async () => {
-    backupScheduler._state = State.PAUSED_USER_ACTIVE;
-    backupScheduler._pausedAccountId = 'acc-1';
-    backupScheduler._checkpoints.set('acc-1', 1);
-    backupScheduler._queue = ['acc-2'];
-
-    backupScheduler.onUserIdle();
-    await new Promise(r => setTimeout(r, 50));
-
-    expectRanBothInOrder();
-  });
-
   it('onWake after a sleep pause runs the interrupted account, then the rest of the queue', async () => {
     backupScheduler._state = State.PAUSED_SLEEP;
     backupScheduler._pausedAccountId = 'acc-1';
@@ -902,7 +934,7 @@ describe('BackupCoordinator — tick self-heal', () => {
   });
 
   it('leaves a paused queue alone', async () => {
-    backupScheduler._state = State.PAUSED_USER_ACTIVE;
+    backupScheduler._state = State.PAUSED_SLEEP;
     backupScheduler._queue = ['acc-1'];
 
     backupScheduler.tick();

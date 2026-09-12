@@ -32,6 +32,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
   const setBackupGlobalConfig = useSettingsStore(s => s.setBackupGlobalConfig);
 
   const activeBackup = useBackupStore(s => s.activeBackup);
+  const queue = useBackupStore(s => s.queue);
 
   const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
 
@@ -147,11 +148,14 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                 <span>{decodeImapUtf7(activeBackup.folder) || 'Starting...'} {activeBackup.totalFolders > 0 && `(${activeBackup.completedFolders}/${activeBackup.totalFolders})`}</span>
                 <span>{activeBackup.completedEmails > 0 && `${activeBackup.completedEmails} emails`}</span>
               </div>
-              {activeBackup.totalFolders > 0 && (
-                <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+              <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
+                {activeBackup.totalFolders > 0 ? (
                   <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${Math.round((activeBackup.completedFolders / activeBackup.totalFolders) * 100)}%` }} />
-                </div>
-              )}
+                ) : (
+                  // Nothing to measure yet (Starting...) - show motion, not an empty track.
+                  <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+                )}
+              </div>
             </div>
           )}
           <button
@@ -161,7 +165,7 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
                 backupScheduler.triggerManualBackup(account.id);
               }
             }}
-            disabled={activeBackup?.active}
+            disabled={activeBackup?.active || queue.length > 0}
             className="w-full bg-mail-accent/10 text-mail-accent-text rounded-lg px-4 py-2.5 text-sm font-semibold hover:bg-mail-accent/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {activeBackup?.active ? (

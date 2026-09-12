@@ -1,6 +1,7 @@
 import { Button } from '../ui/Button';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor, hasPremiumAccess } from '../../stores/settingsStore';
+import { useBackupStore } from '../../stores/backupStore';
 import { backupScheduler } from '../../services/backupScheduler';
 import * as api from '../../services/api';
 import { resolveServerAccount } from '../../services/authUtils';
@@ -74,6 +75,8 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const upsellBackupShown = useSettingsStore(s => s.upsellBackupShown);
   const setBackupSchedule = useSettingsStore(s => s.setBackupSchedule);
   const globalScope = useSettingsStore(s => s.backupScope);
+  const activeBackup = useBackupStore(s => s.activeBackup);
+  const queue = useBackupStore(s => s.queue);
 
   const config = backupSchedules[account.id] || { enabled: false, interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1 };
   const state = backupState[account.id] || {};
@@ -90,6 +93,29 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   const [backupStatusData, setBackupStatusData] = useState(null);
   const [loadingStatus, setLoadingStatus] = useState(false);
   const [backupStatusError, setBackupStatusError] = useState(null);
+
+  // Whoever started this run - the schedule, "Back up all", or this card - the
+  // card shows it. `done` is the 3s "Complete" tail, not a live run.
+  const isActive = !!activeBackup?.active && !activeBackup.done && activeBackup.accountId === account.id;
+  const isQueued = queue.includes(account.id);
+  // The card's own Rust event is richer (per-folder counts); the store carries
+  // the same run for the branches that have no event yet.
+  const live = !isActive ? null : backupProgress?.active ? {
+    folder: backupProgress.folder,
+    completedFolders: backupProgress.completed_folders,
+    totalFolders: backupProgress.total_folders,
+    completedEmails: backupProgress.completed_emails,
+    missingInFolder: backupProgress.missing_in_folder,
+  } : {
+    folder: activeBackup.folder,
+    completedFolders: activeBackup.completedFolders,
+    totalFolders: activeBackup.totalFolders,
+    completedEmails: activeBackup.completedEmails,
+    missingInFolder: 0,
+  };
+  const barPercent = live && live.totalFolders > 0
+    ? Math.round((live.completedFolders / live.totalFolders) * 100)
+    : null;
 
   useEffect(() => {
     const invoke = window.__TAURI__?.core?.invoke;
@@ -343,22 +369,28 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
       {/* Back up now button + live progress */}
       <div className="pt-3 border-t border-mail-border space-y-2">
-        {backupProgress && backupProgress.active && (
+        {live && (
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-mail-text font-medium">
-                {decodeImapUtf7(backupProgress.folder) || 'Starting...'} ({backupProgress.completed_folders}/{backupProgress.total_folders} folders)
+                {decodeImapUtf7(live.folder) || tr('settings.migration.starting')}
+                {live.totalFolders > 0 && ` (${live.completedFolders}/${live.totalFolders} folders)`}
               </span>
               <span className="text-mail-text-muted">
-                {t('settings.backup.account.emailsBackedUp', { count: backupProgress.completed_emails })}
-                {backupProgress.missing_in_folder > 0 && t('settings.backup.account.toDownloadSuffix', { count: backupProgress.missing_in_folder })}
+                {t('settings.backup.account.emailsBackedUp', { count: live.completedEmails || 0 })}
+                {live.missingInFolder > 0 && t('settings.backup.account.toDownloadSuffix', { count: live.missingInFolder })}
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-mail-border overflow-hidden">
-              <div
-                className="h-1.5 rounded-full bg-mail-accent transition-all"
-                style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }}
-              />
+              {barPercent === null ? (
+                // Nothing to measure yet (Starting...) - show motion, not an empty track.
+                <div className="h-1.5 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+              ) : (
+                <div
+                  className="h-1.5 rounded-full bg-mail-accent transition-all"
+                  style={{ width: `${barPercent}%` }}
+                />
+              )}
             </div>
             {archiveProgress && archiveProgress.total > 0 && (
               <div className="space-y-1">
@@ -380,13 +412,18 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         )}
         <button
           onClick={handleManualBackup}
-          disabled={runningManual}
+          disabled={runningManual || isActive || isQueued}
           className="bg-mail-accent/10 text-mail-accent-text rounded-lg px-4 py-2 text-sm font-semibold hover:bg-mail-accent/20 transition-colors disabled:opacity-50 flex items-center gap-2"
         >
-          {runningManual ? (
+          {isQueued ? (
             <>
               <Loader size={14} className="animate-spin" />
-              {backupProgress ? tr('settings.backup.account.backingUp', { backupProgress: backupProgress.folder || '' }) : tr('settings.backup.account.backingUp2')}
+              {tr('svc.backupScheduler.queued')}
+            </>
+          ) : isActive ? (
+            <>
+              <Loader size={14} className="animate-spin" />
+              {live.folder ? tr('settings.backup.account.backingUp', { backupProgress: live.folder }) : tr('settings.backup.account.backingUp2')}
             </>
           ) : manualStatus === 'success' ? (
             <span className="text-mail-success">{t('settings.backup.account.done')}</span>
@@ -495,23 +532,33 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
           </div>
           {verificationSection}
           <div className="pt-2 border-t border-mail-border space-y-2">
-            {runningManual && backupProgress && (
+            {live && (
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-mail-text">{decodeImapUtf7(backupProgress.folder)} ({backupProgress.completed_folders}/{backupProgress.total_folders})</span>
-                  <span className="text-mail-text-muted">{tr('common.emailCount', { count: backupProgress.completed_emails })}</span>
+                  <span className="text-mail-text">
+                    {decodeImapUtf7(live.folder) || tr('settings.migration.starting')}
+                    {live.totalFolders > 0 && ` (${live.completedFolders}/${live.totalFolders})`}
+                  </span>
+                  <span className="text-mail-text-muted">{tr('common.emailCount', { count: live.completedEmails || 0 })}</span>
                 </div>
                 <div className="h-1 rounded-full bg-mail-border overflow-hidden">
-                  <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${backupProgress.total_folders > 0 ? Math.round((backupProgress.completed_folders / backupProgress.total_folders) * 100) : 0}%` }} />
+                  {barPercent === null ? (
+                    <div className="h-1 w-1/3 rounded-full bg-mail-accent animate-pulse" />
+                  ) : (
+                    <div className="h-1 rounded-full bg-mail-accent transition-all" style={{ width: `${barPercent}%` }} />
+                  )}
                 </div>
               </div>
             )}
             <Button variant="accentTint" size="sm" className="text-xs"
               onClick={handleManualBackup}
-              disabled={runningManual}
+              disabled={runningManual || isActive || isQueued}
             >
-              {runningManual ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
-              {runningManual ? tr('settings.backup.account.backingUp', { backupProgress: backupProgress?.folder || '' }) : manualStatus === 'success' ? tr('settings.backup.account.done') : tr('settings.backup.account.backUpNow')}
+              {isQueued || isActive ? <Loader size={12} className="animate-spin" /> : manualStatus === 'success' ? <CheckCircle2 size={12} /> : <HardDrive size={12} />}
+              {isQueued ? tr('svc.backupScheduler.queued')
+                : isActive ? tr('settings.backup.account.backingUp', { backupProgress: live.folder || '' })
+                : manualStatus === 'success' ? tr('settings.backup.account.done')
+                : tr('settings.backup.account.backUpNow')}
             </Button>
             {manualStatus === 'error' && manualError && (
               <div className="text-xs text-mail-warning">{manualError}</div>
