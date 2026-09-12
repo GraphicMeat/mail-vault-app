@@ -1,7 +1,8 @@
 import { Button } from './ui/Button';
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
-import { getSenderName, threadRowMembers } from '../utils/emailParser';
+import { getRowParty, getRowPartyName, threadRowMembers } from '../utils/emailParser';
+import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
 import { getLinkAlertLevel, getAlertsForEmails } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
@@ -68,6 +69,8 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
   const landed = useCustodyLanding(scopeKey, custodyTone);
+  // A thread in an outgoing folder names who it went TO, not you, on every row.
+  const outgoing = isOutgoingRow(thread?.lastEmail, useMailStore.getState());
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -79,20 +82,20 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   const allArchived = members.every(e => e.isArchived);
 
   // Build participant display: every distinct sender in the thread, the user
-  // included — a conversation you replied to shows your name too.
+  // included — a conversation you replied to shows your name too. In an
+  // outgoing folder that list is you, repeated, so it names the recipients.
   const participantNames = useMemo(() => {
     const seen = new Set();
     const names = [];
     for (const email of thread.emails) {
-      const name = getSenderName(email);
-      const addr = email.from?.address?.toLowerCase() || '';
+      const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
       if (!seen.has(addr)) {
         seen.add(addr);
-        names.push(name);
+        names.push(getRowPartyName(email, { outgoing }));
       }
     }
     return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails]);
+  }, [thread.emails, outgoing]);
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();
@@ -215,6 +218,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     ? describeMessageState(thread.lastEmail, { serverKnown }).tone
     : null;
   const landed = useCustodyLanding(scopeKey, custodyTone);
+  // A thread in an outgoing folder names who it went TO, not you, on every row.
+  const outgoing = isOutgoingRow(thread?.lastEmail, useMailStore.getState());
 
   if (!thread?.lastEmail) return null;
   const latestEmail = thread.lastEmail;
@@ -229,15 +234,14 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     const seen = new Set();
     const names = [];
     for (const email of thread.emails) {
-      const name = getSenderName(email);
-      const addr = email.from?.address?.toLowerCase() || '';
+      const addr = getRowParty(email, { outgoing })?.address?.toLowerCase() || '';
       if (!seen.has(addr)) {
         seen.add(addr);
-        names.push(name);
+        names.push(getRowPartyName(email, { outgoing }));
       }
     }
     return names.length <= 2 ? names.join(', ') : `${names[0]}, ${names[1]} +${names.length - 2}`;
-  }, [thread.emails]);
+  }, [thread.emails, outgoing]);
 
   const handleArchiveThread = async (e) => {
     e.stopPropagation();

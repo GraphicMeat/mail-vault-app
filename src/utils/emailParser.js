@@ -124,19 +124,38 @@ export function groupByCorrespondent(emails, userEmail) {
 }
 
 /**
- * Get a display-friendly sender name from an email.
+ * A display-friendly name for one address.
  * If the display name is just the email address, returns the local part (before @) instead.
  */
-export function getSenderName(email) {
-  let rawName = email?.from?.name || '';
+function addressDisplayName(addr) {
+  let rawName = addr?.name || '';
   let name = /^".*"$/.test(rawName) ? rawName.slice(1, -1) : rawName;
   name = name.replace(/\\"/g, '"').trim();
-  const address = email?.from?.address || '';
+  const address = addr?.address || '';
   if (!name && !address) return tr('settings.cleanup.unknown');
   if (!name) return address;
   // If name looks like an email address (contains @), use the local part from the actual address instead
   if (name.includes('@')) return address.split('@')[0] || name;
   return name;
+}
+
+/** Get a display-friendly sender name from an email. */
+export function getSenderName(email) {
+  return addressDisplayName(email?.from);
+}
+
+/**
+ * The address a list row names: the first recipient in an outgoing folder, the
+ * sender everywhere else. A message with no recipient at all falls back to the
+ * sender — a row with a "To:" and no name after it reads as a rendering fault.
+ */
+export function getRowParty(email, { outgoing } = {}) {
+  if (!outgoing) return email?.from || null;
+  return email?.to?.[0] || email?.cc?.[0] || email?.from || null;
+}
+
+export function getRowPartyName(email, opts) {
+  return addressDisplayName(getRowParty(email, opts));
 }
 
 /**

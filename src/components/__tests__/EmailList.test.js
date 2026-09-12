@@ -226,6 +226,13 @@ vi.mock('../../utils/emailParser', async (importOriginal) => ({
   },
   groupBySender: vi.fn(() => []),
   getSenderName: (e) => e?.from?.[0]?.name || '',
+  // The row fixtures here carry list-shaped `from`/`to`, so the party helpers
+  // the rows read now have to be stubbed to the same shape.
+  getRowParty: (e, { outgoing } = {}) => (outgoing ? e?.to?.[0] : e?.from?.[0]) || null,
+  getRowPartyName: (e, { outgoing } = {}) => {
+    const party = (outgoing ? e?.to?.[0] : e?.from?.[0]) || null;
+    return party?.name || party?.address || '';
+  },
 }));
 
 describe('EmailList virtualization', () => {
@@ -951,7 +958,8 @@ describe('thread modes', () => {
     expect(rows.map(n => n.getAttribute('data-uid'))).toEqual(['1', '2', '2', '3']);
     // The Sent copy is drawn as itself — not as INBOX's message 2, which it
     // shares a uid with and which `freshen` used to hand back in its place.
-    expect(rows.map(n => n.querySelector('[dir="auto"]').textContent)).toEqual(['P1', 'P2', 'Me', 'P3']);
+    // The Sent copy names its RECIPIENT, the way every outgoing row does.
+    expect(rows.map(n => n.querySelector('[dir="auto"]').textContent)).toEqual(['P1', 'P2', 'To: me@test.com', 'P3']);
     // And opening it opens it in its own folder.
     const { useMailStore } = await import('../../stores/mailStore');
     fireEvent.click(rows[2]);

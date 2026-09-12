@@ -12,12 +12,19 @@
  *   3. Selection was a 2px left border and nothing else, invisible next to an
  *      unread row's own background.
  *
+ * Plus one the same fixture answers for free: a row in an OUTGOING folder used
+ * to name the sender, which in Sent is the account itself on every row. luke's
+ * Sent messages are addressed to luke@mock.test and sent by `Sender N`
+ * (mockImap's `mailbox()` builds every folder the same way), so "who sent it"
+ * and "who it went to" are two different strings on one row — and jsdom cannot
+ * answer which one the app actually fetched, only which one it renders.
+ *
  * jsdom cannot answer any of these: (1) needs the real IMAP wire, (2) needs the
  * real @tanstack/react-virtual (the unit mock keys rows by index), and (3) is a
  * computed background colour.
  */
 
-import { waitForApp, waitForEmails, visibleRowSubjects } from './helpers.js';
+import { waitForApp, waitForEmails, visibleRowSubjects, switchToFolder } from './helpers.js';
 import { QUOTED_SUBJECT, QUOTED_SUBJECT_SENDER_NAME, QUOTED_SUBJECT_COUNT } from './mockImap.js';
 
 const activate = (id) => browser.execute((accountId) => {
@@ -46,6 +53,13 @@ async function scrollToRow(needle) {
   }
   return false;
 }
+
+/** The party name the row holding `needle` draws — sender, or recipient. */
+const partyForRow = (needle) => browser.execute((s) => {
+  const row = [...document.querySelectorAll('[data-testid="email-row"]')]
+    .find((r) => (r.textContent || '').includes(s));
+  return row ? (row.querySelector('[data-testid="row-sender"]')?.textContent || '').trim() : null;
+}, needle);
 
 const clickButtonByTitle = (title) => browser.execute((t) => {
   const btn = [...document.querySelectorAll('button')].find((b) => b.getAttribute('title') === t);
@@ -142,6 +156,25 @@ describe('List rows: subject text, sender grouping, selection', function () {
       };
     });
   }
+
+  it('names the recipient in Sent, and still the sender in INBOX', async function () {
+    await switchToFolder(luke.email, 'Sent');
+    expect(await scrollToRow('Sent message 3')).toBe(true);
+    const sent = await partyForRow('Sent message 3');
+    // The recipient, not `Sender 3` — which is what that message's From says.
+    expect(sent).toContain(luke.email);
+    expect(sent).not.toContain('Sender 3');
+    // And it is the row's own data doing it: `to` survives the light header
+    // fetch the list runs on, so nothing here is inferred from the folder.
+    expect(await browser.execute(() => (window.__MAIL_STORE__.getState().emails || [])
+      .every((e) => !!e.to?.[0]?.address))).toBe(true);
+
+    await switchToFolder(luke.email, 'INBOX');
+    expect(await scrollToRow('Iliustruotoji')).toBe(true);
+    const inbox = await partyForRow('Iliustruotoji');
+    expect(inbox).toContain(QUOTED_SUBJECT_SENDER_NAME);
+    expect(inbox.startsWith('To:')).toBe(false);
+  });
 
   it('gives one sender two topic rows for two same-subject threads, at two offsets', async function () {
     expect(await clickButtonByTitle('Group by sender')).toBe(true);

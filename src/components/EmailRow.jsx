@@ -2,7 +2,8 @@ import { Button } from './ui/Button';
 import React from 'react';
 import { displayText } from '../utils/bidiText';
 import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
-import { getSenderName } from '../utils/emailParser';
+import { getRowPartyName } from '../utils/emailParser';
+import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
@@ -92,6 +93,10 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
     }
   };
 
+  // A row in an outgoing folder names who the message went TO — in Sent the
+  // sender is you on every row, which is the one thing you already know.
+  const outgoing = isOutgoingRow(email, useMailStore.getState());
+
   const isUnread = !email.flags?.includes('\\Seen');
   // Custody is the glyph's job, not the row ground's: the row keeps the plain
   // surface/hover/unread background every other row has. The tone is still
@@ -141,7 +146,9 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
             title={email._accountEmail}
           />
         )}
-        <span data-testid="row-sender" className="truncate min-w-0" dir="auto">{displayText(getSenderName(email))}</span>
+        <span data-testid="row-sender" className="truncate min-w-0" dir="auto">
+          {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
+        </span>
         <StarToggle email={email} actions={actions} size={14} />
         <SenderAlertIcon level={email._senderAlert} email={email} />
         <ReplyToAlertIcon mismatch={email._replyToMismatch} />
@@ -220,6 +227,10 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
     try { await saveEmailLocally(email.uid); } finally { onStopSaving(rowId); }
   };
 
+  // A row in an outgoing folder names who the message went TO — in Sent the
+  // sender is you on every row, which is the one thing you already know.
+  const outgoing = isOutgoingRow(email, useMailStore.getState());
+
   const isUnread = !email.flags?.includes('\\Seen');
   // Custody is the glyph's job, not the row ground's: the row keeps the plain
   // surface/hover/unread background every other row has. The tone is still
@@ -264,7 +275,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
             />
           )}
           <span data-testid="row-sender" dir="auto" className={`truncate min-w-0 text-xs ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
-            {displayText(getSenderName(email))}
+            {outgoing && `${t('email.original.to')} `}{displayText(getRowPartyName(email, { outgoing }))}
           </span>
           <StarToggle email={email} actions={actions} size={13} />
           <SenderAlertIcon level={email._senderAlert} email={email} size={12} />
