@@ -14,7 +14,9 @@
  *   1. Download from All Inboxes lands the file (no "Failed to download")
  *   2. The image previews inside the app and decodes
  *   3. The PDF previews in a frame
- *   4. With the setting on, switching to the account caches its attachments
+ *   4. The "open externally" button hands the file to the system app without
+ *      opening the in-app preview
+ *   5. With the setting on, switching to the account caches its attachments
  *      without a click — the row opens "Click to open"
  */
 
@@ -53,6 +55,66 @@ const clickInItem = (name, testid) => browser.execute((n, id) => {
   btn.click();
   return true;
 }, name, testid);
+
+/**
+ * Record every Tauri command and swallow `open_file`.
+ *
+ * The button under test really does hand the path to the OS, and a Preview
+ * window launched on the runner steals focus from every spec after this one —
+ * so the one command with a side effect outside the app is stubbed, and only
+ * that one. Restored in `after`.
+ */
+const installInvokeProbe = () => browser.execute(() => {
+  const tauri = window.__TAURI__;
+  const core = tauri.core;
+  if (core.invoke?.__mvProbe) return false;
+  const real = core.invoke;
+  window.__MV_INVOKES__ = [];
+  const probe = (cmd, args) => {
+    window.__MV_INVOKES__.push({ cmd, args });
+    if (cmd === 'open_file') return Promise.resolve(null);
+    return real(cmd, args);
+  };
+  probe.__mvProbe = true;
+
+  // Plain assignment is not enough: on this runtime `core.invoke` is a
+  // non-writable property, so `core.invoke = probe` fails silently and every
+  // assertion below would then be made against the REAL bridge — which would
+  // launch Preview on the runner and steal focus from every later spec. So
+  // three attempts, widest last, and the caller is told which reality it got.
+  try { core.invoke = probe; } catch { /* non-writable */ }
+  if (core.invoke !== probe) {
+    try {
+      Object.defineProperty(core, 'invoke', { value: probe, writable: true, configurable: true });
+    } catch { /* non-configurable */ }
+  }
+  if (core.invoke !== probe) {
+    // The app reads `window.__TAURI__.core` at call time, so swapping the
+    // bridge object wholesale reaches it even when the property will not move.
+    window.__TAURI__ = { ...tauri, core: { ...core, invoke: probe } };
+  }
+  window.__MV_PROBE_RESTORE__ = () => {
+    try { core.invoke = real; } catch { /* see above */ }
+    if (core.invoke !== real) {
+      try {
+        Object.defineProperty(core, 'invoke', { value: real, writable: true, configurable: true });
+      } catch { /* non-configurable */ }
+    }
+    window.__TAURI__ = tauri;
+    delete window.__MV_PROBE_RESTORE__;
+  };
+  return window.__TAURI__.core.invoke?.__mvProbe === true;
+});
+
+const removeInvokeProbe = () => browser.execute(() => {
+  if (typeof window.__MV_PROBE_RESTORE__ !== 'function') return false;
+  window.__MV_PROBE_RESTORE__();
+  return window.__TAURI__.core.invoke?.__mvProbe !== true;
+});
+
+const invokedCommands = () => browser.execute(() => (window.__MV_INVOKES__ || []).map((c) => c.cmd));
+const invokedWith = (cmd) => browser.execute((c) => (window.__MV_INVOKES__ || [])
+  .filter((call) => call.cmd === c).map((call) => call.args), cmd);
 
 const closePreview = () => browser.execute(() => {
   const dlg = document.querySelector('[data-testid="attachment-preview-dialog"]');
@@ -139,6 +201,36 @@ describe('Connected Attachments', function () {
     const src = await browser.execute(() => document.querySelector('[data-testid="attachment-preview-pdf"]').getAttribute('src'));
     expect(src.startsWith('blob:')).toBe(true);
     expect(await closePreview()).toBe(true);
+  });
+
+  // The PDF is already cached (test 1), so this exercises the button's cached
+  // path and leaves the PNG untouched for the prefetch test below.
+  it('hands the file to the system app without opening the in-app preview', async function () {
+    expect(await installInvokeProbe()).toBe(true);
+    try {
+      // Not gated on a cached path: the PNG has never been downloaded here and
+      // still offers the button, which is the whole point of adding it.
+      expect(await browser.execute((n) => {
+        const item = [...document.querySelectorAll('[data-testid="attachment-item"]')]
+          .find((el) => (el.textContent || '').includes(n));
+        return !!item?.querySelector('[data-testid="attachment-open-external"]');
+      }, ATTACHMENT_PNG)).toBe(true);
+
+      expect(await clickInItem(ATTACHMENT_PDF, 'attachment-open-external')).toBe(true);
+      await browser.waitUntil(async () => (await invokedCommands()).includes('open_file'), {
+        timeout: 20_000, interval: 250,
+        timeoutMsg: `the button never reached open_file (saw ${JSON.stringify(await invokedCommands())})`,
+      });
+      const opened = await invokedWith('open_file');
+      expect(opened).toHaveLength(1);
+      expect(typeof opened[0].path).toBe('string');
+      expect(opened[0].path.length).toBeGreaterThan(0);
+      // The in-app dialog is exactly what this button skips.
+      expect(await browser.execute(() =>
+        document.querySelector('[data-testid="attachment-preview-dialog"]') === null)).toBe(true);
+    } finally {
+      expect(await removeInvokeProbe()).toBe(true);
+    }
   });
 
   it('caches every attachment on its own once the setting is on', async function () {

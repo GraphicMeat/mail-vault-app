@@ -105,12 +105,15 @@ function AttachmentContextMenu({ x, y, downloadedPath, canPreview, onPreview, on
           {t('email.attachments.preview')}
         </MenuItem>
       )}
+      {/* Open is unconditional: it caches the file itself when nothing is
+          cached yet, so the first right-click can already reach Preview.
+          Everything below it needs a path that exists on disk. */}
+      <MenuItem onClick={onOpen}>
+        <ExternalLink size={14} />
+        {t('common.open')}
+      </MenuItem>
       {downloadedPath ? (
         <>
-          <MenuItem onClick={onOpen}>
-            <ExternalLink size={14} />
-            {t('common.open')}
-          </MenuItem>
           <MenuItem onClick={onOpenWith}>
             <AppWindow size={14} />
             {t('email.attachments.open')}
@@ -362,6 +365,34 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   const handleOpenWith = withPath('open_with_dialog');
   const handleShowInFolder = withPath('show_in_folder');
 
+  /**
+   * Hand the file to the system's default app on the FIRST click.
+   *
+   * `handleOpen` needs a cached path, and the only thing that cached one was
+   * the download button — which the previewable kinds (image, PDF) never show,
+   * because their slot holds the eye. So for exactly the files someone wants
+   * in Preview, there was no one-click way out of the app.
+   */
+  const openExternally = async (e) => {
+    if (e?.stopPropagation) e.stopPropagation();
+    setContextMenu(null);
+    if (!isTauri) return;
+    setDownloading(true);
+    setError(null);
+    try {
+      const { invoke } = window.__TAURI__.core;
+      const path = downloadedPath ?? await invoke('cache_attachment', location);
+      setDownloadedPath(path);
+      await invoke('open_file', { path });
+    } catch (err) {
+      console.error('[Attachment] Open externally failed:', err);
+      setError(t('email.attachments.failedDownload'));
+      setTimeout(() => setError(null), 3000);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const openPreview = (e) => {
     if (e?.stopPropagation) e.stopPropagation();
     setContextMenu(null);
@@ -433,22 +464,24 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
               <Eye size={badgeIconSize} />
             </button>
           )}
+          {isTauri && (
+            <button
+              type="button"
+              onClick={openExternally}
+              className={iconButton}
+              title={t('common.open')}
+              aria-label={t('common.open')}
+              data-testid="attachment-open-external"
+            >
+              <ExternalLink size={badgeIconSize} />
+            </button>
+          )}
           {downloading ? (
             <div className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} m-1 border-2 border-mail-accent border-t-transparent rounded-full animate-spin`} />
           ) : justDownloaded ? (
             <Check size={badgeIconSize} className="m-1 text-mail-success" />
-          ) : downloadedPath && isTauri ? (
-            <button
-              type="button"
-              onClick={handleOpen}
-              className={iconButton}
-              title={t('common.open')}
-              aria-label={t('common.open')}
-              data-testid="attachment-open"
-            >
-              <ExternalLink size={badgeIconSize} />
-            </button>
-          ) : (
+          ) : downloadedPath && isTauri ? null /* the Open button above already is this row's open, and two identical
+                 ExternalLinks side by side read as two different actions */ : (
             <button
               type="button"
               onClick={handleDownload}
@@ -472,7 +505,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
             onPreview={openPreview}
             onDownload={() => { setContextMenu(null); handleDownload(); }}
             onSaveAs={handleSaveAs}
-            onOpen={handleOpen}
+            onOpen={openExternally}
             onOpenWith={handleOpenWith}
             onShowInFolder={handleShowInFolder}
             onClose={() => setContextMenu(null)}
