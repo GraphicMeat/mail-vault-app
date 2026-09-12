@@ -78,8 +78,9 @@
 .mv-proof { display:grid; grid-template-columns:.9fr 1.1fr; gap:64px; align-items:center; margin-top:40px; padding-top:36px; border-top:1px solid var(--mv-line); }
 .mv-proof p { color:var(--mv-muted); font-size:.93rem; margin-top:12px; }
 .mv-vault-label { color:var(--mv-vault); font-weight:600; }
-.mv-state-shot { aspect-ratio:4/1; }
-.mv-state-shot img { width:185%; max-width:none; margin-left:-85%; margin-top:-9%; }
+/* Keep the mailbox and its custody icons in view; the right pane may be empty. */
+.mv-state-shot { aspect-ratio:2/1; }
+.mv-state-shot img { width:200%; max-width:none; margin-left:0; margin-top:-4.5%; }
 .mv-outcomes { display:grid; grid-template-columns:repeat(3,1fr); gap:42px; }
 .mv-outcomes article { padding-top:26px; border-top:1px solid var(--mv-line); }
 .mv-outcomes p { font-size:.94rem; color:var(--mv-muted); }
