@@ -12,6 +12,7 @@ import { serverVerifiedPatch, refuseEmptyOnce, clearEmptyRefusals, EMPTY_REVERIF
 import { createPerfTrace } from '../../utils/perfTrace';
 import { waitForSentMailboxPath } from '../../utils/sentFolder';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
+import { _drainCache } from './loadMoreEmails';
 import {
   _resetNetworkRetry, _scheduleNetworkRetry,
   getLoadAbortController, setLoadAbortController,
@@ -217,6 +218,41 @@ export async function loadEmails() {
         existingCount: existingStoreEmails.length,
         totalEmails: cachedHeaders?.totalEmails ?? existingStoreEmails.length,
       });
+
+      // The daemon writes a new message's sidecar BEFORE it announces the
+      // change, so by the time a repaint runs the row is already on disk — and
+      // every reconcile exit below (condstore-noop, flag-only, delta-noop)
+      // compares the daemon's own post-sync uidNext/modseq against the server,
+      // finds them identical because the daemon made them so, and returns
+      // without ever reading a cache ROW. The one call that does,
+      // getEmailHeadersPartial, sits in the branch below that only an EMPTY
+      // store reaches — which is why switching accounts was the only way to
+      // see new mail. Draining here is branch-independent: whichever exit
+      // fires, the row is already in the store.
+      const drained = await _drainCache(
+        activeAccountId, activeMailbox, new Set(existingStoreEmails.map(e => e.uid))
+      );
+      if (isStale()) return;
+      if (drained) {
+        // Dedupe against the LIVE store — activateAccount or a flag write may
+        // have committed rows while the cache read was in flight.
+        const current = get();
+        const loadedUids = new Set(current.emails.map(e => e.uid));
+        const fresh = drained.emails.filter(e => !loadedUids.has(e.uid));
+        const widenedServerUids = new Set(current.serverUids.uids);
+        for (const e of drained.emails) widenedServerUids.add(e.uid);
+        useMailStore.setState({
+          emails: [...current.emails, ...fresh],
+          totalEmails: drained.total,
+          hasMoreEmails: drained.hasMore,
+          cachedCount: drained.cached,
+          // Widening, never replacing: a complete set stays complete, an
+          // incomplete one stays incomplete.
+          serverUids: serverUids(widenedServerUids, { complete: current.serverUids.complete }),
+        });
+        get().updateSortedEmails();
+        loadTrace.mark('cache-drained', { drained: fresh.length, totalEmails: drained.total });
+      }
     } else if (cachedHeaders && cachedHeaders.totalCached > 0) {
       console.log('[loadEmails] Store empty, loading 200 from cache (total cached: %d)', cachedHeaders.totalCached);
       const partialHeaders = await db.getEmailHeadersPartial(activeAccountId, activeMailbox, 500);

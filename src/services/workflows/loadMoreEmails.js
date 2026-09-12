@@ -43,7 +43,7 @@ const PAGE_SIZE = 200;
  * assumption that the store was exactly the top N of the cache by UID — the
  * slice silently skipped messages whenever it wasn't.
  */
-async function _drainCache(accountId, mailbox, loadedUids) {
+export async function _drainCache(accountId, mailbox, loadedUids) {
   try {
     const meta = await db.getEmailHeadersMeta(accountId, mailbox);
     const totalCached = meta?.totalCached || 0;

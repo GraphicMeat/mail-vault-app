@@ -171,7 +171,20 @@ export function useEmailScheduler() {
         // (account, mailbox) deduped the keys and not the work: in All
         // Inboxes, a reply naming two accounts' INBOXes fired two concurrent
         // reloads of the one list. Notifications still fire once per change.
-        if (repaint) useMailStore.getState().loadEmails?.();
+        if (repaint) {
+          // 'UNIFIED' is a sentinel, not a mailbox. loadEmails has no
+          // reference to it and would walk on to SELECT "UNIFIED", fail, and
+          // restore the previous rows behind an error — "this happened in all
+          // inboxes". loadUnifiedInbox re-reads each account's disk cache,
+          // which is exactly the repaint a daemon-announced change needs; not
+          // refreshAllAccounts, because the daemon already synced.
+          const mail = useMailStore.getState();
+          if (mail.unifiedInbox || mail.activeMailbox === 'UNIFIED') {
+            mail.loadUnifiedInbox?.(null, mail.unifiedFolder || 'INBOX');
+          } else {
+            mail.loadEmails?.();
+          }
+        }
       }
     })();
     return () => { stopped = true; };

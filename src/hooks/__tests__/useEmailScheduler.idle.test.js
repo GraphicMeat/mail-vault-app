@@ -51,6 +51,7 @@ vi.mock('../../services/workflows/replayOps', () => ({
 // ── stores ──────────────────────────────────────────────────────────────────
 // One store behind all three facades, exactly as the app composes them.
 const mockLoadEmails = vi.fn();
+const mockLoadUnifiedInbox = vi.fn();
 const mailState = () => ({
   accounts: [],
   activeAccountId: null,
@@ -60,6 +61,7 @@ const mailState = () => ({
   totalUnreadCount: 0,
   emails: [],
   loadEmails: mockLoadEmails,
+  loadUnifiedInbox: mockLoadUnifiedInbox,
   refreshAllAccounts: vi.fn().mockResolvedValue({ perAccountResults: [] }),
 });
 const mailStore = create(() => mailState());
@@ -104,6 +106,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     mockDaemonCall.mockClear();
     mockNotify.mockClear();
     mockLoadEmails.mockClear();
+    mockLoadUnifiedInbox.mockClear();
     mockGetHeaders.mockReset().mockResolvedValue({ emails: [], totalEmails: 0 });
     mailStore.setState(mailState());
     settingsStore.setState(settingsState());
@@ -157,6 +160,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+    expect(mockLoadUnifiedInbox).not.toHaveBeenCalled();
     expect(mockGetHeaders).toHaveBeenCalledWith('a1', 'INBOX', 1);
     expect(mockNotify).toHaveBeenCalledTimes(1);
     expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine');
@@ -335,6 +339,48 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockLoadEmails.mock.calls.length).toBeLessThanOrEqual(1);
   });
 
+  // 'UNIFIED' is a sentinel, not a mailbox: loadEmails has no reference to it
+  // anywhere, so it walks on to SELECT "UNIFIED", fails, restores the previous
+  // rows and sets an error — the list never moved. loadUnifiedInbox re-reads
+  // each account's disk cache, which is the repaint a daemon-announced change
+  // needs. Not refreshAllAccounts/refreshCurrentView: the daemon already
+  // synced, this is a repaint, not a user-requested refresh.
+  it('repaints All Inboxes through loadUnifiedInbox, never loadEmails', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+    });
+    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Unified' }] });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
+    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'INBOX');
+    expect(mockLoadEmails).not.toHaveBeenCalled();
+  });
+
+  // The unified view is not always INBOX — a unified Sent must repaint Sent.
+  it('repaints the unified folder that is actually open', async () => {
+    mailStore.setState({
+      accounts: [IMAP_A],
+      activeAccountId: 'a1',
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: true,
+      unifiedFolder: 'Sent',
+    });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'Sent', newEmails: 0, updatedFlags: 2, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockLoadUnifiedInbox).toHaveBeenCalledWith(null, 'Sent');
+  });
+
   // `loadEmails()` takes no arguments and always reloads the view that is
   // open, so a reply naming two on-screen folders is still one list to
   // repaint. Deduping by (account, mailbox) deduped the keys and not the work.
@@ -358,7 +404,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     renderHook(() => useEmailScheduler());
     await flush();
 
-    expect(mockLoadEmails).toHaveBeenCalledTimes(1);
+    expect(mockLoadUnifiedInbox).toHaveBeenCalledTimes(1);
     expect(mockNotify).toHaveBeenCalledTimes(2);
   });
 
