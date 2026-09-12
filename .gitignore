@@ -76,6 +76,10 @@ src-tauri/tauri.conf.json.screenshots-backup
 website/search-index.json
 website/*/search-index.json
 
+# Demo bundle is produced by `npm run build:demo`; source lives in src/demo.
+website/demo/
+website/src/demo/
+
 # Serena MCP workspace — local only
 .serena/
 

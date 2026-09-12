@@ -796,6 +796,20 @@ export async function applyServerRemoval(uid, {
     && (e._mailbox == null || e._mailbox === mailbox)
     && (e._accountId == null || e._accountId === accountId);
   const isRemoved = isUnified ? sameMessage : (e) => e.uid === uid;
+  // `localEmails` can still contain the optimistic row after a local-only
+  // delete has removed its Maildir file. Ask the durable archive index instead
+  // and fail closed when it cannot prove that the vault copy survived.
+  let archivedLocally = false;
+  if (deletedByUs) {
+    try {
+      const archivedIds = await db.getArchivedEmailIds(accountId, mailbox);
+      archivedLocally = archivedIds.has(uid) || archivedIds.has(Number(uid));
+    } catch (error) {
+      // A failed durability read cannot prove that the vault survived. Keep
+      // the tombstone in place and let a later reconcile decide.
+      console.warn('[deleteEmail] Could not verify surviving vault copy:', error);
+    }
+  }
   const filteredEmails = get().emails.filter(e => !isRemoved(e));
   const filteredSent = get().sentEmails.filter(e => !isRemoved(e));
   const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
@@ -823,6 +837,17 @@ export async function applyServerRemoval(uid, {
   if (deletedByUs) updates.localEmails = get().localEmails.map(e => (
     sameMessage(e) ? { ...e, serverDeleted: true } : e
   ));
+
+  // The optimistic delete installed a session tombstone so a stale header
+  // cache could not repaint the row while the server request was in flight.
+  // Once this app has confirmed the delete, an archived copy must be allowed
+  // to re-derive as local-only. Lift only the exact account/mailbox/UID key;
+  // bare UIDs are shared by folders and accounts in unified views.
+  if (deletedByUs && archivedLocally) {
+    const tombstones = new Set(get().deleteTombstones);
+    tombstones.delete(`${accountId}|${mailbox}|${uid}`);
+    updates.deleteTombstones = tombstones;
+  }
 
   useMailStore.setState(updates);
   get().updateSortedEmails();

@@ -19,9 +19,21 @@ export default function BackupRestore() {
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
   const accounts = useAccountStore(s => s.accounts);
   const visibleAccounts = getOrderedAccounts(accounts || []).filter(a => !hiddenAccounts?.[a.id]);
+  const isDemo = !!window.__MAILVAULT_DEMO__;
 
   const [showExportChoice, setShowExportChoice] = useState(false);
   const invoke = window.__TAURI__?.core?.invoke;
+
+  const refreshDemoMailbox = async (accountId) => {
+    if (!isDemo || useMailStore.getState().activeAccountId !== accountId) return;
+    try {
+      // The production loader intentionally reuses a populated list. An
+      // import is a new local source, so clear this demo view first and let
+      // the normal loader hydrate the just-imported sample.
+      useMailStore.setState({ emails: [], sentEmails: [], localEmails: [], savedEmailIds: new Set(), archivedEmailIds: new Set(), totalEmails: 0 });
+      await useMailStore.getState().loadEmails?.();
+    } catch (error) { console.warn('Demo mailbox refresh failed:', error); }
+  };
 
   // ── ZIP Export / Import ──────────────────────────────────────────────────
 
@@ -128,14 +140,20 @@ export default function BackupRestore() {
         }
       }
 
+      await refreshDemoMailbox(visibleAccounts[0]?.id);
+
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
         let msg = `Backup restored. ${result.emailCount} email(s) from ${result.accountCount} account(s) are now in your vault.`;
         if (result.newAccounts.length > 0) {
           msg += `\n\nThese accounts were recreated and still need their passwords, under Settings \u203a Accounts:\n\u2022 ${result.newAccounts.join('\n\u2022 ')}`;
         }
-        alert(msg + '\n\nMailVault reloads when you close this.');
-        window.location.reload();
+        if (isDemo) {
+          alert(msg + '\n\nThis browser demo keeps the sample in this session; no native file was read.');
+        } else {
+          alert(msg + '\n\nMailVault reloads when you close this.');
+          window.location.reload();
+        }
       }, 1500);
     } catch (error) {
       console.error('Import error:', error);
@@ -230,10 +248,13 @@ export default function BackupRestore() {
         unlisten();
       }
 
+      await refreshDemoMailbox(targetAccount.id);
+
       setTimeout(() => {
         useMailStore.getState().dismissExportProgress();
-        alert(t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox }));
-        window.location.reload();
+        const message = t('settings.backup.restore.mboxImportedEmailSNow', { result: result.emailCount, targetAccount: targetAccount.email || 'your account', targetMailbox });
+        if (isDemo) alert(`${message}\n\nThis browser demo keeps the sample in this session; no native file was read.`);
+        else { alert(message); window.location.reload(); }
       }, 1500);
     } catch (error) {
       console.error('MBOX import error:', error);
@@ -252,7 +273,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          {t('settings.backup.restore.writeEverythingVaultSingleZip')}
+          {isDemo ? 'Download a browser sample backup as JSON. It includes fictional vault messages and never reads a file path.' : t('settings.backup.restore.writeEverythingVaultSingleZip')}
         </p>
 
         <div className="flex gap-3">
@@ -280,7 +301,7 @@ export default function BackupRestore() {
         </h4>
 
         <p className="text-sm text-mail-text-muted mb-4">
-          {t('settings.backup.restore.writeVaultStandardMboxFile')}
+          {isDemo ? 'Download a sample MBOX or import the provided fictional mailbox into this browser session.' : t('settings.backup.restore.writeVaultStandardMboxFile')}
         </p>
 
         <div className="flex gap-3">
@@ -309,7 +330,7 @@ export default function BackupRestore() {
         // This asked "Which emails would you like to export?" and then offered
         // one button and Cancel. A question with a single answer is not a
         // choice — say what the export contains instead.
-        description="The .zip holds everything in your vault, plus your accounts and settings. Mail that only exists on the server is not included."
+        description={isDemo ? 'The browser demo downloads a JSON sample containing fictional vault messages. The desktop app writes a ZIP; this route never uses native file paths.' : 'The .zip holds everything in your vault, plus your accounts and settings. Mail that only exists on the server is not included.'}
       >
         <div className="flex flex-col gap-3">
           <Button variant="primary" size="lg" onClick={() => doExport(true)} fullWidth className="py-3 text-left justify-start">

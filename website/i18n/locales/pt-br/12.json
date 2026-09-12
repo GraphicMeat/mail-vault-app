@@ -69,5 +69,6 @@
   "e58f1c26a204": "A caixa de seleção na linha de um grupo seleciona todas as mensagens dele de uma vez, então \"arquivar tudo o que esta newsletter já enviou\" são dois cliques em vez de um longo shift-clique. O mesmo vale para apagar e exportar.",
   "83e1e0a0260e": "Explorar por remetente: um grupo por correspondente, selecionável por inteiro.",
   "e34a86643a8b": "Esta é a visão para achar algo de que você lembra mais ou menos por quando aconteceu do que por quem enviou.",
-  "a26d2cdb7adf": "O Explorer também lembra onde você estava. O seu agrupamento, o detalhe da data e o grupo que estava aberto são guardados por pasta e por conta, e sobrevivem a um reinício."
+  "a26d2cdb7adf": "O Explorer também lembra onde você estava. O seu agrupamento, o detalhe da data e o grupo que estava aberto são guardados por pasta e por conta, e sobrevivem a um reinício.",
+  "2bcb193951cf": "Caixa de entrada do MailVault com conversas de email agrupadas em threads"
 }

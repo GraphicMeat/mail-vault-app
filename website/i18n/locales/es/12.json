@@ -69,5 +69,6 @@
   "e58f1c26a204": "La casilla de la fila de un grupo selecciona todos sus mensajes de golpe, así que «archivar todo lo que ha enviado este boletín» son dos clics en lugar de un largo clic con Mayús. Lo mismo sirve para borrar y exportar.",
   "83e1e0a0260e": "Explorar por remitente: un grupo por contacto, seleccionable entero.",
   "e34a86643a8b": "Esta es la vista para encontrar algo que recuerdas más por cuándo pasó, más o menos, que por quién lo envió.",
-  "a26d2cdb7adf": "Explorer también recuerda dónde estabas. Tu agrupación, el detalle de fecha y el grupo que tenías abierto se guardan por carpeta y por cuenta, y sobreviven a un reinicio."
+  "a26d2cdb7adf": "Explorer también recuerda dónde estabas. Tu agrupación, el detalle de fecha y el grupo que tenías abierto se guardan por carpeta y por cuenta, y sobreviven a un reinicio.",
+  "2bcb193951cf": "Bandeja de entrada de MailVault con conversaciones agrupadas por hilo"
 }

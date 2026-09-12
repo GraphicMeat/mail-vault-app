@@ -26,6 +26,7 @@ const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
+const mockGetArchivedEmailIds = vi.fn().mockResolvedValue(new Set());
 // The vault's index entry for the message being deleted, and the write that
 // stamps it. Absent from this file's mocks, `stampVaultEntry` threw on
 // `db.getLocalIndexEntry is not a function`, its own catch swallowed that, and
@@ -48,7 +49,7 @@ vi.mock('../../db', () => ({
   getLocalEmailLight: vi.fn().mockResolvedValue(null),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
-  getArchivedEmailIds: vi.fn().mockResolvedValue(new Set()),
+  getArchivedEmailIds: (...a) => mockGetArchivedEmailIds(...a),
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
   getLocalEmails: vi.fn().mockResolvedValue([]),
@@ -190,6 +191,7 @@ beforeEach(() => {
   mockIsGraphAccount.mockReturnValue(false);
   mockGetGraphMessageId.mockReturnValue(null);
   mockGraphDeleteMessage.mockResolvedValue(undefined);
+  mockGetArchivedEmailIds.mockResolvedValue(new Set());
 });
 
 describe('markSelectedAsRead', () => {
@@ -699,6 +701,35 @@ describe('deleteEmailFromServer', () => {
     await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
 
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
+  });
+
+  it('lifts only the exact tombstone after a durable vault check confirms the local copy', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1]));
+    const localCopy = { ...seedThread()[0], _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local', serverDeleted: false };
+    primeStore(seedThread(), []);
+    useMailStore.setState({ localEmails: [localCopy], archivedEmailIds: new Set([1]), deleteTombstones: new Set(['other-account|INBOX|1']) });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useMailStore.getState().deleteTombstones.has('acct1|INBOX|1')).toBe(false);
+    expect(useMailStore.getState().deleteTombstones.has('other-account|INBOX|1')).toBe(true);
+    expect(useMailStore.getState().sortedEmails.find(row => row.uid === 1)?.source).toBe('local-only');
+  });
+
+  it('keeps the tombstone for a local-only row when its physical file is gone', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set());
+    const staleLocal = { ...seedThread()[0], _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local-only', _localStaged: true, serverDeleted: false };
+    primeStore(seedThread(), []);
+    useMailStore.setState({ emails: [staleLocal, ...seedThread().slice(1)], localEmails: [staleLocal], archivedEmailIds: new Set() });
+    const oldTauri = window.__TAURI__;
+    window.__TAURI__ = { core: { invoke: vi.fn().mockResolvedValue({ success: true }) } };
+
+    await useMailStore.getState().deleteEmailFromServer(1, { skipRefresh: true });
+
+    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('maildir_delete', expect.objectContaining({ uid: 1 }));
+    expect(useMailStore.getState().deleteTombstones.has('acct1|INBOX|1')).toBe(true);
+    expect(useMailStore.getState().sortedEmails.find(row => row.uid === 1)).toBeUndefined();
+    window.__TAURI__ = oldTauri;
   });
 
   it('clears the viewer when the deleted row was the open email', async () => {

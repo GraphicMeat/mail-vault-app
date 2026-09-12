@@ -1,0 +1,42 @@
+.demo-shell { min-height: 100vh; background: var(--mail-bg); color: var(--mail-text); }
+.demo-header { height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 16px; background: color-mix(in srgb, var(--mail-sidebar-bg) 94%, var(--mail-accent) 6%); border-bottom: 1px solid var(--mail-border); position: relative; z-index: 90; }
+.demo-brand, .demo-actions, .demo-tour-controls, .demo-explanation-heading { display: flex; align-items: center; }
+.demo-brand { gap: 9px; min-width: 0; white-space: nowrap; }
+.demo-kicker { font: 600 10px/1 var(--font-mono, monospace); letter-spacing: .12em; color: var(--mail-accent-text); }
+.demo-title { font: 600 13px/1 var(--font-display, sans-serif); }
+.demo-pill { font: 500 10px/1 var(--font-mono, monospace); color: var(--mail-text-muted); border: 1px solid var(--mail-border); border-radius: 99px; padding: 5px 8px; }
+.demo-actions { gap: 6px; }
+.demo-link, .demo-button, .demo-icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; border-radius: 6px; font-size: 11px; line-height: 1; cursor: pointer; }
+.demo-link { color: var(--mail-text-muted); padding: 7px 6px; text-decoration: none; }
+.demo-link:hover { color: var(--mail-text); background: var(--mail-hover); }
+.demo-button { color: var(--mail-text); background: var(--mail-bg-elevated, var(--mail-bg)); border: 1px solid var(--mail-border); padding: 7px 9px; }
+.demo-button:hover:not(:disabled) { background: var(--mail-hover); }
+.demo-button:disabled { opacity: .45; cursor: default; }
+.demo-button-primary { color: var(--mail-accent-text); border-color: var(--mail-accent); }
+.demo-icon-button, .demo-close { color: var(--mail-text-muted); background: transparent; border: 0; padding: 7px; cursor: pointer; }
+.demo-body { display: flex; height: calc(100vh - 48px); min-width: 0; }
+.demo-app-wrap { height: 100%; min-width: 0; flex: 1 1 auto; position: relative; transform: translateZ(0); }
+.demo-app-wrap > .h-screen { height: 100% !important; }
+/* Portalled app dialogs mount under body. Keep their scrim inside the demo
+   viewport so the explanation column and demo header remain available. */
+body[data-mailvault-demo][data-demo-panel="open"] > .fixed.inset-0 { top: 48px; right: 270px; bottom: 0; }
+body[data-mailvault-demo][data-demo-panel="closed"] > .fixed.inset-0 { top: 48px; right: 0; bottom: 0; }
+.demo-explanation { flex: 0 0 270px; align-self: stretch; overflow: auto; padding: 14px; background: color-mix(in srgb, var(--mail-sidebar-bg) 95%, var(--mail-accent) 5%); border-left: 1px solid var(--mail-border); z-index: 70; }
+.demo-explanation-heading { gap: 6px; color: var(--mail-text-muted); font: 600 10px/1 var(--font-mono, monospace); text-transform: uppercase; letter-spacing: .08em; }
+.demo-explanation-heading .demo-close { margin-left: auto; padding: 2px; }
+.demo-explanation h2 { margin: 14px 0 6px; font: 600 15px/1.25 var(--font-display, sans-serif); }
+.demo-explanation p { margin: 0; color: var(--mail-text-muted); font-size: 12px; line-height: 1.5; }
+.demo-explanation .demo-simulation-note { margin-top: 11px; color: var(--mail-accent-text); font: 10px/1.4 var(--font-mono, monospace); }
+.demo-tour-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: 20px; background: rgba(4, 7, 12, .62); }
+.demo-tour { position: relative; width: min(430px, 100%); padding: 26px; border: 1px solid var(--mail-border); border-radius: 16px; background: var(--mail-bg-elevated, var(--mail-sidebar-bg)); }
+.demo-tour-close { position: absolute; top: 10px; right: 10px; }
+.demo-tour h2 { margin: 13px 0 8px; font: 600 23px/1.15 var(--font-display, sans-serif); }
+.demo-tour p { color: var(--mail-text-muted); font-size: 13px; line-height: 1.55; }
+.demo-tour-preview { display: flex; gap: 8px; margin-top: 20px; padding: 11px; color: var(--mail-text-muted); background: var(--mail-hover); border-radius: 8px; font-size: 11px; line-height: 1.45; }
+.demo-tour-controls { justify-content: space-between; margin-top: 23px; }
+@media (max-width: 720px) { .demo-header { padding: 0 9px; } .demo-title, .demo-pill, .demo-link { display: none; } .demo-actions { gap: 2px; } .demo-tour-button { display: inline-flex; } .demo-body.demo-panel-open { display: flex; flex-direction: column; } .demo-body.demo-panel-open .demo-app-wrap { height: auto; flex: 1 1 auto; min-height: 0; } .demo-body.demo-panel-open .demo-explanation { position: relative; inset: auto; order: 2; width: auto; max-height: 128px; overflow: auto; flex: 0 0 auto; border-radius: 0; box-shadow: none; } }
+@media (max-width: 720px) {
+  body[data-mailvault-demo][data-demo-panel="open"] > .fixed.inset-0,
+  body[data-mailvault-demo][data-demo-panel="closed"] > .fixed.inset-0 { top: 48px; right: 0; bottom: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .demo-tour-backdrop, .demo-explanation { transition: none; } }

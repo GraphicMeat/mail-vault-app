@@ -34,14 +34,14 @@ const ORIGIN_RE = /https:\/\/mailvaultapp\.com([^"\\]*)/g;
 // what actually carries the meaning, and it stays in the DOM for screen readers
 // and crawlers even though the row shows only flags.
 export const LOCALES = [
-  { dir: 'de',    hreflang: 'de',      htmlLang: 'de',      ogLocale: 'de_DE', flag: '🇩🇪', name: 'Deutsch' },
-  { dir: 'fr',    hreflang: 'fr',      htmlLang: 'fr',      ogLocale: 'fr_FR', flag: '🇫🇷', name: 'Français' },
-  { dir: 'es',    hreflang: 'es',      htmlLang: 'es',      ogLocale: 'es_ES', flag: '🇪🇸', name: 'Español' },
-  { dir: 'it',    hreflang: 'it',      htmlLang: 'it',      ogLocale: 'it_IT', flag: '🇮🇹', name: 'Italiano' },
-  { dir: 'ja',    hreflang: 'ja',      htmlLang: 'ja',      ogLocale: 'ja_JP', flag: '🇯🇵', name: '日本語' },
-  { dir: 'ko',    hreflang: 'ko',      htmlLang: 'ko',      ogLocale: 'ko_KR', flag: '🇰🇷', name: '한국어' },
-  { dir: 'zh',    hreflang: 'zh-Hans', htmlLang: 'zh-Hans', ogLocale: 'zh_CN', flag: '🇨🇳', name: '简体中文' },
-  { dir: 'pt-br', hreflang: 'pt-BR',   htmlLang: 'pt-BR',   ogLocale: 'pt_BR', flag: '🇧🇷', name: 'Português (Brasil)' },
+  { dir: 'de',    app: 'de',      hreflang: 'de',      htmlLang: 'de',      ogLocale: 'de_DE', flag: '🇩🇪', name: 'Deutsch' },
+  { dir: 'fr',    app: 'fr',      hreflang: 'fr',      htmlLang: 'fr',      ogLocale: 'fr_FR', flag: '🇫🇷', name: 'Français' },
+  { dir: 'es',    app: 'es',      hreflang: 'es',      htmlLang: 'es',      ogLocale: 'es_ES', flag: '🇪🇸', name: 'Español' },
+  { dir: 'it',    app: 'it',      hreflang: 'it',      htmlLang: 'it',      ogLocale: 'it_IT', flag: '🇮🇹', name: 'Italiano' },
+  { dir: 'ja',    app: 'ja',      hreflang: 'ja',      htmlLang: 'ja',      ogLocale: 'ja_JP', flag: '🇯🇵', name: '日本語' },
+  { dir: 'ko',    app: 'ko',      hreflang: 'ko',      htmlLang: 'ko',      ogLocale: 'ko_KR', flag: '🇰🇷', name: '한국어' },
+  { dir: 'zh',    app: 'zh-Hans', hreflang: 'zh-Hans', htmlLang: 'zh-Hans', ogLocale: 'zh_CN', flag: '🇨🇳', name: '简体中文' },
+  { dir: 'pt-br', app: 'pt-BR',   hreflang: 'pt-BR',   htmlLang: 'pt-BR',   ogLocale: 'pt_BR', flag: '🇧🇷', name: 'Português (Brasil)' },
 ];
 const EN = { hreflang: 'en', flag: '🇬🇧', name: 'English' };
 
@@ -366,6 +366,11 @@ function absolutize(url, pageRel) {
  * pages and would otherwise stat the same 500 paths on every one of them.
  */
 const SHOT_INDEX = new Map();
+let DEMO_PREVIEW_MANIFEST = {};
+try {
+  const manifestPath = path.join(ROOT, 'demo-preview-manifest.json');
+  if (fs.existsSync(manifestPath)) DEMO_PREVIEW_MANIFEST = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+} catch { DEMO_PREVIEW_MANIFEST = {}; }
 function shotsFor(dir) {
   if (!SHOT_INDEX.has(dir)) {
     const at = path.join(ROOT, 'screenshots', dir);
@@ -396,7 +401,9 @@ export function rewriteSrcset(value, pageRel, loc) {
     const descriptor = sp === -1 ? '' : t.slice(sp);
     const r = absolutize(url, pageRel);
     if (!r) return t;
-    const abs = localizePath(r.abs, loc) || localizeShot(r.abs, loc);
+    const preview = localizeDemoAsset(r.abs, r.suffix, loc);
+    const abs = preview ? preview.slice(0, r.suffix ? -r.suffix.length : undefined)
+      : localizePath(r.abs, loc) || localizeShot(r.abs, loc);
     return abs + r.suffix + descriptor;
   }).filter(Boolean).join(', ');
 }
@@ -405,6 +412,23 @@ export function localizePath(abs, loc) {
   if (abs === '/index.html') abs = '/';
   if (!LOCALIZABLE.has(abs)) return null;
   return abs === '/' ? `/${loc.dir}/` : `/${loc.dir}${abs}`;
+}
+
+/** The demo is a shared build, so only its app-language query changes. */
+export function localizeDemoUrl(abs, suffix, loc) {
+  if (abs !== '/demo/') return null;
+  const params = new URLSearchParams(suffix.startsWith('?') ? suffix.slice(1).split('#')[0] : '');
+  params.set('lang', loc.app);
+  const hash = suffix.includes('#') ? suffix.slice(suffix.indexOf('#')) : '';
+  return `/demo/?${params.toString()}${hash}`;
+}
+
+/** Preview captures carry a locale suffix while the demo app remains shared. */
+export function localizeDemoAsset(abs, suffix, loc) {
+  const match = /^\/demo\/assets\/demo-preview-en-(light|dark)-(wide|compact)-[a-f0-9]{12}\.webp$/i.exec(abs);
+  if (!match) return null;
+  const file = DEMO_PREVIEW_MANIFEST[`${loc.dir}-${match[1]}-${match[2]}`];
+  return file ? `/demo/assets/${file}${suffix}` : null;
 }
 
 // --------------------------------------------------------------- rendering
@@ -519,7 +543,9 @@ export function render(html, pageRel, loc, dict) {
         const r = absolutize(at.value, pageRel);
         if (!r) continue;
         const localized = localizePath(r.abs, loc);
-        const next = (localized || localizeShot(r.abs, loc)) + r.suffix;
+        const demo = localizeDemoUrl(r.abs, r.suffix, loc);
+        const preview = localizeDemoAsset(r.abs, r.suffix, loc);
+        const next = demo || preview || (localized || localizeShot(r.abs, loc)) + r.suffix;
         if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
       }
       if ((name === 'srcset' || name === 'imagesrcset') && !('data-i18n-abs' in a)) {
@@ -547,7 +573,9 @@ export function rewriteUrls(fragment, pageRel, loc) {
       if (!at || at.vs < 0) continue;
       const r = absolutize(at.value, pageRel);
       if (!r) continue;
-      const next = (localizePath(r.abs, loc) || localizeShot(r.abs, loc)) + r.suffix;
+      const demo = localizeDemoUrl(r.abs, r.suffix, loc);
+      const preview = localizeDemoAsset(r.abs, r.suffix, loc);
+      const next = demo || preview || (localizePath(r.abs, loc) || localizeShot(r.abs, loc)) + r.suffix;
       if (next !== at.value) edits.push({ start: at.vs, end: at.ve, text: next });
     }
     for (const name of ['srcset', 'imagesrcset']) {

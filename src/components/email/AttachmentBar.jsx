@@ -246,7 +246,8 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   const [contextMenu, setContextMenu] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const contentRef = useRef(attachment.content || null);
-  const isTauri = !!window.__TAURI__;
+  const isDemo = !!window.__MAILVAULT_DEMO__;
+  const isTauri = !!window.__TAURI__ && !isDemo;
   const kind = previewKind(attachment);
   const location = { accountId, mailbox, uid: emailUid, attachmentIndex };
 
@@ -263,7 +264,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 
   const ensureContent = async () => {
     if (contentRef.current) return contentRef.current;
-    if (!isTauri) throw new Error('Attachment content not available');
+    if (!window.__TAURI__?.core?.invoke) throw new Error('Attachment content not available');
     contentRef.current = await readAttachment(location);
     return contentRef.current;
   };
@@ -298,6 +299,17 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 
   const handleSaveAs = async () => {
     setContextMenu(null);
+    if (isDemo) {
+      try {
+        browserDownload({ ...attachment, content: await ensureContent() });
+        flashDownloaded(`browser-downloads/${attachment.filename || 'attachment'}`);
+      } catch (err) {
+        console.error('[Attachment] Browser save failed:', err);
+        setError(t('email.attachments.failedSave'));
+        setTimeout(() => setError(null), 3000);
+      }
+      return;
+    }
     if (!isTauri) return;
 
     try {

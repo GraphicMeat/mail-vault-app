@@ -33,12 +33,13 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/ifram
 import { splitQuotedContent } from '../utils/quoteFolding';
 import { splitSignature } from '../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
+import { useThemeStore } from '../stores/themeStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
-import { MAIL_DARK_TEXT } from '../utils/mailChrome';
+import { getEmailColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
@@ -269,6 +270,8 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
+  const theme = useThemeStore(s => s.theme);
+  const palette = useThemeStore(s => s.palette);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
 
@@ -338,7 +341,10 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     if (!mergedEmail.html) return '';
 
     // Use appropriate text color based on bubble type
-    const textColor = fromUser ? '#ffffff' : `var(--mail-text, ${MAIL_DARK_TEXT})`;
+    // srcDoc is an isolated document and cannot inherit the app's CSS
+    // variables. Resolve the active palette here so light chat bubbles keep
+    // readable text after an Appearance change.
+    const textColor = fromUser ? '#ffffff' : getEmailColors(theme, palette).text;
     const linkColor = fromUser ? '#c7d2fe' : '#6366f1';
     const quoteColor = fromUser ? 'rgba(255,255,255,0.6)' : '#6b7280';
     const quoteBorder = fromUser ? 'rgba(255,255,255,0.3)' : '#d1d5db';
@@ -410,7 +416,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };
-  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking]);
+  }, [mergedEmail.html, fromUser, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
 
   // iframeContent useMemo now returns { html, alertLevel } — extract for srcDoc and alert
   const iframeHtmlContent = iframeContent?.html || '';

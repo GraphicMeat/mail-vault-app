@@ -23,7 +23,9 @@ const legacyPage = `<nav role="banner" class="fixed top-0 left-0 right-0 z-50 gl
 </nav>`;
 const englishPages = (dir = 'website') => readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
   const file = `${dir}/${entry.name}`;
-  if (entry.isDirectory()) return ['node_modules', 'api', 'i18n', 'oauth'].includes(entry.name) ? [] : englishPages(file);
+  // `/demo/` is a Vite application entry; its real React shell is tested by
+  // the demo workflow suite rather than the generated marketing nav audit.
+  if (entry.isDirectory()) return ['node_modules', 'api', 'i18n', 'oauth', 'demo'].includes(entry.name) ? [] : englishPages(file);
   return entry.name.endsWith('.html') && /<html[^>]*lang="en"/.test(readFileSync(file, 'utf8')) ? [file] : [];
 });
 const read = (rel) => readFileSync(`website/${rel}`, 'utf8');
@@ -47,7 +49,7 @@ describe('website nav', () => {
     const files = englishPages();
     expect(files.length).toBeGreaterThanOrEqual(47);
     expect(files).toEqual(expect.arrayContaining(['website/index.html', 'website/changelog.html', 'website/privacy.html', 'website/terms.html']));
-    const expected = ['/#how-it-works', '/features.html', '/pricing.html', '/blog.html', '/docs.html'];
+    const expected = ['/#how-it-works', '/features.html', '/pricing.html', '/blog.html', '/docs.html', '/demo/?lang=en'];
     for (const file of files) {
       const dom = new JSDOM(readFileSync(file, 'utf8'));
       try {

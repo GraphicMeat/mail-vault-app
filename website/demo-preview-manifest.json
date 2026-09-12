@@ -1,0 +1,48 @@
+{
+  "en-light-wide": "demo-preview-en-light-wide-b8f430069ecd.webp",
+  "en-light-compact": "demo-preview-en-light-compact-41dd45cb2010.webp",
+  "en-dark-wide": "demo-preview-en-dark-wide-a018438292a4.webp",
+  "en-dark-compact": "demo-preview-en-dark-compact-72ec2632b09d.webp",
+  "de-light-wide": "demo-preview-de-light-wide-fe0f0083218f.webp",
+  "de-light-compact": "demo-preview-de-light-compact-a1dd7d90b882.webp",
+  "de-dark-wide": "demo-preview-de-dark-wide-a40ef136877a.webp",
+  "de-dark-compact": "demo-preview-de-dark-compact-620a2fc2facb.webp",
+  "fr-light-wide": "demo-preview-fr-light-wide-666bf1fb81d8.webp",
+  "fr-light-compact": "demo-preview-fr-light-compact-1783c3cba60c.webp",
+  "fr-dark-wide": "demo-preview-fr-dark-wide-76e0956da2a7.webp",
+  "fr-dark-compact": "demo-preview-fr-dark-compact-3d372a91e768.webp",
+  "es-light-wide": "demo-preview-es-light-wide-890cd8bcd525.webp",
+  "es-light-compact": "demo-preview-es-light-compact-70064efee2cc.webp",
+  "es-dark-wide": "demo-preview-es-dark-wide-12eee7613cfb.webp",
+  "es-dark-compact": "demo-preview-es-dark-compact-d50c7be222e2.webp",
+  "it-light-wide": "demo-preview-it-light-wide-514233d2970c.webp",
+  "it-light-compact": "demo-preview-it-light-compact-5310855eb2bc.webp",
+  "it-dark-wide": "demo-preview-it-dark-wide-d24bef206a3f.webp",
+  "it-dark-compact": "demo-preview-it-dark-compact-f877381077b6.webp",
+  "ja-light-wide": "demo-preview-ja-light-wide-3e007da1ad1c.webp",
+  "ja-light-compact": "demo-preview-ja-light-compact-8cd8acd4a44b.webp",
+  "ja-dark-wide": "demo-preview-ja-dark-wide-04cfed014bf3.webp",
+  "ja-dark-compact": "demo-preview-ja-dark-compact-ab603594a101.webp",
+  "ko-light-wide": "demo-preview-ko-light-wide-83c5c26af6d2.webp",
+  "ko-light-compact": "demo-preview-ko-light-compact-c278f4fd5cb9.webp",
+  "ko-dark-wide": "demo-preview-ko-dark-wide-bb2b7dc974c4.webp",
+  "ko-dark-compact": "demo-preview-ko-dark-compact-7eb3ba338c54.webp",
+  "zh-light-wide": "demo-preview-zh-light-wide-d22846e1c862.webp",
+  "zh-light-compact": "demo-preview-zh-light-compact-3925f5d84237.webp",
+  "zh-dark-wide": "demo-preview-zh-dark-wide-a75405fb9e47.webp",
+  "zh-dark-compact": "demo-preview-zh-dark-compact-2d0735d14918.webp",
+  "pt-br-light-wide": "demo-preview-pt-br-light-wide-ea2aa27cad44.webp",
+  "pt-br-light-compact": "demo-preview-pt-br-light-compact-d388911fa3f4.webp",
+  "pt-br-dark-wide": "demo-preview-pt-br-dark-wide-f879cebe1625.webp",
+  "pt-br-dark-compact": "demo-preview-pt-br-dark-compact-e787b931ab0a.webp",
+  "_dimensions": {
+    "wide": {
+      "width": 1440,
+      "height": 789
+    },
+    "compact": {
+      "width": 720,
+      "height": 395
+    }
+  }
+}

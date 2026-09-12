@@ -32,6 +32,13 @@ on:
     branches: [main]
     paths:
       - 'website/**'
+      - 'src/**'
+      - 'vite.demo.config.js'
+      - 'scripts/capture-demo-preview.mjs'
+      - 'scripts/update-demo-preview.mjs'
+      - 'scripts/website-release.mjs'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/deploy-website.yml'
   workflow_dispatch:
 
@@ -47,6 +54,36 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      - name: Set up Node for the browser demo
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install demo build dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Test browser demo adapters and persistence
+        run: npx vitest run src/demo/__tests__
+
+      - name: Build browser demo
+        run: npm run build:demo
+
+      - name: Install isolated demo capture tools
+        run: |
+          if ! command -v cwebp >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y webp
+          fi
+
+      - name: Capture current demo previews
+        # This uses a fresh headless browser session and the freshly built demo;
+        # it never starts the Tauri app or touches a developer browser profile.
+        run: npm run capture:demo-preview
+
+      - name: Update homepage preview references
+        run: npm run update:demo-preview
 
       - name: Set up SSH
         run: |
@@ -76,10 +113,51 @@ jobs:
         # committed website/assets/tailwind.css can never go stale in production.
         run: npx -y tailwindcss@3.4.19 -c website/tailwind.config.js -i website/src/tailwind.css -o website/assets/tailwind.css --minify
 
+      - name: Sync demo assets and retain active chunks
+        run: |
+          find website/demo/assets -type f -printf '%f\n' | sort > /tmp/mailvault-demo-assets.manifest
+          scp -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            -p /tmp/mailvault-demo-assets.manifest \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/tmp/mailvault-demo-assets.manifest
+          rsync -avz \
+            -e "ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts" \
+            ./website/demo/assets/ \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/mailvaultapp/demo/assets/
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s <<'SCRIPT'
+          set -e
+          ASSET_DIR=/var/www/mailvaultapp/demo/assets
+          MANIFEST=/tmp/mailvault-demo-assets.manifest
+          STATE_DIR=/var/lib/mailvault-demo
+          RETIRED_DIR=$STATE_DIR/retired
+          PREVIOUS=$STATE_DIR/active.manifest
+          mkdir -p "$RETIRED_DIR"
+          if [ -f "$PREVIOUS" ]; then
+            while IFS= read -r name; do
+              [ -n "$name" ] || continue
+              if ! grep -Fxq "$name" "$MANIFEST" && [ -f "$ASSET_DIR/$name" ] && [ ! -e "$RETIRED_DIR/$name" ]; then
+                touch "$RETIRED_DIR/$name"
+              fi
+            done < "$PREVIOUS"
+          fi
+          while IFS= read -r name; do rm -f "$RETIRED_DIR/$name"; done < "$MANIFEST"
+          find "$RETIRED_DIR" -type f -mmin +11520 -print0 | while IFS= read -r -d '' retired; do
+            name=${retired##*/}
+            if ! grep -Fxq "$name" "$MANIFEST"; then
+              rm -f -- "$ASSET_DIR/$name" "$retired"
+            fi
+          done
+          install -m 644 "$MANIFEST" "$PREVIOUS"
+          rm -f "$MANIFEST"
+          SCRIPT
+          rm -f /tmp/mailvault-demo-assets.manifest
+
       - name: Rsync static files (excluding api/)
         run: |
           rsync -avz --delete \
             --exclude='api/' \
+            --exclude='demo/assets/' \
+            --exclude='demo-preview-manifest.json' \
             --exclude='src/' \
             --exclude='i18n/' \
             --exclude='tailwind.config.js' \
@@ -191,6 +269,36 @@ jobs:
           install -m 644 /tmp/Caddyfile.new "$CF"
           rm -f /tmp/Caddyfile.new
           systemctl reload caddy
+          SCRIPT
+
+      - name: Ensure Caddy serves immutable demo assets and fresh HTML
+        run: |
+          ssh -i ~/.ssh/deploy_key -o UserKnownHostsFile=~/.ssh/known_hosts \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} bash -s <<'SCRIPT'
+          set -e
+          CF=/etc/caddy/Caddyfile
+          grep -qF '# mailvault-demo-cache-policy' "$CF" || {
+            cp "$CF" "$CF.bak-$(date +%Y%m%d-%H%M%S)"
+            awk '
+              /handle \/api\/\* \{/ && !done {
+                print "    # mailvault-demo-cache-policy"
+                print "    @demo_assets path /demo/assets/*"
+                print "    header @demo_assets Cache-Control \"public, max-age=604800, immutable\""
+                print "    @demo_html path /demo /demo/ /demo/index.html /"
+                print "    header @demo_html Cache-Control \"no-cache\""
+                print "    @site_html path_regexp html \\.html$"
+                print "    header @site_html Cache-Control \"no-cache\""
+                print "    @locale_roots path /de /de/ /fr /fr/ /es /es/ /it /it/ /ja /ja/ /ko /ko/ /zh /zh/ /pt-br /pt-br/"
+                print "    header @locale_roots Cache-Control \"no-cache\""
+                print "    encode zstd gzip"
+                done=1
+              }
+              { print }' "$CF" > /tmp/Caddyfile.new
+            caddy validate --config /tmp/Caddyfile.new --adapter caddyfile
+            install -m 644 /tmp/Caddyfile.new "$CF"
+            rm -f /tmp/Caddyfile.new
+            systemctl reload caddy
+          }
           SCRIPT
 
       - name: Install deps + restart service

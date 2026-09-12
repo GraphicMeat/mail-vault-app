@@ -7,6 +7,7 @@ import { t, useT  } from '../../i18n/index.js';
 
 export function DaemonSettings() {
   const t = useT();
+  const isDemo = typeof window !== 'undefined' && !!window.__MAILVAULT_DEMO__;
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
   const [connected, setConnected] = useState(null);
@@ -46,17 +47,17 @@ export function DaemonSettings() {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-mail-text">
-              {checking ? t('settings.daemon.checking') : connected ? t('settings.daemon.helperConnected') : connected === false ? t('settings.daemon.helperRunning') : t('settings.daemon.backgroundHelper')}
+              {isDemo ? 'Browser simulation active' : checking ? t('settings.daemon.checking') : connected ? t('settings.daemon.helperConnected') : connected === false ? t('settings.daemon.helperRunning') : t('settings.daemon.backgroundHelper')}
             </h3>
             {status && (
               <p className="text-xs text-mail-text-muted">
-                {t('settings.daemon.versionAndDataDir', { version: status.version, dataDir: status.data_dir })}
+                {isDemo ? `${status.version} · ${status.data_dir}` : t('settings.daemon.versionAndDataDir', { version: status.version, dataDir: status.data_dir })}
               </p>
             )}
           </div>
         </div>
 
-        {connected === false && (
+        {connected === false && !isDemo && (
           <p className="text-xs text-mail-text-muted mb-3">
             {t('settings.daemon.backgroundHelperNotCurrentlyReachable')}
           </p>
@@ -67,14 +68,13 @@ export function DaemonSettings() {
           disabled={checking}
           className="text-xs font-medium text-mail-accent-text hover:text-mail-accent/80 disabled:opacity-50 transition-colors"
         >
-          {checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
+          {isDemo ? 'Check browser simulation' : checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
         </button>
       </div>
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
-        <p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p>
-        <p>{t('settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p>
+        {isDemo ? <><p>All demo mail, vault and chart work stays in this browser tab.</p><p>No helper process, network account or native storage is used.</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t('settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
       </div>
     </div>
   );

@@ -4,7 +4,9 @@ import { resolve, dirname } from 'node:path';
 import { Script } from 'node:vm';
 import { JSDOM } from 'jsdom';
 const root=resolve('website');
-function files(dir) { return readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()&&!['node_modules','api','i18n'].includes(e.name)?files(resolve(dir,e.name)):e.isFile()&&e.name.endsWith('.html')?[resolve(dir,e.name)]:[]); }
+// `/demo/` is a Vite application entry, so it intentionally does not carry
+// the static marketing shell audited by this suite.
+function files(dir) { return readdirSync(dir,{withFileTypes:true}).flatMap(e=>e.isDirectory()&&!['node_modules','api','i18n','demo'].includes(e.name)?files(resolve(dir,e.name)):e.isFile()&&e.name.endsWith('.html')?[resolve(dir,e.name)]:[]); }
 const english=files(root).filter(p=>/<html[^>]*lang="en"/.test(readFileSync(p,'utf8'))&&!p.includes('/oauth/'));
 describe('English visual rollout',()=>{
  it('has one shared shell, a main landmark and matching language links on every page',()=>{
