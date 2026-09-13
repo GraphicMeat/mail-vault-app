@@ -470,7 +470,7 @@ async fn get_graph_backup_status(
             let mut total_external = 0usize;
 
             for gf in &graph_folders {
-                let mailbox_path = normalize_graph_folder_name(&gf.display_name);
+                let mailbox_path = gf.storage_key.clone();
                 let sc = gf.total_item_count.max(0) as usize;
                 let app_count = scan_local_uids(&app, &acct, &mailbox_path).unwrap_or_default().len();
                 let ext_count = match bp.as_deref() {
@@ -1109,8 +1109,9 @@ async fn run_graph_backup(
         }
 
         let folder_name = &folder.display_name;
-        // Normalize folder name for Maildir path (same as frontend mapping)
-        let mailbox_path = normalize_graph_folder_name(folder_name);
+        // The locale-independent key `list_folders` computed; the app keys its
+        // sidecars, ledger and vault by the same string.
+        let mailbox_path = folder.storage_key.clone();
 
         let mirror_dir = backup_path.as_ref().map(|custom_path| {
             std::path::PathBuf::from(custom_path)
@@ -1325,19 +1326,6 @@ fn flatten_mailboxes(mailboxes: &[imap::MailboxInfo]) -> Vec<&imap::MailboxInfo>
         }
     }
     result
-}
-
-/// Normalize Graph folder display name to IMAP-style path
-fn normalize_graph_folder_name(name: &str) -> String {
-    match name.to_lowercase().as_str() {
-        "inbox" => "INBOX".to_string(),
-        "sent items" => "Sent".to_string(),
-        "deleted items" => "Trash".to_string(),
-        "drafts" => "Drafts".to_string(),
-        "junk email" => "Junk".to_string(),
-        "archive" => "Archive".to_string(),
-        _ => name.to_string(),
-    }
 }
 
 #[tauri::command]
