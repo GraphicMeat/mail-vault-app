@@ -158,9 +158,9 @@ pub fn sweep_soon(app: &tauri::AppHandle) {
 /// One row per hit, in hit order: the list row read from the hit's own file,
 /// plus `vaultDir`, `snippet` and `matchedIn`. The index knows each filename,
 /// so there is no folder listing; `read_light_at` rescans once only if the file
-/// was renamed since (a flag change). A hit whose file is gone is dropped and
-/// `total` still counts it until the next sweep removes the row: transient,
-/// never a wrong row.
+/// was renamed since (a flag change). A hit whose file is gone, or whose uid now
+/// holds a message with another Message-ID, is dropped and `total` still counts
+/// it until the next sweep: transient, never a wrong row.
 pub fn assemble_rows(root: &Path, account_id: &str, page: &core::query::SearchPage) -> Vec<serde_json::Value> {
     page.hits
         .iter()
@@ -168,6 +168,13 @@ pub fn assemble_rows(root: &Path, account_id: &str, page: &core::query::SearchPa
             let cur = root.join("Maildir").join(account_id).join(&h.vault_dir).join("cur");
             let email = crate::read_light_at(&cur, h.uid, Some(&cur.join(&h.filename)))?;
             let mut row = serde_json::to_value(&email).ok()?;
+            // A UID reissue repair since the last sweep can give this uid to another
+            // message: that row is not this hit. Same parser on both sides, so exact.
+            if let Some(indexed) = &h.message_id {
+                if row.get("messageId").and_then(|v| v.as_str()) != Some(indexed.as_str()) {
+                    return None;
+                }
+            }
             let body = body_of(&row);
             let subject = row.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
             // Names and addresses only: the JSON text around them would match `name` or `address`.

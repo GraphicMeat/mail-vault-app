@@ -2737,6 +2737,10 @@ async fn maildir_repair_generation(
                 warn!("maildir_repair_generation: local index remap failed: {}", e);
             }
         }
+        // Files changed uid in `cur/`: the index still maps the old uids to them.
+        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
+            search_index::nudge(&app_handle, &account_id, &mailbox);
+        }
         Ok(report)
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }

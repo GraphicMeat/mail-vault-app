@@ -46,6 +46,9 @@ pub struct SearchHit {
     pub vault_dir: String,
     pub uid: u32,
     pub filename: String,
+    /// The Message-ID indexed for this uid. Row assembly drops a hit whose file
+    /// now carries another one (a UID reissue repaired since the last sweep).
+    pub message_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -163,12 +166,12 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)? })
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -231,6 +234,7 @@ mod tests {
         let h = |k: &str| m.headers.iter().find(|x| x.get_key().eq_ignore_ascii_case(k)).map(|x| x.get_value());
         let from = h("From").unwrap_or_default();
         Some(IndexDoc {
+            message_id: h("Message-ID"),
             date_utc: h("Date").and_then(|d| mailparse::dateparse(&d).ok()),
             from_addr: from.clone(), from_name: String::new(),
             addrs: vec![from], subject: h("Subject").unwrap_or_default(),
@@ -254,7 +258,7 @@ mod tests {
         for (acct, dir, uid, content) in files {
             let cur = root.join("Maildir").join(acct).join(dir).join("cur");
             std::fs::create_dir_all(&cur).unwrap();
-            std::fs::write(cur.join(format!("{uid}:2,.eml")), content).unwrap();
+            std::fs::write(cur.join(format!("{uid}:2,.eml")), format!("Message-ID: <{acct}.{dir}.{uid}@x.test>\r\n{content}")).unwrap();
         }
         for (a, d) in list_vault_dirs(&root.join("Maildir")) {
             reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true }, &parse, &|| true, &mut |_| {}).unwrap();
@@ -276,6 +280,15 @@ mod tests {
         let (_t, db) = fixture();
         assert_eq!(uids(&db, req("luke", "of luke message 1")), vec![("INBOX".into(), 1)]);
         assert_eq!(uids(&db, req("luke", "voic")), vec![("INBOX".into(), 2)]);
+    }
+
+    #[test]
+    fn hits_carry_the_indexed_message_id() {
+        let (_t, db) = fixture();
+        let g = crate::search_index::lock(&db);
+        let page = search(g.as_ref().unwrap(), &req("luke", "PO 4471")).unwrap();
+        let ids: Vec<Option<&str>> = page.hits.iter().map(|h| h.message_id.as_deref()).collect();
+        assert_eq!(ids, vec![Some("<luke.INBOX.2@x.test>")]);
     }
 
     #[test]

@@ -93,9 +93,9 @@ fn assemble_rows_keeps_hit_order_and_adds_snippet_and_matched_in() {
     }
     let page = SearchPage {
         hits: vec![
-            SearchHit { vault_dir: "Archive".into(), uid: 9, filename: "9:2,S.eml".into() },
-            SearchHit { vault_dir: "INBOX".into(), uid: 3, filename: "3:2,S.eml".into() },
-            SearchHit { vault_dir: "INBOX".into(), uid: 404, filename: "404:2,.eml".into() },
+            SearchHit { vault_dir: "Archive".into(), uid: 9, filename: "9:2,S.eml".into(), message_id: None },
+            SearchHit { vault_dir: "INBOX".into(), uid: 3, filename: "3:2,S.eml".into(), message_id: None },
+            SearchHit { vault_dir: "INBOX".into(), uid: 404, filename: "404:2,.eml".into(), message_id: None },
         ],
         total: 3,
         needles: vec!["budget".into()],
@@ -115,6 +115,23 @@ fn assemble_rows_keeps_hit_order_and_adds_snippet_and_matched_in() {
     let rows = crate::search_index::assemble_rows(root, "acct", &keys);
     assert!(rows.iter().all(|r| r["matchedIn"].as_array().unwrap().is_empty()), "{rows:?}");
     assert!(rows.iter().all(|r| r["snippet"].is_null()));
+}
+
+#[test]
+fn assemble_rows_drops_a_hit_whose_uid_now_holds_another_message() {
+    use mailvault_core::search_index::query::{SearchHit, SearchPage};
+    let tmp = tempfile::tempdir().unwrap();
+    let cur = tmp.path().join("Maildir/acct/INBOX/cur");
+    std::fs::create_dir_all(&cur).unwrap();
+    for (uid, id) in [(5u32, "<reissued@x.test>"), (6, "<six@x.test>")] {
+        std::fs::write(cur.join(format!("{uid}:2,.eml")), format!("From: a@x.test\r\nSubject: Budget {uid}\r\nMessage-ID: {id}\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbudget\r\n")).unwrap();
+    }
+    let hit = |uid: u32, id: &str| SearchHit { vault_dir: "INBOX".into(), uid, filename: format!("{uid}:2,.eml"), message_id: Some(id.into()) };
+    // Indexed before a UID reissue repair gave uid 5 to another message.
+    let page = SearchPage { hits: vec![hit(5, "<indexed@x.test>"), hit(6, "<six@x.test>")], total: 2, needles: vec!["budget".into()] };
+    let rows = crate::search_index::assemble_rows(tmp.path(), "acct", &page);
+    let uids: Vec<u64> = rows.iter().filter_map(|r| r["uid"].as_u64()).collect();
+    assert_eq!(uids, vec![6], "the reissued uid's row is another message: dropped, never shown for this hit");
 }
 
 /// Not a gate. The app parser over 50k ~3 KB multipart files, then what
