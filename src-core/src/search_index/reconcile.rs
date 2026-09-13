@@ -199,16 +199,21 @@ pub fn reconcile_mailbox(
         .map(|(_, r)| r.id)
         .collect();
 
-    if !removals.is_empty() || !renames.is_empty() {
+    // `None` = remove the row, `Some(name)` = rename it. One transaction per
+    // chunk, so a folder emptied of 20k files never holds the lock for all of them.
+    let ops: Vec<(i64, Option<&str>)> =
+        removals.iter().map(|&id| (id, None)).chain(renames.iter().map(|&(id, name)| (id, Some(name)))).collect();
+    for chunk in ops.chunks(BATCH) {
         if !keep_going() {
             stats.interrupted = true;
             return Ok(stats);
         }
         let mut guard = lock(db);
         let conn = same_conn(&mut guard, &db_path)?;
-        apply_removals_and_renames(conn, &removals, &renames).map_err(db_err)?;
-        stats.removed = removals.len();
-        stats.renamed = renames.len();
+        apply_removals_and_renames(conn, chunk).map_err(db_err)?;
+        let removed = chunk.iter().filter(|(_, name)| name.is_none()).count();
+        stats.removed += removed;
+        stats.renamed += chunk.len() - removed;
     }
 
     // Highest uids first: the newest mail becomes searchable soonest.
@@ -256,14 +261,18 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
     rows.collect()
 }
 
-fn apply_removals_and_renames(conn: &mut Connection, removals: &[i64], renames: &[(i64, &str)]) -> rusqlite::Result<()> {
+fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]) -> rusqlite::Result<()> {
     let tx = conn.transaction()?;
-    for &id in removals {
-        delete_fts(&tx, id)?;
-        tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
-    }
-    for &(id, filename) in renames {
-        tx.prepare_cached("UPDATE messages SET filename = ?1 WHERE id = ?2")?.execute(params![filename, id])?;
+    for &(id, rename) in ops {
+        match rename {
+            None => {
+                delete_fts(&tx, id)?;
+                tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
+            }
+            Some(filename) => {
+                tx.prepare_cached("UPDATE messages SET filename = ?1 WHERE id = ?2")?.execute(params![filename, id])?;
+            }
+        }
     }
     tx.commit()
 }
@@ -629,6 +638,39 @@ mod tests {
         let n = AtomicUsize::new(0);
         let s2 = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!(s2.parsed, 20);
+    }
+
+    #[test]
+    fn removals_commit_in_chunks_and_an_interrupt_leaves_the_rest() {
+        let emptied = || {
+            let v = vault();
+            put_many(&v, BATCH as u32 + 10);
+            run(&v, "a1", "INBOX", ON, &AtomicUsize::new(0));
+            for e in std::fs::read_dir(v.root.join("Maildir/a1/INBOX/cur")).unwrap() {
+                std::fs::remove_file(e.unwrap().path()).unwrap();
+            }
+            v
+        };
+        let reconcile = |v: &Vault, keep_going: &dyn Fn() -> bool| {
+            reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &fake_parse, keep_going, &mut |_| {}).unwrap()
+        };
+
+        let v = emptied();
+        let calls = AtomicUsize::new(0);
+        let s = reconcile(&v, &|| { calls.fetch_add(1, Ordering::SeqCst); true });
+        assert_eq!((s.removed, s.interrupted), (BATCH + 10, false));
+        assert_eq!(calls.load(Ordering::SeqCst), 2, "one keep_going check per chunk");
+        assert_eq!(row_count(&v.db), 0);
+
+        let v = emptied();
+        let calls = AtomicUsize::new(0);
+        let s = reconcile(&v, &|| calls.fetch_add(1, Ordering::SeqCst) == 0);
+        assert!(s.interrupted);
+        assert_eq!(s.removed, BATCH, "the first chunk is committed on its own");
+        assert_eq!(row_count(&v.db), 10);
+        let s = reconcile(&v, &|| true);
+        assert_eq!((s.removed, s.interrupted), (10, false));
+        assert_eq!(row_count(&v.db), 0);
     }
 
     #[test]
