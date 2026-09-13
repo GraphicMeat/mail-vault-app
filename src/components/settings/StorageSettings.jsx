@@ -5,6 +5,7 @@ import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { runCleanupRules } from '../../services/cleanupEngine';
 import { ToggleSwitch } from './ToggleSwitch';
+import { SearchIndexSettings } from './SearchIndexSettings';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import {
@@ -375,6 +376,8 @@ export function StorageSettings({ accounts, onUpgrade }) {
           )}
         </div>
       </div>
+
+      <SearchIndexSettings />
 
       {/* Auto-Cleanup Rules */}
       <div data-testid="settings-auto-cleanup" className="settings-section relative overflow-hidden">

@@ -106,7 +106,7 @@ export const useSearchStore = create((set, get) => ({
   isSearching: false,
   // { done, total } while a multi-folder server search is in flight, else null.
   searchProgress: null,
-  // { indexed, total, complete } when the offline index answered the vault
+  // { indexed, total, complete, matched, shown } when the offline index answered the vault
   // half of the last search, null when the scan did.
   searchIndexCoverage: null,
 
@@ -127,7 +127,7 @@ export const useSearchStore = create((set, get) => ({
       return;
     }
 
-    set({ isSearching: true, searchActive: true, searchProgress: null });
+    set({ isSearching: true, searchActive: true, searchProgress: null, searchIndexCoverage: null });
 
     let account = accounts.find(a => a.id === activeAccountId);
     account = await ensureFreshToken(account);

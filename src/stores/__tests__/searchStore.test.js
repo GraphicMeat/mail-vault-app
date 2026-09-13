@@ -425,4 +425,19 @@ describe('the vault half answers from the offline index', () => {
     expect(localFilters.restrictTo).toBeNull();
     expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
   });
+
+  it('never keeps the coverage of a previous query', async () => {
+    localResults = withCoverage([], { indexed: 40, total: 50, complete: false });
+    useSearchStore.setState({ searchQuery: 'Rechnung' });
+    await useSearchStore.getState().performSearch();
+    expect(useSearchStore.getState().searchIndexCoverage).toEqual({ indexed: 40, total: 50, complete: false });
+
+    localFilters = null;
+    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
+      location: 'server', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+    expect(localFilters).toBeNull(); // the vault was never asked
+    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+  });
 });

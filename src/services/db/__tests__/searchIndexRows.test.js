@@ -54,7 +54,7 @@ describe('searchLocalEmails answers from the index', () => {
     expect(rows.map(r => [r._mailbox, r.uid])).toEqual([['Projects/2026', 7], ['INBOX', 3]]);
     expect(rows[0]).toMatchObject({ _accountId: 'acct-1', localId: 'acct-1-Projects/2026-7', isLocal: true, isArchived: true, _origin: 'local_sent', serverDeleted: true, matchedIn: ['body'] });
     expect(rows[0].source).not.toBe('local'); // custodySource decides, not a constant
-    expect(rows.coverage).toEqual({ indexed: 10, total: 12, complete: false });
+    expect(rows.coverage).toEqual({ indexed: 10, total: 12, complete: false, matched: 2, shown: 2 });
     const req = calls.find(([c]) => c === 'vault_search')[1].request;
     expect(req).toMatchObject({ accountId: 'acct-1', query: 'plan', mailboxes: null });
   });
@@ -77,6 +77,15 @@ describe('searchLocalEmails answers from the index', () => {
     };
     const rows = await searchLocalEmails('acct-1', 'old', { mailbox: 'Old Clients', mailboxes });
     expect(rows[0]).toMatchObject({ _mailbox: 'Old Clients', localId: 'acct-1-Old Clients-5' });
+  });
+
+  it('says how many matched when the index capped the rows', async () => {
+    vaultSearchReply = {
+      available: true, total: 1234, indexed: 5000, totalMessages: 5000, complete: true,
+      rows: [{ uid: 9, subject: 'Newest', flags: [], isArchived: false, vaultDir: 'INBOX', matchedIn: ['subject'], snippet: null }],
+    };
+    const rows = await searchLocalEmails('acct-1', 'newest', { mailboxes });
+    expect(rows.coverage).toMatchObject({ matched: 1234, shown: 1 });
   });
 
   it('falls back to scanning the vault when the index is unavailable', async () => {

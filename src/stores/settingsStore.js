@@ -385,6 +385,12 @@ export const useSettingsStore = create(
       setTrackerAlert: (key, info) => set(s => (
         key && info ? { trackerAlerts: { ...s.trackerAlerts, [key]: info } } : s
       )),
+      // Offline search index (app process). Attachments and image text are
+      // premium and only take effect through `effectiveSearchIndexConfig`.
+      searchIndexBodies: true,
+      searchIndexAttachments: true,
+      searchIndexImageText: true,
+      setSearchIndexBodies: (v) => set({ searchIndexBodies: !!v }),
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
       // `key` comes from emailScopeKey(email, mailState). Unresolvable message
@@ -1027,6 +1033,9 @@ export const useSettingsStore = create(
           linkSafetyClickConfirm: true,
           trackerBlockingEnabled: true,
           trackerAlerts: {},
+          searchIndexBodies: true,
+          searchIndexAttachments: true,
+          searchIndexImageText: true,
           cleanupRules: [],
           cleanupRulesDisarmed: false,
           cleanupLastRun: null,

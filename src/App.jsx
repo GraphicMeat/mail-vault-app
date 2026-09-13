@@ -48,6 +48,7 @@ import { usePipelineCoordinator } from './hooks/usePipelineCoordinator';
 import { useBackupScheduler } from './hooks/useBackupScheduler';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useSettingsWindow } from './hooks/useSettingsWindow';
+import { useSearchIndexConfig } from './hooks/useSearchIndexConfig';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RefreshCw, X } from 'lucide-react';
 import * as bulkApi from './services/api';
@@ -394,6 +395,9 @@ function App() {
 
   // Backup scheduler — bridges backup singleton to React lifecycle
   useBackupScheduler();
+
+  // Offline search index: tell the app what to index as settings change
+  useSearchIndexConfig();
 
   // Migration manager — listens for migration progress events and checks for incomplete migrations
   useEffect(() => {

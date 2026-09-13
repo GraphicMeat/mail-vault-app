@@ -125,3 +125,28 @@ describe('searching a folder and everything under it', () => {
     expect(summary.toLowerCase()).toContain('subfolder');
   });
 });
+
+describe('what the offline index could not answer', () => {
+  const capped = () => document.querySelector('[data-testid="search-index-capped"]');
+  const building = () => document.querySelector('[data-testid="search-index-building"]');
+
+  it('says only the newest rows are shown when the index capped them', () => {
+    searchState.searchIndexCoverage = { indexed: 900, total: 900, complete: true, matched: 1234, shown: 500 };
+    open();
+    expect(capped().textContent).toContain('500');
+    expect(capped().textContent).toContain('1234');
+    expect(building()).toBe(null);
+  });
+
+  it('says nothing when every match is shown', () => {
+    searchState.searchIndexCoverage = { indexed: 900, total: 900, complete: true, matched: 12, shown: 12 };
+    open();
+    expect(capped()).toBe(null);
+  });
+
+  it('says how far the index is built while it is still catching up', () => {
+    searchState.searchIndexCoverage = { indexed: 45, total: 100, complete: false, matched: 3, shown: 3 };
+    open();
+    expect(building().textContent).toContain('45%');
+  });
+});

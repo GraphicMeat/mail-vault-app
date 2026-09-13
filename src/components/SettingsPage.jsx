@@ -154,6 +154,11 @@ const settingSearchGroups = [
     ['settings.accounts.accountVisible', 'account visible visibility hidden hide'],
     ['settings.accounts.removeAccount', 'account remove delete disconnect'],
   ] },
+  // Storage has no sections to switch: a result opens the page.
+  { id: 'storage', section: 'search-index', sectionKey: 'settings.searchIndex.title', settings: [
+    ['settings.searchIndex.bodies', 'search index body bodies message text words find offline'],
+    ['settings.searchIndex.rebuild', 'search index rebuild reindex attachments pdf ocr'],
+  ] },
 ];
 
 const normalizeTab = tab => tab === 'general' ? 'appearance' : tab === 'ai' ? 'cleanup' : tab;

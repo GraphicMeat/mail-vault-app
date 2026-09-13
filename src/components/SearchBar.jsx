@@ -41,6 +41,7 @@ export function SearchBar({ autoFocus = false }) {
   const searchActive = useSearchStore(s => s.searchActive);
   const isSearching = useSearchStore(s => s.isSearching);
   const searchProgress = useSearchStore(s => s.searchProgress);
+  const searchIndexCoverage = useSearchStore(s => s.searchIndexCoverage);
   const searchResults = useSearchStore(s => s.searchResults);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
@@ -597,6 +598,17 @@ export function SearchBar({ autoFocus = false }) {
                 <span className="ml-2 text-[10px]">
                   {t('search.localServerCounts', { local: searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length, server: searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length })}
                 </span>
+              )}
+              {/* The index caps its rows; a silent cap reads as "that's all there is". */}
+              {searchIndexCoverage?.matched > searchIndexCoverage?.shown && (
+                <div className="text-xs text-mail-text-muted" data-testid="search-index-capped">
+                  {t('search.indexShowingNewest', { shown: searchIndexCoverage.shown, matched: searchIndexCoverage.matched })}
+                </div>
+              )}
+              {searchIndexCoverage && !searchIndexCoverage.complete && searchIndexCoverage.total > 0 && (
+                <div className="text-xs text-mail-text-muted" data-testid="search-index-building">
+                  {t('search.indexBuilding', { percent: Math.floor((100 * searchIndexCoverage.indexed) / searchIndexCoverage.total) })}
+                </div>
               )}
             </>
           )}

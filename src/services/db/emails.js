@@ -705,8 +705,9 @@ const toUnixSeconds = (d) => (d ? Math.floor(new Date(d).getTime() / 1000) : nul
  * the same decoration `getLocalEmails` gives vault rows: the SERVER path the
  * sanitised directory came from, provenance, and custody off one local-index
  * read per mailbox. The array carries a non-enumerable
- * `coverage = { indexed, total, complete }` so the UI can say how much of the
- * vault the answer covers; scan results have none.
+ * `coverage = { indexed, total, complete, matched, shown }` so the UI can say how
+ * much of the vault the answer covers and whether rows were capped; scan results
+ * have none.
  */
 export async function searchLocalEmails(accountId, query, filters = {}) {
   await initDB();
@@ -746,7 +747,8 @@ export async function searchLocalEmails(accountId, query, filters = {}) {
     rows.push({ ...stamped, isLocal: true, source: custodySource(stamped) });
   }
   Object.defineProperty(rows, 'coverage', {
-    value: { indexed: reply.indexed, total: reply.totalMessages, complete: !!reply.complete },
+    // `matched` counts every hit; the index returns at most 500 rows of them.
+    value: { indexed: reply.indexed, total: reply.totalMessages, complete: !!reply.complete, matched: reply.total, shown: rows.length },
     enumerable: false,
   });
   return rows;
