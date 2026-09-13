@@ -72,6 +72,19 @@ pub fn uid_file_map(cur_dir: &Path) -> std::collections::HashMap<u32, PathBuf> {
     map
 }
 
+/// The path an earlier `uid_file_map` listed for `uid`, if it is still there.
+/// A flag change renames the file after the listing is taken, so a listed
+/// path that is gone gets one `find_by_uid` rescan before the uid counts as
+/// absent. A caller never looks up uids the listing did not have: that is
+/// what keeps a whole selection linear.
+pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<PathBuf> {
+    if listed.exists() {
+        Some(listed.to_path_buf())
+    } else {
+        find_by_uid(cur_dir, uid)
+    }
+}
+
 /// List all UIDs in a Maildir/cur directory.
 pub fn list_uids(data_dir: &Path, account_id: &str, mailbox: &str) -> Vec<u32> {
     let dir = cur_path(data_dir, account_id, mailbox);
@@ -656,6 +669,57 @@ pub struct GenerationRepair {
 /// not, and neither side is worth rewriting for this.
 pub fn normalize_message_id(raw: &str) -> String {
     raw.trim().trim_start_matches('<').trim_end_matches('>').trim().to_string()
+}
+
+/// Which of `uids` the vault holds, split three ways: verified, missing,
+/// mismatched.
+///
+/// A file under the uid's name is the weakest of proofs: uids are per-mailbox
+/// and a recreated mailbox reissues them, so the file sitting at uid 12 may be
+/// a different message than the one the caller is about to delete from the
+/// server. Where the caller knows what Message-ID it expects, that is checked
+/// and a disagreement lands in `mismatched` - never in `verified`.
+///
+/// The absence of proof is not proof of a swap: a uid with no expected id, or
+/// a file whose header carries none, verifies on presence alone.
+pub fn verify_copies(
+    cur_dir: &Path,
+    uids: &[u32],
+    expected_ids: Option<&HashMap<u32, String>>,
+) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    verify_listed(cur_dir, &uid_file_map(cur_dir), uids, expected_ids)
+}
+
+/// `verify_copies` against a listing taken earlier. A uid the listing lacks
+/// is missing: a copy written since is only unproven, and the caller keeps
+/// the server's.
+fn verify_listed(
+    cur_dir: &Path,
+    listing: &HashMap<u32, PathBuf>,
+    uids: &[u32],
+    expected_ids: Option<&HashMap<u32, String>>,
+) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+    let mut verified: Vec<u32> = Vec::new();
+    let mut missing: Vec<u32> = Vec::new();
+    let mut mismatched: Vec<u32> = Vec::new();
+
+    for uid in uids {
+        let Some(path) = listing.get(uid).and_then(|listed| find_listed_by_uid(cur_dir, *uid, listed)) else {
+            missing.push(*uid);
+            continue;
+        };
+        let expected = expected_ids
+            .and_then(|m| m.get(uid))
+            .map(|id| normalize_message_id(id))
+            .filter(|id| !id.is_empty());
+        // read_message_id already returns the id normalized the same way.
+        match (expected, read_message_id(&path)) {
+            (Some(want), Some(got)) if want != got => mismatched.push(*uid),
+            _ => verified.push(*uid),
+        }
+    }
+
+    (verified, missing, mismatched)
 }
 
 /// The header section of an RFC 5322 message — everything before the first
@@ -1532,5 +1596,204 @@ mod tests {
         assert_eq!(hits, n as usize);
         assert_eq!(slow_hits, sample.len());
         println!("n={n} single_pass={single_pass:?} per_uid_rescan={per_uid:?} projected_old_total={:?}", per_uid * n);
+    }
+
+    #[test]
+    fn a_listed_path_still_on_disk_is_used_as_is() {
+        let tmp = tempfile::tempdir().unwrap();
+        let listed = tmp.path().join("7:2,S.eml");
+        fs::write(&listed, b"x").unwrap();
+        assert_eq!(find_listed_by_uid(tmp.path(), 7, &listed), Some(listed));
+    }
+
+    #[test]
+    fn a_file_renamed_after_the_listing_is_found_again() {
+        // A flag change renames the file between the listing and the lookup.
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("70:2,S.eml"), b"other uid").unwrap();
+        fs::write(tmp.path().join("7:2,FS.eml"), b"x").unwrap();
+        assert_eq!(
+            find_listed_by_uid(tmp.path(), 7, &tmp.path().join("7:2,S.eml")),
+            Some(tmp.path().join("7:2,FS.eml")),
+        );
+    }
+
+    #[test]
+    fn a_file_deleted_after_the_listing_is_gone() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("70:2,S.eml"), b"other uid").unwrap();
+        assert_eq!(find_listed_by_uid(tmp.path(), 7, &tmp.path().join("7:2,S.eml")), None);
+    }
+
+    /// A vault file, named the way build_maildir_filename names them.
+    fn write_vault_msg(dir: &Path, name: &str, message_id: Option<&str>) {
+        let head = match message_id {
+            Some(id) => format!("Message-ID: {}\r\n", id),
+            None => String::new(),
+        };
+        fs::write(dir.join(name), format!("{}Subject: {}\r\n\r\nbody\r\n", head, name)).unwrap();
+    }
+
+    #[test]
+    fn a_file_whose_message_id_matches_is_verified() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
+
+        let mut expected = HashMap::new();
+        // The caller's angle brackets must not decide the answer.
+        expected.insert(12u32, "a@host.test".to_string());
+
+        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], Some(&expected));
+        assert_eq!(verified, vec![12]);
+        assert!(missing.is_empty());
+        assert!(mismatched.is_empty());
+    }
+
+    #[test]
+    fn a_file_holding_another_message_is_never_verified() {
+        // The uid is present, so the old presence-only check called this proof
+        // and the caller deleted the server's only copy of a@host.test.
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), "12:2,S", Some("<somethingelse@host.test>"));
+
+        let mut expected = HashMap::new();
+        expected.insert(12u32, "<a@host.test>".to_string());
+
+        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], Some(&expected));
+        assert!(verified.is_empty());
+        assert!(missing.is_empty());
+        assert_eq!(mismatched, vec![12]);
+    }
+
+    #[test]
+    fn a_uid_with_no_file_is_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], None);
+        assert!(verified.is_empty());
+        assert_eq!(missing, vec![12]);
+        assert!(mismatched.is_empty());
+    }
+
+    #[test]
+    fn absence_of_proof_is_not_proof_of_a_swap() {
+        // No expected id, and a file that carries none: presence alone verifies,
+        // which is what every caller before this change relied on.
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), "13:2,S", None);
+
+        let mut expected = HashMap::new();
+        expected.insert(13u32, "<a@host.test>".to_string());
+
+        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], Some(&expected));
+        assert_eq!(verified, vec![12, 13]);
+        assert!(missing.is_empty());
+        assert!(mismatched.is_empty());
+    }
+
+    #[test]
+    fn a_file_renamed_after_the_listing_is_still_checked_against_its_message_id() {
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), "12:2,FS", Some("<somethingelse@host.test>"));
+        let listing = HashMap::from([(12u32, tmp.path().join("12:2,S"))]);
+        let expected = HashMap::from([(12u32, "<a@host.test>".to_string())]);
+
+        let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], Some(&expected));
+        assert!(verified.is_empty(), "a stale listed path must not verify on presence alone");
+        assert!(missing.is_empty());
+        assert_eq!(mismatched, vec![12]);
+    }
+
+    #[test]
+    fn a_file_deleted_after_the_listing_is_missing_not_verified() {
+        let tmp = tempfile::tempdir().unwrap();
+        let listing = HashMap::from([(12u32, tmp.path().join("12:2,S"))]);
+
+        let (verified, missing, mismatched) = verify_listed(tmp.path(), &listing, &[12], None);
+        assert!(verified.is_empty(), "the caller deletes the server copy of whatever verifies");
+        assert_eq!(missing, vec![12]);
+        assert!(mismatched.is_empty());
+    }
+
+    /// src-tauri's `verify_copies` before the one-pass listing: `find_by_uid`
+    /// per uid.
+    fn verify_copies_per_uid(
+        cur_dir: &Path,
+        uids: &[u32],
+        expected_ids: Option<&HashMap<u32, String>>,
+    ) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
+        let (mut verified, mut missing, mut mismatched) = (Vec::new(), Vec::new(), Vec::new());
+        for uid in uids {
+            let Some(path) = find_by_uid(cur_dir, *uid) else {
+                missing.push(*uid);
+                continue;
+            };
+            let expected = expected_ids
+                .and_then(|m| m.get(uid))
+                .map(|id| normalize_message_id(id))
+                .filter(|id| !id.is_empty());
+            match (expected, read_message_id(&path)) {
+                (Some(want), Some(got)) if want != got => mismatched.push(*uid),
+                _ => verified.push(*uid),
+            }
+        }
+        (verified, missing, mismatched)
+    }
+
+    #[test]
+    fn verify_copies_agrees_with_the_per_uid_lookup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        write_vault_msg(cur, "1:2,S.eml", Some("<one@host.test>"));
+        write_vault_msg(cur, "10:2,.eml", Some("<ten@host.test>"));
+        write_vault_msg(cur, "100:2,F.eml", Some("<swapped@host.test>"));
+        write_vault_msg(cur, "11:2,S.eml", None);
+        write_vault_msg(cur, "3:2,S.eml", Some("<three@host.test>"));
+        write_vault_msg(cur, "3:2,FS.eml", Some("<three-dup@host.test>"));
+        // Not vault rows for find_by_uid, so not for verify either.
+        write_vault_msg(cur, "07:2,S.eml", Some("<seven@host.test>"));
+        write_vault_msg(cur, "9.eml", Some("<nine@host.test>"));
+        write_vault_msg(cur, "20_S.eml", Some("<twenty@host.test>"));
+
+        let expected = HashMap::from([
+            (1u32, "one@host.test".to_string()),
+            (100, "<hundred@host.test>".to_string()),
+            (11, "<eleven@host.test>".to_string()),
+            (3, "<three@host.test>".to_string()),
+            (7, "<seven@host.test>".to_string()),
+            (10, "   ".to_string()),
+        ]);
+        let uids = [1u32, 10, 100, 11, 3, 7, 9, 20, 12, 1];
+
+        for ids in [None, Some(&expected)] {
+            assert_eq!(verify_copies(cur, &uids, ids), verify_copies_per_uid(cur, &uids, ids));
+        }
+    }
+
+    /// Not a gate. `cargo test -p mailvault-core --release --lib bench_verify_copies -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_verify_copies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        let n = 20_000u32;
+        for uid in 1..=n {
+            fs::write(cur.join(format!("{uid}:2,S.eml")), format!("Message-ID: <{uid}@host.test>\r\n\r\nx")).unwrap();
+        }
+        let uids: Vec<u32> = (1..=n).collect();
+        let expected: HashMap<u32, String> = uids.iter().map(|u| (*u, format!("<{u}@host.test>"))).collect();
+
+        let t = std::time::Instant::now();
+        let (verified, _, _) = verify_copies(cur, &uids, Some(&expected));
+        let one_pass = t.elapsed();
+
+        let sample: Vec<u32> = uids.iter().step_by(100).copied().collect(); // 200 uids
+        let t = std::time::Instant::now();
+        let (slow_verified, _, _) = verify_copies_per_uid(cur, &sample, Some(&expected));
+        let per_uid = t.elapsed() / sample.len() as u32;
+
+        assert_eq!(verified.len(), n as usize);
+        assert_eq!(slow_verified.len(), sample.len());
+        println!("n={n} one_pass={one_pass:?} per_uid={per_uid:?} projected_old_total={:?}", per_uid * n);
     }
 }

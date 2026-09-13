@@ -2847,44 +2847,6 @@ async fn bulk_delete_emails(
 
 // ── Verify archived emails on disk ──────────────────────────────────────────
 
-/// Which of `uids` the vault holds, split three ways.
-///
-/// A file under the uid's name is the weakest of proofs: uids are per-mailbox
-/// and a recreated mailbox reissues them, so the file sitting at uid 12 may be
-/// a different message than the one the caller is about to delete from the
-/// server. Where the caller knows what Message-ID it expects, that is checked
-/// and a disagreement lands in `mismatched` - never in `verified`.
-///
-/// The absence of proof is not proof of a swap: a uid with no expected id, or
-/// a file whose header carries none, verifies on presence alone.
-pub fn verify_copies(
-    cur_dir: &Path,
-    uids: &[u32],
-    expected_ids: Option<&std::collections::HashMap<u32, String>>,
-) -> (Vec<u32>, Vec<u32>, Vec<u32>) {
-    let mut verified: Vec<u32> = Vec::new();
-    let mut missing: Vec<u32> = Vec::new();
-    let mut mismatched: Vec<u32> = Vec::new();
-
-    for uid in uids {
-        let Some(path) = find_file_by_uid(cur_dir, *uid) else {
-            missing.push(*uid);
-            continue;
-        };
-        let expected = expected_ids
-            .and_then(|m| m.get(uid))
-            .map(|id| mailvault_core::maildir::normalize_message_id(id))
-            .filter(|id| !id.is_empty());
-        // read_message_id already returns the id normalized the same way.
-        match (expected, mailvault_core::maildir::read_message_id(&path)) {
-            (Some(want), Some(got)) if want != got => mismatched.push(*uid),
-            _ => verified.push(*uid),
-        }
-    }
-
-    (verified, missing, mismatched)
-}
-
 #[tauri::command]
 async fn verify_archived_emails(
     app_handle: tauri::AppHandle,
@@ -2896,7 +2858,8 @@ async fn verify_archived_emails(
     tokio::task::spawn_blocking(move || {
         let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
 
-        let (verified, missing, mismatched) = verify_copies(&cur_dir, &uids, expected_ids.as_ref());
+        let (verified, missing, mismatched) =
+            mailvault_core::maildir::verify_copies(&cur_dir, &uids, expected_ids.as_ref());
 
         info!(
             "verify_archived_emails: {}/{} verified, {} missing, {} mismatched",
@@ -6471,9 +6434,9 @@ mod purge_tests {
 
 #[cfg(test)]
 mod verify_copies_tests {
-    use super::*;
     use std::collections::HashMap;
 
+    // The verify_copies cases live with it in mailvault_core::maildir.
     #[test]
     fn expected_ids_cross_the_ipc_boundary_as_string_keys() {
         // The engine builds `{ [uid]: messageId }`, and JSON object keys are
@@ -6485,76 +6448,6 @@ mod verify_copies_tests {
         let map = map.unwrap();
         assert_eq!(map.get(&12).map(String::as_str), Some("<a@host.test>"));
         assert_eq!(map.get(&7).map(String::as_str), Some("b@host.test"));
-    }
-
-    /// A vault file, named the way build_maildir_filename names them.
-    fn write(dir: &Path, uid: u32, message_id: Option<&str>) {
-        let head = match message_id {
-            Some(id) => format!("Message-ID: {}\r\n", id),
-            None => String::new(),
-        };
-        fs::write(
-            dir.join(format!("{}:2,S", uid)),
-            format!("{}Subject: msg {}\r\n\r\nbody\r\n", head, uid),
-        )
-        .unwrap();
-    }
-
-    #[test]
-    fn a_file_whose_message_id_matches_is_verified() {
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), 12, Some("<a@host.test>"));
-
-        let mut expected = HashMap::new();
-        // The caller's angle brackets must not decide the answer.
-        expected.insert(12u32, "a@host.test".to_string());
-
-        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], Some(&expected));
-        assert_eq!(verified, vec![12]);
-        assert!(missing.is_empty());
-        assert!(mismatched.is_empty());
-    }
-
-    #[test]
-    fn a_file_holding_another_message_is_never_verified() {
-        // The uid is present, so the old presence-only check called this proof
-        // and the caller deleted the server's only copy of a@host.test.
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), 12, Some("<somethingelse@host.test>"));
-
-        let mut expected = HashMap::new();
-        expected.insert(12u32, "<a@host.test>".to_string());
-
-        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], Some(&expected));
-        assert!(verified.is_empty());
-        assert!(missing.is_empty());
-        assert_eq!(mismatched, vec![12]);
-    }
-
-    #[test]
-    fn a_uid_with_no_file_is_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12], None);
-        assert!(verified.is_empty());
-        assert_eq!(missing, vec![12]);
-        assert!(mismatched.is_empty());
-    }
-
-    #[test]
-    fn absence_of_proof_is_not_proof_of_a_swap() {
-        // No expected id, and a file that carries none: presence alone verifies,
-        // which is what every caller before this change relied on.
-        let tmp = tempfile::tempdir().unwrap();
-        write(tmp.path(), 12, Some("<a@host.test>"));
-        write(tmp.path(), 13, None);
-
-        let mut expected = HashMap::new();
-        expected.insert(13u32, "<a@host.test>".to_string());
-
-        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], Some(&expected));
-        assert_eq!(verified, vec![12, 13]);
-        assert!(missing.is_empty());
-        assert!(mismatched.is_empty());
     }
 }
 
