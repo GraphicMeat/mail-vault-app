@@ -127,6 +127,44 @@ fn search_index_status_is_available_during_the_first_build_but_search_is_not() {
     assert_eq!(status()["available"], true);
 }
 
+#[test]
+fn vault_rows_reads_flags_off_the_current_filename_and_skips_unindexed_uids() {
+    use mailvault_core::search_index::{db, lock};
+    let tmp = tempfile::tempdir().unwrap();
+    let st = crate::search_index::SearchIndexState::default();
+    assert!(crate::search_index::rows_reply(&st, "acct", "INBOX", &[3]).is_empty(), "closed: nothing, the caller reads the files");
+
+    *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
+    {
+        let guard = lock(&st.db);
+        let conn = guard.as_ref().unwrap();
+        // The row was parsed while the file was unread and unarchived; it has been renamed since.
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
+             VALUES ('acct', 'INBOX', 3, '3:2,AS.eml', 1, 1, 1, 1, '{\"uid\":3,\"subject\":\"Budget\",\"isArchived\":false,\"hasAttachments\":true}')",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state, row_json) \
+             VALUES ('acct', 'Projects_2026', 5, '5:2,.eml', 1, 1, 1, 1, '{\"uid\":5,\"subject\":\"Nested\"}')",
+            [],
+        ).unwrap();
+    }
+    let rows = crate::search_index::rows_reply(&st, "acct", "INBOX", &[4, 3]);
+    assert_eq!(rows.len(), 1, "uid 4 is not indexed: left to the file path");
+    assert_eq!(rows[0]["uid"], 3);
+    assert_eq!(rows[0]["subject"], "Budget");
+    assert_eq!(rows[0]["hasAttachments"], true);
+    assert_eq!(rows[0]["isArchived"], true, "from the current name, not the parse-time value");
+    let flags: Vec<String> = rows[0]["flags"].as_array().unwrap().iter().map(|f| f.as_str().unwrap().to_string()).collect();
+    assert!(flags.iter().any(|f| f == "\\Seen") && flags.iter().any(|f| f == "archived"), "{flags:?}");
+    // The mailbox argument is the server path; the index keys by the sanitized dir.
+    let nested = crate::search_index::rows_reply(&st, "acct", "Projects/2026", &[5]);
+    assert_eq!(nested.len(), 1);
+    assert_eq!(nested[0]["isArchived"], false);
+    assert_eq!(nested[0]["flags"], serde_json::json!([]));
+}
+
 /// Not a gate. The app parser over 50k ~3 KB multipart files, then what
 /// `vault_search` does per query (`search`, then `assemble_rows`), on a warm
 /// page cache (the files were just written). On the mini (a release test binary

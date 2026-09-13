@@ -842,8 +842,8 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'maildir_set_flags': { const row = find({ accountId, mailbox, uid: args.uid }); if (row) row.vaultFlags = args.flags || row.vaultFlags || []; return null; }
       case 'maildir_delete': { const row = find({ accountId, mailbox, uid: args.uid }); if (row) row.vaultPresent = false; const draftCleanup = mailbox === 'Drafts' || row?.flags?.includes('draft') || row?.vaultFlags?.includes('draft'); emit('demo:state', { type: draftCleanup ? 'draft-deleted' : 'vault-delete', id: row?.id }); return { success: true, simulated: true }; }
       case 'maildir_delete_many': { const rows = (args.uids || []).map(uid => find({ accountId, mailbox, uid })).filter(Boolean); rows.forEach(row => { row.vaultPresent = false; }); emit('demo:state', { type: 'vault-delete-many' }); return { removed: rows.length, simulated: true }; }
-      case 'maildir_read_archived_cached': case 'maildir_read_archived': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.vaultPresent ? clone(row) : null; }
-      case 'maildir_save_archived_cache': case 'maildir_clear_cache': return { success: true, simulated: true };
+      case 'maildir_clear_cache': return { success: true, simulated: true };
+      case 'vault_rows': return (args.uids || []).map(uid => find({ accountId, mailbox, uid })).filter(row => row?.vaultPresent).map(row => ({ ...header(row), uid: row.uid, flags: row.vaultFlags || row.flags || [], isArchived: true }));
       case 'local_index_remove': return { removed: 1, simulated: true };
       case 'custody_status': return { available: true, error: null, path: null, simulated: true };
       case 'verify_archived_emails': {

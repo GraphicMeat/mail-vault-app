@@ -3125,82 +3125,6 @@ fn maildir_exists(
     Ok(find_file_by_uid(&cur_dir, uid).is_some())
 }
 
-/// Read archived email headers from cache file. Returns empty vec on cache miss.
-/// Cache is valid when UID count matches. This is a fast read-only operation.
-#[tauri::command]
-async fn maildir_read_archived_cached(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    expected_count: u32,
-) -> Result<Vec<LightEmail>, String> {
-    tokio::task::spawn_blocking(move || {
-        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-        let cache_path = cur_dir.parent()
-            .ok_or_else(|| "No parent dir".to_string())?
-            .join("archived_headers.json");
-
-        if !cache_path.exists() {
-            info!("maildir_read_archived_cached: no cache file, returning empty");
-            return Ok(Vec::new());
-        }
-
-        let raw = fs::read_to_string(&cache_path)
-            .map_err(|e| format!("Failed to read cache: {}", e))?;
-
-        #[derive(Deserialize)]
-        struct CacheFile {
-            uid_count: usize,
-            emails: Vec<LightEmail>,
-        }
-
-        match serde_json::from_str::<CacheFile>(&raw) {
-            Ok(cached) if cached.uid_count == expected_count as usize => {
-                info!("maildir_read_archived_cached: cache hit, {} emails", cached.emails.len());
-                Ok(cached.emails)
-            }
-            Ok(cached) => {
-                info!("maildir_read_archived_cached: cache stale ({} vs {})", cached.uid_count, expected_count);
-                Ok(Vec::new())
-            }
-            Err(_) => {
-                info!("maildir_read_archived_cached: cache corrupt, returning empty");
-                Ok(Vec::new())
-            }
-        }
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Save archived email headers to cache file for instant subsequent loads.
-/// Called after batch loading completes so the next load is instant.
-#[tauri::command]
-async fn maildir_save_archived_cache(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    emails: Vec<LightEmail>,
-) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-        let cache_path = cur_dir.parent()
-            .ok_or_else(|| "No parent dir".to_string())?
-            .join("archived_headers.json");
-
-        #[derive(Serialize)]
-        struct CacheFile<'a> {
-            uid_count: usize,
-            emails: &'a [LightEmail],
-        }
-        let cache = CacheFile { uid_count: emails.len(), emails: &emails };
-        let json = serde_json::to_string(&cache)
-            .map_err(|e| format!("JSON serialize error: {}", e))?;
-        fs::write(&cache_path, json)
-            .map_err(|e| format!("Failed to write cache: {}", e))?;
-        info!("maildir_save_archived_cache: saved {} emails to cache", emails.len());
-        Ok(())
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
 #[tauri::command]
 async fn maildir_list(
     app_handle: tauri::AppHandle,
@@ -5149,8 +5073,6 @@ fn main() {
             maildir_read,
             maildir_read_light,
             maildir_read_light_batch,
-            maildir_read_archived_cached,
-            maildir_save_archived_cache,
             maildir_read_attachment,
             cache_attachment,
             cached_attachment_path,
@@ -5261,7 +5183,7 @@ fn main() {
             daemon_rpc,
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset,
             search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild,
-            search_index::vault_search
+            search_index::vault_search, search_index::vault_rows
         ])
         .setup(|app| {
             app.state::<insights::InsightsSnapshots>().start_cleanup();

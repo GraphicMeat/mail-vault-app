@@ -544,7 +544,7 @@ export async function appendLocalIndex(accountId, mailbox, entries) {
 
 /**
  * Every durable copy of a message's read state, in one call: the vault file
- * name and its external-mirror copy, local-index.json, the header sidecar.
+ * name and its external-mirror copy, the custody entry, the header sidecar.
  * `changes` carry each message's full IMAP flag list. Rust does nothing for a
  * message the vault does not hold and says so in the counts it returns.
  */

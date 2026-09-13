@@ -464,6 +464,45 @@ pub(crate) fn search_reply(st: &SearchIndexState, request: &core::query::SearchR
     }))
 }
 
+/// The index's list rows for `uids` of one folder: `row_json` (headers,
+/// attachments list, no body) with `flags` and `isArchived` read off the
+/// CURRENT filename, so a flag rename since the last sweep is not stale here.
+/// Only uids the index holds, in request order; the caller reads the rest
+/// from their files. Empty while the index is closed. Replaces the
+/// archived-headers cache file, which was these rows with a second copy of
+/// the body text.
+#[tauri::command]
+pub async fn vault_rows(app: tauri::AppHandle, account_id: String, mailbox: String, uids: Vec<u32>) -> Result<Vec<serde_json::Value>, String> {
+    off_main(app, move |st| rows_reply(st, &account_id, &mailbox, &uids)).await
+}
+
+pub(crate) fn rows_reply(st: &SearchIndexState, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<serde_json::Value> {
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Vec::new() };
+    let vault_dir = core::text::vault_dir_name(mailbox);
+    let mut stmt = match conn.prepare_cached("SELECT filename, row_json FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3") {
+        Ok(s) => s,
+        Err(e) => {
+            warn!("vault_rows: {e}");
+            return Vec::new();
+        }
+    };
+    uids.iter()
+        .filter_map(|uid| {
+            let (filename, row_json): (String, String) = stmt
+                .query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get(0)?, r.get(1)?)))
+                .ok()?;
+            let mut row: serde_json::Value = serde_json::from_str(&row_json).ok()?;
+            let flags = crate::parse_flags_from_filename(&filename);
+            let obj = row.as_object_mut()?;
+            obj.insert("uid".into(), (*uid).into());
+            obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
+            obj.insert("flags".into(), serde_json::json!(flags));
+            Some(row)
+        })
+        .collect()
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[allow(dead_code)] // attachments and image_text are read from phase 3 on

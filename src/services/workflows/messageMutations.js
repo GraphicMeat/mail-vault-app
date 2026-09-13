@@ -59,7 +59,7 @@ export async function reloadListInView() {
 }
 
 
-// One message as local-index.json stores it. `local_index_append` upserts by
+// One message as the custody store keeps it. `local_index_append` upserts by
 // uid, so this doubles as the shape any later writer has to preserve — see
 // markServerDeleted, which re-appends an entry to add one field.
 export function indexEntryFor(email, extra = {}) {
@@ -146,7 +146,7 @@ export async function saveEmailLocally(uid) {
         await api.appendLocalIndex(accountId, mailbox, [indexEntryFor(emailData)]);
       }
     } catch (e) {
-      console.warn('[mailStore] Failed to update local-index.json:', e);
+      console.warn('[mailStore] Failed to update the custody entry:', e);
     }
 
     if (!isUnified) {
@@ -395,7 +395,7 @@ export async function removeLocalEmail(uid) {
   try {
     await api.removeFromLocalIndex(accountId, mailbox, uid);
   } catch (e) {
-    console.warn('[mailStore] Failed to remove from local-index.json:', e);
+    console.warn('[mailStore] Failed to remove the custody entry:', e);
   }
 
   const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
@@ -962,7 +962,7 @@ function _mapLocalFlags(localEmails, matches, map) {
 //
 // One Rust call lands it on every copy the vault keeps: the Maildir file name
 // (which restore and the external mirror read the flags off), the mirror's
-// copy, local-index.json (which the unified list reads a vault row back from)
+// copy, the custody entry (which the unified list reads a vault row back from)
 // and the header sidecar (which the next repaint from cache reads). Each of
 // those used to be written by a different path or by none — a message marked
 // read here restored to a new server as unread, a vault row rebuilt from its
@@ -1771,7 +1771,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   get().updateSortedEmails();
 
   // ── UIDVALIDITY guard ──
-  // Neither the vault nor local-index.json carries a UIDVALIDITY stamp. After
+  // Neither the vault nor the custody store carries a UIDVALIDITY stamp. After
   // a server-side UID reissue (the change-server flow, or one the server
   // initiates on its own), a uid this mailbox holds for a SERVER delete can
   // now name an unrelated message: `t.uid` at the server-delete call below

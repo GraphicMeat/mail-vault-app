@@ -15,7 +15,7 @@
  * So gold now requires evidence, and there are exactly three kinds:
  *
  *   1. the message was created here and never had a server copy — a staged
- *      send or a local draft, recorded in local-index.json as `local_sent` /
+ *      send or a local draft, recorded in the custody store as `local_sent` /
  *      `local_draft` (`_origin`), or still in flight as `_localStaged`;
  *   2. this app deleted the server copy — `applyServerRemoval` stamps
  *      `serverDeleted` onto the vault's index entry, so the claim survives a
