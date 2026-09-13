@@ -557,13 +557,26 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     return (
       <div
         data-testid="email-viewer-loading"
+        role="status"
         className="flex-1 flex flex-col items-center justify-center gap-3 bg-mail-bg h-full min-h-0"
       >
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-          className="w-8 h-8 border-2 border-mail-accent border-t-transparent rounded-full"
-        />
+        <svg
+          className="email-viewer-spinner w-8 h-8"
+          viewBox="0 0 32 32"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle cx="16" cy="16" r="13" stroke="var(--mail-border)" strokeWidth="2" />
+          <circle
+            cx="16"
+            cy="16"
+            r="13"
+            stroke="var(--mail-accent)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray="54 82"
+          />
+        </svg>
         <p className="text-sm text-mail-text-muted">{t('viewer.loadingMessage')}</p>
       </div>
     );

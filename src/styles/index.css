@@ -851,6 +851,16 @@ input[type="range"]::-moz-range-thumb:hover {
   100% { transform: scale(1);    opacity: 1; }
 }
 
+.email-viewer-spinner {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: email-viewer-spinner 1s linear infinite;
+}
+
+@keyframes email-viewer-spinner {
+  to { transform: rotate(360deg); }
+}
+
 /* Reduce motion.
  *
  * framer-motion is covered by <MotionConfig reducedMotion="user"> in main.jsx;
@@ -868,6 +878,7 @@ input[type="range"]::-moz-range-thumb:hover {
   }
 
   .animate-spin,
+  .email-viewer-spinner,
   .animate-pulse,
   .animate-pulse-soft {
     animation-duration: 1.5s !important;
