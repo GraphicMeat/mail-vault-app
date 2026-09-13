@@ -1152,89 +1152,117 @@ async fn run_graph_backup(
             .map_err(|e| format!("folder listing panicked: {}", e))?
         };
 
-        // Paginate through all messages to find missing ones
+        // List the whole folder before numbering any of it. The uid a message
+        // is filed under comes from the ledger the app keeps, never from where
+        // the message sits in this listing: Graph lists newest first, so one
+        // arrival moves every position, and filing by position put the oldest
+        // message under the number the ledger gives the new one. One call for
+        // the folder also means one read of the vault and one ledger write.
+        let mut listed: Vec<crate::graph::GraphMessage> = Vec::new();
         let mut skip = 0u32;
         let page_size = 100u32;
-        let mut uid_counter = 0u32;
-
         loop {
             if cancel.load(Ordering::Relaxed) {
                 break;
             }
-
             let (messages, next_link) = client.list_messages(&folder.id, page_size, skip).await?;
-            if messages.is_empty() {
-                break;
-            }
-
-            for msg in &messages {
-                uid_counter += 1;
-                if local_uids.contains(&uid_counter) {
-                    continue;
-                }
-
-                // Fetch MIME content and store to app dir + external backup dir
-                match client.get_mime_content(&msg.id).await {
-                    Ok(raw_bytes) => {
-                        let mirror_to = match copies_to_write(uid_counter, &in_vault, in_mirror.as_ref()) {
-                            CopiesToWrite::Nothing => continue,
-                            CopiesToWrite::Vault => None,
-                            CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
-                        };
-                        let cur_dir =
-                            crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-                        let filename =
-                            crate::build_maildir_filename(uid_counter, &["archived".to_string()]);
-                        // Both writes off the runtime worker: a stalled write on
-                        // the external drive would hold every task it polls. A
-                        // failed vault write ends the run; a failed mirror write
-                        // is counted.
-                        let mirror_write = tokio::task::spawn_blocking(move || {
-                            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
-                            std::fs::write(cur_dir.join(&filename), &raw_bytes)
-                                .map_err(|e| format!("write .eml: {}", e))?;
-                            Ok::<_, String>(mirror_to.map(|dir| {
-                                std::fs::create_dir_all(&dir)
-                                    .map_err(|e| format!("external mkdir failed: {}", e))
-                                    .and_then(|()| {
-                                        std::fs::write(dir.join(&filename), &raw_bytes)
-                                            .map_err(|e| format!("external write failed: {}", e))
-                                    })
-                            }))
-                        })
-                        .await
-                        .map_err(|e| format!("message write panicked: {}", e))??;
-                        in_vault.insert(uid_counter);
-                        match mirror_write {
-                            Some(Ok(())) => {
-                                if let Some(mirrored) = in_mirror.as_mut() {
-                                    mirrored.insert(uid_counter);
-                                }
-                            }
-                            Some(Err(e)) => {
-                                warn!("backup(graph): {}", e);
-                                total_ext_failures += 1;
-                            }
-                            None => {}
-                        }
-
-                        total_backed_up += 1;
-                    }
-                    Err(e) => {
-                        warn!(
-                            "backup(graph): failed to fetch message {} in {}: {}",
-                            msg.id, folder_name, e
-                        );
-                        total_errors += 1;
-                        last_message_error = Some(e.to_string());
-                    }
-                }
-            }
-
-            if next_link.is_none() || messages.len() < page_size as usize {
+            let page_len = messages.len();
+            listed.extend(messages);
+            if page_len == 0 || next_link.is_none() || page_len < page_size as usize {
                 break;
             }
             skip += page_size;
+        }
+
+        if !listed.is_empty() && !cancel.load(Ordering::Relaxed) {
+            let entries: Vec<(String, Option<String>)> = listed
+                .iter()
+                .map(|m| (m.id.clone(), m.internet_message_id.clone()))
+                .collect();
+            let ledger_path = crate::graph_ledger_path(&app_handle, &account_id, &mailbox_path)?;
+            let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
+            let local = local_uids.clone();
+            // Directory scan, header reads and a file write, on whatever drive the vault is on.
+            let plan = tokio::task::spawn_blocking(move || {
+                mailvault_core::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local)
+            })
+            .await
+            .map_err(|e| format!("graph ledger panicked: {}", e))?;
+
+            match plan {
+                // No ledger, no numbers: filing by position instead is the bug
+                // this replaces. The folder is reported and the run moves on.
+                Err(e) => {
+                    warn!("backup(graph): {} not backed up: {}", mailbox_path, e);
+                    total_errors += 1;
+                    last_message_error = Some(e);
+                }
+                Ok(plan) => {
+                    for (idx, uid) in plan {
+                        if cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        let msg = &listed[idx];
+
+                        // Fetch MIME content and store to app dir + external backup dir
+                        match client.get_mime_content(&msg.id).await {
+                            Ok(raw_bytes) => {
+                                let mirror_to = match copies_to_write(uid, &in_vault, in_mirror.as_ref()) {
+                                    CopiesToWrite::Nothing => continue,
+                                    CopiesToWrite::Vault => None,
+                                    CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
+                                };
+                                let cur_dir =
+                                    crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
+                                let filename =
+                                    crate::build_maildir_filename(uid, &["archived".to_string()]);
+                                // Both writes off the runtime worker: a stalled write on
+                                // the external drive would hold every task it polls. A
+                                // failed vault write ends the run; a failed mirror write
+                                // is counted.
+                                let mirror_write = tokio::task::spawn_blocking(move || {
+                                    std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
+                                    std::fs::write(cur_dir.join(&filename), &raw_bytes)
+                                        .map_err(|e| format!("write .eml: {}", e))?;
+                                    Ok::<_, String>(mirror_to.map(|dir| {
+                                        std::fs::create_dir_all(&dir)
+                                            .map_err(|e| format!("external mkdir failed: {}", e))
+                                            .and_then(|()| {
+                                                std::fs::write(dir.join(&filename), &raw_bytes)
+                                                    .map_err(|e| format!("external write failed: {}", e))
+                                            })
+                                    }))
+                                })
+                                .await
+                                .map_err(|e| format!("message write panicked: {}", e))??;
+                                in_vault.insert(uid);
+                                match mirror_write {
+                                    Some(Ok(())) => {
+                                        if let Some(mirrored) = in_mirror.as_mut() {
+                                            mirrored.insert(uid);
+                                        }
+                                    }
+                                    Some(Err(e)) => {
+                                        warn!("backup(graph): {}", e);
+                                        total_ext_failures += 1;
+                                    }
+                                    None => {}
+                                }
+
+                                total_backed_up += 1;
+                            }
+                            Err(e) => {
+                                warn!(
+                                    "backup(graph): failed to fetch message {} in {}: {}",
+                                    msg.id, folder_name, e
+                                );
+                                total_errors += 1;
+                                last_message_error = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // Same shape as the IMAP loop: the page loop breaks on cancel, and

@@ -984,8 +984,19 @@ fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Res
 /// Lives in the mailbox's sidecar directory alongside the `<uid>.json` files.
 /// Its presence is what tells a reader that this mailbox's UIDs were allocated
 /// by us over a date-ordered Graph listing rather than issued by an IMAP server
-/// in arrival order — see `load_from_sidecars`.
-const GRAPH_ID_MAP_FILE: &str = "graph_id_map.json";
+/// in arrival order — see `load_from_sidecars`. `mailvault_core::graph_ledger`
+/// is the only code that writes this file; the name is shared so its listing
+/// path and the backup always allocate from the same copy.
+const GRAPH_ID_MAP_FILE: &str = mailvault_core::graph_ledger::LEDGER_FILE;
+
+/// Where a mailbox's Outlook uid ledger lives. The app's listing path and the
+/// backup must name the same file, so both come here.
+pub(crate) fn graph_ledger_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
+    Ok(vault::root(app_handle)?
+        .join("email_cache")
+        .join(cache_base_name(account_id, mailbox))
+        .join(GRAPH_ID_MAP_FILE))
+}
 
 #[tauri::command]
 fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
@@ -1005,11 +1016,7 @@ fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
 
 #[tauri::command]
 fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let file = vault::root(&app_handle)?
-        .join("email_cache")
-        .join(&base_name)
-        .join(GRAPH_ID_MAP_FILE);
+    let file = graph_ledger_path(&app_handle, &account_id, &mailbox)?;
 
     if !file.exists() {
         return Ok(None);
