@@ -45,13 +45,14 @@ fn g<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// The text the index holds for a list row: its text part, else its HTML part as text.
+/// The text the index holds for a list row: the longer of its text part and its
+/// HTML part as text. Newsletters often ship a one-line text stub ("View this
+/// email in your browser") with the whole message only in the HTML.
 fn body_of(row: &serde_json::Value) -> String {
-    match (row.get("text").and_then(|v| v.as_str()), row.get("html").and_then(|v| v.as_str())) {
-        (Some(t), _) if !t.trim().is_empty() => t.to_string(),
-        (_, Some(h)) => core::text::html_to_text(h),
-        _ => String::new(),
-    }
+    let text = row.get("text").and_then(|v| v.as_str()).unwrap_or("");
+    let html = row.get("html").and_then(|v| v.as_str()).map(core::text::html_to_text).unwrap_or_default();
+    // Trimmed, so a whitespace-only text part never beats real HTML text.
+    if html.trim().chars().count() > text.trim().chars().count() { html } else { text.to_string() }
 }
 
 /// A list-row address as `Name <address>`, or the bare address.

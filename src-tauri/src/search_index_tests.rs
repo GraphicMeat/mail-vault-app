@@ -70,9 +70,18 @@ fn eml_alternative(plain: &str, html: &str) -> Vec<u8> {
 }
 
 #[test]
-fn adapter_prefers_the_text_part_when_html_is_also_present() {
-    let doc = crate::search_index::index_doc_from_light(&eml_alternative("Plain wins", "<p>Html loses</p>"), 1, "1:2,.eml").expect("parses");
-    assert_eq!(doc.body_text.trim(), "Plain wins");
+fn adapter_indexes_the_html_when_the_text_part_is_a_stub() {
+    let html = "<p>Your <b>September statement</b> is ready.</p><p>Balance due: 1,240.00 by October 5.</p>";
+    let doc = crate::search_index::index_doc_from_light(&eml_alternative("View this email in your browser", html), 1, "1:2,.eml").expect("parses");
+    assert!(doc.body_text.contains("September statement"), "{:?}", doc.body_text);
+    assert!(doc.body_text.contains("Balance due"), "{:?}", doc.body_text);
+}
+
+#[test]
+fn adapter_keeps_the_text_part_when_it_says_more_than_the_html() {
+    let plain = "Hi Bob, the full minutes of Tuesday's meeting are below, with every action item and owner.";
+    let doc = crate::search_index::index_doc_from_light(&eml_alternative(plain, "<p>See minutes</p>"), 1, "1:2,.eml").expect("parses");
+    assert_eq!(doc.body_text.trim(), plain);
 }
 
 #[test]
