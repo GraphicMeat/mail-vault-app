@@ -1070,6 +1070,7 @@ pub async fn graph_cache_mime(
         std::fs::write(&file_path, &raw_bytes)
             .map_err(|e| format!("Failed to write .eml file: {}", e))?;
         info!("Graph: cached UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+        crate::search_index::nudge(&app_handle, &account_id, &mailbox);
     }
 
     // Parse the .eml to return light email data

@@ -3549,6 +3549,9 @@ fn maildir_clear_cache(
     }
 
     info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
+    if deleted_count > 0 {
+        search_index::sweep_soon(&app_handle); // every folder of every account lost files
+    }
     Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
 }
 
@@ -3709,6 +3712,9 @@ fn maildir_migrate_email_dirs(
     }
 
     info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
+    if migrated > 0 {
+        search_index::sweep_soon(&app_handle); // folders moved between account dirs
+    }
     Ok(serde_json::json!({ "migrated": migrated }))
 }
 
@@ -4141,6 +4147,9 @@ async fn import_backup(
         .map(|s| serde_json::to_string(&s).unwrap_or_default());
 
     info!("Backup imported: {} emails, {} new accounts", email_count, new_accounts.len());
+    if email_count > 0 {
+        search_index::sweep_soon(&app_handle); // files landed in any number of accounts and folders
+    }
 
     Ok(ImportResult {
         email_count,
@@ -4503,6 +4512,9 @@ async fn import_mbox(
     }));
 
     info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
+    if email_count > 0 {
+        search_index::sweep_soon(&app_handle); // a whole mailbox of new files: a full pass, not one nudge per message
+    }
 
     Ok(MboxImportResult {
         email_count,
