@@ -255,6 +255,14 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const editor = useEditor({
+    // Build the editor in useEditor's mount effect, never during render. Built
+    // during render, @tiptap/react arms a 1 ms timer that destroys it unless
+    // that effect runs first, trusting React to throw away a render whose store
+    // changed meanwhile. React 18 skips that check when a Suspense boundary
+    // reveals a tree it re-rendered hidden at default priority: the first
+    // Compose of a session committed an editor the timer had already destroyed.
+    // `editor` is null for the first render instead.
+    immediatelyRender: false,
     extensions: editorExtensions(placeholder),
     content,
     onUpdate: ({ editor }) => {
@@ -312,9 +320,10 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // idiom the external-content sync below uses — and the selection goes back
   // because the document is identical, so the positions still hold.
   // Padded, or a line break ending a paragraph would not survive the re-read.
+  // A destroyed editor has no schema left to write HTML with.
   const spellcheckSettled = useRef(false);
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     if (!spellcheckSettled.current) { spellcheckSettled.current = true; return; }
     const { from, to } = editor.state.selection;
     editor.chain()
@@ -330,7 +339,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // empty message and makes the first Undo press a no-op.
   // The parent holds the padded HTML this editor handed it; that echo is not a change.
   useEffect(() => {
-    if (editor && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
+    if (editor && !editor.isDestroyed && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
       editor.chain().setMeta('addToHistory', false).setContent(content).run();
     }
   }, [content, editor]);
