@@ -149,6 +149,26 @@ pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String>
         .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Clone, Default, serde::Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexCounts {
+    pub indexed: u64,
+    pub total: u64,
+}
+
+/// Index coverage. `total` is the larger of the rows and the sweep's
+/// `disk_total`, so a half-built index never reads as complete. A failed
+/// query counts as zero: this only feeds a progress line.
+pub fn counts(conn: &Connection) -> IndexCounts {
+    let (rows, indexed): (i64, i64) = conn
+        .query_row("SELECT count(*), count(*) FILTER (WHERE body_state != 0) FROM messages", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap_or((0, 0));
+    let disk = meta_get(conn, "disk_total").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
+    IndexCounts { indexed: u64::try_from(indexed).unwrap_or(0), total: u64::try_from(rows).unwrap_or(0).max(disk) }
+}
+
 pub fn db_size_bytes(vault_root: &Path) -> u64 {
     let dir = vault_root.join(DB_DIR);
     ["", "-wal"]
@@ -224,6 +244,17 @@ mod tests {
         assert!(t.elapsed() < std::time::Duration::from_secs(1), "a held lock must fail fast, took {:?}", t.elapsed());
         assert!(tmp.path().join(DB_DIR).join(DB_FILE).exists());
         assert_eq!(meta_get(&holder, "probe").as_deref(), Some("held"));
+    }
+
+    #[test]
+    fn counts_use_the_larger_of_rows_and_disk_total() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        assert_eq!(counts(&conn), IndexCounts { indexed: 0, total: 0 });
+        meta_set(&conn, "disk_total", "10").unwrap();
+        conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',1,'1:2,.eml',1,1,1,1)", []).unwrap();
+        conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',2,'2:2,.eml',1,1,1,0)", []).unwrap();
+        assert_eq!(counts(&conn), IndexCounts { indexed: 1, total: 10 });
     }
 
     #[test]

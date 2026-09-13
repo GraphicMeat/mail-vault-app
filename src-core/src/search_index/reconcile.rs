@@ -739,4 +739,33 @@ mod tests {
         assert_eq!(wal_len(), 0, "the checkpoint truncates the WAL, so no body pages linger in it");
         assert_eq!(compact_if_pending(&v.db), Ok(false));
     }
+
+    /// cargo test -p mailvault-core --release --lib bench_index_50k -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn bench_index_50k() {
+        use std::time::Instant;
+        let v = vault();
+        let words = ["invoice", "meeting", "budget", "shipment", "contract", "会議", "資料", "Réunion", "delivery", "quarterly"];
+        let n = 50_000u32;
+        for i in 1..=n {
+            let dir = ["INBOX", "Archive", "Sent"][(i % 3) as usize];
+            let w = words[(i as usize) % words.len()];
+            let body: String = (0..300).map(|k| words[(k * 7 + i as usize) % words.len()]).collect::<Vec<_>>().join(" ");
+            put(&v, "bench", dir, &format!("{i}:2,S.eml"), &eml_utf8(&format!("{w} update {i}"), &body));
+        }
+        let t = Instant::now();
+        let parse = |raw: &[u8], uid: u32, name: &str| fake_parse(raw, uid, name);
+        for (a, d) in list_vault_dirs(&v.root.join("Maildir")) {
+            reconcile_mailbox(&v.db, &v.root.join("Maildir"), &a, &d, ON, &parse, &|| true, &mut |_| {}).unwrap();
+        }
+        println!("index_build n={n} elapsed={:?} db_bytes={}", t.elapsed(), db::db_size_bytes(&v.root));
+        let g = crate::search_index::lock(&v.db);
+        let conn = g.as_ref().unwrap();
+        for q in ["invoice", "update 4999", "budget meeting", "会議", "voic", "nothingmatcheszzz"] {
+            let t = Instant::now();
+            let page = crate::search_index::query::search(conn, &crate::search_index::query::SearchRequest { account_id: "bench".into(), query: q.into(), ..Default::default() }).unwrap();
+            println!("query {q:?} total={} elapsed={:?}", page.total, t.elapsed());
+        }
+    }
 }
