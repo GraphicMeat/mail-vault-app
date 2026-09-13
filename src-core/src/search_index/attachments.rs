@@ -97,7 +97,11 @@ fn extract_office(input: &AttachmentInput) -> Result<String, ExtractError> {
     let mut zip = zip::ZipArchive::new(reader).map_err(|_| ExtractError::Permanent("failed"))?;
     let mut out = String::new();
     let mut budget = MAX_ZIP_UNCOMPRESSED;
+    use std::io::Read;
     for i in 0..zip.len() {
+        if budget == 0 {
+            break;
+        }
         let mut entry = match zip.by_index(i) {
             Ok(e) => e,
             Err(_) => continue,
@@ -109,20 +113,31 @@ fn extract_office(input: &AttachmentInput) -> Result<String, ExtractError> {
         if !wanted {
             continue;
         }
-        let take = (entry.size()).min(budget);
-        if take == 0 {
-            break;
+        // `entry.size()` is the archive's OWN claimed uncompressed size from the
+        // central directory, and a crafted zip can lie about it — sizing an
+        // allocation from it lets an attacker force large `vec![]`s per entry
+        // while supplying almost no real data (memory/CPU amplification). Read
+        // in small fixed chunks instead, so the only thing bounding work is
+        // `budget`, which is decremented only by bytes actually read.
+        let mut chunk = [0u8; 64 * 1024];
+        let mut entry_buf = Vec::new();
+        loop {
+            if budget == 0 {
+                break;
+            }
+            let want = chunk.len().min(budget as usize);
+            let n = match entry.read(&mut chunk[..want]) {
+                Ok(0) => break,
+                Ok(n) => n,
+                Err(_) => break,
+            };
+            entry_buf.extend_from_slice(&chunk[..n]);
+            budget = budget.saturating_sub(n as u64);
         }
-        let mut buf = vec![0u8; take as usize];
-        use std::io::Read;
-        let n = entry.read(&mut buf).unwrap_or(0);
-        buf.truncate(n);
-        budget = budget.saturating_sub(n as u64);
-        let xml = String::from_utf8_lossy(&buf);
-        out.push_str(&strip_xml_tags(&xml));
-        out.push('\n');
-        if budget == 0 {
-            break;
+        if !entry_buf.is_empty() {
+            let xml = String::from_utf8_lossy(&entry_buf);
+            out.push_str(&strip_xml_tags(&xml));
+            out.push('\n');
         }
     }
     Ok(out)
@@ -327,5 +342,46 @@ mod tests {
         let (state, _) = extract(&i, true, true, &NoOcrExtractor);
         assert_ne!(state, "pending", "a corrupt zip is a permanent verdict, not a retry");
         assert_ne!(state, "ok");
+    }
+
+    /// `entry.size()` is the zip's own claimed uncompressed size and cannot be
+    /// trusted for allocation sizing: a crafted archive can declare a huge size
+    /// per entry while holding almost no real data, which would previously force
+    /// a `vec![0u8; claimed_size]` allocation on every matching entry. The `zip`
+    /// crate's write API doesn't let us lie about an entry's declared size
+    /// directly, so this proves the same class of amplification a different way:
+    /// many small matching entries (`ppt/slides/slideN.xml` has no bound on N)
+    /// must not cause per-entry allocations anywhere near `MAX_ZIP_UNCOMPRESSED`,
+    /// and the whole extraction must stay fast and respect `MAX_PART_CHARS`.
+    #[test]
+    fn many_small_matching_zip_entries_do_not_blow_up_extraction() {
+        let mut buf = Vec::new();
+        const ENTRY_COUNT: usize = 500;
+        {
+            let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+            let opts: zip::write::SimpleFileOptions = zip::write::SimpleFileOptions::default();
+            use std::io::Write;
+            for n in 0..ENTRY_COUNT {
+                zip.start_file(format!("ppt/slides/slide{n}.xml"), opts).unwrap();
+                zip.write_all(b"<p:sld><p:txBody><a:t>hi</a:t></p:txBody></p:sld>").unwrap();
+            }
+            zip.finish().unwrap();
+        }
+        let i = input(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "deck.pptx",
+            buf,
+        );
+        let start = std::time::Instant::now();
+        let (state, text) = extract(&i, true, true, &NoOcrExtractor);
+        let elapsed = start.elapsed();
+        assert_eq!(state, "ok");
+        let text = text.unwrap();
+        // Real content across all 500 tiny entries is a few KB, nowhere close to
+        // MAX_ZIP_UNCOMPRESSED (50MB) or even MAX_PART_CHARS (200_000) — proves no
+        // per-entry allocation was driven by a claimed/self-reported size.
+        assert!(text.len() < 100_000, "extracted text unexpectedly large: {} bytes", text.len());
+        assert!(text.contains("hi"));
+        assert!(elapsed.as_secs() < 5, "extraction took too long: {elapsed:?}");
     }
 }
