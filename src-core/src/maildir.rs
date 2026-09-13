@@ -45,20 +45,28 @@ pub fn find_by_uid(cur_dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
+/// The uid a vault filename carries, by `find_by_uid`'s exact rule: the name
+/// starts with the canonical decimal uid and a `:`. `u32::parse` alone would
+/// also take `07:` and `+7:`, which `find_by_uid(7)` never matches.
+pub fn vault_filename_uid(name: &str) -> Option<u32> {
+    let (digits, _) = name.split_once(':')?;
+    let canonical = !digits.is_empty()
+        && digits.bytes().all(|b| b.is_ascii_digit())
+        && (digits == "0" || !digits.starts_with('0'));
+    if canonical { digits.parse().ok() } else { None }
+}
+
 /// Every `<uid>:…` file in a Maildir `cur/` directory, keyed by uid, in ONE
 /// directory pass. `find_by_uid` rescans the directory per call, which is
 /// quadratic when a caller resolves a whole folder. Same matching rule as
-/// `find_by_uid`: only names with a colon after the uid count; legacy
-/// `12.eml` / `12_S.eml` names are not vault rows. If two files carry the same
-/// uid the first one `read_dir` yields wins, exactly as `find_by_uid` behaves.
+/// `find_by_uid` (`vault_filename_uid`): legacy `12.eml` / `12_S.eml` names
+/// are not vault rows. If two files carry the same uid the first one
+/// `read_dir` yields wins, exactly as `find_by_uid` behaves.
 pub fn uid_file_map(cur_dir: &Path) -> std::collections::HashMap<u32, PathBuf> {
     let mut map = std::collections::HashMap::new();
     let Ok(entries) = fs::read_dir(cur_dir) else { return map };
     for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        let Some((uid_str, _)) = name.split_once(':') else { continue };
-        let Ok(uid) = uid_str.parse::<u32>() else { continue };
+        let Some(uid) = vault_filename_uid(&entry.file_name().to_string_lossy()) else { continue };
         map.entry(uid).or_insert_with(|| entry.path());
     }
     map
@@ -1465,13 +1473,34 @@ mod tests {
     fn uid_file_map_agrees_with_find_by_uid() {
         let tmp = tempfile::tempdir().unwrap();
         let cur = tmp.path();
-        for name in ["1:2,S.eml", "10:2,.eml", "101:2,F.eml", "1010.eml"] {
+        for name in ["1:2,S.eml", "10:2,.eml", "101:2,F.eml", "1010.eml", "07:2,S.eml", "+8:2,S.eml", "3:2,S.eml", "3:2,FS.eml"] {
             fs::write(cur.join(name), b"x").unwrap();
         }
         let map = uid_file_map(cur);
-        for uid in [1u32, 10, 101, 1010, 5] {
+        for uid in [1u32, 10, 101, 1010, 5, 3, 7, 8] {
             assert_eq!(map.get(&uid).cloned(), find_by_uid(cur, uid), "uid {uid}");
         }
+    }
+
+    #[test]
+    fn vault_filename_uid_is_find_by_uids_rule() {
+        let cases = [
+            ("7:2,S.eml", Some(7)),
+            ("0:2,.eml", Some(0)),
+            ("4294967295:2,.eml", Some(u32::MAX)),
+            ("4294967296:2,.eml", None),
+            ("07:2,.eml", None),
+            ("+7:2,.eml", None),
+            ("7.eml", None),
+            (":2,.eml", None),
+            ("7a:2,.eml", None),
+            (".4711:2,S.eml.tmp-1", None),
+        ];
+        let wrong: Vec<_> = cases.iter()
+            .filter(|(name, want)| vault_filename_uid(name) != *want)
+            .map(|(name, want)| format!("{name}: got {:?}, want {want:?}", vault_filename_uid(name)))
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
     }
 
     #[test]
