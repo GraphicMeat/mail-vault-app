@@ -30,7 +30,21 @@ vi.mock('../syncService', () => ({
   toSyncAccount: (account, id = account?.id) => ({ id, email: account?.email, imapConfig: {} }),
 }));
 vi.mock('../transport', () => ({ getDaemonHealth: () => ({ alive: true }) }));
-vi.mock('../api', () => ({ prefetchAttachments: vi.fn(async () => 0), fetchEmailLight: vi.fn() }));
+const graph = vi.hoisted(() => ({
+  order: [],
+  listFolders: null,
+  listMessages: null,
+  adopt: null,
+}));
+vi.mock('../api', () => ({
+  prefetchAttachments: vi.fn(async () => 0),
+  fetchEmailLight: vi.fn(),
+  graphListFolders: (...a) => graph.listFolders(...a),
+}));
+vi.mock('../cacheManager', () => ({ listGraphMessages: (...a) => graph.listMessages(...a) }));
+vi.mock('../workflows/adoptGraphFolderKeys', () => ({
+  adoptGraphFolderKeysFromListing: (...a) => graph.adopt(...a),
+}));
 vi.mock('../authUtils', () => ({
   hasValidCredentials: () => true,
   ensureFreshToken: (a) => Promise.resolve(a),
@@ -236,5 +250,28 @@ describe('AccountPipeline attachment prefetch', () => {
     // A pipeline is reused across account switches; each switch sweeps again.
     await pipeline.startContentCaching([], 'INBOX');
     expect(api.prefetchAttachments).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AccountPipeline Graph header load', () => {
+  const graphAccount = { id: 'acc-3', email: 'leia@mock.test', oauth2Transport: 'graph', oauth2AccessToken: 'tok' };
+  const listing = [{ id: 'f2', displayName: 'Gesendete Elemente', wellKnownName: 'sentitems', storageKey: 'Sent' }];
+
+  beforeEach(() => {
+    graph.order = [];
+    graph.listFolders = vi.fn(async () => { graph.order.push('listFolders'); return listing; });
+    graph.listMessages = vi.fn(async () => { graph.order.push('listMessages'); return { headers: [] }; });
+    graph.adopt = vi.fn(async () => { graph.order.push('adopt'); });
+  });
+
+  // A folder still stored under the server's word for it must be adopted
+  // before anything writes under the storage key, or the pipeline caches
+  // headers into a sidecar the old directory never joins.
+  it('adopts the listing before it lists any message', async () => {
+    const pipeline = new AccountPipeline(graphAccount, { concurrency: 1 });
+    await pipeline._loadHeadersGraph('Sent');
+
+    expect(graph.adopt).toHaveBeenCalledWith(graphAccount, listing);
+    expect(graph.order).toEqual(['listFolders', 'adopt', 'listMessages']);
   });
 });

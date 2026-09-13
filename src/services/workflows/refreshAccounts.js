@@ -5,6 +5,7 @@ import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
 import { isGraphAccount, storageKeyOf } from '../graphConfig';
+import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
 import { invalidate as _invalidateProbe } from '../syncProbe';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
@@ -122,6 +123,7 @@ export async function refreshAllAccounts(options = {}) {
         try {
           const token = account.oauth2AccessToken;
           const folders = await api.graphListFolders(token);
+          await adoptGraphFolderKeysFromListing(account, folders);
           const targetFolder = folders.find(f => storageKeyOf(f) === targetMailbox);
           if (targetFolder) {
             const normalizedMailbox = storageKeyOf(targetFolder);

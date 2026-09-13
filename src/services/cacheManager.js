@@ -135,6 +135,12 @@ export async function resolveGraphMessageId(accountId, mailbox, uid, { row, toke
       import('./graphConfig.js'),
     ]);
     const folders = await api.graphListFolders(token);
+    // No adoptGraphFolderKeysFromListing here, deliberately: this relist has
+    // only an accountId, and it cannot run before one of the listing paths
+    // above it (activateAccount, loadEmails, the pipeline) has already listed
+    // and adopted for this account — `mailbox` reaching here IS a storage key
+    // one of them produced. It also writes no directory of its own: it only
+    // refreshes the in-memory uid → Graph id map.
     const folder = folders.find(f => storageKeyOf(f) === mailbox);
     if (!folder) return null;
 

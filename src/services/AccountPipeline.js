@@ -7,6 +7,7 @@ import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
+import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 
 export { hasValidCredentials };
 
@@ -202,6 +203,7 @@ export class AccountPipeline {
 
     // 1. Fetch folder list to find the Graph folder ID
     const graphFolders = await api.graphListFolders(token);
+    await adoptGraphFolderKeysFromListing(this.account, graphFolders);
     const targetFolder = graphFolders.find(f => storageKeyOf(f) === mailbox);
 
     if (!targetFolder) {

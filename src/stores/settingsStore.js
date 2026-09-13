@@ -201,6 +201,10 @@ export const useSettingsStore = create(
       // Graph accounts whose localized folder dirs were adopted { [accountId]: true }
       graphFolderKeysAdopted: {},
 
+      // Graph accounts whose server-named folder dirs were adopted from a
+      // listing { [accountId]: true }
+      graphFolderKeysAdoptedFromListing: {},
+
       // Display settings
       displayNames: {}, // { [accountId]: string }
       sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
@@ -590,6 +594,10 @@ export const useSettingsStore = create(
 
       markGraphFolderKeysAdopted: (accountId) => set({
         graphFolderKeysAdopted: { ...get().graphFolderKeysAdopted, [accountId]: true }
+      }),
+
+      markGraphFolderKeysAdoptedFromListing: (accountId) => set({
+        graphFolderKeysAdoptedFromListing: { ...get().graphFolderKeysAdoptedFromListing, [accountId]: true }
       }),
 
       // Account order management

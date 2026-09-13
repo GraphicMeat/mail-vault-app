@@ -63,7 +63,7 @@ export function _resolveUnifiedContext(key, state) {
   // Determine the actual mailbox: use _mailbox if tagged, detect sent emails, fall back to INBOX
   let mailbox = email._mailbox || 'INBOX';
   if (!email._mailbox && email._isSent) {
-    // Try to find the Sent folder name from the account's mailboxes
+    // Try to find the Sent folder's path from the account's mailboxes
     const sentFolder = state.mailboxes?.find(m =>
       m.specialUse === '\\Sent' || m.special_use === '\\Sent' ||
       m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items'

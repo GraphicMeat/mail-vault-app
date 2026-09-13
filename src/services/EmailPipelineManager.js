@@ -3,7 +3,8 @@ import { hasValidCredentials } from './authUtils';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import * as db from './db';
-import { graphFoldersToMailboxes } from './graphConfig';
+import { graphFoldersToMailboxes, isGraphAccount } from './graphConfig';
+import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
 import { waitForSentMailboxPath } from '../utils/sentFolder';
 
 /** Check if an account is hidden in settings */
@@ -170,9 +171,10 @@ class EmailPipelineManager {
             const freshAccount = await import('./authUtils').then(m => m.ensureFreshToken(account));
             const apiMod = await import('./api');
             let mailboxes;
-            if (freshAccount.oauth2Transport === 'graph') {
+            if (isGraphAccount(freshAccount)) {
               // Graph API: fetch folders and convert to app's mailbox format
               const graphFolders = await apiMod.graphListFolders(freshAccount.oauth2AccessToken);
+              await adoptGraphFolderKeysFromListing(freshAccount, graphFolders);
               mailboxes = graphFoldersToMailboxes(graphFolders);
             } else {
               mailboxes = await apiMod.fetchMailboxes(freshAccount);

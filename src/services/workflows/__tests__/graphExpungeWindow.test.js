@@ -68,6 +68,10 @@ vi.mock('../../graphConfig', () => ({
   graphMessageToEmail: (m) => m,
 }));
 
+// The listing path adopts folder keys once per account; its own spec covers
+// that, and this spec's settings store stands in for the real one.
+vi.mock('../adoptGraphFolderKeys', () => ({ adoptGraphFolderKeysFromListing: async () => {} }));
+
 vi.mock('../../cacheManager', () => ({
   saveRestoreDescriptor: vi.fn(),
   getRestoreDescriptor: vi.fn().mockReturnValue(null),

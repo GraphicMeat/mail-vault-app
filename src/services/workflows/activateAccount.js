@@ -19,7 +19,7 @@ import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRest
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { openFolder } from './loadSubtree';
-import { adoptGraphFolderKeys } from './adoptGraphFolderKeys';
+import { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { refreshFolderStatus } from './folderStatus';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
@@ -54,6 +54,7 @@ async function fetchAccountMailboxes(account) {
   const freshAccount = await ensureFreshToken(account);
   if (isGraphAccount(freshAccount)) {
     const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
+    await adoptGraphFolderKeysFromListing(freshAccount, graphFolders);
     return graphFoldersToMailboxes(graphFolders);
   }
   return api.fetchMailboxes(freshAccount);
@@ -230,6 +231,7 @@ async function _loadServerEmailsViaGraph(account, accountId, activeMailbox, uidM
 
   if (!targetFolder) {
     const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+    await adoptGraphFolderKeysFromListing(account, graphFolders);
     if (signal.aborted) return;
     mailboxes = graphFoldersToMailboxes(graphFolders);
     useMailStoreRef.setState({ mailboxes, mailboxesFetchedAt: Date.now() });

@@ -5,6 +5,7 @@ import * as api from '../api';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
 import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
+import { adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
@@ -847,6 +848,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
 
     if (shouldRefreshMailboxes) {
       const graphFolders = await api.graphListFolders(account.oauth2AccessToken);
+      await adoptGraphFolderKeysFromListing(account, graphFolders);
       if (isStale()) return;
       mailboxes = graphFoldersToMailboxes(graphFolders);
       useMailStore.setState({ mailboxes, mailboxesFetchedAt: Date.now() });
