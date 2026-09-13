@@ -19,6 +19,7 @@ import {
   seedLegacyVault,
   seedLegacyCustody,
   seedCorruptCustody,
+  seedAttachmentSearchMessage,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 
@@ -420,6 +421,12 @@ export const config = {
       }
       if ((specs || []).some((s) => s.includes('connected-custody-corrupt'))) {
         seedCorruptCustody(testDataDir);
+      }
+      // A message with a text-attachment, planted before boot for the same
+      // reason as the seeds above: the search-index sweep that discovers it
+      // runs during app setup.
+      if ((specs || []).some((s) => s.includes('connected-attachment-search'))) {
+        seedAttachmentSearchMessage(testDataDir, accounts[0].id);
       }
     }
   },

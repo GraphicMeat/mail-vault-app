@@ -1139,6 +1139,54 @@ export function seedCorruptCustody(home) {
   writeFileSync(join(dir, 'custody.db'), CORRUPT_CUSTODY_BYTES);
 }
 
+/** Subject/body/token for `seedAttachmentSearchMessage` — see its doc comment. */
+export const ATTACHMENT_SEARCH_UID = 990010;
+export const ATTACHMENT_SEARCH_SUBJECT = 'Attachment search fixture';
+export const ATTACHMENT_SEARCH_BODY = 'Nothing notable in this body.';
+export const ATTACHMENT_SEARCH_TOKEN = 'ZEBRACORN';
+export const ATTACHMENT_SEARCH_FILENAME = 'notes.txt';
+
+/**
+ * A message whose ONLY text-attachment body contains `ATTACHMENT_SEARCH_TOKEN`
+ * — never the subject or body — so a search hit proves the attachment column
+ * matched (spec 8, phase 3). Mirrors `seedLegacyVault`'s shape: written
+ * straight into the account's Maildir `cur/`, planted BEFORE the app launches.
+ *
+ * The search-index sweep (`reconcile_mailbox` in src-core) lists `cur/`
+ * directly off disk — it does not go through custody or the local-index JSON
+ * files `seedLegacyCustody` restores — so a plain, correctly-named `.eml` is
+ * enough for it to discover, parse and index this message's attachment.
+ */
+export function seedAttachmentSearchMessage(home, accountId) {
+  const cur = join(appDataDir(home), 'Maildir', accountId, 'INBOX', 'cur');
+  mkdirSync(cur, { recursive: true });
+  const boundary = 'MockMvAttachSearchBoundary';
+  const raw = [
+    'From: Fixture Sender <fixture@mock.test>',
+    'To: luke@mock.test',
+    `Subject: ${ATTACHMENT_SEARCH_SUBJECT}`,
+    'Date: Mon, 01 Sep 2026 10:00:00 +0000',
+    `Message-ID: <attachment-search-${ATTACHMENT_SEARCH_UID}@mock.test>`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    ATTACHMENT_SEARCH_BODY,
+    '',
+    `--${boundary}`,
+    `Content-Type: text/plain; name="${ATTACHMENT_SEARCH_FILENAME}"`,
+    `Content-Disposition: attachment; filename="${ATTACHMENT_SEARCH_FILENAME}"`,
+    '',
+    `The word ${ATTACHMENT_SEARCH_TOKEN} only lives inside this attachment.`,
+    '',
+    `--${boundary}--`,
+    '',
+  ].join('\r\n');
+  writeFileSync(join(cur, `${ATTACHMENT_SEARCH_UID}:2,S.eml`), raw);
+}
+
 export const MOCK_PASSWORD = 'mock-password';
 
 /**
