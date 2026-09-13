@@ -799,6 +799,8 @@
   "undoSend.undo": "Undo",
   "chunkError.dismiss": "Dismiss",
   "chunkError.reload": "Reload",
+  "chunkError.loadFailed": "Part of the app failed to load from disk. This usually means an update replaced the app while it was running. Reloading picks up the new version. Your mail and your vault are untouched.",
+  "chunkError.threw": "Something went wrong while opening it. Dismiss to try again, or reload if it keeps happening. Your mail and your vault are untouched.",
   "keychain.reEnterPassword": "Re-enter password",
   "restore.tray.dismiss": "Dismiss",
   "vaultAlert.mailStorageFolderNotFound": "Mail storage folder not found — syncing is paused",

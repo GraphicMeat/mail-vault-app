@@ -8,6 +8,9 @@ import { Z } from './ui/layers';
 // locale change, which is fine for a terminal surface whose action is reload.
 import { t } from '../i18n/index.js';
 
+// A chunk that could not load, as WebKit, WebView2 and Vite's stylesheet preload word it.
+const LOAD_FAILURE = /Importing a module script failed|Failed to fetch dynamically imported module|Unable to preload CSS/;
+
 /**
  * Catches a failed lazy-chunk load for one overlay.
  *
@@ -21,19 +24,22 @@ import { t } from '../i18n/index.js';
  *
  * `React.lazy` caches the rejected promise, so there is no in-place retry to
  * offer: a reload is the recovery, and it is the honest thing to say.
+ *
+ * Anything else the overlay throws lands here too, and blaming an update for
+ * that is not honest, so the message depends on which of the two it was.
  */
 export class ChunkErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { failed: false };
+    this.state = { failed: false, loadFailure: false };
   }
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+  static getDerivedStateFromError(error) {
+    return { failed: true, loadFailure: LOAD_FAILURE.test(String(error?.message ?? error)) };
   }
 
   componentDidCatch(error) {
-    console.error(`[ChunkErrorBoundary] ${this.props.name} failed to load:`, error);
+    console.error(`[ChunkErrorBoundary] ${this.props.name} could not open:`, error);
   }
 
   render() {
@@ -53,7 +59,7 @@ export class ChunkErrorBoundary extends React.Component {
             <AlertTriangle size={20} className="text-mail-warning" />
           </div>
         }
-        description="Part of the app failed to load from disk. This usually means an update replaced the app while it was running. Reloading picks up the new version. Your mail and your vault are untouched."
+        description={this.state.loadFailure ? t('chunkError.loadFailed') : t('chunkError.threw')}
         footer={
           <>
             <Button variant="secondary" size="lg" className="flex-1" onClick={() => this.setState({ failed: false })}>
