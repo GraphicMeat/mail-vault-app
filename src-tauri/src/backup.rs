@@ -561,13 +561,31 @@ fn scan_local_uids(
     account_id: &str,
     mailbox: &str,
 ) -> Result<HashSet<u32>, String> {
-    let cur_dir = crate::maildir_cur_path(app_handle, account_id, mailbox)?;
+    scan_cur_uids(&crate::maildir_cur_path(app_handle, account_id, mailbox)?)
+}
+
+/// A backup folder's vault uids, counted after the pre-sync with its mirror
+/// when there is one. The run fetches every server uid missing from this set.
+/// Counted before the pre-sync, a uid only the mirror held was still missing
+/// once restored: the fetch downloaded it again and stored the server's copy
+/// beside the restored one, under a second name.
+fn vault_uids_after_presync(app_dir: &Path, mirror_dir: Option<&Path>) -> Result<HashSet<u32>, String> {
+    if let Some(mirror_dir) = mirror_dir {
+        let synced = sync_locations(app_dir, mirror_dir);
+        if synced > 0 {
+            info!("backup: pre-synced {} files between {:?} and {:?}", synced, app_dir, mirror_dir);
+        }
+    }
+    scan_cur_uids(app_dir)
+}
+
+fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
     if !cur_dir.exists() {
         return Ok(HashSet::new());
     }
 
     let mut uids = HashSet::new();
-    let entries = std::fs::read_dir(&cur_dir)
+    let entries = std::fs::read_dir(cur_dir)
         .map_err(|e| format!("Failed to read Maildir cur dir: {}", e))?;
 
     for entry in entries.flatten() {
@@ -722,16 +740,19 @@ async fn run_imap_backup_inner(
         };
         let server_uids: Vec<u32> = server_flags.iter().map(|(uid, _)| *uid).collect();
 
-        // Get local UIDs. A read_dir of a folder on a drive another process is
-        // hammering can stall for seconds; on a runtime worker that stall is
-        // paid by every IMAP socket the runtime is meant to be polling.
+        // Get local UIDs, after the pre-sync with the mirror (see
+        // vault_uids_after_presync). Directory scans and file copies, some on
+        // an external drive: a read_dir of a folder on a drive another process
+        // is hammering can stall for seconds, and on a runtime worker that
+        // stall is paid by every IMAP socket the runtime is meant to be polling.
         let local_uids = {
-            let app = app_handle.clone();
-            let acct = account_id.clone();
-            let mbox = mailbox_path.clone();
-            tokio::task::spawn_blocking(move || scan_local_uids(&app, &acct, &mbox))
+            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
+            let mirror_dir = backup_path.as_ref().map(|root| {
+                std::path::PathBuf::from(root).join(&account.email).join(mailbox_path).join("cur")
+            });
+            tokio::task::spawn_blocking(move || vault_uids_after_presync(&app_dir, mirror_dir.as_deref()))
                 .await
-                .map_err(|e| format!("local uid scan panicked: {}", e))??
+                .map_err(|e| format!("pre-sync panicked: {}", e))??
         };
 
         // Compute delta
@@ -769,22 +790,6 @@ async fn run_imap_backup_inner(
                     missing_in_folder: missing.len(),
                 },
             );
-        }
-
-        // Pre-sync: copy files that exist in one location but not the other
-        if let Some(ref custom_path) = backup_path {
-            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
-            let backup_dir = std::path::PathBuf::from(custom_path)
-                .join(&account.email)
-                .join(mailbox_path)
-                .join("cur");
-            // Whole-directory scan plus file copies, on the external drive.
-            let synced = tokio::task::spawn_blocking(move || sync_locations(&app_dir, &backup_dir))
-                .await
-                .map_err(|e| format!("pre-sync panicked: {}", e))?;
-            if synced > 0 {
-                info!("backup: pre-synced {} files between app and backup for {}", synced, mailbox_path);
-            }
         }
 
         if !missing.is_empty() {
@@ -837,7 +842,8 @@ async fn run_imap_backup_inner(
         // phone, starred elsewhere — carries the state it was stored with, and
         // that state is what restore uploads and the mirror keeps. The listing
         // above already has every flag, so catching up is one directory pass
-        // with nothing more to fetch. Only the copies that were already here:
+        // with nothing more to fetch. Only the copies that were already here,
+        // restored ones included (a legacy `<uid>.eml` comes back flagless):
         // the ones just stored carry the server's flags already.
         let changes: Vec<crate::vault_flags::FlagChange> = server_flags
             .iter()
@@ -1086,33 +1092,23 @@ async fn run_graph_backup(
         // Normalize folder name for Maildir path (same as frontend mapping)
         let mailbox_path = normalize_graph_folder_name(folder_name);
 
-        // Get local UIDs. A read_dir of a folder on a drive another process is
-        // hammering can stall for seconds; on a runtime worker that stall is
-        // paid by every socket the runtime is meant to be polling.
-        let local_uids = {
-            let app = app_handle.clone();
-            let acct = account_id.clone();
-            let mbox = mailbox_path.clone();
-            tokio::task::spawn_blocking(move || scan_local_uids(&app, &acct, &mbox))
-                .await
-                .map_err(|e| format!("local uid scan panicked: {}", e))??
-        };
-
-        // Pre-sync: copy files between app and external backup (bidirectional)
-        if let Some(ref custom_path) = backup_path {
-            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-            let backup_dir = std::path::PathBuf::from(custom_path)
+        let mirror_dir = backup_path.as_ref().map(|custom_path| {
+            std::path::PathBuf::from(custom_path)
                 .join(&account.email)
                 .join(&mailbox_path)
-                .join("cur");
-            // Whole-directory scan plus file copies, on the external drive.
-            let synced = tokio::task::spawn_blocking(move || sync_locations(&app_dir, &backup_dir))
+                .join("cur")
+        });
+
+        // Get local UIDs, after the pre-sync with the mirror, as the IMAP path
+        // does: a message restored here is not downloaded only to be skipped.
+        // Off the runtime workers for the same reason too.
+        let local_uids = {
+            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
+            let mirror_dir = mirror_dir.clone();
+            tokio::task::spawn_blocking(move || vault_uids_after_presync(&app_dir, mirror_dir.as_deref()))
                 .await
-                .map_err(|e| format!("pre-sync panicked: {}", e))?;
-            if synced > 0 {
-                info!("backup(graph): pre-synced {} files between app and backup for {}", synced, mailbox_path);
-            }
-        }
+                .map_err(|e| format!("pre-sync panicked: {}", e))??
+        };
 
         // One listing per side for the whole folder, after the pre-sync so what
         // it restored or mirrored counts. Looking every fetched message up again
@@ -1122,12 +1118,6 @@ async fn run_graph_backup(
         // it had just written.
         // ponytail: a copy another writer lands mid-folder is not in the listing,
         // and this run writes its own beside it; the rescan had that race too, only narrower.
-        let mirror_dir = backup_path.as_ref().map(|custom_path| {
-            std::path::PathBuf::from(custom_path)
-                .join(&account.email)
-                .join(&mailbox_path)
-                .join("cur")
-        });
         let (mut in_vault, mut in_mirror) = {
             let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
             let mirror_dir = mirror_dir.clone();
@@ -1709,6 +1699,38 @@ mod tests {
         assert_eq!(count(&ext, 209), 1, "both vault files for uid 209 were mirrored");
         assert_eq!(count(&app, 208), 1, "both mirror files for uid 208 were restored");
         assert_eq!(sync_locations(&app, &ext), 0);
+    }
+
+    /// The backup fetches every server uid missing from this set, so a uid the
+    /// pre-sync restores has to be in it. Counted before the pre-sync, `4.eml`
+    /// read as missing and the fetch stored uid 4 again beside the restore.
+    #[test]
+    fn vault_uids_after_presync_include_what_the_presync_restored() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = tmp.path().join("Matrix").join("cur");
+        let ext = tmp.path().join("ext");
+        fs::create_dir_all(&app).unwrap();
+        fs::create_dir_all(&ext).unwrap();
+        fs::write(app.join("1:2,AS.eml"), eml("in-the-vault@mock.test")).unwrap();
+        fs::write(ext.join("3:2,S.eml"), eml("mirror-maildir-name@mock.test")).unwrap();
+        fs::write(ext.join("4.eml"), eml("mirror-legacy-name@mock.test")).unwrap();
+
+        let uids = super::vault_uids_after_presync(&app, Some(&ext)).unwrap();
+
+        assert_eq!(uids, std::collections::HashSet::from([1, 3, 4]));
+    }
+
+    /// No mirror, nothing to pre-sync: the vault as it stands, and a folder
+    /// nothing was ever stored into is empty rather than an error.
+    #[test]
+    fn vault_uids_after_presync_without_a_mirror_read_the_vault() {
+        let tmp = tempfile::tempdir().unwrap();
+        let app = tmp.path().join("INBOX").join("cur");
+        assert!(super::vault_uids_after_presync(&app, None).unwrap().is_empty());
+
+        fs::create_dir_all(&app).unwrap();
+        fs::write(app.join("5:2,S.eml"), eml("in-the-vault@mock.test")).unwrap();
+        assert_eq!(super::vault_uids_after_presync(&app, None).unwrap(), std::collections::HashSet::from([5]));
     }
 
     /// Not a gate.

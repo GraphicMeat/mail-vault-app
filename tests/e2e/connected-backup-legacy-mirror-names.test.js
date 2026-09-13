@@ -112,9 +112,8 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     mkdirSync(mirror, { recursive: true });
 
     // Server uids 3 and 4 in the vault, and on the mirror under both legacy
-    // shapes: the pre-sync has nothing to copy either way. (Only in the vault,
-    // not only on the mirror: the backup takes its local scan BEFORE the
-    // pre-sync, so a server uid the pre-sync restores is fetched again.)
+    // shapes: the pre-sync has nothing to copy either way. (A server uid only
+    // the mirror holds is connected-backup-restored-not-refetched's case.)
     writeFileSync(join(cur, '3:2,.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
     writeFileSync(join(mirror, '3.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
     writeFileSync(join(cur, '4:2,S.eml'), eml(`mock-4-${VADER}`, 'Vader matrix 4'));
