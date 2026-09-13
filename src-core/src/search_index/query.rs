@@ -78,7 +78,11 @@ pub fn plan_query(query: &str) -> MatchPlan {
         plan.whole = Some(fts_string(&q));
     }
     if !long.is_empty() {
-        plan.all_long = Some(long.iter().map(|t| fts_string(t)).collect::<Vec<_>>().join(" AND "));
+        let all_long = long.iter().map(|t| fts_string(t)).collect::<Vec<_>>().join(" AND ");
+        // One long word is the whole query: the same MATCH twice buys nothing.
+        if plan.whole.as_ref() != Some(&all_long) {
+            plan.all_long = Some(all_long);
+        }
     }
     plan.cjk = cjk_short.iter().map(|t| fts_string(&cjk_units(t))).collect();
     plan.needles =
@@ -196,6 +200,15 @@ mod tests {
         assert!(p.whole.is_none() && p.all_long.is_none());
 
         assert_eq!(plan_query("   "), MatchPlan::default());
+    }
+
+    #[test]
+    fn one_word_query_matches_once() {
+        let p = plan_query("Invoice");
+        assert_eq!(p.whole.as_deref(), Some("\"invoice\""));
+        assert_eq!(p.all_long, None, "a second identical MATCH buys nothing");
+        let p = plan_query("invoice 4471");
+        assert_eq!(p.all_long.as_deref(), Some("\"invoice\" AND \"4471\""));
     }
 
     #[test]
