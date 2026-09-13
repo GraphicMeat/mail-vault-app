@@ -389,7 +389,7 @@ fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
 
 /// Copy every vault dir present in `src_root` into `dst_root` and check it all
 /// arrived. Nothing is deleted from the source here — the caller switches over
-/// first. Only a derived `search_index` at the destination is cleared.
+/// first. Only the derived index files at the destination are cleared.
 /// Returns (dirs copied, files copied, bytes copied).
 fn copy_and_verify<F: Fn(MoveProgress)>(
     src_root: &Path,
@@ -398,11 +398,17 @@ fn copy_and_verify<F: Fn(MoveProgress)>(
 ) -> Result<(Vec<&'static str>, usize, u64), String> {
     // A leftover index at the destination is derived data. Left in place, copy_tree's
     // size-equal skip could keep its file, or pair a fresh index with a stale -wal.
-    match std::fs::remove_dir_all(dst_root.join("search_index")) {
-        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-            return Err(format!("Cannot clear the old search index at {}: {}", dst_root.display(), e));
+    // Only our file names: the folder is the user's pick, and anything else in a
+    // `search_index` directory there is not ours to delete.
+    use mailvault_core::search_index::db::{DB_DIR, DB_FILE};
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let path = dst_root.join(DB_DIR).join(format!("{DB_FILE}{suffix}"));
+        match std::fs::remove_file(&path) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("Cannot clear the old search index at {}: {}", path.display(), e));
+            }
+            _ => {}
         }
-        _ => {}
     }
     let present: Vec<&'static str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
     let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
@@ -564,6 +570,26 @@ mod tests {
         // Missing entirely is caught too.
         fs::remove_file(dst.join("Maildir/acc/INBOX/cur/1:2,S.eml")).unwrap();
         assert!(verify_tree(&src, &dst).is_err());
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_move_clears_only_the_index_files_at_the_destination() {
+        let base = tmp("mv-vault-dest-index");
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(dst.join("search_index")).unwrap();
+        fs::write(dst.join("search_index/index.db"), b"stale").unwrap();
+        fs::write(dst.join("search_index/index.db-wal"), b"stale wal").unwrap();
+        fs::write(dst.join("search_index/keep.txt"), b"another app's file").unwrap();
+
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+
+        assert!(!dst.join("search_index/index.db").exists());
+        assert!(!dst.join("search_index/index.db-wal").exists());
+        assert_eq!(fs::read(dst.join("search_index/keep.txt")).unwrap(), b"another app's file");
 
         let _ = fs::remove_dir_all(&base);
     }
