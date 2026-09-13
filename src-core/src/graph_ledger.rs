@@ -30,11 +30,16 @@ pub type Ledger = BTreeMap<u32, String>;
 /// never allocate from the same stale read. The value is a memo of the
 /// Message-IDs read from vault files, per `cur/` dir and uid: the app seeds a
 /// folder 200 ids at a time, and reading every file again per page is quadratic.
-// ponytail: process-wide lock; two processes on one vault (two Macs on a NAS
-// vault) can still race, add a file lock on the ledger if that is supported.
+// ponytail: one lock for every mailbox, not one per ledger path: two processes
+// on one vault (two Macs on a NAS vault) can still race, add a file lock on
+// the ledger if that is supported. It also means a first call over a large
+// rebuilt folder on a slow drive, which reads every unowned file while
+// holding this lock, blocks every OTHER Outlook mailbox's listing and backup
+// too, not just its own; split to one lock per ledger path if that
+// contention matters.
 // The memo trusts a uid's file never to change content, true for Graph
 // mailboxes today; re-read when a file's length changes if that stops holding.
-static STATE: LazyLock<Mutex<HashMap<PathBuf, HashMap<u32, Option<String>>>>> =
+static STATE: LazyLock<Mutex<HashMap<PathBuf, HashMap<u32, String>>>> =
     LazyLock::new(Default::default);
 
 /// The ledger on disk. No file is an empty ledger; a file that cannot be read
@@ -57,13 +62,24 @@ struct DiskView {
     canonical: HashMap<u32, PathBuf>,
 }
 
-fn scan(cur_dir: &Path) -> DiskView {
+/// `cur_dir` (and its sibling `orphaned/`) missing is an empty view: a mailbox
+/// never backed up has no `cur/` yet. Any other failure to list either
+/// directory, including a single unreadable entry partway through, is an
+/// error: reading it as empty would hand out a uid a file on disk already
+/// carries, the same reason `load` refuses unreadable input.
+fn scan(cur_dir: &Path) -> Result<DiskView, String> {
     let mut view = DiskView { highest: 0, canonical: HashMap::new() };
     let orphaned = cur_dir.parent().map(|mailbox| mailbox.join(ORPHAN_DIR));
     for (dir, is_cur) in [(Some(cur_dir.to_path_buf()), true), (orphaned, false)] {
         let Some(dir) = dir else { continue };
-        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
-        for entry in entries.flatten() {
+        let entries = match std::fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(format!("Outlook uid allocation could not list {}: {}", dir.display(), e)),
+        };
+        for entry in entries {
+            let entry = entry
+                .map_err(|e| format!("Outlook uid allocation could not list {}: {}", dir.display(), e))?;
             let name = entry.file_name().to_string_lossy().to_string();
             if let Some(uid) = mirror_filename_uid(&name) {
                 view.highest = view.highest.max(uid);
@@ -75,7 +91,7 @@ fn scan(cur_dir: &Path) -> DiskView {
             }
         }
     }
-    view
+    Ok(view)
 }
 
 fn persist(path: &Path, ledger: &Ledger) -> Result<(), String> {
@@ -110,7 +126,7 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
     }
 
     if !unseen.is_empty() {
-        let disk = scan(cur_dir);
+        let disk = scan(cur_dir)?;
 
         // Normalized Message-ID -> the lowest uid of a file the ledger does not own.
         let mut adoptable: HashMap<String, u32> = HashMap::new();
@@ -125,8 +141,17 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
                 .collect();
             unowned.sort_unstable_by_key(|(uid, _)| *uid);
             for (uid, path) in unowned {
-                if let Some(message_id) = read.entry(uid).or_insert_with(|| read_message_id(path)) {
-                    adoptable.entry(message_id.clone()).or_insert(uid);
+                // Only a successful read is memoized: a transient open/read
+                // failure returns None exactly like "no Message-ID header"
+                // does, and caching that would pin the file unowned for the
+                // rest of the process instead of retrying it on a later call.
+                let message_id = match read.get(&uid) {
+                    Some(id) => Some(id.clone()),
+                    None => read_message_id(path),
+                };
+                if let Some(message_id) = message_id {
+                    read.entry(uid).or_insert_with(|| message_id.clone());
+                    adoptable.entry(message_id).or_insert(uid);
                 }
             }
         }
@@ -134,11 +159,32 @@ pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<St
         let mut next = ledger.keys().next_back().copied().unwrap_or(0).max(disk.highest);
         for (id, message_id) in unseen {
             let adopted = message_id.map(normalize_message_id).and_then(|m| adoptable.remove(&m));
-            let uid = adopted.unwrap_or_else(|| {
-                next += 1;
-                next
-            });
-            ledger.insert(uid, id.to_string());
+            let uid = match adopted {
+                Some(uid) => uid,
+                // checked, not `+= 1`: a legacy or set-aside file can name any
+                // u32, so the floor can already sit at u32::MAX. Wrapping
+                // would hand out a uid a file on disk carries; panicking
+                // would take the whole process down for one mailbox.
+                None => {
+                    next = next.checked_add(1).ok_or_else(|| {
+                        format!("Outlook uid ledger {} has no uids left to allocate", ledger_path.display())
+                    })?;
+                    next
+                }
+            };
+            // Guards the one invariant the two paths above exist to keep: an
+            // adopted uid is never still owned (it came from `adoptable`,
+            // built from uids `ledger` does not contain) and a fresh uid is
+            // never below `next`'s floor, so this should never fire. If it
+            // ever does, failing loudly beats silently overwriting whichever
+            // message already owned that uid.
+            if ledger.insert(uid, id.to_string()).is_some() {
+                return Err(format!(
+                    "Outlook uid ledger {} already had a message filed under uid {}",
+                    ledger_path.display(),
+                    uid
+                ));
+            }
             uid_of.insert(id.to_string(), uid);
         }
 
@@ -217,9 +263,9 @@ mod tests {
     }
 
     #[cfg(unix)]
-    fn set_read_only(dir: &Path, read_only: bool) {
+    fn set_mode(path: &Path, mode: u32) {
         use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(dir, fs::Permissions::from_mode(if read_only { 0o555 } else { 0o755 })).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
     }
 
     #[test]
@@ -270,6 +316,7 @@ mod tests {
         fs::write(&m.ledger, r#"{"1":"g-a","#).unwrap();
         let err = allocate(&m.ledger, &m.cur, &listed(&["a", "new"])).unwrap_err();
         assert!(err.contains("ledger"), "{err}");
+        assert!(err.contains(&m.ledger.display().to_string()), "{err}");
         assert_eq!(fs::read_to_string(&m.ledger).unwrap(), r#"{"1":"g-a","#);
     }
 
@@ -287,9 +334,9 @@ mod tests {
         seed(&m, &[(1, "a")]);
         let before = fs::read(&m.ledger).unwrap();
         let dir = m.ledger.parent().unwrap().to_path_buf();
-        set_read_only(&dir, true);
+        set_mode(&dir, 0o555);
         let result = allocate(&m.ledger, &m.cur, &listed(&["a", "new"]));
-        set_read_only(&dir, false);
+        set_mode(&dir, 0o755);
         assert!(result.is_err());
         assert_eq!(fs::read(&m.ledger).unwrap(), before);
     }
@@ -300,9 +347,9 @@ mod tests {
         let m = mailbox();
         seed(&m, &[(1, "a"), (2, "b")]);
         let dir = m.ledger.parent().unwrap().to_path_buf();
-        set_read_only(&dir, true); // any write attempt would fail
+        set_mode(&dir, 0o555); // any write attempt would fail
         let result = allocate(&m.ledger, &m.cur, &listed(&["b", "a"]));
-        set_read_only(&dir, false);
+        set_mode(&dir, 0o755);
         assert_eq!(result.unwrap(), vec![2, 1]);
     }
 
@@ -475,5 +522,124 @@ mod tests {
         for (id, uid) in pairs {
             assert_eq!(disk.get(&uid), Some(&id));
         }
+    }
+
+    // --- fix round 1 ---
+
+    #[cfg(unix)]
+    #[test]
+    fn a_vault_folder_that_cannot_be_listed_is_an_error_and_writes_nothing() {
+        let m = mailbox();
+        seed(&m, &[(1, "a")]);
+        file(&m, 2, "b");
+        let before = fs::read(&m.ledger).unwrap();
+        set_mode(&m.cur, 0o000);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["new"]));
+        set_mode(&m.cur, 0o755);
+        assert!(result.is_err(), "{result:?}");
+        assert_eq!(fs::read(&m.ledger).unwrap(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_transient_message_id_read_error_is_retried_not_pinned_as_no_message_id() {
+        let m = mailbox();
+        file(&m, 1, "m1"); // unowned; ledger is empty
+        set_mode(&m.cur.join("1:2,.eml"), 0o000);
+        // The scan runs (the listed id carries a Message-ID) but uid 1 can't be
+        // read; a fresh uid is issued instead of adopting it.
+        let uids = allocate(&m.ledger, &m.cur, &listed(&["a"])).unwrap();
+        assert_eq!(uids, vec![2]);
+        set_mode(&m.cur.join("1:2,.eml"), 0o644);
+        // Now readable: a later id sharing uid 1's Message-ID must still adopt
+        // it, proving the earlier failed read was not cached as "no id".
+        let entries = vec![("g-b".to_string(), Some("<m1@outlook.test>".to_string()))];
+        assert_eq!(allocate(&m.ledger, &m.cur, &entries).unwrap(), vec![1]);
+    }
+
+    #[test]
+    fn uid_space_exhausted_is_an_error_and_writes_nothing() {
+        let m = mailbox();
+        fs::write(m.cur.join("4294967295.eml"), eml("legacy@outlook.test")).unwrap();
+        assert!(allocate(&m.ledger, &m.cur, &[("g-n".to_string(), None)]).is_err());
+        assert!(!m.ledger.exists());
+    }
+
+    /// Rule 6: the floor is the higher of a legacy `cur/` name and an
+    /// orphaned/set-aside one, in either direction (the earlier test only
+    /// covered the orphaned file winning).
+    #[test]
+    fn the_floor_takes_the_higher_of_a_legacy_name_and_a_set_aside_file() {
+        let m = mailbox();
+        fs::write(m.cur.join("30.eml"), eml("legacy@outlook.test")).unwrap();
+        let orphaned = m.cur.parent().unwrap().join(crate::maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphaned).unwrap();
+        fs::write(orphaned.join("20:2,.eml"), eml("set-aside@outlook.test")).unwrap();
+        let uids = allocate(&m.ledger, &m.cur, &[("g-n".to_string(), None)]).unwrap();
+        assert_eq!(uids, vec![31]);
+    }
+
+    /// Rule 10, memo hit: a Message-ID read once for an unowned uid is not
+    /// read again on a later call, even once the file becomes unreadable.
+    #[cfg(unix)]
+    #[test]
+    fn a_memoized_message_id_is_reused_without_rereading_a_file_that_turned_unreadable() {
+        let m = mailbox();
+        file(&m, 1, "m1");
+        file(&m, 2, "m2");
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
+        set_mode(&m.cur.join("2:2,.eml"), 0o000);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["m2"]));
+        set_mode(&m.cur.join("2:2,.eml"), 0o644);
+        assert_eq!(result.unwrap(), vec![2]);
+    }
+
+    /// Rule 10, retain: a memo entry for a uid whose file left `cur/` is
+    /// dropped, so a later file recreated at that uid is read fresh rather
+    /// than adopted under the vanished file's stale Message-ID.
+    #[test]
+    fn a_stale_memo_entry_for_a_deleted_file_is_not_reused_when_its_uid_is_recreated() {
+        let m = mailbox();
+        file(&m, 1, "m1");
+        file(&m, 5, "m2");
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
+        fs::remove_file(m.cur.join("5:2,.eml")).unwrap();
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["other"])).unwrap(), vec![2]);
+        file(&m, 5, "m3");
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m3"])).unwrap(), vec![5]);
+    }
+
+    /// Same shape, but with a third file (uid 9) that is never listed, so it
+    /// stays unowned for the whole test and the directory's memo is never
+    /// fully dropped (rule 10's "nothing left to adopt" drop needs every
+    /// canonical uid owned). That isolates the per-uid `retain`: without it,
+    /// this would still fail even though the test above, where the memo gets
+    /// dropped wholesale between the second and third call anyway, would not.
+    #[test]
+    fn retain_alone_drops_a_stale_entry_when_the_directory_memo_survives() {
+        let m = mailbox();
+        file(&m, 1, "m1");
+        file(&m, 5, "m2");
+        file(&m, 9, "keep");
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["m1"])).unwrap(), vec![1]);
+        fs::remove_file(m.cur.join("5:2,.eml")).unwrap();
+        allocate(&m.ledger, &m.cur, &listed(&["other"])).unwrap();
+        file(&m, 5, "m3");
+        let entries = vec![("g-m3".to_string(), Some("<m3@outlook.test>".to_string()))];
+        assert_eq!(allocate(&m.ledger, &m.cur, &entries).unwrap(), vec![5]);
+    }
+
+    /// Rule 8: nothing unseen means `allocate` never scans `cur/` at all, not
+    /// just that it skips the write — an unlistable `cur/` must not surface as
+    /// an error when there was nothing to look up in it.
+    #[cfg(unix)]
+    #[test]
+    fn nothing_unseen_never_scans_the_directory() {
+        let m = mailbox();
+        seed(&m, &[(1, "a"), (2, "b")]);
+        set_mode(&m.cur, 0o000);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["b", "a"]));
+        set_mode(&m.cur, 0o755);
+        assert_eq!(result.unwrap(), vec![2, 1]);
     }
 }
