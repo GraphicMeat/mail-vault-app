@@ -45,6 +45,25 @@ pub fn find_by_uid(cur_dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
+/// Every `<uid>:…` file in a Maildir `cur/` directory, keyed by uid, in ONE
+/// directory pass. `find_by_uid` rescans the directory per call, which is
+/// quadratic when a caller resolves a whole folder. Same matching rule as
+/// `find_by_uid`: only names with a colon after the uid count; legacy
+/// `12.eml` / `12_S.eml` names are not vault rows. If two files carry the same
+/// uid the first one `read_dir` yields wins, exactly as `find_by_uid` behaves.
+pub fn uid_file_map(cur_dir: &Path) -> std::collections::HashMap<u32, PathBuf> {
+    let mut map = std::collections::HashMap::new();
+    let Ok(entries) = fs::read_dir(cur_dir) else { return map };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        let Some((uid_str, _)) = name.split_once(':') else { continue };
+        let Ok(uid) = uid_str.parse::<u32>() else { continue };
+        map.entry(uid).or_insert_with(|| entry.path());
+    }
+    map
+}
+
 /// List all UIDs in a Maildir/cur directory.
 pub fn list_uids(data_dir: &Path, account_id: &str, mailbox: &str) -> Vec<u32> {
     let dir = cur_path(data_dir, account_id, mailbox);
@@ -1425,5 +1444,39 @@ mod tests {
         assert_eq!(read_generation(&mailbox), Some(42));
 
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn uid_file_map_keys_colon_names_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        for name in ["7:2,S.eml", "12:2,.eml", "300:2,AF.eml", "12.eml", "13_S.eml", "not-a-uid:2,.eml", "_meta.json"] {
+            fs::write(cur.join(name), b"x").unwrap();
+        }
+        let map = uid_file_map(cur);
+        let mut keys: Vec<u32> = map.keys().copied().collect();
+        keys.sort();
+        assert_eq!(keys, vec![7, 12, 300]);
+        assert_eq!(map[&12].file_name().unwrap().to_str().unwrap(), "12:2,.eml");
+        assert_eq!(map[&300].file_name().unwrap().to_str().unwrap(), "300:2,AF.eml");
+    }
+
+    #[test]
+    fn uid_file_map_agrees_with_find_by_uid() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        for name in ["1:2,S.eml", "10:2,.eml", "101:2,F.eml", "1010.eml"] {
+            fs::write(cur.join(name), b"x").unwrap();
+        }
+        let map = uid_file_map(cur);
+        for uid in [1u32, 10, 101, 1010, 5] {
+            assert_eq!(map.get(&uid).cloned(), find_by_uid(cur, uid), "uid {uid}");
+        }
+    }
+
+    #[test]
+    fn uid_file_map_missing_dir_is_empty() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert!(uid_file_map(&tmp.path().join("nope")).is_empty());
     }
 }
