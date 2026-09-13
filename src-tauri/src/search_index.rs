@@ -82,6 +82,7 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
         body_text,
         has_attachments: obj.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false),
         row_json: serde_json::to_string(&row).ok()?,
+        attachment_candidates: Vec::new(),
     })
 }
 

@@ -32,6 +32,16 @@ pub struct IndexDoc {
     pub has_attachments: bool,
     /// The list row JSON with text/html cleared and no flags (flags come from the filename).
     pub row_json: String,
+    /// Attachment-shaped MIME parts, metadata only — no bytes. One `pending`
+    /// row is written per candidate; extraction (Task 5) fills in the rest.
+    pub attachment_candidates: Vec<AttachmentMeta>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AttachmentMeta {
+    pub filename: String,
+    pub mime: String,
+    pub size: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -322,12 +332,17 @@ fn commit_batch(
     let tx = conn.transaction()?;
     {
         let mut upsert = tx.prepare_cached(UPSERT)?;
+        let mut clear_attachments = tx.prepare_cached("DELETE FROM attachments WHERE message_row = ?1")?;
+        let mut insert_attachment = tx.prepare_cached(
+            "INSERT INTO attachments (message_row, part_index, filename, mime, size, state) VALUES (?1, ?2, ?3, ?4, ?5, 'pending')",
+        )?;
         for (file, doc) in docs {
             let body_state = match (&doc, config.bodies) {
                 (None, _) => BODY_UNPARSEABLE,
                 (Some(_), true) => BODY_INDEXED,
                 (Some(_), false) => BODY_DISABLED,
             };
+            let candidates = doc.as_ref().map(|d| d.attachment_candidates.clone()).unwrap_or_default();
             let d = doc.unwrap_or_else(|| IndexDoc { row_json: "{}".into(), ..IndexDoc::default() });
             let addrs = d.addrs.join("\n");
             let id: i64 = upsert.query_row(
@@ -352,7 +367,13 @@ fn commit_batch(
             )?;
             delete_fts(&tx, id)?;
             if body_state != BODY_UNPARSEABLE {
-                insert_fts(&tx, id, &d.subject, &addrs, &d.body_text)?;
+                insert_fts(&tx, id, &d.subject, &addrs, &d.body_text, "")?;
+            }
+            clear_attachments.execute([id])?;
+            if config.attachments {
+                for (i, part) in candidates.iter().enumerate() {
+                    insert_attachment.execute(params![id, i as i64, part.filename, part.mime, part.size as i64])?;
+                }
             }
         }
     }
@@ -365,13 +386,13 @@ fn delete_fts(conn: &Connection, id: i64) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn insert_fts(conn: &Connection, id: i64, subject: &str, addrs: &str, body: &str) -> rusqlite::Result<()> {
-    conn.prepare_cached("INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, ?2, ?3, ?4, '')")?
-        .execute(params![id, subject, addrs, body])?;
-    let (s, a, b) = (cjk_units(subject), cjk_units(addrs), cjk_units(body));
-    if !(s.is_empty() && a.is_empty() && b.is_empty()) {
-        conn.prepare_cached("INSERT INTO msg_cjk(rowid, subject, addrs, body, attach) VALUES (?1, ?2, ?3, ?4, '')")?
-            .execute(params![id, s, a, b])?;
+fn insert_fts(conn: &Connection, id: i64, subject: &str, addrs: &str, body: &str, attach: &str) -> rusqlite::Result<()> {
+    conn.prepare_cached("INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, ?2, ?3, ?4, ?5)")?
+        .execute(params![id, subject, addrs, body, attach])?;
+    let (s, a, b, x) = (cjk_units(subject), cjk_units(addrs), cjk_units(body), cjk_units(attach));
+    if !(s.is_empty() && a.is_empty() && b.is_empty() && x.is_empty()) {
+        conn.prepare_cached("INSERT INTO msg_cjk(rowid, subject, addrs, body, attach) VALUES (?1, ?2, ?3, ?4, ?5)")?
+            .execute(params![id, s, a, b, x])?;
     }
     Ok(())
 }
@@ -451,7 +472,7 @@ fn strip_bodies(conn: &Connection) -> rusqlite::Result<()> {
         .collect::<rusqlite::Result<_>>()?;
     for (id, subject, addrs) in rows {
         delete_fts(conn, id)?;
-        insert_fts(conn, id, &subject, &addrs, "")?;
+        insert_fts(conn, id, &subject, &addrs, "", "")?;
     }
     conn.execute(
         "UPDATE messages SET body_state = ?1 WHERE body_state IN (?2, ?3)",
@@ -482,6 +503,7 @@ mod tests {
             body_text: parsed.get_body().unwrap_or_default(),
             has_attachments: false,
             row_json: "{}".into(),
+            attachment_candidates: Vec::new(),
         })
     }
 
@@ -949,5 +971,59 @@ mod tests {
         let cfg = IndexConfig { bodies: true, attachments: true, image_text: false };
         assert!(cfg.attachments);
         assert!(!cfg.image_text);
+    }
+
+    #[test]
+    fn commit_batch_writes_pending_attachment_rows_for_each_candidate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            subject: "Invoice".into(),
+            has_attachments: true,
+            attachment_candidates: vec![
+                AttachmentMeta { filename: "invoice.pdf".into(), mime: "application/pdf".into(), size: 5000 },
+                AttachmentMeta { filename: "photo.png".into(), mime: "image/png".into(), size: 200_000 },
+            ],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let message_id: i64 = conn.query_row("SELECT id FROM messages", [], |r| r.get(0)).unwrap();
+        let mut stmt = conn.prepare("SELECT part_index, filename, mime, size, state FROM attachments WHERE message_row = ?1 ORDER BY part_index").unwrap();
+        let rows: Vec<(i64, String, String, i64, String)> = stmt
+            .query_map([message_id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0], (0, "invoice.pdf".into(), "application/pdf".into(), 5000, "pending".into()));
+        assert_eq!(rows[1], (1, "photo.png".into(), "image/png".into(), 200_000, "pending".into()));
+    }
+
+    #[test]
+    fn commit_batch_writes_no_attachment_rows_when_attachments_are_disabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 1 }],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, vec![(&file, Some(doc))]).unwrap();
+        let n: i64 = conn.query_row("SELECT count(*) FROM attachments", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "no candidate rows are written while the attachments toggle is off");
+    }
+
+    #[test]
+    fn reparsing_a_changed_message_replaces_its_attachment_rows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc1 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "old.pdf".into(), mime: "application/pdf".into(), size: 1 }], ..IndexDoc::default() };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc1))]).unwrap();
+        let doc2 = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "new.pdf".into(), mime: "application/pdf".into(), size: 2 }], ..IndexDoc::default() };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc2))]).unwrap();
+        let names: Vec<String> = conn.prepare("SELECT filename FROM attachments").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
+        assert_eq!(names, vec!["new.pdf".to_string()], "the old part's row must not linger once the message is reparsed with a different attachment set");
     }
 }
