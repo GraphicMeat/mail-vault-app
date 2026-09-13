@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import HardBreak from '@tiptap/extension-hard-break';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -166,32 +167,94 @@ async function insertImageFiles(editor, files, pos) {
   insertImages(editor, srcs.map((src, i) => ({ src, name: files[i].name })), pos);
 }
 
+// Tags a renderer starts a new line for (prosemirror-model's block list).
+const BLOCK_TAGS = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|CANVAS|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|HGROUP|HR|LI|NOSCRIPT|OL|OUTPUT|P|PRE|SECTION|TABLE|TBODY|TD|TFOOT|TH|THEAD|TR|UL)$/;
+// Inline wrappers a <br> can sit inside and still be the end of its line.
+const INLINE_TAGS = /^(A|ABBR|ACRONYM|B|BDI|BDO|CITE|CODE|DEL|DFN|EM|FONT|I|INS|KBD|LABEL|MARK|Q|RUBY|S|SAMP|SMALL|SPAN|STRIKE|STRONG|SUB|SUP|TIME|TT|U|VAR)$/;
+
+/**
+ * True for a <br> that nothing follows on its line. Such a break draws no line
+ * of its own: it only holds an otherwise empty line open, so `<p><br></p>` is
+ * one blank line and `<p>Hi<br></p>` is one line, in every mail client.
+ * ProseMirror's own paste parser reads it the same way.
+ */
+export function isPaddingBreak(br) {
+  let node = br;
+  for (;;) {
+    let next = node.nextSibling;
+    // Collapsible whitespace and comments put nothing on the line.
+    while (next && (next.nodeType === 8 || (next.nodeType === 3 && !/[^ \t\n\r\f]/.test(next.nodeValue)))) {
+      next = next.nextSibling;
+    }
+    if (next) return next.nodeType === 1 && BLOCK_TAGS.test(next.nodeName);
+    const parent = node.parentNode;
+    if (!parent || !INLINE_TAGS.test(parent.nodeName)) return true;
+    node = parent;
+  }
+}
+
+// Reading mail HTML with the stock rule turned a padding <br> into a line
+// break inside the blank line it belongs to: a blank line from a template, a
+// plain-text signature or a forwarded Gmail message showed two lines tall.
+const MailHardBreak = HardBreak.extend({
+  parseHTML() {
+    return [
+      { tag: 'br', ignore: true, getAttrs: (el) => (isPaddingBreak(el) ? null : false) },
+      ...this.parent(),
+    ];
+  },
+});
+
+/** The compose schema. Exported so the tests read and write HTML through the same one. */
+export const editorExtensions = (placeholder) => [
+  StarterKit.configure({
+    heading: false,
+    // StarterKit ships its own link and underline; the two below replace
+    // them, and registering both names warns and leaves which one wins
+    // up to extension order.
+    link: false,
+    underline: false,
+    hardBreak: false,
+  }),
+  MailHardBreak,
+  Underline,
+  Link.configure({
+    openOnClick: false,
+    HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+  }),
+  Placeholder.configure({ placeholder }),
+  // allowBase64: compose restores initialData.body HTML after minimize /
+  // undo-send, and the inline picture must parse back out of that string.
+  Image.configure({ allowBase64: true }),
+];
+
+/**
+ * The editor's HTML with its empty lines made real. TipTap writes an empty
+ * paragraph as `<p></p>` and a line break that ends a paragraph as a bare
+ * trailing `<br>`; ProseMirror gives both their height on screen with a <br>
+ * of its own, and anywhere else they collapse. This adds that <br>, the way
+ * Thunderbird, Gmail and Apple Mail write a blank line. Takes getHTML()
+ * output only: HTML that is already padded would gain a second line.
+ */
+export function padEmptyLines(html) {
+  if (!html) return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const p of doc.body.querySelectorAll('p')) {
+    let last = p;
+    while (last.lastChild) last = last.lastChild;
+    if (last === p || last.nodeName === 'BR') p.appendChild(doc.createElement('br'));
+  }
+  return doc.body.innerHTML;
+}
+
 export function RichTextEditor({ content, onUpdate, placeholder = 'Write your message...', editorRef, onFiles }) {
   const t = useT();
   const spellcheckEnabled = useSettingsStore((s) => s.spellcheckEnabled ?? true);
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        heading: false,
-        // StarterKit ships its own link and underline; the two below replace
-        // them, and registering both names warns and leaves which one wins
-        // up to extension order.
-        link: false,
-        underline: false,
-      }),
-      Underline,
-      Link.configure({
-        openOnClick: false,
-        HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
-      }),
-      Placeholder.configure({ placeholder }),
-      // allowBase64: compose restores initialData.body HTML after minimize /
-      // undo-send, and the inline picture must parse back out of that string.
-      Image.configure({ allowBase64: true }),
-    ],
+    extensions: editorExtensions(placeholder),
     content,
     onUpdate: ({ editor }) => {
-      onUpdate(editor.getHTML(), editor.getText());
+      onUpdate(padEmptyLines(editor.getHTML()), editor.getText());
     },
     editorProps: {
       attributes: {
@@ -244,6 +307,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // just as broken. `addToHistory: false` keeps Undo out of it — the same
   // idiom the external-content sync below uses — and the selection goes back
   // because the document is identical, so the positions still hold.
+  // Padded, or a line break ending a paragraph would not survive the re-read.
   const spellcheckSettled = useRef(false);
   useEffect(() => {
     if (!editor) return;
@@ -251,7 +315,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     const { from, to } = editor.state.selection;
     editor.chain()
       .setMeta('addToHistory', false)
-      .setContent(editor.getHTML())
+      .setContent(padEmptyLines(editor.getHTML()))
       .setTextSelection({ from, to })
       .run();
   }, [spellcheckEnabled, editor]);
@@ -260,8 +324,9 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
   // signature swap on account change, template fallback). None of that is a user
   // edit, so keep it out of the undo history — recorded, it lights Undo on an
   // empty message and makes the first Undo press a no-op.
+  // The parent holds the padded HTML this editor handed it; that echo is not a change.
   useEffect(() => {
-    if (editor && content !== undefined && editor.getHTML() !== content) {
+    if (editor && content !== undefined && padEmptyLines(editor.getHTML()) !== content) {
       editor.chain().setMeta('addToHistory', false).setContent(content).run();
     }
   }, [content, editor]);
