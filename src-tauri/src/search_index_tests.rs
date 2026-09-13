@@ -101,6 +101,32 @@ fn assemble_rows_drops_a_hit_whose_uid_now_holds_another_message() {
     assert_eq!(uids, vec![6], "the reissued uid's row is another message: dropped, never shown for this hit");
 }
 
+#[test]
+fn search_index_status_is_available_during_the_first_build_but_search_is_not() {
+    use mailvault_core::search_index::{db, lock, query::SearchRequest};
+    let tmp = tempfile::tempdir().unwrap();
+    let st = crate::search_index::SearchIndexState::default();
+    let status = || crate::search_index::status_json(&st);
+    let search = || {
+        let req = SearchRequest { account_id: "acct".into(), query: "budget".into(), ..Default::default() };
+        crate::search_index::search_reply(&st, &req).unwrap()
+    };
+    assert_eq!((status()["available"].as_bool(), search()["available"].as_bool()), (Some(false), Some(false)), "closed");
+
+    *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
+    *st.root.lock().unwrap() = Some(tmp.path().to_path_buf());
+    let s = status();
+    assert_eq!(s["available"], true, "open: Settings shows the first build's progress and can Rebuild");
+    assert_eq!(s["indexed"], 0);
+    assert_eq!(search()["available"], false, "a first build misses mail the scan finds: search keeps scanning");
+
+    db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
+    let reply = search();
+    assert_eq!(reply["available"], true);
+    assert_eq!(reply["rows"], serde_json::json!([]));
+    assert_eq!(status()["available"], true);
+}
+
 /// Not a gate. The app parser over 50k ~3 KB multipart files, then what
 /// `vault_search` does per query (`search`, then `assemble_rows`), on a warm
 /// page cache (the files were just written). On the mini (a release test binary

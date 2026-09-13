@@ -22,7 +22,7 @@ use tracing::{info, warn};
 #[derive(Default)]
 pub struct SearchIndexState {
     pub db: SharedConn,
-    root: Mutex<Option<PathBuf>>,
+    pub(crate) root: Mutex<Option<PathBuf>>,
     config: Mutex<Option<IndexConfig>>,
     signals: Mutex<Option<mpsc::Sender<Signal>>>,
     phase: Mutex<&'static str>, // "idle" | "indexing" | "unavailable"
@@ -209,16 +209,16 @@ pub fn assemble_rows(root: &Path, account_id: &str, page: &core::query::SearchPa
         .collect()
 }
 
-fn status_json(st: &SearchIndexState) -> serde_json::Value {
+pub(crate) fn status_json(st: &SearchIndexState) -> serde_json::Value {
     let guard = lock(&st.db);
     let Some(conn) = guard.as_ref() else {
         return serde_json::json!({ "available": false, "state": "unavailable", "indexed": 0, "total": 0, "sizeBytes": 0, "complete": false });
     };
     let c = db::counts(conn);
     let size = g(&st.root).as_ref().map(|r| db::db_size_bytes(r)).unwrap_or(0);
-    // counts() yields 0/0 on error: never "complete". Not available until the
-    // first full pass: searches use the scan until then.
-    serde_json::json!({ "available": db::first_pass_done(conn), "state": *g(&st.phase), "indexed": c.indexed, "total": c.total, "sizeBytes": size, "complete": c.total > 0 && c.indexed >= c.total })
+    // counts() yields 0/0 on error: never "complete". Available whenever open, so
+    // Settings shows a first build's progress; only vault_search waits for first_pass_done.
+    serde_json::json!({ "available": true, "state": *g(&st.phase), "indexed": c.indexed, "total": c.total, "sizeBytes": size, "complete": c.total > 0 && c.indexed >= c.total })
 }
 
 fn emit(app: &tauri::AppHandle, st: &SearchIndexState) {
@@ -436,30 +436,31 @@ async fn off_main<T: Send + 'static>(
 /// its first full pass over it.
 #[tauri::command]
 pub async fn vault_search(app: tauri::AppHandle, request: core::query::SearchRequest) -> Result<serde_json::Value, String> {
-    off_main(app, move |st| {
-        let (root, page, counts) = {
-            let guard = lock(&st.db);
-            // Root read under the db lock, so it is the root this connection was opened for.
-            let (Some(conn), Some(root)) = (guard.as_ref(), g(&st.root).clone()) else {
-                return Ok(serde_json::json!({ "available": false }));
-            };
-            // A first build (or a rebuild) still misses mail the scan finds.
-            if !db::first_pass_done(conn) {
-                return Ok(serde_json::json!({ "available": false }));
-            }
-            (root, core::query::search(conn, &request)?, db::counts(conn))
-        }; // released before any file is read
-        let rows = assemble_rows(&root, &request.account_id, &page);
-        Ok(serde_json::json!({
-            "available": true,
-            "rows": rows,
-            "total": page.total,
-            "indexed": counts.indexed,
-            "totalMessages": counts.total,
-            "complete": counts.total > 0 && counts.indexed >= counts.total,
-        }))
-    })
-    .await?
+    off_main(app, move |st| search_reply(st, &request)).await?
+}
+
+pub(crate) fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest) -> Result<serde_json::Value, String> {
+    let (root, page, counts) = {
+        let guard = lock(&st.db);
+        // Root read under the db lock, so it is the root this connection was opened for.
+        let (Some(conn), Some(root)) = (guard.as_ref(), g(&st.root).clone()) else {
+            return Ok(serde_json::json!({ "available": false }));
+        };
+        // A first build (or a rebuild) still misses mail the scan finds.
+        if !db::first_pass_done(conn) {
+            return Ok(serde_json::json!({ "available": false }));
+        }
+        (root, core::query::search(conn, request)?, db::counts(conn))
+    }; // released before any file is read
+    let rows = assemble_rows(&root, &request.account_id, &page);
+    Ok(serde_json::json!({
+        "available": true,
+        "rows": rows,
+        "total": page.total,
+        "indexed": counts.indexed,
+        "totalMessages": counts.total,
+        "complete": counts.total > 0 && counts.indexed >= counts.total,
+    }))
 }
 
 #[derive(serde::Deserialize)]
