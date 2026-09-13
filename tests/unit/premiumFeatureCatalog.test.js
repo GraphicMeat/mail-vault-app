@@ -12,7 +12,7 @@ describe('premium feature catalog', () => {
     expect(PREMIUM_FEATURES.map(f => f.id)).toEqual([
       'backup-schedule', 'backup-health', 'cleanup', 'time-capsule',
       'tracker-blocking', 'auto-cleanup', 'migration', 'server-change',
-      'export-image', 'focus-session', 'devices',
+      'export-image', 'focus-session', 'devices', 'attachment-search',
     ]);
   });
 

@@ -26,5 +26,5 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'export-image',     icon: Image,          titleKey: 'premium.exportImage.title',     blurbKey: 'premium.exportImage.blurb',     shot: 'premium-export-image',     tab: null },
   { id: 'focus-session',    icon: Timer,          titleKey: 'premium.focusSession.title',    blurbKey: 'premium.focusSession.blurb',    shot: 'premium-focus-session',    tab: null },
   { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
-  { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: 'attachment-search',       tab: 'storage' },
+  { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: null,                       tab: 'storage' },
 ]);
