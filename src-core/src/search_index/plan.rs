@@ -58,7 +58,7 @@ pub fn plan(queue: Vec<Signal>) -> Plan {
     p
 }
 
-/// `first`, everything already queued, and, while that is nudges only, what
+/// `first`, everything already queued, and, while `coalesces` holds, what
 /// arrives within `window`: a writer that caches message after message nudges
 /// once per message, and those become one pass. Stops waiting at the first
 /// other signal (its full pass is coming anyway) or a disconnect.
@@ -66,7 +66,7 @@ pub fn collect_burst(first: Signal, rx: &Receiver<Signal>, window: Duration) -> 
     let deadline = Instant::now() + window;
     let mut queue = vec![first];
     loop {
-        let signal = if queue.iter().all(|s| matches!(s, Signal::Nudge { .. })) {
+        let signal = if coalesces(&queue) {
             match rx.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
                 Ok(s) => s,
                 Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
@@ -80,6 +80,14 @@ pub fn collect_burst(first: Signal, rx: &Receiver<Signal>, window: Duration) -> 
         queue.push(signal);
     }
     queue
+}
+
+/// Whether a burst waits for more signals before its pass: only when it is
+/// already two or more nudges and nothing else. A lone nudge (one archive, then
+/// a search for it) is indexed at once; a writer caching message after message
+/// shows up as a burst.
+pub fn coalesces(queue: &[Signal]) -> bool {
+    queue.len() >= 2 && queue.iter().all(|s| matches!(s, Signal::Nudge { .. }))
 }
 
 /// A scoped pass becomes a full one once the last full pass is `SWEEP_EVERY` old.
@@ -161,16 +169,42 @@ mod tests {
     }
 
     #[test]
-    fn a_nudge_burst_waits_for_the_nudges_behind_it() {
-        let (tx, rx) = channel();
-        let sender = std::thread::spawn(move || {
+    fn only_a_burst_of_two_or_more_nudges_waits() {
+        assert!(!coalesces(&[nudge("a", "INBOX")]), "one write, searched right after: index it now");
+        assert!(coalesces(&[nudge("a", "INBOX"), nudge("a", "INBOX")]));
+        assert!(coalesces(&[nudge("a", "INBOX"), nudge("b", "Archive"), nudge("a", "INBOX")]));
+        assert!(!coalesces(&[Signal::Sweep]));
+        assert!(!coalesces(&[nudge("a", "INBOX"), Signal::Configure]));
+    }
+
+    /// Sends `later` 50 ms from now; the sender is returned so the channel stays connected.
+    fn send_later(tx: std::sync::mpsc::Sender<Signal>, later: Signal) -> std::thread::JoinHandle<std::sync::mpsc::Sender<Signal>> {
+        std::thread::spawn(move || {
             std::thread::sleep(Duration::from_millis(50));
-            tx.send(nudge("a", "Archive")).unwrap();
-            tx // kept alive until joined: a disconnect is not what this tests
-        });
+            tx.send(later).unwrap();
+            tx
+        })
+    }
+
+    #[test]
+    fn a_lone_nudge_does_not_wait() {
+        let (tx, rx) = channel();
+        let sender = send_later(tx, nudge("a", "Archive"));
+        let t = Instant::now();
+        let queue = collect_burst(nudge("a", "INBOX"), &rx, Duration::from_secs(10));
+        assert!(t.elapsed() < Duration::from_secs(5), "waited {:?}", t.elapsed());
+        assert_eq!(queue, vec![nudge("a", "INBOX")]);
+        let _tx = sender.join().unwrap();
+    }
+
+    #[test]
+    fn two_queued_nudges_wait_for_the_nudges_behind_them() {
+        let (tx, rx) = channel();
+        tx.send(nudge("a", "INBOX")).unwrap();
+        let sender = send_later(tx, nudge("a", "Archive"));
         let queue = collect_burst(nudge("a", "INBOX"), &rx, Duration::from_millis(1000));
         let _tx = sender.join().unwrap();
-        assert_eq!(queue, vec![nudge("a", "INBOX"), nudge("a", "Archive")]);
+        assert_eq!(queue, vec![nudge("a", "INBOX"), nudge("a", "INBOX"), nudge("a", "Archive")]);
     }
 
     #[test]
@@ -182,8 +216,11 @@ mod tests {
         assert!(t.elapsed() < Duration::from_secs(5), "a full pass is coming anyway: {:?}", t.elapsed());
         assert_eq!(queue, vec![nudge("a", "INBOX"), Signal::Configure]);
 
+        let (tx, rx) = channel();
+        let sender = send_later(tx, nudge("a", "INBOX"));
         let t = Instant::now();
-        assert_eq!(collect_burst(Signal::Sweep, &rx, Duration::from_secs(10)), vec![Signal::Sweep]);
+        assert_eq!(collect_burst(Signal::Sweep, &rx, Duration::from_secs(10)), vec![Signal::Sweep], "a Sweep alone does not wait");
         assert!(t.elapsed() < Duration::from_secs(5));
+        let _tx = sender.join().unwrap();
     }
 }
