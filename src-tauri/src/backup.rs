@@ -862,7 +862,7 @@ async fn run_imap_backup_inner(
                 .map_err(|e| format!("flag catch-up panicked: {}", e))?;
             if applied.total() > 0 {
                 info!(
-                    "backup: {} — read state caught up on {} vault files, {} mirror files, {} index entries",
+                    "backup: {} — read state caught up on {} vault files, {} mirror files, {} custody entries",
                     mailbox_path, applied.renamed, applied.mirrored, applied.index_patched
                 );
             }

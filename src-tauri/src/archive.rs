@@ -296,14 +296,18 @@ pub async fn run_with_backup(
 
     // Record custody for every message this run stored.
     if !index_entries.is_empty() {
-        let n = index_entries.len();
         let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox.clone());
         match tokio::task::spawn_blocking(move || {
             crate::custody::with_conn(&handle, |c| mailvault_core::custody::entries::upsert(c, &acct, &mbx, &index_entries))
         })
         .await
         {
-            Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", n),
+            Ok(Ok((written, skipped))) => {
+                info!("archive_emails: recorded {} custody entries", written);
+                if skipped > 0 {
+                    warn!("archive_emails: {} entries without a uid skipped", skipped);
+                }
+            }
             Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
             Err(e) => warn!("archive_emails: custody write panicked: {}", e),
         }
