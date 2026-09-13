@@ -2045,29 +2045,6 @@ pub fn delete_maildir_files(cur_dir: &Path, uids: &std::collections::HashSet<u32
     removed
 }
 
-/// Drop `uids` from a mailbox's `local-index.json` in a single read-modify-write.
-/// A missing index is not an error — nothing was ever indexed.
-pub fn prune_local_index(
-    index_path: &Path,
-    uids: &std::collections::HashSet<u32>,
-) -> Result<(), String> {
-    if !index_path.exists() {
-        return Ok(());
-    }
-    let content = fs::read_to_string(index_path)
-        .map_err(|e| format!("Failed to read local index: {}", e))?;
-    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
-    entries.retain(|e| {
-        e.get("uid")
-            .and_then(|u| u.as_u64())
-            .map(|u| !uids.contains(&(u as u32)))
-            .unwrap_or(true)
-    });
-    let data = serde_json::to_string(&entries)
-        .map_err(|e| format!("Failed to serialize local index: {}", e))?;
-    fs::write(index_path, &data).map_err(|e| format!("Failed to write local index: {}", e))
-}
-
 fn parse_address_str(header_value: &str) -> Vec<MaildirAddress> {
     match mailparse::addrparse(header_value) {
         Ok(addrs) => {
@@ -2521,70 +2498,6 @@ fn sidecar_message_id_map(
     (map, sidecars)
 }
 
-/// Uids in this mailbox that the server never issued — messages composed here
-/// that live only in the vault (`local_sent`, `local_draft`). A UID reissue
-/// says nothing about them, and a repair that moved them aside for "not on the
-/// server" would hide the user's own sent mail and drafts.
-fn locally_created_uids(index_path: &Path) -> std::collections::HashSet<u32> {
-    let mut uids = std::collections::HashSet::new();
-    let entries: Vec<serde_json::Value> = fs::read_to_string(index_path)
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    for entry in entries {
-        let source = entry.get("source").and_then(|v| v.as_str()).unwrap_or("");
-        if source == "local_sent" || source == "local_draft" {
-            if let Some(uid) = entry.get("uid").and_then(|u| u.as_u64()) {
-                uids.insert(uid as u32);
-            }
-        }
-    }
-    uids
-}
-
-/// Follow a repair through `local-index.json`: rebound uids are rewritten,
-/// orphaned ones dropped. A *recovered* file needs no entry — it is back
-/// because the server has it, so the list renders it from the server's own
-/// headers and reads its archived mark off the file itself.
-///
-/// Leaving the index alone would keep the rows the list renders pointing at
-/// uids whose files just moved — the same "claims a row is archived when the
-/// archived thing is a different message" the repair exists to end.
-fn remap_local_index(
-    index_path: &Path,
-    report: &mailvault_core::maildir::GenerationRepair,
-) -> Result<(), String> {
-    if !index_path.exists() {
-        return Ok(());
-    }
-    let content = fs::read_to_string(index_path)
-        .map_err(|e| format!("Failed to read local index: {}", e))?;
-    let mut entries: Vec<serde_json::Value> = serde_json::from_str(&content).unwrap_or_default();
-
-    let moved: std::collections::HashMap<u64, u64> =
-        report.rebound.iter().map(|(o, n)| (*o as u64, *n as u64)).collect();
-    let dropped: std::collections::HashSet<u64> =
-        report.orphaned.iter().map(|u| *u as u64).collect();
-
-    entries.retain(|e| {
-        e.get("uid").and_then(|u| u.as_u64()).map_or(true, |u| !dropped.contains(&u))
-    });
-    for entry in entries.iter_mut() {
-        let uid = entry.get("uid").and_then(|u| u.as_u64());
-        if let (Some(uid), Some(obj)) = (uid, entry.as_object_mut()) {
-            if let Some(new_uid) = moved.get(&uid) {
-                obj.insert("uid".to_string(), serde_json::json!(new_uid));
-            }
-        }
-    }
-
-    let data = serde_json::to_string(&entries)
-        .map_err(|e| format!("Failed to serialize local index: {}", e))?;
-    let tmp = index_path.with_extension("json.tmp");
-    fs::write(&tmp, &data).map_err(|e| format!("Failed to write local index tmp: {}", e))?;
-    fs::rename(&tmp, index_path).map_err(|e| format!("Failed to replace local index: {}", e))
-}
-
 /// What the sync engine last recorded for this mailbox: the UIDVALIDITY its
 /// UIDs belong to, and how many messages the server said it holds.
 ///
@@ -2661,16 +2574,25 @@ async fn maildir_repair_generation(
             return Ok(mailvault_core::maildir::GenerationRepair::default());
         }
 
-        let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
-        let protected = locally_created_uids(&index_path);
+        // A repair that cannot see which files were composed here would move
+        // the user's own sent mail and drafts aside as "not on the server".
+        let protected = match custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::local_uids(c, &account_id, &mailbox)) {
+            Ok(uids) => uids,
+            Err(e) => {
+                warn!("maildir_repair_generation: {}/{} skipped, {}", account_id, mailbox, e);
+                return Ok(mailvault_core::maildir::GenerationRepair::default());
+            }
+        };
 
         let report = mailvault_core::maildir::repair_generation(
             &mailbox_dir, uid_validity, &id_to_uid, &protected,
         );
 
         if !report.rebound.is_empty() || !report.orphaned.is_empty() {
-            if let Err(e) = remap_local_index(&index_path, &report) {
-                warn!("maildir_repair_generation: local index remap failed: {}", e);
+            if let Err(e) = custody::with_conn(&app_handle, |c| {
+                mailvault_core::custody::entries::remap(c, &account_id, &mailbox, &report.rebound, &report.orphaned)
+            }) {
+                warn!("maildir_repair_generation: custody remap failed: {}", e);
             }
         }
         // Files changed uid in `cur/`: the index still maps the old uids to them.
@@ -3368,9 +3290,9 @@ fn maildir_delete_many(
         search_index::nudge(&app_handle, &account_id, &mailbox);
     }
 
-    let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
-    if let Err(e) = prune_local_index(&index_path, &uid_set) {
-        warn!("maildir_delete_many: index prune failed: {}", e);
+    let uids: Vec<u32> = uid_set.iter().copied().collect();
+    if let Err(e) = custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::remove(c, &account_id, &mailbox, &uids)) {
+        warn!("maildir_delete_many: custody prune failed: {}", e);
     }
 
     info!(
@@ -6420,34 +6342,6 @@ mod purge_tests {
         assert!(cur.join("1010:2,S").exists(), "1010 must survive a purge of 101");
     }
 
-    #[test]
-    fn prunes_only_requested_uids_from_index() {
-        let tmp = tempfile::tempdir().unwrap();
-        let index = tmp.path().join("local-index.json");
-        std::fs::write(
-            &index,
-            r#"[{"uid":101,"subject":"a"},{"uid":102,"subject":"b"},{"uid":103,"subject":"c"}]"#,
-        )
-        .unwrap();
-
-        let mut uids = HashSet::new();
-        uids.insert(102u32);
-
-        prune_local_index(&index, &uids).unwrap();
-
-        let left: Vec<serde_json::Value> =
-            serde_json::from_str(&std::fs::read_to_string(&index).unwrap()).unwrap();
-        let kept: Vec<u64> = left.iter().map(|e| e["uid"].as_u64().unwrap()).collect();
-        assert_eq!(kept, vec![101, 103]);
-    }
-
-    #[test]
-    fn missing_index_is_not_an_error() {
-        let tmp = tempfile::tempdir().unwrap();
-        let mut uids = HashSet::new();
-        uids.insert(1u32);
-        assert!(prune_local_index(&tmp.path().join("nope.json"), &uids).is_ok());
-    }
 }
 
 #[cfg(test)]

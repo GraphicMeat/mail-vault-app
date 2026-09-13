@@ -294,35 +294,18 @@ pub async fn run_with_backup(
         }
     }
 
-    // Write to local-index.json if any entries were archived
+    // Record custody for every message this run stored.
     if !index_entries.is_empty() {
-        if let Ok(data_dir) = crate::vault::root(&app_handle) {
-            let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
-            let index_path = dir_path.join("local-index.json");
-
-            let mut existing: Vec<serde_json::Value> = if index_path.exists() {
-                tokio::fs::read_to_string(&index_path).await.ok()
-                    .and_then(|c| serde_json::from_str(&c).ok())
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-
-            let new_uids: std::collections::HashSet<u64> = index_entries.iter()
-                .filter_map(|e| e.get("uid").and_then(|u| u.as_u64()))
-                .collect();
-            existing.retain(|e| {
-                e.get("uid").and_then(|u| u.as_u64()).map_or(true, |uid| !new_uids.contains(&uid))
-            });
-            existing.extend(index_entries);
-
-            if let Ok(data) = serde_json::to_string(&existing) {
-                let tmp_path = index_path.with_extension("json.tmp");
-                if tokio::fs::write(&tmp_path, &data).await.is_ok() {
-                    let _ = tokio::fs::rename(&tmp_path, &index_path).await;
-                }
-            }
-            info!("archive_emails: wrote {} entries to local-index.json", new_uids.len());
+        let n = index_entries.len();
+        let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox.clone());
+        match tokio::task::spawn_blocking(move || {
+            crate::custody::with_conn(&handle, |c| mailvault_core::custody::entries::upsert(c, &acct, &mbx, &index_entries))
+        })
+        .await
+        {
+            Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", n),
+            Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
+            Err(e) => warn!("archive_emails: custody write panicked: {}", e),
         }
     }
 
