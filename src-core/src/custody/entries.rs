@@ -141,7 +141,11 @@ pub fn remap(conn: &Connection, account_id: &str, mailbox: &str, rebound: &[(u32
                     .map_err(err)?;
                 if let Some(json) = json {
                     let mut entry: Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-                    entry["uid"] = Value::from(*new);
+                    // Nothing this app wrote is anything but an object, and a row
+                    // that is not one has no `uid` field to rewrite: it stays where
+                    // it is rather than aborting the process on an index panic.
+                    let Some(obj) = entry.as_object_mut() else { continue };
+                    obj.insert("uid".to_string(), Value::from(*new));
                     moving.push((*old, entry));
                 }
             }
@@ -312,6 +316,22 @@ mod tests {
         assert_eq!(rows, vec![json!({"uid": 6, "k": "five"}), json!({"uid": 7, "k": "six"}), json!({"uid": 20, "k": "stays"})]);
         remap(&c, "a", "INBOX", &[(404, 405)], &[406]).unwrap(); // nothing to move: not an error
         assert_eq!(parsed(&c, "a", "INBOX").len(), 3);
+    }
+
+    #[test]
+    fn remap_leaves_a_row_that_is_not_an_object_alone() {
+        let (_t, c) = store();
+        c.execute("INSERT INTO vault_entries VALUES ('a','INBOX',5,'42')", []).unwrap();
+        upsert(&c, "a", "INBOX", &[json!({"uid": 6})]).unwrap();
+        remap(&c, "a", "INBOX", &[(5, 50), (6, 60)], &[]).unwrap();
+        let rows: Vec<(u32, String)> = c
+            .prepare("SELECT uid, entry_json FROM vault_entries WHERE account_id = 'a' AND mailbox_path = 'INBOX' ORDER BY uid")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(rows, vec![(5, "42".to_string()), (60, "{\"uid\":60}".to_string())]);
     }
 
     #[test]
