@@ -1,6 +1,7 @@
 //! Offline search index kept inside the vault (`<vault>/search_index/index.db`).
 //! Spec: docs/superpowers/specs/2026-09-13-offline-search-index-design.md §6.
 
+pub mod attachments;
 pub mod db;
 pub mod plan;
 pub mod query;
