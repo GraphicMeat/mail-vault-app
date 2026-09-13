@@ -12,6 +12,7 @@ pub mod mime;
 pub mod types;
 pub mod imap;
 pub mod graph;
+pub mod graph_ledger;
 pub mod oauth2;
 pub mod dns;
 pub mod spellcheck;
