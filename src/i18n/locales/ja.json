@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "{{w}}×{{h}} の見えない画像 — 絵ではなく開封確認です",
   "vaultAlert.findMailvaultMailFolder": "MailVault のメールフォルダを探す",
   "vaultAlert.folderHoldingMailAvailableRight": "メールが入っているフォルダに今アクセスできません。",
+  "vaultAlert.custodyUnreadable": "保管記録を開けませんでした",
+  "vaultAlert.custodyUnreadableDetail": "MailVault は {{path}} を読み取れません。メールは引き続き開けますが、このファイルが修復されるかバックアップから復元されるまで、保存済みメッセージのどれがサーバーから削除され、どれがここに書き込まれたのかを判別できません。何も削除されていません。",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "そのフォルダは別の MailVault のデータです。このインストールに属するフォルダを選ぶか、設定で保存場所をリセットしてください。",
   "vaultAlert.mailStorageFolderNotFound": "メールの保存フォルダが見つかりません — 同期を一時停止しました",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault はメールを {{vaultStatus}} に保存していますが、今はアクセスできません。",

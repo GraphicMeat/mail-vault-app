@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Imagen invisible de {{w}}×{{h}}: un acuse de lectura, no una imagen",
   "vaultAlert.findMailvaultMailFolder": "Encontrar tu carpeta de correo de MailVault",
   "vaultAlert.folderHoldingMailAvailableRight": "La carpeta que contiene tu correo no está disponible ahora mismo.",
+  "vaultAlert.custodyUnreadable": "No se pudieron abrir los registros del almacén",
+  "vaultAlert.custodyUnreadableDetail": "MailVault no puede leer {{path}}. El correo se sigue abriendo, pero no puede saber qué mensajes guardados se eliminaron del servidor ni cuáles se escribieron aquí hasta que ese archivo se repare o se restaure desde una copia de seguridad. No se ha eliminado nada.",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "Esa carpeta contiene otro almacén de MailVault. Elige la carpeta de esta instalación, o restablece la ubicación en Ajustes.",
   "vaultAlert.mailStorageFolderNotFound": "No se encuentra la carpeta de almacenamiento del correo: la sincronización está pausada",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault guarda tu correo en {{vaultStatus}}, que no está disponible ahora mismo.",

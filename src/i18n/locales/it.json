@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Immagine invisibile {{w}}×{{h}}: una ricevuta di lettura, non una figura",
   "vaultAlert.findMailvaultMailFolder": "Trova la cartella di posta di MailVault",
   "vaultAlert.folderHoldingMailAvailableRight": "La cartella che contiene la tua posta non è disponibile al momento.",
+  "vaultAlert.custodyUnreadable": "Non è stato possibile aprire i registri dell'archivio",
+  "vaultAlert.custodyUnreadableDetail": "MailVault non riesce a leggere {{path}}. La posta si apre ancora, ma non può sapere quali messaggi salvati sono stati eliminati dal server né quali sono stati scritti qui finché quel file non viene riparato o ripristinato da un backup. Non è stato eliminato nulla.",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "Quella cartella contiene un altro archivio MailVault. Scegli la cartella di questa installazione, oppure reimposta la posizione in Impostazioni.",
   "vaultAlert.mailStorageFolderNotFound": "Cartella di archiviazione della posta non trovata: la sincronizzazione è in pausa",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault conserva la tua posta in {{vaultStatus}}, che ora non è disponibile.",

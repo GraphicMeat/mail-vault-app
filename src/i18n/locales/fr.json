@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Image invisible {{w}}×{{h}} — un accusé de lecture, pas une image",
   "vaultAlert.findMailvaultMailFolder": "Trouver votre dossier de courrier MailVault",
   "vaultAlert.folderHoldingMailAvailableRight": "Le dossier contenant votre courrier n'est pas disponible pour le moment.",
+  "vaultAlert.custodyUnreadable": "Les registres du coffre n'ont pas pu être ouverts",
+  "vaultAlert.custodyUnreadableDetail": "MailVault ne peut pas lire {{path}}. Le courrier s'ouvre toujours, mais il ne peut pas savoir quels messages enregistrés ont été supprimés du serveur ni lesquels ont été écrits ici tant que ce fichier n'est pas réparé ou restauré depuis une sauvegarde. Rien n'a été supprimé.",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "Ce dossier contient un autre stockage MailVault. Choisissez le dossier de cette installation, ou réinitialisez l'emplacement dans Paramètres.",
   "vaultAlert.mailStorageFolderNotFound": "Dossier de stockage du courrier introuvable — la synchronisation est en pause",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault stocke votre courrier dans {{vaultStatus}}, qui n'est pas disponible pour le moment.",

@@ -612,6 +612,14 @@ export async function vaultGetStatus() {
   return tauriInvoke('vault_get_status', {});
 }
 
+/** Whether the custody store (what each stored message is) opened, and why not. */
+export async function custodyStatus() {
+  if (IS_TAURI) {
+    return tauriInvoke('custody_status', {});
+  }
+  return { available: true, error: null, path: null };
+}
+
 /// Classify a folder the user picked, before committing to it.
 export async function vaultInspectFolder(path) {
   return tauriInvoke('vault_inspect_folder', { path });

@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "{{w}}×{{h}} 的不可见图片——这是已读回执，不是图片",
   "vaultAlert.findMailvaultMailFolder": "查找你的 MailVault 邮件文件夹",
   "vaultAlert.folderHoldingMailAvailableRight": "存放你邮件的文件夹当前不可用。",
+  "vaultAlert.custodyUnreadable": "无法打开存档记录",
+  "vaultAlert.custodyUnreadableDetail": "MailVault 无法读取 {{path}}。邮件仍然可以打开，但在该文件修复或从备份还原之前，无法判断哪些已保存的邮件是从服务器删除的，哪些是写入到这里的。没有任何内容被删除。",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "该文件夹属于另一个 MailVault 存储。请选择本安装对应的文件夹，或在设置中重置存储位置。",
   "vaultAlert.mailStorageFolderNotFound": "未找到邮件存储文件夹——同步已暂停",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault 把你的邮件存放在 {{vaultStatus}}，该位置当前不可用。",

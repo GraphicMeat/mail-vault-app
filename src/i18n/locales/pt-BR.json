@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Imagem invisível de {{w}}×{{h}} — um aviso de leitura, não uma figura",
   "vaultAlert.findMailvaultMailFolder": "Encontrar sua pasta de correio do MailVault",
   "vaultAlert.folderHoldingMailAvailableRight": "A pasta que contém seu correio não está disponível agora.",
+  "vaultAlert.custodyUnreadable": "Não foi possível abrir os registros do cofre",
+  "vaultAlert.custodyUnreadableDetail": "O MailVault não consegue ler {{path}}. Os e-mails continuam abrindo, mas ele não tem como saber quais mensagens salvas foram excluídas do servidor nem quais foram gravadas aqui até que esse arquivo seja reparado ou restaurado de um backup. Nada foi excluído.",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "Essa pasta contém outro armazenamento do MailVault. Escolha a pasta desta instalação, ou redefina o local em Configurações.",
   "vaultAlert.mailStorageFolderNotFound": "Pasta de armazenamento do correio não encontrada — a sincronização está pausada",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "O MailVault guarda seu correio em {{vaultStatus}}, que não está disponível agora.",

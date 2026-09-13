@@ -1485,6 +1485,8 @@
   "util.trackerDetect.invisibleImageReadReceiptPicture": "Unsichtbares {{w}}×{{h}}-Bild — eine Lesebestätigung, kein Bild",
   "vaultAlert.findMailvaultMailFolder": "Deinen MailVault-Mailordner finden",
   "vaultAlert.folderHoldingMailAvailableRight": "Der Ordner mit deiner Mail ist gerade nicht verfügbar.",
+  "vaultAlert.custodyUnreadable": "Archivunterlagen konnten nicht geöffnet werden",
+  "vaultAlert.custodyUnreadableDetail": "MailVault kann {{path}} nicht lesen. E-Mails lassen sich weiterhin öffnen, aber bis diese Datei repariert oder aus einer Sicherung wiederhergestellt ist, lässt sich nicht feststellen, welche gespeicherten Nachrichten auf dem Server gelöscht und welche hier geschrieben wurden. Es wurde nichts gelöscht.",
   "vaultAlert.folderHoldsDifferentMailvaultStore": "Dieser Ordner enthält einen anderen MailVault-Speicher. Wähl den Ordner dieser Installation, oder setz den Speicherort in den Einstellungen zurück.",
   "vaultAlert.mailStorageFolderNotFound": "Mail-Speicherordner nicht gefunden — der Abgleich pausiert",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault speichert deine Mail in {{vaultStatus}}, das gerade nicht verfügbar ist.",

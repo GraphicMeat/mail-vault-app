@@ -1251,6 +1251,8 @@
   "vaultAlert.folderHoldsDifferentMailvaultStore": "That folder holds a different MailVault store. Pick the folder belonging to this installation, or reset the storage location in Settings.",
   "vaultAlert.mailvaultStoresMailWhichAvailable": "MailVault stores your mail in {{vaultStatus}}, which is not available right now.",
   "vaultAlert.folderHoldingMailAvailableRight": "The folder holding your mail is not available right now.",
+  "vaultAlert.custodyUnreadable": "Vault records could not be opened",
+  "vaultAlert.custodyUnreadableDetail": "MailVault cannot read {{path}}. Mail still opens, but it cannot tell which saved messages were deleted from the server or written here until that file is repaired or restored from a backup. Nothing has been deleted.",
   "shareUnlock.authorizationTryAgain": "Authorization {{res}}. Try again.",
   "shareUnlock.desktopAppRequired": "Desktop app required.",
   "shareUnlock.emailsJustLandedSafelyVault": "{{emailsBackedUp}} emails just landed safely in your vault.",
