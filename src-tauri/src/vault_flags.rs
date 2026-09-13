@@ -2,18 +2,18 @@
 //! message.
 //!
 //! Read state lived in six places and had one writer each, or none. The server
-//! got the STORE, memory and local-index.json got the flip, and the Maildir
+//! got the STORE, memory and the custody entry got the flip, and the Maildir
 //! file name — which restore, the external mirror and every `.eml` read treat
 //! as the message's flags — kept whatever it was stored with, which was always
 //! "seen". So a restore uploaded every vault message as read, a vault row
 //! rebuilt from its file rendered unread whatever had been done to it, and the
 //! mirror never learned about a change at all.
 //!
-//! `apply_in` is the one writer now: the file name (app dir and mirror), the
-//! index entry, the header sidecar and archived_headers.json. The app's mark
-//! read/unread and the backup run's reconcile both go through it.
+//! `apply_in` is the one writer for the files: the name (app dir and mirror)
+//! and the header sidecar. `apply_everywhere` is that call plus the custody
+//! entry's flags — the app's mark read/unread and the backup run's reconcile
+//! both go through it.
 
-use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -87,12 +87,8 @@ pub struct Dirs {
     /// `<backup root>/<email>/<mailbox>/cur/`, when an external location is
     /// configured and reachable.
     pub mirror_cur: Option<PathBuf>,
-    /// `maildir/<account>/<mailbox>/local-index.json`
-    pub index: PathBuf,
     /// `email_cache/<account>_<mailbox>/`
     pub sidecar_dir: PathBuf,
-    /// `Maildir/<account>/<mailbox>/archived_headers.json`
-    pub archived_cache: PathBuf,
 }
 
 pub(crate) fn dirs_for(
@@ -103,10 +99,6 @@ pub(crate) fn dirs_for(
     backup_root: Option<&str>,
 ) -> Result<Dirs, String> {
     let cur = crate::maildir_cur_path(app_handle, account_id, mailbox)?;
-    let archived_cache = cur
-        .parent()
-        .map(|p| p.join("archived_headers.json"))
-        .ok_or_else(|| "Maildir path has no parent".to_string())?;
     let mirror_cur = match (backup_root, account_email) {
         (Some(root), Some(email)) => Some(PathBuf::from(root).join(email).join(mailbox).join("cur")),
         _ => None,
@@ -114,18 +106,14 @@ pub(crate) fn dirs_for(
     Ok(Dirs {
         cur,
         mirror_cur,
-        index: crate::local_index_path(app_handle, account_id, mailbox)?,
         sidecar_dir: crate::vault::root(app_handle)?
             .join("email_cache")
             .join(crate::cache_base_name(account_id, mailbox)),
-        archived_cache,
     })
 }
 
-/// One writer at a time per process. Every call rewrites a whole index file;
-/// two at once would each read the same array, patch their own uid and put the
-/// file back, and the loser's flag would vanish. The frontend batches a
-/// selection into one call, and this keeps two callers honest anyway.
+/// One writer at a time per process: two callers renaming the same folder's
+/// files at once would race on the names.
 static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
@@ -150,21 +138,12 @@ pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied 
     let app_files = mirror_file_map(&dirs.cur);
     let mirror_files = dirs.mirror_cur.as_deref().map(mirror_file_map);
 
-    let mut index = JsonFile::load(&dirs.index, None);
-    let mut cache = JsonFile::load(&dirs.archived_cache, Some("emails"));
-
     for change in changes {
         let imap = &change.flags;
 
         if let Some(path) = app_files.get(&change.uid) {
             match rename_for(path, change.uid, imap) {
-                Ok(Some(new_name)) => {
-                    out.renamed += 1;
-                    // The header cache stores what a fresh `.eml` read would
-                    // report, so hand it exactly that.
-                    let light = crate::parse_flags_from_filename(&new_name);
-                    cache.patch(change.uid, &light);
-                }
+                Ok(Some(_)) => out.renamed += 1,
                 Ok(None) => {}
                 Err(e) => warn!("vault_flags: rename uid {} failed: {}", change.uid, e),
             }
@@ -180,18 +159,31 @@ pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied 
             }
         }
 
-        if index.patch(change.uid, imap) {
-            out.index_patched += 1;
-        }
-
         if sidecars && patch_flags_field(&dirs.sidecar_dir.join(format!("{}.json", change.uid)), imap) {
             out.sidecars_patched += 1;
         }
     }
 
-    index.save();
-    cache.save();
     out
+}
+
+/// `apply_in` plus the custody entry's flags: the one call the app's mark
+/// read/unread and the backup's catch-up both make. `sidecars` as for `apply_in`.
+pub fn apply_everywhere(
+    app: &tauri::AppHandle,
+    account_id: &str,
+    mailbox: &str,
+    dirs: &Dirs,
+    changes: &[FlagChange],
+    sidecars: bool,
+) -> Applied {
+    let mut applied = apply_in(dirs, changes, sidecars);
+    let patch: Vec<(u32, Vec<String>)> = changes.iter().map(|c| (c.uid, c.flags.clone())).collect();
+    match crate::custody::with_conn(app, |c| mailvault_core::custody::entries::patch_flags_many(c, account_id, mailbox, &patch)) {
+        Ok(n) => applied.index_patched = n,
+        Err(e) => warn!("vault_flags: custody patch failed for {}/{}: {}", account_id, mailbox, e),
+    }
+    applied
 }
 
 /// Rename `path` so its flag letters carry `imap`. `Some(new name)` when the
@@ -238,85 +230,6 @@ fn set_flags(obj: &mut serde_json::Value, flags: &[String]) -> bool {
     }
 }
 
-/// A JSON file holding one array of `{uid, flags, ...}` entries — bare
-/// (local-index.json) or under `key` (archived_headers.json's `emails`). Read
-/// once, positions indexed once, written back once and only if something
-/// changed.
-struct JsonFile {
-    path: PathBuf,
-    key: Option<&'static str>,
-    value: Option<serde_json::Value>,
-    /// uid → positions in the array. A folder's index can hold 14k entries
-    /// and a backup reconcile patches every one of them; a scan per patch
-    /// would be 14k × 14k.
-    positions: HashMap<u64, Vec<usize>>,
-    dirty: bool,
-}
-
-impl JsonFile {
-    fn load(path: &Path, key: Option<&'static str>) -> Self {
-        let value: Option<serde_json::Value> = fs::read_to_string(path)
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok());
-        let mut positions: HashMap<u64, Vec<usize>> = HashMap::new();
-        if let Some(entries) = value.as_ref().and_then(|v| Self::array_in(v, key)) {
-            for (i, entry) in entries.iter().enumerate() {
-                if let Some(uid) = entry.get("uid").and_then(|u| u.as_u64()) {
-                    positions.entry(uid).or_default().push(i);
-                }
-            }
-        }
-        JsonFile { path: path.to_path_buf(), key, value, positions, dirty: false }
-    }
-
-    fn array_in<'a>(v: &'a serde_json::Value, key: Option<&str>) -> Option<&'a Vec<serde_json::Value>> {
-        match key {
-            None => v.as_array(),
-            Some(k) => v.get(k)?.as_array(),
-        }
-    }
-
-    fn patch(&mut self, uid: u32, flags: &[String]) -> bool {
-        let Some(at) = self.positions.get(&(uid as u64)) else { return false };
-        let key = self.key;
-        let Some(entries) = self.value.as_mut().and_then(|v| match key {
-            None => v.as_array_mut(),
-            Some(k) => v.get_mut(k)?.as_array_mut(),
-        }) else {
-            return false;
-        };
-        let mut changed = false;
-        for &i in at {
-            if let Some(entry) = entries.get_mut(i) {
-                changed |= set_flags(entry, flags);
-            }
-        }
-        self.dirty |= changed;
-        changed
-    }
-
-    fn save(&self) {
-        if !self.dirty {
-            return;
-        }
-        let Some(value) = &self.value else { return };
-        let Ok(json) = serde_json::to_string(value) else { return };
-        // Tmp-then-rename, as local_index_append does, so a reader never sees
-        // a half-written file — under a name of our own, so two writers can
-        // never be filling the same tmp file at once.
-        static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let tmp = self.path.with_extension(format!(
-            "json.{}.{}.tmp",
-            std::process::id(),
-            SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-        ));
-        if fs::write(&tmp, json).is_ok() && fs::rename(&tmp, &self.path).is_err() {
-            warn!("vault_flags: could not replace {:?}", self.path);
-            let _ = fs::remove_file(&tmp);
-        }
-    }
-}
-
 /// The app's half: one or more messages whose read state just changed here.
 /// `account_email` names the mirror directory; without it, or without a
 /// configured external location, the mirror is simply not touched.
@@ -331,7 +244,7 @@ pub async fn vault_apply_flags(
     tokio::task::spawn_blocking(move || {
         let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
         let result = dirs_for(&app_handle, &account_id, &mailbox, account_email.as_deref(), root.as_deref())
-            .map(|dirs| apply_in(&dirs, &changes, true));
+            .map(|dirs| apply_everywhere(&app_handle, &account_id, &mailbox, &dirs, &changes, true));
         if needs_release {
             if let Some(ref p) = root {
                 crate::backup::release_backup_path(p);
@@ -362,33 +275,29 @@ pub struct RenamePair {
     pub to: String,
 }
 
-/// Move every location `from` has to `to`. The Maildir mailbox DIRECTORY
-/// (parent of `cur/`, so `archived_headers.json` travels with it), the index
-/// directory, the sidecar cache, the mirror. Missing sources are skipped;
-/// returns how many moved and which ones ERRORED. Nothing is ever deleted here.
+/// Move the three locations `from` has to `to`: the Maildir mailbox DIRECTORY
+/// (parent of `cur/`, so `.uidvalidity` travels with it), the sidecar cache,
+/// the mirror. Missing sources are skipped; returns how many moved and which
+/// ones ERRORED. Nothing is ever deleted here.
 ///
 /// The two are not the same answer: a source that was never there is a
 /// non-event, a source that failed to move leaves the vault half-renamed and
 /// the user has to be told. A count alone cannot tell them apart, which is
 /// how a failed rename used to end up as a `warn!` nobody reads.
 ///
-/// Two of the four are flat: `maildir_cur_path` and `cache_base_name` sanitize
+/// Two of the three are flat: `maildir_cur_path` and `cache_base_name` sanitize
 /// the WHOLE mailbox path into one directory name, so `Projects` and
-/// `Projects/Alpha` are siblings and their pairs never interact. The other two
-/// — `local_index_path` and the mirror — use the raw path, so they nest, and
-/// renaming `Projects` there carries `Projects/Alpha` along with it. That is
-/// harmless as long as the parent pair runs first, which is why
-/// `vault_rename_mailbox` sorts shallowest-first: the descendant's pair then
-/// finds its source already gone and skips.
+/// `Projects/Alpha` are siblings and their pairs never interact. The mirror
+/// uses the raw path, so it nests, and renaming `Projects` there carries
+/// `Projects/Alpha` along with it. That is harmless as long as the parent pair
+/// runs first, which is why `vault_rename_mailbox` sorts shallowest-first: the
+/// descendant's pair then finds its source already gone and skips.
 pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
     let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
     if let (Some(a), Some(b)) = (up(&from.cur), up(&to.cur)) {
-        pairs.push((a, b));
-    }
-    if let (Some(a), Some(b)) = (up(&from.index), up(&to.index)) {
         pairs.push((a, b));
     }
     pairs.push((from.sidecar_dir.clone(), to.sidecar_dir.clone()));
@@ -430,8 +339,8 @@ pub async fn vault_rename_mailbox(
 ) -> Result<usize, String> {
     tokio::task::spawn_blocking(move || {
         let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
-        // Shallowest first — see `rename_dirs`: the index and the mirror nest,
-        // so a parent's move has to happen before its descendants' pairs.
+        // Shallowest first — see `rename_dirs`: the mirror nests, so a
+        // parent's move has to happen before its descendants' pairs.
         let mut pairs = pairs;
         pairs.sort_by_key(|p| p.from.len());
         let mut moved = 0;
@@ -446,6 +355,10 @@ pub async fn vault_rename_mailbox(
                 let (n, mut bad) = rename_dirs(&from, &to);
                 moved += n;
                 failed.append(&mut bad);
+                match crate::custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::rename_mailbox(c, &account_id, &p.from, &p.to)) {
+                    Ok(rows) => moved += usize::from(rows > 0),
+                    Err(e) => failed.push(format!("custody {} -> {} ({})", p.from, p.to, e)),
+                }
             }
             if !failed.is_empty() {
                 return Err(format!("vault rename incomplete: {}", failed.join("; ")));
@@ -522,19 +435,12 @@ mod tests {
         let base = tmp.path();
         let cur = base.join("Maildir").join("acct").join("INBOX").join("cur");
         let mirror = base.join("mirror").join("me@mock.test").join("INBOX").join("cur");
-        let index_dir = base.join("maildir").join("acct").join("INBOX");
         let sidecar_dir = base.join("email_cache").join("acct_INBOX");
-        for d in [&cur, &mirror, &index_dir, &sidecar_dir] {
+        for d in [&cur, &mirror, &sidecar_dir] {
             fs::create_dir_all(d).unwrap();
         }
         Fixture {
-            dirs: Dirs {
-                archived_cache: cur.parent().unwrap().join("archived_headers.json"),
-                cur,
-                mirror_cur: Some(mirror),
-                index: index_dir.join("local-index.json"),
-                sidecar_dir,
-            },
+            dirs: Dirs { cur, mirror_cur: Some(mirror), sidecar_dir },
             _tmp: tmp,
         }
     }
@@ -549,9 +455,8 @@ mod tests {
         v
     }
 
-    /// `flags` of `uid` in any of the three shapes: a bare array
-    /// (local-index.json), `{emails: [...]}` (archived_headers.json), or ONE
-    /// object (a header sidecar is a single message).
+    /// `flags` of `uid` in a header sidecar: ONE object, because a sidecar
+    /// holds a single message.
     fn flags_of(path: &Path, uid: u32) -> Option<Vec<String>> {
         let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
         let entries = match &v {
@@ -575,22 +480,15 @@ mod tests {
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,A"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,A.eml"), b"body").unwrap();
-        fs::write(&d.index, r#"[{"uid":7,"subject":"s","flags":[]},{"uid":8,"flags":["\\Seen"]}]"#).unwrap();
         fs::write(d.sidecar_dir.join("7.json"), r#"{"uid":7,"flags":[],"subject":"s"}"#).unwrap();
-        fs::write(&d.archived_cache, r#"{"uid_count":1,"emails":[{"uid":7,"flags":["archived"]}]}"#).unwrap();
 
         let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
 
-        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 1, sidecars_patched: 1 });
+        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 1 });
         // The legacy extension-less name converges on the current one.
         assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
         assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,AS.eml"]);
-        assert_eq!(flags_of(&d.index, 7), Some(s(&["\\Seen"])));
-        // The neighbour entry is untouched.
-        assert_eq!(flags_of(&d.index, 8), Some(s(&["\\Seen"])));
         assert_eq!(flags_of(&d.sidecar_dir.join("7.json"), 7), Some(s(&["\\Seen"])));
-        // What a fresh .eml read of the renamed file would report.
-        assert_eq!(flags_of(&d.archived_cache, 7), Some(s(&["archived", "seen", "\\Seen"])));
     }
 
     /// The backup's catch-up over a copy the app auto-cached when the message
@@ -602,7 +500,6 @@ mod tests {
         let d = &f.dirs;
         fs::write(d.cur.join("9:2,.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("9.eml"), b"body").unwrap();
-        fs::write(&d.index, r#"[{"uid":9,"flags":[]}]"#).unwrap();
 
         let applied = apply_in(d, &[change(9, &["\\Seen", "archived"])], false);
 
@@ -618,15 +515,13 @@ mod tests {
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,AS.eml"), b"body").unwrap();
-        fs::write(&d.index, r#"[{"uid":7,"flags":["\\Seen"]}]"#).unwrap();
 
         let applied = apply_in(d, &[change(7, &[])], true);
 
-        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 1, sidecars_patched: 0 });
+        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The .eml suffix the file had is kept.
         assert_eq!(names(&d.cur), vec!["7:2,A.eml"]);
         assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,A.eml"]);
-        assert_eq!(flags_of(&d.index, 7), Some(s(&[])));
     }
 
     #[test]
@@ -634,14 +529,11 @@ mod tests {
         let f = fixture();
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
-        fs::write(&d.index, r#"[{"uid":7,"flags":["\\Seen"]}]"#).unwrap();
-        let before = fs::metadata(&d.index).unwrap().modified().unwrap();
 
         let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
 
         assert_eq!(applied, Applied::default());
         assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
-        assert_eq!(fs::metadata(&d.index).unwrap().modified().unwrap(), before, "index rewritten for nothing");
     }
 
     #[test]
@@ -654,26 +546,6 @@ mod tests {
         let applied = apply_in(d, &[change(9, &["\\Seen"]), change(10, &["\\Seen"])], true);
 
         assert_eq!(applied, Applied { renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 1 });
-        assert!(!d.index.exists(), "an index was invented for a folder that had none");
-    }
-
-    #[test]
-    fn an_index_with_many_entries_is_patched_by_position_not_by_scan() {
-        let f = fixture();
-        let d = &f.dirs;
-        let entries: Vec<String> = (1..=500)
-            .map(|uid| format!(r#"{{"uid":{},"flags":{}}}"#, uid, if uid % 2 == 0 { r#"["\\Seen"]"# } else { "[]" }))
-            .collect();
-        fs::write(&d.index, format!("[{}]", entries.join(","))).unwrap();
-        // The server: everything read.
-        let changes: Vec<FlagChange> = (1..=500).map(|uid| change(uid, &["\\Seen"])).collect();
-
-        let applied = apply_in(d, &changes, false);
-
-        assert_eq!(applied.index_patched, 250);
-        assert_eq!(flags_of(&d.index, 1), Some(s(&["\\Seen"])));
-        assert_eq!(flags_of(&d.index, 499), Some(s(&["\\Seen"])));
-        assert_eq!(flags_of(&d.index, 500), Some(s(&["\\Seen"])));
     }
 
     #[test]
@@ -696,7 +568,6 @@ mod tests {
         fs::write(d.cur.join("1:2,A.eml"), b"a").unwrap();
         fs::write(d.cur.join("2:2,AS.eml"), b"b").unwrap();
         fs::write(d.cur.join("3:2,AS.eml"), b"c").unwrap();
-        fs::write(&d.index, r#"[{"uid":1,"flags":[]},{"uid":2,"flags":["\\Seen"]},{"uid":3,"flags":["\\Seen"]}]"#).unwrap();
 
         // A sidecar the reconcile must leave to the sync engine.
         fs::write(d.sidecar_dir.join("1.json"), r#"{"uid":1,"flags":[]}"#).unwrap();
@@ -704,30 +575,25 @@ mod tests {
         // The server: 1 was read elsewhere, 2 is as stored, 3 was marked unread.
         let applied = apply_in(d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])], false);
 
-        assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 2, sidecars_patched: 0 });
+        assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
         assert_eq!(flags_of(&d.sidecar_dir.join("1.json"), 1), Some(s(&[])));
         assert_eq!(names(&d.cur), vec!["1:2,AS.eml", "2:2,AS.eml", "3:2,A.eml"]);
-        assert_eq!(flags_of(&d.index, 1), Some(s(&["\\Seen"])));
-        assert_eq!(flags_of(&d.index, 3), Some(s(&[])));
     }
 
     /// A `Dirs` pair for one mailbox rename, laid out the way `dirs_for` builds
-    /// it: a sanitized Maildir/sidecar name, a raw path for the index and mirror.
-    ///
-    /// The index tree is named `index` rather than the app's `maildir`: on a
-    /// case-insensitive volume (every stock macOS) `maildir` and `Maildir` are
-    /// ONE directory, so the real index file sits beside `cur` and rides along
-    /// with the Maildir rename. Keeping them apart here is what makes this test
-    /// measure `rename_dirs` instead of the filesystem's case folding.
+    /// it: a sanitized Maildir/sidecar name, a raw path for the mirror.
     fn rename_fixture(base: &Path, mailbox: &str, sidecar: &str) -> Dirs {
-        let mailbox_dir = base.join("Maildir").join("a").join(mailbox);
         Dirs {
-            cur: mailbox_dir.join("cur"),
+            cur: base.join("Maildir").join("a").join(mailbox).join("cur"),
             mirror_cur: Some(base.join("mirror").join("me@x").join(mailbox).join("cur")),
-            index: base.join("index").join("a").join(mailbox).join("local-index.json"),
             sidecar_dir: base.join("email_cache").join(sidecar),
-            archived_cache: mailbox_dir.join("archived_headers.json"),
         }
+    }
+
+    /// A file beside `cur/`, as `.uidvalidity` sits: it travels only if the
+    /// whole mailbox DIRECTORY moved, not just `cur/`.
+    fn sibling(d: &Dirs) -> PathBuf {
+        d.cur.parent().unwrap().join(".uidvalidity")
     }
 
     #[test]
@@ -737,27 +603,23 @@ mod tests {
         let from = rename_fixture(base, "Projects", "a_Projects");
         let to = rename_fixture(base, "Work", "a_Work");
 
-        // Only three of the four locations exist — no external mirror is configured.
+        // Only two of the three locations exist — no external mirror is configured.
         fs::create_dir_all(&from.cur).unwrap();
-        fs::create_dir_all(from.index.parent().unwrap()).unwrap();
         fs::create_dir_all(&from.sidecar_dir).unwrap();
         fs::write(from.cur.join("7:2,AS"), b"body").unwrap();
-        fs::write(&from.archived_cache, b"{\"emails\":[]}").unwrap();
-        fs::write(&from.index, b"[]").unwrap();
+        fs::write(sibling(&from), b"1").unwrap();
         fs::write(from.sidecar_dir.join("7.json"), b"{}").unwrap();
 
-        assert_eq!(rename_dirs(&from, &to), (3, vec![]));
+        assert_eq!(rename_dirs(&from, &to), (2, vec![]));
 
         assert!(to.cur.join("7:2,AS").exists());
         // The whole mailbox directory moved, so its sibling files came along.
-        assert!(to.archived_cache.exists(), "archived_headers.json stayed behind");
-        assert!(to.index.exists());
+        assert!(sibling(&to).exists(), ".uidvalidity stayed behind");
         assert!(to.sidecar_dir.join("7.json").exists());
         // A mirror that was never there is not invented.
         assert!(!base.join("mirror").exists());
         // Nothing is left at the old paths, and nothing was deleted.
         assert!(!base.join("Maildir").join("a").join("Projects").exists());
-        assert!(!from.index.exists());
         assert!(!from.sidecar_dir.exists());
 
         // Idempotent: the sources are gone, so a repeat moves nothing.

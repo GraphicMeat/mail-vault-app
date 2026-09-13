@@ -2428,10 +2428,6 @@ fn maildir_store(
     Ok(())
 }
 
-pub(crate) fn local_index_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    Ok(vault::root(app_handle)?.join("maildir").join(account_id).join(mailbox).join("local-index.json"))
-}
-
 // ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
 //
 // See `mailvault_core::maildir`'s generation section for what this repairs and

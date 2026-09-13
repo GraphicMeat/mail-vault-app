@@ -852,10 +852,11 @@ async fn run_imap_backup_inner(
             let dirs = crate::vault_flags::dirs_for(
                 &app_handle, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
             )?;
+            let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox_path.to_string());
             // Renames every stale file in both locations — disk work, and it
             // takes a process-wide writer lock while it does it.
             let applied = tokio::task::spawn_blocking(move || {
-                crate::vault_flags::apply_in(&dirs, &changes, false)
+                crate::vault_flags::apply_everywhere(&handle, &acct, &mbx, &dirs, &changes, false)
             })
                 .await
                 .map_err(|e| format!("flag catch-up panicked: {}", e))?;

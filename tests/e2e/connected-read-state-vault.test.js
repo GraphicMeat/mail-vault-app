@@ -10,7 +10,7 @@
  *   - archiving an unread message stored it as READ (`<uid>:2,AS`), and a
  *     restore to a new server uploaded every vault message as read;
  *   - marking a message read or unread here changed the server, memory and
- *     local-index.json, and nothing else: the file, its mirror copy and the
+ *     the custody entry, and nothing else: the file, its mirror copy and the
  *     header sidecar kept the old state, so a switch away and back repainted
  *     the old state until a delta sync happened to correct it;
  *   - a change made on the server elsewhere never reached the vault at all —
@@ -51,15 +51,24 @@ function nameOf(dir, uid) {
 }
 
 /**
- * `flags` of the uid's entry in a JSON file, whichever of the three shapes it
- * has: a bare array (local-index.json), `{emails:[…]}` (archived_headers.json),
- * or ONE object (a header sidecar is a single message).
+ * `flags` of the uid's entry in a header sidecar: ONE object, because a sidecar
+ * holds a single message.
  */
 function jsonFlags(path, uid) {
   if (!existsSync(path)) return null;
   const v = JSON.parse(readFileSync(path, 'utf-8'));
   const entries = Array.isArray(v) ? v : (v.uid != null ? [v] : (v.emails || []));
   const entry = entries.find((e) => Number(e.uid) === uid);
+  return entry ? entry.flags : null;
+}
+
+/** `flags` of the uid's custody entry, straight from the app's store. */
+async function indexFlags(accountId, mailbox, uid) {
+  const raw = await browser.executeAsync((a, m, done) => {
+    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m }).then(done, () => done(null));
+  }, accountId, mailbox);
+  if (!raw) return null;
+  const entry = JSON.parse(raw).find((e) => Number(e.uid) === uid);
   return entry ? entry.flags : null;
 }
 
@@ -143,7 +152,6 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
 
   let account = null;
   let cur = null;
-  let index = null;
   let sidecarDir = null;
   let mirror = null;
   let backupRoot = null;
@@ -161,7 +169,6 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     account = browser.mockAccounts.find((a) => a.email === LUKE);
     const data = appDataDir(browser.testDataDir);
     cur = join(data, 'Maildir', account.id, 'INBOX', 'cur');
-    index = join(data, 'maildir', account.id, 'INBOX', 'local-index.json');
     sidecarDir = join(data, 'email_cache', `${account.id.replace(/[^a-zA-Z0-9]/g, '_')}_INBOX`);
 
     // This spec's own mirror, so the mirror assertions test this spec's subject
@@ -206,12 +213,13 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     expect(await vaultFlags(account.id, 'INBOX', unreadUid)).not.toContain('\\Seen');
     expect(await vaultFlags(account.id, 'INBOX', readUid)).toContain('\\Seen');
 
-    // The index was already written with the row's server flags before this
-    // change; pinned so the two records cannot drift apart again.
-    await waitFor(() => jsonFlags(index, unreadUid) !== null && jsonFlags(index, readUid) !== null,
-      'local-index.json never got both entries');
-    expect(jsonFlags(index, unreadUid)).not.toContain('\\Seen');
-    expect(jsonFlags(index, readUid)).toContain('\\Seen');
+    // The custody entry was already written with the row's server flags before
+    // this change; pinned so the two records cannot drift apart again.
+    await waitFor(async () => (await indexFlags(account.id, 'INBOX', unreadUid)) !== null
+      && (await indexFlags(account.id, 'INBOX', readUid)) !== null,
+      'the custody store never got both entries');
+    expect(await indexFlags(account.id, 'INBOX', unreadUid)).not.toContain('\\Seen');
+    expect(await indexFlags(account.id, 'INBOX', readUid)).toContain('\\Seen');
 
     // And the row did not change state just by being archived.
     expect((await rowFor(unreadSubject)).unread).toBe(true);
@@ -236,7 +244,8 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
       `vault file never renamed to read — cur/ holds ${nameOf(cur, unreadUid)}`);
     await waitFor(() => isSeenName(nameOf(mirror, unreadUid), unreadUid),
       `mirror copy never renamed to read — mirror holds ${nameOf(mirror, unreadUid)}`);
-    await waitFor(() => (jsonFlags(index, unreadUid) || []).includes('\\Seen'), 'local-index.json never got \\Seen');
+    await waitFor(async () => ((await indexFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
+      'the custody entry never got \\Seen');
     await waitFor(() => (jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
       'the header sidecar never got \\Seen — the next repaint from cache would show it unread again');
   });
@@ -252,7 +261,8 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
       `vault file kept its S — cur/ holds ${nameOf(cur, unreadUid)}`);
     await waitFor(() => isUnseenName(nameOf(mirror, unreadUid), unreadUid),
       `mirror copy kept its S — mirror holds ${nameOf(mirror, unreadUid)}`);
-    await waitFor(() => !(jsonFlags(index, unreadUid) || []).includes('\\Seen'), 'local-index.json kept \\Seen');
+    await waitFor(async () => !((await indexFlags(account.id, 'INBOX', unreadUid)) || []).includes('\\Seen'),
+      'the custody entry kept \\Seen');
     await waitFor(() => !(jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
       'the header sidecar kept \\Seen');
   });
@@ -289,7 +299,6 @@ describe('Read state — a backup carries the server\'s state and catches up wit
 
   let account = null;
   let cur = null;
-  let index = null;
   let mirror = null;
   let backupRoot = null;
   const flipped = [];     // [uid, op to undo] — put the mock back for the specs after this one
@@ -312,7 +321,6 @@ describe('Read state — a backup carries the server\'s state and catches up wit
     account = browser.mockAccounts.find((a) => a.email === VADER);
     const data = appDataDir(browser.testDataDir);
     cur = join(data, 'Maildir', account.id, FOLDER, 'cur');
-    index = join(data, 'maildir', account.id, FOLDER, 'local-index.json');
     backupRoot = mkdtempSync(join(tmpdir(), 'mv-read-state-backup-'));
     mirror = join(backupRoot, VADER, FOLDER, 'cur');
     const loc = await invoke('backup_save_external_location', { path: backupRoot });
@@ -340,10 +348,10 @@ describe('Read state — a backup carries the server\'s state and catches up wit
     expect(isSeenName(nameOf(cur, READ_UID), READ_UID)).toBe(true);
     expect(isUnseenName(nameOf(mirror, UNREAD_UID), UNREAD_UID)).toBe(true);
     expect(isSeenName(nameOf(mirror, READ_UID), READ_UID)).toBe(true);
-    // The index already carried the server's flags before this change —
-    // pinned so file and index cannot drift apart again.
-    expect(jsonFlags(index, UNREAD_UID)).not.toContain('\\Seen');
-    expect(jsonFlags(index, READ_UID)).toContain('\\Seen');
+    // The custody entry already carried the server's flags before this change
+    // — pinned so file and entry cannot drift apart again.
+    expect(await indexFlags(account.id, FOLDER, UNREAD_UID)).not.toContain('\\Seen');
+    expect(await indexFlags(account.id, FOLDER, READ_UID)).toContain('\\Seen');
   });
 
   it('a change made on the server elsewhere reaches the vault and the mirror at the next backup', async function () {
@@ -363,7 +371,7 @@ describe('Read state — a backup carries the server\'s state and catches up wit
     expect(isUnseenName(nameOf(cur, READ_UID), READ_UID)).toBe(true);
     expect(isSeenName(nameOf(mirror, UNREAD_UID), UNREAD_UID)).toBe(true);
     expect(isUnseenName(nameOf(mirror, READ_UID), READ_UID)).toBe(true);
-    expect(jsonFlags(index, UNREAD_UID)).toContain('\\Seen');
-    expect(jsonFlags(index, READ_UID)).not.toContain('\\Seen');
+    expect(await indexFlags(account.id, FOLDER, UNREAD_UID)).toContain('\\Seen');
+    expect(await indexFlags(account.id, FOLDER, READ_UID)).not.toContain('\\Seen');
   });
 });
