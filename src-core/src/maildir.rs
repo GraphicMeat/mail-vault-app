@@ -85,6 +85,29 @@ pub fn find_listed_by_uid(cur_dir: &Path, uid: u32, listed: &Path) -> Option<Pat
     }
 }
 
+/// The uid a message filename carries by the external mirror's rule: the text
+/// before the first `:`, `.` or `_`. The mirror has held
+/// `<uid>:2,<flags>[.eml]`, legacy `<uid>.eml` and `<uid>_<flags>.eml`. Looser
+/// than `vault_filename_uid` (it also takes `07.eml` and `+7.eml`), which is
+/// what every mirror check has always matched.
+pub fn mirror_filename_uid(name: &str) -> Option<u32> {
+    name.split(|c: char| c == ':' || c == '.' || c == '_').next()?.parse().ok()
+}
+
+/// Every file in `dir` keyed by `mirror_filename_uid`, in ONE directory pass,
+/// first entry per uid wins. The per-uid mirror lookup rescans the directory
+/// on every call, and on the external drive that is the slowest disk the app
+/// touches.
+pub fn mirror_file_map(dir: &Path) -> HashMap<u32, PathBuf> {
+    let mut map = HashMap::new();
+    let Ok(entries) = fs::read_dir(dir) else { return map };
+    for entry in entries.flatten() {
+        let Some(uid) = mirror_filename_uid(&entry.file_name().to_string_lossy()) else { continue };
+        map.entry(uid).or_insert_with(|| entry.path());
+    }
+    map
+}
+
 /// List all UIDs in a Maildir/cur directory.
 pub fn list_uids(data_dir: &Path, account_id: &str, mailbox: &str) -> Vec<u32> {
     let dir = cur_path(data_dir, account_id, mailbox);
@@ -1596,6 +1619,67 @@ mod tests {
         assert_eq!(hits, n as usize);
         assert_eq!(slow_hits, sample.len());
         println!("n={n} single_pass={single_pass:?} per_uid_rescan={per_uid:?} projected_old_total={:?}", per_uid * n);
+    }
+
+    #[test]
+    fn mirror_filename_uid_takes_every_shape_the_mirror_has_carried() {
+        let cases = [
+            ("12:2,S.eml", Some(12)),
+            ("12:2,S", Some(12)),
+            ("12.eml", Some(12)),
+            ("12_S.eml", Some(12)),
+            ("12", Some(12)),
+            // Looser than vault_filename_uid, and always has been.
+            ("07.eml", Some(7)),
+            ("+7.eml", Some(7)),
+            ("4294967296.eml", None),
+            ("12a.eml", None),
+            ("_meta.json", None),
+            (".4711:2,S.eml.tmp-1", None),
+            ("", None),
+        ];
+        let wrong: Vec<_> = cases.iter()
+            .filter(|(name, want)| mirror_filename_uid(name) != *want)
+            .map(|(name, want)| format!("{name}: got {:?}, want {want:?}", mirror_filename_uid(name)))
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// src-tauri's `find_msg_file_by_uid` as every mirror check called it, one
+    /// directory rescan per uid.
+    fn per_uid_mirror_lookup(dir: &Path, uid: u32) -> Option<PathBuf> {
+        let entries = fs::read_dir(dir).ok()?;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let head = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
+            if head.parse::<u32>().ok() == Some(uid) {
+                return Some(entry.path());
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn mirror_file_map_agrees_with_the_per_uid_mirror_lookup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        for name in [
+            "12:2,S.eml", "13:2,F", "14.eml", "15_S.eml", "07.eml", "+8.eml", "17",
+            "16.eml", "16:2,F.eml", "4294967296.eml", "_meta.json", "not-a-uid.eml",
+            ".4711:2,S.eml.tmp-1",
+        ] {
+            fs::write(dir.join(name), b"x").unwrap();
+        }
+        fs::create_dir(dir.join("18")).unwrap();
+
+        let map = mirror_file_map(dir);
+        for uid in [12u32, 13, 14, 15, 7, 8, 16, 17, 18, 4711, 0, 99] {
+            assert_eq!(map.get(&uid).cloned(), per_uid_mirror_lookup(dir, uid), "uid {uid}");
+        }
+        let mut keys: Vec<u32> = map.keys().copied().collect();
+        keys.sort();
+        assert_eq!(keys, vec![7, 8, 12, 13, 14, 15, 16, 17, 18]);
+        assert!(mirror_file_map(&dir.join("nope")).is_empty());
     }
 
     #[test]
