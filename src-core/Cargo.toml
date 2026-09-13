@@ -28,6 +28,8 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 hickory-resolver = "0.26"
 rand = "0.9"
 url = "2"
+# Offline search index (src/search_index): FTS5 trigram + contentless_delete need SQLite >= 3.43, so bundle it.
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }

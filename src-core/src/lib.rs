@@ -6,6 +6,7 @@
 
 pub mod fsx;
 pub mod maildir;
+pub mod search_index;
 pub mod mime;
 pub mod types;
 pub mod imap;
