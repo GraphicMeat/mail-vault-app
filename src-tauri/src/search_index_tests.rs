@@ -232,7 +232,7 @@ fn search_index_bench_50k_real_parser() {
     let t = Instant::now();
     for (a, d) in reconcile::list_vault_dirs(&maildir).unwrap() {
         let parse = &crate::search_index::index_doc_from_light;
-        reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true }, parse, &|| true, &mut |_| {}).unwrap();
+        reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true, attachments: true, image_text: true }, parse, &|| true, &mut |_| {}).unwrap();
     }
     println!("index_build n={N} elapsed={:?}", t.elapsed());
     {
