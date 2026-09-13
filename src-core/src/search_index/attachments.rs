@@ -238,6 +238,16 @@ mod tests {
         assert_eq!(extract(&i, true, true, &NoOcrExtractor).0, "too_large");
     }
 
+    /// A declared `size` over the limit classifies as `too_large` even with an
+    /// EMPTY `bytes` vec: the size check alone is sufficient, so a caller can
+    /// (and, for I2, must) skip decoding an oversized part's body entirely
+    /// before ever constructing the real byte vec.
+    #[test]
+    fn oversized_declared_size_is_too_large_without_any_real_bytes() {
+        let i = AttachmentInput { filename: "huge.bin".into(), mime: "application/octet-stream".into(), size: MAX_PART_BYTES + 1, bytes: Vec::new() };
+        assert_eq!(extract(&i, true, true, &NoOcrExtractor).0, "too_large");
+    }
+
     #[test]
     fn tiny_image_is_too_small() {
         let i = input("image/png", "a.png", vec![0u8; 100]);

@@ -11,7 +11,7 @@
 
 use mailvault_core::search_index::plan::{bodies_action, collect_burst, needs_full, plan, BodiesAction, Plan, Signal, COALESCE, SWEEP_EVERY};
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
-use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, IndexConfig, IndexDoc}, SharedConn};
+use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, AttachmentMeta, IndexConfig, IndexDoc}, SharedConn};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{mpsc, Mutex};
@@ -72,6 +72,24 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
             addrs.extend(list.iter().map(addr_text));
         }
     }
+    // Attachment candidates need the real MIME tree; the light parse above
+    // only surfaces text/html + headers. A full re-parse failure here just
+    // means no candidates get listed (an unparseable message already fails
+    // the light parse above and returns None before this point).
+    let attachment_candidates = mailparse::parse_mail(raw)
+        .map(|parsed| {
+            let mut parts = Vec::new();
+            crate::collect_attachment_parts(&parsed, &mut parts);
+            parts
+                .into_iter()
+                .map(|part| AttachmentMeta {
+                    filename: crate::part_filename(part),
+                    mime: part.ctype.mimetype.clone(),
+                    size: encoded_part_size(part),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     Some(IndexDoc {
         message_id: obj.get("messageId").and_then(|v| v.as_str()).map(String::from),
         date_utc: obj.get("date").and_then(|v| v.as_str()).and_then(|d| mailparse::dateparse(d).ok()),
@@ -82,8 +100,17 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
         body_text,
         has_attachments: obj.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false),
         row_json: serde_json::to_string(&row).ok()?,
-        attachment_candidates: Vec::new(),
+        attachment_candidates,
     })
+}
+
+/// Upper bound on a MIME part's decoded body size, without decoding it: a
+/// part's raw bytes (its own headers + still-encoded body) are always >= the
+/// decoded body, since base64/quoted-printable only ever grow bytes. Lets
+/// callers reject an oversized attachment before `get_body_raw()` allocates
+/// the full decode.
+fn encoded_part_size(part: &mailparse::ParsedMail) -> u64 {
+    part.raw_bytes.len() as u64
 }
 
 /// Read one attachment part's raw bytes off disk and re-parse the message it
@@ -108,10 +135,28 @@ fn read_attachment_part(
     let mut parts = Vec::new();
     crate::collect_attachment_parts(&parsed, &mut parts);
     let part = parts.get(part_index)?;
-    let bytes = part.get_body_raw().ok()?;
     let mime = part.ctype.mimetype.clone();
     let filename = crate::part_filename(part);
     let doc = index_doc_from_light(&raw, uid, &current_filename)?;
+    // Size-check the ENCODED bytes before ever decoding: get_body_raw() fully
+    // base64-decodes the part into RAM, so a hostile multi-hundred-MB
+    // attachment must be rejected before that allocation, not after. `extract()`
+    // checks `input.size` against MAX_PART_BYTES before touching `input.bytes`
+    // for anything but the actual text/office/pdf/image extraction branches,
+    // so an empty placeholder here is safe and correctly classifies as too_large.
+    let encoded_size = encoded_part_size(part);
+    if encoded_size > mailvault_core::search_index::attachments::MAX_PART_BYTES {
+        return Some((
+            mailvault_core::search_index::attachments::AttachmentInput {
+                filename,
+                mime,
+                size: encoded_size,
+                bytes: Vec::new(),
+            },
+            doc,
+        ));
+    }
+    let bytes = part.get_body_raw().ok()?;
     Some((
         mailvault_core::search_index::attachments::AttachmentInput {
             filename,

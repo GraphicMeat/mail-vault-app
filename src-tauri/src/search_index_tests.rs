@@ -48,6 +48,36 @@ fn adapter_falls_back_to_html_when_the_text_part_is_whitespace() {
     assert_eq!(doc.body_text, "From html");
 }
 
+fn eml_with_one_attachment() -> Vec<u8> {
+    b"From: Ann <ann@x.test>\r\nTo: bob@x.test\r\nSubject: Report attached\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSee attached.\r\n--b\r\nContent-Type: text/plain; name=\"notes.txt\"\r\nContent-Disposition: attachment; filename=\"notes.txt\"\r\n\r\nhello world\r\n--b--\r\n".to_vec()
+}
+
+/// C1: the real `ParseFn` must populate `attachment_candidates` from the
+/// message's actual MIME parts, not hardcode an empty Vec — that hardcode is
+/// what made the whole attachment-search feature inert in production (no
+/// pending row was ever written, so extraction never ran).
+#[test]
+fn adapter_lists_a_real_attachment_as_a_candidate() {
+    let raw = eml_with_one_attachment();
+    let doc = crate::search_index::index_doc_from_light(&raw, 1, "1:2,.eml").expect("parses");
+    assert_eq!(doc.attachment_candidates.len(), 1, "{:?}", doc.attachment_candidates);
+    let candidate = &doc.attachment_candidates[0];
+    assert_eq!(candidate.filename, "notes.txt");
+    assert_eq!(candidate.mime, "text/plain");
+    // Size is the ENCODED part size (raw bytes, headers included) as an
+    // upper bound on the decoded body, not the exact decoded length (I2):
+    // this part is 7-bit so encoding adds no bloat, but the value comes from
+    // `encoded_part_size`, never from decoding the body.
+    let part_raw = b"Content-Type: text/plain; name=\"notes.txt\"\r\nContent-Disposition: attachment; filename=\"notes.txt\"\r\n\r\nhello world\r\n";
+    assert_eq!(candidate.size, part_raw.len() as u64);
+}
+
+#[test]
+fn adapter_lists_no_candidates_for_a_message_with_no_attachments() {
+    let doc = crate::search_index::index_doc_from_light(&eml_html(), 7, "7:2,S.eml").expect("parses");
+    assert!(doc.attachment_candidates.is_empty(), "{:?}", doc.attachment_candidates);
+}
+
 #[test]
 fn assemble_rows_keeps_hit_order_and_adds_snippet_and_matched_in() {
     use mailvault_core::search_index::query::{SearchHit, SearchPage};
