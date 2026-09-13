@@ -2,6 +2,7 @@
 //! Spec: docs/superpowers/specs/2026-09-13-offline-search-index-design.md §6.
 
 pub mod db;
+pub mod plan;
 pub mod query;
 pub mod reconcile;
 pub mod text;

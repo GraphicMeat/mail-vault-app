@@ -9,26 +9,14 @@
 //! Lock order: `db` may be held while `root` or `phase` is taken (status_json,
 //! vault_search); never take `root` or `phase` and then `db`.
 
+use mailvault_core::search_index::plan::{bodies_action, collect_burst, needs_full, plan, BodiesAction, Plan, Signal, COALESCE, SWEEP_EVERY};
 use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, IndexConfig, IndexDoc}, SharedConn};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{mpsc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
-
-/// The longest gap between full passes, however many nudges arrive in between.
-pub(crate) const SWEEP_EVERY: Duration = Duration::from_secs(15 * 60);
-
-pub enum Signal {
-    Sweep,
-    Nudge { account_id: String, vault_dir: String },
-    Rebuild,
-    /// The config itself is read from state on every pass; this only wakes the worker.
-    Configure,
-    /// A vault operation finished: open the current root, then a full pass.
-    Reopen,
-}
 
 #[derive(Default)]
 pub struct SearchIndexState {
@@ -237,63 +225,6 @@ pub fn start(app: &tauri::AppHandle) {
         .unwrap_or_else(|e| warn!("search index worker did not start: {e}"));
 }
 
-/// What one drained burst of signals asks the worker to do.
-#[derive(Debug, PartialEq)]
-pub(crate) struct Plan {
-    pub reopen: bool,
-    pub rebuild: bool,
-    /// `Some` only when every signal was a nudge for this one folder; otherwise a full pass.
-    pub only: Option<(String, String)>,
-}
-
-pub(crate) fn plan(queue: Vec<Signal>) -> Plan {
-    let mut p = Plan { reopen: false, rebuild: false, only: None };
-    let mut full = false;
-    let mut nudges: Vec<(String, String)> = Vec::new();
-    for s in queue {
-        match s {
-            Signal::Reopen => {
-                p.reopen = true;
-                full = true;
-            }
-            Signal::Rebuild => {
-                p.rebuild = true;
-                full = true;
-            }
-            Signal::Sweep | Signal::Configure => full = true,
-            Signal::Nudge { account_id, vault_dir } => nudges.push((account_id, vault_dir)),
-        }
-    }
-    nudges.sort();
-    nudges.dedup();
-    if !full && nudges.len() == 1 {
-        p.only = nudges.pop();
-    }
-    p
-}
-
-/// A scoped pass becomes a full one once the last full pass is `SWEEP_EVERY` old.
-pub(crate) fn needs_full(since_last_full: Duration, planned_full: bool) -> bool {
-    planned_full || since_last_full >= SWEEP_EVERY
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) enum BodiesAction {
-    None,
-    /// No flag stored (fresh index): write it, nothing to strip or re-parse.
-    RecordOnly,
-    Toggle,
-}
-
-/// Compare the stored `bodies_enabled` flag with the configured setting.
-pub(crate) fn bodies_action(stored: Option<&str>, want: bool) -> BodiesAction {
-    match stored {
-        None => BodiesAction::RecordOnly,
-        Some(s) if s == if want { "1" } else { "0" } => BodiesAction::None,
-        Some(_) => BodiesAction::Toggle,
-    }
-}
-
 fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
     let st = app.state::<SearchIndexState>();
     open_into(&app, &st); // here, not in setup: open runs quick_check
@@ -314,11 +245,8 @@ fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
         // Cleared before the drain: a configure/rebuild that lands after this either
         // is drained now or leaves `interrupt` set and a queued signal.
         st.interrupt.store(false, SeqCst);
-        let mut queue = vec![first];
-        while let Ok(s) = rx.try_recv() {
-            queue.push(s);
-        }
-        let Plan { reopen, rebuild, only } = plan(queue);
+        // A nudge-only burst waits up to COALESCE for the nudges behind it.
+        let Plan { reopen, rebuild, only } = plan(collect_burst(first, &rx, COALESCE));
         let full = needs_full(last_full.elapsed(), only.is_none());
         run_pass(&app, &st, reopen, rebuild, if full { None } else { only });
         // Not cut short = complete. A pass skipped because the index is unconfigured
@@ -330,7 +258,7 @@ fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
     }
 }
 
-fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<(String, String)>) {
+fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec<(String, String)>>) {
     if reopen {
         open_into(app, st);
     }
@@ -409,13 +337,13 @@ fn rebuild_index(app: &tauri::AppHandle, st: &SearchIndexState) {
     }
 }
 
-fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: IndexConfig, only: Option<(String, String)>) {
+fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: IndexConfig, only: Option<Vec<(String, String)>>) {
     *g(&st.phase) = "indexing";
     emit(app, st);
     let keep_going = || lock(&st.db).is_some() && !st.interrupt.load(SeqCst);
     let full = only.is_none();
     let (dirs, listed) = match only {
-        Some(pair) => (vec![pair], true),
+        Some(folders) => (folders, true),
         None => match reconcile::list_vault_dirs(maildir) {
             Ok(dirs) => (dirs, true),
             Err(e) => {
