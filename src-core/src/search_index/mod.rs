@@ -5,6 +5,7 @@ pub mod db;
 pub mod plan;
 pub mod query;
 pub mod reconcile;
+pub mod slot;
 pub mod text;
 
 /// The one connection an app process holds. `None` while the vault is being

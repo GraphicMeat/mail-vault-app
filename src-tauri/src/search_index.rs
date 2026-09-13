@@ -10,6 +10,7 @@
 //! vault_search); never take `root` or `phase` and then `db`.
 
 use mailvault_core::search_index::plan::{bodies_action, collect_burst, needs_full, plan, BodiesAction, Plan, Signal, COALESCE, SWEEP_EVERY};
+use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, IndexConfig, IndexDoc}, SharedConn};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
@@ -27,6 +28,9 @@ pub struct SearchIndexState {
     phase: Mutex<&'static str>, // "idle" | "indexing" | "unavailable"
     /// Set by configure, rebuild and close so a running sweep stops at its next batch boundary.
     interrupt: AtomicBool,
+    /// close()/reopen() around vault operations: an open that a switch started
+    /// behind never installs its connection, and nothing is swept or deleted meanwhile.
+    switch: SwitchGuard,
 }
 
 fn g<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -82,6 +86,13 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
 }
 
 fn open_into(app: &tauri::AppHandle, st: &SearchIndexState) {
+    // The vault's files are moving; its reopen() queues the open for afterwards.
+    if st.switch.is_switching() {
+        *g(&st.phase) = "unavailable";
+        return;
+    }
+    // Before the root is resolved and quick_check runs: a close() from here on makes this open stale.
+    let gen = st.switch.current();
     let root = match crate::vault::root(app) {
         Ok(r) => r,
         Err(e) => {
@@ -95,10 +106,16 @@ fn open_into(app: &tauri::AppHandle, st: &SearchIndexState) {
     *lock(&st.db) = None;
     match db::open(&root) {
         Ok(conn) => {
-            // root and phase first, so a status read never sees an open DB with a stale phase.
+            if !install_if_current(&st.db, &st.switch, gen, conn) {
+                return; // a switch started while this opened: the connection is dropped
+            }
             *g(&st.root) = Some(root);
             *g(&st.phase) = "idle";
-            *lock(&st.db) = Some(conn);
+            // A close() that landed between the install and here cleared root before this set it.
+            if st.switch.current() != gen {
+                *g(&st.root) = None;
+                *g(&st.phase) = "unavailable";
+            }
         }
         Err(e) => {
             warn!("search index unavailable: {e}");
@@ -109,18 +126,21 @@ fn open_into(app: &tauri::AppHandle, st: &SearchIndexState) {
 }
 
 /// Before a vault operation: stop the sweep and release the files. Waits on the
-/// DB mutex, so callers run it on a blocking thread.
+/// DB mutex, so callers run it on a blocking thread. Until `reopen`, no open
+/// in flight installs its connection and the worker neither sweeps nor deletes.
 pub fn close(app: &tauri::AppHandle) {
     let st = app.state::<SearchIndexState>();
     st.interrupt.store(true, SeqCst); // a running sweep stops at its next check
-    *lock(&st.db) = None; // drop = checkpoint + remove -wal
+    st.switch.begin_switch(&st.db); // drop = checkpoint + remove -wal
     *g(&st.root) = None;
 }
 
 /// After a vault operation, success or not: the worker opens whatever root is
 /// current then. Status reports `available: false` until it has.
 pub fn reopen(app: &tauri::AppHandle) {
-    send(&app.state::<SearchIndexState>(), Signal::Reopen);
+    let st = app.state::<SearchIndexState>();
+    st.switch.end_switch();
+    send(&st, Signal::Reopen);
 }
 
 fn send(st: &SearchIndexState, s: Signal) {
@@ -259,6 +279,9 @@ fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
 }
 
 fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec<(String, String)>>) {
+    if st.switch.is_switching() {
+        return; // the vault operation's reopen() sends a Reopen, which is a full pass
+    }
     if reopen {
         open_into(app, st);
     }
@@ -315,11 +338,19 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
 /// Delete the index files and open a fresh index. A file that will not go is
 /// never reopened: the index stays unavailable instead.
 fn rebuild_index(app: &tauri::AppHandle, st: &SearchIndexState) {
+    if st.switch.is_switching() {
+        return;
+    }
+    let gen = st.switch.current();
     let Some(root) = g(&st.root).clone() else { return };
     *lock(&st.db) = None; // drop = checkpoint; then the files can go
     let dir = root.join(db::DB_DIR);
     let mut stuck = false;
     for suffix in ["", "-wal", "-shm", "-journal"] {
+        // A vault operation may be copying these files, or `root` is no longer the vault.
+        if st.switch.is_switching() || st.switch.current() != gen {
+            return;
+        }
         let path = dir.join(format!("{}{suffix}", db::DB_FILE));
         if let Err(e) = std::fs::remove_file(&path) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -333,7 +364,7 @@ fn rebuild_index(app: &tauri::AppHandle, st: &SearchIndexState) {
         *g(&st.phase) = "unavailable";
         emit(app, st);
     } else {
-        open_into(app, st);
+        open_into(app, st); // installs through install_if_current
     }
 }
 
