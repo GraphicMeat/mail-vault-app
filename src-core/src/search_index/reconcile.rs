@@ -397,6 +397,94 @@ fn insert_fts(conn: &Connection, id: i64, subject: &str, addrs: &str, body: &str
     Ok(())
 }
 
+pub const EXTRACT_BATCH: usize = 50;
+
+/// One pass over up to `EXTRACT_BATCH` pending attachment parts: pulls
+/// candidates via `read_part`, extracts text through `extractor`, writes the
+/// result back to the `attachments` row and rewrites the message's FTS row so
+/// the new attachment text becomes searchable immediately. `read_part` returns
+/// `None` when the message's file is gone (left `pending`; a future full
+/// reconcile will notice the file is gone and remove the message row, which
+/// cascades to its attachment rows via `ON DELETE CASCADE`). A `Transient`
+/// extraction error (surfaced by `extract` as state `"pending"`) also leaves
+/// the row untouched for the next sweep to retry. Returns how many rows
+/// changed state, so the caller can decide whether a progress signal is
+/// worth emitting.
+pub fn run_pending_extractions(
+    conn: &mut Connection,
+    premium: bool,
+    image_text_enabled: bool,
+    extractor: &dyn super::attachments::TextExtractor,
+    read_part: impl Fn(&str, &str, u32, &str, usize) -> Option<(super::attachments::AttachmentInput, IndexDoc)>,
+) -> usize {
+    use super::attachments::extract;
+
+    let mut stmt = match conn.prepare(
+        "SELECT a.message_row, a.part_index, m.uid, m.account_id, m.vault_dir, m.filename \
+         FROM attachments a JOIN messages m ON m.id = a.message_row \
+         WHERE a.state = 'pending' LIMIT ?1",
+    ) {
+        Ok(s) => s,
+        Err(_) => return 0,
+    };
+    let pending: Vec<(i64, i64, u32, String, String, String)> = match stmt.query_map(params![EXTRACT_BATCH as i64], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, i64>(1)?,
+            r.get::<_, i64>(2)? as u32,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, String>(5)?,
+        ))
+    }) {
+        Ok(rows) => rows.filter_map(Result::ok).collect(),
+        Err(_) => return 0,
+    };
+    drop(stmt);
+
+    let mut changed = 0usize;
+    for (message_row, part_index, uid, account_id, vault_dir, filename) in pending {
+        let Some((input, doc)) = read_part(&account_id, &vault_dir, uid, &filename, part_index as usize) else { continue };
+        // Images only extract when the OCR toggle is on; every other
+        // attachment-shaped part extracts once attachments are on at all
+        // (the caller already gates that by not calling this function when
+        // `config.attachments` is false).
+        let enabled = if input.mime.to_lowercase().starts_with("image/") { image_text_enabled } else { true };
+        let (state, text) = extract(&input, premium, enabled, extractor);
+        if state == "pending" {
+            continue; // transient: leave it, the next sweep retries
+        }
+        let Ok(tx) = conn.transaction() else { continue };
+        if tx
+            .execute(
+                "UPDATE attachments SET state = ?1, text = ?2 WHERE message_row = ?3 AND part_index = ?4",
+                params![state, text, message_row, part_index],
+            )
+            .is_err()
+        {
+            continue;
+        }
+        let attach_text: String = tx
+            .query_row(
+                "SELECT group_concat(text, char(10)) FROM attachments WHERE message_row = ?1 AND state = 'ok'",
+                [message_row],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let addrs = doc.addrs.join("\n");
+        let _ = delete_fts(&tx, message_row);
+        if !doc.subject.is_empty() || !doc.body_text.is_empty() || !attach_text.is_empty() {
+            let _ = insert_fts(&tx, message_row, &doc.subject, &addrs, &doc.body_text, &attach_text);
+        }
+        if tx.commit().is_ok() {
+            changed += 1;
+        }
+    }
+    changed
+}
+
 /// Drop every folder whose `(account_id, vault_dir)` is not in `present`.
 /// Returns the number of folders removed.
 pub fn prune_missing_dirs(db: &SharedConn, present: &[(String, String)]) -> Result<usize, String> {
@@ -1025,5 +1113,83 @@ mod tests {
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc2))]).unwrap();
         let names: Vec<String> = conn.prepare("SELECT filename FROM attachments").unwrap().query_map([], |r| r.get(0)).unwrap().collect::<Result<_, _>>().unwrap();
         assert_eq!(names, vec!["new.pdf".to_string()], "the old part's row must not linger once the message is reparsed with a different attachment set");
+    }
+
+    #[test]
+    fn run_pending_extractions_fills_in_ok_text_and_rewrites_fts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            subject: "Invoice".into(),
+            attachment_candidates: vec![AttachmentMeta { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11 }],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+
+        let changed = super::run_pending_extractions(&mut conn, true, true, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
+            Some((
+                crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
+                IndexDoc { subject: "Invoice".into(), ..IndexDoc::default() },
+            ))
+        });
+        assert_eq!(changed, 1);
+
+        let (state, text): (String, Option<String>) = conn.query_row("SELECT state, text FROM attachments", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
+        assert_eq!(state, "ok");
+        assert_eq!(text.as_deref(), Some("hello world"));
+
+        let hit: i64 = conn.query_row("SELECT rowid FROM msg_fts WHERE msg_fts MATCH '\"orld\"'", [], |r| r.get(0)).unwrap();
+        assert!(hit > 0, "the FTS row must be rewritten with the attachment text in the attach column");
+    }
+
+    #[test]
+    fn a_transient_extraction_error_leaves_the_row_pending() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+
+        struct AlwaysTransient;
+        impl crate::search_index::attachments::TextExtractor for AlwaysTransient {
+            fn pdf_text_layer(&self, _b: &[u8]) -> Result<(String, usize), crate::search_index::attachments::ExtractError> {
+                Err(crate::search_index::attachments::ExtractError::Transient("timeout".into()))
+            }
+            fn pdf_ocr(&self, _b: &[u8], _m: usize) -> Result<String, crate::search_index::attachments::ExtractError> {
+                Err(crate::search_index::attachments::ExtractError::Transient("timeout".into()))
+            }
+            fn image_ocr(&self, _b: &[u8], _m: &str) -> Result<String, crate::search_index::attachments::ExtractError> {
+                Err(crate::search_index::attachments::ExtractError::Transient("timeout".into()))
+            }
+        }
+        let changed = super::run_pending_extractions(&mut conn, true, true, &AlwaysTransient, |_a, _d, _u, _f, _p| {
+            Some((
+                crate::search_index::attachments::AttachmentInput { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000, bytes: vec![] },
+                IndexDoc::default(),
+            ))
+        });
+        assert_eq!(changed, 0, "a transient error changes nothing observable");
+        let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
+        assert_eq!(state, "pending", "must still be pending so the next sweep retries it");
+    }
+
+    #[test]
+    fn a_missing_file_leaves_the_row_pending_without_looping_forever_in_one_call() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let changed = super::run_pending_extractions(&mut conn, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None);
+        assert_eq!(changed, 0);
+        let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
+        assert_eq!(state, "pending");
     }
 }
