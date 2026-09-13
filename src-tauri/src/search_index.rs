@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 use tauri::{Emitter, Manager};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 #[derive(Default)]
 pub struct SearchIndexState {
@@ -399,7 +399,8 @@ fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: 
                 completed = false;
                 break;
             }
-            Ok(s) if s.parsed + s.removed + s.renamed + s.failed > 0 => info!("search index {account}/{dir}: {s:?}"),
+            Ok(s) if s.parsed + s.removed + s.renamed > 0 => info!("search index {account}/{dir}: {s:?}"),
+            Ok(s) if s.failed > 0 => debug!("search index {account}/{dir}: {s:?}"),
             Ok(_) => {}
             Err(e) if e.contains("closed") => {
                 completed = false;

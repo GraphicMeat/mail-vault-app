@@ -43,8 +43,8 @@ pub struct IndexConfig {
 pub type ParseFn<'a> = &'a (dyn Fn(&[u8], u32, &str) -> Option<IndexDoc> + Sync);
 
 /// `parsed` and `failed` are disjoint: `failed` counts files that were
-/// unparseable or unreadable (both recorded) or gone since the listing (left
-/// for the next sweep).
+/// unparseable or a directory-shaped path (both recorded), or gone since the
+/// listing or unreadable for any other reason (left for the next sweep).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ReconcileStats {
     pub parsed: usize,
