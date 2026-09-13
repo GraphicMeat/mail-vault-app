@@ -329,6 +329,10 @@ pub async fn run_with_backup(
     let final_completed = completed.load(Ordering::Relaxed);
     let final_errors = errors.load(Ordering::Relaxed);
     let final_ext_failures = ext_failures.load(Ordering::Relaxed);
+    // Once per run, for archive_emails and each backup folder alike.
+    if final_completed > 0 {
+        crate::search_index::nudge(&app_handle, &account_id, &mailbox);
+    }
 
     info!(
         "archive_emails: done — {}/{} completed, {} errors, {} external copy failures",

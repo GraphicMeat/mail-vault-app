@@ -2400,6 +2400,8 @@ pub fn maildir_store_raw(
         .map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    // Here, not at the caller: the already-cached return above must not wake the index.
+    search_index::nudge(app_handle, account_id, mailbox);
     Ok(())
 }
 
@@ -2434,6 +2436,7 @@ fn maildir_store(
         .map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    search_index::nudge(&app_handle, &account_id, &mailbox);
     Ok(())
 }
 
@@ -3406,6 +3409,7 @@ fn maildir_delete(
         fs::remove_file(&path)
             .map_err(|e| format!("Failed to delete .eml file: {}", e))?;
         info!("Deleted email UID {} from {:?}", uid, path);
+        search_index::nudge(&app_handle, &account_id, &mailbox);
     }
     Ok(())
 }
@@ -3420,6 +3424,9 @@ fn maildir_delete_many(
     let uid_set: std::collections::HashSet<u32> = uids.into_iter().collect();
     let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
     let removed = delete_maildir_files(&cur_dir, &uid_set);
+    if removed > 0 {
+        search_index::nudge(&app_handle, &account_id, &mailbox);
+    }
 
     let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
     if let Err(e) = prune_local_index(&index_path, &uid_set) {
@@ -3454,6 +3461,7 @@ fn maildir_set_flags(
         fs::rename(&old_path, &new_path)
             .map_err(|e| format!("Failed to rename file: {}", e))?;
         info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
+        search_index::nudge(&app_handle, &account_id, &mailbox);
     }
     Ok(())
 }
@@ -5380,7 +5388,8 @@ fn main() {
             github::github_check_star,
             daemon_rpc,
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset,
-            search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild
+            search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild,
+            search_index::vault_search
         ])
         .setup(|app| {
             app.state::<insights::InsightsSnapshots>().start_cleanup();

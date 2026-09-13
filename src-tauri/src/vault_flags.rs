@@ -331,6 +331,9 @@ pub async fn vault_apply_flags(
             }
         }
         let applied = result?;
+        if applied.renamed > 0 {
+            crate::search_index::nudge(&app_handle, &account_id, &mailbox); // filename-only updates
+        }
         if applied.total() > 0 {
             info!(
                 "vault_flags: {}/{} — {} renamed, {} mirrored, {} index, {} sidecars",
@@ -442,6 +445,9 @@ pub async fn vault_rename_mailbox(
             }
             Ok(moved)
         })();
+        if moved > 0 {
+            crate::search_index::sweep_soon(&app_handle); // the old folders' rows go, the new ones' come
+        }
         if needs_release {
             if let Some(ref p) = root {
                 crate::backup::release_backup_path(p);

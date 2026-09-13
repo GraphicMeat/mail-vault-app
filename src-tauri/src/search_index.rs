@@ -6,8 +6,8 @@
 //! Only the worker thread opens the index (it runs `quick_check`); the main
 //! thread and tokio workers never open it or wait on its mutex.
 //!
-//! Lock order: `db` may be held while `root` or `phase` is taken (status_json
-//! only); never take `root` or `phase` and then `db`.
+//! Lock order: `db` may be held while `root` or `phase` is taken (status_json,
+//! vault_search); never take `root` or `phase` and then `db`.
 
 use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, IndexConfig, IndexDoc}, SharedConn};
 use std::path::{Path, PathBuf};
@@ -45,31 +45,38 @@ fn g<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// The text the index holds for a list row: its text part, else its HTML part as text.
+fn body_of(row: &serde_json::Value) -> String {
+    match (row.get("text").and_then(|v| v.as_str()), row.get("html").and_then(|v| v.as_str())) {
+        (Some(t), _) if !t.trim().is_empty() => t.to_string(),
+        (_, Some(h)) => core::text::html_to_text(h),
+        _ => String::new(),
+    }
+}
+
+/// A list-row address as `Name <address>`, or the bare address.
+fn addr_text(v: &serde_json::Value) -> String {
+    let a = v.get("address").and_then(|x| x.as_str()).unwrap_or("");
+    match v.get("name").and_then(|x| x.as_str()) {
+        Some(n) if !n.is_empty() => format!("{n} <{a}>"),
+        _ => a.to_string(),
+    }
+}
+
 /// `ParseFn` for core: the list-row parser, so rows and the index agree on one parser.
 pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<IndexDoc> {
     let email = crate::parse_eml_bytes_light(raw, uid, crate::parse_flags_from_filename(filename)).ok()?;
     let mut row = serde_json::to_value(&email).ok()?;
+    let body_text = body_of(&row);
     let obj = row.as_object_mut()?;
-    let body_text = match (obj.get("text").and_then(|v| v.as_str()), obj.get("html").and_then(|v| v.as_str())) {
-        (Some(t), _) if !t.trim().is_empty() => t.to_string(),
-        (_, Some(h)) => core::text::html_to_text(h),
-        _ => String::new(),
-    };
     for k in ["text", "html", "flags"] {
         obj.remove(k);
     }
-    let addr = |v: &serde_json::Value| -> String {
-        let a = v.get("address").and_then(|x| x.as_str()).unwrap_or("");
-        match v.get("name").and_then(|x| x.as_str()) {
-            Some(n) if !n.is_empty() => format!("{n} <{a}>"),
-            _ => a.to_string(),
-        }
-    };
     let from = obj.get("from").cloned().unwrap_or(serde_json::Value::Null);
-    let mut addrs = vec![addr(&from)];
+    let mut addrs = vec![addr_text(&from)];
     for key in ["to", "cc", "bcc", "replyTo"] {
         if let Some(list) = obj.get(key).and_then(|v| v.as_array()) {
-            addrs.extend(list.iter().map(addr));
+            addrs.extend(list.iter().map(addr_text));
         }
     }
     Some(IndexDoc {
@@ -133,12 +140,57 @@ fn send(st: &SearchIndexState, s: Signal) {
     }
 }
 
-/// A vault writer changed `mailbox`: reconcile that folder soon.
-#[allow(dead_code)] // callers land with the vault writers (Task 7)
+/// A vault writer changed `mailbox`: reconcile that folder soon. A channel
+/// send, so a writer never waits on the index.
 pub fn nudge(app: &tauri::AppHandle, account_id: &str, mailbox: &str) {
     if let Some(st) = app.try_state::<SearchIndexState>() {
         send(&st, Signal::Nudge { account_id: account_id.into(), vault_dir: core::text::vault_dir_name(mailbox) });
     }
+}
+
+/// A change wider than one folder (a mailbox rename moves whole directories): a full pass soon.
+pub fn sweep_soon(app: &tauri::AppHandle) {
+    if let Some(st) = app.try_state::<SearchIndexState>() {
+        send(&st, Signal::Sweep);
+    }
+}
+
+/// One row per hit, in hit order: the list row read from the hit's own file,
+/// plus `vaultDir`, `snippet` and `matchedIn`. The index knows each filename,
+/// so there is no folder listing; `read_light_at` rescans once only if the file
+/// was renamed since (a flag change). A hit whose file is gone is dropped and
+/// `total` still counts it until the next sweep removes the row: transient,
+/// never a wrong row.
+pub fn assemble_rows(root: &Path, account_id: &str, page: &core::query::SearchPage) -> Vec<serde_json::Value> {
+    page.hits
+        .iter()
+        .filter_map(|h| {
+            let cur = root.join("Maildir").join(account_id).join(&h.vault_dir).join("cur");
+            let email = crate::read_light_at(&cur, h.uid, Some(&cur.join(&h.filename)))?;
+            let mut row = serde_json::to_value(&email).ok()?;
+            let body = body_of(&row);
+            let subject = row.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
+            // Names and addresses only: the JSON text around them would match `name` or `address`.
+            let from = addr_text(&row["from"]);
+            let to = ["to", "cc", "bcc"]
+                .iter()
+                .filter_map(|k| row.get(*k)?.as_array())
+                .flatten()
+                .map(addr_text)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let matched: Vec<&str> = [("subject", &subject), ("from", &from), ("to", &to), ("body", &body)]
+                .into_iter()
+                .filter(|(_, text)| page.needles.iter().any(|n| core::text::contains_folded(text, n)))
+                .map(|(label, _)| label)
+                .collect();
+            let obj = row.as_object_mut()?;
+            obj.insert("vaultDir".into(), h.vault_dir.clone().into());
+            obj.insert("snippet".into(), core::text::snippet(&body, &page.needles, 160).into());
+            obj.insert("matchedIn".into(), matched.into());
+            Some(row)
+        })
+        .collect()
 }
 
 fn status_json(st: &SearchIndexState) -> serde_json::Value {
@@ -387,6 +439,31 @@ async fn off_main<T: Send + 'static>(
     tokio::task::spawn_blocking(move || f(&app.state::<SearchIndexState>()))
         .await
         .map_err(|e| format!("Task join error: {e}"))
+}
+
+/// `{ available: false }` until the worker has opened the index.
+#[tauri::command]
+pub async fn vault_search(app: tauri::AppHandle, request: core::query::SearchRequest) -> Result<serde_json::Value, String> {
+    off_main(app, move |st| {
+        let (root, page, counts) = {
+            let guard = lock(&st.db);
+            // Root read under the db lock, so it is the root this connection was opened for.
+            let (Some(conn), Some(root)) = (guard.as_ref(), g(&st.root).clone()) else {
+                return Ok(serde_json::json!({ "available": false }));
+            };
+            (root, core::query::search(conn, &request)?, db::counts(conn))
+        }; // released before any file is read
+        let rows = assemble_rows(&root, &request.account_id, &page);
+        Ok(serde_json::json!({
+            "available": true,
+            "rows": rows,
+            "total": page.total,
+            "indexed": counts.indexed,
+            "totalMessages": counts.total,
+            "complete": counts.total > 0 && counts.indexed >= counts.total,
+        }))
+    })
+    .await?
 }
 
 #[derive(serde::Deserialize)]
