@@ -1079,6 +1079,66 @@ export function seedLegacyVault(home, accountId) {
   return cur;
 }
 
+/** Uids of the messages `seedLegacyCustody` records; above every mock uid. */
+export const LEGACY_CUSTODY_UID = 990002;
+export const LEGACY_NESTED_UID = 990003;
+/** Every custody field the pre-store writers produced, in one entry. */
+export const LEGACY_CUSTODY_ENTRY = {
+  uid: LEGACY_CUSTODY_UID,
+  subject: 'Recorded by the JSON index',
+  from: { address: 'legacy@mock.test', name: 'Legacy' },
+  to: [{ address: 'luke@mock.test', name: null }],
+  date: 'Mon, 01 Sep 2026 10:00:00 +0000',
+  flags: [],
+  has_attachments: false,
+  message_id: '<legacy-custody@mock.test>',
+  in_reply_to: null,
+  references: null,
+  snippet: 'kept',
+  source: 'local',
+  serverDeleted: true,
+  _external_copy_failed: false,
+};
+export const LEGACY_NESTED_ENTRY = {
+  uid: LEGACY_NESTED_UID,
+  subject: 'Nested folder entry',
+  source: 'local_sent',
+  serverAbsent: true,
+  serverAbsentAt: '2026-09-10T00:00:00Z',
+  flags: ['\\Seen'],
+};
+export const CORRUPT_CUSTODY_BYTES = 'this is not a database, and it must not be deleted';
+
+/**
+ * A vault as every build before the custody store left it: the per-mailbox
+ * `local-index.json` (a bare array, nested by raw mailbox path) and the
+ * `archived_headers.json` cache, plus the vault file the INBOX entry is about.
+ * Planted BEFORE the app launches: the import runs once, during setup.
+ */
+export function seedLegacyCustody(home, accountId) {
+  const data = appDataDir(home);
+  const inbox = join(data, 'maildir', accountId, 'INBOX');
+  const cur = join(data, 'Maildir', accountId, 'INBOX', 'cur');
+  mkdirSync(cur, { recursive: true });
+  mkdirSync(inbox, { recursive: true });
+  writeFileSync(join(inbox, 'local-index.json'), JSON.stringify([LEGACY_CUSTODY_ENTRY]));
+  writeFileSync(join(data, 'Maildir', accountId, 'INBOX', 'archived_headers.json'), JSON.stringify({ uid_count: 1, emails: [] }));
+  const nested = join(data, 'maildir', accountId, 'Projects', '2026');
+  mkdirSync(nested, { recursive: true });
+  writeFileSync(join(nested, 'local-index.json'), JSON.stringify([LEGACY_NESTED_ENTRY]));
+  writeFileSync(join(cur, `${LEGACY_CUSTODY_UID}:2,A.eml`),
+    'From: Legacy <legacy@mock.test>\r\nTo: luke@mock.test\r\nSubject: Recorded by the JSON index\r\n'
+    + 'Date: Mon, 01 Sep 2026 10:00:00 +0000\r\nMessage-ID: <legacy-custody@mock.test>\r\n\r\n'
+    + 'A message the old index vouched for.\r\n');
+}
+
+/** A custody store no build can read. Planted BEFORE the app launches. */
+export function seedCorruptCustody(home) {
+  const dir = join(appDataDir(home), 'custody');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'custody.db'), CORRUPT_CUSTODY_BYTES);
+}
+
 export const MOCK_PASSWORD = 'mock-password';
 
 /**

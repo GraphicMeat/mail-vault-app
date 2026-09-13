@@ -17,6 +17,8 @@ import {
   stopDaemon,
   appDataDir,
   seedLegacyVault,
+  seedLegacyCustody,
+  seedCorruptCustody,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 
@@ -412,6 +414,12 @@ export const config = {
       // exist before the app launches: the sweep runs once during setup.
       if ((specs || []).some((s) => s.includes('connected-vault-eml-migration'))) {
         seedLegacyVault(testDataDir, accounts[0].id);
+      }
+      if ((specs || []).some((s) => s.includes('connected-custody-migration'))) {
+        seedLegacyCustody(testDataDir, accounts[0].id);
+      }
+      if ((specs || []).some((s) => s.includes('connected-custody-corrupt'))) {
+        seedCorruptCustody(testDataDir);
       }
     }
   },
