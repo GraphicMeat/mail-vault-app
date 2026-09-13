@@ -354,6 +354,13 @@ export const testidPresent = (testid) => browser.execute((id) => {
 }, testid);
 export const testidText = (testid) => browser.execute((id) =>
   document.querySelector(`[data-testid="${id}"]`)?.textContent.trim() ?? null, testid);
+/**
+ * Text of the expanded quoted original. It renders in a sandboxed frame, so the
+ * `compose-quoted` box holds no text of its own; the frame is same-origin, so
+ * its document reads from here. Null until the frame has loaded.
+ */
+export const quotedText = () => browser.execute(() =>
+  document.querySelector('[data-testid="compose-quoted"] iframe')?.contentDocument?.body?.textContent.trim() || null);
 
 /** Click a button inside the modal (or inside `scope`) by its exact trimmed text. */
 export async function clickButtonText(text, scope = MODAL) {

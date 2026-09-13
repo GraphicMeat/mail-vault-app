@@ -84,3 +84,17 @@ describe('htmlToText', () => {
       .toBe('Hi,\n\ntext');
   });
 });
+
+// Plain text is characters, never markup: a received plain-text mail is quoted
+// into a reply through textToHtml.
+describe('textToHtml', () => {
+  it('writes angle brackets and ampersands as text', () => {
+    expect(textToHtml('<img src=x onerror="alert(1)"> Fish & chips'))
+      .toBe('<p>&lt;img src=x onerror="alert(1)"&gt; Fish &amp; chips</p>');
+  });
+
+  it('round-trips a quote line that names an address', () => {
+    const text = 'On Monday, Ann <ann@example.com> wrote:\n> a < b && b > c';
+    expect(htmlToText(textToHtml(text))).toBe(text);
+  });
+});

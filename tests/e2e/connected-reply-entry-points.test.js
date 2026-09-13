@@ -28,7 +28,7 @@ import {
   modalOpen,
   modalCount,
   testidPresent,
-  testidText,
+  quotedText,
 } from './composeHelpers.js';
 
 // The single message this spec replies to — account 0's INBOX, no thread.
@@ -431,7 +431,14 @@ describe('Reply entry points — header, thread message, row menu', function () 
         10_000,
         200,
       );
-      expect(await testidText('compose-quoted')).toContain(CROSS_FOLDER_INBOX_BODY);
+      const quoted = await waitFor(
+        quotedText,
+        (text) => !!text && text.includes(CROSS_FOLDER_INBOX_BODY),
+        'the expanded quote never showed the body of the message it answers',
+        10_000,
+        200,
+      );
+      expect(quoted).toContain(CROSS_FOLDER_INBOX_BODY);
     });
 
     it('the thread chevron unfolds the message without a compose', async function () {
@@ -475,7 +482,14 @@ describe('Reply entry points — header, thread message, row menu', function () 
       10_000,
       200,
     );
-    expect(await testidText('compose-quoted')).toContain(BODY);
+    const quoted = await waitFor(
+      quotedText,
+      (text) => !!text && text.includes(BODY),
+      'the expanded quote never showed the body the row menu resolved',
+      10_000,
+      200,
+    );
+    expect(quoted).toContain(BODY);
   });
 
   it('the row menu starts a new conversation with the sender', async function () {

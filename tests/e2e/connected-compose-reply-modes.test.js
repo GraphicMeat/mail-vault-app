@@ -36,6 +36,7 @@ import {
   modalTitle,
   testidPresent,
   testidText,
+  quotedText,
   clickButtonTitle,
   bubbles,
   clickBubble,
@@ -151,7 +152,12 @@ describe('Connected Compose Reply Modes', function () {
       interval: 200,
       timeoutMsg: 'The quoted original did not expand when its toggle was clicked',
     });
-    const quoted = await testidText('compose-quoted');
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The expanded quote never showed the original body',
+    });
+    const quoted = await quotedText();
     expect(quoted).toContain('Original Message');
     expect(quoted).toContain('Ann Sender');
     expect(quoted).toContain(SUBJECT);
@@ -339,6 +345,96 @@ describe('Connected Compose Reply Modes', function () {
       interval: 200,
       timeoutMsg: 'The restored draft had a quoted toggle but no quoted original behind it',
     });
-    expect(await testidText('compose-quoted')).toContain('Original html body');
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The restored draft\'s quoted original never showed its body',
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Someone else's markup
+  // -------------------------------------------------------------------------
+  // The compose window is the app's own webview: withGlobalTauri puts the IPC
+  // bridge on its window and the CSP allows inline handlers. The payload only
+  // records whether it ran and whether the bridge was in reach. A data: image
+  // that fails to decode fires onerror without a network request.
+
+  const RAN = 'window.__mvQuoteRan = typeof top.__TAURI__';
+  const BROKEN_IMG = `<img src="data:image/png;base64,AAAA" onerror="${RAN}">`;
+
+  /** What ran from the quote, in the app window and inside the quote's own frame. */
+  const quoteRan = () => browser.execute(() => {
+    const frame = document.querySelector('[data-testid="compose-quoted"] iframe');
+    return { app: window.__mvQuoteRan ?? null, frame: frame?.contentWindow?.__mvQuoteRan ?? null };
+  });
+
+  async function expandQuote() {
+    expect(await clickTestid('compose-quoted-toggle')).toBe(true);
+    await browser.waitUntil(() => testidPresent('compose-quoted'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The quoted original did not expand when its toggle was clicked',
+    });
+    // Long enough for a broken image to fail and a handler to fire.
+    await browser.pause(1500);
+  }
+
+  it('runs nothing from an HTML original a Reply shows', async function () {
+    await browser.execute(() => { delete window.__mvQuoteRan; });
+    await openMode({
+      ...EMAIL,
+      from: { name: `${BROKEN_IMG}Ann Sender`, address: SENDER },
+      html: `<p>Original html body</p>${BROKEN_IMG}`,
+    }, 'r');
+
+    await expandQuote();
+    expect(await quoteRan()).toEqual({ app: null, frame: null });
+
+    // It did render: the body, and the sender's name as the characters it holds.
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes('Original html body'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The quoted original never showed its body, so "nothing ran" proves nothing',
+    });
+    expect(await quotedText()).toContain(`From: ${BROKEN_IMG}Ann Sender <${SENDER}>`);
+  });
+
+  it('quotes a plain-text original as the characters it holds', async function () {
+    await browser.execute(() => { delete window.__mvQuoteRan; });
+    const line = `On Monday, Ann Sender <${SENDER}> wrote:`;
+    await openMode({ ...EMAIL, html: '', text: `${line}\n${BROKEN_IMG}` }, 'r');
+
+    await expandQuote();
+    expect(await quoteRan()).toEqual({ app: null, frame: null });
+
+    await browser.waitUntil(async () => ((await quotedText()) || '').includes(line), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The plain-text original never showed its "wrote:" line with the address in it',
+    });
+    expect(await quotedText()).toContain(BROKEN_IMG);
+  });
+
+  // A guard, green before the fix too: a Forward puts the original into the
+  // editor, where only TipTap's schema stands between its markup and the app
+  // window (Image keeps src/alt/title, Link refuses javascript:).
+  it('runs nothing from an HTML original a Forward carries into the editor', async function () {
+    await browser.execute(() => { delete window.__mvQuoteRan; });
+    await openMode({
+      ...EMAIL,
+      from: { name: `${BROKEN_IMG}Ann Sender`, address: SENDER },
+      html: `<p>Original html body</p>${BROKEN_IMG}<p><a href="javascript:${RAN}">details</a></p>`,
+    }, 'f');
+
+    await browser.waitUntil(async () => ((await editorText()) || '').includes('Original html body'), {
+      timeout: 10_000,
+      interval: 200,
+      timeoutMsg: 'The forwarded original never reached the editor, so "nothing ran" proves nothing',
+    });
+    await browser.pause(1500);
+    expect(await browser.execute(() => window.__mvQuoteRan ?? null)).toBe(null);
+    expect(await browser.execute(() =>
+      document.querySelectorAll('.ProseMirror [onerror], .ProseMirror a[href^="javascript:"]').length)).toBe(0);
   });
 });

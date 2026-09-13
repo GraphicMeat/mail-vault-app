@@ -14,6 +14,7 @@ import * as db from '../services/db';
 import { RichTextEditor, insertImages, textToHtml, htmlToText, inlineComposeSpacing } from './RichTextEditor';
 import { ContactsPickerButton, ContactsAutocomplete } from './ContactsPicker';
 import { findSentMailboxPath } from '../utils/sentFolder';
+import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
 import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
@@ -123,6 +124,30 @@ function AttachmentPreview({ attachment, onRemove }) {
     </div>
   );
 }
+
+// Fields of a received message go into the quote's HTML as text.
+const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+// The message a reply answers: someone else's HTML, shown in the app's own
+// window, where withGlobalTauri puts the IPC bridge. The sandbox has no
+// allow-scripts, so nothing in the frame runs: no <script>, no onerror, no
+// javascript: link. allow-same-origin only lets the auto-size read its height.
+// The reading pane's frames allow scripts (Dark Reader, quote folding); this
+// one must not copy them.
+const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
+  const t = useT();
+  const frameRef = useRef(null);
+  useEffect(() => attachEmailIframeAutoSize(frameRef.current), []);
+  return (
+    <iframe
+      ref={frameRef}
+      sandbox="allow-same-origin"
+      srcDoc={buildEmailIframeHtml({ bodyHtml: html, extraHead: '<style>body { padding: 12px 16px; }</style>' })}
+      title={t('compose.originalMessage')}
+      className="block w-full border-0 rounded-md"
+    />
+  );
+});
 
 // The HTML5 drag handlers below are the browser-preview path. In the app,
 // wry answers AppKit before WebKit sees a file drag, and the drop arrives as
@@ -296,7 +321,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
 
     // Build quoted content as HTML — stored separately for collapsible display
-    const quotedHeaderHtml = `<p><strong>${t('compose.originalMessage')}</strong><br>From: ${fromName} &lt;${fromAddress}&gt;<br>Date: ${originalDate}<br>Subject: ${originalSubject}<br>To: ${originalTo}</p>`;
+    const quotedHeaderHtml = `<p><strong>${t('compose.originalMessage')}</strong><br>From: ${escapeHtml(fromName)} &lt;${escapeHtml(fromAddress)}&gt;<br>Date: ${escapeHtml(originalDate)}<br>Subject: ${escapeHtml(originalSubject)}<br>To: ${escapeHtml(originalTo)}</p>`;
     const quotedBodyHtml = replyTo.html
       ? replyTo.html
       : textToHtml(replyTo.text || '');
@@ -1436,11 +1461,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               </button>
               {quotedExpanded && (
                 <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
-                  <div
-                    className="text-xs text-mail-text-muted border-l-2 border-mail-border pl-3
-                              [&_p]:my-1 [&_a]:text-mail-accent-text [&_img]:max-w-full"
-                    dangerouslySetInnerHTML={{ __html: quotedHtml }}
-                  />
+                  <QuotedOriginal html={quotedHtml} />
                 </div>
               )}
             </div>
