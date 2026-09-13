@@ -28,13 +28,33 @@ export const LEGACY_LOCALIZED_KEYS = [
  * away, and the account is adopted again on the next launch after the app has
  * already opened its folders under the new key. Wait for hydration first.
  */
+export const HYDRATION_WAIT_MS = 5000;
+
 async function hydrated() {
   const persist = useSettingsStore.persist;
-  if (persist?.hasHydrated && !persist.hasHydrated()) {
-    await new Promise((resolve) => {
-      const unsub = persist.onFinishHydration(() => { unsub(); resolve(); });
+  if (!persist?.hasHydrated || persist.hasHydrated()) return;
+  // Bounded, because zustand's `hydrate()` sets `hasHydrated` and fires the
+  // finish listeners inside a `.then()`: a rejection anywhere in that chain (a
+  // throwing migration, a bad `JSON.parse` in the storage adapter) lands in its
+  // `.catch` instead, leaving the flag false and every listener unfired
+  // forever. Both passes are awaited on every boot path and at every Graph
+  // listing, so an unbounded wait would hang activation, listing and refresh
+  // with nothing on screen to explain it. Going ahead is safe: if the persisted
+  // state is genuinely unavailable the flag is absent anyway, and the command
+  // is a no-op when there is nothing to adopt.
+  await new Promise((resolve) => {
+    let unsub = () => {};
+    const timer = setTimeout(() => {
+      unsub();
+      console.warn('[adoptGraphFolderKeys] settings did not hydrate in time; proceeding with in-memory state');
+      resolve();
+    }, HYDRATION_WAIT_MS);
+    unsub = persist.onFinishHydration(() => {
+      clearTimeout(timer);
+      unsub();
+      resolve();
     });
-  }
+  });
 }
 
 /**

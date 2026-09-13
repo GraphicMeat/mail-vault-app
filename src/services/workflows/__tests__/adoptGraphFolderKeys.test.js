@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const api = { vaultAdoptMailboxDirs: vi.fn() };
 vi.mock('../../api', () => api);
@@ -14,7 +14,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
 }));
 
-const { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing, LEGACY_LOCALIZED_KEYS } =
+const { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing, LEGACY_LOCALIZED_KEYS, HYDRATION_WAIT_MS } =
   await import('../adoptGraphFolderKeys');
 
 const GRAPH = { id: 'g1', email: 'leia@mock.test', authType: 'oauth2', oauth2Transport: 'graph' };
@@ -55,6 +55,14 @@ beforeEach(() => {
     markGraphFolderKeysAdopted: vi.fn((id) => { settingsState.graphFolderKeysAdopted[id] = true; }),
     markGraphFolderKeysAdoptedFromListing: vi.fn((id) => { settingsState.graphFolderKeysAdoptedFromListing[id] = true; }),
   };
+});
+
+// Not at the end of the one test that fakes them: a failing assertion throws
+// before any cleanup line, and leaked fake timers hang every later test that
+// waits on a real one.
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 describe('LEGACY_LOCALIZED_KEYS', () => {
@@ -133,6 +141,27 @@ describe('adoptGraphFolderKeys', () => {
     expect(api.vaultAdoptMailboxDirs).not.toHaveBeenCalled();
   });
 
+  // zustand sets `hasHydrated` and fires the finish listeners in a `.then()`;
+  // a rejection anywhere in that chain goes to its `.catch` instead, so the
+  // flag stays false and no listener ever runs. Unbounded, that hangs every
+  // boot path and every Graph listing, which all await this.
+  it('gives up on a hydration that never finishes and proceeds', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unsub = vi.fn();
+    settingsPersist = { hasHydrated: () => false, onFinishHydration: () => unsub };
+
+    let settled = false;
+    const done = adoptGraphFolderKeys([GRAPH]).then(() => { settled = true; });
+    await vi.advanceTimersByTimeAsync(HYDRATION_WAIT_MS);
+
+    expect(settled).toBe(true);
+    await done;
+    expect(api.vaultAdoptMailboxDirs).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(unsub).toHaveBeenCalledTimes(1);
+  });
+
   it('does not wait when the store has already hydrated', async () => {
     const onFinishHydration = vi.fn();
     settingsPersist = { hasHydrated: () => true, onFinishHydration };
@@ -149,7 +178,6 @@ describe('adoptGraphFolderKeys', () => {
     expect(settingsState.markGraphFolderKeysAdopted).not.toHaveBeenCalled();
     expect(settingsState.setLastMailbox).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
   });
 });
 
@@ -216,7 +244,6 @@ describe('adoptGraphFolderKeysFromListing', () => {
     await adoptGraphFolderKeysFromListing(GRAPH, GERMAN_LISTING);
     expect(settingsState.markGraphFolderKeysAdoptedFromListing).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
   });
 
   it('does not throw when the command rejects, and leaves the flag unset', async () => {
@@ -224,7 +251,6 @@ describe('adoptGraphFolderKeysFromListing', () => {
     api.vaultAdoptMailboxDirs.mockRejectedValue(new Error('disk'));
     await expect(adoptGraphFolderKeysFromListing(GRAPH, GERMAN_LISTING)).resolves.toBeUndefined();
     expect(settingsState.markGraphFolderKeysAdoptedFromListing).not.toHaveBeenCalled();
-    warn.mockRestore();
   });
 
   it('rewrites a remembered last mailbox that was the server word', async () => {

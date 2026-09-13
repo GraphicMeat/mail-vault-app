@@ -32,6 +32,8 @@ export async function updateAccount(accountId, patch) {
   try {
     if (isGraphAccount(updated)) {
       const freshAccount = await ensureFreshToken(updated);
+      // A connectivity probe: the listing is discarded, so no folder-key
+      // adoption pass here — the listing on the next activation runs it.
       await api.graphListFolders(freshAccount.oauth2AccessToken);
     } else {
       await api.testConnection(updated);

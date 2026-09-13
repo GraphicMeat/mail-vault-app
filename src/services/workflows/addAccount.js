@@ -34,6 +34,8 @@ export async function addAccount(accountData) {
   try {
     if (isGraphAccount(account)) {
       const freshAccount = await ensureFreshToken(account);
+      // A connectivity probe: the listing is discarded, and a new account has
+      // no directories, so no folder-key adoption pass belongs here.
       await api.graphListFolders(freshAccount.oauth2AccessToken);
     } else {
       await api.testConnection(account);
