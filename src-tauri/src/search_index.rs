@@ -423,6 +423,7 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
                 conn,
                 premium,
                 config.image_text,
+                config.bodies,
                 &extractor,
                 |account_id, vault_dir, uid, filename, part_index| {
                     read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index)

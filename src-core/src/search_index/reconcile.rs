@@ -414,6 +414,7 @@ pub fn run_pending_extractions(
     conn: &mut Connection,
     premium: bool,
     image_text_enabled: bool,
+    bodies: bool,
     extractor: &dyn super::attachments::TextExtractor,
     read_part: impl Fn(&str, &str, u32, &str, usize) -> Option<(super::attachments::AttachmentInput, IndexDoc)>,
 ) -> usize {
@@ -474,9 +475,13 @@ pub fn run_pending_extractions(
             .flatten()
             .unwrap_or_default();
         let addrs = doc.addrs.join("\n");
+        // Same bodies-toggle normalization commit_batch applies: an
+        // extraction sweep must not smuggle the raw, uncapped body back into
+        // the FTS row when the user has bodies indexing turned off.
+        let body_text = if bodies { cap_chars(doc.body_text.clone(), MAX_BODY_CHARS) } else { String::new() };
         let _ = delete_fts(&tx, message_row);
-        if !doc.subject.is_empty() || !doc.body_text.is_empty() || !attach_text.is_empty() {
-            let _ = insert_fts(&tx, message_row, &doc.subject, &addrs, &doc.body_text, &attach_text);
+        if !doc.subject.is_empty() || !body_text.is_empty() || !attach_text.is_empty() {
+            let _ = insert_fts(&tx, message_row, &doc.subject, &addrs, &body_text, &attach_text);
         }
         if tx.commit().is_ok() {
             changed += 1;
@@ -1127,7 +1132,7 @@ mod tests {
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
 
-        let changed = super::run_pending_extractions(&mut conn, true, true, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
+        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
             Some((
                 crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
                 IndexDoc { subject: "Invoice".into(), ..IndexDoc::default() },
@@ -1141,6 +1146,37 @@ mod tests {
 
         let hit: i64 = conn.query_row("SELECT rowid FROM msg_fts WHERE msg_fts MATCH '\"orld\"'", [], |r| r.get(0)).unwrap();
         assert!(hit > 0, "the FTS row must be rewritten with the attachment text in the attach column");
+    }
+
+    #[test]
+    fn run_pending_extractions_with_bodies_off_drops_body_text_from_fts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc {
+            subject: "Invoice".into(),
+            body_text: "a very secret body about quokkas".into(),
+            attachment_candidates: vec![AttachmentMeta { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11 }],
+            ..IndexDoc::default()
+        };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+
+        // bodies: false — the extraction rewrite must not smuggle the raw
+        // body text back into the FTS row even though the read_part callback
+        // hands back a doc with body_text set.
+        let changed = super::run_pending_extractions(&mut conn, true, true, false, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
+            Some((
+                crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
+                IndexDoc { subject: "Invoice".into(), body_text: "a very secret body about quokkas".into(), ..IndexDoc::default() },
+            ))
+        });
+        assert_eq!(changed, 1);
+
+        let body_hits: i64 = conn.query_row("SELECT count(*) FROM msg_fts WHERE msg_fts MATCH '\"quokkas\"'", [], |r| r.get(0)).unwrap();
+        assert_eq!(body_hits, 0, "bodies:false must keep the raw body text out of the FTS row");
+
+        let attach_hit: i64 = conn.query_row("SELECT rowid FROM msg_fts WHERE msg_fts MATCH '\"orld\"'", [], |r| r.get(0)).unwrap();
+        assert!(attach_hit > 0, "the attachment text must still be searchable regardless of the bodies toggle");
     }
 
     #[test]
@@ -1166,7 +1202,7 @@ mod tests {
                 Err(crate::search_index::attachments::ExtractError::Transient("timeout".into()))
             }
         }
-        let changed = super::run_pending_extractions(&mut conn, true, true, &AlwaysTransient, |_a, _d, _u, _f, _p| {
+        let changed = super::run_pending_extractions(&mut conn, true, true, true, &AlwaysTransient, |_a, _d, _u, _f, _p| {
             Some((
                 crate::search_index::attachments::AttachmentInput { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000, bytes: vec![] },
                 IndexDoc::default(),
@@ -1187,7 +1223,7 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
-        let changed = super::run_pending_extractions(&mut conn, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None);
+        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None);
         assert_eq!(changed, 0);
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending");
