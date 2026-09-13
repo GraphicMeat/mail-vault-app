@@ -22,12 +22,13 @@ use crate::external_location::{self, SLOT_VAULT};
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 5] = [
+pub const VAULT_DIRS: [&str; 6] = [
     "Maildir",          // the messages
     "maildir",          // per-mailbox local-index.json
     "email_cache",      // header sidecars
     "attachment_cache", // extracted attachments
     "mailboxes",        // per-account folder lists
+    "search_index",     // offline search index (derived; rebuilt from Maildir)
 ];
 
 /// Marker written at the vault root so a re-selected folder can be recognised

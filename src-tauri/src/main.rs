@@ -92,6 +92,7 @@ mod notification_sound;
 mod op_journal;
 mod restore;
 pub use mailvault_core::oauth2;
+mod search_index;
 mod smtp;
 mod spellcheck;
 mod insights;
@@ -1836,7 +1837,10 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 /// a new path, or the folder was moved by hand).
 #[tauri::command]
 fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
-    let status = vault::adopt(&app_handle, &path)?;
+    search_index::close(&app_handle);
+    let result = vault::adopt(&app_handle, &path);
+    search_index::reopen(&app_handle);
+    let status = result?;
     // The daemon reads the storage location once at startup — restart it so it
     // does not keep syncing into the old folder.
     shutdown_daemon_child();
@@ -1847,6 +1851,7 @@ fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::Vaul
 /// Copy the mail data to `path`, verify it, delete the originals, switch over.
 #[tauri::command]
 async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
+    search_index::close(&app_handle);
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
         let emitter = handle.clone();
@@ -1855,7 +1860,9 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
         })
     })
     .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    .map_err(|e| format!("Task join error: {}", e));
+    search_index::reopen(&app_handle);
+    let result = result?;
     shutdown_daemon_child();
     let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
@@ -1864,6 +1871,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
 /// Bring the mail back into the app data dir, then stop using the custom folder.
 #[tauri::command]
 async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
+    search_index::close(&app_handle);
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
         let emitter = handle.clone();
@@ -1872,7 +1880,9 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
         })
     })
     .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    .map_err(|e| format!("Task join error: {}", e));
+    search_index::reopen(&app_handle);
+    let result = result?;
     shutdown_daemon_child();
     let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
@@ -1881,7 +1891,10 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 /// Go back to storing mail in the app data dir. Does not move anything.
 #[tauri::command]
 fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
-    let status = vault::reset(&app_handle)?;
+    search_index::close(&app_handle);
+    let result = vault::reset(&app_handle);
+    search_index::reopen(&app_handle);
+    let status = result?;
     shutdown_daemon_child();
     let _ = app_handle.emit("vault-status", status.clone());
     Ok(status)
@@ -5181,6 +5194,7 @@ fn main() {
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
+        .manage(search_index::SearchIndexState::default())
         .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default());
 
@@ -5354,7 +5368,8 @@ fn main() {
             github::github_device_poll,
             github::github_check_star,
             daemon_rpc,
-            vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset
+            vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset,
+            search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild
         ])
         .setup(|app| {
             app.state::<insights::InsightsSnapshots>().start_cleanup();
@@ -5447,6 +5462,8 @@ fn main() {
                 if vault_status.display_path.is_empty() { "app data dir" } else { &vault_status.display_path },
                 vault_status.status
             );
+            // After resolve: the index lives in the vault root resolve just picked.
+            search_index::start(app.handle());
 
             // A vault written before 2.5.0's `.eml` rename, or by any build
             // between it and the writer fix, still holds extension-less files.
@@ -5744,6 +5761,10 @@ fn main() {
 #[cfg(test)]
 #[path = "light_batch_tests.rs"]
 mod light_batch_tests;
+
+#[cfg(test)]
+#[path = "search_index_tests.rs"]
+mod search_index_tests;
 
 #[cfg(test)]
 mod tests {
