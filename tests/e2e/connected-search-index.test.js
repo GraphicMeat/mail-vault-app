@@ -145,11 +145,24 @@ describe('Search index', function () {
   });
 
   after(async function () {
+    // A case that failed mid-dialog must not leave Settings over the next spec.
+    try { await closeSettings(); } catch { /* best effort */ }
     try { await clearSearch(); } catch { /* best effort */ }
     await browser.execute(() => {
       window.__SEARCH_INDEX_EVENTS_STOP__?.();
       window.__SETTINGS_STORE__?.getState?.().setSearchIndexBodies?.(true);
     });
+    if (!lukeSubject) return; // `before` failed: nothing was turned off
+    // Bodies back on reaches the worker through a channel. The next spec gets an
+    // index that answers body text again, not one still re-parsing: `matchedIn`
+    // tells an index answer from the scan's.
+    await inboxOf(LUKE);
+    await browser.waitUntil(async () => (await localSearch(bodyPhrase(lukeSubject)))
+      .some((r) => r.subject === lukeSubject && (r.matchedIn || []).includes('body')), {
+      timeout: 120_000, interval: 1000,
+      timeoutMsg: `the index never found "${lukeSubject}" by its body again after the spec`,
+    });
+    await clearSearch();
   });
 
   it('is available and not the fallback scan', async function () {
