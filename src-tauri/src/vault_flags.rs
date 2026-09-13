@@ -9,10 +9,10 @@
 //! rebuilt from its file rendered unread whatever had been done to it, and the
 //! mirror never learned about a change at all.
 //!
-//! `apply_in` is the one writer for the files: the name (app dir and mirror)
+//! `apply_files` is the one writer for the files: the name (app dir and mirror)
 //! and the header sidecar. `apply_everywhere` is that call plus the custody
-//! entry's flags — the app's mark read/unread and the backup run's reconcile
-//! both go through it.
+//! entry's flags, both under `WRITER` — the app's mark read/unread and the
+//! backup run's reconcile both go through it.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -117,27 +117,31 @@ pub(crate) fn dirs_for(
 /// the custody patch too, so the file name and the custody entry can never be
 /// left disagreeing by two callers applying opposite flags to the same uid.
 ///
-/// Non-reentrant: `apply_everywhere` calls `apply_files`, never `apply_in`.
+/// Non-reentrant: `apply_everywhere` calls `apply_files`, never the locking
+/// `apply_in` (test-only).
 ///
 /// ponytail: the lock now spans a custody write as well as the renames. Both
 /// callers already run this off the main thread, and the write is one
 /// transaction over the uids in hand.
 static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+/// The test seam for the locked file half: `apply_files` under `WRITER`, which
+/// is what `apply_everywhere` does before it also patches custody.
+#[cfg(test)]
+pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
+    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
+    apply_files(dirs, changes, sidecars)
+}
+
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
 /// does not hold — there is nothing to rename or patch, and the counts say so.
+/// No lock of its own: the caller holds `WRITER`.
 ///
 /// `sidecars`: also patch the header cache. The app's own mark read/unread
 /// wants that (the next repaint from cache reads it, and a server-only message
 /// has no other copy). The backup reconcile does not: the sync engine owns
 /// those files, and a 14k-message folder would open 14k of them to change
 /// nothing.
-pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
-    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    apply_files(dirs, changes, sidecars)
-}
-
-/// `apply_in`'s body, without the lock. The caller holds `WRITER`.
 fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
     let mut out = Applied::default();
     if changes.is_empty() {
@@ -180,8 +184,9 @@ fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
     out
 }
 
-/// `apply_in` plus the custody entry's flags: the one call the app's mark
-/// read/unread and the backup's catch-up both make. `sidecars` as for `apply_in`.
+/// `apply_files` plus the custody entry's flags: the one call the app's mark
+/// read/unread and the backup's catch-up both make. `sidecars` as for
+/// `apply_files`.
 ///
 /// Both halves run under one `WRITER` acquisition. The name and the custody
 /// entry are two records of the same fact, and the app's mark read/unread and
