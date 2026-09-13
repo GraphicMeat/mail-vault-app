@@ -18,7 +18,7 @@ import { scanTrackers } from '../../utils/trackerDetect';
 import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
-import { buildEmailIframeHtml, getEmailBodyContent } from '../../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { t as tr, useT  } from '../../i18n/index.js';
 
 // Full-screen modal for viewing complete email with HTML rendering
@@ -101,10 +101,14 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     const scannedForFrame = trackerBlocking
       ? scanTrackers(cidResolved, emailScopeKey(email, useMailStore.getState())).cleanedBodyHtml
       : cidResolved;
+    // One nonce per render: the frame's CSP runs only our nonced DR script, not
+    // anything the mail carries.
+    const nonce = emailScriptNonce();
     return buildEmailIframeHtml({
       bodyHtml: getEmailBodyContent(scannedForFrame),
       themeTag: theme,
-      extraHead: isDark ? getDarkReaderInlineScripts({ palette }) : '',
+      extraHead: isDark ? getDarkReaderInlineScripts({ palette, nonce }) : '',
+      nonce,
     });
   }, [email, trackerBlocking, theme, palette]);
 

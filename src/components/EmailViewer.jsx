@@ -43,7 +43,7 @@ import { emailScopeKey, selectionKey, spansMailboxes } from '../stores/slices/un
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, getContextMenuColors, attachEmailIframeAutoSize, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { getEmailColors } from '../utils/mailChrome';
@@ -370,12 +370,16 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     // iframe HTML (not injected post-load) so it runs during page load —
     // eliminates the load-event race and prevents a flash of light content
     // on theme toggle. srcDoc diff on theme change still forces reload.
-    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts({ palette }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    // One nonce for this render: the frame's CSP grants only scripts that carry
+    // it (our DR + fold scripts), so the mail's own script never runs.
+    const nonce = emailScriptNonce();
+    const extraHead = `${emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: effectiveEmailTheme,
       extraHead,
-      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
+      extraBody: `${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}`,
+      nonce,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay]);
@@ -682,10 +686,15 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
               // The popup is a second renderer of the same mail — a beacon
               // stripped in the pane but left in the window still fires.
               const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
+              // The popup loads from file:// and inherits no CSP, so its meta
+              // (script-src 'nonce-…') is the ONLY policy — Dark Reader has to
+              // carry the same nonce to run there.
+              const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveEmailTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette }) : '',
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
+                nonce: popupNonce,
               });
               invoke('open_email_window', { html: popupHtml, title: selectedEmail.subject || 'Email' });
             }}

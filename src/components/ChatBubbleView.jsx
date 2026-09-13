@@ -40,7 +40,7 @@ import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors } from '../utils/mailChrome';
-import { neutralizeEmailDarkScheme } from '../utils/emailIframeTemplate';
+import { neutralizeEmailDarkScheme, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 
@@ -366,10 +366,16 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       chatAlertLevel = scan.maxAlertLevel;
     }
 
+    // Chat bubbles build their own document (transparent bg, per-bubble tint),
+    // so they carry the same CSP as buildEmailIframeHtml: script-src 'nonce-…'
+    // as the first head element, and the fold scripts carry that nonce. The
+    // mail's own script and inline handlers get no nonce and are blocked.
+    const nonce = emailScriptNonce();
     const builtHtml = `
       <!DOCTYPE html>
       <html>
         <head>
+          <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
           <meta charset="UTF-8">
           <base target="_blank">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -412,7 +418,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
             ${indicatorStyle}
           </style>
         </head>
-        <body>${neutralizeEmailDarkScheme(scannedBody)}${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}</body>
+        <body>${neutralizeEmailDarkScheme(scannedBody)}${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}</body>
       </html>
     `;
     return { html: builtHtml, alertLevel: chatAlertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers), scopeKey: chatScopeKey };

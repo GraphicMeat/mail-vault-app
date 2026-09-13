@@ -12,7 +12,7 @@ import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
-import { buildEmailIframeHtml, getEmailBodyContent, attachEmailIframeAutoSize } from '../../utils/emailIframeTemplate';
+import { buildEmailIframeHtml, getEmailBodyContent, attachEmailIframeAutoSize, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import {
   Paperclip,
@@ -98,13 +98,17 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
       alertLevel = scan.maxAlertLevel;
     }
     // Light baseline; DR inlined when dark so it runs during load —
-    // no post-load injection race, no flash on theme toggle.
-    const extraHead = `${isDark ? getDarkReaderInlineScripts({ palette }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
+    // no post-load injection race, no flash on theme toggle. One nonce per
+    // render: only our DR + fold scripts carry it, so the mail's own script
+    // is blocked by the frame's CSP.
+    const nonce = emailScriptNonce();
+    const extraHead = `${isDark ? getDarkReaderInlineScripts({ palette, nonce }) : ''}${indicatorStyle ? `<style>${indicatorStyle}</style>` : ''}`;
     const html = buildEmailIframeHtml({
       bodyHtml: renderedBody,
       themeTag: theme,
       extraHead,
-      extraBody: `${getQuoteFoldingScript()}${getSignatureFoldingScript(signatureDisplay)}`,
+      extraBody: `${getQuoteFoldingScript(nonce)}${getSignatureFoldingScript(signatureDisplay, nonce)}`,
+      nonce,
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
@@ -405,10 +409,13 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
               const bodyHtml = getEmailBodyContent(rawHtml);
               // Same body, second window — strip there too.
               const popupBody = trackerBlocking ? scanTrackers(bodyHtml, scopeKey).cleanedBodyHtml : bodyHtml;
+              // file:// popup inherits no CSP; DR needs the meta's nonce to run.
+              const popupNonce = emailScriptNonce();
               const popupHtml = buildEmailIframeHtml({
                 bodyHtml: popupBody,
                 themeTag: effectiveTheme,
-                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette }) : '',
+                extraHead: emailDarkMode ? getDarkReaderInlineScripts({ palette, nonce: popupNonce }) : '',
+                nonce: popupNonce,
               });
               invoke('open_email_window', { html: popupHtml, title: email.subject || 'Email' });
             }}

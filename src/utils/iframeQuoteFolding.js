@@ -2,15 +2,19 @@ import { t } from '../i18n/index.js';
 /**
  * Returns a <script> block to inject into email iframe srcDoc.
  * Finds quoted content elements and makes them collapsible.
+ *
+ * @param {string} nonce - the frame's CSP nonce; without it the script-src
+ *   'nonce-…' policy blocks this <script>, so callers must pass the same value
+ *   they gave buildEmailIframeHtml.
  */
-export function getQuoteFoldingScript() {
+export function getQuoteFoldingScript(nonce = '') {
   // Interpolated here, not called inside the template: the script runs in the
   // iframe, which has no `t` — a bare t() call in the body is a ReferenceError
   // the moment the toggle is clicked. JSON.stringify quotes and escapes it.
   const SHOW = JSON.stringify(t('util.iframeQuoteFolding.showQuotedText'));
   const HIDE = JSON.stringify(t('util.iframeQuoteFolding.hideQuotedText'));
   return `
-<script>
+<script${nonce ? ` nonce="${nonce}"` : ''}>
 (function() {
   function fold(el) {
     el.dataset.quoteFolded = 'true';
@@ -120,8 +124,9 @@ export function getQuoteFoldingScript() {
  * Finds signature elements and handles them based on the display mode.
  *
  * @param {'smart' | 'always-show' | 'always-hide' | 'collapsed'} mode
+ * @param {string} nonce - the frame's CSP nonce (see getQuoteFoldingScript).
  */
-export function getSignatureFoldingScript(mode) {
+export function getSignatureFoldingScript(mode, nonce = '') {
   if (mode === 'always-show') return '';
 
   // Validate mode to prevent script injection
@@ -131,7 +136,7 @@ export function getSignatureFoldingScript(mode) {
   const HIDE_SIG = JSON.stringify(t('util.iframeQuoteFolding.hideSignature'));
 
   return `
-<script>
+<script${nonce ? ` nonce="${nonce}"` : ''}>
 (function() {
   var mode = '${safeMode}';
   var sigSelectors = ['.gmail_signature', '.yahoo_signature',

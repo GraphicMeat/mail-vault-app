@@ -209,19 +209,52 @@ export function attachEmailIframeAutoSize(iframe, { minHeight = 0, pad = 8 } = {
   };
 }
 
+// A per-render nonce for the frame's own inline scripts.
+//
+// The reading-pane frames run with `allow-scripts allow-same-origin`, which is
+// no sandbox — the frame would run whatever the mail carries and reach the
+// parent's IPC bridge. buildEmailIframeHtml pins a `script-src 'nonce-…'` CSP
+// on the document, so ONLY scripts we stamp with this exact nonce run (Dark
+// Reader, quote/signature folding); the mail's inline handlers and its own
+// <script> tags never get it and are inert. A fresh value every render means a
+// static email cannot pre-write the nonce into its markup to slip through.
+export function emailScriptNonce() {
+  const c = globalThis.crypto;
+  if (c?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    c.getRandomValues(bytes);
+    let s = '';
+    for (const b of bytes) s += b.toString(16).padStart(2, '0');
+    return s;
+  }
+  // No WebCrypto (never true in the WKWebView or in vitest's node) — a
+  // non-guessable-enough fallback so the document still renders its scripts.
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}${Math.random().toString(36).slice(2)}`;
+}
+
 // Build a complete HTML document for an email iframe.
 //
 // opts:
-//   bodyHtml   — inner body HTML (already CID-resolved, script-free, etc.)
+//   bodyHtml   — inner body HTML (CID-resolved). Any <script> or inline handler
+//                the mail carries here is left verbatim and blocked by the CSP
+//                below — this function no longer trusts the caller to have
+//                stripped it (the old "script-free" precondition was never
+//                enforced anywhere).
 //   themeTag   — 'dark' | 'light'. Stamped into the document so srcDoc differs
 //                per theme (forces iframe reload on theme switch so DR can
 //                re-inject cleanly). Does NOT change the baseline colors.
 //   extraHead  — optional raw HTML appended inside <head> (e.g. Dark Reader
-//                script for standalone popup windows)
-//   extraBody  — optional raw HTML appended inside <body> (e.g. fold scripts)
+//                script for standalone popup windows). App-authored scripts here
+//                MUST carry `nonce` to run — pass the same value in.
+//   extraBody  — optional raw HTML appended inside <body> (e.g. fold scripts).
+//                Same nonce rule as extraHead.
+//   nonce      — the CSP nonce for our own scripts; defaults to a fresh one.
+//                Pass the value you gave getDarkReaderInlineScripts /
+//                getQuoteFoldingScript / getSignatureFoldingScript so their
+//                <script nonce> matches the policy.
 //   tableMode  — 'preserve' (let emails own their table layout, default)
 //              | 'clip'    (legacy: table-layout:fixed to clip overflow)
-export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead = '', extraBody = '', tableMode = 'preserve' } = {}) {
+export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead = '', extraBody = '', nonce = emailScriptNonce(), tableMode = 'preserve' } = {}) {
   const tableCss = tableMode === 'clip'
     ? 'table { table-layout: fixed; width: 100% !important; overflow: hidden; } td, th { overflow: hidden; text-overflow: ellipsis; }'
     : 'table { max-width: 100% !important; width: auto !important; }';
@@ -236,12 +269,20 @@ export function buildEmailIframeHtml({ bodyHtml, themeTag = 'light', extraHead =
     themeTag === 'dark' ? stripInlineColorImportant(bodyHtml) : bodyHtml
   );
 
-  // <meta charset> is first in <head> so WKWebView decodes correctly even
-  // when the document is loaded from a file:// URL (which would otherwise
-  // fall back to Latin-1 and mojibake UTF-8 bytes).
+  // The CSP <meta> is the FIRST element in <head> so it governs everything that
+  // follows — the mail's inline handlers and any <script> it carries in the
+  // body. `script-src 'nonce-…'` (no 'unsafe-inline') means only our own nonced
+  // scripts run; a nonce source expression also makes any 'unsafe-inline' the
+  // parent policy would otherwise contribute inert, so this stands on its own
+  // even for the file:// "Open in window" popup, which inherits no CSP at all.
+  // Nothing else is constrained here — img/style/font stay exactly as the pane
+  // rendered them before (the reading-pane frames still inherit the app CSP for
+  // those). <meta charset> follows immediately, well inside WKWebView's 1024-byte
+  // scan window, so file:// decoding is unaffected.
   return `<!DOCTYPE html>
 <html data-mv-theme="${themeTag}">
   <head>
+    <meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">
     <meta charset="UTF-8">
     <base target="_blank">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

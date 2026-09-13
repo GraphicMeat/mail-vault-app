@@ -26,7 +26,13 @@ const DEFAULT_OPTIONS = {
 // Return inline <script> tags to embed Dark Reader into an HTML document.
 // Used for both srcdoc iframes and standalone popup windows — DR runs as
 // the document loads, so there is no race with post-load injection.
-export function getDarkReaderInlineScripts({ palette = 'indigo', ...options } = {}) {
+//
+// `nonce` is the frame's CSP nonce: the document pins `script-src 'nonce-…'`,
+// so both tags need it to run. Dark Reader's OWN runtime helper script (the
+// stylesheet-proxy it injects with createElement) gets no nonce and is blocked
+// — DR is built for that (it falls back to a rAF stylesheet watcher and the
+// `securitypolicyviolation` path), so theming still applies.
+export function getDarkReaderInlineScripts({ palette = 'indigo', nonce = '', ...options } = {}) {
   const colors = getEmailColors('dark', palette);
   const opts = JSON.stringify({
     ...DEFAULT_OPTIONS,
@@ -37,5 +43,6 @@ export function getDarkReaderInlineScripts({ palette = 'indigo', ...options } = 
   // Neutralize any stray </script> inside the source so the outer tag
   // doesn't terminate early.
   const safeSource = darkReaderSource.replace(/<\/script>/gi, '<\\/script>');
-  return `<script>${safeSource}</script><script>try{if(window.DarkReader&&typeof window.DarkReader.enable==='function'){window.DarkReader.enable(${opts});}}catch(e){console.error('[DarkReader enable]',e);}</script>`;
+  const attr = nonce ? ` nonce="${nonce}"` : '';
+  return `<script${attr}>${safeSource}</script><script${attr}>try{if(window.DarkReader&&typeof window.DarkReader.enable==='function'){window.DarkReader.enable(${opts});}}catch(e){console.error('[DarkReader enable]',e);}</script>`;
 }
