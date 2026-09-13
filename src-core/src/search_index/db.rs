@@ -31,6 +31,7 @@ CREATE TABLE mailbox_scan (
   account_id TEXT NOT NULL,
   vault_dir  TEXT NOT NULL,
   scanned_at INTEGER NOT NULL,
+  file_count INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (account_id, vault_dir)
 );
 CREATE VIRTUAL TABLE msg_fts USING fts5(subject, addrs, body, attach,
@@ -150,6 +151,15 @@ pub fn meta_get_checked(conn: &Connection, key: &str) -> Result<Option<String>, 
     conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional().map_err(|e| e.to_string())
 }
 
+/// Written once a full pass has reconciled every folder without interruption.
+/// A fresh or rebuilt index misses mail the scan finds until then, so searches
+/// and status report it unavailable.
+pub const FIRST_PASS_DONE: &str = "first_pass_done";
+
+pub fn first_pass_done(conn: &Connection) -> bool {
+    meta_get(conn, FIRST_PASS_DONE).is_some()
+}
+
 pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
     conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?1, ?2)", [key, value])
         .map(|_| ())
@@ -163,17 +173,19 @@ pub struct IndexCounts {
     pub total: u64,
 }
 
-/// Index coverage. `total` is the larger of the rows and the sweep's
-/// `disk_total`, so a half-built index never reads as complete. A failed
-/// query counts as zero: this only feeds a progress line.
+/// Index coverage. `total` is the larger of the rows and the files each
+/// folder's last listing found (`mailbox_scan.file_count`), so a half-built
+/// index never reads as complete. A failed query counts as zero: this only
+/// feeds a progress line.
 pub fn counts(conn: &Connection) -> IndexCounts {
-    let (rows, indexed): (i64, i64) = conn
-        .query_row("SELECT count(*), count(*) FILTER (WHERE body_state != 0) FROM messages", [], |r| {
-            Ok((r.get(0)?, r.get(1)?))
-        })
-        .unwrap_or((0, 0));
-    let disk = meta_get(conn, "disk_total").and_then(|v| v.parse::<u64>().ok()).unwrap_or(0);
-    IndexCounts { indexed: u64::try_from(indexed).unwrap_or(0), total: u64::try_from(rows).unwrap_or(0).max(disk) }
+    let (rows, indexed, listed): (i64, i64, i64) = conn
+        .query_row(
+            "SELECT count(*), count(*) FILTER (WHERE body_state != 0), (SELECT coalesce(sum(file_count), 0) FROM mailbox_scan) FROM messages",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap_or((0, 0, 0));
+    IndexCounts { indexed: u64::try_from(indexed).unwrap_or(0), total: u64::try_from(rows.max(listed)).unwrap_or(0) }
 }
 
 pub fn db_size_bytes(vault_root: &Path) -> u64 {
@@ -266,11 +278,11 @@ mod tests {
     }
 
     #[test]
-    fn counts_use_the_larger_of_rows_and_disk_total() {
+    fn counts_use_the_larger_of_rows_and_listed_files() {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
         assert_eq!(counts(&conn), IndexCounts { indexed: 0, total: 0 });
-        meta_set(&conn, "disk_total", "10").unwrap();
+        conn.execute("INSERT INTO mailbox_scan VALUES ('a','INBOX',1,6), ('a','Archive',1,4)", []).unwrap();
         conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',1,'1:2,.eml',1,1,1,1)", []).unwrap();
         conn.execute("INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES ('a','INBOX',2,'2:2,.eml',1,1,1,0)", []).unwrap();
         assert_eq!(counts(&conn), IndexCounts { indexed: 1, total: 10 });

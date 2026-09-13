@@ -9,7 +9,7 @@
 use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
-use crate::maildir::{uid_file_map, vault_filename_uid};
+use crate::maildir::vault_filename_uid;
 use rusqlite::{params, Connection};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -43,7 +43,8 @@ pub struct IndexConfig {
 pub type ParseFn<'a> = &'a (dyn Fn(&[u8], u32, &str) -> Option<IndexDoc> + Sync);
 
 /// `parsed` and `failed` are disjoint: `failed` counts files that were
-/// unparseable (recorded) or unreadable (left for the next sweep).
+/// unparseable or unreadable (both recorded) or gone since the listing (left
+/// for the next sweep).
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ReconcileStats {
     pub parsed: usize,
@@ -111,15 +112,6 @@ fn subdirs(path: &Path) -> std::io::Result<Vec<String>> {
         .collect())
 }
 
-/// Vault rows on disk, one per uid per folder (same rule as the listing).
-pub fn count_disk_files(maildir_root: &Path) -> u64 {
-    list_vault_dirs(maildir_root)
-        .unwrap_or_default()
-        .iter()
-        .map(|(a, d)| uid_file_map(&maildir_root.join(a).join(d).join("cur")).len() as u64)
-        .sum()
-}
-
 /// `<uid>:` files in `cur`, first entry per uid wins, plus the uids whose
 /// `metadata()` failed. `None` when `cur` cannot be read at all, missing
 /// included: the caller never mistakes that for "every message deleted" (a
@@ -177,6 +169,12 @@ pub fn reconcile_mailbox(
     let (rows, db_path) = {
         let guard = lock(db);
         let conn = guard.as_ref().ok_or_else(closed)?;
+        // The listing's size is the folder's share of `counts().total`, recorded
+        // at the moment of the listing: a nudge after a delete keeps the total
+        // honest without a full pass, and files not indexed yet are counted.
+        conn.prepare_cached("INSERT OR REPLACE INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, unixepoch(), ?3)")
+            .and_then(|mut st| st.execute(params![account_id, vault_dir, files.len() as i64]))
+            .map_err(db_err)?;
         (load_rows(conn, account_id, vault_dir).map_err(db_err)?, conn.path().map(str::to_owned))
     };
 
@@ -230,10 +228,23 @@ pub fn reconcile_mailbox(
         }
         let mut docs = Vec::with_capacity(batch.len());
         for &file in batch {
-            // ponytail: unreadable now (renamed or deleted since the listing) = left for the next sweep, never recorded.
-            let Ok(raw) = std::fs::read(cur.join(&file.filename)) else {
-                stats.failed += 1;
-                continue;
+            let raw = match std::fs::read(cur.join(&file.filename)) {
+                Ok(raw) => raw,
+                // Renamed (a flag change) or deleted since the listing: recording it
+                // under the old name and stat would pin an empty body on a message
+                // whose size and mtime never change again. The next sweep lists it.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    stats.failed += 1;
+                    continue;
+                }
+                // Unreadable where it stands (permissions, a directory, I/O): recorded
+                // as unparseable, so it counts as indexed and is retried only when
+                // its size or mtime change.
+                Err(_) => {
+                    stats.failed += 1;
+                    docs.push((file, None));
+                    continue;
+                }
             };
             let doc = parse(&raw, file.uid, &file.filename).map(|mut d| {
                 // Cap before taking the lock: less memory per batch, shorter commits.
@@ -338,8 +349,6 @@ fn commit_batch(
             }
         }
     }
-    tx.prepare_cached("INSERT OR REPLACE INTO mailbox_scan VALUES (?1, ?2, unixepoch())")?
-        .execute(params![account_id, vault_dir])?;
     tx.commit()
 }
 
@@ -370,8 +379,9 @@ pub fn prune_missing_dirs(db: &SharedConn, present: &[(String, String)]) -> Resu
 
 fn prune(conn: &mut Connection, present: &[(String, String)]) -> rusqlite::Result<usize> {
     let tx = conn.transaction()?;
+    // Scan rows too: a folder listed but never indexed still adds to `counts().total`.
     let indexed: Vec<(String, String)> = tx
-        .prepare("SELECT DISTINCT account_id, vault_dir FROM messages")?
+        .prepare("SELECT account_id, vault_dir FROM messages UNION SELECT account_id, vault_dir FROM mailbox_scan")?
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
     // ponytail: O(folders²) membership test; fine for hundreds of folders, HashSet if vaults reach thousands.
@@ -588,6 +598,71 @@ mod tests {
         assert_eq!(n.load(Ordering::SeqCst), 1);
     }
 
+    fn counts(v: &Vault) -> db::IndexCounts {
+        db::counts(crate::search_index::lock(&v.db).as_ref().unwrap())
+    }
+
+    #[test]
+    fn unreadable_file_is_recorded_and_not_reread_but_a_vanished_one_is_left() {
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "one"));
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "two"));
+        let cur = v.root.join("Maildir/a1/INBOX/cur");
+        std::fs::create_dir(cur.join("9:2,.eml")).unwrap(); // listed, never readable
+        // Highest uid first: uid 2's parse deletes uid 1 after the listing saw it.
+        let parse = |raw: &[u8], uid: u32, name: &str| {
+            if uid == 2 {
+                let _ = std::fs::remove_file(cur.join("1:2,.eml"));
+            }
+            fake_parse(raw, uid, name)
+        };
+        let s = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &parse, &|| true, &mut |_| {}).unwrap();
+        assert_eq!((s.parsed, s.failed), (1, 2));
+        let state = |uid: u32| -> Option<i64> {
+            let g = crate::search_index::lock(&v.db);
+            g.as_ref().unwrap().query_row("SELECT body_state FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).ok()
+        };
+        assert_eq!(state(9), Some(BODY_UNPARSEABLE), "an unreadable file counts as indexed");
+        assert_eq!(state(1), None, "a file gone since the listing is the next sweep's, not a row");
+        let n = AtomicUsize::new(0);
+        let again = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!((again.failed, again.unchanged), (0, 2), "the unreadable file is not read again");
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 2, total: 2 });
+    }
+
+    #[test]
+    fn total_is_the_files_listed_per_folder_even_before_they_are_indexed() {
+        let v = vault();
+        for uid in 1..=3 { put(&v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml("In", "x")); }
+        for uid in 1..=2 { put(&v, "a1", "Archive", &format!("{uid}:2,.eml"), &eml("Arc", "x")); }
+        put(&v, "a1", "Gone", "1:2,.eml", &eml("Gone", "x"));
+        for dir in ["INBOX", "Archive", "Gone"] {
+            let s = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", dir, ON, &fake_parse, &|| false, &mut |_| {}).unwrap();
+            assert!(s.interrupted);
+        }
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 0, total: 6 }, "listed, not yet indexed");
+        std::fs::remove_dir_all(v.root.join("Maildir/a1/Gone")).unwrap();
+        prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir")).unwrap()).unwrap();
+        assert_eq!(counts(&v).total, 5, "prune drops a folder that was listed but never got a row");
+        let n = AtomicUsize::new(0);
+        for dir in ["INBOX", "Archive"] { run(&v, "a1", dir, ON, &n); }
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 5, total: 5 });
+    }
+
+    #[test]
+    fn a_delete_reconciled_in_its_folder_alone_keeps_the_index_complete() {
+        let v = vault();
+        for dir in ["INBOX", "Archive"] {
+            for uid in 1..=2 { put(&v, "a1", dir, &format!("{uid}:2,.eml"), &eml(dir, "x")); }
+        }
+        let n = AtomicUsize::new(0);
+        for dir in ["INBOX", "Archive"] { run(&v, "a1", dir, ON, &n); }
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 4, total: 4 });
+        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/2:2,.eml")).unwrap();
+        run(&v, "a1", "INBOX", ON, &n); // a nudge: this folder only, no full pass
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 3, total: 3 });
+    }
+
     #[test]
     fn bodies_off_indexes_headers_only_and_toggling_on_reparses() {
         let v = vault();
@@ -618,7 +693,6 @@ mod tests {
         let mut dirs = list_vault_dirs(&v.root.join("Maildir")).unwrap();
         dirs.sort();
         assert_eq!(dirs, vec![("a1".into(), "INBOX".into()), ("a2".into(), "INBOX".into()), ("a2".into(), "Projects_2026".into())]);
-        assert_eq!(count_disk_files(&v.root.join("Maildir")), 3);
         std::fs::remove_dir_all(v.root.join("Maildir/a2/Projects_2026")).unwrap();
         let removed = prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir")).unwrap()).unwrap();
         assert_eq!(removed, 1);

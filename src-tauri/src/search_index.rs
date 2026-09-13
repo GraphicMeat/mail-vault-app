@@ -208,8 +208,9 @@ fn status_json(st: &SearchIndexState) -> serde_json::Value {
     };
     let c = db::counts(conn);
     let size = g(&st.root).as_ref().map(|r| db::db_size_bytes(r)).unwrap_or(0);
-    // counts() yields 0/0 on error: never "complete".
-    serde_json::json!({ "available": true, "state": *g(&st.phase), "indexed": c.indexed, "total": c.total, "sizeBytes": size, "complete": c.total > 0 && c.indexed >= c.total })
+    // counts() yields 0/0 on error: never "complete". Not available until the
+    // first full pass: searches use the scan until then.
+    serde_json::json!({ "available": db::first_pass_done(conn), "state": *g(&st.phase), "indexed": c.indexed, "total": c.total, "sizeBytes": size, "complete": c.total > 0 && c.indexed >= c.total })
 }
 
 fn emit(app: &tauri::AppHandle, st: &SearchIndexState) {
@@ -424,29 +425,36 @@ fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: 
         },
     };
     // A listing that failed is not "these folders are gone": no prune.
-    if full && listed {
-        let disk_total = reconcile::count_disk_files(maildir); // walk the vault BEFORE taking the lock
-        // A close during the walk: the listing is of a vault that is no longer open.
-        if keep_going() {
-            if let Some(conn) = lock(&st.db).as_ref() {
-                let _ = db::meta_set(conn, "disk_total", &disk_total.to_string());
-            }
-        }
-        // An unplugged or unreadable vault lists nothing; pruning then would drop the whole index.
-        if maildir.is_dir() && keep_going() {
-            if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
-                warn!("search index prune: {e}");
-            }
+    // An unplugged or unreadable vault lists nothing; pruning then would drop the whole index.
+    if full && listed && maildir.is_dir() && keep_going() {
+        if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
+            warn!("search index prune: {e}");
         }
     }
+    let mut completed = full && listed;
     for (account, dir) in dirs {
         let mut on_batch = |_n: usize| emit(app, st);
         match reconcile::reconcile_mailbox(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &mut on_batch) {
-            Ok(s) if s.interrupted => break, // configure/rebuild/close asked us to stop
+            // configure/rebuild/close asked us to stop
+            Ok(s) if s.interrupted => {
+                completed = false;
+                break;
+            }
             Ok(s) if s.parsed + s.removed + s.renamed + s.failed > 0 => info!("search index {account}/{dir}: {s:?}"),
             Ok(_) => {}
-            Err(e) if e.contains("closed") => break,
+            Err(e) if e.contains("closed") => {
+                completed = false;
+                break;
+            }
             Err(e) => warn!("search index {account}/{dir}: {e}"), // one bad folder must not stop the sweep
+        }
+    }
+    // Before the idle emit below, so that event already reports the index available.
+    if completed && keep_going() {
+        if let Some(conn) = lock(&st.db).as_ref().filter(|c| !db::first_pass_done(c)) {
+            if let Err(e) = db::meta_set(conn, db::FIRST_PASS_DONE, "1") {
+                warn!("search index: recording the first full pass failed: {e}");
+            }
         }
     }
     let open = lock(&st.db).is_some();
@@ -465,7 +473,8 @@ async fn off_main<T: Send + 'static>(
         .map_err(|e| format!("Task join error: {e}"))
 }
 
-/// `{ available: false }` until the worker has opened the index.
+/// `{ available: false }` until the worker has opened the index and finished
+/// its first full pass over it.
 #[tauri::command]
 pub async fn vault_search(app: tauri::AppHandle, request: core::query::SearchRequest) -> Result<serde_json::Value, String> {
     off_main(app, move |st| {
@@ -475,6 +484,10 @@ pub async fn vault_search(app: tauri::AppHandle, request: core::query::SearchReq
             let (Some(conn), Some(root)) = (guard.as_ref(), g(&st.root).clone()) else {
                 return Ok(serde_json::json!({ "available": false }));
             };
+            // A first build (or a rebuild) still misses mail the scan finds.
+            if !db::first_pass_done(conn) {
+                return Ok(serde_json::json!({ "available": false }));
+            }
             (root, core::query::search(conn, &request)?, db::counts(conn))
         }; // released before any file is read
         let rows = assemble_rows(&root, &request.account_id, &page);

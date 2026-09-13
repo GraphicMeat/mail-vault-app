@@ -205,9 +205,10 @@ describe('Search index', function () {
   });
 
   it('shows status in Settings and survives Rebuild', async function () {
-    // A rebuild starts from an empty index, so a progress event reporting
-    // indexed 0 is what proves the click did something: the searches below
-    // would pass just as well against the index from before it.
+    // A rebuild starts from an empty index that is not available until its
+    // first full pass, so a progress event reporting that is what proves the
+    // click did something: the searches below would pass just as well against
+    // the index from before it.
     await browser.execute(() => {
       window.__SEARCH_INDEX_EVENTS__ = [];
       window.__TAURI__.event.listen('search-index-progress', (e) => window.__SEARCH_INDEX_EVENTS__.push(e.payload))
@@ -232,8 +233,8 @@ describe('Search index', function () {
 
     await browser.waitUntil(() => browser.execute(() => {
       const events = window.__SEARCH_INDEX_EVENTS__ || [];
-      const emptied = events.findIndex((e) => e.available === true && e.indexed === 0);
-      return emptied >= 0 && events.slice(emptied).some((e) => e.state === 'idle' && e.indexed >= 2);
+      const emptied = events.findIndex((e) => e.available === false && e.indexed === 0);
+      return emptied >= 0 && events.slice(emptied).some((e) => e.available === true && e.state === 'idle' && e.indexed >= 2);
     }), { timeout: 120_000, interval: 500, timeoutMsg: 'no progress event showed the index emptied and refilled after Rebuild' });
     await closeSettings();
 
