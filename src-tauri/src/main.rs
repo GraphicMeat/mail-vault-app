@@ -2984,13 +2984,23 @@ fn maildir_read_light(
 pub(crate) fn read_light_batch_in(cur_dir: &Path, uids: &[u32]) -> Vec<Option<LightEmail>> {
     let files = mailvault_core::maildir::uid_file_map(cur_dir);
     uids.iter()
-        .map(|uid| {
-            let path = files.get(uid)?;
-            let filename = path.file_name()?.to_string_lossy().to_string();
-            let raw = fs::read(path).ok()?;
-            parse_eml_bytes_light(&raw, *uid, parse_flags_from_filename(&filename)).ok()
-        })
+        .map(|uid| read_light_at(cur_dir, *uid, Some(files.get(uid)?.as_path())))
         .collect()
+}
+
+/// Read and light-parse `uid` from `hint`, a path the caller already knows
+/// (a listing, an index row). If there is no hint or it no longer reads, look
+/// the uid up once in `cur_dir`. A file that reads but does not parse is `None`.
+pub(crate) fn read_light_at(cur_dir: &Path, uid: u32, hint: Option<&Path>) -> Option<LightEmail> {
+    let read = |path: &Path| -> Option<(Vec<u8>, String)> {
+        Some((fs::read(path).ok()?, path.file_name()?.to_string_lossy().into_owned()))
+    };
+    // ponytail: a rename after the listing leaves a stale path; only a failed read pays one rescan
+    let (raw, name) = match hint.and_then(read) {
+        Some(hit) => hit,
+        None => read(&find_file_by_uid(cur_dir, uid)?)?,
+    };
+    parse_eml_bytes_light(&raw, uid, parse_flags_from_filename(&name)).ok()
 }
 
 #[tauri::command]

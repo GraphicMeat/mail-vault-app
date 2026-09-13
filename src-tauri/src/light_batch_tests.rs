@@ -46,3 +46,17 @@ fn batch_matches_the_per_uid_lookup_it_replaces() {
         );
     }
 }
+
+#[test]
+fn read_light_at_survives_a_rename_after_the_listing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let cur = tmp.path();
+    std::fs::write(cur.join("7:2,FS.eml"), eml("seven")).unwrap();
+
+    let seven = read_light_at(cur, 7, Some(&cur.join("7:2,S.eml"))).expect("stale hint falls back to the uid lookup");
+    assert_eq!(seven.uid, 7);
+    assert!(seven.flags.iter().any(|f| f == "\\Flagged"));
+    assert!(seven.flags.iter().any(|f| f == "\\Seen"));
+
+    assert!(read_light_at(cur, 8, Some(&cur.join("8:2,.eml"))).is_none(), "no uid-8 file anywhere");
+}
