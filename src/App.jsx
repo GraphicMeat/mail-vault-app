@@ -780,6 +780,10 @@ function App() {
         db.startKeychainLoad();
 
         const accounts = await db.getAccountsWithoutPasswords();
+        // Before any pipeline can touch a Graph sidecar: folders written under
+        // a localized name move under their storage key once.
+        const { adoptGraphFolderKeys } = await import('./services/workflows/adoptGraphFolderKeys');
+        await adoptGraphFolderKeys(accounts);
         // One-time migration: move .eml files from email-address dirs to UUID dirs
         db.migrateMaildirEmailDirs(accounts).catch(() => {});
         quickLoadHadAccountsRef.current = accounts.length > 0;

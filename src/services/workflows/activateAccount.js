@@ -19,6 +19,7 @@ import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRest
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
 import { openFolder } from './loadSubtree';
+import { adoptGraphFolderKeys } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { refreshFolderStatus } from './folderStatus';
 import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
@@ -1300,6 +1301,7 @@ export async function init() {
     console.log('[init] db.initDB done, getting accounts...');
     const accounts = await db.getAccounts();
     console.log('[init] Got', accounts.length, 'accounts');
+    await adoptGraphFolderKeys(accounts);
     useMailStore.setState({ accounts });
 
     if (accounts.length > 0) {

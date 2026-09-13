@@ -198,6 +198,9 @@ export const useSettingsStore = create(
       // Last selected mailbox per account { [accountId]: string }
       lastMailboxPerAccount: {},
 
+      // Graph accounts whose localized folder dirs were adopted { [accountId]: true }
+      graphFolderKeysAdopted: {},
+
       // Display settings
       displayNames: {}, // { [accountId]: string }
       sendAsAddresses: {}, // { [accountId]: string } — outgoing From override; login is unchanged
@@ -583,6 +586,10 @@ export const useSettingsStore = create(
       getLastMailbox: (accountId) => get().lastMailboxPerAccount[accountId] || 'INBOX',
       setLastMailbox: (accountId, mailbox) => set({
         lastMailboxPerAccount: { ...get().lastMailboxPerAccount, [accountId]: mailbox }
+      }),
+
+      markGraphFolderKeysAdopted: (accountId) => set({
+        graphFolderKeysAdopted: { ...get().graphFolderKeysAdopted, [accountId]: true }
       }),
 
       // Account order management
