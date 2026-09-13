@@ -368,7 +368,10 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
     // under the same `conn` sweep just released, never a second connection.
     if config.attachments {
         let extractor = crate::attachment_extract::current_extractor();
-        let premium = crate::iap::is_entitled("com.mailvault.app.backups");
+        // config.attachments already reflects the JS-side premium check
+        // (useSearchIndexConfig.js gates it on hasPremiumAccess); no
+        // Rust-side general-premium entitlement exists to re-check here.
+        let premium = true;
         let mut guard = lock(&st.db);
         if let Some(conn) = guard.as_mut() {
             reconcile::run_pending_extractions(
