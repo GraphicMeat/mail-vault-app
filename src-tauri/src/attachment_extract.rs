@@ -18,8 +18,12 @@ mod imp {
         fn pdf_text_layer(&self, bytes: &[u8]) -> Result<(String, usize), ExtractError> {
             let data = NSData::with_bytes(bytes);
             let doc = unsafe { PDFDocument::initWithData(PDFDocument::alloc(), &data) };
+            // `initWithData` returns `None` when the bytes don't parse as a
+            // PDF at all (truncated, corrupt, mislabeled) — not specifically
+            // because it's encrypted. A structurally valid encrypted PDF
+            // constructs fine and is caught by `isLocked()` below.
             let Some(doc) = doc else {
-                return Err(ExtractError::Permanent("encrypted"));
+                return Err(ExtractError::Permanent("failed"));
             };
             if unsafe { doc.isLocked() } {
                 return Err(ExtractError::Permanent("encrypted"));
@@ -58,9 +62,17 @@ mod imp {
                 return Err(ExtractError::Transient("vision request failed".into()));
             }
 
+            // `performRequests_error`'s `Err` only covers scheduling-level
+            // failure; the synchronous objc2-vision 0.3.2 API has no
+            // per-request `.error()` to tell "genuinely found nothing" apart
+            // from "failed internally" when `results()` comes back `None`.
+            // Treat `None` as retryable rather than risk recording a false
+            // "ok" that never gets another sweep. `Some(empty array)` means
+            // Vision ran fine and found zero text regions — that's a real
+            // empty-text success, not a failure.
             let results = request.results();
             let Some(results) = results else {
-                return Ok(String::new());
+                return Err(ExtractError::Transient("vision returned no results".into()));
             };
             let mut out = String::new();
             for obs in results.iter() {
@@ -108,5 +120,15 @@ mod tests {
         let (text, pages) = extractor.pdf_text_layer(&bytes).unwrap();
         assert!(text.contains("Hello"), "got: {text:?}");
         assert_eq!(pages, 1);
+    }
+
+    #[test]
+    fn pdfkit_rejects_garbage_bytes_as_failed_not_encrypted() {
+        let extractor = current_extractor();
+        let err = extractor.pdf_text_layer(b"not a pdf, just garbage bytes").unwrap_err();
+        match err {
+            ExtractError::Permanent(state) => assert_eq!(state, "failed"),
+            ExtractError::Transient(msg) => panic!("expected Permanent(\"failed\"), got Transient({msg:?})"),
+        }
     }
 }
