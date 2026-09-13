@@ -89,9 +89,9 @@ mod imp {
 #[cfg(not(target_os = "macos"))]
 mod imp {
     use super::{ExtractError, TextExtractor};
-    use std::io::Write;
+    use std::io::{Read, Write};
     use std::process::{Command, Stdio};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     pub struct NativeExtractor;
 
@@ -117,21 +117,59 @@ mod imp {
                 .write_all(bytes)
                 .map_err(|e| ExtractError::Transient(e.to_string()))?;
 
-            // The 30s cap is enforced here, by the parent, not by the child:
-            // a subprocess with a bug should be killed, not trusted to
-            // self-limit. `wait_with_output` has no timeout variant, so it
-            // runs on a helper thread and we just stop waiting on it.
+            // Read stdout on its own thread so a slow/stuck child doesn't
+            // block this function — but keep `child` itself here, unmoved,
+            // so a timeout can actually call `child.kill()` on it (mirrors
+            // `shutdown_daemon_child`'s kill-then-wait shape, minus the
+            // SIGTERM grace period: an attachment extraction has no state
+            // worth flushing, so going straight to a hard kill is fine).
+            // The previous version moved `child` into the wait thread and
+            // only gave up *waiting* on timeout — the child process (and the
+            // thread blocked on it) kept running forever. On a PDF crafted
+            // to hang, and since a timeout is reported as `Transient` and
+            // retried on every future sweep, that leaked one more orphaned
+            // process and thread per retry.
+            let mut stdout = child.stdout.take().expect("stdout was piped");
             let (tx, rx) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
-                let _ = tx.send(child.wait_with_output());
+                let mut buf = Vec::new();
+                let result = stdout.read_to_end(&mut buf).map(|_| buf);
+                let _ = tx.send(result);
             });
-            let output = match rx.recv_timeout(Duration::from_secs(30)) {
-                Ok(Ok(o)) => o,
-                Ok(Err(e)) => return Err(ExtractError::Transient(e.to_string())),
-                Err(_) => return Err(ExtractError::Transient("pdf extraction timed out".into())),
+
+            let deadline = Instant::now() + Duration::from_secs(30);
+            let status = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break status,
+                    Ok(None) => {
+                        if Instant::now() >= deadline {
+                            // Kill and reap right here — don't block further
+                            // waiting for it (a process that ignores SIGKILL
+                            // is an OS-level problem outside this code's
+                            // scope). Killing the child closes its stdout,
+                            // which unblocks the reader thread above almost
+                            // immediately; we don't wait on that either.
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            return Err(ExtractError::Transient("pdf extraction timed out".into()));
+                        }
+                        std::thread::sleep(Duration::from_millis(50));
+                    }
+                    Err(e) => return Err(ExtractError::Transient(e.to_string())),
+                }
             };
 
-            if !output.status.success() {
+            // The child has already exited, so its stdout pipe is closed and
+            // the reader thread above is finishing (or finished) reading
+            // whatever it wrote; a short recv timeout is just a safety net,
+            // not an expected wait.
+            let stdout_bytes = match rx.recv_timeout(Duration::from_secs(5)) {
+                Ok(Ok(buf)) => buf,
+                Ok(Err(e)) => return Err(ExtractError::Transient(e.to_string())),
+                Err(_) => return Err(ExtractError::Transient("failed to read extract-pdf output".into())),
+            };
+
+            if !status.success() {
                 // A non-zero (or, on a signal-killed abort, altogether
                 // missing) exit code is indistinguishable from here between
                 // "this exact file will never parse", "transient OOM on this
@@ -145,9 +183,9 @@ mod imp {
                 // that way). So any failure here stays `Transient`, never
                 // `Permanent` — a bad exit code is never treated as a
                 // verdict on the file itself.
-                return Err(ExtractError::Transient(format!("extract-pdf exited {:?}", output.status)));
+                return Err(ExtractError::Transient(format!("extract-pdf exited {:?}", status)));
             }
-            let text = String::from_utf8_lossy(&output.stdout).into_owned();
+            let text = String::from_utf8_lossy(&stdout_bytes).into_owned();
             // Page count is not surfaced by this subprocess mode. `extract()`'s
             // OCR-fallback heuristic (Task 3) uses the page count only to scale
             // its "is this a scanned PDF" threshold before trying OCR — and
