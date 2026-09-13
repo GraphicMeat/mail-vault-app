@@ -186,7 +186,11 @@ export function isPaddingBreak(br) {
     while (next && (next.nodeType === 8 || (next.nodeType === 3 && !/[^ \t\n\r\f]/.test(next.nodeValue)))) {
       next = next.nextSibling;
     }
-    if (next) return next.nodeType === 1 && BLOCK_TAGS.test(next.nodeName);
+    // ponytail: anything else after it, a block included, keeps it a line break.
+    // Ignoring a <br> that sits alone between two <div>s opens a paragraph the
+    // next <div>'s text merges into, so Gmail's reply/quote gap would vanish
+    // rather than show double height.
+    if (next) return false;
     const parent = node.parentNode;
     if (!parent || !INLINE_TAGS.test(parent.nodeName)) return true;
     node = parent;
@@ -388,9 +392,11 @@ export function htmlToText(html) {
     }
     if (node.nodeType !== 1 || SKIP_TAGS.test(node.nodeName)) return;
     const tag = node.nodeName;
+    // A padding <br> ends its line too: nothing follows it on that line, so
+    // ending the line here or at the block's end writes the same text.
     if (tag === 'BR') {
       open();
-      if (!isPaddingBreak(node)) close();
+      close();
       return;
     }
     if (tag === 'PRE') {

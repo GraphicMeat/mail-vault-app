@@ -82,6 +82,11 @@ describe('reading mail HTML into the editor', () => {
       P(text('x', bold), br(bold), text('y')),
     ));
   });
+
+  it('looks past the whitespace and comments a sender left after a closing <br>', () => {
+    load('<div>\n  Hello<br>\n  <!-- signature -->\n</div>');
+    expect(editor.getJSON()).toEqual(doc(P(text('Hello'))));
+  });
 });
 
 describe('what the editor hands out is what it reads back', () => {
