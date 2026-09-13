@@ -5509,6 +5509,7 @@ fn main() {
             // Maildir, every later one is a single read of the version marker.
             {
                 let root = vault::root(&app.handle()).ok();
+                let app_handle = app.handle().clone();
                 std::thread::spawn(move || {
                     let mig = sweep_vault_eml(root.as_deref());
                     if mig.renamed > 0 || mig.errors > 0 {
@@ -5516,6 +5517,12 @@ fn main() {
                             "Maildir .eml sweep: renamed={} already_ok={} skipped={} errors={}",
                             mig.renamed, mig.already_ok, mig.skipped_non_message, mig.errors
                         );
+                    }
+                    // Runs beside the index's first build, which skips a file renamed
+                    // between its listing and its read until the next full pass
+                    // (SWEEP_EVERY). One full pass after the renames picks them up now.
+                    if mig.renamed > 0 {
+                        search_index::sweep_soon(&app_handle);
                     }
                 });
             }
