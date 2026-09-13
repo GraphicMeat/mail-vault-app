@@ -49,11 +49,18 @@ cocoa = "0.26"
 objc = "0.2"
 keyring = { version = "3", features = ["apple-native"] }
 tauri-plugin-sparkle-updater = { version = "0.2", optional = true }
-# StoreKit bindings — Mac App Store IAP (enabled by `appstore` feature)
-objc2 = { version = "0.6", optional = true }
-objc2-foundation = { version = "0.3", optional = true }
+# objc2 core is unconditional: PDFKit/Vision extraction (below) needs it on
+# every macOS build. StoreKit bindings (objc2-store-kit, block2) stay behind
+# `appstore`.
+objc2 = "0.6"
+objc2-foundation = "0.3"
 objc2-store-kit = { version = "0.3", optional = true }
 block2 = { version = "0.6", optional = true }
+# PDF text-layer + OCR (search index phase 3, Task 7) — unconditional macOS
+# deps, not gated by `appstore`: search is available on every distribution
+# channel.
+objc2-pdf-kit = "0.3"
+objc2-vision = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
@@ -78,7 +85,7 @@ webdriver = ["tauri-plugin-webdriver-automation"]
 # Developer ID / non-MAS macOS builds use Sparkle for auto-updates.
 sparkle = ["dep:tauri-plugin-sparkle-updater"]
 # Mac App Store build: drops Sparkle, enables StoreKit IAP for paid features.
-appstore = ["dep:objc2", "dep:objc2-foundation", "dep:objc2-store-kit", "dep:block2"]
+appstore = ["dep:objc2-store-kit", "dep:block2"]
 
 [profile.release]
 panic = "abort"
