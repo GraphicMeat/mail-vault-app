@@ -19,7 +19,7 @@ pub const LEGACY_CACHE: &str = "archived_headers.json";
 /// Directories whose contents are messages, never index files. On macOS
 /// `maildir/` and `Maildir/` are one directory, so without this the walk
 /// would descend into every `cur/` of the vault.
-const MESSAGE_DIRS: [&str; 4] = ["cur", "new", "tmp", "orphaned"];
+const MESSAGE_DIRS: [&str; 4] = ["cur", "new", "tmp", crate::maildir::ORPHAN_DIR];
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct ImportReport {
@@ -120,9 +120,11 @@ pub fn mailbox_path_of(account_dir: &Path, index_file: &Path) -> Option<String> 
 /// `root` is not there.
 fn account_dirs(root: &Path) -> Vec<(String, PathBuf)> {
     let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
+    // `file_type()` does not follow the link: a symlinked account directory is
+    // not ours to walk, and one pointing at an ancestor would never end.
     let mut out: Vec<(String, PathBuf)> = entries
         .flatten()
-        .filter(|e| e.path().is_dir())
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
         .map(|e| (e.file_name().to_string_lossy().to_string(), e.path()))
         .filter(|(name, _)| !name.starts_with('.'))
         .collect();
@@ -130,13 +132,21 @@ fn account_dirs(root: &Path) -> Vec<(String, PathBuf)> {
     out
 }
 
+/// A symlink is never followed, neither as a directory nor as an index file:
+/// one pointing at an ancestor would walk until the stack goes, and this runs
+/// at startup where `panic = "abort"` makes that unrecoverable. The type comes
+/// from the directory entry, which does not follow the link the way
+/// `Path::is_dir` does.
 fn collect_index_files(dir: &Path, out: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
-    let mut paths: Vec<PathBuf> = entries.flatten().map(|e| e.path()).collect();
+    let mut paths: Vec<(PathBuf, bool)> = entries
+        .flatten()
+        .filter_map(|e| e.file_type().ok().filter(|t| !t.is_symlink()).map(|t| (e.path(), t.is_dir())))
+        .collect();
     paths.sort();
-    for path in paths {
+    for (path, is_dir) in paths {
         let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-        if path.is_dir() {
+        if is_dir {
             if !MESSAGE_DIRS.contains(&name.as_str()) && !name.starts_with('.') {
                 collect_index_files(&path, out);
             }
@@ -148,11 +158,16 @@ fn collect_index_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// `<name>` → `<name>.pre-db-<stamp>` (a suffix, so nothing ever reads it as
 /// the record again); `-<n>` appended if that name is somehow taken.
+///
+/// `rename` replaces its destination without a word, and this is the one path
+/// here that could destroy a retired file, so the name has to be free by
+/// `symlink_metadata` (`exists()` says false for a broken symlink and for
+/// anything it cannot stat).
 fn retire(path: &Path, stamp: u64) -> Result<(), String> {
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("no file name")?;
     let mut target = path.with_file_name(format!("{name}.pre-db-{stamp}"));
     let mut n = 1;
-    while target.exists() {
+    while target.symlink_metadata().is_ok() {
         target = path.with_file_name(format!("{name}.pre-db-{stamp}-{n}"));
         n += 1;
     }
@@ -318,5 +333,35 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
         assert_eq!(import_legacy(&conn, tmp.path()), ImportReport::default());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_loop_under_the_account_dir_does_not_recurse() {
+        let tmp = tempfile::tempdir().unwrap();
+        let r = tmp.path();
+        write(r, "maildir/acct-a/INBOX/local-index.json", &json!([entry_7()]).to_string());
+        std::os::unix::fs::symlink(r.join("maildir/acct-a"), r.join("maildir/acct-a/loop")).unwrap();
+        let conn = open(r).unwrap();
+        let report = import_legacy(&conn, r);
+        assert_eq!(report.errors, vec![]);
+        assert_eq!(report.files, 1, "the walk followed the symlink");
+        assert_eq!(by_uid(&conn, "acct-a", "INBOX"), vec![entry_7()]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn retire_never_replaces_an_existing_retired_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write(tmp.path(), "maildir/acct-a/INBOX/local-index.json", "[]");
+        let dir = path.parent().unwrap();
+        // A retired file this run must not destroy. Broken on purpose: `exists()`
+        // says false for it, `symlink_metadata()` does not.
+        let taken = dir.join("local-index.json.pre-db-42");
+        std::os::unix::fs::symlink(dir.join("gone"), &taken).unwrap();
+        retire(&path, 42).unwrap();
+        assert!(taken.symlink_metadata().is_ok(), "the retired file was replaced");
+        assert!(!path.exists());
+        assert_eq!(std::fs::read_to_string(dir.join("local-index.json.pre-db-42-1")).unwrap(), "[]");
     }
 }
