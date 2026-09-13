@@ -55,6 +55,18 @@ pub struct GraphMailFolder {
     pub unread_item_count: i64,
     #[serde(default)]
     pub child_folder_count: i64,
+    /// Graph's own name for a default folder ("inbox", "sentitems", "drafts",
+    /// "deleteditems", "junkemail", "archive"); None for a user folder. Filled
+    /// by `list_folders` from a `$batch` of well-known lookups. Graph v1.0's
+    /// listing has no such property, and `displayName` follows the MAILBOX's
+    /// language ("Gesendete Elemente"), so it cannot be the key.
+    #[serde(default)]
+    pub well_known_name: Option<String>,
+    /// The locale-independent name every store keys this folder by: the vault
+    /// directory, the sidecar dir with its uid ledger, the local index, the
+    /// mirror. Computed here, never read from Graph.
+    #[serde(default, skip_deserializing)]
+    pub storage_key: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -216,13 +228,121 @@ impl GraphMessage {
 // Graph API client
 // ---------------------------------------------------------------------------
 
-const GRAPH_BASE: &str = "https://graph.microsoft.com/v1.0";
+const GRAPH_BASE_DEFAULT: &str = "https://graph.microsoft.com/v1.0";
+
+/// The Graph origin. `MAILVAULT_GRAPH_BASE` points the client at a loopback
+/// mock for the e2e suite, and at nothing else: the same rule as
+/// `MAILVAULT_IMAP_PLAINTEXT` in imap/mod.rs.
+pub fn graph_base() -> String {
+    graph_base_from(std::env::var("MAILVAULT_GRAPH_BASE").ok().as_deref())
+}
+
+pub(crate) fn graph_base_from(override_url: Option<&str>) -> String {
+    match override_url {
+        Some(url) if is_loopback_http(url) => {
+            tracing::warn!("[Graph] MAILVAULT_GRAPH_BASE={} — requests go to a loopback mock", url);
+            url.trim_end_matches('/').to_string()
+        }
+        Some(url) => {
+            tracing::warn!("[Graph] MAILVAULT_GRAPH_BASE={} ignored — not loopback", url);
+            GRAPH_BASE_DEFAULT.to_string()
+        }
+        None => GRAPH_BASE_DEFAULT.to_string(),
+    }
+}
+
+fn is_loopback_http(url: &str) -> bool {
+    ["http://127.0.0.1", "http://localhost", "http://[::1]"]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
+}
+
+/// Well-known folder name -> the storage key every store uses for it.
+pub const WELL_KNOWN: [(&str, &str); 6] = [
+    ("inbox", "INBOX"),
+    ("sentitems", "Sent"),
+    ("drafts", "Drafts"),
+    ("deleteditems", "Trash"),
+    ("junkemail", "Junk"),
+    ("archive", "Archive"),
+];
+
+/// `{"responses":[{"id":"sentitems","status":200,"body":{"id":"AAMk…"}}, …]}`
+/// -> `[("sentitems", "AAMk…")]`. A 404 (no Archive folder) or a body
+/// without an id is skipped.
+pub fn parse_well_known_batch(json: &serde_json::Value) -> Vec<(String, String)> {
+    json["responses"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| {
+            if r["status"].as_u64()? != 200 {
+                return None;
+            }
+            Some((r["id"].as_str()?.to_string(), r["body"]["id"].as_str()?.to_string()))
+        })
+        .collect()
+}
+
+/// Stamp `well_known_name` on every folder whose id the batch resolved.
+pub fn tag_well_known(folders: &mut [GraphMailFolder], resolved: &[(String, String)]) -> usize {
+    let mut tagged = 0;
+    for f in folders.iter_mut() {
+        if let Some((name, _)) = resolved.iter().find(|(_, id)| *id == f.id) {
+            f.well_known_name = Some(name.clone());
+            tagged += 1;
+        }
+    }
+    tagged
+}
+
+/// The pre-2026-09 rule: match Outlook's ENGLISH display names. Kept only for
+/// a listing whose well-known lookup failed, so an English mailbox keeps its
+/// keys when `$batch` is down.
+fn legacy_storage_key(display_name: &str) -> Option<&'static str> {
+    match display_name.to_lowercase().as_str() {
+        "inbox" => Some("INBOX"),
+        "sent items" => Some("Sent"),
+        "deleted items" => Some("Trash"),
+        "drafts" => Some("Drafts"),
+        "junk email" => Some("Junk"),
+        "archive" => Some("Archive"),
+        _ => None,
+    }
+}
+
+pub fn storage_key_for(folder: &GraphMailFolder, batch_failed: bool) -> String {
+    if let Some(key) = folder
+        .well_known_name
+        .as_deref()
+        .and_then(|n| WELL_KNOWN.iter().find(|(name, _)| *name == n))
+        .map(|(_, key)| *key)
+    {
+        return key.to_string();
+    }
+    if batch_failed {
+        if let Some(key) = legacy_storage_key(&folder.display_name) {
+            return key.to_string();
+        }
+    }
+    // A user folder literally named "Sent Items" beside a tagged Sent keys as
+    // "Sent Items": the display name, never the well-known word.
+    folder.display_name.clone()
+}
+
+pub fn assign_storage_keys(folders: &mut [GraphMailFolder], batch_failed: bool) {
+    for f in folders.iter_mut() {
+        f.storage_key = storage_key_for(f, batch_failed);
+    }
+}
 
 pub struct GraphClient {
     // pub (not pub(crate)) so src-tauri's migration.rs can issue custom
     // authenticated Graph requests not covered by GraphClient's own methods.
     pub client: Client,
     pub access_token: String,
+    /// `https://graph.microsoft.com/v1.0`, or the loopback mock from `graph_base()`.
+    pub base: String,
 }
 
 impl GraphClient {
@@ -230,12 +350,14 @@ impl GraphClient {
         Self {
             client: Client::new(),
             access_token: access_token.to_string(),
+            base: graph_base(),
         }
     }
 
-    /// List all mail folders for the authenticated user.
+    /// List all mail folders for the authenticated user, each stamped with
+    /// its well-known name (when it has one) and its storage key.
     pub async fn list_folders(&self) -> Result<Vec<GraphMailFolder>, String> {
-        let url = format!("{}/me/mailFolders?$top=100", GRAPH_BASE);
+        let url = format!("{}/me/mailFolders?$top=100", self.base);
         let resp = self
             .client
             .get(&url)
@@ -268,7 +390,51 @@ impl GraphClient {
             .await
             .map_err(|e| format!("Graph list_folders parse error: {}", e))?;
 
-        Ok(list.value)
+        let mut folders = list.value;
+        let batch_failed = match self.resolve_well_known_ids().await {
+            Ok(resolved) => {
+                tag_well_known(&mut folders, &resolved);
+                false
+            }
+            Err(e) => {
+                tracing::warn!("[Graph] well-known folder lookup failed, keying by display name: {}", e);
+                true
+            }
+        };
+        assign_storage_keys(&mut folders, batch_failed);
+        Ok(folders)
+    }
+
+    /// One `$batch` of `GET /me/mailFolders/{well-known}?$select=id` for the
+    /// six default folders. Well-known names resolve whatever the mailbox's
+    /// language calls the folder; the listing's displayName does not.
+    async fn resolve_well_known_ids(&self) -> Result<Vec<(String, String)>, String> {
+        let requests: Vec<serde_json::Value> = WELL_KNOWN
+            .iter()
+            .map(|(name, _)| serde_json::json!({
+                "id": name,
+                "method": "GET",
+                "url": format!("/me/mailFolders/{}?$select=id", name),
+            }))
+            .collect();
+        let resp = self
+            .client
+            .post(format!("{}/$batch", self.base))
+            .bearer_auth(&self.access_token)
+            .json(&serde_json::json!({ "requests": requests }))
+            .send()
+            .await
+            .map_err(|e| format!("Graph $batch request failed: {}", e))?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("Graph $batch failed ({}) {}", status.as_u16(), body));
+        }
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("Graph $batch parse error: {}", e))?;
+        Ok(parse_well_known_batch(&json))
     }
 
     /// List messages in a folder with pagination.
@@ -281,7 +447,7 @@ impl GraphClient {
     ) -> Result<(Vec<GraphMessage>, Option<String>), String> {
         let url = format!(
             "{}/me/mailFolders/{}/messages?$top={}&$skip={}&$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc",
-            GRAPH_BASE, folder_id, top, skip
+            self.base, folder_id, top, skip
         );
 
         let resp = self
@@ -323,7 +489,7 @@ impl GraphClient {
     pub async fn get_message(&self, message_id: &str) -> Result<GraphMessage, String> {
         let url = format!(
             "{}/me/messages/{}?$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,body,internetMessageHeaders",
-            GRAPH_BASE, message_id
+            self.base, message_id
         );
 
         let resp = self
@@ -365,7 +531,7 @@ impl GraphClient {
         message_id: &str,
         is_read: bool,
     ) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);
+        let url = format!("{}/me/messages/{}", self.base, message_id);
 
         let resp = self
             .client
@@ -403,7 +569,7 @@ impl GraphClient {
     /// Graph has exactly two of our flags — `isRead` above and this one.
     /// \Answered and keywords have no equivalent and never reach here.
     pub async fn set_flag_status(&self, message_id: &str, flagged: bool) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);
+        let url = format!("{}/me/messages/{}", self.base, message_id);
 
         let resp = self
             .client
@@ -440,7 +606,7 @@ impl GraphClient {
 
     /// Delete a message (moves to Deleted Items by default in Graph API).
     pub async fn delete_message(&self, message_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", GRAPH_BASE, message_id);
+        let url = format!("{}/me/messages/{}", self.base, message_id);
 
         let resp = self
             .client
@@ -478,7 +644,7 @@ impl GraphClient {
         message_id: &str,
         destination_folder_id: &str,
     ) -> Result<String, String> {
-        let url = format!("{}/me/messages/{}/move", GRAPH_BASE, message_id);
+        let url = format!("{}/me/messages/{}/move", self.base, message_id);
 
         let resp = self
             .client
@@ -518,7 +684,7 @@ impl GraphClient {
 
     /// Download the raw MIME (.eml) content of a message.
     pub async fn get_mime_content(&self, message_id: &str) -> Result<Vec<u8>, String> {
-        let url = format!("{}/me/messages/{}/$value", GRAPH_BASE, message_id);
+        let url = format!("{}/me/messages/{}/$value", self.base, message_id);
 
         let resp = self
             .client
@@ -561,7 +727,7 @@ impl GraphClient {
     /// Graph API requires the MIME content to be base64-encoded with Content-Type: text/plain.
     pub async fn create_message_from_mime(&self, mime_bytes: &[u8]) -> Result<String, String> {
         let encoded = base64::engine::general_purpose::STANDARD.encode(mime_bytes);
-        let url = format!("{}/me/messages", GRAPH_BASE);
+        let url = format!("{}/me/messages", self.base);
 
         let resp = self
             .client
@@ -610,9 +776,9 @@ impl GraphClient {
         let url = match parent_folder_id {
             Some(parent_id) => format!(
                 "{}/me/mailFolders/{}/childFolders",
-                GRAPH_BASE, parent_id
+                self.base, parent_id
             ),
-            None => format!("{}/me/mailFolders", GRAPH_BASE),
+            None => format!("{}/me/mailFolders", self.base),
         };
 
         let resp = self
@@ -666,7 +832,7 @@ impl GraphClient {
     /// Rename a folder. Graph names folders, it does not path them, so this is
     /// the whole of a rename — the subtree comes along untouched.
     pub async fn rename_folder(&self, folder_id: &str, display_name: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}", GRAPH_BASE, folder_id);
+        let url = format!("{}/me/mailFolders/{}", self.base, folder_id);
 
         let resp = self
             .client
@@ -683,7 +849,7 @@ impl GraphClient {
     /// Move a folder under another one. `destination_id` takes a well-known
     /// name as well as an id, which is what makes "deleteditems" the delete.
     pub async fn move_folder(&self, folder_id: &str, destination_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}/move", GRAPH_BASE, folder_id);
+        let url = format!("{}/me/mailFolders/{}/move", self.base, folder_id);
 
         let resp = self
             .client
@@ -701,7 +867,7 @@ impl GraphClient {
     /// Items moves it there instead, so the caller only reaches this for one
     /// that is already in the bin.
     pub async fn delete_folder(&self, folder_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}", GRAPH_BASE, folder_id);
+        let url = format!("{}/me/mailFolders/{}", self.base, folder_id);
 
         let resp = self
             .client
@@ -1048,5 +1214,98 @@ mod tests {
 
         // is_read false → no \\Seen flag
         assert!(header.flags.is_empty());
+    }
+
+    // -- Storage keys ---------------------------------------------------------
+
+    fn folder(id: &str, display: &str) -> GraphMailFolder {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "displayName": display, "totalItemCount": 1, "unreadItemCount": 0
+        })).unwrap()
+    }
+
+    #[test]
+    fn graph_base_honours_only_a_loopback_override() {
+        assert_eq!(graph_base_from(None), "https://graph.microsoft.com/v1.0");
+        assert_eq!(graph_base_from(Some("http://127.0.0.1:4599/v1.0")), "http://127.0.0.1:4599/v1.0");
+        assert_eq!(graph_base_from(Some("http://localhost:4599/v1.0/")), "http://localhost:4599/v1.0");
+        assert_eq!(graph_base_from(Some("https://evil.test/v1.0")), "https://graph.microsoft.com/v1.0");
+        assert_eq!(graph_base_from(Some("http://10.0.0.5/v1.0")), "https://graph.microsoft.com/v1.0");
+    }
+
+    #[test]
+    fn parse_well_known_batch_keeps_200s_and_skips_the_rest() {
+        let json = serde_json::json!({ "responses": [
+            { "id": "inbox", "status": 200, "body": { "id": "fld-inbox" } },
+            { "id": "sentitems", "status": 200, "body": { "id": "fld-sent" } },
+            { "id": "archive", "status": 404, "body": { "error": { "code": "ErrorItemNotFound" } } },
+            { "id": "drafts", "status": 200 }
+        ]});
+        assert_eq!(
+            parse_well_known_batch(&json),
+            vec![("inbox".to_string(), "fld-inbox".to_string()), ("sentitems".to_string(), "fld-sent".to_string())]
+        );
+        assert!(parse_well_known_batch(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn tag_well_known_matches_by_id_and_counts() {
+        let mut folders = vec![folder("fld-sent", "Gesendete Elemente"), folder("fld-proj", "Projekte")];
+        let resolved = vec![("sentitems".to_string(), "fld-sent".to_string()), ("archive".to_string(), "fld-none".to_string())];
+        assert_eq!(tag_well_known(&mut folders, &resolved), 1);
+        assert_eq!(folders[0].well_known_name.as_deref(), Some("sentitems"));
+        assert_eq!(folders[1].well_known_name, None);
+    }
+
+    #[test]
+    fn storage_key_comes_from_the_well_known_name_first() {
+        let mut f = folder("fld-sent", "Gesendete Elemente");
+        f.well_known_name = Some("sentitems".to_string());
+        assert_eq!(storage_key_for(&f, false), "Sent");
+        let mut i = folder("fld-inbox", "Posteingang");
+        i.well_known_name = Some("inbox".to_string());
+        assert_eq!(storage_key_for(&i, false), "INBOX");
+        for (name, key) in WELL_KNOWN {
+            let mut g = folder("x", "anything");
+            g.well_known_name = Some(name.to_string());
+            assert_eq!(storage_key_for(&g, false), key);
+        }
+    }
+
+    #[test]
+    fn storage_key_falls_back_to_the_display_name_table_only_when_the_batch_failed() {
+        let f = folder("fld-sent", "Sent Items");
+        assert_eq!(storage_key_for(&f, true), "Sent");
+        assert_eq!(storage_key_for(&f, false), "Sent Items");
+        let d = folder("fld-del", "deleted items");
+        assert_eq!(storage_key_for(&d, true), "Trash");
+        let p = folder("fld-proj", "Projekte");
+        assert_eq!(storage_key_for(&p, true), "Projekte");
+        assert_eq!(storage_key_for(&p, false), "Projekte");
+    }
+
+    #[test]
+    fn assign_storage_keys_fills_every_folder() {
+        let mut folders = vec![folder("fld-sent", "Gesendete Elemente"), folder("fld-proj", "Projekte")];
+        folders[0].well_known_name = Some("sentitems".to_string());
+        assign_storage_keys(&mut folders, false);
+        assert_eq!(folders[0].storage_key, "Sent");
+        assert_eq!(folders[1].storage_key, "Projekte");
+    }
+
+    #[test]
+    fn folder_serializes_the_new_fields_in_camel_case() {
+        let mut f = folder("fld-sent", "Gesendete Elemente");
+        f.well_known_name = Some("sentitems".to_string());
+        f.storage_key = "Sent".to_string();
+        let v = serde_json::to_value(&f).unwrap();
+        assert_eq!(v["wellKnownName"], "sentitems");
+        assert_eq!(v["storageKey"], "Sent");
+        // A listing parsed from Graph never carries storageKey; it defaults.
+        let parsed: GraphMailFolder = serde_json::from_value(serde_json::json!({
+            "id": "a", "displayName": "b", "totalItemCount": 0, "unreadItemCount": 0, "storageKey": "IGNORED"
+        })).unwrap();
+        assert_eq!(parsed.storage_key, "");
+        assert_eq!(parsed.well_known_name, None);
     }
 }
