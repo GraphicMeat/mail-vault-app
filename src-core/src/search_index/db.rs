@@ -105,6 +105,9 @@ fn sql(e: rusqlite::Error) -> Fail {
 
 fn open_at(path: &Path) -> Result<Connection, Fail> {
     let conn = Connection::open(path).map_err(sql)?;
+    // The app holds one Mutex-guarded connection, so SQLITE_BUSY can only be
+    // another process: waiting rusqlite's default 5 s buys nothing.
+    conn.busy_timeout(std::time::Duration::ZERO).map_err(io)?;
     // Exclusive BEFORE the first WAL access: no -shm file, so WAL also works
     // when the vault is on a network volume (sqlite.org/wal.html).
     conn.execute_batch("PRAGMA locking_mode=EXCLUSIVE;").map_err(sql)?;
@@ -213,10 +216,12 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let holder = open(tmp.path()).unwrap();
         meta_set(&holder, "probe", "held").unwrap();
+        let t = std::time::Instant::now();
         match open(tmp.path()) {
             Err(OpenError::Io(_)) => {}
             other => panic!("expected Io while another connection holds the lock, got {:?}", other.map(|_| ())),
         }
+        assert!(t.elapsed() < std::time::Duration::from_secs(1), "a held lock must fail fast, took {:?}", t.elapsed());
         assert!(tmp.path().join(DB_DIR).join(DB_FILE).exists());
         assert_eq!(meta_get(&holder, "probe").as_deref(), Some("held"));
     }
