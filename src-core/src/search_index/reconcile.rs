@@ -37,6 +37,8 @@ pub struct IndexDoc {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexConfig {
     pub bodies: bool,
+    pub attachments: bool,
+    pub image_text: bool,
 }
 
 /// (raw bytes, uid, filename) -> parsed doc, or None when the file is not mail.
@@ -534,8 +536,8 @@ mod tests {
         }
     }
 
-    const ON: IndexConfig = IndexConfig { bodies: true };
-    const OFF: IndexConfig = IndexConfig { bodies: false };
+    const ON: IndexConfig = IndexConfig { bodies: true, attachments: false, image_text: false };
+    const OFF: IndexConfig = IndexConfig { bodies: false, attachments: false, image_text: false };
 
     #[test]
     fn indexes_new_files_and_skips_unchanged_ones() {
@@ -940,5 +942,12 @@ mod tests {
             let page = crate::search_index::query::search(conn, &crate::search_index::query::SearchRequest { account_id: "bench".into(), query: q.into(), ..Default::default() }).unwrap();
             println!("query {q:?} total={} elapsed={:?}", page.total, t.elapsed());
         }
+    }
+
+    #[test]
+    fn index_config_carries_attachment_flags() {
+        let cfg = IndexConfig { bodies: true, attachments: true, image_text: false };
+        assert!(cfg.attachments);
+        assert!(!cfg.image_text);
     }
 }

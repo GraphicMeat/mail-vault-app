@@ -505,7 +505,6 @@ pub(crate) fn rows_reply(st: &SearchIndexState, account_id: &str, mailbox: &str,
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[allow(dead_code)] // attachments and image_text are read from phase 3 on
 pub struct ConfigArgs {
     pub bodies: bool,
     #[serde(default)]
@@ -517,7 +516,7 @@ pub struct ConfigArgs {
 #[tauri::command]
 pub async fn search_index_configure(app: tauri::AppHandle, config: ConfigArgs) -> Result<(), String> {
     off_main(app, move |st| {
-        let cfg = IndexConfig { bodies: config.bodies };
+        let cfg = IndexConfig { bodies: config.bodies, attachments: config.attachments, image_text: config.image_text };
         *g(&st.config) = Some(cfg);
         st.interrupt.store(true, SeqCst); // stop a running sweep at its next batch
         send(st, Signal::Configure);
