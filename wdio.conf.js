@@ -22,6 +22,7 @@ import {
   seedAttachmentSearchMessage,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
+import { startMockGraph } from './tests/e2e/mockGraph.js';
 
 // App binary path (debug build with webdriver feature). Cargo builds into the
 // workspace target dir, not src-tauri/target — the old path pointed at a binary
@@ -200,6 +201,7 @@ export function configureMockAccounts(accounts) {
 
 let tauriWd;
 let mockServers = [];
+let mockGraph = null;
 let credentialsPath;
 let seededAccounts = [];
 
@@ -225,7 +227,13 @@ export const config = {
   specs: ['./tests/e2e/**/*.test.js'],
   // These scenarios require the dedicated Insights accounts and mailbox data.
   // Keep broad/default suites on their existing Luke/Vader fixtures.
-  exclude: ['./tests/e2e/connected-insights.test.js', './tests/e2e/ui-insights.test.js'],
+  // The graph-* specs need the German Outlook mailbox only wdio.graph.conf.js
+  // loads into the mock, so they are never part of a default selection.
+  exclude: [
+    './tests/e2e/connected-insights.test.js',
+    './tests/e2e/ui-insights.test.js',
+    './tests/e2e/graph-*.test.js',
+  ],
   suites: {
     // CI-safe: no accounts needed, works from empty/welcome state
     'ui-headless': ['./tests/e2e/ui-*.test.js'],
@@ -309,7 +317,7 @@ export const config = {
 
     buildMockServer();
     mockServers = await Promise.all(
-      MOCK_ACCOUNTS.map((a) => startMockImap(a.scenario || scenario({
+      MOCK_ACCOUNTS.map((a) => a.graph ? null : startMockImap(a.scenario || scenario({
         owner: a.email,
         subjectPrefix: a.subjectPrefix,
         inbox: a.inbox,
@@ -324,10 +332,16 @@ export const config = {
         nestedMailboxes: a.nestedMailboxes,
       }))),
     );
-    seededAccounts = MOCK_ACCOUNTS.map((a, i) => mockAccount({
+    // A Graph entry ({ graph: true, account }) carries its whole seeded account:
+    // no IMAP server, no password, the token in the credentials file.
+    seededAccounts = MOCK_ACCOUNTS.map((a, i) => a.graph ? a.account : mockAccount({
       ...a, port: mockServers[i].port, smtpPort: mockServers[i].smtpPort,
     }));
     credentialsPath = seedAccounts(testDataDir, seededAccounts);
+
+    // Outlook accounts talk to Microsoft Graph, not IMAP. The backup specs for
+    // them reach this stand-in through MAILVAULT_GRAPH_BASE (loopback only).
+    mockGraph = await startMockGraph();
 
     // onPrepare runs in the launcher, before() runs in each worker — module state
     // does not cross that boundary, but the environment workers are spawned with does.
@@ -343,10 +357,12 @@ export const config = {
     // could only ever read back "not there".
     process.env.E2E_DATA_DIR = testDataDir;
     process.env.E2E_MOCK_ACCOUNTS = JSON.stringify(seededAccounts);
-    process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map(({ host, port, smtpPort }) => ({ host, port, smtpPort })));
+    process.env.E2E_MOCK_SERVERS = JSON.stringify(mockServers.map((s) => s ? { host: s.host, port: s.port, smtpPort: s.smtpPort } : null));
     process.env.E2E_MOCK_INBOX_SIZES = JSON.stringify(MOCK_ACCOUNTS.map((a) => a.inbox || 40));
+    process.env.E2E_MOCK_GRAPH = JSON.stringify({ base: mockGraph.base, origin: mockGraph.origin });
 
-    mockServers.forEach((s, i) => console.log(`[wdio] Mock for ${MOCK_ACCOUNTS[i].email}: IMAP ${s.host}:${s.port}, SMTP ${s.host}:${s.smtpPort}`));
+    mockServers.forEach((s, i) => { if (s) console.log(`[wdio] Mock for ${MOCK_ACCOUNTS[i].email}: IMAP ${s.host}:${s.port}, SMTP ${s.host}:${s.smtpPort}`); });
+    console.log(`[wdio] Mock Graph: ${mockGraph.base}`);
 
     return new Promise((resolve) => {
       // Trace level in CI: tauri-wd relays the app's stdout lines at
@@ -367,6 +383,9 @@ export const config = {
           // Same hatch for the mock SMTP listener, same loopback-only rule.
           // Without it lettre insists on STARTTLS and no send can ever succeed.
           MAILVAULT_SMTP_PLAINTEXT: '1',
+          // Graph requests go to the loopback mock above. The app ignores any
+          // base that is not loopback, so a shipped binary cannot be pointed away.
+          MAILVAULT_GRAPH_BASE: mockGraph.base,
         },
       });
 
@@ -389,7 +408,8 @@ export const config = {
   },
 
   onComplete: function () {
-    mockServers.forEach((s) => s.stop());
+    mockServers.forEach((s) => s?.stop());
+    mockGraph?.stop();
 
     if (tauriWd) {
       // Negative pid = whole group: tauri-wd plus the app it launched. Killing
@@ -443,6 +463,7 @@ export const config = {
     browser.mockAccounts = accounts;
     browser.mockImap = JSON.parse(process.env.E2E_MOCK_SERVERS || '[]');
     browser.mockInboxSizes = JSON.parse(process.env.E2E_MOCK_INBOX_SIZES || '[]');
+    browser.mockGraph = JSON.parse(process.env.E2E_MOCK_GRAPH || 'null');
     browser.hasCredentials = true;
     browser.testDataDir = testDataDir;
   },
