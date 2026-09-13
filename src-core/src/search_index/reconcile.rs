@@ -6,12 +6,12 @@
 //! `progress` are always called with no guard held: the app's callbacks lock
 //! the same mutex.
 
-use super::db::meta_set;
+use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
 use crate::maildir::{uid_file_map, vault_filename_uid};
 use rusqlite::{params, Connection};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 
@@ -115,21 +115,23 @@ pub fn count_disk_files(maildir_root: &Path) -> u64 {
         .sum()
 }
 
-/// `<uid>:` files in `cur`, first entry per uid wins. A missing directory is
-/// empty; `None` when it exists but cannot be read, so the caller never
-/// mistakes an unreadable folder for "every message deleted".
-fn list_cur(cur: &Path) -> Option<HashMap<u32, DiskFile>> {
-    let entries = match std::fs::read_dir(cur) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(HashMap::new()),
-        Err(_) => return None,
-    };
+/// `<uid>:` files in `cur`, first entry per uid wins, plus the uids whose
+/// `metadata()` failed. `None` when `cur` cannot be read at all, missing
+/// included: the caller never mistakes that for "every message deleted" (a
+/// folder that is gone is `prune_missing_dirs`'s job).
+fn list_cur(cur: &Path) -> Option<(HashMap<u32, DiskFile>, HashSet<u32>)> {
+    let entries = std::fs::read_dir(cur).ok()?;
     let mut files = HashMap::new();
+    let mut unstatted = HashSet::new();
     for entry in entries.flatten() {
         let filename = entry.file_name().to_string_lossy().into_owned();
         let Some(uid) = vault_filename_uid(&filename) else { continue };
-        // ponytail: a file renamed away between read_dir and stat drops out; its row is removed and re-added next sweep.
-        let Ok(meta) = entry.metadata() else { continue };
+        let Ok(meta) = entry.metadata() else {
+            // Typically a flag rename between read_dir and stat: the message
+            // is still there under another name, so its row must not be removed.
+            unstatted.insert(uid);
+            continue;
+        };
         let mtime_ns = meta
             .modified()
             .ok()
@@ -138,7 +140,18 @@ fn list_cur(cur: &Path) -> Option<HashMap<u32, DiskFile>> {
         let size = i64::try_from(meta.len()).unwrap_or(i64::MAX);
         files.entry(uid).or_insert(DiskFile { uid, filename, size, mtime_ns });
     }
-    Some(files)
+    Some((files, unstatted))
+}
+
+/// The connection at a later lock point, only if it is still the database
+/// this sweep read its rows from (`path` recorded at the first lock point).
+/// A vault switch can close and reopen the index while a batch is parsed
+/// without the lock; `None` or another database is "closed", never a write.
+fn same_conn<'a>(slot: &'a mut Option<Connection>, path: &Option<String>) -> Result<&'a mut Connection, String> {
+    match slot {
+        Some(conn) if conn.path() == path.as_deref() => Ok(conn),
+        _ => Err(closed()),
+    }
 }
 
 pub fn reconcile_mailbox(
@@ -153,13 +166,13 @@ pub fn reconcile_mailbox(
 ) -> Result<ReconcileStats, String> {
     let mut stats = ReconcileStats::default();
     let cur = maildir_root.join(account_id).join(vault_dir).join("cur");
-    // Unreadable folder: leave its rows alone, the next sweep retries.
-    let Some(files) = list_cur(&cur) else { return Ok(stats) };
+    // Missing or unreadable folder: touch nothing.
+    let Some((files, unstatted)) = list_cur(&cur) else { return Ok(stats) };
 
-    let rows = {
+    let (rows, db_path) = {
         let guard = lock(db);
         let conn = guard.as_ref().ok_or_else(closed)?;
-        load_rows(conn, account_id, vault_dir).map_err(db_err)?
+        (load_rows(conn, account_id, vault_dir).map_err(db_err)?, conn.path().map(str::to_owned))
     };
 
     let mut to_parse: Vec<&DiskFile> = Vec::new();
@@ -180,15 +193,23 @@ pub fn reconcile_mailbox(
             _ => to_parse.push(file),
         }
     }
-    let removals: Vec<i64> = rows.iter().filter(|(uid, _)| !files.contains_key(uid)).map(|(_, r)| r.id).collect();
+    let removals: Vec<i64> = rows
+        .iter()
+        .filter(|(uid, _)| !files.contains_key(uid) && !unstatted.contains(uid))
+        .map(|(_, r)| r.id)
+        .collect();
 
     if !removals.is_empty() || !renames.is_empty() {
+        if !keep_going() {
+            stats.interrupted = true;
+            return Ok(stats);
+        }
         let mut guard = lock(db);
-        let conn = guard.as_mut().ok_or_else(closed)?;
+        let conn = same_conn(&mut guard, &db_path)?;
         apply_removals_and_renames(conn, &removals, &renames).map_err(db_err)?;
+        stats.removed = removals.len();
+        stats.renamed = renames.len();
     }
-    stats.removed = removals.len();
-    stats.renamed = renames.len();
 
     // Highest uids first: the newest mail becomes searchable soonest.
     to_parse.sort_unstable_by(|a, b| b.uid.cmp(&a.uid));
@@ -214,7 +235,7 @@ pub fn reconcile_mailbox(
         }
         {
             let mut guard = lock(db);
-            let conn = guard.as_mut().ok_or_else(closed)?;
+            let conn = same_conn(&mut guard, &db_path)?;
             commit_batch(conn, account_id, vault_dir, config, docs).map_err(db_err)?;
         } // guard dropped before progress: the callback locks the same mutex
         progress(stats.parsed + stats.failed);
@@ -353,29 +374,43 @@ fn prune(conn: &mut Connection, present: &[(String, String)]) -> rusqlite::Resul
 }
 
 /// Off: every indexed row's FTS entry is rewritten without its body (subject
-/// and addresses from `messages`), then the index file is compacted so the
-/// body tokens leave the disk. On: disabled rows become pending and the next
-/// sweep re-parses them.
+/// and addresses from `messages`) and `vacuum_pending` is set, all in one
+/// transaction; the file is compacted later by `compact_if_pending`. On:
+/// disabled rows become pending and the next sweep re-parses them.
 pub fn set_bodies_enabled(db: &SharedConn, enabled: bool) -> Result<(), String> {
     let mut guard = lock(db);
     let conn = guard.as_mut().ok_or_else(closed)?;
     let tx = conn.transaction().map_err(db_err)?;
+    // Flags in the same transaction as the rows: the worker compares bodies_enabled to decide whether to toggle.
     if enabled {
         tx.execute("UPDATE messages SET body_state = ?1 WHERE body_state = ?2", [BODY_PENDING, BODY_DISABLED])
             .map_err(db_err)?;
+        meta_set(&tx, "bodies_enabled", "1")?;
     } else {
         strip_bodies(&tx).map_err(db_err)?;
+        meta_set(&tx, "bodies_enabled", "0")?;
+        meta_set(&tx, "vacuum_pending", "1")?;
     }
-    // Same transaction as the rows: the worker compares this flag to decide whether to toggle.
-    meta_set(&tx, "bodies_enabled", if enabled { "1" } else { "0" })?;
-    tx.commit().map_err(db_err)?;
-    if !enabled {
-        conn.execute_batch(
-            "INSERT INTO msg_fts(msg_fts) VALUES('optimize'); INSERT INTO msg_cjk(msg_cjk) VALUES('optimize'); VACUUM;",
-        )
+    tx.commit().map_err(db_err)
+}
+
+/// When bodies were turned off: purge the deleted body tokens from the FTS
+/// segments, rewrite the file and truncate the WAL so no body page stays on
+/// disk. Holds the lock throughout, so the worker calls it only when idle.
+/// `Ok(false)` when nothing was pending.
+pub fn compact_if_pending(db: &SharedConn) -> Result<bool, String> {
+    let guard = lock(db);
+    let conn = guard.as_ref().ok_or_else(closed)?;
+    if meta_get(conn, "vacuum_pending").as_deref() != Some("1") {
+        return Ok(false);
+    }
+    conn.execute_batch("INSERT INTO msg_fts(msg_fts) VALUES('optimize'); INSERT INTO msg_cjk(msg_cjk) VALUES('optimize'); VACUUM;")
         .map_err(db_err)?;
-    }
-    Ok(())
+    // Cleared before the checkpoint so this write is truncated away with the rest.
+    // ponytail: a failed checkpoint after this leaves the flag clear; the exclusive connection has no reader to make it busy.
+    meta_set(conn, "vacuum_pending", "0")?;
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").map_err(db_err)?;
+    Ok(true)
 }
 
 fn strip_bodies(conn: &Connection) -> rusqlite::Result<()> {
@@ -450,6 +485,26 @@ mod tests {
         st.query_map([q], |r| r.get(0)).unwrap().map(|r| r.unwrap()).collect()
     }
 
+    /// `eml` with a UTF-8 charset, so a CJK body survives mailparse's us-ascii default.
+    fn eml_utf8(subject: &str, body: &str) -> String {
+        eml(subject, body).replacen("\r\n\r\n", "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n", 1)
+    }
+
+    fn cjk_hits(v: &Vault, q: &str) -> i64 {
+        let g = crate::search_index::lock(&v.db);
+        g.as_ref().unwrap().query_row("SELECT count(*) FROM msg_cjk WHERE msg_cjk MATCH ?1", [q], |r| r.get(0)).unwrap()
+    }
+
+    fn row_count(db: &SharedConn) -> i64 {
+        crate::search_index::lock(db).as_ref().unwrap().query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap()
+    }
+
+    fn put_many(v: &Vault, n: u32) {
+        for uid in 1..=n {
+            put(v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml(&format!("m{uid}"), "x"));
+        }
+    }
+
     const ON: IndexConfig = IndexConfig { bodies: true };
     const OFF: IndexConfig = IndexConfig { bodies: false };
 
@@ -488,17 +543,23 @@ mod tests {
     #[test]
     fn rewritten_file_is_reparsed_and_deleted_file_is_removed() {
         let v = vault();
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Old subject", "old words"));
-        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Goner", "vanishing"));
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Old subject 古い", "old words"));
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Goner 消える", "vanishing"));
         let n = AtomicUsize::new(0);
         run(&v, "a1", "INBOX", ON, &n);
-        put(&v, "a1", "INBOX", "1:2,.eml", &eml("New subject", "brand new longer words here"));
+        assert_eq!((cjk_hits(&v, "\"古 い\""), cjk_hits(&v, "\"消 え る\"")), (1, 1));
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("New subject 新しい", "brand new longer words here"));
         std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/2:2,.eml")).unwrap();
         let s = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((s.parsed, s.removed), (1, 1));
         assert!(fts_hits(&v, "\"old words\"").is_empty());
         assert_eq!(fts_hits(&v, "\"brand new\"").len(), 1);
         assert!(fts_hits(&v, "\"vanishing\"").is_empty());
+        assert_eq!(
+            (cjk_hits(&v, "\"古 い\""), cjk_hits(&v, "\"消 え る\""), cjk_hits(&v, "\"新 し い\"")),
+            (0, 0, 1),
+            "msg_cjk drops the rewritten and the removed text too"
+        );
     }
 
     #[test]
@@ -548,6 +609,11 @@ mod tests {
         let removed = prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir"))).unwrap();
         assert_eq!(removed, 1);
         assert!(fts_hits(&v, "\"gamma\"").is_empty());
+        assert_eq!(
+            (fts_hits(&v, "\"alpha\"").len(), fts_hits(&v, "\"beta\"").len()),
+            (1, 1),
+            "prune keeps the folders still on disk"
+        );
     }
 
     #[test]
@@ -575,5 +641,102 @@ mod tests {
         let hit: i64 = g.as_ref().unwrap()
             .query_row("SELECT count(*) FROM msg_cjk WHERE msg_cjk MATCH '\"会 議\"'", [], |r| r.get(0)).unwrap();
         assert_eq!(hit, 1);
+    }
+
+    #[test]
+    fn sweep_stops_when_the_connection_is_swapped() {
+        let a = vault();
+        let b = vault();
+        put_many(&a, BATCH as u32 + 5);
+        // parse runs without the lock: a vault switch (close + reopen elsewhere) lands here.
+        let parse = |raw: &[u8], uid: u32, name: &str| {
+            let other = crate::search_index::lock(&b.db).take();
+            if other.is_some() {
+                *crate::search_index::lock(&a.db) = other;
+            }
+            fake_parse(raw, uid, name)
+        };
+        let res = reconcile_mailbox(&a.db, &a.root.join("Maildir"), "a1", "INBOX", ON, &parse, &|| true, &mut |_| {});
+        assert!(res.as_ref().is_err_and(|e| e.contains("closed")), "{res:?}");
+        assert_eq!(row_count(&a.db), 0, "vault B's index got none of vault A's rows");
+    }
+
+    #[test]
+    fn missing_cur_removes_nothing() {
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "one"));
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "two"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        std::fs::remove_dir_all(v.root.join("Maildir/a1/INBOX/cur")).unwrap();
+        let s = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(s, ReconcileStats::default());
+        assert_eq!(row_count(&v.db), 2);
+        assert_eq!((fts_hits(&v, "\"alpha\"").len(), fts_hits(&v, "\"beta\"").len()), (1, 1));
+        assert_eq!(prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir"))).unwrap(), 1);
+        assert_eq!(row_count(&v.db), 0);
+        assert_eq!((fts_hits(&v, "\"alpha\"").len(), fts_hits(&v, "\"beta\"").len()), (0, 0));
+    }
+
+    #[test]
+    fn callbacks_that_lock_the_same_mutex_do_not_deadlock() {
+        let v = vault();
+        put_many(&v, BATCH as u32 + 1);
+        let Vault { _tmp, root, db } = v;
+        let db = std::sync::Arc::new(db);
+        let shared = db.clone();
+        let (tx, rx) = std::sync::mpsc::channel();
+        // On a thread with a timeout, so a deadlock fails the test instead of hanging the run.
+        std::thread::spawn(move || {
+            let keep_going = || row_count(&shared) >= 0;
+            let mut seen = Vec::new();
+            let res = reconcile_mailbox(&shared, &root.join("Maildir"), "a1", "INBOX", ON, &fake_parse, &keep_going, &mut |n| {
+                seen.push((n, row_count(&shared)))
+            });
+            let _ = tx.send((res, seen));
+        });
+        let (res, seen) = rx.recv_timeout(std::time::Duration::from_secs(60)).expect("deadlock: a callback locked the held mutex");
+        assert_eq!(res.unwrap().parsed, BATCH + 1);
+        assert_eq!(seen, vec![(BATCH, BATCH as i64), (BATCH + 1, BATCH as i64 + 1)], "each batch is committed before its progress call");
+        assert_eq!(row_count(&db), BATCH as i64 + 1);
+    }
+
+    #[test]
+    fn closing_mid_sweep_returns_closed() {
+        let v = vault();
+        put_many(&v, BATCH as u32 + 1);
+        let calls = AtomicUsize::new(0);
+        let keep_going = || {
+            if calls.fetch_add(1, Ordering::SeqCst) == 1 {
+                *crate::search_index::lock(&v.db) = None;
+            }
+            true
+        };
+        let res = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &fake_parse, &keep_going, &mut |_| {});
+        assert!(res.as_ref().is_err_and(|e| e.contains("closed")), "{res:?}");
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn bodies_off_defers_compaction_until_asked() {
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml_utf8("Weekly report", "confidential 機密 numbers"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!((fts_hits(&v, "\"confidential\"").len(), cjk_hits(&v, "\"機 密\"")), (1, 1));
+
+        set_bodies_enabled(&v.db, false).unwrap();
+        assert_eq!((fts_hits(&v, "\"confidential\"").len(), cjk_hits(&v, "\"機 密\"")), (0, 0), "body words leave both tables");
+        assert_eq!(fts_hits(&v, "\"weekly\"").len(), 1);
+        let meta = |k: &str| db::meta_get(crate::search_index::lock(&v.db).as_ref().unwrap(), k);
+        assert_eq!(meta("bodies_enabled").as_deref(), Some("0"));
+        assert_eq!(meta("vacuum_pending").as_deref(), Some("1"));
+        let wal_len = || std::fs::metadata(v.root.join("search_index/index.db-wal")).map_or(0, |m| m.len());
+        assert!(wal_len() > 0, "precondition: the toggle's pages sit in the WAL");
+
+        assert_eq!(compact_if_pending(&v.db), Ok(true));
+        assert_eq!(meta("vacuum_pending").as_deref(), Some("0"));
+        assert_eq!(wal_len(), 0, "the checkpoint truncates the WAL, so no body pages linger in it");
+        assert_eq!(compact_if_pending(&v.db), Ok(false));
     }
 }
