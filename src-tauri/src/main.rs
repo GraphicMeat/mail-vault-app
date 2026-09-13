@@ -1835,25 +1835,31 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 
 /// Point the app at a folder that already holds the mail (drive reconnected at
 /// a new path, or the folder was moved by hand).
+///
+/// Async + blocking thread: closing the search index waits on its mutex.
 #[tauri::command]
-fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
-    search_index::close(&app_handle);
-    let result = vault::adopt(&app_handle, &path);
-    search_index::reopen(&app_handle);
-    let status = result?;
-    // The daemon reads the storage location once at startup — restart it so it
-    // does not keep syncing into the old folder.
-    shutdown_daemon_child();
-    let _ = app_handle.emit("vault-status", status.clone());
-    Ok(status)
+async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
+    tokio::task::spawn_blocking(move || {
+        search_index::close(&app_handle);
+        let result = vault::adopt(&app_handle, &path);
+        search_index::reopen(&app_handle);
+        let status = result?;
+        // The daemon reads the storage location once at startup — restart it so it
+        // does not keep syncing into the old folder.
+        shutdown_daemon_child();
+        let _ = app_handle.emit("vault-status", status.clone());
+        Ok(status)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Copy the mail data to `path`, verify it, delete the originals, switch over.
 #[tauri::command]
 async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
-    search_index::close(&app_handle);
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
+        search_index::close(&handle); // waits on the index mutex: not on a tokio worker
         let emitter = handle.clone();
         vault::move_to(&handle, &path, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
@@ -1871,9 +1877,9 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
 /// Bring the mail back into the app data dir, then stop using the custom folder.
 #[tauri::command]
 async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
-    search_index::close(&app_handle);
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
+        search_index::close(&handle); // waits on the index mutex: not on a tokio worker
         let emitter = handle.clone();
         vault::move_to_default(&handle, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
@@ -1889,15 +1895,20 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 }
 
 /// Go back to storing mail in the app data dir. Does not move anything.
+/// Async + blocking thread: closing the search index waits on its mutex.
 #[tauri::command]
-fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
-    search_index::close(&app_handle);
-    let result = vault::reset(&app_handle);
-    search_index::reopen(&app_handle);
-    let status = result?;
-    shutdown_daemon_child();
-    let _ = app_handle.emit("vault-status", status.clone());
-    Ok(status)
+async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
+    tokio::task::spawn_blocking(move || {
+        search_index::close(&app_handle);
+        let result = vault::reset(&app_handle);
+        search_index::reopen(&app_handle);
+        let status = result?;
+        shutdown_daemon_child();
+        let _ = app_handle.emit("vault-status", status.clone());
+        Ok(status)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
@@ -5463,6 +5474,7 @@ fn main() {
                 vault_status.status
             );
             // After resolve: the index lives in the vault root resolve just picked.
+            // Only spawns; the worker thread opens the index.
             search_index::start(app.handle());
 
             // A vault written before 2.5.0's `.eml` rename, or by any build

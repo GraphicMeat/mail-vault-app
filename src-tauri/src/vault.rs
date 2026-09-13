@@ -93,9 +93,10 @@ fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
     std::fs::write(dir.join(MARKER_FILE), data).map_err(|e| format!("Cannot write vault marker: {}", e))
 }
 
-/// True if the folder already holds mail data, marker or not.
+/// True if the folder already holds mail data, marker or not. A search index
+/// alone is derived data, not mail.
 fn looks_like_vault(dir: &Path) -> bool {
-    VAULT_DIRS.iter().any(|d| dir.join(d).exists())
+    VAULT_DIRS.iter().filter(|d| **d != "search_index").any(|d| dir.join(d).exists())
 }
 
 /// Resolve the configured vault (if any) and start security-scoped access.
@@ -387,13 +388,22 @@ fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
 }
 
 /// Copy every vault dir present in `src_root` into `dst_root` and check it all
-/// arrived. Nothing is deleted here — the caller switches over first.
+/// arrived. Nothing is deleted from the source here — the caller switches over
+/// first. Only a derived `search_index` at the destination is cleared.
 /// Returns (dirs copied, files copied, bytes copied).
 fn copy_and_verify<F: Fn(MoveProgress)>(
     src_root: &Path,
     dst_root: &Path,
     on_progress: &F,
 ) -> Result<(Vec<&'static str>, usize, u64), String> {
+    // A leftover index at the destination is derived data. Left in place, copy_tree's
+    // size-equal skip could keep its file, or pair a fresh index with a stale -wal.
+    match std::fs::remove_dir_all(dst_root.join("search_index")) {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
+            return Err(format!("Cannot clear the old search index at {}: {}", dst_root.display(), e));
+        }
+        _ => {}
+    }
     let present: Vec<&'static str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
     let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
 

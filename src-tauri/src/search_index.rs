@@ -3,6 +3,9 @@
 //! the index around vault switches. The logic lives in
 //! `mailvault_core::search_index`. Spec: docs/superpowers/specs/2026-09-13-offline-search-index-design.md §6.
 //!
+//! Only the worker thread opens the index (it runs `quick_check`); the main
+//! thread and tokio workers never open it or wait on its mutex.
+//!
 //! Lock order: `db` may be held while `root` or `phase` is taken (status_json
 //! only); never take `root` or `phase` and then `db`.
 
@@ -10,16 +13,21 @@ use mailvault_core::search_index::{self as core, db, lock, reconcile::{self, Ind
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::{mpsc, Mutex};
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 use tracing::{info, warn};
 
-const SWEEP_EVERY: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+/// The longest gap between full passes, however many nudges arrive in between.
+pub(crate) const SWEEP_EVERY: Duration = Duration::from_secs(15 * 60);
 
 pub enum Signal {
     Sweep,
     Nudge { account_id: String, vault_dir: String },
     Rebuild,
-    Configure(IndexConfig),
+    /// The config itself is read from state on every pass; this only wakes the worker.
+    Configure,
+    /// A vault operation finished: open the current root, then a full pass.
+    Reopen,
 }
 
 #[derive(Default)]
@@ -104,7 +112,8 @@ fn open_into(app: &tauri::AppHandle, st: &SearchIndexState) {
     }
 }
 
-/// Before a vault operation: stop the sweep and release the files.
+/// Before a vault operation: stop the sweep and release the files. Waits on the
+/// DB mutex, so callers run it on a blocking thread.
 pub fn close(app: &tauri::AppHandle) {
     let st = app.state::<SearchIndexState>();
     st.interrupt.store(true, SeqCst); // a running sweep stops at its next check
@@ -112,11 +121,10 @@ pub fn close(app: &tauri::AppHandle) {
     *g(&st.root) = None;
 }
 
-/// After a vault operation, success or not: open whatever root is current now.
+/// After a vault operation, success or not: the worker opens whatever root is
+/// current then. Status reports `available: false` until it has.
 pub fn reopen(app: &tauri::AppHandle) {
-    let st = app.state::<SearchIndexState>();
-    open_into(app, &st);
-    send(&st, Signal::Sweep);
+    send(&app.state::<SearchIndexState>(), Signal::Reopen);
 }
 
 fn send(st: &SearchIndexState, s: Signal) {
@@ -148,10 +156,10 @@ fn emit(app: &tauri::AppHandle, st: &SearchIndexState) {
     let _ = app.emit("search-index-progress", status_json(st));
 }
 
-/// Open the index and spawn the worker. Called from `setup` after `vault::resolve`.
+/// Spawn the worker, which opens the index before its first wait. Called from
+/// `setup` after `vault::resolve`.
 pub fn start(app: &tauri::AppHandle) {
     let st = app.state::<SearchIndexState>();
-    open_into(app, &st);
     let (tx, rx) = mpsc::channel::<Signal>();
     *g(&st.signals) = Some(tx);
     let app = app.clone();
@@ -171,28 +179,27 @@ pub fn start(app: &tauri::AppHandle) {
 /// What one drained burst of signals asks the worker to do.
 #[derive(Debug, PartialEq)]
 pub(crate) struct Plan {
+    pub reopen: bool,
     pub rebuild: bool,
-    /// The latest configure in the burst.
-    pub configure: Option<IndexConfig>,
-    /// `Some` only when every signal was a nudge for this one folder; otherwise a full sweep.
+    /// `Some` only when every signal was a nudge for this one folder; otherwise a full pass.
     pub only: Option<(String, String)>,
 }
 
 pub(crate) fn plan(queue: Vec<Signal>) -> Plan {
-    let mut p = Plan { rebuild: false, configure: None, only: None };
+    let mut p = Plan { reopen: false, rebuild: false, only: None };
     let mut full = false;
     let mut nudges: Vec<(String, String)> = Vec::new();
     for s in queue {
         match s {
-            Signal::Configure(c) => {
-                p.configure = Some(c);
+            Signal::Reopen => {
+                p.reopen = true;
                 full = true;
             }
             Signal::Rebuild => {
                 p.rebuild = true;
                 full = true;
             }
-            Signal::Sweep => full = true,
+            Signal::Sweep | Signal::Configure => full = true,
             Signal::Nudge { account_id, vault_dir } => nudges.push((account_id, vault_dir)),
         }
     }
@@ -204,15 +211,40 @@ pub(crate) fn plan(queue: Vec<Signal>) -> Plan {
     p
 }
 
+/// A scoped pass becomes a full one once the last full pass is `SWEEP_EVERY` old.
+pub(crate) fn needs_full(since_last_full: Duration, planned_full: bool) -> bool {
+    planned_full || since_last_full >= SWEEP_EVERY
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum BodiesAction {
+    None,
+    /// No flag stored (fresh index): write it, nothing to strip or re-parse.
+    RecordOnly,
+    Toggle,
+}
+
+/// Compare the stored `bodies_enabled` flag with the configured setting.
+pub(crate) fn bodies_action(stored: Option<&str>, want: bool) -> BodiesAction {
+    match stored {
+        None => BodiesAction::RecordOnly,
+        Some(s) if s == if want { "1" } else { "0" } => BodiesAction::None,
+        Some(_) => BodiesAction::Toggle,
+    }
+}
+
 fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
     let st = app.state::<SearchIndexState>();
+    open_into(&app, &st); // here, not in setup: open runs quick_check
+    let mut last_full = Instant::now();
     loop {
         // An interrupt still set here arrived after the last drain: its signal was
         // either drained already (its pass was cut short) or is queued. Go again now.
         let first = if st.interrupt.load(SeqCst) {
             Signal::Sweep
         } else {
-            match rx.recv_timeout(SWEEP_EVERY) {
+            // Counted from the last full pass, so a stream of nudges cannot postpone it.
+            match rx.recv_timeout(SWEEP_EVERY.saturating_sub(last_full.elapsed())) {
                 Ok(s) => s,
                 Err(mpsc::RecvTimeoutError::Timeout) => Signal::Sweep,
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
@@ -225,47 +257,92 @@ fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
         while let Ok(s) = rx.try_recv() {
             queue.push(s);
         }
-        let Plan { rebuild, configure, only } = plan(queue);
-        let Some(config) = *g(&st.config) else { continue }; // nothing until the frontend configures
+        let Plan { reopen, rebuild, only } = plan(queue);
+        let full = needs_full(last_full.elapsed(), only.is_none());
+        run_pass(&app, &st, reopen, rebuild, if full { None } else { only });
+        // Not cut short = complete. A pass skipped because the index is unconfigured
+        // or closed counts too: the configure or reopen that changes that forces its
+        // own full pass. Resetting here is also what keeps a zero timeout from spinning.
+        if full && !st.interrupt.load(SeqCst) {
+            last_full = Instant::now();
+        }
+    }
+}
 
-        if rebuild {
-            let current = g(&st.root).clone();
-            if let Some(root) = current {
-                *lock(&st.db) = None; // drop = checkpoint; then the files can go
-                for suffix in ["", "-wal", "-shm"] {
-                    let _ = std::fs::remove_file(root.join(db::DB_DIR).join(format!("{}{}", db::DB_FILE, suffix)));
-                }
-                open_into(&app, &st);
-            }
-        }
-        // Read after a rebuild's reopen, which resolves the vault root afresh.
-        let Some(root) = g(&st.root).clone() else { continue };
-        let maildir = root.join("Maildir");
+fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<(String, String)>) {
+    if reopen {
+        open_into(app, st);
+    }
+    let Some(config) = *g(&st.config) else { return }; // nothing until the frontend configures
+    if rebuild {
+        rebuild_index(app, st);
+    }
+    // Read after a reopen or rebuild, which resolve the vault root afresh.
+    let Some(root) = g(&st.root).clone() else { return };
+    let maildir = root.join("Maildir");
 
-        if let Some(new) = configure {
-            let current = lock(&st.db).as_ref().and_then(|c| db::meta_get(c, "bodies_enabled"));
-            let want = if new.bodies { "1" } else { "0" };
-            if current.as_deref() != Some(want) {
-                if let Err(e) = reconcile::set_bodies_enabled(&st.db, new.bodies) {
-                    warn!("search index: bodies toggle failed: {e}");
-                }
+    // Every pass, not only after a configure: one drained while the index was
+    // closed, or a toggle that lost a race with a vault switch, lands here.
+    let action = {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else { return };
+        let action = bodies_action(db::meta_get(conn, "bodies_enabled").as_deref(), config.bodies);
+        if action == BodiesAction::RecordOnly {
+            if let Err(e) = db::meta_set(conn, "bodies_enabled", if config.bodies { "1" } else { "0" }) {
+                // Sweeping without the flag could index bodies a later "off" would never strip.
+                warn!("search index: recording the bodies setting failed: {e}");
+                return;
             }
         }
-        sweep(&app, &st, &maildir, config, only);
-        // Deferred optimize + VACUUM + WAL truncate after bodies-off, only when nothing is pending.
-        if !st.interrupt.load(SeqCst) {
-            match reconcile::compact_if_pending(&st.db) {
-                Ok(true) => emit(&app, &st),
-                Ok(false) => {}
-                Err(e) => warn!("search index compaction: {e}"),
+        action
+    };
+    if action == BodiesAction::Toggle {
+        match reconcile::set_bodies_enabled(&st.db, config.bodies) {
+            Ok(()) => {}
+            Err(e) if e.contains("closed") => return, // the next pass retries
+            Err(e) => warn!("search index: bodies toggle failed: {e}"),
+        }
+    }
+    sweep(app, st, &maildir, config, only);
+    // Deferred optimize + VACUUM + WAL truncate after bodies-off, only when nothing is pending.
+    if !st.interrupt.load(SeqCst) {
+        match reconcile::compact_if_pending(&st.db) {
+            Ok(true) => emit(app, st),
+            Ok(false) => {}
+            Err(e) => warn!("search index compaction: {e}"),
+        }
+    }
+}
+
+/// Delete the index files and open a fresh index. A file that will not go is
+/// never reopened: the index stays unavailable instead.
+fn rebuild_index(app: &tauri::AppHandle, st: &SearchIndexState) {
+    let Some(root) = g(&st.root).clone() else { return };
+    *lock(&st.db) = None; // drop = checkpoint; then the files can go
+    let dir = root.join(db::DB_DIR);
+    let mut stuck = false;
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let path = dir.join(format!("{}{suffix}", db::DB_FILE));
+        if let Err(e) = std::fs::remove_file(&path) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                warn!("search index rebuild: cannot remove {}: {e}", path.display());
+                stuck = true;
             }
         }
+    }
+    if stuck {
+        *g(&st.root) = None;
+        *g(&st.phase) = "unavailable";
+        emit(app, st);
+    } else {
+        open_into(app, st);
     }
 }
 
 fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: IndexConfig, only: Option<(String, String)>) {
     *g(&st.phase) = "indexing";
     emit(app, st);
+    let keep_going = || lock(&st.db).is_some() && !st.interrupt.load(SeqCst);
     let full = only.is_none();
     let dirs = match only {
         Some(pair) => vec![pair],
@@ -273,17 +350,19 @@ fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: 
     };
     if full {
         let disk_total = reconcile::count_disk_files(maildir); // walk the vault BEFORE taking the lock
-        if let Some(conn) = lock(&st.db).as_ref() {
-            let _ = db::meta_set(conn, "disk_total", &disk_total.to_string());
+        // A close during the walk: the listing is of a vault that is no longer open.
+        if keep_going() {
+            if let Some(conn) = lock(&st.db).as_ref() {
+                let _ = db::meta_set(conn, "disk_total", &disk_total.to_string());
+            }
         }
         // An unplugged or unreadable vault lists nothing; pruning then would drop the whole index.
-        if maildir.is_dir() {
+        if maildir.is_dir() && keep_going() {
             if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
                 warn!("search index prune: {e}");
             }
         }
     }
-    let keep_going = || lock(&st.db).is_some() && !st.interrupt.load(SeqCst);
     for (account, dir) in dirs {
         let mut on_batch = |_n: usize| emit(app, st);
         match reconcile::reconcile_mailbox(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &mut on_batch) {
@@ -327,7 +406,7 @@ pub async fn search_index_configure(app: tauri::AppHandle, config: ConfigArgs) -
         let cfg = IndexConfig { bodies: config.bodies };
         *g(&st.config) = Some(cfg);
         st.interrupt.store(true, SeqCst); // stop a running sweep at its next batch
-        send(st, Signal::Configure(cfg));
+        send(st, Signal::Configure);
     })
     .await
 }
