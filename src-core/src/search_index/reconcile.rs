@@ -237,12 +237,17 @@ pub fn reconcile_mailbox(
                     stats.failed += 1;
                     continue;
                 }
-                // Unreadable where it stands (permissions, a directory, I/O): recorded
-                // as unparseable, so it counts as indexed and is retried only when
-                // its size or mtime change.
-                Err(_) => {
+                // Never readable at this path (a directory, or a path through a file):
+                // recorded as unparseable, so it counts as indexed and is not re-read.
+                Err(e) if matches!(e.kind(), std::io::ErrorKind::IsADirectory | std::io::ErrorKind::NotADirectory) => {
                     stats.failed += 1;
                     docs.push((file, None));
+                    continue;
+                }
+                // Anything else may pass (permissions fixed, a flaky drive, too many open
+                // files): no row, so it is not counted as indexed and the next pass retries.
+                Err(_) => {
+                    stats.failed += 1;
                     continue;
                 }
             };
@@ -627,6 +632,34 @@ mod tests {
         let n = AtomicUsize::new(0);
         let again = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!((again.failed, again.unchanged), (0, 2), "the unreadable file is not read again");
+        assert_eq!(counts(&v), db::IndexCounts { indexed: 2, total: 2 });
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn a_transient_read_error_is_retried_not_pinned() {
+        use std::os::unix::fs::PermissionsExt;
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("Alpha", "readable"));
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Beta", "padlocked"));
+        let locked = v.root.join("Maildir/a1/INBOX/cur/2:2,.eml");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let n = AtomicUsize::new(0);
+        let s = run(&v, "a1", "INBOX", ON, &n);
+        let has_row = |uid: u32| {
+            let g = crate::search_index::lock(&v.db);
+            g.as_ref().unwrap().query_row("SELECT 1 FROM messages WHERE uid = ?1", [uid], |_| Ok(())).is_ok()
+        };
+        let first = ((s.parsed, s.failed), has_row(1), has_row(2), counts(&v));
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+        assert_eq!(
+            first,
+            ((1, 1), true, false, db::IndexCounts { indexed: 1, total: 2 }),
+            "a permission error leaves no row, so the message is not counted as indexed"
+        );
+        let again = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!((again.parsed, again.unchanged), (1, 1), "the next pass reads it once it is readable");
+        assert_eq!(fts_hits(&v, "\"padlocked\"").len(), 1);
         assert_eq!(counts(&v), db::IndexCounts { indexed: 2, total: 2 });
     }
 
