@@ -2977,6 +2977,22 @@ fn maildir_read_light(
     Ok(Some(email))
 }
 
+/// One slot per requested uid, in request order: `None` when the vault has no
+/// `<uid>:` file or it does not parse. The folder is listed once
+/// (`uid_file_map`); resolving each uid with `find_file_by_uid` rescanned the
+/// whole directory per uid, quadratic over a folder.
+pub(crate) fn read_light_batch_in(cur_dir: &Path, uids: &[u32]) -> Vec<Option<LightEmail>> {
+    let files = mailvault_core::maildir::uid_file_map(cur_dir);
+    uids.iter()
+        .map(|uid| {
+            let path = files.get(uid)?;
+            let filename = path.file_name()?.to_string_lossy().to_string();
+            let raw = fs::read(path).ok()?;
+            parse_eml_bytes_light(&raw, *uid, parse_flags_from_filename(&filename)).ok()
+        })
+        .collect()
+}
+
 #[tauri::command]
 async fn maildir_read_light_batch(
     app_handle: tauri::AppHandle,
@@ -2986,28 +3002,7 @@ async fn maildir_read_light_batch(
 ) -> Result<Vec<Option<LightEmail>>, String> {
     tokio::task::spawn_blocking(move || {
         let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-        let mut results = Vec::with_capacity(uids.len());
-
-        for uid in &uids {
-            match find_file_by_uid(&cur_dir, *uid) {
-                Some(file_path) => {
-                    let filename = file_path.file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_default();
-                    let flags = parse_flags_from_filename(&filename);
-                    match fs::read(&file_path) {
-                        Ok(raw) => match parse_eml_bytes_light(&raw, *uid, flags) {
-                            Ok(email) => results.push(Some(email)),
-                            Err(_) => results.push(None),
-                        },
-                        Err(_) => results.push(None),
-                    }
-                }
-                None => results.push(None),
-            }
-        }
-
-        Ok(results)
+        Ok(read_light_batch_in(&cur_dir, &uids))
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -5737,6 +5732,10 @@ fn main() {
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+#[path = "light_batch_tests.rs"]
+mod light_batch_tests;
 
 #[cfg(test)]
 mod tests {
