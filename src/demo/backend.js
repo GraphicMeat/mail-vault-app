@@ -845,6 +845,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'maildir_read_archived_cached': case 'maildir_read_archived': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.vaultPresent ? clone(row) : null; }
       case 'maildir_save_archived_cache': case 'maildir_clear_cache': return { success: true, simulated: true };
       case 'local_index_remove': return { removed: 1, simulated: true };
+      case 'custody_status': return { available: true, error: null, path: null, simulated: true };
       case 'verify_archived_emails': {
         const uids = args.uids || []; const expected = args.expectedIds || {};
         const verified = uids.filter(uid => { const row = find({ accountId, mailbox, uid }); return !!row?.vaultPresent && (!expected[uid] || expected[uid] === row.messageId); });

@@ -64,7 +64,7 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
   let account;
   let other;
 
-  const draftSubjects = (accountId) => localIndex(accountId, 'Drafts').map((e) => e.subject);
+  const draftSubjects = async (accountId) => (await localIndex(accountId, 'Drafts')).map((e) => e.subject);
 
   /** Type a draft, let it autosave, then leave it in the vault with no window. */
   async function orphanedDraft(subject, { to, body, accountId, fromKey, files } = {}) {
@@ -81,7 +81,7 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
     if (files) expect(await attachViaInput(files)).toBe(true);
     await waitForLocalDraft(id, subject);
 
-    const snapshot = snapshotDraft(id, subject);
+    const snapshot = await snapshotDraft(id, subject);
     // Closing is a discard, which is what takes the vault copy with it — the
     // point here is to be rid of the WINDOW.
     await closeComposeHard();
@@ -104,7 +104,7 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
         timeout: 30_000,
         interval: 500,
         timeoutMsg: `The re-seeded draft "${subject}" never rendered as a row in Drafts — ` +
-          `index holds ${JSON.stringify(draftSubjects(owner.id))}`,
+          `index holds ${JSON.stringify(await draftSubjects(owner.id))}`,
       },
     );
     expect(await clickRow(subject)).toBe(true);
@@ -185,8 +185,8 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
     // REPLACED the draft. A fresh uid would leave both rows in the folder and
     // the user with two copies of one message.
     expect(listDrafts(account.id).length).toBe(before);
-    expect(draftSubjects(account.id)).toContain(FINISHED);
-    expect(draftSubjects(account.id)).not.toContain(SUBJECT);
+    expect(await draftSubjects(account.id)).toContain(FINISHED);
+    expect(await draftSubjects(account.id)).not.toContain(SUBJECT);
     // Deliberately not a superstring of the old subject: this reads raw .eml
     // text, and a continued subject that contains the old one matches itself.
     expect(readDrafts(account.id).some((t) => flatten(t).includes(SUBJECT))).toBe(false);
@@ -195,11 +195,11 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
   it('carries the threading headers a reply draft was written with', async function () {
     const SUBJECT = 'Re: keeping the thread';
     await orphanedDraft(SUBJECT, { to: 'recipient@example.com', body: 'Answering below' });
-    const entry = localIndex(account.id, 'Drafts').find((e) => e.subject === SUBJECT);
+    const entry = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === SUBJECT);
     // A fresh compose has no parent, so seed the headers a reply draft would
     // have had — the index is the only place they survive the vault parse.
     await restoreDraft(account.id, {
-      rawBase64: snapshotDraft(account.id, SUBJECT).rawBase64,
+      rawBase64: (await snapshotDraft(account.id, SUBJECT)).rawBase64,
       entry: {
         ...entry,
         in_reply_to: '<parent@mock.test>',
@@ -212,7 +212,7 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
     await waitForLocalDraft(account.id, 'Re: keeping the thread, continued');
 
     // Lose these and continuing a reply starts a new thread on the other end.
-    const saved = localIndex(account.id, 'Drafts')
+    const saved = (await localIndex(account.id, 'Drafts'))
       .find((e) => e.subject === 'Re: keeping the thread, continued');
     expect(saved.in_reply_to).toBe('<parent@mock.test>');
     expect(saved.references).toBe('<root@mock.test> <parent@mock.test>');
@@ -235,7 +235,7 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
 
     await setField('compose-subject', 'Attachment still here');
     await waitForLocalDraft(account.id, 'Attachment still here');
-    const saved = localIndex(account.id, 'Drafts').find((e) => e.subject === 'Attachment still here');
+    const saved = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === 'Attachment still here');
     expect(saved.has_attachments).toBe(true);
     expect(flatten(readDrafts(account.id).find((t) => t.includes('Attachment still here'))))
       .toContain('notes.pdf');
@@ -259,8 +259,8 @@ describe('Connected Compose Draft Reopen — a draft row goes back into compose'
 
     await setField('compose-subject', 'Written from the other account, still');
     await waitForLocalDraft(other.id, 'Written from the other account, still');
-    expect(draftSubjects(other.id)).not.toContain(SUBJECT);
-    expect(draftSubjects(account.id)).not.toContain('Written from the other account, still');
+    expect(await draftSubjects(other.id)).not.toContain(SUBJECT);
+    expect(await draftSubjects(account.id)).not.toContain('Written from the other account, still');
   });
 
   it('brings a minimized draft forward rather than opening a second window on it', async function () {

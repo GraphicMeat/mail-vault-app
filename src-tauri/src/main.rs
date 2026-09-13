@@ -77,6 +77,7 @@ use walkdir::WalkDir;
 mod archive;
 mod backup;
 mod commands;
+mod custody;
 mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
 mod export_fetch;
@@ -1841,7 +1842,9 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         search_index::close(&app_handle);
+        custody::close(&app_handle);
         let result = vault::adopt(&app_handle, &path);
+        custody::reopen(&app_handle);
         search_index::reopen(&app_handle);
         let status = result?;
         // The daemon reads the storage location once at startup — restart it so it
@@ -1860,10 +1863,13 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
         search_index::close(&handle); // waits on the index mutex: not on a tokio worker
+        custody::close(&handle);
         let emitter = handle.clone();
-        vault::move_to(&handle, &path, move |p| {
+        let result = vault::move_to(&handle, &path, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
-        })
+        });
+        custody::reopen(&handle); // success or not: whatever root is current now
+        result
     })
     .await
     .map_err(|e| format!("Task join error: {}", e));
@@ -1880,10 +1886,13 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
         search_index::close(&handle); // waits on the index mutex: not on a tokio worker
+        custody::close(&handle);
         let emitter = handle.clone();
-        vault::move_to_default(&handle, move |p| {
+        let result = vault::move_to_default(&handle, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
-        })
+        });
+        custody::reopen(&handle); // success or not: whatever root is current now
+        result
     })
     .await
     .map_err(|e| format!("Task join error: {}", e));
@@ -1900,7 +1909,9 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         search_index::close(&app_handle);
+        custody::close(&app_handle);
         let result = vault::reset(&app_handle);
+        custody::reopen(&app_handle);
         search_index::reopen(&app_handle);
         let status = result?;
         shutdown_daemon_child();
@@ -2440,83 +2451,8 @@ fn maildir_store(
     Ok(())
 }
 
-// ── Local index (local-index.json) ──────────────────────────────────────────
-
 pub(crate) fn local_index_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     Ok(vault::root(app_handle)?.join("maildir").join(account_id).join(mailbox).join("local-index.json"))
-}
-
-#[tauri::command]
-async fn local_index_read(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-) -> Result<Option<String>, String> {
-    let data_dir = vault::root(&app_handle)?;
-    let index_path = data_dir.join("maildir").join(&account_id).join(&mailbox).join("local-index.json");
-
-    if !index_path.exists() {
-        return Ok(None);
-    }
-
-    let content = tokio::fs::read_to_string(&index_path).await
-        .map_err(|e| format!("Failed to read local-index.json: {}", e))?;
-    Ok(Some(content))
-}
-
-#[tauri::command]
-async fn local_index_append(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    entries_json: String,
-) -> Result<(), String> {
-    let data_dir = vault::root(&app_handle)?;
-    let dir_path = data_dir.join("maildir").join(&account_id).join(&mailbox);
-    tokio::fs::create_dir_all(&dir_path).await
-        .map_err(|e| format!("Failed to create dir: {}", e))?;
-    let index_path = dir_path.join("local-index.json");
-
-    let new_entries: Vec<serde_json::Value> = serde_json::from_str(&entries_json)
-        .map_err(|e| format!("Failed to parse entries: {}", e))?;
-
-    let mut existing: Vec<serde_json::Value> = if index_path.exists() {
-        let content = tokio::fs::read_to_string(&index_path).await.unwrap_or_default();
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let new_uids: std::collections::HashSet<u64> = new_entries.iter()
-        .filter_map(|e| e.get("uid").and_then(|u| u.as_u64()))
-        .collect();
-    existing.retain(|e| {
-        e.get("uid").and_then(|u| u.as_u64()).map_or(true, |uid| !new_uids.contains(&uid))
-    });
-    existing.extend(new_entries);
-
-    let tmp_path = index_path.with_extension("json.tmp");
-    let data = serde_json::to_string(&existing)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    tokio::fs::write(&tmp_path, &data).await
-        .map_err(|e| format!("Failed to write tmp: {}", e))?;
-    tokio::fs::rename(&tmp_path, &index_path).await
-        .map_err(|e| format!("Failed to rename: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
-async fn local_index_remove(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<(), String> {
-    let index_path = local_index_path(&app_handle, &account_id, &mailbox)?;
-    // ponytail: sync fs call in an async command — fine for a small JSON file,
-    // same tradeoff maildir_delete_many already makes.
-    prune_local_index(&index_path, &std::collections::HashSet::from([uid]))
 }
 
 // ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
@@ -5230,6 +5166,7 @@ fn main() {
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
         .manage(search_index::SearchIndexState::default())
+        .manage(custody::CustodyState::default())
         .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default());
 
@@ -5317,9 +5254,10 @@ fn main() {
             export_mbox,
             export_mbox_all,
             import_mbox,
-            local_index_read,
-            local_index_append,
-            local_index_remove,
+            custody::local_index_read,
+            custody::local_index_append,
+            custody::local_index_remove,
+            custody::custody_status,
             maildir_repair_generation,
             maildir_orphan_stats,
             maildir_purge_orphans,
@@ -5498,6 +5436,10 @@ fn main() {
                 if vault_status.display_path.is_empty() { "app data dir" } else { &vault_status.display_path },
                 vault_status.status
             );
+            // Custody first and synchronously: the legacy JSON import runs here,
+            // before any command can read or write an entry. The index worker
+            // reads none of this, so it starts right after.
+            custody::open_into(app.handle());
             // After resolve: the index lives in the vault root resolve just picked.
             // Only spawns; the worker thread opens the index.
             search_index::start(app.handle());
@@ -5809,6 +5751,10 @@ mod light_batch_tests;
 #[cfg(test)]
 #[path = "search_index_tests.rs"]
 mod search_index_tests;
+
+#[cfg(test)]
+#[path = "custody_tests.rs"]
+mod custody_tests;
 
 #[cfg(test)]
 mod tests {

@@ -51,7 +51,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
 
   let account;
 
-  const draftSubjects = () => localIndex(account.id, 'Drafts').map((e) => e.subject);
+  const draftSubjects = async () => (await localIndex(account.id, 'Drafts')).map((e) => e.subject);
 
   async function freshCompose() {
     await browser.execute(() => document.activeElement?.blur());
@@ -96,7 +96,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
 
     // And it is indexed as a locally-created draft, which is what keeps a
     // delete from being replayed against a server that never had it.
-    const entry = localIndex(account.id, 'Drafts').find((e) => e.subject === 'Autosaved while typing');
+    const entry = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === 'Autosaved while typing');
     expect(!!entry).toBe(true);
     expect(entry.source).toBe('local_draft');
     expect(entry.flags).toContain('draft');
@@ -131,8 +131,8 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // One compose window is one draft: the rewrite replaces the .eml and its
     // index entry rather than leaving a copy per keystroke pause.
     expect(listDrafts(account.id).length).toBe(afterFirst);
-    expect(draftSubjects()).toContain('Second autosave pass');
-    expect(draftSubjects()).not.toContain('First autosave pass');
+    expect(await draftSubjects()).toContain('Second autosave pass');
+    expect(await draftSubjects()).not.toContain('First autosave pass');
     expect(readDrafts(account.id).some((t) => flatten(t).includes('First autosave pass'))).toBe(false);
   });
 
@@ -235,8 +235,8 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // given travels through the unmount. Allocating a new one here would leave
     // the pre-minimize version behind as a second, stale row.
     expect(listDrafts(account.id).length).toBe(before);
-    expect(draftSubjects()).toContain('Draft after the bubble');
-    expect(draftSubjects()).not.toContain('Draft before the bubble');
+    expect(await draftSubjects()).toContain('Draft after the bubble');
+    expect(await draftSubjects()).not.toContain('Draft before the bubble');
   });
 
   it('takes the draft out of the vault when its bubble is dismissed', async function () {
@@ -254,7 +254,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // the only discard that happens with the compose window already unmounted.
     expect(await closeBubble(0)).toBe(true);
     await browser.waitUntil(
-      async () => !draftSubjects().includes('Bubble X discards this'),
+      async () => !(await draftSubjects()).includes('Bubble X discards this'),
       {
         timeout: 15_000,
         interval: 300,
@@ -282,7 +282,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // The bytes themselves, not a base64 prefix: this stub is pure ASCII, so
     // lettre files it as 7bit rather than base64.
     expect(raw).toContain('%PDF-1.4');
-    const entry = localIndex(account.id, 'Drafts').find((e) => e.subject === 'Draft with an attachment');
+    const entry = (await localIndex(account.id, 'Drafts')).find((e) => e.subject === 'Draft with an attachment');
     expect(entry?.has_attachments).toBe(true);
   });
 
@@ -337,7 +337,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
 
     // The message never left, so it is still a draft. Deleting it here would
     // put the only copy in an outbox bubble the user can dismiss.
-    expect(draftSubjects()).toContain('Draft outlives a failed send');
+    expect(await draftSubjects()).toContain('Draft outlives a failed send');
     expect(readDrafts(account.id).some((t) => flatten(t).includes('Draft outlives a failed send'))).toBe(true);
   });
 
@@ -372,10 +372,10 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // src/services/__tests__/localDrafts.test.js, which was red before it.
     // What this case is worth: it fails if two open windows ever stop being two
     // rows for any other reason.
-    const subs = draftSubjects();
+    const subs = await draftSubjects();
     expect(subs).toContain('First window draft');
     expect(subs).toContain('Second window draft');
-    const uids = localIndex(account.id, 'Drafts')
+    const uids = (await localIndex(account.id, 'Drafts'))
       .filter((e) => (e.subject || '').endsWith('window draft'))
       .map((e) => e.uid);
     expect(new Set(uids).size).toBe(2);
@@ -393,7 +393,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // "On the same mailbox" is the whole contract: a draft belongs to the
     // account the message will leave from, and to no other account's vault.
     expect(readDrafts(other.id).some((t) => flatten(t).includes('Only in the composing account'))).toBe(false);
-    expect(localIndex(other.id, 'Drafts').map((e) => e.subject))
+    expect((await localIndex(other.id, 'Drafts')).map((e) => e.subject))
       .not.toContain('Only in the composing account');
   });
 
@@ -412,7 +412,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
 
     // Discard means gone: the vault copy is the draft, so it has to go too.
     await browser.waitUntil(
-      async () => !draftSubjects().includes('Discarded draft goes away'),
+      async () => !(await draftSubjects()).includes('Discarded draft goes away'),
       {
         timeout: 15_000,
         interval: 300,

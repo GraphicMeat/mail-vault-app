@@ -686,12 +686,13 @@ export const listDrafts = (accountId) => {
 export const readDrafts = (accountId) =>
   listDrafts(accountId).map((name) => readFileSync(join(draftsDir(accountId), name), 'utf8'));
 
-/** local-index.json for a mailbox — the metadata the Drafts list renders from. */
-export function localIndex(accountId, mailbox) {
-  const path = join(appDataDir(browser.testDataDir), 'Maildir', accountId, mailbox, 'local-index.json');
-  if (!existsSync(path)) return [];
+/** The Drafts index entries for a mailbox, read from the app's custody store (the metadata the Drafts list renders from). */
+export async function localIndex(accountId, mailbox) {
+  const raw = await browser.executeAsync((a, m, done) => {
+    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m }).then(done, () => done(null));
+  }, accountId, mailbox);
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
+    return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
@@ -705,12 +706,13 @@ export function localIndex(accountId, mailbox) {
  * actually produced, so a spec that puts it back is not asserting against a
  * hand-written MIME that can drift away from the real one.
  */
-export function snapshotDraft(accountId, subject) {
-  const entry = localIndex(accountId, 'Drafts').find((e) => e.subject === subject);
+export async function snapshotDraft(accountId, subject) {
+  const entries = await localIndex(accountId, 'Drafts');
+  const entry = entries.find((e) => e.subject === subject);
   if (!entry) {
     throw new Error(
       `No local-index entry for draft "${subject}" in ${accountId} — index holds ` +
-      JSON.stringify(localIndex(accountId, 'Drafts').map((e) => e.subject)),
+      JSON.stringify(entries.map((e) => e.subject)),
     );
   }
   const name = listDrafts(accountId).find((f) =>

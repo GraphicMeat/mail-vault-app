@@ -22,13 +22,14 @@ use crate::external_location::{self, SLOT_VAULT};
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 6] = [
+pub const VAULT_DIRS: [&str; 7] = [
     "Maildir",          // the messages
-    "maildir",          // per-mailbox local-index.json
+    "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
     "email_cache",      // header sidecars
     "attachment_cache", // extracted attachments
     "mailboxes",        // per-account folder lists
     "search_index",     // offline search index (derived; rebuilt from Maildir)
+    "custody",          // custody records (what each stored message is); never derived, never deleted
 ];
 
 /// Marker written at the vault root so a re-selected folder can be recognised
@@ -591,6 +592,21 @@ mod tests {
         assert!(!dst.join("search_index/index.db-wal").exists());
         assert_eq!(fs::read(dst.join("search_index/keep.txt")).unwrap(), b"another app's file");
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_move_carries_the_custody_store_byte_for_byte() {
+        let base = tmp("mv-vault-custody");
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(src.join("custody")).unwrap();
+        fs::write(src.join("custody/custody.db"), b"custody rows the user cannot get back").unwrap();
+
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+
+        assert_eq!(fs::read(dst.join("custody/custody.db")).unwrap(), b"custody rows the user cannot get back");
+        assert!(VAULT_DIRS.contains(&"custody"));
         let _ = fs::remove_dir_all(&base);
     }
 
