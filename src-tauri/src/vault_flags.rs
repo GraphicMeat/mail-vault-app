@@ -356,6 +356,132 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     (moved, failed)
 }
 
+/// What one `adopt_dirs` call did. `moved` and `blocked` count locations;
+/// `failed` carries renames the filesystem refused.
+#[derive(Debug, Default)]
+pub struct Adopted {
+    pub moved: usize,
+    pub blocked: usize,
+    pub failed: Vec<String>,
+}
+
+/// Move a mailbox written under a legacy localized name (`from`) under its
+/// storage key (`to`), the one-time adoption for Graph accounts.
+///
+/// The three app-side locations (the Maildir mailbox dir, the index dir, the
+/// sidecar dir with the uid ledger) move as a UNIT, and only when none of
+/// their destinations exists: moving a subset would pair one ledger with
+/// another numbering's vault files. The mirror moves on its own, when its
+/// source exists and its destination does not. `fs::rename` only; nothing is
+/// deleted, an existing destination is left alone and counted as blocked.
+pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
+    fn up(p: &Path) -> Option<PathBuf> {
+        p.parent().map(|q| q.to_path_buf())
+    }
+    fn mv(src: &Path, dst: &Path, out: &mut Adopted) {
+        if let Some(p) = dst.parent() {
+            let _ = fs::create_dir_all(p);
+        }
+        match fs::rename(src, dst) {
+            Ok(()) => out.moved += 1,
+            Err(e) => {
+                warn!("vault_adopt: {:?} -> {:?}: {}", src, dst, e);
+                out.failed.push(format!("{} ({})", src.display(), e));
+            }
+        }
+    }
+
+    let mut out = Adopted::default();
+    let app_side: Vec<(PathBuf, PathBuf)> = [
+        (up(&from.cur), up(&to.cur)),
+        (up(&from.index), up(&to.index)),
+        (Some(from.sidecar_dir.clone()), Some(to.sidecar_dir.clone())),
+    ]
+    .into_iter()
+    .filter_map(|(a, b)| Some((a?, b?)))
+    .collect();
+
+    if app_side.iter().any(|(src, _)| src.exists()) {
+        if app_side.iter().any(|(_, dst)| dst.exists()) {
+            out.blocked += 1;
+        } else {
+            for (src, dst) in &app_side {
+                if src.exists() {
+                    mv(src, dst, &mut out);
+                }
+            }
+        }
+    }
+
+    if let (Some(src), Some(dst)) = (
+        from.mirror_cur.as_deref().and_then(up),
+        to.mirror_cur.as_deref().and_then(up),
+    ) {
+        if src.exists() {
+            if dst.exists() {
+                out.blocked += 1;
+            } else {
+                mv(&src, &dst, &mut out);
+            }
+        }
+    }
+    out
+}
+
+#[derive(Debug, Default, Serialize)]
+pub struct AdoptReport {
+    pub adopted: Vec<String>,
+    pub skipped_both_exist: Vec<String>,
+    pub failed: Vec<String>,
+}
+
+/// The one-time adoption of Graph folders written under localized names.
+/// Every pair is attempted; the command fails only after all of them ran.
+#[tauri::command]
+pub async fn vault_adopt_mailbox_dirs(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    account_email: Option<String>,
+    pairs: Vec<RenamePair>,
+) -> Result<AdoptReport, String> {
+    tokio::task::spawn_blocking(move || {
+        let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
+        let result = (|| -> Result<AdoptReport, String> {
+            let mut report = AdoptReport::default();
+            for p in &pairs {
+                let from = dirs_for(&app_handle, &account_id, &p.from, account_email.as_deref(), root.as_deref())?;
+                let to = dirs_for(&app_handle, &account_id, &p.to, account_email.as_deref(), root.as_deref())?;
+                let out = adopt_dirs(&from, &to);
+                let label = format!("{} -> {}", p.from, p.to);
+                if !out.failed.is_empty() {
+                    report.failed.push(format!("{}: {}", label, out.failed.join("; ")));
+                } else if out.moved > 0 {
+                    report.adopted.push(label);
+                } else if out.blocked > 0 {
+                    report.skipped_both_exist.push(label);
+                }
+            }
+            Ok(report)
+        })();
+        if needs_release {
+            if let Some(ref p) = root {
+                crate::backup::release_backup_path(p);
+            }
+        }
+        let report = result?;
+        info!(
+            "vault_adopt_mailbox_dirs: {} — adopted {:?}, left in place {:?}, failed {}",
+            account_id, report.adopted, report.skipped_both_exist, report.failed.len()
+        );
+        if !report.failed.is_empty() {
+            return Err(format!("vault adopt incomplete: {}", report.failed.join("; ")));
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 /// The local half of a folder rename: the server already moved the subtree,
 /// this moves the directories that hold its copies.
 #[tauri::command]
@@ -705,5 +831,129 @@ mod tests {
         // Untouched: nothing is deleted when a move fails.
         assert!(from.sidecar_dir.join("7.json").exists());
         assert!(to.cur.exists());
+    }
+
+    /// Every regular file under `base`, so "nothing was deleted" is a count.
+    fn file_count(base: &Path) -> usize {
+        fn walk(p: &Path, n: &mut usize) {
+            if let Ok(rd) = fs::read_dir(p) {
+                for e in rd.flatten() {
+                    let path = e.path();
+                    if path.is_dir() { walk(&path, n) } else { *n += 1 }
+                }
+            }
+        }
+        let mut n = 0;
+        walk(base, &mut n);
+        n
+    }
+
+    fn seed_app_side(from: &Dirs) {
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::write(from.cur.join("1:2,S.eml"), b"body").unwrap();
+        fs::write(&from.archived_cache, b"{\"emails\":[]}").unwrap();
+        fs::create_dir_all(from.index.parent().unwrap()).unwrap();
+        fs::write(&from.index, b"[]").unwrap();
+        fs::create_dir_all(&from.sidecar_dir).unwrap();
+        fs::write(from.sidecar_dir.join("graph_id_map.json"), b"{\"1\":\"msg-1\"}").unwrap();
+        fs::write(from.sidecar_dir.join("1.json"), b"{\"uid\":1}").unwrap();
+    }
+
+    #[test]
+    fn adopt_dirs_is_a_no_op_when_nothing_exists_on_the_from_side() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
+        let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
+        let out = adopt_dirs(&from, &to);
+        assert_eq!((out.moved, out.blocked), (0, 0));
+        assert!(out.failed.is_empty());
+        assert!(!to.cur.exists());
+    }
+
+    #[test]
+    fn adopt_dirs_moves_the_three_app_dirs_and_the_ledger_when_every_destination_is_absent() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
+        let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
+        seed_app_side(&from);
+        let before = file_count(tmp.path());
+
+        let out = adopt_dirs(&from, &to);
+
+        assert_eq!(out.moved, 3, "vault dir, index dir, sidecar dir");
+        assert_eq!(out.blocked, 0);
+        assert!(out.failed.is_empty());
+        assert!(to.cur.join("1:2,S.eml").exists());
+        assert!(to.archived_cache.exists(), "archived_headers.json travels with the mailbox dir");
+        assert!(to.index.exists());
+        assert!(to.sidecar_dir.join("graph_id_map.json").exists(), "the ledger travels with the sidecar dir");
+        assert!(!from.cur.parent().unwrap().exists());
+        assert!(!from.sidecar_dir.exists());
+        assert_eq!(file_count(tmp.path()), before, "nothing deleted");
+    }
+
+    #[test]
+    fn adopt_dirs_moves_nothing_on_the_app_side_when_one_destination_exists() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = rename_fixture(tmp.path(), "Papierkorb", "a_Papierkorb");
+        let to = rename_fixture(tmp.path(), "Trash", "a_Trash");
+        seed_app_side(&from);
+        // Only the vault dir exists on the English side (a backup wrote it).
+        fs::create_dir_all(&to.cur).unwrap();
+        let before = file_count(tmp.path());
+
+        let out = adopt_dirs(&from, &to);
+
+        assert_eq!(out.moved, 0, "a partial move would pair one ledger with another numbering's files");
+        assert_eq!(out.blocked, 1);
+        assert!(from.cur.join("1:2,S.eml").exists());
+        assert!(from.sidecar_dir.join("graph_id_map.json").exists());
+        assert!(!to.sidecar_dir.exists());
+        assert_eq!(file_count(tmp.path()), before);
+    }
+
+    #[test]
+    fn adopt_dirs_moves_the_mirror_on_its_own_rule() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = rename_fixture(tmp.path(), "Papierkorb", "a_Papierkorb");
+        let to = rename_fixture(tmp.path(), "Trash", "a_Trash");
+        seed_app_side(&from);
+        fs::create_dir_all(&to.cur).unwrap(); // app side blocked
+        let from_mirror = from.mirror_cur.clone().unwrap();
+        fs::create_dir_all(&from_mirror).unwrap();
+        fs::write(from_mirror.join("1:2,S.eml"), b"mirror").unwrap();
+        let before = file_count(tmp.path());
+
+        let out = adopt_dirs(&from, &to);
+
+        assert_eq!(out.moved, 1, "the mirror moved");
+        assert_eq!(out.blocked, 1, "the app side did not");
+        assert!(to.mirror_cur.clone().unwrap().join("1:2,S.eml").exists());
+        assert!(!from_mirror.exists());
+        assert!(from.cur.join("1:2,S.eml").exists());
+        assert_eq!(file_count(tmp.path()), before);
+
+        // A mirror whose destination now exists stays put.
+        fs::create_dir_all(&from_mirror).unwrap();
+        fs::write(from_mirror.join("2:2,S.eml"), b"second").unwrap();
+        let before2 = file_count(tmp.path());
+        let out2 = adopt_dirs(&from, &to);
+        assert_eq!(out2.moved, 0);
+        assert_eq!(out2.blocked, 2, "app side and mirror both blocked");
+        assert!(from_mirror.join("2:2,S.eml").exists());
+        assert_eq!(file_count(tmp.path()), before2);
+    }
+
+    #[test]
+    fn adopt_dirs_without_a_mirror_configured_only_touches_the_app_side() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
+        let mut to = rename_fixture(tmp.path(), "Sent", "a_Sent");
+        from.mirror_cur = None;
+        to.mirror_cur = None;
+        seed_app_side(&from);
+        let out = adopt_dirs(&from, &to);
+        assert_eq!((out.moved, out.blocked), (3, 0));
+        assert!(out.failed.is_empty());
     }
 }

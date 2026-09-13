@@ -5123,6 +5123,7 @@ fn main() {
             maildir_set_flags,
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
+            vault_flags::vault_adopt_mailbox_dirs,
             maildir_storage_stats,
             maildir_clear_cache,
             maildir_migrate_json_to_eml,

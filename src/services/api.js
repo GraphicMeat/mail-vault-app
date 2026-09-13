@@ -455,6 +455,13 @@ export async function vaultRenameMailbox(accountId, accountEmail, pairs) {
   return tauriInvoke('vault_rename_mailbox', { accountId, accountEmail, pairs });
 }
 
+// The one-time adoption of Graph folders written under localized names: every
+// legacy word -> its storage key, moved only when nothing already lives at the
+// destination. Returns { adopted, skipped_both_exist, failed }.
+export async function vaultAdoptMailboxDirs(accountId, accountEmail, pairs) {
+  return tauriInvoke('vault_adopt_mailbox_dirs', { accountId, accountEmail, pairs });
+}
+
 // ── Graph API functions (personal Microsoft accounts) ─────────────────────
 
 export async function graphListFolders(accessToken) {
