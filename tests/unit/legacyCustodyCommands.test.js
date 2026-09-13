@@ -26,7 +26,9 @@ describe('legacy custody files', () => {
   it('no source or spec invokes the removed archived-cache commands', () => {
     const files = [...walk('src'), ...walk('tests')];
     expect(files.length).toBeGreaterThan(50); // a walk that found nothing would pass for nothing
-    const hits = files.filter((p) => REMOVED.some((c) => readFileSync(p, 'utf8').includes(`'${c}'`)));
+    // The bare name, not a quoted spelling: a double-quoted or template-literal
+    // invoke is the same command coming back.
+    const hits = files.filter((p) => REMOVED.some((c) => readFileSync(p, 'utf8').includes(c)));
     expect(hits).toEqual([]);
   });
   it('no app source names a legacy custody file', () => {

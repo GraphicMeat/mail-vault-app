@@ -62,7 +62,7 @@ describe('getArchivedEmails builds rows from sidecars, then the index, then the 
     // commands included. Naming them here would be the one thing
     // tests/unit/legacyCustodyCommands.test.js forbids, and that guard covers
     // the whole repo, not just this path.
-    expect(calls.map((c) => c.cmd).filter((cmd) => !(cmd in DEFAULTS))).toEqual([]);
+    expect(calls.map((c) => c.cmd).filter((cmd) => !Object.hasOwn(DEFAULTS, cmd))).toEqual([]);
   });
 
   it('a failing index read is not a missing row: the files fill in', async () => {

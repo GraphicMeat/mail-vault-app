@@ -602,10 +602,17 @@ fn inventory(
 ) -> Result<Snapshot, Value> {
     let mut snapshot = Snapshot::new(root.clone(), accounts.clone());
     snapshot.watch_directory(&root, "");
-    // One short read under the store's lock; the walks below must not hold it.
+    // The store is one file (plus its write-ahead log): a write changes one of
+    // them, and the snapshot is stale. Stamp BEFORE reading, never after: a
+    // write landing between the two is then a write after the stamp, which is
+    // caught, and its rows are included. Stamping after the read would compare
+    // a post-write stamp against itself and serve those rows as fresh forever.
     let custody_path = root
         .join(mailvault_core::custody::db::DB_DIR)
         .join(mailvault_core::custody::db::DB_FILE);
+    snapshot.watch(&custody_path, "");
+    snapshot.watch(&custody_path.with_extension("db-wal"), "");
+    // One short read under the store's lock; the walks below must not hold it.
     let mut custody_rows: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
     {
         let guard = mailvault_core::custody::lock(custody);
@@ -621,10 +628,6 @@ fn inventory(
             }
         }
     }
-    // The store is one file (plus its write-ahead log): a write after this
-    // point changes one of them, and the snapshot is stale.
-    snapshot.watch(&custody_path, "");
-    snapshot.watch(&custody_path.with_extension("db-wal"), "");
     let cache_paths = snapshot.children(&root.join("email_cache"), "");
     for account in accounts {
         let mut locations = BTreeMap::new();
