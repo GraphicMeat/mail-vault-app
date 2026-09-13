@@ -844,12 +844,10 @@ async fn run_imap_backup_inner(
         // above already has every flag, so catching up is one directory pass
         // with nothing more to fetch. Only the copies that were already here,
         // restored ones included (a legacy `<uid>.eml` comes back flagless):
-        // the ones just stored carry the server's flags already.
-        let changes: Vec<crate::vault_flags::FlagChange> = server_flags
-            .iter()
-            .filter(|(uid, _)| local_uids.contains(uid))
-            .map(|(uid, flags)| crate::vault_flags::FlagChange { uid: *uid, flags: flags.clone() })
-            .collect();
+        // the ones just stored carry the server's flags already. Every copy the
+        // run counts as backed up is marked archived here, which is what heals
+        // an auto-cached `<uid>:2,.eml` once a backup vouches for it.
+        let changes = catch_up_changes(&server_flags, &local_uids);
         if !changes.is_empty() {
             let dirs = crate::vault_flags::dirs_for(
                 &app_handle, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
@@ -954,12 +952,32 @@ fn orphaned_message_ids(app_dir: &std::path::Path) -> HashSet<String> {
     ids
 }
 
+/// One flag change per server uid the vault holds, carrying the server's flags
+/// plus `archived`: every copy this run counted as backed up is a vault copy,
+/// and `A` is what says so.
+fn catch_up_changes(
+    server_flags: &[(u32, Vec<String>)],
+    local_uids: &HashSet<u32>,
+) -> Vec<crate::vault_flags::FlagChange> {
+    server_flags
+        .iter()
+        .filter(|(uid, _)| local_uids.contains(uid))
+        .map(|(uid, flags)| {
+            let mut flags = flags.clone();
+            flags.push("archived".to_string());
+            crate::vault_flags::FlagChange { uid: *uid, flags }
+        })
+        .collect()
+}
+
 /// Sync files between app Maildir and backup location (bidirectional).
 /// - App dir files missing from backup → copy to backup keeping the Maildir
 ///   name (`<uid>:2,<flags>.eml`) so flags survive the round trip
-/// - Backup files missing from app dir → copy to app dir, restoring the flags
-///   encoded in the backup filename (legacy `<uid>.eml` copies have none), and
-///   never re-importing a message the generation repair already set aside
+/// - Backup files missing from app dir → copy to app dir, named with `archived`
+///   on top of whatever flags the backup filename carried (legacy `<uid>.eml`
+///   copies carry none): the vault copy the restore makes is what puts the row
+///   in the list and what Clear cached emails keeps. Never re-imports a message
+///   the generation repair already set aside.
 /// Returns total files synced.
 fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
     use mailvault_core::maildir::{mirror_file_map, mirror_filename_uid, uid_file_map};
@@ -1023,7 +1041,8 @@ fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> us
                     }
                 }
             }
-            let flags = super::parse_flags_from_filename(&name);
+            let mut flags = super::parse_flags_from_filename(&name);
+            flags.push("archived".to_string());
             let dst = app_dir.join(super::build_maildir_filename(uid, &flags));
             if fs::copy(entry.path(), &dst).is_ok() {
                 synced += 1;
@@ -1162,7 +1181,8 @@ async fn run_graph_backup(
                         };
                         let cur_dir =
                             crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-                        let filename = crate::build_maildir_filename(uid_counter, &[] as &[String]);
+                        let filename =
+                            crate::build_maildir_filename(uid_counter, &["archived".to_string()]);
                         // Both writes off the runtime worker: a stalled write on
                         // the external drive would hold every task it polls. A
                         // failed vault write ends the run; a failed mirror write
@@ -1403,7 +1423,9 @@ mod tests {
     use std::fs;
 
     /// Flags must survive both directions of the app ↔ external sync, and
-    /// legacy flagless `<uid>.eml` backups must still restore.
+    /// legacy flagless `<uid>.eml` backups must still restore — carrying `A`,
+    /// because the restored copy is a vault copy: without it the row never
+    /// appears in the list and Clear cached emails deletes the file.
     #[test]
     fn sync_locations_preserves_flags() {
         let base = std::env::temp_dir().join("mv-sync-flags-test");
@@ -1420,8 +1442,8 @@ mod tests {
         assert_eq!(sync_locations(&app, &ext), 3);
 
         assert!(ext.join("101:2,SF.eml").exists(), "flags lost app → external");
-        assert!(app.join("202:2,S.eml").exists(), "flags lost external → app");
-        assert!(app.join("303:2,.eml").exists(), "legacy backup did not restore");
+        assert!(app.join("202:2,AS.eml").exists(), "flags lost external → app");
+        assert!(app.join("303:2,A.eml").exists(), "legacy backup did not restore");
 
         // Second pass must be a no-op — no duplicates under either naming scheme.
         assert_eq!(sync_locations(&app, &ext), 0);
@@ -1545,7 +1567,10 @@ mod tests {
     }
 
     /// `sync_locations` before its one-pass listings, verbatim but for paths:
-    /// a directory rescan per file in both directions.
+    /// a directory rescan per file in both directions. Kept as a reference for
+    /// the UID RULES, not for the flags — it carries the same `archived` push
+    /// the restore does, so the equivalence below still says something about
+    /// which files move rather than what they are called.
     fn sync_locations_per_uid(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
         let mut synced = 0;
         let _ = fs::create_dir_all(app_dir);
@@ -1578,7 +1603,8 @@ mod tests {
                         if ids.contains(&id) { continue; }
                     }
                 }
-                let flags = crate::parse_flags_from_filename(&name);
+                let mut flags = crate::parse_flags_from_filename(&name);
+                flags.push("archived".to_string());
                 let dst = app_dir.join(crate::build_maildir_filename(uid, &flags));
                 if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
             }
@@ -1600,7 +1626,7 @@ mod tests {
         for name in [
             "101:2,SF.eml", // app only: mirrored under its own name
             "102:2,S",      // app only, no extension: mirrored as .eml
-            "103_S.eml",    // legacy name in the vault: mirrored, then restored as 103:2,.eml
+            "103_S.eml",    // legacy name in the vault: mirrored, then restored as 103:2,A.eml
             "104:2,S.eml",  // mirror holds 104.eml: nothing moves
             "105:2,F.eml",  // mirror holds 105_S.eml: nothing moves
             "07:2,S.eml",   // mirror side reads 7, vault side does not
@@ -1612,11 +1638,11 @@ mod tests {
         }
         fs::create_dir_all(app.join("400")).unwrap();
         for name in [
-            "202:2,S.eml", // mirror only: restored with its flags
-            "203.eml",     // legacy flagless: restored as 203:2,.eml
+            "202:2,S.eml", // mirror only: restored with its flags, plus archived
+            "203.eml",     // legacy flagless: restored as 203:2,A.eml
             "204_S.eml",   // legacy underscore: restored, flags not parsed
             "205:2,F",     // no .eml: never restored
-            "08.eml",      // restored as 8:2,.eml
+            "08.eml",      // restored as 8:2,A.eml
             "104.eml",
             "105_S.eml",
             "7:2,S.eml",   // the vault's 07:2,S.eml is not uid 7: restored
@@ -1661,10 +1687,13 @@ mod tests {
         // The fixture has to reach the paths it claims to, or agreement is vacuous.
         let app_names: Vec<String> = listing(&new_app).into_iter().map(|(n, _)| n).collect();
         let ext_names: Vec<String> = listing(&new_ext).into_iter().map(|(n, _)| n).collect();
-        for name in ["202:2,S.eml", "203:2,.eml", "204:2,.eml", "8:2,.eml", "7:2,S.eml", "103:2,.eml", "207:2,.eml"] {
+        for name in ["202:2,AS.eml", "203:2,A.eml", "204:2,A.eml", "8:2,A.eml", "7:2,AS.eml", "103:2,A.eml", "207:2,A.eml"] {
             assert!(app_names.contains(&name.to_string()), "not restored: {name} in {app_names:?}");
         }
-        for name in ["206:2,.eml", "205:2,F.eml", "205:2,.eml", "104:2,.eml", "105:2,.eml"] {
+        for name in [
+            "206:2,.eml", "205:2,F.eml", "205:2,.eml", "104:2,.eml", "105:2,.eml",
+            "206:2,A.eml", "205:2,AF.eml", "104:2,A.eml", "105:2,A.eml",
+        ] {
             assert!(!app_names.contains(&name.to_string()), "restored but should not be: {name}");
         }
         for name in ["101:2,SF.eml", "102:2,S.eml", "103_S.eml"] {
@@ -1731,6 +1760,28 @@ mod tests {
         fs::create_dir_all(&app).unwrap();
         fs::write(app.join("5:2,S.eml"), eml("in-the-vault@mock.test")).unwrap();
         assert_eq!(super::vault_uids_after_presync(&app, None).unwrap(), std::collections::HashSet::from([5]));
+    }
+
+    /// The catch-up walks the server's uids and keeps the ones the vault holds.
+    /// Every one of those is a copy this run counted as backed up, so it is
+    /// marked archived: that is what heals an auto-cached `<uid>:2,.eml` the
+    /// app wrote when the message was opened.
+    #[test]
+    fn catch_up_marks_every_counted_vault_copy_archived() {
+        let server_flags: Vec<(u32, Vec<String>)> = vec![
+            (1, vec!["\\Seen".to_string()]),
+            (2, vec![]),
+            (3, vec!["\\Flagged".to_string()]),
+        ];
+        let local_uids = std::collections::HashSet::from([1u32, 2, 9]);
+
+        let changes = super::catch_up_changes(&server_flags, &local_uids);
+
+        let uids: Vec<u32> = changes.iter().map(|c| c.uid).collect();
+        assert_eq!(uids, vec![1, 2], "only the server uids the vault holds");
+        assert!(changes[0].flags.iter().any(|f| f == "\\Seen"), "{:?}", changes[0].flags);
+        assert!(changes[0].flags.iter().any(|f| f == "archived"), "{:?}", changes[0].flags);
+        assert_eq!(changes[1].flags, vec!["archived".to_string()]);
     }
 
     /// Not a gate.

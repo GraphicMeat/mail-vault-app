@@ -35,8 +35,8 @@ const FOLDER = 'Matrix';
 const SERVER_UIDS = [1, 2, 3, 4, 5, 6];
 
 // Outside the mock's uid space: the pre-sync is the only thing that can move them.
-const MIRROR_LEGACY = 999_301;     // mirror `<uid>.eml` only: restores
-const MIRROR_FLAGGED = 999_302;    // mirror `<uid>:2,F.eml` only: restores with its flag
+const MIRROR_LEGACY = 999_301;     // mirror `<uid>.eml` only: restores, marked archived
+const MIRROR_FLAGGED = 999_302;    // mirror `<uid>:2,F.eml` only: restores with its flag, marked archived
 const VAULT_ONLY = 999_303;        // vault only: mirrored under its own name
 const BOTH_LEGACY = 999_304;       // vault `<uid>:2,S.eml`, mirror `<uid>.eml`: nothing moves
 const LOCAL_UIDS = [MIRROR_LEGACY, MIRROR_FLAGGED, VAULT_ONLY, BOTH_LEGACY];
@@ -63,6 +63,9 @@ const vaultNames = (dir, uid) =>
 /** The mirror's rule: the text before the first ':', '.' or '_'. */
 const mirrorNames = (dir, uid) =>
   existsSync(dir) ? readdirSync(dir).filter((n) => n.split(/[:._]/)[0] === String(uid)) : [];
+
+/** The Maildir flag letters of a vault name: `4:2,AS.eml` -> `AS`. */
+const flagLetters = (name) => (name.split(':2,')[1] || '').replace(/\.eml$/, '');
 
 /** `browser.execute` does not await a Promise; `executeAsync` does. */
 function invoke(cmd, args) {
@@ -112,8 +115,9 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     mkdirSync(mirror, { recursive: true });
 
     // Server uids 3 and 4 in the vault, and on the mirror under both legacy
-    // shapes: the pre-sync has nothing to copy either way. (A server uid only
-    // the mirror holds is connected-backup-restored-not-refetched's case.)
+    // shapes: the pre-sync has nothing to copy either way; the flag catch-up
+    // marks both archived. (A server uid only the mirror holds is
+    // connected-backup-restored-not-refetched's case.)
     writeFileSync(join(cur, '3:2,.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
     writeFileSync(join(mirror, '3.eml'), eml(`mock-3-${VADER}`, 'Vader matrix 3'));
     writeFileSync(join(cur, '4:2,S.eml'), eml(`mock-4-${VADER}`, 'Vader matrix 4'));
@@ -173,12 +177,27 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
   });
 
   it('restores each legacy mirror name under the vault name, and mirrors the vault-only file under its own', function () {
-    expect(vaultNames(cur, MIRROR_LEGACY)).toEqual([`${MIRROR_LEGACY}:2,.eml`]);
-    expect(vaultNames(cur, MIRROR_FLAGGED)).toEqual([`${MIRROR_FLAGGED}:2,F.eml`]);
+    expect(vaultNames(cur, MIRROR_LEGACY)).toEqual([`${MIRROR_LEGACY}:2,A.eml`]);
+    expect(vaultNames(cur, MIRROR_FLAGGED)).toEqual([`${MIRROR_FLAGGED}:2,AF.eml`]);
     expect(mirrorNames(mirror, VAULT_ONLY)).toEqual([`${VAULT_ONLY}:2,S.eml`]);
     expect(mirrorNames(mirror, BOTH_LEGACY)).toEqual([`${BOTH_LEGACY}.eml`]);
     // uid 1 reached the vault by re-archiving, and the mirror by the pre-sync.
     expect(readFileSync(join(mirror, mirrorNames(mirror, 1)[0]), 'utf8')).toContain('Subject: Vader matrix 1');
+  });
+
+  it('marks every vault copy the backup counted as archived', function () {
+    // Both were already on both sides, so only the flag catch-up can name them.
+    expect(vaultNames(cur, 3)).toEqual(['3:2,A.eml']);
+    expect(vaultNames(cur, 4)).toEqual(['4:2,AS.eml']);
+    for (const uid of SERVER_UIDS) {
+      const names = vaultNames(cur, uid);
+      expect(names).toHaveLength(1);
+      expect(flagLetters(names[0])).toContain('A');
+    }
+    // The catch-up walks the SERVER's uids, so a vault-only uid the server
+    // never had is not promoted — it gains `A` the next time the mirror
+    // restores it.
+    expect(vaultNames(cur, VAULT_ONLY)).toEqual([`${VAULT_ONLY}:2,S.eml`]);
   });
 
   it('keeps the mirror copy the repair set aside instead of writing a second uid 6 beside it', function () {

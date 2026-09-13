@@ -11,6 +11,10 @@
  * `emails_backed_up` counted it. Nothing errored; the vault just held two files
  * for one message.
  *
+ * A restored copy is named with `A`, as the fetch's own copy is: the vault copy
+ * the backup makes is what puts the row in the list and what Clear cached
+ * emails keeps.
+ *
  * Scoped to vader's "Matrix" (LIST order [INBOX, Sent, Archive, Drafts, Trash,
  * Matrix], `skipFolders: 5`), as connected-backup-legacy-mirror-names is.
  * Matrix holds uids 1..6, even ones read, Message-ID `<mock-<uid>-vader@mock.test>`.
@@ -125,11 +129,12 @@ describe('Backup pre-sync: a uid restored from the mirror is not fetched again',
     expect(counts()).toEqual(want);
   });
 
-  it("keeps the restored copy, caught up to the server's read state", function () {
+  it("keeps the restored copy, marked archived and caught up to the server's read state", function () {
     for (const uid of RESTORED) {
       const names = vaultNames(cur, uid);
       expect(names).toHaveLength(1);
       expect(readFileSync(join(cur, names[0]), 'utf8')).toContain(MIRROR_MARK);
+      expect(flagLetters(names[0])).toContain('A');
     }
     expect(flagLetters(vaultNames(cur, 4)[0])).toContain('S');
     expect(flagLetters(vaultNames(cur, 3)[0])).not.toContain('S');

@@ -51,7 +51,11 @@ pub fn store_flags(imap: &[String]) -> Vec<String> {
 }
 
 /// Maildir flags after `imap` is applied over `current`: the local-only words
-/// (archived, draft, trashed) survive, seen/flagged/replied follow the server.
+/// (archived, draft, trashed) survive from `current`, seen/flagged/replied
+/// follow the server. `archived` is also ADDED when the change asks for it,
+/// which is how the backup vouches for a copy it counted as backed up; the
+/// app's own callers pass a row's IMAP flag list, and a row only says
+/// `archived` when its file already has `A`.
 pub fn merge_flags(current: &[String], imap: &[String]) -> Vec<String> {
     let mut out: Vec<String> = current
         .iter()
@@ -59,6 +63,9 @@ pub fn merge_flags(current: &[String], imap: &[String]) -> Vec<String> {
         .filter(|f| matches!(f.as_str(), "archived" | "draft" | "trashed"))
         .collect();
     let has = |name: &str| imap.iter().any(|f| f.eq_ignore_ascii_case(name));
+    if has("archived") {
+        out.push("archived".into());
+    }
     if has("\\Seen") {
         out.push("seen".into());
     }
@@ -495,6 +502,16 @@ mod tests {
         assert_eq!(merge_flags(&s(&["archived", "seen", "\\Seen"]), &s(&[])), s(&["archived"]));
     }
 
+    /// `archived` is the one local word a change may ADD: it is how the backup
+    /// vouches for a copy it counted, so an auto-cached flagless file gains `A`.
+    /// Never on its own — only when the change asks for it.
+    #[test]
+    fn a_change_that_asks_for_archived_adds_it_and_nothing_else_does() {
+        assert_eq!(merge_flags(&s(&[]), &s(&["\\Seen", "archived"])), s(&["archived", "seen"]));
+        assert_eq!(merge_flags(&s(&["seen"]), &s(&["archived"])), s(&["archived"]));
+        assert_eq!(merge_flags(&s(&[]), &s(&["\\Seen"])), s(&["seen"]));
+    }
+
     struct Fixture {
         _tmp: tempfile::TempDir,
         dirs: Dirs,
@@ -574,6 +591,25 @@ mod tests {
         assert_eq!(flags_of(&d.sidecar_dir.join("7.json"), 7), Some(s(&["\\Seen"])));
         // What a fresh .eml read of the renamed file would report.
         assert_eq!(flags_of(&d.archived_cache, 7), Some(s(&["archived", "seen", "\\Seen"])));
+    }
+
+    /// The backup's catch-up over a copy the app auto-cached when the message
+    /// was opened: flagless in the vault, legacy-named on the mirror. The run
+    /// counted it as backed up, so both copies come out carrying `A`.
+    #[test]
+    fn a_change_asking_for_archived_puts_the_letter_on_the_vault_and_mirror_copies() {
+        let f = fixture();
+        let d = &f.dirs;
+        fs::write(d.cur.join("9:2,.eml"), b"body").unwrap();
+        fs::write(d.mirror_cur.as_ref().unwrap().join("9.eml"), b"body").unwrap();
+        fs::write(&d.index, r#"[{"uid":9,"flags":[]}]"#).unwrap();
+
+        let applied = apply_in(d, &[change(9, &["\\Seen", "archived"])], false);
+
+        assert_eq!(applied.renamed, 1);
+        assert_eq!(applied.mirrored, 1);
+        assert_eq!(names(&d.cur), vec!["9:2,AS.eml"]);
+        assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["9:2,AS.eml"]);
     }
 
     #[test]
