@@ -113,7 +113,15 @@ pub(crate) fn dirs_for(
 }
 
 /// One writer at a time per process: two callers renaming the same folder's
-/// files at once would race on the names.
+/// files at once would race on the names. `apply_everywhere` holds it across
+/// the custody patch too, so the file name and the custody entry can never be
+/// left disagreeing by two callers applying opposite flags to the same uid.
+///
+/// Non-reentrant: `apply_everywhere` calls `apply_files`, never `apply_in`.
+///
+/// ponytail: the lock now spans a custody write as well as the renames. Both
+/// callers already run this off the main thread, and the write is one
+/// transaction over the uids in hand.
 static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
@@ -125,11 +133,16 @@ static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// those files, and a 14k-message folder would open 14k of them to change
 /// nothing.
 pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
+    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
+    apply_files(dirs, changes, sidecars)
+}
+
+/// `apply_in`'s body, without the lock. The caller holds `WRITER`.
+fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
     let mut out = Applied::default();
     if changes.is_empty() {
         return out;
     }
-    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
 
     // One listing per directory: the per-uid finders rescan on every call, and
     // a backup reconcile hands this every message the folder holds.
@@ -169,6 +182,12 @@ pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied 
 
 /// `apply_in` plus the custody entry's flags: the one call the app's mark
 /// read/unread and the backup's catch-up both make. `sidecars` as for `apply_in`.
+///
+/// Both halves run under one `WRITER` acquisition. The name and the custody
+/// entry are two records of the same fact, and the app's mark read/unread and
+/// the backup's catch-up are exactly the pair that can apply opposite flags to
+/// one uid at the same moment: patching custody after the lock was released
+/// let the name say read while the entry said unread.
 pub fn apply_everywhere(
     app: &tauri::AppHandle,
     account_id: &str,
@@ -177,7 +196,11 @@ pub fn apply_everywhere(
     changes: &[FlagChange],
     sidecars: bool,
 ) -> Applied {
-    let mut applied = apply_in(dirs, changes, sidecars);
+    if changes.is_empty() {
+        return Applied::default();
+    }
+    let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
+    let mut applied = apply_files(dirs, changes, sidecars);
     let patch: Vec<(u32, Vec<String>)> = changes.iter().map(|c| (c.uid, c.flags.clone())).collect();
     match crate::custody::with_conn(app, |c| mailvault_core::custody::entries::patch_flags_many(c, account_id, mailbox, &patch)) {
         Ok(n) => applied.index_patched = n,
@@ -472,6 +495,28 @@ mod tests {
 
     fn change(uid: u32, flags: &[&str]) -> FlagChange {
         FlagChange { uid, flags: s(flags) }
+    }
+
+    /// The lock is taken exactly once on the way in. Not a race detector: a
+    /// second acquisition on either path would hang this test rather than fail
+    /// it, which is the failure the `apply_in`/`apply_files` split has to avoid
+    /// now that `apply_everywhere` takes `WRITER` itself.
+    #[test]
+    fn two_callers_of_apply_in_both_complete_under_the_one_writer_lock() {
+        let f = fixture();
+        let d = &f.dirs;
+        fs::write(d.cur.join("1:2,.eml"), b"body").unwrap();
+        fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
+
+        let (first, second) = std::thread::scope(|scope| {
+            let a = scope.spawn(|| apply_in(d, &[change(1, &["\\Seen"])], false));
+            let b = scope.spawn(|| apply_in(d, &[change(2, &["\\Seen"])], false));
+            (a.join().unwrap(), b.join().unwrap())
+        });
+
+        assert_eq!(first.renamed, 1);
+        assert_eq!(second.renamed, 1);
+        assert_eq!(names(&d.cur), vec!["1:2,S.eml", "2:2,S.eml"]);
     }
 
     #[test]
