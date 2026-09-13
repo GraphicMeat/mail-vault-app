@@ -421,9 +421,9 @@ async fn fetch_and_store(
             if let Some(backup_dir) = mirror {
                 match fs::create_dir_all(&backup_dir) {
                     Ok(()) => {
-                        // Same Maildir name as the app copy (+ .eml) so flags survive a
+                        // Same Maildir name as the app copy so flags survive a
                         // restore from the external location back into the app store.
-                        let dst = backup_dir.join(format!("{}.eml", filename));
+                        let dst = backup_dir.join(&filename);
                         if super::find_msg_file_by_uid(&backup_dir, uid).is_none() {
                             if let Err(e) = mailvault_core::fsx::write_atomic(&dst, &raw_bytes) {
                                 warn!("archive_emails: external copy failed for UID {}: {}", uid, e);

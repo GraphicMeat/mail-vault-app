@@ -1896,7 +1896,7 @@ pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox
 }
 
 /// The flags a vault file name carries, as the Maildir words AND as the IMAP
-/// names — `seen` and `\Seen` both, for a file named `12:2,AS`.
+/// names — `seen` and `\Seen` both, for a file named `12:2,AS.eml`.
 ///
 /// Every row in the app asks `flags.includes('\Seen')`; a row built from its
 /// .eml used to get the words alone and render unread whatever the file said.
@@ -1940,7 +1940,7 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     flag_chars.sort();
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
-    format!("{}:2,{}", uid, flag_str)
+    format!("{}:2,{}.eml", uid, flag_str)
 }
 
 /// Find a message file for `uid` in a directory that may use either naming
@@ -1975,7 +1975,7 @@ pub fn find_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
 /// Delete every Maildir file in `cur_dir` whose uid is in `uids`.
 /// One directory pass — the per-uid `find_file_by_uid` rescans the whole
 /// directory each call, which is quadratic over a bulk selection.
-/// Vault filenames are always `<uid>:<flags>` (see `build_maildir_filename`),
+/// Vault filenames are always `<uid>:2,<flags>.eml` (see `build_maildir_filename`),
 /// so the uid is the run of digits before the first ':'.
 pub fn delete_maildir_files(cur_dir: &Path, uids: &std::collections::HashSet<u32>) -> usize {
     let mut removed = 0usize;
@@ -4459,12 +4459,12 @@ async fn import_mbox(
         let unescaped = mbox_unescape_from(msg_raw);
 
         max_uid += 1;
-        let filename = format!("{}:2,", max_uid);
+        let filename = build_maildir_filename(max_uid, &[] as &[String]);
         let dest = cur_dir.join(&filename);
 
         if dest.exists() {
             max_uid += 1;
-            let filename2 = format!("{}:2,", max_uid);
+            let filename2 = build_maildir_filename(max_uid, &[] as &[String]);
             let dest2 = cur_dir.join(&filename2);
             fs::write(&dest2, &unescaped)
                 .map_err(|e| format!("Failed to write .eml: {}", e))?;
@@ -5780,7 +5780,7 @@ mod tests {
         assert_eq!(parse_flags_from_filename("12:2,A"), vec!["archived"]);
         assert_eq!(parse_flags_from_filename("12:2,FRS"), vec!["flagged", "replied", "seen", "\\Seen", "\\Flagged", "\\Answered"]);
         // The names round-trip through the builder without changing the name.
-        assert_eq!(build_maildir_filename(12, &parse_flags_from_filename("12:2,AS")), "12:2,AS");
+        assert_eq!(build_maildir_filename(12, &parse_flags_from_filename("12:2,AS.eml")), "12:2,AS.eml");
     }
 
     #[test]

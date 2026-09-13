@@ -1034,7 +1034,7 @@ fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> us
                 }
             }
             let flags = super::parse_flags_from_filename(&name);
-            let dst = app_dir.join(format!("{}.eml", super::build_maildir_filename(uid, &flags)));
+            let dst = app_dir.join(super::build_maildir_filename(uid, &flags));
             if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
         }
     }
@@ -1170,7 +1170,7 @@ async fn run_graph_backup(
                                     .join("cur");
                                 match std::fs::create_dir_all(&backup_dir) {
                                     Ok(()) => {
-                                        let dst = backup_dir.join(format!("{}.eml", filename));
+                                        let dst = backup_dir.join(&filename);
                                         if crate::find_msg_file_by_uid(&backup_dir, uid_counter).is_none() {
                                             if let Err(e) = std::fs::write(&dst, &raw_bytes) {
                                                 warn!("backup(graph): external write failed: {}", e);

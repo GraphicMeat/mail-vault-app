@@ -192,10 +192,7 @@ fn rename_for(path: &Path, uid: u32, imap: &[String]) -> Result<Option<String>, 
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
     let current = crate::parse_flags_from_filename(&name);
-    let mut new_name = crate::build_maildir_filename(uid, &merge_flags(&current, imap));
-    if name.ends_with(".eml") {
-        new_name.push_str(".eml");
-    }
+    let new_name = crate::build_maildir_filename(uid, &merge_flags(&current, imap));
     if new_name == name {
         return Ok(None);
     }
@@ -575,7 +572,8 @@ mod tests {
         let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
 
         assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 1, sidecars_patched: 1 });
-        assert_eq!(names(&d.cur), vec!["7:2,AS"]);
+        // The legacy extension-less name converges on the current one.
+        assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
         assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,AS.eml"]);
         assert_eq!(flags_of(&d.index, 7), Some(s(&["\\Seen"])));
         // The neighbour entry is untouched.
@@ -606,14 +604,14 @@ mod tests {
     fn a_change_the_copies_already_carry_is_a_no_op() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("7:2,AS"), b"body").unwrap();
+        fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
         fs::write(&d.index, r#"[{"uid":7,"flags":["\\Seen"]}]"#).unwrap();
         let before = fs::metadata(&d.index).unwrap().modified().unwrap();
 
         let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
 
         assert_eq!(applied, Applied::default());
-        assert_eq!(names(&d.cur), vec!["7:2,AS"]);
+        assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
         assert_eq!(fs::metadata(&d.index).unwrap().modified().unwrap(), before, "index rewritten for nothing");
     }
 
@@ -666,9 +664,9 @@ mod tests {
     fn a_backup_reconcile_touches_only_the_copies_that_disagree() {
         let f = fixture();
         let d = &f.dirs;
-        fs::write(d.cur.join("1:2,A"), b"a").unwrap();
-        fs::write(d.cur.join("2:2,AS"), b"b").unwrap();
-        fs::write(d.cur.join("3:2,AS"), b"c").unwrap();
+        fs::write(d.cur.join("1:2,A.eml"), b"a").unwrap();
+        fs::write(d.cur.join("2:2,AS.eml"), b"b").unwrap();
+        fs::write(d.cur.join("3:2,AS.eml"), b"c").unwrap();
         fs::write(&d.index, r#"[{"uid":1,"flags":[]},{"uid":2,"flags":["\\Seen"]},{"uid":3,"flags":["\\Seen"]}]"#).unwrap();
 
         // A sidecar the reconcile must leave to the sync engine.
@@ -679,7 +677,7 @@ mod tests {
 
         assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 2, sidecars_patched: 0 });
         assert_eq!(flags_of(&d.sidecar_dir.join("1.json"), 1), Some(s(&[])));
-        assert_eq!(names(&d.cur), vec!["1:2,AS", "2:2,AS", "3:2,A"]);
+        assert_eq!(names(&d.cur), vec!["1:2,AS.eml", "2:2,AS.eml", "3:2,A.eml"]);
         assert_eq!(flags_of(&d.index, 1), Some(s(&["\\Seen"])));
         assert_eq!(flags_of(&d.index, 3), Some(s(&[])));
     }

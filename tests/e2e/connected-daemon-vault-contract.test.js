@@ -8,7 +8,7 @@
  *   maildir_exists        daemon `{exists: bool}` vs Tauri a bare `bool`
  *   maildir_storage_stats daemon {total_size,...} vs Tauri {totalBytes,...}
  *   maildir_store         core writes `<uid>:archived,seen:<ts>.eml`,
- *                         Tauri writes `<uid>:2,AS`
+ *                         Tauri writes `<uid>:2,AS.eml`
  *
  * `{exists: false}` is truthy, so once the daemon's heartbeat connected,
  * `isEmailSaved` said "already in the vault" about every message,
@@ -52,6 +52,7 @@ describe('Vault — daemon/Tauri contract', function () {
         name,
         // Tauri's own format. The daemon's would not match, which is the point.
         archived: /:2,[A-Z]*A/.test(name),
+        eml: name.endsWith('.eml'),
         size: statSync(join(cur, name)).size,
       });
     }
@@ -146,6 +147,13 @@ describe('Vault — daemon/Tauri contract', function () {
         throw new Error(`"${subject}" (uid ${uid}) never reached the vault as an archived file. `
           + `cur/ holds: ${[...vault().keys()].join(',') || '(nothing)'}. `
           + `store error: ${await storeError() || 'none'}`);
+      }
+
+      // v2.5.0 promised the `.eml` suffix and only shipped the one-time rename
+      // of what was already there, so every archive after it landed without one.
+      const stored = vault().get(uid);
+      if (!stored.eml) {
+        throw new Error(`"${subject}" landed as ${stored.name} — a vault file must carry .eml`);
       }
 
       // The row has to agree with the disk, and nothing may have errored.

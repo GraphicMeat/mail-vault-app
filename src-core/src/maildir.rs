@@ -191,7 +191,7 @@ pub struct EmlMigrationStats {
 }
 
 const MAILDIR_VERSION_FILE: &str = ".maildir_version";
-const MAILDIR_CURRENT_VERSION: u32 = 2;
+const MAILDIR_CURRENT_VERSION: u32 = 3;
 
 /// One-time migration: append `.eml` to every Maildir message file that lacks
 /// the extension. Idempotent — guarded by `{data_dir}/Maildir/.maildir_version`.
@@ -1073,6 +1073,27 @@ mod tests {
         // Readers still resolve by UID prefix after migration.
         assert!(find_by_uid(&cur, 101).is_some());
         assert!(find_by_uid(&cur, 102).is_some());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// v2.5.0 shipped the rename but not the writer, so every file stored
+    /// between then and the fix landed without the extension in a vault the
+    /// version marker already called migrated. The bump has to sweep them.
+    #[test]
+    fn test_migrate_sweeps_files_written_after_an_earlier_version_marker() {
+        let dir = std::env::temp_dir().join("mailvault-test-migrate-eml-v2");
+        let _ = fs::remove_dir_all(&dir);
+
+        let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(dir.join("Maildir").join(MAILDIR_VERSION_FILE), b"2").unwrap();
+        fs::write(cur.join("201:2,S"), b"A").unwrap();
+
+        let s = migrate_add_eml_extension(&dir);
+
+        assert_eq!(s.renamed, 1);
+        assert!(cur.join("201:2,S.eml").exists());
 
         let _ = fs::remove_dir_all(&dir);
     }

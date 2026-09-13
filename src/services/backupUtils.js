@@ -3,8 +3,8 @@ import { t } from '../i18n/index.js';
  * Build the ZIP-internal path for a backup email file.
  * @param {string} email - Account email address
  * @param {string} mailbox - Mailbox name (e.g. "INBOX", "Sent")
- * @param {string} filename - Maildir filename (e.g. "123:2,AS")
- * @returns {string} Path like "emails/luke@example.com/INBOX/123:2,AS"
+ * @param {string} filename - Maildir filename (e.g. "123:2,AS.eml")
+ * @returns {string} Path like "emails/luke@example.com/INBOX/123:2,AS.eml"
  */
 export function buildBackupEmailPath(email, mailbox, filename) {
   return `emails/${email}/${mailbox}/${filename}`;

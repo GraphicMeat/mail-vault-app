@@ -12,7 +12,7 @@
  * so with the daemon up every field came back undefined.
  *
  * `maildir_store` broke it in a third way — not the response but the FILE: core
- * writes `<uid>:archived,seen:<ts>.eml`, Tauri writes `<uid>:2,AS`, and Tauri's
+ * writes `<uid>:archived,seen:<ts>.eml`, Tauri writes `<uid>:2,AS.eml`, and Tauri's
  * flag parser only understands `:2,`. A message the daemon stored would list
  * with no flags and never read as archived.
  *
@@ -58,7 +58,7 @@ describe('daemon command registry', () => {
   it.each([
     ['maildir_exists', 'daemon {exists:bool} vs Tauri bare bool'],
     ['maildir_storage_stats', 'daemon snake_case StorageStats vs Tauri camelCase MaildirStorageStats'],
-    ['maildir_store', 'core writes <uid>:archived,seen:<ts>.eml, Tauri writes <uid>:2,AS'],
+    ['maildir_store', 'core writes <uid>:archived,seen:<ts>.eml, Tauri writes <uid>:2,AS.eml'],
     ['maildir_delete', 'the family has one writer'],
     ['maildir_list', 'daemon {uids,count} vs Tauri MaildirEmailSummary[]'],
     ['maildir_read', 'different response shapes'],

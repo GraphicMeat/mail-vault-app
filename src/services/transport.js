@@ -33,7 +33,7 @@ const DAEMON_COMMANDS = {
   //                       mailbox_count}, Tauri {totalBytes, totalMB, emailCount}.
   //                       Not one field name in common.
   //   maildir_store       not a response mismatch but a FILENAME one: core writes
-  //                       `<uid>:archived,seen:<ts>.eml`, Tauri writes `<uid>:2,AS`,
+  //                       `<uid>:archived,seen:<ts>.eml`, Tauri writes `<uid>:2,AS.eml`,
   //                       and Tauri's parse_flags_from_filename only understands
   //                       `:2,`. A message the daemon stored lists with no flags
   //                       and never reads as archived.
