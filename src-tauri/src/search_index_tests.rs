@@ -208,7 +208,7 @@ fn search_index_bench_50k_real_parser() {
     let db: mailvault_core::search_index::SharedConn = std::sync::Mutex::new(Some(db::open(root).unwrap()));
     let maildir = root.join("Maildir");
     let t = Instant::now();
-    for (a, d) in reconcile::list_vault_dirs(&maildir) {
+    for (a, d) in reconcile::list_vault_dirs(&maildir).unwrap() {
         let parse = &crate::search_index::index_doc_from_light;
         reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true }, parse, &|| true, &mut |_| {}).unwrap();
     }

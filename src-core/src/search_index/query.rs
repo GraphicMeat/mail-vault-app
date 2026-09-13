@@ -260,7 +260,7 @@ mod tests {
             std::fs::create_dir_all(&cur).unwrap();
             std::fs::write(cur.join(format!("{uid}:2,.eml")), format!("Message-ID: <{acct}.{dir}.{uid}@x.test>\r\n{content}")).unwrap();
         }
-        for (a, d) in list_vault_dirs(&root.join("Maildir")) {
+        for (a, d) in list_vault_dirs(&root.join("Maildir")).unwrap() {
             reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true }, &parse, &|| true, &mut |_| {}).unwrap();
         }
         (tmp, db)

@@ -84,32 +84,37 @@ struct Row {
 
 /// `(account_id, vault_dir)` for every `Maildir/<account>/<dir>` holding a
 /// `cur` directory. Depth one only: the nested `maildir/…` custody dirs have
-/// no `cur`.
-pub fn list_vault_dirs(maildir_root: &Path) -> Vec<(String, String)> {
+/// no `cur`. No `Maildir` yet is an empty vault; any other read error is `Err`,
+/// never a shorter list: pruning against one would drop folders still on disk.
+pub fn list_vault_dirs(maildir_root: &Path) -> Result<Vec<(String, String)>, String> {
+    let accounts = match subdirs(maildir_root) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        other => other.map_err(|e| format!("list {}: {e}", maildir_root.display()))?,
+    };
     let mut out = Vec::new();
-    for account in subdirs(maildir_root) {
+    for account in accounts {
         let account_path = maildir_root.join(&account);
-        for dir in subdirs(&account_path) {
+        for dir in subdirs(&account_path).map_err(|e| format!("list {}: {e}", account_path.display()))? {
             if account_path.join(&dir).join("cur").is_dir() {
                 out.push((account.clone(), dir));
             }
         }
     }
-    out
+    Ok(out)
 }
 
-fn subdirs(path: &Path) -> Vec<String> {
-    let Ok(entries) = std::fs::read_dir(path) else { return Vec::new() };
-    entries
+fn subdirs(path: &Path) -> std::io::Result<Vec<String>> {
+    Ok(std::fs::read_dir(path)?
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .filter_map(|e| e.file_name().into_string().ok())
-        .collect()
+        .collect())
 }
 
 /// Vault rows on disk, one per uid per folder (same rule as the listing).
 pub fn count_disk_files(maildir_root: &Path) -> u64 {
     list_vault_dirs(maildir_root)
+        .unwrap_or_default()
         .iter()
         .map(|(a, d)| uid_file_map(&maildir_root.join(a).join(d).join("cur")).len() as u64)
         .sum()
@@ -609,13 +614,13 @@ mod tests {
         put(&v, "a2", "INBOX", "1:2,.eml", &eml("Beta", "two"));
         put(&v, "a2", "Projects_2026", "1:2,.eml", &eml("Gamma", "three"));
         let n = AtomicUsize::new(0);
-        for (a, d) in list_vault_dirs(&v.root.join("Maildir")) { run(&v, &a, &d, ON, &n); }
-        let mut dirs = list_vault_dirs(&v.root.join("Maildir"));
+        for (a, d) in list_vault_dirs(&v.root.join("Maildir")).unwrap() { run(&v, &a, &d, ON, &n); }
+        let mut dirs = list_vault_dirs(&v.root.join("Maildir")).unwrap();
         dirs.sort();
         assert_eq!(dirs, vec![("a1".into(), "INBOX".into()), ("a2".into(), "INBOX".into()), ("a2".into(), "Projects_2026".into())]);
         assert_eq!(count_disk_files(&v.root.join("Maildir")), 3);
         std::fs::remove_dir_all(v.root.join("Maildir/a2/Projects_2026")).unwrap();
-        let removed = prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir"))).unwrap();
+        let removed = prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir")).unwrap()).unwrap();
         assert_eq!(removed, 1);
         assert!(fts_hits(&v, "\"gamma\"").is_empty());
         assert_eq!(
@@ -623,6 +628,25 @@ mod tests {
             (1, 1),
             "prune keeps the folders still on disk"
         );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn an_unreadable_account_dir_is_an_error_not_an_empty_account() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let maildir = tmp.path().join("Maildir");
+        assert_eq!(list_vault_dirs(&maildir), Ok(vec![]), "no Maildir yet: nothing to list");
+        std::fs::create_dir_all(maildir.join("a1/INBOX/cur")).unwrap();
+        std::fs::create_dir_all(maildir.join("a2/INBOX/cur")).unwrap();
+        let locked = maildir.join("a2");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let res = list_vault_dirs(&maildir);
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(res.is_err(), "pruning on this listing would drop every a2 folder: {res:?}");
+        let mut dirs = list_vault_dirs(&maildir).unwrap();
+        dirs.sort();
+        assert_eq!(dirs, vec![("a1".into(), "INBOX".into()), ("a2".into(), "INBOX".into())]);
     }
 
     #[test]
@@ -715,7 +739,7 @@ mod tests {
         assert_eq!(s, ReconcileStats::default());
         assert_eq!(row_count(&v.db), 2);
         assert_eq!((fts_hits(&v, "\"alpha\"").len(), fts_hits(&v, "\"beta\"").len()), (1, 1));
-        assert_eq!(prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir"))).unwrap(), 1);
+        assert_eq!(prune_missing_dirs(&v.db, &list_vault_dirs(&v.root.join("Maildir")).unwrap()).unwrap(), 1);
         assert_eq!(row_count(&v.db), 0);
         assert_eq!((fts_hits(&v, "\"alpha\"").len(), fts_hits(&v, "\"beta\"").len()), (0, 0));
     }
@@ -798,7 +822,7 @@ mod tests {
         }
         let t = Instant::now();
         let parse = |raw: &[u8], uid: u32, name: &str| fake_parse(raw, uid, name);
-        for (a, d) in list_vault_dirs(&v.root.join("Maildir")) {
+        for (a, d) in list_vault_dirs(&v.root.join("Maildir")).unwrap() {
             reconcile_mailbox(&v.db, &v.root.join("Maildir"), &a, &d, ON, &parse, &|| true, &mut |_| {}).unwrap();
         }
         println!("index_build n={n} elapsed={:?} db_bytes={}", t.elapsed(), db::db_size_bytes(&v.root));

@@ -413,11 +413,18 @@ fn sweep(app: &tauri::AppHandle, st: &SearchIndexState, maildir: &Path, config: 
     emit(app, st);
     let keep_going = || lock(&st.db).is_some() && !st.interrupt.load(SeqCst);
     let full = only.is_none();
-    let dirs = match only {
-        Some(pair) => vec![pair],
-        None => reconcile::list_vault_dirs(maildir),
+    let (dirs, listed) = match only {
+        Some(pair) => (vec![pair], true),
+        None => match reconcile::list_vault_dirs(maildir) {
+            Ok(dirs) => (dirs, true),
+            Err(e) => {
+                warn!("search index: listing the vault failed: {e}");
+                (Vec::new(), false)
+            }
+        },
     };
-    if full {
+    // A listing that failed is not "these folders are gone": no prune.
+    if full && listed {
         let disk_total = reconcile::count_disk_files(maildir); // walk the vault BEFORE taking the lock
         // A close during the walk: the listing is of a vault that is no longer open.
         if keep_going() {
