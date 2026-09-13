@@ -474,7 +474,7 @@ async fn fetch_and_store(
     info!("archive_emails: stored UID {} ({} bytes{})", uid, raw_len,
         if external_copy_failed { ", external copy FAILED" } else { "" });
 
-    // Build local-index entry
+    // Build the custody entry
     let index_entry = serde_json::json!({
         "uid": email.uid,
         "from": { "address": email.from.address, "name": email.from.name },

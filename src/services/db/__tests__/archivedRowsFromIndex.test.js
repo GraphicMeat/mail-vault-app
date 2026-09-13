@@ -58,7 +58,11 @@ describe('getArchivedEmails builds rows from sidecars, then the index, then the 
     expect(calls.find((c) => c.cmd === 'vault_rows').args.uids).toEqual([20, 10]);
     expect(calls.find((c) => c.cmd === 'maildir_read_light_batch').args.uids).toEqual([10]);
     expect(rows.every((r) => r.isArchived === true && r.localId === `acct-INBOX-${r.uid}`)).toBe(true);
-    expect(calls.some((c) => c.cmd === 'maildir_save_archived_cache' || c.cmd === 'maildir_read_archived_cached')).toBe(false);
+    // Nothing outside the three tiers is reached — the retired archived-cache
+    // commands included. Naming them here would be the one thing
+    // tests/unit/legacyCustodyCommands.test.js forbids, and that guard covers
+    // the whole repo, not just this path.
+    expect(calls.map((c) => c.cmd).filter((cmd) => !(cmd in DEFAULTS))).toEqual([]);
   });
 
   it('a failing index read is not a missing row: the files fill in', async () => {

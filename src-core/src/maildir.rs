@@ -288,7 +288,7 @@ const MAILDIR_CURRENT_VERSION: u32 = 3;
 ///
 /// Walks `{data_dir}/Maildir/*/*/{cur,new,tmp}/` and renames files whose name
 /// looks like a Maildir message (`{uid}:...`) but does not already end in
-/// `.eml`. Files that don't match the pattern (e.g. `local-index.json`) are
+/// `.eml`. Files that don't match the pattern (a stray JSON file, say) are
 /// left alone.
 pub fn migrate_add_eml_extension(data_dir: &Path) -> EmlMigrationStats {
     let mut stats = EmlMigrationStats::default();
@@ -357,7 +357,7 @@ fn rename_dir_add_eml(dir: &Path, stats: &mut EmlMigrationStats) {
         let name = entry.file_name().to_string_lossy().to_string();
 
         // Heuristic: Maildir message filenames start with `{uid}:`.
-        // Anything else (local-index.json, hidden files, etc.) is left alone.
+        // Anything else (a stray JSON file, hidden files, etc.) is left alone.
         let looks_like_message = name
             .split(':')
             .next()
@@ -663,7 +663,7 @@ fn extract_snippet(parsed: &mailparse::ParsedMail) -> Option<String> {
 // server, and every caller that asks "is uid N archived?" gets a yes about
 // some other message.
 //
-// `.uidvalidity` (a sibling of `cur/`, alongside `local-index.json`) records
+// `.uidvalidity` (a sibling of `cur/`) records
 // the generation the files in `cur/` are keyed under. When it names a
 // generation the server has replaced, `repair_generation` re-binds what it can
 // by Message-ID and moves the rest out of the uid namespace into `orphaned/`.

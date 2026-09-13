@@ -1,5 +1,7 @@
 //! Read-only, local header snapshots. Tauri's sidecars and Maildir are the source
-//! of truth here; the daemon uses a different Maildir format.
+//! of truth for the files; custody comes from the store
+//! (`<vault>/custody/custody.db`), never from a per-mailbox file. The daemon
+//! uses a different Maildir format.
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -400,7 +402,13 @@ impl InsightsSnapshots {
             }
         });
     }
-    fn begin_at(&self, root: &Path, configured: &[String], account_ids: &[String]) -> ResultValue {
+    fn begin_at(
+        &self,
+        root: &Path,
+        custody: &mailvault_core::custody::SharedConn,
+        configured: &[String],
+        account_ids: &[String],
+    ) -> ResultValue {
         self.expire(Instant::now());
         if account_ids.iter().any(|a| {
             !configured.contains(a)
@@ -418,7 +426,7 @@ impl InsightsSnapshots {
         let mut accounts = account_ids.to_vec();
         accounts.sort();
         accounts.dedup();
-        let mut snapshot = inventory(root, configured, accounts)?;
+        let mut snapshot = inventory(root, custody, configured, accounts)?;
         if !snapshot.unchanged() {
             return Err(
                 json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))}),
@@ -588,11 +596,35 @@ fn date_value(value: &Value) -> Option<String> {
 }
 fn inventory(
     root: PathBuf,
+    custody: &mailvault_core::custody::SharedConn,
     configured: &[String],
     accounts: Vec<String>,
 ) -> Result<Snapshot, Value> {
     let mut snapshot = Snapshot::new(root.clone(), accounts.clone());
     snapshot.watch_directory(&root, "");
+    // One short read under the store's lock; the walks below must not hold it.
+    let custody_path = root
+        .join(mailvault_core::custody::db::DB_DIR)
+        .join(mailvault_core::custody::db::DB_FILE);
+    let mut custody_rows: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
+    {
+        let guard = mailvault_core::custody::lock(custody);
+        for account in &accounts {
+            match guard
+                .as_ref()
+                .map(|conn| mailvault_core::custody::entries::entries_for_account(conn, account))
+            {
+                Some(Ok(rows)) => {
+                    custody_rows.insert(account.clone(), rows);
+                }
+                _ => snapshot.problem("unreadableLocation", account, None),
+            }
+        }
+    }
+    // The store is one file (plus its write-ahead log): a write after this
+    // point changes one of them, and the snapshot is stale.
+    snapshot.watch(&custody_path, "");
+    snapshot.watch(&custody_path.with_extension("db-wal"), "");
     let cache_paths = snapshot.children(&root.join("email_cache"), "");
     for account in accounts {
         let mut locations = BTreeMap::new();
@@ -618,23 +650,8 @@ fn inventory(
         } else {
             snapshot.problem("mailboxInventoryUnavailable", &account, None);
         }
-        let index_root = root.join("maildir").join(&account);
-        let index_files = snapshot.walk(&index_root, &account);
         let mut indexes: Vec<(String, PathBuf, Value)> = vec![];
-        for path in index_files
-            .iter()
-            .filter(|p| p.file_name().and_then(|n| n.to_str()) == Some("local-index.json"))
-        {
-            if !snapshot.watch(path, &account) {
-                continue;
-            }
-            let mailbox = path
-                .parent()
-                .unwrap()
-                .strip_prefix(&index_root)
-                .unwrap()
-                .to_string_lossy()
-                .replace('\\', "/");
+        for (mailbox, row) in custody_rows.remove(&account).unwrap_or_default() {
             locations
                 .entry(mailbox.clone())
                 .or_insert_with(|| Location {
@@ -645,19 +662,9 @@ fn inventory(
                     uid_validity: None,
                     special_use: None,
                 });
-            let parsed = fs::File::open(path)
-                .map_err(|_| "unreadableLocation")
-                .and_then(|file| {
-                    serde_json::from_reader::<_, Vec<CachedHeader>>(BufReader::new(file))
-                        .map_err(|_| "invalidMetadata")
-                });
-            match parsed {
-                Ok(rows) => {
-                    for row in rows {
-                        indexes.push((mailbox.clone(), path.clone(), row.value()));
-                    }
-                }
-                Err(code) => snapshot.problem(code, &account, Some(&mailbox)),
+            match serde_json::from_value::<CachedHeader>(row) {
+                Ok(header) => indexes.push((mailbox, custody_path.clone(), header.value())),
+                Err(_) => snapshot.problem("invalidMetadata", &account, Some(&mailbox)),
             }
         }
         for location in locations.values() {
@@ -1080,7 +1087,8 @@ pub async fn insights_begin_snapshot(
             return Err(error("invalidAccountScope"));
         }
         let root = crate::vault::root(&app_handle).map_err(|_| error("vaultUnavailable"))?;
-        state.begin_at(&root, &configured, &account_ids)
+        let custody = tauri::Manager::state::<crate::custody::CustodyState>(&app_handle);
+        state.begin_at(&root, &custody.db, &configured, &account_ids)
     })
     .await
     .map_err(|_| error("snapshotUnavailable"))?
