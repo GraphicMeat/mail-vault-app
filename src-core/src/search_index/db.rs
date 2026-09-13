@@ -1,4 +1,4 @@
-use rusqlite::{Connection, OptionalExtension};
+use rusqlite::{Connection, ErrorCode, OptionalExtension};
 use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
@@ -57,20 +57,38 @@ impl std::fmt::Display for OpenError {
 }
 
 /// Open (creating if needed) the vault's index. Phase 1: every table is
-/// derived from the .eml files, so an unusable file is deleted and rebuilt.
+/// derived from the .eml files, so a corrupt file is deleted and rebuilt.
+/// Any other failure (locked by another process, permission, read-only
+/// volume, a failed migration) leaves the files untouched.
 pub fn open(vault_root: &Path) -> Result<Connection, OpenError> {
     let dir = vault_root.join(DB_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| OpenError::Io(format!("create {}: {e}", dir.display())))?;
     let path = dir.join(DB_FILE);
     match open_at(&path) {
-        Err(OpenError::Io(first)) => {
-            tracing::warn!("search index unusable ({first}); rebuilding {}", path.display());
+        Ok(conn) => Ok(conn),
+        Err(Fail::Other(e)) => Err(e),
+        Err(Fail::Corrupt(first)) => {
+            tracing::warn!("search index corrupt ({first}); rebuilding {}", path.display());
             for suffix in ["", "-wal", "-shm", "-journal"] {
                 let _ = std::fs::remove_file(dir.join(format!("{DB_FILE}{suffix}")));
             }
-            open_at(&path)
+            open_at(&path).map_err(|f| match f {
+                Fail::Corrupt(e) => OpenError::Io(e),
+                Fail::Other(e) => e,
+            })
         }
-        other => other,
+    }
+}
+
+/// Why `open_at` failed. Only `Corrupt` lets `open` delete the file.
+enum Fail {
+    Corrupt(String),
+    Other(OpenError),
+}
+
+impl From<OpenError> for Fail {
+    fn from(e: OpenError) -> Self {
+        Fail::Other(e)
     }
 }
 
@@ -78,19 +96,26 @@ fn io<E: std::fmt::Display>(e: E) -> OpenError {
     OpenError::Io(e.to_string())
 }
 
-fn open_at(path: &Path) -> Result<Connection, OpenError> {
-    let conn = Connection::open(path).map_err(io)?;
+fn sql(e: rusqlite::Error) -> Fail {
+    match e.sqlite_error_code() {
+        Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => Fail::Corrupt(e.to_string()),
+        _ => Fail::Other(io(e)),
+    }
+}
+
+fn open_at(path: &Path) -> Result<Connection, Fail> {
+    let conn = Connection::open(path).map_err(sql)?;
     // Exclusive BEFORE the first WAL access: no -shm file, so WAL also works
     // when the vault is on a network volume (sqlite.org/wal.html).
-    conn.execute_batch("PRAGMA locking_mode=EXCLUSIVE;").map_err(io)?;
-    let mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0)).map_err(io)?;
+    conn.execute_batch("PRAGMA locking_mode=EXCLUSIVE;").map_err(sql)?;
+    let mode: String = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get(0)).map_err(sql)?;
     if !mode.eq_ignore_ascii_case("wal") {
-        return Err(OpenError::Io(format!("journal_mode stayed {mode}")));
+        return Err(OpenError::Io(format!("journal_mode stayed {mode}")).into());
     }
-    conn.execute_batch("PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;").map_err(io)?;
-    let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(io)?;
+    conn.execute_batch("PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;").map_err(sql)?;
+    let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(sql)?;
     if check != "ok" {
-        return Err(OpenError::Io(format!("quick_check: {check}")));
+        return Err(Fail::Corrupt(format!("quick_check: {check}")));
     }
     migrate(&conn)?;
     Ok(conn)
@@ -181,6 +206,19 @@ mod tests {
         std::fs::write(tmp.path().join(DB_DIR).join(DB_FILE), b"this is not a database at all, not even close").unwrap();
         let conn = open(tmp.path()).unwrap();
         assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn busy_file_is_left_alone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let holder = open(tmp.path()).unwrap();
+        meta_set(&holder, "probe", "held").unwrap();
+        match open(tmp.path()) {
+            Err(OpenError::Io(_)) => {}
+            other => panic!("expected Io while another connection holds the lock, got {:?}", other.map(|_| ())),
+        }
+        assert!(tmp.path().join(DB_DIR).join(DB_FILE).exists());
+        assert_eq!(meta_get(&holder, "probe").as_deref(), Some("held"));
     }
 
     #[test]
