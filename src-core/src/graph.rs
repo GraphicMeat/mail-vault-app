@@ -64,7 +64,9 @@ pub struct GraphMailFolder {
     pub well_known_name: Option<String>,
     /// The locale-independent name every store keys this folder by: the vault
     /// directory, the sidecar dir with its uid ledger, the local index, the
-    /// mirror. Computed here, never read from Graph.
+    /// mirror. Computed here, never read from Graph. When the well-known
+    /// lookup fails the whole listing fails, so this is never a display name
+    /// standing in for a key the lookup could not resolve.
     #[serde(default, skip_deserializing)]
     pub storage_key: String,
 }
@@ -296,44 +298,37 @@ pub fn tag_well_known(folders: &mut [GraphMailFolder], resolved: &[(String, Stri
     tagged
 }
 
-/// The pre-2026-09 rule: match Outlook's ENGLISH display names. Kept only for
-/// a listing whose well-known lookup failed, so an English mailbox keeps its
-/// keys when `$batch` is down.
-fn legacy_storage_key(display_name: &str) -> Option<&'static str> {
-    match display_name.to_lowercase().as_str() {
-        "inbox" => Some("INBOX"),
-        "sent items" => Some("Sent"),
-        "deleted items" => Some("Trash"),
-        "drafts" => Some("Drafts"),
-        "junk email" => Some("Junk"),
-        "archive" => Some("Archive"),
-        _ => None,
-    }
-}
-
-pub fn storage_key_for(folder: &GraphMailFolder, batch_failed: bool) -> String {
-    if let Some(key) = folder
+/// The key `$batch` earned this folder, or its display name. There is no
+/// display-name table: guessing "Sent Items" -> Sent gets an English mailbox
+/// right and every other one wrong, which is the bug. A listing whose
+/// well-known lookup failed is an error, not a listing keyed by language.
+pub fn storage_key_for(folder: &GraphMailFolder) -> String {
+    folder
         .well_known_name
         .as_deref()
         .and_then(|n| WELL_KNOWN.iter().find(|(name, _)| *name == n))
-        .map(|(_, key)| *key)
-    {
-        return key.to_string();
-    }
-    if batch_failed {
-        if let Some(key) = legacy_storage_key(&folder.display_name) {
-            return key.to_string();
-        }
-    }
-    // A user folder literally named "Sent Items" beside a tagged Sent keys as
-    // "Sent Items": the display name, never the well-known word.
-    folder.display_name.clone()
+        .map(|(_, key)| key.to_string())
+        // A user folder literally named "Sent Items" beside a tagged Sent keys
+        // as "Sent Items": the display name, never the well-known word.
+        .unwrap_or_else(|| folder.display_name.clone())
 }
 
-pub fn assign_storage_keys(folders: &mut [GraphMailFolder], batch_failed: bool) {
+pub fn assign_storage_keys(folders: &mut [GraphMailFolder]) {
     for f in folders.iter_mut() {
-        f.storage_key = storage_key_for(f, batch_failed);
+        f.storage_key = storage_key_for(f);
     }
+}
+
+/// `retry-after` in whole seconds, for the one `$batch` retry. Capped at 5 so
+/// a throttled listing cannot hold a caller for the minutes Graph sometimes
+/// asks for, and 1 when the header is missing or is the HTTP-date form.
+fn retry_after_secs(headers: &reqwest::header::HeaderMap) -> u64 {
+    headers
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok())
+        .unwrap_or(1)
+        .min(5)
 }
 
 pub struct GraphClient {
@@ -391,23 +386,23 @@ impl GraphClient {
             .map_err(|e| format!("Graph list_folders parse error: {}", e))?;
 
         let mut folders = list.value;
-        let batch_failed = match self.resolve_well_known_ids().await {
-            Ok(resolved) => {
-                tag_well_known(&mut folders, &resolved);
-                false
-            }
-            Err(e) => {
-                tracing::warn!("[Graph] well-known folder lookup failed, keying by display name: {}", e);
-                true
-            }
-        };
-        assign_storage_keys(&mut folders, batch_failed);
+        // Fail closed: a listing whose keys could not be resolved is an error.
+        // Keying by display name instead would re-split the store for exactly
+        // the non-English mailboxes this resolution exists for, and the caller
+        // already retries a failed listing (10-minute folder cache, scheduler).
+        let resolved = self.resolve_well_known_ids().await?;
+        tag_well_known(&mut folders, &resolved);
+        assign_storage_keys(&mut folders);
         Ok(folders)
     }
 
     /// One `$batch` of `GET /me/mailFolders/{well-known}?$select=id` for the
     /// six default folders. Well-known names resolve whatever the mailbox's
     /// language calls the folder; the listing's displayName does not.
+    ///
+    /// A 429 is retried once after `retry-after`, because throttling is the one
+    /// failure that clears on its own in seconds. Anything else — a second 429
+    /// included — is an `Err` the caller retries on its own schedule.
     async fn resolve_well_known_ids(&self) -> Result<Vec<(String, String)>, String> {
         let requests: Vec<serde_json::Value> = WELL_KNOWN
             .iter()
@@ -417,24 +412,35 @@ impl GraphClient {
                 "url": format!("/me/mailFolders/{}?$select=id", name),
             }))
             .collect();
-        let resp = self
-            .client
-            .post(format!("{}/$batch", self.base))
-            .bearer_auth(&self.access_token)
-            .json(&serde_json::json!({ "requests": requests }))
-            .send()
-            .await
-            .map_err(|e| format!("Graph $batch request failed: {}", e))?;
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            return Err(format!("Graph $batch failed ({}) {}", status.as_u16(), body));
+        let body = serde_json::json!({ "requests": requests });
+        let mut retried = false;
+        loop {
+            let resp = self
+                .client
+                .post(format!("{}/$batch", self.base))
+                .bearer_auth(&self.access_token)
+                .json(&body)
+                .send()
+                .await
+                .map_err(|e| format!("Graph $batch request failed: {}", e))?;
+            let status = resp.status();
+            if status == reqwest::StatusCode::TOO_MANY_REQUESTS && !retried {
+                let wait = retry_after_secs(resp.headers());
+                tracing::warn!("[Graph] $batch throttled, one retry in {}s", wait);
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                retried = true;
+                continue;
+            }
+            if !status.is_success() {
+                let body = resp.text().await.unwrap_or_default();
+                return Err(format!("Graph $batch failed ({}) {}", status.as_u16(), body));
+            }
+            let json: serde_json::Value = resp
+                .json()
+                .await
+                .map_err(|e| format!("Graph $batch parse error: {}", e))?;
+            return Ok(parse_well_known_batch(&json));
         }
-        let json: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| format!("Graph $batch parse error: {}", e))?;
-        Ok(parse_well_known_batch(&json))
     }
 
     /// List messages in a folder with pagination.
@@ -1261,34 +1267,44 @@ mod tests {
     fn storage_key_comes_from_the_well_known_name_first() {
         let mut f = folder("fld-sent", "Gesendete Elemente");
         f.well_known_name = Some("sentitems".to_string());
-        assert_eq!(storage_key_for(&f, false), "Sent");
+        assert_eq!(storage_key_for(&f), "Sent");
         let mut i = folder("fld-inbox", "Posteingang");
         i.well_known_name = Some("inbox".to_string());
-        assert_eq!(storage_key_for(&i, false), "INBOX");
+        assert_eq!(storage_key_for(&i), "INBOX");
         for (name, key) in WELL_KNOWN {
             let mut g = folder("x", "anything");
             g.well_known_name = Some(name.to_string());
-            assert_eq!(storage_key_for(&g, false), key);
+            assert_eq!(storage_key_for(&g), key);
         }
     }
 
     #[test]
-    fn storage_key_falls_back_to_the_display_name_table_only_when_the_batch_failed() {
-        let f = folder("fld-sent", "Sent Items");
-        assert_eq!(storage_key_for(&f, true), "Sent");
-        assert_eq!(storage_key_for(&f, false), "Sent Items");
-        let d = folder("fld-del", "deleted items");
-        assert_eq!(storage_key_for(&d, true), "Trash");
-        let p = folder("fld-proj", "Projekte");
-        assert_eq!(storage_key_for(&p, true), "Projekte");
-        assert_eq!(storage_key_for(&p, false), "Projekte");
+    fn storage_key_is_the_display_name_for_an_untagged_folder_even_when_it_looks_well_known() {
+        // Only the $batch decides which folder is the real Sent. A folder the
+        // batch did not name keys as whatever it is called, English or not.
+        assert_eq!(storage_key_for(&folder("x", "Sent Items")), "Sent Items");
+        assert_eq!(storage_key_for(&folder("y", "deleted items")), "deleted items");
+        assert_eq!(storage_key_for(&folder("z", "Projekte")), "Projekte");
+    }
+
+    #[test]
+    fn retry_after_defaults_to_one_second_and_caps_at_five() {
+        use reqwest::header::{HeaderMap, HeaderValue};
+        let mut h = HeaderMap::new();
+        assert_eq!(retry_after_secs(&h), 1, "no header at all");
+        h.insert("retry-after", HeaderValue::from_static("3"));
+        assert_eq!(retry_after_secs(&h), 3);
+        h.insert("retry-after", HeaderValue::from_static("120"));
+        assert_eq!(retry_after_secs(&h), 5, "a long backoff must not stall the listing");
+        h.insert("retry-after", HeaderValue::from_static("Wed, 21 Oct 2026 07:28:00 GMT"));
+        assert_eq!(retry_after_secs(&h), 1, "the HTTP-date form is not seconds");
     }
 
     #[test]
     fn assign_storage_keys_fills_every_folder() {
         let mut folders = vec![folder("fld-sent", "Gesendete Elemente"), folder("fld-proj", "Projekte")];
         folders[0].well_known_name = Some("sentitems".to_string());
-        assign_storage_keys(&mut folders, false);
+        assign_storage_keys(&mut folders);
         assert_eq!(folders[0].storage_key, "Sent");
         assert_eq!(folders[1].storage_key, "Projekte");
     }
