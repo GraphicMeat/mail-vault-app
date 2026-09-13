@@ -62,7 +62,7 @@ describe('RichTextEditor output', () => {
     rawHtml = '<p>Lorem ipsum</p><p></p><p>dolor</p>';
     render(<RichTextEditor content="" onUpdate={onUpdate} />);
     options.onUpdate({ editor: fakeEditor });
-    expect(onUpdate.mock.calls[0][0]).toBe('<p>Lorem ipsum</p><p><br></p><p>dolor</p>');
+    expect(onUpdate.mock.calls).toEqual([['<p>Lorem ipsum</p><p><br></p><p>dolor</p>']]);
   });
 
   it('does not re-set the document when the parent echoes that HTML back', () => {

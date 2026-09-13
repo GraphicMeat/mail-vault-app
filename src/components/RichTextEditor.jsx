@@ -254,7 +254,7 @@ export function RichTextEditor({ content, onUpdate, placeholder = 'Write your me
     extensions: editorExtensions(placeholder),
     content,
     onUpdate: ({ editor }) => {
-      onUpdate(padEmptyLines(editor.getHTML()), editor.getText());
+      onUpdate(padEmptyLines(editor.getHTML()));
     },
     editorProps: {
       attributes: {
@@ -352,15 +352,85 @@ export function textToHtml(text) {
     .join('');
 }
 
-// Strip HTML to plain text (for text/ part of multipart emails).
-// Block-level tags become newlines so paragraphs don't collapse into one line.
+const SKIP_TAGS = /^(HEAD|SCRIPT|STYLE|TEMPLATE|TITLE)$/;
+
+/**
+ * The text/plain twin of a message body, line for line as the HTML reads: one
+ * line per paragraph and line break, an empty paragraph as a blank line, list
+ * items marked, quoted lines prefixed with "> ", a link followed by its
+ * address when the text does not already say it. DOMParser, so nothing in the
+ * HTML (the quoted original included) loads or runs.
+ */
 export function htmlToText(html) {
   if (!html) return '';
-  const div = document.createElement('div');
-  div.innerHTML = html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/(p|div|li|h[1-6]|blockquote|pre|tr)>/gi, '\n');
-  return (div.textContent || div.innerText || '').replace(/\n{3,}/g, '\n\n').trim();
+  const { body } = new DOMParser().parseFromString(html, 'text/html');
+  const lines = [];
+  let line = null;   // the line being written, null between lines
+  let quote = '';    // one "> " per enclosing blockquote
+  let marker = '';   // a list item's marker, waiting for the item's first line
+  const lists = [];  // per enclosing list: null for <ul>, the count so far for <ol>
+
+  const open = () => {
+    if (line === null) { line = marker; marker = ''; }
+  };
+  const close = () => {
+    if (line !== null) { lines.push((quote + line).trimEnd()); line = null; }
+  };
+
+  const walk = (node) => {
+    if (node.nodeType === 3) {
+      let value = node.nodeValue.replace(/[ \t\n\r\f]+/g, ' ');
+      if (line === null || line === '' || line.endsWith(' ')) value = value.replace(/^ /, '');
+      if (!value) return;
+      open();
+      line += value.replace(/\u00a0/g, ' ');
+      return;
+    }
+    if (node.nodeType !== 1 || SKIP_TAGS.test(node.nodeName)) return;
+    const tag = node.nodeName;
+    if (tag === 'BR') {
+      open();
+      if (!isPaddingBreak(node)) close();
+      return;
+    }
+    if (tag === 'PRE') {
+      close();
+      for (const row of node.textContent.replace(/\n$/, '').split('\n')) { open(); line += row; close(); }
+      return;
+    }
+    const block = BLOCK_TAGS.test(tag);
+    if (block) close();
+    if (tag === 'BLOCKQUOTE') quote += '> ';
+    else if (tag === 'UL' || tag === 'OL') lists.push(tag === 'OL' ? 0 : null);
+    else if (tag === 'LI') {
+      const depth = Math.max(lists.length - 1, 0);
+      const ordered = lists.length > 0 && lists[lists.length - 1] !== null;
+      marker = '  '.repeat(depth) + (ordered ? `${++lists[lists.length - 1]}. ` : '- ');
+    }
+    // A paragraph is a line even when it is empty: that is the blank line.
+    if (tag === 'P') open();
+    node.childNodes.forEach(walk);
+    if (tag === 'A') {
+      const href = node.getAttribute('href') || '';
+      const address = href.replace(/^mailto:/i, '');
+      const bare = (s) => s.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+      const shown = node.textContent.trim();
+      if (/^(https?:|mailto:)/i.test(href) && shown && bare(address) !== bare(shown)) {
+        open();
+        line = `${line.trimEnd()} <${address}>`;
+      }
+    }
+    if (block) close();
+    if (tag === 'BLOCKQUOTE') quote = quote.slice(0, -2);
+    else if (tag === 'UL' || tag === 'OL') lists.pop();
+    else if (tag === 'LI') marker = '';
+  };
+
+  body.childNodes.forEach(walk);
+  close();
+  while (lines.length && !lines[0]) lines.shift();
+  while (lines.length && !lines[lines.length - 1]) lines.pop();
+  return lines.join('\n');
 }
 
 // The compose window renders paragraphs nearly flush (`.tiptap p { margin: 0 0

@@ -198,7 +198,6 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
-  const plainTextRef = useRef('');
 
   // ── Autosaved draft (see services/localDrafts.js) ──
   // The vault draft this window owns. The uid is allocated on the first save
@@ -487,7 +486,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const handleSaveTemplate = () => {
     const name = templateName.trim();
     if (!name) return;
-    addEmailTemplate(name, plainTextRef.current || htmlToText(formData.body));
+    addEmailTemplate(name, htmlToText(formData.body));
     setTemplateName('');
     setSavingTemplate(false);
     setShowTemplates(false);
@@ -588,9 +587,10 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         const fullHtml = quotedHtml
           ? composed + '<hr><blockquote>' + quotedHtml + '</blockquote>'
           : composed;
+        // The text part is rendered from the same HTML the recipient reads.
         const fullText = quotedHtml
-          ? (plainTextRef.current || htmlToText(formData.body)) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
-          : (plainTextRef.current || htmlToText(formData.body));
+          ? htmlToText(formData.body) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
+          : htmlToText(formData.body);
 
         // Resolve the account's Sent folder once — used for both local
         // Maildir archival (where we write the raw .eml so the email is
@@ -683,7 +683,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           references: parseReferenceList(formData.references).length
             ? parseReferenceList(formData.references)
             : null,
-          snippet: (plainTextRef.current || htmlToText(formData.body)).slice(0, 200),
+          snippet: htmlToText(formData.body).slice(0, 200),
         };
         if (invoke) {
           try {
@@ -1024,7 +1024,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       const html = quotedHtml
         ? formData.body + '<hr><blockquote>' + quotedHtml + '</blockquote>'
         : formData.body;
-      const text = plainTextRef.current || htmlToText(formData.body);
+      const text = htmlToText(formData.body);
       const payload = {
         to: formData.to,
         cc: formData.cc || undefined,
@@ -1393,9 +1393,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               content={formData.body}
               editorRef={editorRef}
               onFiles={addFiles}
-              onUpdate={(html, text) => {
+              onUpdate={(html) => {
                 setFormData(prev => ({ ...prev, body: html }));
-                plainTextRef.current = text;
                 setError(null);
               }}
               placeholder={t('compose.writeMessage')}
