@@ -398,3 +398,31 @@ describe('searching a branch, continued', () => {
     expect(useSearchStore.getState().searchResults.find(r => r.uid === 34)).toBeTruthy();
   });
 });
+
+describe('the vault half answers from the offline index', () => {
+  const withCoverage = (rows, coverage) => Object.defineProperty(rows, 'coverage', { value: coverage, enumerable: false });
+
+  it('hands the index the branch and keeps how much of the vault it covered', async () => {
+    state.mailboxes = NESTED;
+    localResults = withCoverage([], { indexed: 40, total: 50, complete: false });
+    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
+      location: 'local', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    expect(localFilters.restrictTo).toEqual(expect.arrayContaining(['Kunden', 'Kunden.Company XY.Invoices.erledigt']));
+    expect(localFilters.restrictTo).not.toContain('Kunden-Alt');
+    expect(useSearchStore.getState().searchIndexCoverage).toEqual({ indexed: 40, total: 50, complete: false });
+
+    useSearchStore.getState().clearSearch();
+    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+  });
+
+  it('has no coverage when the scan answered, and no restriction on "all folders"', async () => {
+    useSearchStore.setState({ searchIndexCoverage: { indexed: 1, total: 2, complete: false }, searchQuery: 'Angebot' });
+    await useSearchStore.getState().performSearch();
+
+    expect(localFilters.restrictTo).toBeNull();
+    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+  });
+});

@@ -694,7 +694,65 @@ export async function migrateMaildirEmailDirs(accounts) {
   }
 }
 
+const toUnixSeconds = (d) => (d ? Math.floor(new Date(d).getTime() / 1000) : null);
+
+/**
+ * Vault search. The offline index (`vault_search`, app process) answers when it
+ * is open; until then — or when the command fails — the per-message scan below
+ * answers exactly as it always has.
+ *
+ * Index rows are the same `LightEmail` JSON the vault reads return, so they get
+ * the same decoration `getLocalEmails` gives vault rows: the SERVER path the
+ * sanitised directory came from, provenance, and custody off one local-index
+ * read per mailbox. The array carries a non-enumerable
+ * `coverage = { indexed, total, complete }` so the UI can say how much of the
+ * vault the answer covers; scan results have none.
+ */
 export async function searchLocalEmails(accountId, query, filters = {}) {
+  await initDB();
+  const mailboxes = filters.mailbox && filters.mailbox !== 'all'
+    ? [filters.mailbox]
+    : (filters.restrictTo ? [...filters.restrictTo] : null);
+  let reply = null;
+  try {
+    reply = await invoke('vault_search', { request: {
+      accountId, query: query || '', mailboxes,
+      sender: filters.sender || null,
+      dateFrom: toUnixSeconds(filters.dateFrom), dateTo: toUnixSeconds(filters.dateTo),
+      hasAttachments: !!filters.hasAttachments,
+    } });
+  } catch (e) {
+    console.warn('[db] vault_search failed; scanning the vault instead:', e);
+  }
+  if (!reply?.available) return scanLocalEmails(accountId, query, filters);
+
+  // The paths this search asked for come first: the scan stamps a one-folder
+  // search with `filters.mailbox` verbatim, whether or not the tree lists it.
+  const knownBoxes = [...(mailboxes || []).map(path => ({ path })), ...(filters.mailboxes || [])];
+  const stamperByMailbox = new Map();
+  const rows = [];
+  for (const row of reply.rows || []) {
+    const mailbox = mailboxPathFromVaultDir(row.vaultDir, knownBoxes);
+    if (!stamperByMailbox.has(mailbox)) {
+      stamperByMailbox.set(mailbox, custodyStamper(await getLocalIndexMeta(accountId, mailbox)));
+    }
+    const stamped = stamperByMailbox.get(mailbox)({
+      ...row,
+      localId: `${accountId}-${mailbox}-${row.uid}`,
+      _accountId: accountId,
+      _mailbox: mailbox,
+      isArchived: !!row.isArchived,
+    });
+    rows.push({ ...stamped, isLocal: true, source: custodySource(stamped) });
+  }
+  Object.defineProperty(rows, 'coverage', {
+    value: { indexed: reply.indexed, total: reply.totalMessages, complete: !!reply.complete },
+    enumerable: false,
+  });
+  return rows;
+}
+
+async function scanLocalEmails(accountId, query, filters = {}) {
   await initDB();
 
   let emails;

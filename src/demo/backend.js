@@ -1023,6 +1023,11 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'fetch_remote_asset': return unsupported(command);
       case 'open_file': case 'open_email_window': return unsupported(command);
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
+      // The browser demo has no index: searchLocalEmails falls back to its scan.
+      case 'vault_search': return { available: false };
+      case 'search_index_status': return { available: false, state: 'unavailable', indexed: 0, total: 0, sizeBytes: 0, complete: false };
+      case 'search_index_configure': return null;
+      case 'search_index_rebuild': return null;
       default: return unsupported(command);
     }
     return null;

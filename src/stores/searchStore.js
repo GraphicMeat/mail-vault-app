@@ -106,6 +106,9 @@ export const useSearchStore = create((set, get) => ({
   isSearching: false,
   // { done, total } while a multi-folder server search is in flight, else null.
   searchProgress: null,
+  // { indexed, total, complete } when the offline index answered the vault
+  // half of the last search, null when the scan did.
+  searchIndexCoverage: null,
 
   setSearchQuery: (query) => set({ searchQuery: query }),
 
@@ -189,9 +192,11 @@ export const useSearchStore = create((set, get) => ({
             dateFrom: searchFilters.dateFrom,
             dateTo: searchFilters.dateTo,
             mailbox: scope.localMailbox,
+            restrictTo: scope.restrictTo ? [...scope.restrictTo] : null,
             mailboxes,
             hasAttachments: searchFilters.hasAttachments
           });
+          if (!superseded()) set({ searchIndexCoverage: localResults.coverage || null });
           const kept = scope.restrictTo
             ? localResults.filter(r => scope.restrictTo.has(r._mailbox))
             : localResults;
@@ -279,6 +284,7 @@ export const useSearchStore = create((set, get) => ({
     },
     searchResults: [],
     isSearching: false,
-    searchProgress: null
+    searchProgress: null,
+    searchIndexCoverage: null
   })
 }));
