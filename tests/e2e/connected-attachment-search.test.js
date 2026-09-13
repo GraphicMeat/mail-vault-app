@@ -76,7 +76,7 @@ describe('Attachment search', function () {
 
   before(async function () {
     await waitForApp();
-    await waitForEmails(LUKE);
+    await waitForEmails();
     // The toggle defaults to true (settingsStore.js), so premium is the only
     // thing missing: `effectiveSearchIndexConfig` (useSearchIndexConfig.js)
     // gates `attachments` on `hasPremiumAccess(billingProfile) && toggle`.
