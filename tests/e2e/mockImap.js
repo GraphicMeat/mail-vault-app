@@ -1049,6 +1049,36 @@ export function mockAccount({ id, email, port, smtpPort, name }) {
   };
 }
 
+/** UID of the message `seedLegacyVault` plants. High enough that no mock
+ *  mailbox issues it, so the row list is unaffected and only the file matters. */
+export const LEGACY_EML_UID = 990001;
+
+/** The name that message carries before the sweep, and after it. */
+export const LEGACY_EML_NAME = `${LEGACY_EML_UID}:2,AS`;
+
+/**
+ * A vault as 2.5.0 through 2.13.1 left it: the version marker already says
+ * migrated, and the messages stored after that rename carry no `.eml` suffix
+ * because the writer never got the change (discussion #13).
+ *
+ * Must be planted BEFORE the app launches — the sweep runs once at startup.
+ */
+export function seedLegacyVault(home, accountId) {
+  const maildir = join(appDataDir(home), 'Maildir');
+  const cur = join(maildir, accountId, 'INBOX', 'cur');
+  mkdirSync(cur, { recursive: true });
+  writeFileSync(join(maildir, '.maildir_version'), '2');
+  writeFileSync(join(cur, LEGACY_EML_NAME),
+    'From: Legacy <legacy@mock.test>\r\n'
+    + 'To: luke@mock.test\r\n'
+    + 'Subject: Stored before the extension\r\n'
+    + 'Date: Mon, 01 Sep 2026 10:00:00 +0000\r\n'
+    + 'Message-ID: <legacy-eml@mock.test>\r\n'
+    + '\r\n'
+    + 'This message was archived by a build that forgot the suffix.\r\n');
+  return cur;
+}
+
 export const MOCK_PASSWORD = 'mock-password';
 
 /**

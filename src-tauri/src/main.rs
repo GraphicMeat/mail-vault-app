@@ -1943,6 +1943,20 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     format!("{}:2,{}.eml", uid, flag_str)
 }
 
+/// Rename the vault's message files that pre-date the `.eml` suffix.
+///
+/// `migrate_add_eml_extension` is idempotent and guarded by a version marker
+/// inside the vault, so this costs one file read once it has run. `None` is an
+/// external vault that is not mounted: sweeping then would write that marker
+/// into whatever path is standing in and call a vault migrated that nothing
+/// ever looked at.
+fn sweep_vault_eml(root: Option<&Path>) -> mailvault_core::maildir::EmlMigrationStats {
+    match root {
+        Some(root) => mailvault_core::maildir::migrate_add_eml_extension(root),
+        None => Default::default(),
+    }
+}
+
 /// Find a message file for `uid` in a directory that may use either naming
 /// scheme: Maildir (`<uid>:2,<flags>[.eml]`) or the legacy flagless external
 /// backup name (`<uid>.eml`). Used for the external backup location, which
@@ -5468,6 +5482,24 @@ fn main() {
                 vault_status.status
             );
 
+            // A vault written before 2.5.0's `.eml` rename, or by any build
+            // between it and the writer fix, still holds extension-less files.
+            // The daemon sweeps too, but the app is the process that always
+            // runs. Off the startup path: the first sweep walks the whole
+            // Maildir, every later one is a single read of the version marker.
+            {
+                let root = vault::root(&app.handle()).ok();
+                std::thread::spawn(move || {
+                    let mig = sweep_vault_eml(root.as_deref());
+                    if mig.renamed > 0 || mig.errors > 0 {
+                        info!(
+                            "Maildir .eml sweep: renamed={} already_ok={} skipped={} errors={}",
+                            mig.renamed, mig.already_ok, mig.skipped_non_message, mig.errors
+                        );
+                    }
+                });
+            }
+
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.
             #[cfg(any(not(target_os = "macos"), feature = "sparkle"))]
@@ -5781,6 +5813,33 @@ mod tests {
         assert_eq!(parse_flags_from_filename("12:2,FRS"), vec!["flagged", "replied", "seen", "\\Seen", "\\Flagged", "\\Answered"]);
         // The names round-trip through the builder without changing the name.
         assert_eq!(build_maildir_filename(12, &parse_flags_from_filename("12:2,AS.eml")), "12:2,AS.eml");
+    }
+
+    /// The `.eml` sweep must not depend on the background helper being up.
+    /// Discussion #13: 2.5.0 ran the rename from the daemon only, and the app,
+    /// which is the process that always runs, never swept anything.
+    #[test]
+    fn startup_sweeps_a_vault_that_predates_the_eml_suffix() {
+        let dir = tempfile::tempdir().unwrap();
+        let cur = dir.path().join("Maildir").join("acc").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("7:2,AS"), b"body").unwrap();
+
+        let stats = sweep_vault_eml(Some(dir.path()));
+
+        assert_eq!(stats.renamed, 1);
+        assert!(cur.join("7:2,AS.eml").exists());
+    }
+
+    /// An external vault that is not mounted resolves to no root at all. The
+    /// sweep must then do nothing — writing a version marker into whatever
+    /// path is standing in would mark a vault it never looked at as migrated.
+    #[test]
+    fn startup_sweeps_nothing_when_the_vault_is_unreachable() {
+        let stats = sweep_vault_eml(None);
+
+        assert_eq!(stats.renamed, 0);
+        assert_eq!(stats.errors, 0);
     }
 
     #[test]

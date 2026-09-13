@@ -16,6 +16,7 @@ import {
   resetAppState,
   stopDaemon,
   appDataDir,
+  seedLegacyVault,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 
@@ -402,11 +403,16 @@ export const config = {
   },
 
   // Each spec file gets a fresh app state — see resetAppState().
-  beforeSession: function () {
+  beforeSession: function (_config, _capabilities, specs) {
     const accounts = JSON.parse(process.env.E2E_MOCK_ACCOUNTS || '[]');
     if (accounts.length) {
       resetAppState(testDataDir, accounts);
       seedOnboardingComplete(testDataDir);
+      // One spec needs a vault written before the `.eml` suffix, and it has to
+      // exist before the app launches: the sweep runs once during setup.
+      if ((specs || []).some((s) => s.includes('connected-vault-eml-migration'))) {
+        seedLegacyVault(testDataDir, accounts[0].id);
+      }
     }
   },
 
