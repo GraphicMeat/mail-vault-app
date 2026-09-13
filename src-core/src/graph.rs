@@ -1,6 +1,7 @@
 use base64::Engine;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use tracing::warn;
 
 use crate::imap::{EmailAddress, EmailHeader};
 
@@ -232,31 +233,40 @@ impl GraphMessage {
 
 const GRAPH_BASE_DEFAULT: &str = "https://graph.microsoft.com/v1.0";
 
-/// The Graph origin. `MAILVAULT_GRAPH_BASE` points the client at a loopback
-/// mock for the e2e suite, and at nothing else: the same rule as
-/// `MAILVAULT_IMAP_PLAINTEXT` in imap/mod.rs.
-pub fn graph_base() -> String {
-    graph_base_from(std::env::var("MAILVAULT_GRAPH_BASE").ok().as_deref())
-}
-
-pub(crate) fn graph_base_from(override_url: Option<&str>) -> String {
-    match override_url {
-        Some(url) if is_loopback_http(url) => {
-            tracing::warn!("[Graph] MAILVAULT_GRAPH_BASE={} — requests go to a loopback mock", url);
-            url.trim_end_matches('/').to_string()
-        }
-        Some(url) => {
-            tracing::warn!("[Graph] MAILVAULT_GRAPH_BASE={} ignored — not loopback", url);
-            GRAPH_BASE_DEFAULT.to_string()
-        }
-        None => GRAPH_BASE_DEFAULT.to_string(),
+/// Where every Graph request goes: Microsoft, unless an e2e run points the
+/// client at a mock on this machine with `MAILVAULT_GRAPH_BASE`. The override is
+/// honoured only for a plain-http loopback URL with no userinfo, because every
+/// request carries the user's bearer token and a base anywhere else would hand
+/// it over. Same rule as `MAILVAULT_IMAP_PLAINTEXT` on the IMAP side.
+fn resolve_graph_base(env: Option<&str>) -> String {
+    let Some(raw) = env.map(str::trim).filter(|s| !s.is_empty()) else {
+        return GRAPH_BASE_DEFAULT.to_string();
+    };
+    let loopback = reqwest::Url::parse(raw).ok().is_some_and(|url| {
+        url.scheme() == "http"
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.host_str().is_some_and(|host| {
+                host.eq_ignore_ascii_case("localhost")
+                    || host
+                        .trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            })
+    });
+    if loopback {
+        warn!("[Graph] MAILVAULT_GRAPH_BASE={} — requests go to a loopback mock", raw);
+        raw.trim_end_matches('/').to_string()
+    } else {
+        warn!("[Graph] MAILVAULT_GRAPH_BASE={} ignored — not a loopback http URL", raw);
+        GRAPH_BASE_DEFAULT.to_string()
     }
 }
 
-fn is_loopback_http(url: &str) -> bool {
-    ["http://127.0.0.1", "http://localhost", "http://[::1]"]
-        .iter()
-        .any(|prefix| url.starts_with(prefix))
+fn graph_base() -> &'static str {
+    static BASE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    BASE.get_or_init(|| resolve_graph_base(std::env::var("MAILVAULT_GRAPH_BASE").ok().as_deref()))
 }
 
 /// Well-known folder name -> the storage key every store uses for it.
@@ -361,8 +371,6 @@ pub struct GraphClient {
     // authenticated Graph requests not covered by GraphClient's own methods.
     pub client: Client,
     pub access_token: String,
-    /// `https://graph.microsoft.com/v1.0`, or the loopback mock from `graph_base()`.
-    pub base: String,
 }
 
 impl GraphClient {
@@ -370,14 +378,13 @@ impl GraphClient {
         Self {
             client: Client::new(),
             access_token: access_token.to_string(),
-            base: graph_base(),
         }
     }
 
     /// List all mail folders for the authenticated user, each stamped with
     /// its well-known name (when it has one) and its storage key.
     pub async fn list_folders(&self) -> Result<Vec<GraphMailFolder>, String> {
-        let url = format!("{}/me/mailFolders?$top=100", self.base);
+        let url = format!("{}/me/mailFolders?$top=100", graph_base());
         let resp = self
             .client
             .get(&url)
@@ -446,7 +453,7 @@ impl GraphClient {
         loop {
             let resp = self
                 .client
-                .post(format!("{}/$batch", self.base))
+                .post(format!("{}/$batch", graph_base()))
                 .bearer_auth(&self.access_token)
                 .json(&body)
                 .send()
@@ -455,7 +462,7 @@ impl GraphClient {
             let status = resp.status();
             if status == reqwest::StatusCode::TOO_MANY_REQUESTS && !retried {
                 let wait = retry_after_secs(resp.headers());
-                tracing::warn!("[Graph] $batch throttled, one retry in {}s", wait);
+                warn!("[Graph] $batch throttled, one retry in {}s", wait);
                 tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
                 retried = true;
                 continue;
@@ -489,7 +496,7 @@ impl GraphClient {
     ) -> Result<(Vec<GraphMessage>, Option<String>), String> {
         let url = format!(
             "{}/me/mailFolders/{}/messages?$top={}&$skip={}&$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId&$orderby=receivedDateTime desc",
-            self.base, folder_id, top, skip
+            graph_base(), folder_id, top, skip
         );
 
         let resp = self
@@ -531,7 +538,7 @@ impl GraphClient {
     pub async fn get_message(&self, message_id: &str) -> Result<GraphMessage, String> {
         let url = format!(
             "{}/me/messages/{}?$select=id,subject,from,toRecipients,ccRecipients,bccRecipients,receivedDateTime,sentDateTime,isRead,hasAttachments,internetMessageId,body,internetMessageHeaders",
-            self.base, message_id
+            graph_base(), message_id
         );
 
         let resp = self
@@ -573,7 +580,7 @@ impl GraphClient {
         message_id: &str,
         is_read: bool,
     ) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", self.base, message_id);
+        let url = format!("{}/me/messages/{}", graph_base(), message_id);
 
         let resp = self
             .client
@@ -611,7 +618,7 @@ impl GraphClient {
     /// Graph has exactly two of our flags — `isRead` above and this one.
     /// \Answered and keywords have no equivalent and never reach here.
     pub async fn set_flag_status(&self, message_id: &str, flagged: bool) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", self.base, message_id);
+        let url = format!("{}/me/messages/{}", graph_base(), message_id);
 
         let resp = self
             .client
@@ -648,7 +655,7 @@ impl GraphClient {
 
     /// Delete a message (moves to Deleted Items by default in Graph API).
     pub async fn delete_message(&self, message_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/messages/{}", self.base, message_id);
+        let url = format!("{}/me/messages/{}", graph_base(), message_id);
 
         let resp = self
             .client
@@ -686,7 +693,7 @@ impl GraphClient {
         message_id: &str,
         destination_folder_id: &str,
     ) -> Result<String, String> {
-        let url = format!("{}/me/messages/{}/move", self.base, message_id);
+        let url = format!("{}/me/messages/{}/move", graph_base(), message_id);
 
         let resp = self
             .client
@@ -726,7 +733,7 @@ impl GraphClient {
 
     /// Download the raw MIME (.eml) content of a message.
     pub async fn get_mime_content(&self, message_id: &str) -> Result<Vec<u8>, String> {
-        let url = format!("{}/me/messages/{}/$value", self.base, message_id);
+        let url = format!("{}/me/messages/{}/$value", graph_base(), message_id);
 
         let resp = self
             .client
@@ -769,7 +776,7 @@ impl GraphClient {
     /// Graph API requires the MIME content to be base64-encoded with Content-Type: text/plain.
     pub async fn create_message_from_mime(&self, mime_bytes: &[u8]) -> Result<String, String> {
         let encoded = base64::engine::general_purpose::STANDARD.encode(mime_bytes);
-        let url = format!("{}/me/messages", self.base);
+        let url = format!("{}/me/messages", graph_base());
 
         let resp = self
             .client
@@ -818,9 +825,9 @@ impl GraphClient {
         let url = match parent_folder_id {
             Some(parent_id) => format!(
                 "{}/me/mailFolders/{}/childFolders",
-                self.base, parent_id
+                graph_base(), parent_id
             ),
-            None => format!("{}/me/mailFolders", self.base),
+            None => format!("{}/me/mailFolders", graph_base()),
         };
 
         let resp = self
@@ -874,7 +881,7 @@ impl GraphClient {
     /// Rename a folder. Graph names folders, it does not path them, so this is
     /// the whole of a rename — the subtree comes along untouched.
     pub async fn rename_folder(&self, folder_id: &str, display_name: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}", self.base, folder_id);
+        let url = format!("{}/me/mailFolders/{}", graph_base(), folder_id);
 
         let resp = self
             .client
@@ -891,7 +898,7 @@ impl GraphClient {
     /// Move a folder under another one. `destination_id` takes a well-known
     /// name as well as an id, which is what makes "deleteditems" the delete.
     pub async fn move_folder(&self, folder_id: &str, destination_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}/move", self.base, folder_id);
+        let url = format!("{}/me/mailFolders/{}/move", graph_base(), folder_id);
 
         let resp = self
             .client
@@ -909,7 +916,7 @@ impl GraphClient {
     /// Items moves it there instead, so the caller only reaches this for one
     /// that is already in the bin.
     pub async fn delete_folder(&self, folder_id: &str) -> Result<(), String> {
-        let url = format!("{}/me/mailFolders/{}", self.base, folder_id);
+        let url = format!("{}/me/mailFolders/{}", graph_base(), folder_id);
 
         let resp = self
             .client
@@ -1258,21 +1265,39 @@ mod tests {
         assert!(header.flags.is_empty());
     }
 
+    // -- Base URL override ---------------------------------------------------
+
+    #[test]
+    fn graph_base_defaults_to_microsoft() {
+        assert_eq!(resolve_graph_base(None), "https://graph.microsoft.com/v1.0");
+        assert_eq!(resolve_graph_base(Some("")), "https://graph.microsoft.com/v1.0");
+    }
+
+    #[test]
+    fn graph_base_override_is_honoured_for_loopback_http_only() {
+        assert_eq!(resolve_graph_base(Some("http://127.0.0.1:43123/v1.0")), "http://127.0.0.1:43123/v1.0");
+        assert_eq!(resolve_graph_base(Some("http://localhost:43123/v1.0/")), "http://localhost:43123/v1.0");
+        assert_eq!(resolve_graph_base(Some("http://[::1]:43123/v1.0")), "http://[::1]:43123/v1.0");
+        // Every request carries the user's bearer token: anywhere but this
+        // machine, and the override would hand it over.
+        for hostile in [
+            "https://graph.example.com/v1.0",
+            "http://graph.example.com/v1.0",
+            "http://127.0.0.1.example.com/v1.0",
+            "http://127.0.0.1:80@example.com/v1.0",
+            "http://localhost@example.com/v1.0",
+            "ftp://127.0.0.1/v1.0",
+            "not a url",
+        ] {
+            assert_eq!(resolve_graph_base(Some(hostile)), "https://graph.microsoft.com/v1.0", "{hostile}");
+        }
+    }
     // -- Storage keys ---------------------------------------------------------
 
     fn folder(id: &str, display: &str) -> GraphMailFolder {
         serde_json::from_value(serde_json::json!({
             "id": id, "displayName": display, "totalItemCount": 1, "unreadItemCount": 0
         })).unwrap()
-    }
-
-    #[test]
-    fn graph_base_honours_only_a_loopback_override() {
-        assert_eq!(graph_base_from(None), "https://graph.microsoft.com/v1.0");
-        assert_eq!(graph_base_from(Some("http://127.0.0.1:4599/v1.0")), "http://127.0.0.1:4599/v1.0");
-        assert_eq!(graph_base_from(Some("http://localhost:4599/v1.0/")), "http://localhost:4599/v1.0");
-        assert_eq!(graph_base_from(Some("https://evil.test/v1.0")), "https://graph.microsoft.com/v1.0");
-        assert_eq!(graph_base_from(Some("http://10.0.0.5/v1.0")), "https://graph.microsoft.com/v1.0");
     }
 
     #[test]
