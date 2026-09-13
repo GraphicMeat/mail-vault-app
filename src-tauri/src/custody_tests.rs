@@ -19,6 +19,12 @@ fn status_reports_closed_then_open_then_the_open_failure() {
     assert_eq!(s["available"], false);
     assert_eq!(s["error"], "custody store unreadable: file is not a database");
     assert_eq!(s["path"], db::db_path(tmp.path()).display().to_string(), "the banner names the file");
+
+    // A vault switch closes the store: the failure that belonged to the old
+    // root must not be reported against the one being switched to.
+    crate::custody::close_state(&st);
+    let s = crate::custody::status_json(&st);
+    assert_eq!((s["available"].as_bool(), s["error"].is_null(), s["path"].is_null()), (Some(false), true, true));
 }
 
 #[test]

@@ -63,9 +63,15 @@ pub fn open_into(app: &tauri::AppHandle) {
 /// Before a vault operation: release the file. Drop = checkpoint, and the
 /// -wal is gone, so a copy of `custody.db` alone is complete.
 pub fn close(app: &tauri::AppHandle) {
-    let st = app.state::<CustodyState>();
+    close_state(&app.state::<CustodyState>());
+}
+
+/// What `close` does to the state, without the handle: closed is closed, and
+/// the last open's error belongs to a root that is no longer current.
+pub(crate) fn close_state(st: &CustodyState) {
     *lock(&st.db) = None;
     *g(&st.root) = None;
+    *g(&st.error) = None;
 }
 
 /// After a vault operation, success or not: open whatever root is current.

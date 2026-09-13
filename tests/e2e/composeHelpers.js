@@ -688,14 +688,11 @@ export const readDrafts = (accountId) =>
 
 /** The Drafts index entries for a mailbox, read from the app's custody store (the metadata the Drafts list renders from). */
 export async function localIndex(accountId, mailbox) {
-  const raw = await browser.executeAsync((a, m, done) => {
-    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m }).then(done, () => done(null));
-  }, accountId, mailbox);
-  try {
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
+  const r = await invoke('local_index_read', { accountId, mailbox });
+  // A store that is closed or would not open answers with an error. Swallowing
+  // it would turn every `.not.toContain` assertion green against nothing.
+  if (!r.ok) throw new Error(`local_index_read failed for ${accountId}/${mailbox}: ${r.error}`);
+  return r.value ? JSON.parse(r.value) : [];
 }
 
 /**
