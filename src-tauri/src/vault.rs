@@ -19,6 +19,7 @@ use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::external_location::{self, SLOT_VAULT};
+use mailvault_core::custody::db::{DB_DIR as CUSTODY_DIR, DB_FILE as CUSTODY_FILE};
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
@@ -388,6 +389,78 @@ fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// A free `<name>.pre-move-<stamp>` beside `path`, `-<n>` while taken.
+fn set_aside_name(path: &Path, stamp: u64) -> Result<PathBuf, String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    for n in 0..100 {
+        let suffix = if n == 0 { String::new() } else { format!("-{n}") };
+        let candidate = path.with_file_name(format!("{name}.pre-move-{stamp}{suffix}"));
+        if candidate.symlink_metadata().is_err() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!("Cannot set aside {}: every .pre-move name is taken", path.display()))
+}
+
+/// Move the destination's custody files out of the way so `copy_tree` copies
+/// the source's unconditionally.
+///
+/// The index gets deleted here for the same reason (`copy_tree`'s size-equal
+/// resume skip would keep a stale file), but custody is never derived and never
+/// deleted, so it is renamed aside instead. `custody.db` is rewritten in place
+/// — `json_set` on a row, then a checkpoint back into the same pages — so a
+/// stale copy at the destination is the same length as the live one far more
+/// often than not, and "same size" means nothing about its content.
+///
+/// ponytail: repeated interrupted retries leave one `.pre-move-*` set per
+/// attempt. Bounded by the number of retries, and never deleting them is the point.
+fn set_aside_custody(src_root: &Path, dst_root: &Path) -> Result<(), String> {
+    // Only when the source brings its own: otherwise the destination would be
+    // left with no live store at all, for nothing.
+    if !src_root.join(CUSTODY_DIR).exists() {
+        return Ok(());
+    }
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    for suffix in ["", "-wal", "-shm", "-journal"] {
+        let path = dst_root.join(CUSTODY_DIR).join(format!("{CUSTODY_FILE}{suffix}"));
+        if path.symlink_metadata().is_err() {
+            continue;
+        }
+        let aside = set_aside_name(&path, stamp)?;
+        std::fs::rename(&path, &aside)
+            .map_err(|e| format!("Cannot set aside the old custody store at {}: {}", path.display(), e))?;
+    }
+    Ok(())
+}
+
+/// The custody store arrived byte for byte. `verify_tree` compares sizes, which
+/// is the right proof for an immutable `.eml`; custody is the vault's only
+/// mutated-in-place, non-derivable file, so it gets the stronger check before
+/// anything is removed from the source.
+///
+/// ponytail: reads both files whole. One small file; switch to a streaming
+/// compare if a vault ever carries a custody store worth chunking.
+fn verify_custody(src_root: &Path, dst_root: &Path) -> Result<(), String> {
+    let src = src_root.join(CUSTODY_DIR).join(CUSTODY_FILE);
+    if src.symlink_metadata().is_err() {
+        return Ok(());
+    }
+    let dst = dst_root.join(CUSTODY_DIR).join(CUSTODY_FILE);
+    let from = std::fs::read(&src).map_err(|e| format!("read {}: {}", src.display(), e))?;
+    let to = std::fs::read(&dst)
+        .map_err(|e| format!("{} is missing from the new location: {}", dst.display(), e))?;
+    if from != to {
+        return Err(format!(
+            "The custody records did not arrive intact at {}. Nothing has been removed.",
+            dst.display()
+        ));
+    }
+    Ok(())
+}
+
 /// Copy every vault dir present in `src_root` into `dst_root` and check it all
 /// arrived. Nothing is deleted from the source here — the caller switches over
 /// first. Only the derived index files at the destination are cleared.
@@ -411,6 +484,7 @@ fn copy_and_verify<F: Fn(MoveProgress)>(
             _ => {}
         }
     }
+    set_aside_custody(src_root, dst_root)?;
     let present: Vec<&'static str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
     let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
 
@@ -425,6 +499,7 @@ fn copy_and_verify<F: Fn(MoveProgress)>(
     for dir in &present {
         verify_tree(&src_root.join(dir), &dst_root.join(dir))?;
     }
+    verify_custody(src_root, dst_root)?;
 
     Ok((present, copied, bytes))
 }
@@ -607,6 +682,61 @@ mod tests {
 
         assert_eq!(fs::read(dst.join("custody/custody.db")).unwrap(), b"custody rows the user cannot get back");
         assert!(VAULT_DIRS.contains(&"custody"));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_resumed_move_replaces_a_same_size_stale_custody_store() {
+        // An interrupted move leaves a custody.db at the destination. The app
+        // keeps running on the source and rewrites its rows in place, so the
+        // file changes content without changing length. copy_tree's size-equal
+        // resume skip would keep the stale one, verify_tree would pass on the
+        // size, and remove_sources would then delete the only good copy.
+        let base = tmp("mv-vault-custody-resume");
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(src.join("custody")).unwrap();
+        fs::create_dir_all(dst.join("custody")).unwrap();
+        let fresh = b"custody rows written after the interrupted move";
+        let stale = b"custody rows from the interrupted move.........";
+        assert_eq!(fresh.len(), stale.len(), "the test is only meaningful at equal length");
+        fs::write(src.join("custody/custody.db"), fresh).unwrap();
+        fs::write(dst.join("custody/custody.db"), stale).unwrap();
+
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+
+        assert_eq!(fs::read(dst.join("custody/custody.db")).unwrap(), fresh);
+        // Custody is never deleted: the stale bytes are set aside, not removed.
+        let aside: Vec<String> = fs::read_dir(dst.join("custody"))
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.starts_with("custody.db.pre-move-"))
+            .collect();
+        assert_eq!(aside.len(), 1, "expected one set-aside copy, found {:?}", aside);
+        assert_eq!(fs::read(dst.join("custody").join(&aside[0])).unwrap(), stale);
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn a_move_fails_before_removal_when_the_custody_copy_differs() {
+        let base = tmp("mv-vault-custody-verify");
+        let src = base.join("src");
+        let dst = base.join("dst");
+        fs::create_dir_all(src.join("custody")).unwrap();
+        fs::write(src.join("custody/custody.db"), b"the records the user cannot rebuild").unwrap();
+
+        copy_and_verify(&src, &dst, &|_| {}).unwrap();
+        verify_custody(&src, &dst).unwrap();
+
+        // Same length, different content: a bad write, a half-flushed page, a
+        // stale file a resume did not replace.
+        fs::write(dst.join("custody/custody.db"), b"THE RECORDS THE USER CANNOT REBUILD").unwrap();
+        assert!(verify_custody(&src, &dst).is_err(), "a differing custody copy must stop the move");
+        // Size-only verification cannot see it, which is why the byte check exists.
+        verify_tree(&src, &dst).unwrap();
+
         let _ = fs::remove_dir_all(&base);
     }
 
