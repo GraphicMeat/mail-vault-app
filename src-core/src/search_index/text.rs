@@ -205,7 +205,10 @@ mod tests {
         assert!(s.to_lowercase().contains("invoice"), "{s}");
         assert!(s.chars().count() <= 32, "{s}"); // 30 + two ellipses
         assert_eq!(snippet(text, &["absent".to_string()], 30), None);
-        assert_eq!(snippet("İstanbul office", &["i̇stanbul".to_string(), "office".to_string()], 40).is_some(), true);
+        let s = snippet("İstanbul office", &["istanbul".to_string()], 40).expect("lowercase needle finds İstanbul");
+        assert!(s.contains("İstanbul"), "{s}");
+        let s = snippet("İstanbul office", &["İSTANBUL".to_string()], 40).expect("uppercase needle finds İstanbul");
+        assert!(s.contains("İstanbul"), "{s}");
     }
 
     #[test]
