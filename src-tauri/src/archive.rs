@@ -1,3 +1,4 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use serde::{Deserialize, Serialize};
@@ -138,6 +139,34 @@ pub async fn run_with_backup(
     // Get the IMAP pool from managed state
     let pool = app_handle.state::<ImapPool>();
 
+    // One listing of the vault folder and one of its mirror for the whole run.
+    // Looking every uid up again was a read_dir per message, the mirror's on the
+    // external drive the run is already struggling to keep up with.
+    // ponytail: a copy another writer lands mid-run is not in the listing, and
+    // this run writes its own beside it under a second flag name.
+    let (vault_listing, mirror_uids) = {
+        let app = app_handle.clone();
+        let (acct, mbox) = (account_id.clone(), mailbox.clone());
+        let mirror = backup_path.as_deref().zip(account_email.as_deref()).map(|(bp, addr)| {
+            std::path::PathBuf::from(bp).join(addr).join(&mailbox).join("cur")
+        });
+        tokio::task::spawn_blocking(move || {
+            let vault_listing: HashMap<u32, std::path::PathBuf> = if remove_existing {
+                super::maildir_cur_path(&app, &acct, &mbox)
+                    .map(|cur| mailvault_core::maildir::uid_file_map(&cur))
+                    .unwrap_or_default()
+            } else {
+                HashMap::new()
+            };
+            let mirror_uids: HashSet<u32> = mirror
+                .map(|dir| mailvault_core::maildir::mirror_file_map(&dir).into_keys().collect())
+                .unwrap_or_default();
+            (vault_listing, mirror_uids)
+        })
+        .await
+        .map_err(|e| format!("archive listing panicked: {}", e))?
+    };
+
     for uid in uids {
         if cancel.load(Ordering::Relaxed) {
             warn!("archive_emails: cancelled before spawning UID {}", uid);
@@ -159,6 +188,8 @@ pub async fn run_with_backup(
         let ext_failures = Arc::clone(&ext_failures);
         let last_err_msg = Arc::clone(&last_err_msg);
         let pace = Arc::clone(&pace);
+        let listed = vault_listing.get(&uid).cloned();
+        let in_mirror = mirror_uids.contains(&uid);
 
         set.spawn(async move {
             let _permit = sem.acquire().await.unwrap();
@@ -192,7 +223,7 @@ pub async fn run_with_backup(
 
             match fetch_and_store(
                 &pool, &app, &account_id, &account, &mailbox, uid, bp.as_deref(), ae.as_deref(),
-                remove_existing, &pace,
+                listed, in_mirror, &pace,
             ).await {
                 Ok(index_entry) => {
                     // Track external copy failures
@@ -338,7 +369,11 @@ async fn fetch_and_store(
     uid: u32,
     backup_path: Option<&str>,
     account_email: Option<&str>,
-    remove_existing: bool,
+    // Where the run's listing saw a vault copy of this uid, when it was asked
+    // to replace one.
+    listed: Option<std::path::PathBuf>,
+    // The run's mirror listing already holds this uid, under any name.
+    in_mirror: bool,
     pace: &DrivePace,
 ) -> Result<serde_json::Value, String> {
     use base64::Engine;
@@ -400,8 +435,8 @@ async fn fetch_and_store(
 
             fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
 
-            if remove_existing {
-                if let Some(existing) = super::find_file_by_uid(&cur_dir, uid) {
+            if let Some(listed) = listed {
+                if let Some(existing) = mailvault_core::maildir::find_listed_by_uid(&cur_dir, uid, &listed) {
                     let _ = fs::remove_file(&existing);
                 }
             }
@@ -424,7 +459,7 @@ async fn fetch_and_store(
                         // Same Maildir name as the app copy so flags survive a
                         // restore from the external location back into the app store.
                         let dst = backup_dir.join(&filename);
-                        if super::find_msg_file_by_uid(&backup_dir, uid).is_none() {
+                        if !in_mirror {
                             if let Err(e) = mailvault_core::fsx::write_atomic(&dst, &raw_bytes) {
                                 warn!("archive_emails: external copy failed for UID {}: {}", uid, e);
                                 external_copy_failed = true;
