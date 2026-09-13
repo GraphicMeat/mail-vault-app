@@ -445,6 +445,11 @@ pub async fn vault_adopt_mailbox_dirs(
     pairs: Vec<RenamePair>,
 ) -> Result<AdoptReport, String> {
     tokio::task::spawn_blocking(move || {
+        // Shallowest first, as `vault_rename_mailbox` does: a no-op for the flat
+        // storage keys sent today, and the order the nesting index and mirror
+        // need the day a localized folder with children is adopted.
+        let mut pairs = pairs;
+        pairs.sort_by_key(|p| p.from.len());
         let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
         let result = (|| -> Result<AdoptReport, String> {
             let mut report = AdoptReport::default();
