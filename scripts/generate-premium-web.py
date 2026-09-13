@@ -12,7 +12,7 @@ for ident,titleKey,blurbKey,shot in features:
  media=''
  if shot!='null':
   name=shot.strip("'");assert (root/f'website/screenshots/{name}-1440.webp').exists()
-  media=f'<button class="mv-shot" type="button" data-image aria-label="Enlarge: {title}"><img src="/screenshots/{name}-1440.webp" srcset="/screenshots/{name}-720.webp 720w, /screenshots/{name}-1440.webp 1440w, /screenshots/{name}-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="{title} in MailVault"></button>'
+  media=f'<button class="mv-shot" type="button" data-image aria-label="Enlarge: {title}"><picture><source data-shot-dark media="(prefers-color-scheme: dark)" srcset="/screenshots/{name}-720.webp 720w, /screenshots/{name}-1440.webp 1440w, /screenshots/{name}-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px"><img src="/screenshots/{name}-light-1440.webp" srcset="/screenshots/{name}-light-720.webp 720w, /screenshots/{name}-light-1440.webp 1440w, /screenshots/{name}-light-2880.webp 2880w" sizes="(max-width:760px) 90vw, 680px" width="1440" height="932" loading="lazy" alt="{title} in MailVault"></picture></button>'
   media+='<p class="mv-small">Real app screenshot · Click to enlarge</p>'
  elif ident=='devices':media='<div class="mv-device-allowance"><strong>5</strong><span>MailVault installations<br>One Premium subscription</span></div>'
  details.append(f'<details class="mv-premium-detail" id="{target}" name="premium-feature"><summary>{title}</summary><div class="mv-premium-detail-body"><div><p>{blurb}</p><a href="/get-started.html?plan=yearly" class="mv-text-link">Get started with Premium →</a></div><div>{media}</div></div></details>')
