@@ -62,13 +62,26 @@ function jsonFlags(path, uid) {
   return entry ? entry.flags : null;
 }
 
-/** `flags` of the uid's custody entry, straight from the app's store. */
+/**
+ * `flags` of the uid's custody entry, straight from the app's store.
+ *
+ * A store that is closed or would not open REJECTS. Mapping that to `null`
+ * would make `waitFor(() => !(await indexFlags(...) || []).includes('\\Seen'))`
+ * pass on the first tick against a store that answers nothing — the same
+ * vacuity composeHelpers.localIndex throws on. `null` means one thing here: the
+ * read worked and the mailbox has no entry for this uid.
+ *
+ * The page resolves `{ok}` rather than rejecting through wdio, because a
+ * result object carrying a truthy `error` key is read back as a W3C error.
+ */
 async function indexFlags(accountId, mailbox, uid) {
-  const raw = await browser.executeAsync((a, m, done) => {
-    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m }).then(done, () => done(null));
+  const r = await browser.executeAsync((a, m, done) => {
+    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m })
+      .then((raw) => done({ ok: true, raw }), (e) => done({ ok: false, reason: String((e && e.message) || e) }));
   }, accountId, mailbox);
-  if (!raw) return null;
-  const entry = JSON.parse(raw).find((e) => Number(e.uid) === uid);
+  if (!r.ok) throw new Error(`local_index_read failed for ${accountId}/${mailbox}: ${r.reason}`);
+  if (!r.raw) return null;
+  const entry = JSON.parse(r.raw).find((e) => Number(e.uid) === uid);
   return entry ? entry.flags : null;
 }
 
