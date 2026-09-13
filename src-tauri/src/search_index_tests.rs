@@ -116,3 +116,94 @@ fn assemble_rows_keeps_hit_order_and_adds_snippet_and_matched_in() {
     assert!(rows.iter().all(|r| r["matchedIn"].as_array().unwrap().is_empty()), "{rows:?}");
     assert!(rows.iter().all(|r| r["snippet"].is_null()));
 }
+
+/// Not a gate. The app parser over 50k ~3 KB multipart files, then what
+/// `vault_search` does per query (`search`, then `assemble_rows`), on a warm
+/// page cache (the files were just written). On the mini (a release test binary
+/// finds Sparkle only through DYLD_FRAMEWORK_PATH):
+/// DYLD_FRAMEWORK_PATH=$PWD/src-tauri SPARKLE_FRAMEWORK_PATH=$PWD/src-tauri cargo test -p mailvault --release search_index_bench -- --ignored --nocapture
+#[test]
+#[ignore]
+fn search_index_bench_50k_real_parser() {
+    use mailvault_core::search_index::{db, lock, query::{search, SearchRequest}, reconcile::{self, IndexConfig}};
+    use std::time::Instant;
+
+    // splitmix64: which messages carry a word is set by its rate alone.
+    fn mix(mut x: u64) -> u64 {
+        x = x.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        x ^ (x >> 31)
+    }
+    // No filler word contains a dictionary word, "update" or a digit.
+    const FILLER: [&str; 32] = [
+        "please", "review", "attached", "notes", "thanks", "regards", "schedule", "team", "project", "status",
+        "follow", "question", "morning", "office", "travel", "weekend", "details", "summary", "action", "items",
+        "customer", "product", "launch", "design", "draft", "final", "approve", "agenda", "call", "friday",
+        "monday", "report",
+    ];
+    // (word, percent of messages whose body carries it)
+    const DICT: [(&str, u64); 10] = [
+        ("invoice", 5), ("meeting", 6), ("budget", 8), ("shipment", 3), ("contract", 4),
+        ("会議", 3), ("資料", 2), ("Réunion", 1), ("delivery", 10), ("quarterly", 7),
+    ];
+    const N: u32 = 50_000;
+    const NEWEST: i64 = 1_789_207_200; // Sat, 12 Sep 2026 10:00:00 +0000; message i is i*10 minutes older
+
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let t = Instant::now();
+    let mut bytes = 0usize;
+    for i in 1..=N {
+        let seed = u64::from(i) << 20;
+        let mut words: Vec<&str> = (0..200).map(|k| FILLER[(mix(seed | k) % FILLER.len() as u64) as usize]).collect();
+        for (k, (w, pct)) in DICT.iter().enumerate() {
+            let k = k as u64;
+            if mix(seed | (1000 + k)) % 100 < *pct {
+                let at = (mix(seed | (2000 + k)) % words.len() as u64) as usize;
+                words.insert(at, *w);
+            }
+        }
+        let text = words.chunks(20).map(|c| c.join(" ")).collect::<Vec<_>>().join("\r\n");
+        let html = words.chunks(20).map(|c| format!("<p>{}</p>", c.join(" "))).collect::<String>();
+        let subject = FILLER[(mix(seed | 3000) % FILLER.len() as u64) as usize];
+        let date = chrono::DateTime::from_timestamp(NEWEST - i64::from(i) * 600, 0).unwrap().to_rfc2822();
+        let eml = format!(
+            "From: Sender {s} <sender{s}@x.test>\r\nTo: Me <me@x.test>\r\nSubject: {subject} update {i}\r\nMessage-ID: <{i}@x.test>\r\nDate: {date}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"b\"\r\n\r\n--b\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{text}\r\n--b\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><body>{html}</body></html>\r\n--b--\r\n",
+            s = i % 50
+        );
+        bytes += eml.len();
+        let cur = root.join("Maildir/bench").join(["INBOX", "Archive", "Sent"][(i % 3) as usize]).join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(format!("{i}:2,S.eml")), eml).unwrap();
+    }
+    println!("corpus n={N} avg_bytes={} write={:?}", bytes / N as usize, t.elapsed());
+
+    let db: mailvault_core::search_index::SharedConn = std::sync::Mutex::new(Some(db::open(root).unwrap()));
+    let maildir = root.join("Maildir");
+    let t = Instant::now();
+    for (a, d) in reconcile::list_vault_dirs(&maildir) {
+        let parse = &crate::search_index::index_doc_from_light;
+        reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true }, parse, &|| true, &mut |_| {}).unwrap();
+    }
+    println!("index_build n={N} elapsed={:?}", t.elapsed());
+    {
+        let g = lock(&db);
+        let conn = g.as_ref().unwrap();
+        conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);").unwrap();
+        let t = Instant::now();
+        let c = db::counts(conn);
+        println!("db_bytes={} counts indexed={} total={} elapsed={:?}", db::db_size_bytes(root), c.indexed, c.total, t.elapsed());
+    }
+
+    let req = |q: &str| SearchRequest { account_id: "bench".into(), query: q.into(), ..Default::default() };
+    let week = SearchRequest { date_from: Some(NEWEST - 7 * 86_400), date_to: Some(NEWEST), ..req("") };
+    for (label, r) in [("invoice", req("invoice")), ("budget meeting", req("budget meeting")), ("会議", req("会議")), ("update 4999", req("update 4999")), ("<empty>, last 7 days", week)] {
+        let t = Instant::now();
+        let page = search(lock(&db).as_ref().unwrap(), &r).unwrap();
+        let searched = t.elapsed();
+        let t = Instant::now();
+        let rows = crate::search_index::assemble_rows(root, "bench", &page);
+        println!("query {label:?} total={} hits={} rows={} search={searched:?} assemble={:?}", page.total, page.hits.len(), rows.len(), t.elapsed());
+    }
+}
