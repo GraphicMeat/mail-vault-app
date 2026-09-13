@@ -3,7 +3,7 @@ use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
 pub const DB_FILE: &str = "index.db";
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE messages (
@@ -38,6 +38,20 @@ CREATE VIRTUAL TABLE msg_fts USING fts5(subject, addrs, body, attach,
   tokenize = 'trigram remove_diacritics 1', content = '', contentless_delete = 1);
 CREATE VIRTUAL TABLE msg_cjk USING fts5(subject, addrs, body, attach,
   tokenize = 'unicode61', content = '', contentless_delete = 1);
+";
+
+const SCHEMA_V2: &str = "
+CREATE TABLE attachments (
+  message_row INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  part_index  INTEGER NOT NULL,
+  filename    TEXT NOT NULL DEFAULT '',
+  mime        TEXT NOT NULL DEFAULT '',
+  size        INTEGER NOT NULL,
+  state       TEXT NOT NULL,
+  text        TEXT,
+  PRIMARY KEY (message_row, part_index)
+);
+CREATE INDEX attachments_pending ON attachments (state) WHERE state = 'pending';
 ";
 
 #[derive(Debug)]
@@ -137,6 +151,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         ))
         .map_err(io)?;
     }
+    if version < 2 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V2} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2'); COMMIT;"
+        ))
+        .map_err(io)?;
+    }
     Ok(())
 }
 
@@ -209,11 +229,11 @@ mod tests {
         assert_eq!(mode.to_lowercase(), "wal");
         let locking: String = conn.query_row("PRAGMA locking_mode", [], |r| r.get(0)).unwrap();
         assert_eq!(locking.to_lowercase(), "exclusive");
-        for table in ["meta", "messages", "mailbox_scan", "msg_fts", "msg_cjk"] {
+        for table in ["meta", "messages", "mailbox_scan", "msg_fts", "msg_cjk", "attachments"] {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
         assert!(tmp.path().join("search_index/index.db").exists());
         assert!(!tmp.path().join("search_index/index.db-shm").exists(), "exclusive mode must not create a shared-memory file");
     }
@@ -247,7 +267,63 @@ mod tests {
         std::fs::create_dir_all(tmp.path().join(DB_DIR)).unwrap();
         std::fs::write(tmp.path().join(DB_DIR).join(DB_FILE), b"this is not a database at all, not even close").unwrap();
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn v2_migration_adds_attachments_table_and_bumps_version() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'attachments'", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[test]
+    fn v1_database_migrates_forward_to_v2() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join(DB_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(DB_FILE);
+        {
+            // Build a v1-only database by hand, so this test survives future schema changes.
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(&format!(
+                "BEGIN; CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL); {SCHEMA_V1} \
+                 INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1'); COMMIT;"
+            ))
+            .unwrap();
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc) VALUES ('a', 'INBOX', 1, 'f', 0, 0, 0)",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = open(tmp.path()).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        let rows: i64 = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap();
+        assert_eq!(rows, 1, "v1 rows survive the migration to v2");
+        conn.execute(
+            "INSERT INTO attachments (message_row, part_index, size, state) VALUES (1, 0, 10, 'pending')",
+            [],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn attachment_row_is_deleted_when_its_message_is_deleted() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute(
+            "INSERT INTO messages (id, account_id, vault_dir, uid, filename, size, mtime_ns, date_utc) VALUES (1, 'a', 'INBOX', 1, 'f', 0, 0, 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute("INSERT INTO attachments (message_row, part_index, size, state) VALUES (1, 0, 10, 'pending')", []).unwrap();
+        conn.execute("DELETE FROM messages WHERE id = 1", []).unwrap();
+        let n: i64 = conn.query_row("SELECT count(*) FROM attachments", [], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "ON DELETE CASCADE must remove attachment rows with their message");
     }
 
     #[test]
