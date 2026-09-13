@@ -1888,9 +1888,7 @@ fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, Strin
 }
 
 pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    let safe_mailbox = mailbox.chars().map(|c| {
-        if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
-    }).collect::<String>();
+    let safe_mailbox = mailvault_core::search_index::text::vault_dir_name(mailbox);
     let base = vault::root(app_handle)?;
     Ok(base.join("Maildir").join(account_id).join(&safe_mailbox).join("cur"))
 }
