@@ -75,6 +75,7 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use walkdir::WalkDir;
 
 mod archive;
+mod attachment_extract;
 mod backup;
 mod commands;
 mod custody;

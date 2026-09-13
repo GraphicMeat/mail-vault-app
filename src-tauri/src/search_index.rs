@@ -86,6 +86,43 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
     })
 }
 
+/// Read one attachment part's raw bytes off disk and re-parse the message it
+/// lives in, for `reconcile::run_pending_extractions`'s `read_part` callback.
+/// Looks the message up by uid (not by the `filename` recorded at the last
+/// reconcile) so a flag rename since then does not miss it; `part_index` is
+/// still keyed off `collect_attachment_parts`'s order, which is stable for a
+/// given message body.
+fn read_attachment_part(
+    maildir_root: &Path,
+    account_id: &str,
+    vault_dir: &str,
+    uid: u32,
+    _filename: &str,
+    part_index: usize,
+) -> Option<(mailvault_core::search_index::attachments::AttachmentInput, IndexDoc)> {
+    let cur = maildir_root.join(account_id).join(vault_dir).join("cur");
+    let path = crate::find_file_by_uid(&cur, uid)?;
+    let raw = std::fs::read(&path).ok()?;
+    let current_filename = path.file_name()?.to_string_lossy().into_owned();
+    let parsed = mailparse::parse_mail(&raw).ok()?;
+    let mut parts = Vec::new();
+    crate::collect_attachment_parts(&parsed, &mut parts);
+    let part = parts.get(part_index)?;
+    let bytes = part.get_body_raw().ok()?;
+    let mime = part.ctype.mimetype.clone();
+    let filename = crate::part_filename(part);
+    let doc = index_doc_from_light(&raw, uid, &current_filename)?;
+    Some((
+        mailvault_core::search_index::attachments::AttachmentInput {
+            filename,
+            mime,
+            size: bytes.len() as u64,
+            bytes,
+        },
+        doc,
+    ))
+}
+
 fn open_into(app: &tauri::AppHandle, st: &SearchIndexState) {
     // The vault's files are moving; its reopen() queues the open for afterwards.
     if st.switch.is_switching() {
@@ -326,6 +363,25 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
         }
     }
     sweep(app, st, &maildir, config, only);
+    // Attachment text extraction: gated on the same `attachments` toggle the
+    // sweep above used to decide whether to write pending rows at all. Runs
+    // under the same `conn` sweep just released, never a second connection.
+    if config.attachments {
+        let extractor = crate::attachment_extract::current_extractor();
+        let premium = crate::iap::is_entitled("com.mailvault.app.backups");
+        let mut guard = lock(&st.db);
+        if let Some(conn) = guard.as_mut() {
+            reconcile::run_pending_extractions(
+                conn,
+                premium,
+                config.image_text,
+                &extractor,
+                |account_id, vault_dir, uid, filename, part_index| {
+                    read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index)
+                },
+            );
+        }
+    }
     // Deferred optimize + VACUUM + WAL truncate after bodies-off, only when nothing is pending.
     if !st.interrupt.load(SeqCst) {
         match reconcile::compact_if_pending(&st.db) {
