@@ -22,6 +22,7 @@ import {
   editorHtml,
   editorText,
   typeInBody,
+  pressInBody,
   selectAllInBody,
   clickToolbar,
   toolbarState,
@@ -39,6 +40,8 @@ import {
   flatten,
   waitForOutboxError,
 } from './composeHelpers.js';
+import mailparser from 'mailparser';
+const { simpleParser } = mailparser;
 
 const TEMPLATE_NAME = 'E2E Dropzone Template';
 const TEMPLATE_BODY = 'Thanks for the order, the meat is on its way.';
@@ -422,5 +425,75 @@ describe('Connected Compose Editor', function () {
     // survive a mail client, so it has to ride on the tag.
     expect(raw).toMatch(/margin: 0px 0px 0\.25em/);
     await waitForOutboxError(subject);
+  });
+
+  // ── blank lines and line breaks ──────────────────────────────────────────
+
+  it('sends a blank line as a blank line and a line break as a line break, in both parts', async function () {
+    // Reported against 2.13: a message typed with blank lines between its
+    // paragraphs arrived as one block of text. The editor wrote a blank line
+    // as <p></p>, which has no height in any mail client, and the text part
+    // came from TipTap's getText(), which put a blank line after every
+    // paragraph and three for every blank line.
+    const [luke] = browser.mockAccounts || [];
+    expect(luke?.id).toBeDefined();
+
+    const subject = 'E2E blank lines survive';
+    await openComposeFresh();
+    await typeInBody('First paragraph');
+    await pressInBody('Enter');
+    await pressInBody('Enter');
+    await typeInBody('Second paragraph');
+    await pressInBody('Enter', { shift: true });
+    await typeInBody('same paragraph, next line');
+
+    // Positive control: the editor holds what the assertions below expect.
+    const shown = (await editorHtml()).replace(/<p [^>]*>/g, '<p>');
+    expect(shown).toContain('<p>First paragraph</p><p><br class="ProseMirror-trailingBreak"></p><p>Second paragraph<br>same paragraph, next line</p>');
+
+    const before = new Set(listSent(luke.id));
+    // Addressed to refuse: the staged .eml only survives while the send fails.
+    await setField('compose-to', SEND_REFUSED_TO);
+    await setField('compose-subject', subject);
+    await setField('compose-delay', 0);
+    expect(await clickSend()).toBe(true);
+    await browser.pause(400);
+    const formError = await testidText('compose-error');
+    if (formError) throw new Error(`Send was rejected by the compose form: "${formError}"`);
+
+    const parsed = await simpleParser(await readStagedEml(luke.id, before, subject));
+
+    // HTML part: the blank line carries the <br> that gives it a line's height.
+    const html = parsed.html.replace(/ style="[^"]*"/g, '');
+    expect(html).toContain('<p>First paragraph</p><p><br></p><p>Second paragraph<br>same paragraph, next line</p>');
+    expect(html).not.toContain('<p></p>');
+
+    // Text part: line for line as the message reads.
+    const text = parsed.text.replace(/\r\n/g, '\n');
+    expect(text).toContain('First paragraph\n\nSecond paragraph\nsame paragraph, next line');
+    expect(text).not.toContain('First paragraph\n\n\n');
+    await waitForOutboxError(subject);
+  });
+
+  it('inserts a template with its blank line once, not two lines tall', async function () {
+    // Templates are stored as plain text and come back as paragraphs with
+    // <p><br></p> for each blank line. Read with the stock rule, that <br>
+    // became a line break inside the empty paragraph.
+    const name = 'E2E Blank Line Template';
+    await clearTemplates();
+    await settingsCall('addEmailTemplate', name, 'Thanks for the order,\n\nthe meat is on its way.');
+
+    await openComposeFresh();
+    await openTemplates();
+    expect(await clickTemplateNamed(name)).toBe(true);
+    await browser.waitUntil(async () => (await editorText()).includes('the meat is on its way.'), {
+      timeout: 10_000,
+      interval: 250,
+      timeoutMsg: 'the template body never reached the editor',
+    });
+
+    const html = (await editorHtml()).replace(/<p [^>]*>/g, '<p>');
+    expect(html).toContain('<p>Thanks for the order,</p><p><br class="ProseMirror-trailingBreak"></p><p>the meat is on its way.</p>');
+    await clearTemplates();
   });
 });

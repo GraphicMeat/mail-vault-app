@@ -220,6 +220,27 @@ export async function typeInBody(text) {
   }
 }
 
+/**
+ * Press Enter (or Shift+Enter) in the editor. ProseMirror's keymap acts on
+ * keydown and never checks isTrusted, and `browser.keys()` does not reach a
+ * contenteditable under tauri-wd (see typeInBody). A key the keymap handled
+ * has its default prevented, which is how a press that did nothing fails here
+ * instead of three assertions later.
+ */
+export async function pressInBody(key, { shift = false } = {}) {
+  const handled = await browser.execute((sel, k, withShift) => {
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    el.focus();
+    const event = new KeyboardEvent('keydown', { key: k, code: k, shiftKey: withShift, bubbles: true, cancelable: true });
+    el.dispatchEvent(event);
+    return event.defaultPrevented;
+  }, EDITOR, key, shift);
+  if (handled === null) throw new Error(`pressInBody: no editor at ${EDITOR}`);
+  if (!handled) throw new Error(`pressInBody: ProseMirror did not handle ${shift ? 'Shift+' : ''}${key}`);
+  await browser.pause(150);
+}
+
 /** Focus the editor and select everything in it (ProseMirror follows the DOM selection). */
 export async function selectAllInBody() {
   await browser.execute((sel) => {
