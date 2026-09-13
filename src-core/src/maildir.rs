@@ -1479,4 +1479,29 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         assert!(uid_file_map(&tmp.path().join("nope")).is_empty());
     }
+
+    /// Not a gate. `cargo test -p mailvault-core --release --lib bench_uid_lookup -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn bench_uid_lookup() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path();
+        let n = 20_000u32;
+        for uid in 1..=n { fs::write(cur.join(format!("{uid}:2,S.eml")), b"x").unwrap(); }
+        let uids: Vec<u32> = (1..=n).collect();
+
+        let t = std::time::Instant::now();
+        let map = uid_file_map(cur);
+        let hits = uids.iter().filter(|u| map.contains_key(u)).count();
+        let single_pass = t.elapsed();
+
+        let sample: Vec<u32> = uids.iter().step_by(100).copied().collect(); // 200 lookups
+        let t = std::time::Instant::now();
+        let slow_hits = sample.iter().filter(|u| find_by_uid(cur, **u).is_some()).count();
+        let per_uid = t.elapsed() / sample.len() as u32;
+
+        assert_eq!(hits, n as usize);
+        assert_eq!(slow_hits, sample.len());
+        println!("n={n} single_pass={single_pass:?} per_uid_rescan={per_uid:?} projected_old_total={:?}", per_uid * n);
+    }
 }
