@@ -139,8 +139,15 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
     Ok(())
 }
 
+/// A read error reads as "not set". Only for values where that is harmless;
+/// a decision that would write over the stored value uses `meta_get_checked`.
 pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
-    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional().ok().flatten()
+    meta_get_checked(conn, key).ok().flatten()
+}
+
+/// `Ok(None)` only when the key is not stored.
+pub fn meta_get_checked(conn: &Connection, key: &str) -> Result<Option<String>, String> {
+    conn.query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0)).optional().map_err(|e| e.to_string())
 }
 
 pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
@@ -229,6 +236,18 @@ mod tests {
         std::fs::write(tmp.path().join(DB_DIR).join(DB_FILE), b"this is not a database at all, not even close").unwrap();
         let conn = open(tmp.path()).unwrap();
         assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn meta_get_checked_tells_a_missing_key_from_a_failed_read() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        assert_eq!(meta_get_checked(&conn, "missing"), Ok(None));
+        meta_set(&conn, "probe", "1").unwrap();
+        assert_eq!(meta_get_checked(&conn, "probe"), Ok(Some("1".into())));
+        conn.execute_batch("DROP TABLE meta").unwrap();
+        assert!(meta_get_checked(&conn, "probe").is_err(), "a failed read is not \"unset\"");
+        assert_eq!(meta_get(&conn, "probe"), None);
     }
 
     #[test]

@@ -346,7 +346,16 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
     let action = {
         let guard = lock(&st.db);
         let Some(conn) = guard.as_ref() else { return };
-        let action = bodies_action(db::meta_get(conn, "bodies_enabled").as_deref(), config.bodies);
+        let stored = match db::meta_get_checked(conn, "bodies_enabled") {
+            Ok(v) => v,
+            Err(e) => {
+                // Read as "unset", a failed read would record over the real flag and
+                // skip stripping bodies the user turned off. The next pass retries.
+                warn!("search index: reading the bodies setting failed: {e}");
+                return;
+            }
+        };
+        let action = bodies_action(stored.as_deref(), config.bodies);
         if action == BodiesAction::RecordOnly {
             if let Err(e) = db::meta_set(conn, "bodies_enabled", if config.bodies { "1" } else { "0" }) {
                 // Sweeping without the flag could index bodies a later "off" would never strip.
