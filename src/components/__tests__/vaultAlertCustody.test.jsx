@@ -50,11 +50,24 @@ describe('VaultAlertBanner: custody store', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('shows both banners when the vault is missing and the store is closed', async () => {
+  it('shows both banners when the vault is missing and the store could not be opened', async () => {
     api.vaultGetStatus.mockResolvedValue({ status: 'missing', displayPath: '/gone', isCustom: true });
     api.custodyStatus.mockResolvedValue({ available: false, error: 'no vault root', path: null });
-    render(<VaultAlertBanner />);
+    const { container } = render(<VaultAlertBanner />);
     expect(await screen.findByText('Vault records could not be opened')).toBeTruthy();
     expect(screen.getByRole('button')).toBeTruthy(); // the missing-vault banner's Choose folder
+    // With no root there is no file to name, so the sentence that names one is
+    // dropped whole rather than interpolated with nothing.
+    expect(container.textContent).toMatch(/no vault root/);
+    expect(container.textContent).not.toMatch(/cannot read \./);
+  });
+
+  it('renders nothing for a store that is merely closed', async () => {
+    // `close()` during a vault switch leaves available:false with no error and
+    // emits nothing. That is not a failure the user can act on.
+    api.custodyStatus.mockResolvedValue({ available: false, error: null, path: null });
+    const { container } = render(<VaultAlertBanner />);
+    await waitFor(() => expect(api.custodyStatus).toHaveBeenCalled());
+    expect(container.firstChild).toBeNull();
   });
 });

@@ -42,7 +42,10 @@ export function VaultAlertBanner() {
   }, [setVaultStatus]);
 
   const missing = !!vaultStatus && vaultStatus.status === 'missing';
-  const custodyDown = !!custody && custody.available === false;
+  // An open failure, not merely closed: `close()` during a vault switch leaves
+  // available:false with no error and emits nothing, and there is nothing to
+  // tell the user about a store that is between roots.
+  const custodyDown = !!custody && custody.available === false && !!custody.error;
   if (!missing && !custodyDown) return null;
 
   const handleChoose = async () => {
@@ -102,9 +105,12 @@ export function VaultAlertBanner() {
           <AlertTriangle size={16} className="text-mail-danger flex-shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm text-mail-danger font-medium">{t('vaultAlert.custodyUnreadable')}</p>
+            {/* The sentence names the file, so it is dropped whole when there
+                is no file to name (no vault root), leaving the reason alone. */}
             <p className="text-xs text-mail-text-muted mt-0.5">
-              {t('vaultAlert.custodyUnreadableDetail', { path: custody.path || '' })}
-              {custody.error ? ` (${custody.error})` : ''}
+              {custody.path
+                ? `${t('vaultAlert.custodyUnreadableDetail', { path: custody.path })} (${custody.error})`
+                : custody.error}
             </p>
           </div>
         </div>
