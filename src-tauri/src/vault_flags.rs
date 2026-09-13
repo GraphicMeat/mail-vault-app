@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use mailvault_core::maildir::mirror_file_map;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
@@ -137,8 +138,10 @@ pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied 
 
     // One listing per directory: the per-uid finders rescan on every call, and
     // a backup reconcile hands this every message the folder holds.
-    let app_files = files_by_uid(&dirs.cur);
-    let mirror_files = dirs.mirror_cur.as_deref().map(files_by_uid);
+    // Every shape the vault and the mirror have written starts with the uid:
+    // `<uid>:2,<flags>[.eml]`, `<uid>.eml`, `<uid>_<flags>.eml`.
+    let app_files = mirror_file_map(&dirs.cur);
+    let mirror_files = dirs.mirror_cur.as_deref().map(mirror_file_map);
 
     let mut index = JsonFile::load(&dirs.index, None);
     let mut cache = JsonFile::load(&dirs.archived_cache, Some("emails"));
@@ -198,22 +201,6 @@ fn rename_for(path: &Path, uid: u32, imap: &[String]) -> Result<Option<String>, 
     }
     fs::rename(path, path.with_file_name(&new_name)).map_err(|e| e.to_string())?;
     Ok(Some(new_name))
-}
-
-/// uid → path for every message file in `dir`. Every shape the vault and the
-/// mirror have ever written starts with the uid: `<uid>:2,<flags>[.eml]`,
-/// `<uid>.eml`, `<uid>_<flags>.eml`.
-fn files_by_uid(dir: &Path) -> HashMap<u32, PathBuf> {
-    let mut map = HashMap::new();
-    let Ok(entries) = fs::read_dir(dir) else { return map };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let head = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
-        if let Ok(uid) = head.parse::<u32>() {
-            map.entry(uid).or_insert_with(|| entry.path());
-        }
-    }
-    map
 }
 
 /// Set `flags` on the JSON object at `path`. False when there is no such file

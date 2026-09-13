@@ -117,30 +117,7 @@ fn scan_external_uids(
         .join(email)
         .join(mailbox)
         .join("cur");
-    if !cur_dir.exists() {
-        return HashSet::new();
-    }
-    let mut uids = HashSet::new();
-    if let Ok(entries) = std::fs::read_dir(&cur_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
-            if let Ok(uid) = uid_str.parse::<u32>() {
-                uids.insert(uid);
-            }
-        }
-    }
-    uids
-}
-
-/// Parse the uid a mirror filename belongs to. The mirror has carried three
-/// shapes over its lifetime — `<uid>:2,<flags>.eml`, `<uid>.eml` and
-/// `<uid>_<flags>.eml` — so split on the first of ':', '.' or '_'.
-/// Same rule `scan_external_uids` uses; keep them in step.
-fn mirror_uid_of(name: &str) -> Option<u32> {
-    name.split(|c: char| c == ':' || c == '.' || c == '_')
-        .next()
-        .and_then(|s| s.parse::<u32>().ok())
+    mailvault_core::maildir::mirror_file_map(&cur_dir).into_keys().collect()
 }
 
 /// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
@@ -159,7 +136,7 @@ pub fn purge_backup_files(
     if let Ok(entries) = std::fs::read_dir(&cur) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            match mirror_uid_of(&name) {
+            match mailvault_core::maildir::mirror_filename_uid(&name) {
                 Some(uid) if uids.contains(&uid) => {}
                 _ => continue,
             }
@@ -596,11 +573,7 @@ fn scan_local_uids(
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         // Filename format: "<uid>:<flags>.eml" or "<uid>.eml" or "<uid>_<flags>.eml"
-        let uid_str = name
-            .split(|c: char| c == ':' || c == '.' || c == '_')
-            .next()
-            .unwrap_or("");
-        if let Ok(uid) = uid_str.parse::<u32>() {
+        if let Some(uid) = mailvault_core::maildir::mirror_filename_uid(&name) {
             uids.insert(uid);
         }
     }

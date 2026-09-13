@@ -1964,9 +1964,7 @@ fn sweep_vault_eml(root: Option<&Path>) -> mailvault_core::maildir::EmlMigration
 pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     let entries = fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let head = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or("");
-        if head.parse::<u32>().ok() == Some(uid) {
+        if mailvault_core::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) == Some(uid) {
             return Some(entry.path());
         }
     }
