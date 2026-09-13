@@ -11,6 +11,10 @@ export function SearchIndexSettings() {
   const t = useT();
   const bodies = useSettingsStore(s => s.searchIndexBodies);
   const setSearchIndexBodies = useSettingsStore(s => s.setSearchIndexBodies);
+  const attachments = useSettingsStore(s => s.searchIndexAttachments);
+  const setSearchIndexAttachments = useSettingsStore(s => s.setSearchIndexAttachments);
+  const imageText = useSettingsStore(s => s.searchIndexImageText);
+  const setSearchIndexImageText = useSettingsStore(s => s.setSearchIndexImageText);
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
@@ -41,6 +45,24 @@ export function SearchIndexSettings() {
           </div>
           <ToggleSwitch active={bodies} onClick={() => setSearchIndexBodies(!bodies)}
             testId="search-index-bodies" label={t('settings.searchIndex.bodies')} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
+          <div>
+            <div className="text-sm text-mail-text">{t('settings.searchIndex.attachments')}</div>
+            <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.attachmentsHint')}</div>
+          </div>
+          <ToggleSwitch active={attachments} onClick={() => setSearchIndexAttachments(!attachments)}
+            testId="search-index-attachments" label={t('settings.searchIndex.attachments')} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
+          <div>
+            <div className="text-sm text-mail-text">{t('settings.searchIndex.imageText')}</div>
+            <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.imageTextHint')}</div>
+          </div>
+          <ToggleSwitch active={imageText} onClick={() => setSearchIndexImageText(!imageText)}
+            testId="search-index-image-text" label={t('settings.searchIndex.imageText')} />
         </div>
 
         <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">

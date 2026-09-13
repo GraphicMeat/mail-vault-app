@@ -22,7 +22,7 @@ beforeEach(() => {
   statusReply = { available: true, state: 'indexing', indexed: 12, total: 40, sizeBytes: 2048, complete: false };
   progress = null;
   rebuild.mockReset().mockResolvedValue(undefined);
-  useSettingsStore.setState({ searchIndexBodies: true });
+  useSettingsStore.setState({ searchIndexBodies: true, searchIndexAttachments: true, searchIndexImageText: true });
 });
 afterEach(cleanup);
 
@@ -43,6 +43,28 @@ describe('Search index settings', () => {
     fireEvent.click(toggle);
     expect(useSettingsStore.getState().searchIndexBodies).toBe(true);
     await waitFor(() => screen.getByTestId('search-index-status'));
+  });
+
+  it('turns attachment indexing off and on', async () => {
+    render(<SearchIndexSettings />);
+    const toggle = screen.getByTestId('search-index-attachments');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(toggle);
+    expect(useSettingsStore.getState().searchIndexAttachments).toBe(false);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    expect(useSettingsStore.getState().searchIndexAttachments).toBe(true);
+  });
+
+  it('turns image text recognition off and on', async () => {
+    render(<SearchIndexSettings />);
+    const toggle = screen.getByTestId('search-index-image-text');
+    expect(toggle.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(toggle);
+    expect(useSettingsStore.getState().searchIndexImageText).toBe(false);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    expect(useSettingsStore.getState().searchIndexImageText).toBe(true);
   });
 
   it('rebuilds the index on request', async () => {

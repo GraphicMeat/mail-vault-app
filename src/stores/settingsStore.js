@@ -391,6 +391,8 @@ export const useSettingsStore = create(
       searchIndexAttachments: true,
       searchIndexImageText: true,
       setSearchIndexBodies: (v) => set({ searchIndexBodies: !!v }),
+      setSearchIndexAttachments: (v) => set({ searchIndexAttachments: !!v }),
+      setSearchIndexImageText: (v) => set({ searchIndexImageText: !!v }),
       setLinkSafetyEnabled: (v) => set({ linkSafetyEnabled: v }),
       setLinkSafetyClickConfirm: (v) => set({ linkSafetyClickConfirm: v }),
       // `key` comes from emailScopeKey(email, mailState). Unresolvable message

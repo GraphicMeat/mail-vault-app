@@ -157,6 +157,8 @@ const settingSearchGroups = [
   // Storage has no sections to switch: a result opens the page.
   { id: 'storage', section: 'search-index', sectionKey: 'settings.searchIndex.title', settings: [
     ['settings.searchIndex.bodies', 'search index body bodies message text words find offline'],
+    ['settings.searchIndex.attachments', 'search index attachments pdf word excel powerpoint premium'],
+    ['settings.searchIndex.imageText', 'search index image text ocr recognize photos scanned premium macos'],
     ['settings.searchIndex.rebuild', 'search index rebuild reindex attachments pdf ocr'],
   ] },
 ];
