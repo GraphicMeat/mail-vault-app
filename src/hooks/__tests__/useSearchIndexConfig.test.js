@@ -43,4 +43,26 @@ describe('useSearchIndexConfig', () => {
     expect(configure).toHaveBeenCalledTimes(2);
     expect(configure).toHaveBeenLastCalledWith({ bodies: false, attachments: false, imageText: false });
   });
+
+  it('pushes nothing before settings hydrate, then the hydrated config exactly once', () => {
+    let finishHydration = null;
+    const hasHydrated = vi.spyOn(useSettingsStore.persist, 'hasHydrated').mockReturnValue(false);
+    const onFinish = vi.spyOn(useSettingsStore.persist, 'onFinishHydration')
+      .mockImplementation((cb) => { finishHydration = cb; return () => {}; });
+    try {
+      useSettingsStore.setState({ searchIndexBodies: true, billingProfile: null }); // the defaults, before disk answers
+      renderHook(() => useSearchIndexConfig());
+      act(() => useSettingsStore.setState({ sendDelay: 30 }));
+      act(() => useSettingsStore.setState({ searchIndexBodies: false })); // the saved value arriving
+      expect(configure).not.toHaveBeenCalled();
+
+      hasHydrated.mockReturnValue(true);
+      act(() => finishHydration(useSettingsStore.getState()));
+      expect(configure).toHaveBeenCalledTimes(1);
+      expect(configure).toHaveBeenLastCalledWith({ bodies: false, attachments: false, imageText: false });
+    } finally {
+      hasHydrated.mockRestore();
+      onFinish.mockRestore();
+    }
+  });
 });
