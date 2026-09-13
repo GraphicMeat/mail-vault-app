@@ -108,6 +108,33 @@ pub fn mirror_file_map(dir: &Path) -> HashMap<u32, PathBuf> {
     map
 }
 
+/// Which copies of a fetched message a backup still has to write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CopiesToWrite {
+    /// The vault holds the uid: neither side is written, and the message does
+    /// not count as backed up.
+    Nothing,
+    /// The vault copy only: no mirror is configured, or it holds the uid.
+    Vault,
+    VaultAndMirror,
+}
+
+/// A backup's per-message decision, from uid sets instead of a directory
+/// rescan of each side per message. `vault` holds the keys of a
+/// `uid_file_map` listing of `cur/`, `mirror` those of a `mirror_file_map`
+/// listing of the mirror folder (`None` when no mirror is configured), each
+/// plus every uid the run has written there since. The vault gates both
+/// sides, as the rescans did.
+pub fn copies_to_write(uid: u32, vault: &HashSet<u32>, mirror: Option<&HashSet<u32>>) -> CopiesToWrite {
+    if vault.contains(&uid) {
+        CopiesToWrite::Nothing
+    } else if matches!(mirror, Some(mirrored) if !mirrored.contains(&uid)) {
+        CopiesToWrite::VaultAndMirror
+    } else {
+        CopiesToWrite::Vault
+    }
+}
+
 /// List all UIDs in a Maildir/cur directory.
 pub fn list_uids(data_dir: &Path, account_id: &str, mailbox: &str) -> Vec<u32> {
     let dir = cur_path(data_dir, account_id, mailbox);
@@ -1680,6 +1707,84 @@ mod tests {
         keys.sort();
         assert_eq!(keys, vec![7, 8, 12, 13, 14, 15, 16, 17, 18]);
         assert!(mirror_file_map(&dir.join("nope")).is_empty());
+    }
+
+    #[test]
+    fn copies_to_write_lets_the_vault_gate_both_sides() {
+        let empty = HashSet::new();
+        let has7: HashSet<u32> = [7u32].into_iter().collect();
+        let cases = [
+            (7, &has7, Some(&empty), CopiesToWrite::Nothing),
+            (7, &has7, Some(&has7), CopiesToWrite::Nothing),
+            (7, &has7, None, CopiesToWrite::Nothing),
+            (7, &empty, Some(&empty), CopiesToWrite::VaultAndMirror),
+            (7, &empty, Some(&has7), CopiesToWrite::Vault),
+            (7, &empty, None, CopiesToWrite::Vault),
+            // Membership is per uid, not "the set is non-empty".
+            (8, &has7, Some(&has7), CopiesToWrite::VaultAndMirror),
+        ];
+        let wrong: Vec<_> = cases.iter()
+            .filter(|(uid, vault, mirror, want)| copies_to_write(*uid, vault, *mirror) != *want)
+            .map(|(uid, vault, mirror, want)| {
+                format!("uid {uid} vault {vault:?} mirror {mirror:?}: got {:?}, want {want:?}", copies_to_write(*uid, vault, *mirror))
+            })
+            .collect();
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// run_graph_backup's check before its listings: after each fetch, a
+    /// rescan of `cur/` by `find_by_uid`, then of the mirror folder by
+    /// `find_msg_file_by_uid`.
+    fn copies_to_write_per_message(cur: &Path, mirror: Option<&Path>, uid: u32) -> CopiesToWrite {
+        if find_by_uid(cur, uid).is_some() {
+            return CopiesToWrite::Nothing;
+        }
+        match mirror {
+            Some(dir) if per_uid_mirror_lookup(dir, uid).is_none() => CopiesToWrite::VaultAndMirror,
+            _ => CopiesToWrite::Vault,
+        }
+    }
+
+    #[test]
+    fn copies_to_write_from_one_listing_per_side_agrees_with_the_per_message_rescans() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cur = tmp.path().join("cur");
+        let mirror = tmp.path().join("mirror");
+        fs::create_dir_all(&cur).unwrap();
+        fs::create_dir_all(&mirror).unwrap();
+        // Where the vault's `<uid>:` rule and the mirror's split on ':', '.'
+        // or '_' read a name differently, the sides disagree about the uid.
+        for name in [
+            "1:2,S.eml", "2:2,F.eml", "07:2,S.eml", "+8:2,.eml", "12.eml", "13_S.eml",
+            "16:2,S.eml", "16:2,FS.eml", "18", ".4711:2,S.eml.tmp-1", "_meta.json",
+        ] {
+            fs::write(cur.join(name), b"x").unwrap();
+        }
+        fs::create_dir(cur.join("19:2,S.eml")).unwrap();
+        for name in [
+            "1.eml", "3:2,S.eml", "4.eml", "5_S.eml", "07.eml", "+8.eml", "13:2,S.eml",
+            "16.eml", "4294967296.eml", "not-a-uid.eml", ".4711:2,S.eml.tmp-1", "_meta.json",
+        ] {
+            fs::write(mirror.join(name), b"x").unwrap();
+        }
+        fs::create_dir(mirror.join("20")).unwrap();
+
+        // Listed the way run_graph_backup lists them, once per folder.
+        let vault: HashSet<u32> = uid_file_map(&cur).into_keys().collect();
+        let mirrored: HashSet<u32> = mirror_file_map(&mirror).into_keys().collect();
+
+        for uid in (0..=21).chain([4711, u32::MAX]) {
+            assert_eq!(
+                copies_to_write(uid, &vault, Some(&mirrored)),
+                copies_to_write_per_message(&cur, Some(&mirror), uid),
+                "uid {uid}",
+            );
+            assert_eq!(
+                copies_to_write(uid, &vault, None),
+                copies_to_write_per_message(&cur, None, uid),
+                "uid {uid} without a mirror",
+            );
+        }
     }
 
     #[test]

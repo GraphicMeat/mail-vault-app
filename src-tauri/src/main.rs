@@ -1959,8 +1959,10 @@ fn sweep_vault_eml(root: Option<&Path>) -> mailvault_core::maildir::EmlMigration
 
 /// Find a message file for `uid` in a directory that may use either naming
 /// scheme: Maildir (`<uid>:2,<flags>[.eml]`) or the legacy flagless external
-/// backup name (`<uid>.eml`). Used for the external backup location, which
-/// holds both after the flag-preserving rename.
+/// backup name (`<uid>.eml`), with one directory rescan per call. Every mirror
+/// check now lists the folder once (`mirror_file_map`); this stays as the
+/// per-uid version the equivalence tests compare against.
+#[cfg(test)]
 pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     let entries = fs::read_dir(dir).ok()?;
     for entry in entries.flatten() {

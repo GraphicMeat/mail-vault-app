@@ -1040,6 +1040,8 @@ async fn run_graph_backup(
     backup_path: Option<String>,
     skip_folders: usize,
 ) -> Result<BackupResult, String> {
+    use mailvault_core::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+
     let account: ImapConfig = serde_json::from_str(&account_json)
         .map_err(|e| format!("Bad account JSON: {}", e))?;
     let access_token = account
@@ -1112,6 +1114,33 @@ async fn run_graph_backup(
             }
         }
 
+        // One listing per side for the whole folder, after the pre-sync so what
+        // it restored or mirrored counts. Looking every fetched message up again
+        // was a read_dir of cur/ and of the mirror folder per message, quadratic
+        // over a folder and on the external drive. Each side keeps its own uid
+        // rule, and a write joins its side's set, as the rescan found the file
+        // it had just written.
+        // ponytail: a copy another writer lands mid-folder is not in the listing,
+        // and this run writes its own beside it; the rescan had that race too, only narrower.
+        let mirror_dir = backup_path.as_ref().map(|custom_path| {
+            std::path::PathBuf::from(custom_path)
+                .join(&account.email)
+                .join(&mailbox_path)
+                .join("cur")
+        });
+        let (mut in_vault, mut in_mirror) = {
+            let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
+            let mirror_dir = mirror_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
+                let in_mirror: Option<HashSet<u32>> =
+                    mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
+                (in_vault, in_mirror)
+            })
+            .await
+            .map_err(|e| format!("folder listing panicked: {}", e))?
+        };
+
         // Paginate through all messages to find missing ones
         let mut skip = 0u32;
         let page_size = 100u32;
@@ -1136,44 +1165,48 @@ async fn run_graph_backup(
                 // Fetch MIME content and store to app dir + external backup dir
                 match client.get_mime_content(&msg.id).await {
                     Ok(raw_bytes) => {
+                        let mirror_to = match copies_to_write(uid_counter, &in_vault, in_mirror.as_ref()) {
+                            CopiesToWrite::Nothing => continue,
+                            CopiesToWrite::Vault => None,
+                            CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
+                        };
                         let cur_dir =
                             crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-                        std::fs::create_dir_all(&cur_dir)
-                            .map_err(|e| format!("mkdir: {}", e))?;
-
-                        if crate::find_file_by_uid(&cur_dir, uid_counter).is_none() {
-                            let filename = crate::build_maildir_filename(
-                                uid_counter,
-                                &[] as &[String],
-                            );
+                        let filename = crate::build_maildir_filename(uid_counter, &[] as &[String]);
+                        // Both writes off the runtime worker: a stalled write on
+                        // the external drive would hold every task it polls. A
+                        // failed vault write ends the run; a failed mirror write
+                        // is counted.
+                        let mirror_write = tokio::task::spawn_blocking(move || {
+                            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
                             std::fs::write(cur_dir.join(&filename), &raw_bytes)
                                 .map_err(|e| format!("write .eml: {}", e))?;
-
-                            // Also write to external backup if configured
-                            if let Some(ref custom_path) = backup_path {
-                                let backup_dir = std::path::PathBuf::from(custom_path)
-                                    .join(&account.email)
-                                    .join(&mailbox_path)
-                                    .join("cur");
-                                match std::fs::create_dir_all(&backup_dir) {
-                                    Ok(()) => {
-                                        let dst = backup_dir.join(&filename);
-                                        if crate::find_msg_file_by_uid(&backup_dir, uid_counter).is_none() {
-                                            if let Err(e) = std::fs::write(&dst, &raw_bytes) {
-                                                warn!("backup(graph): external write failed: {}", e);
-                                                total_ext_failures += 1;
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        warn!("backup(graph): external mkdir failed: {}", e);
-                                        total_ext_failures += 1;
-                                    }
+                            Ok::<_, String>(mirror_to.map(|dir| {
+                                std::fs::create_dir_all(&dir)
+                                    .map_err(|e| format!("external mkdir failed: {}", e))
+                                    .and_then(|()| {
+                                        std::fs::write(dir.join(&filename), &raw_bytes)
+                                            .map_err(|e| format!("external write failed: {}", e))
+                                    })
+                            }))
+                        })
+                        .await
+                        .map_err(|e| format!("message write panicked: {}", e))??;
+                        in_vault.insert(uid_counter);
+                        match mirror_write {
+                            Some(Ok(())) => {
+                                if let Some(mirrored) = in_mirror.as_mut() {
+                                    mirrored.insert(uid_counter);
                                 }
                             }
-
-                            total_backed_up += 1;
+                            Some(Err(e)) => {
+                                warn!("backup(graph): {}", e);
+                                total_ext_failures += 1;
+                            }
+                            None => {}
                         }
+
+                        total_backed_up += 1;
                     }
                     Err(e) => {
                         warn!(
