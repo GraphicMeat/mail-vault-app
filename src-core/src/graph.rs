@@ -270,20 +270,44 @@ pub const WELL_KNOWN: [(&str, &str); 6] = [
 ];
 
 /// `{"responses":[{"id":"sentitems","status":200,"body":{"id":"AAMk…"}}, …]}`
-/// -> `[("sentitems", "AAMk…")]`. A 404 (no Archive folder) or a body
-/// without an id is skipped.
-pub fn parse_well_known_batch(json: &serde_json::Value) -> Vec<(String, String)> {
-    json["responses"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|r| {
-            if r["status"].as_u64()? != 200 {
-                return None;
+/// -> `[("sentitems", "AAMk…")]`. A 404 is a mailbox without that folder (no
+/// Archive), and a 200 without a body id has nothing to tag: both are skipped.
+///
+/// Every other sub-status FAILS the listing. Graph answers the `$batch` POST
+/// 200 and throttles or errors the sub-requests INDIVIDUALLY, so a 429 in here
+/// is the same outage as a 429 on the POST — and dropping it would tag nothing
+/// and key every folder by display name, the degradation this resolution
+/// exists to remove.
+pub fn parse_well_known_batch(json: &serde_json::Value) -> Result<Vec<(String, String)>, String> {
+    let mut out = Vec::new();
+    for r in json["responses"].as_array().into_iter().flatten() {
+        let id = r["id"].as_str().unwrap_or("?");
+        match r["status"].as_u64() {
+            Some(200) => {
+                if let Some(folder_id) = r["body"]["id"].as_str() {
+                    out.push((id.to_string(), folder_id.to_string()));
+                }
             }
-            Some((r["id"].as_str()?.to_string(), r["body"]["id"].as_str()?.to_string()))
-        })
-        .collect()
+            Some(404) => {}
+            Some(429) => {
+                // Reported, not slept on, so it is NOT capped the way
+                // `retry_after_secs` is: the log should say what Graph said.
+                let wait = r["headers"]["Retry-After"]
+                    .as_str()
+                    .and_then(|v| v.parse::<u64>().ok())
+                    .unwrap_or(1);
+                return Err(format!(
+                    "Graph $batch sub-request {} answered (429:retry_after={})",
+                    id, wait
+                ));
+            }
+            Some(status) => {
+                return Err(format!("Graph $batch sub-request {} answered {}", id, status))
+            }
+            None => return Err(format!("Graph $batch sub-request {} answered no status", id)),
+        }
+    }
+    Ok(out)
 }
 
 /// Stamp `well_known_name` on every folder whose id the batch resolved.
@@ -319,16 +343,17 @@ pub fn assign_storage_keys(folders: &mut [GraphMailFolder]) {
     }
 }
 
-/// `retry-after` in whole seconds, for the one `$batch` retry. Capped at 5 so
-/// a throttled listing cannot hold a caller for the minutes Graph sometimes
-/// asks for, and 1 when the header is missing or is the HTTP-date form.
+/// `retry-after` in whole seconds, for the one `$batch` retry. Clamped to
+/// 1..=5: capped so a throttled listing cannot hold a caller for the minutes
+/// Graph sometimes asks for, floored so `retry-after: 0` is a retry rather than
+/// an immediate second hammer. 1 when the header is missing or is an HTTP date.
 fn retry_after_secs(headers: &reqwest::header::HeaderMap) -> u64 {
     headers
         .get("retry-after")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse::<u64>().ok())
         .unwrap_or(1)
-        .min(5)
+        .clamp(1, 5)
 }
 
 pub struct GraphClient {
@@ -391,7 +416,11 @@ impl GraphClient {
         // the non-English mailboxes this resolution exists for, and the caller
         // already retries a failed listing (10-minute folder cache, scheduler).
         let resolved = self.resolve_well_known_ids().await?;
-        tag_well_known(&mut folders, &resolved);
+        // Inbox exists in every mailbox, so zero tags is a broken lookup, not a
+        // mailbox without default folders.
+        if tag_well_known(&mut folders, &resolved) == 0 {
+            return Err("Graph well-known lookup resolved no folder (inbox always exists)".into());
+        }
         assign_storage_keys(&mut folders);
         Ok(folders)
     }
@@ -432,14 +461,21 @@ impl GraphClient {
                 continue;
             }
             if !status.is_success() {
+                // A second 429 keeps the marker the file's other 429 sites use.
+                let throttle = (status == reqwest::StatusCode::TOO_MANY_REQUESTS)
+                    .then(|| format!("429:retry_after={}", retry_after_secs(resp.headers())));
                 let body = resp.text().await.unwrap_or_default();
-                return Err(format!("Graph $batch failed ({}) {}", status.as_u16(), body));
+                return Err(format!(
+                    "Graph $batch failed ({}) {}",
+                    throttle.unwrap_or_else(|| status.as_u16().to_string()),
+                    body
+                ));
             }
             let json: serde_json::Value = resp
                 .json()
                 .await
                 .map_err(|e| format!("Graph $batch parse error: {}", e))?;
-            return Ok(parse_well_known_batch(&json));
+            return parse_well_known_batch(&json);
         }
     }
 
@@ -1248,10 +1284,44 @@ mod tests {
             { "id": "drafts", "status": 200 }
         ]});
         assert_eq!(
-            parse_well_known_batch(&json),
+            parse_well_known_batch(&json).unwrap(),
             vec![("inbox".to_string(), "fld-inbox".to_string()), ("sentitems".to_string(), "fld-sent".to_string())]
         );
-        assert!(parse_well_known_batch(&serde_json::json!({})).is_empty());
+        assert!(parse_well_known_batch(&serde_json::json!({})).unwrap().is_empty());
+    }
+
+    #[test]
+    fn parse_well_known_batch_fails_on_a_throttled_or_broken_sub_request() {
+        // Graph answers the POST 200 and throttles the sub-requests one by one.
+        // Dropping those silently tags nothing, and every folder then keys by
+        // display name: the degradation this resolution exists to remove.
+        let throttled = serde_json::json!({ "responses": [
+            { "id": "inbox", "status": 200, "body": { "id": "fld-inbox" } },
+            { "id": "sentitems", "status": 429, "headers": { "Retry-After": "7" } }
+        ]});
+        let err = parse_well_known_batch(&throttled).unwrap_err();
+        assert!(err.contains("sentitems"), "names the sub-request: {err}");
+        assert!(err.contains("(429:retry_after=7)"), "carries the throttle marker: {err}");
+
+        let broken = serde_json::json!({ "responses": [
+            { "id": "inbox", "status": 500, "body": { "error": { "code": "InternalServerError" } } }
+        ]});
+        let err = parse_well_known_batch(&broken).unwrap_err();
+        assert!(err.contains("inbox") && err.contains("500"), "{err}");
+
+        // A 429 with no Retry-After still names a wait, so the marker is uniform.
+        let bare = serde_json::json!({ "responses": [{ "id": "archive", "status": 429 }] });
+        assert!(parse_well_known_batch(&bare).unwrap_err().contains("(429:retry_after=1)"));
+
+        // A 404 is a mailbox without that folder (no Archive), not a failure.
+        let missing = serde_json::json!({ "responses": [
+            { "id": "archive", "status": 404 },
+            { "id": "inbox", "status": 200, "body": { "id": "fld-inbox" } }
+        ]});
+        assert_eq!(
+            parse_well_known_batch(&missing).unwrap(),
+            vec![("inbox".to_string(), "fld-inbox".to_string())]
+        );
     }
 
     #[test]
@@ -1298,6 +1368,8 @@ mod tests {
         assert_eq!(retry_after_secs(&h), 5, "a long backoff must not stall the listing");
         h.insert("retry-after", HeaderValue::from_static("Wed, 21 Oct 2026 07:28:00 GMT"));
         assert_eq!(retry_after_secs(&h), 1, "the HTTP-date form is not seconds");
+        h.insert("retry-after", HeaderValue::from_static("0"));
+        assert_eq!(retry_after_secs(&h), 1, "a zero wait is not a retry, it is a hammer");
     }
 
     #[test]
