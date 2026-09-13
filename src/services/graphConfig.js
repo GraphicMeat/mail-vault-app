@@ -29,49 +29,45 @@ export function isPersonalMicrosoftEmail(email) {
   return domain ? PERSONAL_MS_DOMAINS.includes(domain) : false;
 }
 
-// Map Graph API folder display names to IMAP-style names used by the app
-export const GRAPH_FOLDER_NAME_MAP = () => ({
-  'Inbox': 'INBOX',
-  'Sent Items': t('list.sent'),
-  'Drafts': t('sidebar.drafts'),
-  'Deleted Items': t('settings.storage.trash'),
-  'Junk Email': t('svc.graphConfig.junk'),
-  'Archive': t('common.archive'),
-});
+// ── Folder keys ───────────────────────────────────────────────────────────
+// Rust's `list_folders` stamps every Graph folder with `storageKey` (the
+// locale-independent word every store is keyed by: vault dir, sidecar dir and
+// its uid ledger, index, mirror) and `wellKnownName` (Graph's own name for a
+// default folder). Nothing here derives a key from a display name: Outlook
+// names default folders in the MAILBOX's language, and the UI catalog once
+// leaked into this key too (v2.11.0 through v2.13.1), which split one folder
+// into two directories per language.
+export const WELL_KNOWN = {
+  inbox:        { specialUse: '\\Inbox',   labelKey: null },
+  sentitems:    { specialUse: '\\Sent',    labelKey: 'list.sent' },
+  drafts:       { specialUse: '\\Drafts',  labelKey: 'sidebar.drafts' },
+  deleteditems: { specialUse: '\\Trash',   labelKey: 'settings.storage.trash' },
+  junkemail:    { specialUse: '\\Junk',    labelKey: 'svc.graphConfig.junk' },
+  archive:      { specialUse: '\\Archive', labelKey: 'common.archive' },
+};
 
-// Reverse map: app mailbox name → Graph display name (for folder ID lookup)
-export const APP_TO_GRAPH_FOLDER_MAP = Object.fromEntries(
-  Object.entries(GRAPH_FOLDER_NAME_MAP()).map(([k, v]) => [v, k])
-);
+/** The storage key of a Graph folder object; a listing from an older binary
+ *  has none and keys by display name, as it always did for custom folders. */
+export const storageKeyOf = (f) => f.storageKey ?? f.displayName;
 
-export function normalizeGraphFolderName(displayName) {
-  return GRAPH_FOLDER_NAME_MAP()[displayName] || displayName;
-}
-
-export function inferSpecialUse(displayName) {
-  switch (displayName) {
-    case 'Inbox': return '\\Inbox';
-    case 'Sent Items': return '\\Sent';
-    case 'Drafts': return '\\Drafts';
-    case 'Deleted Items': return '\\Trash';
-    case 'Junk Email': return '\\Junk';
-    case 'Archive': return '\\Archive';
-    default: return null;
-  }
-}
-
-// Convert Graph folder objects to MailboxInfo format matching IMAP mailbox shape
+// Convert Graph folder objects to MailboxInfo format matching IMAP mailbox shape:
+// `path` is the storage key, `name` the word the UI shows (INBOX stays INBOX,
+// as it does for an IMAP account).
 export function graphFoldersToMailboxes(graphFolders) {
-  return graphFolders.map(f => ({
-    name: normalizeGraphFolderName(f.displayName),
-    path: normalizeGraphFolderName(f.displayName),
-    specialUse: inferSpecialUse(f.displayName),
-    flags: [],
-    delimiter: '/',
-    noselect: false,
-    children: [],
-    _graphFolderId: f.id, // stash Graph folder ID for message fetching
-  }));
+  return graphFolders.map(f => {
+    const known = f.wellKnownName ? WELL_KNOWN[f.wellKnownName] : null;
+    const path = storageKeyOf(f);
+    return {
+      name: known ? (known.labelKey ? t(known.labelKey) : path) : f.displayName,
+      path,
+      specialUse: known?.specialUse ?? null,
+      flags: [],
+      delimiter: '/',
+      noselect: false,
+      children: [],
+      _graphFolderId: f.id, // stash Graph folder ID for message fetching
+    };
+  });
 }
 
 // Convert a GraphMessage (from graphGetMessage) to the email object format the UI expects

@@ -9,7 +9,7 @@
 // own never moves.
 import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
-import { isGraphAccount, normalizeGraphFolderName } from '../graphConfig';
+import { isGraphAccount } from '../graphConfig';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
 import { encodeImapUtf7 } from '../../utils/imapUtf7';
 import { t as tr } from '../../i18n/index.js';
@@ -86,10 +86,10 @@ export async function createFolder(accountId, parentPath, displayName) {
   const { s, account, mailboxes, d } = await _ctx(accountId);
   const leaf = validName(displayName, d);
   const graph = isGraphAccount(account);
-  // Graph names folders, it does not path them: a subfolder's path is just
-  // normalizeGraphFolderName(displayName), flat, the same shape the refetch
-  // will list it under — never the IMAP-shaped `parent + delimiter + leaf`.
-  const path = graph ? normalizeGraphFolderName(displayName.trim()) : (parentPath ? `${parentPath}${d}${leaf}` : leaf);
+  // Graph names folders, it does not path them: a new folder's path is its
+  // display name, flat, the same key Rust's listing will give it (a user
+  // folder is never well-known) — never the IMAP-shaped `parent + delimiter + leaf`.
+  const path = graph ? displayName.trim() : (parentPath ? `${parentPath}${d}${leaf}` : leaf);
   if (graph) {
     await api.graphCreateFolder(account.oauth2AccessToken, displayName.trim(), parentPath ? graphIdOf(mailboxes, parentPath) || null : null);
   } else {
@@ -104,12 +104,12 @@ export async function renameFolder(accountId, path, displayName) {
   guardLocked(mailboxes, path);
   const leaf = validName(displayName, d);
   const graph = isGraphAccount(account);
-  // Same reasoning as createFolder: a Graph folder's path is its normalized
-  // display name, flat. Using the IMAP-shaped `to` here would move the vault
+  // Same reasoning as createFolder: a Graph folder's path is its display
+  // name, flat. Using the IMAP-shaped `to` here would move the vault
   // directories to a path Graph's refetch never produces, silently orphaning
   // the Maildir, the index, the sidecar cache and the mirror.
   const to = graph
-    ? normalizeGraphFolderName(displayName.trim())
+    ? displayName.trim()
     : (path.includes(d) ? path.slice(0, path.lastIndexOf(d) + 1) : '') + leaf;
   if (graph) {
     await api.graphRenameFolder(account.oauth2AccessToken, graphIdOf(mailboxes, path), displayName.trim());

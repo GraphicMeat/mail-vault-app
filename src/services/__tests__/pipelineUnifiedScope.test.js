@@ -53,9 +53,8 @@ vi.mock('../db', () => ({
 }));
 
 vi.mock('../graphConfig', () => ({
-  GRAPH_FOLDER_NAME_MAP: {},
-  normalizeGraphFolderName: (n) => n,
   isGraphAccount: () => false,
+  graphFoldersToMailboxes: () => [],
 }));
 
 vi.mock('../../utils/sentFolder', () => ({ waitForSentMailboxPath: vi.fn().mockResolvedValue('Sent') }));

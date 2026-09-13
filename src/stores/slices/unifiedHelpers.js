@@ -65,10 +65,10 @@ export function _resolveUnifiedContext(key, state) {
   if (!email._mailbox && email._isSent) {
     // Try to find the Sent folder name from the account's mailboxes
     const sentFolder = state.mailboxes?.find(m =>
-      m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items' ||
-      m.special_use === '\\Sent'
+      m.specialUse === '\\Sent' || m.special_use === '\\Sent' ||
+      m.name?.toLowerCase() === 'sent' || m.name?.toLowerCase() === 'sent items'
     );
-    mailbox = sentFolder?.name || 'Sent';
+    mailbox = sentFolder?.path || sentFolder?.name || 'Sent';
   }
   // Final safety: never return 'UNIFIED' as a real mailbox
   if (mailbox === 'UNIFIED') mailbox = 'INBOX';

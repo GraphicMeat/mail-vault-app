@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { hasValidCredentials, ensureFreshToken } from '../authUtils';
-import { isGraphAccount, APP_TO_GRAPH_FOLDER_MAP, normalizeGraphFolderName } from '../graphConfig';
+import { isGraphAccount, storageKeyOf } from '../graphConfig';
 import { invalidateRestoreDescriptors as _invalidateRestore, getAccountCacheMailboxes as _getAccountMailboxes, listGraphMessages } from '../cacheManager';
 import { invalidate as _invalidateProbe } from '../syncProbe';
 import { forceMailboxRefetch } from './helpers/mailboxRefetch';
@@ -122,13 +122,9 @@ export async function refreshAllAccounts(options = {}) {
         try {
           const token = account.oauth2AccessToken;
           const folders = await api.graphListFolders(token);
-          const targetGraphName = APP_TO_GRAPH_FOLDER_MAP[targetMailbox] || targetMailbox;
-          const targetFolder = folders.find(f => (
-            f.displayName === targetGraphName ||
-            normalizeGraphFolderName(f.displayName) === targetMailbox
-          ));
+          const targetFolder = folders.find(f => storageKeyOf(f) === targetMailbox);
           if (targetFolder) {
-            const normalizedMailbox = normalizeGraphFolderName(targetFolder.displayName);
+            const normalizedMailbox = storageKeyOf(targetFolder);
             const cached = await db.getEmailHeaders(account.id, normalizedMailbox).catch(() => null);
             const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
 

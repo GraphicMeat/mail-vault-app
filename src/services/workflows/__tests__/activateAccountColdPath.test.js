@@ -73,9 +73,7 @@ vi.mock('../../authUtils', () => ({
 }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: () => false,
-  GRAPH_FOLDER_NAME_MAP: {},
   graphFoldersToMailboxes: () => [],
-  inferSpecialUse: () => null,
   graphMessageToEmail: (m) => m,
   isPersonalMicrosoftEmail: () => false,
 }));

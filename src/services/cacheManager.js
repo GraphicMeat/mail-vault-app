@@ -130,15 +130,12 @@ export async function resolveGraphMessageId(accountId, mailbox, uid, { row, toke
   _graphIdRebuiltAt.set(rebuildKey, Date.now());
 
   try {
-    const [api, { normalizeGraphFolderName }] = await Promise.all([
+    const [api, { storageKeyOf }] = await Promise.all([
       import('./api.js'),
       import('./graphConfig.js'),
     ]);
     const folders = await api.graphListFolders(token);
-    const folder = folders.find(f => {
-      const normalized = normalizeGraphFolderName(f.displayName);
-      return normalized === mailbox || f.displayName === mailbox;
-    });
+    const folder = folders.find(f => storageKeyOf(f) === mailbox);
     if (!folder) return null;
 
     await listGraphMessages(accountId, mailbox, token, folder.id);

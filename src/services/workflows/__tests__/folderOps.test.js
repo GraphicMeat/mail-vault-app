@@ -19,10 +19,6 @@ vi.mock('../../api', () => api);
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (a) => a?.oauth2Transport === 'graph',
-  // None of these fixtures use a display name from GRAPH_FOLDER_NAME_MAP
-  // (Inbox, Sent Items, …), so a passthrough is the real function's behaviour
-  // for every name these tests exercise.
-  normalizeGraphFolderName: (name) => name,
 }));
 const mockForce = vi.fn();
 vi.mock('../helpers/mailboxRefetch', () => ({ forceMailboxRefetch: (...a) => mockForce(...a) }));
@@ -252,7 +248,7 @@ describe('Graph', () => {
     expect(api.vaultRenameMailbox).not.toHaveBeenCalled();
   });
 
-  it('maps the vault path through normalizeGraphFolderName, not the IMAP-shaped path a real hierarchy would use', async () => {
+  it('keys the vault path by the flat display name, not the IMAP-shaped path a real hierarchy would use', async () => {
     // Graph paths are flat display names — never `parent + delimiter + leaf`.
     // A rename whose vault "to" used the IMAP shape would move the Maildir to
     // a path Graph's own refetch never produces, orphaning it.

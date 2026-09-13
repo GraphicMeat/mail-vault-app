@@ -74,7 +74,6 @@ vi.mock('../../attachmentUtils', () => ({ hasRealAttachments: () => false }));
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (a) => a?.oauth2Transport === 'graph',
   graphMessageToEmail: (m) => m,
-  normalizeGraphFolderName: (n) => n,
 }));
 
 vi.mock('../../cacheManager', () => ({

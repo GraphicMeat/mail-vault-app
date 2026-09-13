@@ -5,7 +5,7 @@ import { syncNow, waitForSync, toSyncAccount } from './syncService';
 import { getDaemonHealth } from './transport';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
-import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, normalizeGraphFolderName } from './graphConfig';
+import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 
 export { hasValidCredentials };
@@ -202,9 +202,7 @@ export class AccountPipeline {
 
     // 1. Fetch folder list to find the Graph folder ID
     const graphFolders = await api.graphListFolders(token);
-    const targetFolder = graphFolders.find(
-      f => normalizeGraphFolderName(f.displayName) === mailbox
-    );
+    const targetFolder = graphFolders.find(f => storageKeyOf(f) === mailbox);
 
     if (!targetFolder) {
       console.warn(`[Pipeline:${this.account.email}] No Graph folder matching "${mailbox}"`);

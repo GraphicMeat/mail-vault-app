@@ -64,7 +64,6 @@ vi.mock('../../authUtils', () => ({
 
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: () => true,
-  normalizeGraphFolderName: (x) => x,
   graphFoldersToMailboxes: () => [],
   graphMessageToEmail: (m) => m,
 }));

@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { ensureFreshToken, hasValidCredentials, resolveServerAccount } from '../authUtils';
-import { isGraphAccount, normalizeGraphFolderName, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
+import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';

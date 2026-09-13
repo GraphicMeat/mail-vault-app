@@ -64,7 +64,6 @@ vi.mock('../../attachmentUtils', () => ({
 vi.mock('../../graphConfig', () => ({
   isGraphAccount: (...a) => mockIsGraphAccount(...a),
   graphMessageToEmail: (m) => m,
-  normalizeGraphFolderName: (n) => n,
 }));
 
 vi.mock('../../cacheManager', () => ({

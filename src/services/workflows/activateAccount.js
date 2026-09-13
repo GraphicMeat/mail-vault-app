@@ -14,7 +14,7 @@ import { mailboxIsUnchanged, markVerified } from '../syncProbe';
 import { proveServerUidsIfUnproven } from './loadEmails';
 import { recall as memoRecall, remember as memoRemember, peek as memoPeek } from '../headerMemo';
 import { checkRestoreNeeded } from '../restoreDetection';
-import { isGraphAccount, GRAPH_FOLDER_NAME_MAP, graphFoldersToMailboxes, inferSpecialUse, graphMessageToEmail } from '../graphConfig';
+import { isGraphAccount, graphFoldersToMailboxes, graphMessageToEmail } from '../graphConfig';
 import { saveRestoreDescriptor as _saveRestore, getRestoreDescriptor as _getRestore, listGraphMessages as _listGraphMessages, getGraphMessageId, restoreGraphIdMap as _restoreGraphIdMap } from '../cacheManager';
 import { createPerfTrace } from '../../utils/perfTrace';
 import { countMailboxes, isMailboxTreeComplete, pickMailboxList, INBOX_PLACEHOLDER, retryOnce } from './mailboxTree';
