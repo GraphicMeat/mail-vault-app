@@ -163,6 +163,25 @@ describe('Graph uid allocation (JS side)', () => {
     expect(uidsById(headers)).toEqual({ c: 1, a: 2, b: 3 });
   });
 
+  it('does not bring back uid memory dropped while the allocator answered', async () => {
+    serve(['a']);
+    await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+
+    serve(['b', 'a']);
+    h.parkAllocations = true;
+    const listing = listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+    try {
+      await vi.waitFor(() => expect(h.parked).toHaveLength(1));
+      clearGraphIdMap(ACCT); // the account is removed, or a clash elsewhere dropped this mailbox
+      h.parked.shift()();
+      await expect(listing).rejects.toThrow(/dropped during this listing/);
+    } finally {
+      h.parkAllocations = false;
+      h.parked.splice(0).forEach((resolve) => resolve());
+    }
+    expect(getGraphMessageId(ACCT, 'INBOX', 1)).toBeNull();
+  });
+
   it('takes uids another writer allocated from the ledger on disk after a restart', async () => {
     // The backup allocated 1-3 while the app was closed.
     h.disk.set(`${ACCT}:INBOX`, { 1: 'a', 2: 'b', 3: 'c' });

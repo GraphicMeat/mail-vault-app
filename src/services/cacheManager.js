@@ -247,6 +247,13 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
         + `for ${unknown.length} ids — refusing to pair them by position`
       );
     }
+    if (known.size > 0 && !_graphIdMap.has(key)) {
+      // This mailbox's memory was dropped while Rust answered: a clash in an
+      // overlapping listing, or the account being removed. Merging into the
+      // snapshot read before the await would bring it back, and the next
+      // listing would skip the ledger on disk again.
+      throw new Error(`[graphIdMap] ${accountId}:${mailbox} uid memory was dropped during this listing; not restoring it`);
+    }
     // Only now, with the numbers on disk, does this session start using them.
     // Merge into what memory holds now, not the snapshot read before the
     // await: a listing of this mailbox that finished meanwhile has already
