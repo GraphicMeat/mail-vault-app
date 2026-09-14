@@ -52,6 +52,7 @@ version = "7"
 
 [dependencies.tracing]
 version = "0.1"
+default-features = false
 
 [dev-dependencies.assert_matches]
 version = "1.3"

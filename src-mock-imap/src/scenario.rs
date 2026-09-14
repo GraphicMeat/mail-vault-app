@@ -92,20 +92,23 @@ pub enum Action {
     /// After N responses, delay every subsequent one — bulk-operation throttling.
     ThrottleAfter(usize, Duration),
 
-    /// Replace the nth (1-based) untagged FETCH item with a line the client's
-    /// decoder cannot parse.
+    /// Replace the nth (1-based) untagged FETCH item with a line the strict
+    /// grammar cannot parse and that names no UID: `* 999 FETCH (UID notanumber
+    /// FLAGS ())`.
     ///
-    /// B4 in the parity audit. async-imap's decoder stops advancing after a
-    /// line it fails on, so one poisoned item costs every item behind it and
-    /// the page that comes back is SHORT — indistinguishable from a mailbox
-    /// that really holds that many. This is the only way to produce an `Err`
-    /// item in the FETCH stream on demand; no real server can be asked for one.
+    /// B4 in the parity audit. Before the vendored parser's lenient read, the
+    /// decoder stopped advancing after such a line, so one item cost every item
+    /// behind it and the page came back SHORT. Now it yields an empty row: the
+    /// page keeps every other item and reports one skipped, unnamed. The
+    /// keepalive splice (`InjectMidLine`) is what still kills a page.
     CorruptFetchItem(usize),
 
     /// Replace the untagged FETCH item carrying this UID with a line the
-    /// strict grammar cannot read, keeping its own `* <seq>` and `UID <n>` —
-    /// so the vendored parser's lenient read still yields a row that names the
-    /// message, and the client can report it as skipped.
+    /// strict grammar cannot read, keeping its own `* <seq>` and `UID <n>`.
+    /// The vendored parser's lenient read yields an EMPTY row for it: a list
+    /// that never reached its closing paren carries nothing, not even the UID,
+    /// so the page keeps every other item and reports one skipped item it
+    /// cannot name. The seq and UID are named in the daemon's warn line.
     ///
     /// Unlike `CorruptFetchItem`, which is addressed by position, this one is
     /// addressed by UID and so survives a re-fetch of a different range. It

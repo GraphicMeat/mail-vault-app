@@ -973,9 +973,7 @@ fn an_unreadable_fetch_line_costs_only_that_message() {
 
     let (rest, resp) = parse_response(input).unwrap();
     let attrs = attrs_of(resp, 673);
-    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(673))), "{attrs:?}");
-    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Flags(_))), "{attrs:?}");
-    assert!(!attrs.iter().any(|a| matches!(a, AttributeValue::Envelope(_))), "{attrs:?}");
+    assert!(attrs.is_empty(), "a truncated row carries nothing, not even its UID: {attrs:?}");
     assert!(rest.starts_with(b"* 674 FETCH"), "the scan must stop at the line's own CRLF: {:?}", String::from_utf8_lossy(rest));
 
     let (rest, resp) = parse_response(rest).unwrap();
@@ -998,7 +996,7 @@ fn an_unreadable_fetch_line_is_incomplete_until_its_literal_arrives() {
     }
     let (rest, resp) = parse_response(full).unwrap();
     let attrs = attrs_of(resp, 1);
-    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(1))));
+    assert!(attrs.is_empty(), "a truncated row carries nothing, not even its UID: {attrs:?}");
     assert!(rest.is_empty());
 }
 
@@ -1007,9 +1005,31 @@ fn a_literal_ahead_of_the_bad_attribute_is_stepped_over() {
     let input: &[u8] = b"* 7 FETCH (UID 7 BODY[HEADER.FIELDS (X)] {7}\r\nab)cd\r\n INTERNALDATE notadate)\r\n";
     let (rest, resp) = parse_response(input).unwrap();
     let attrs = attrs_of(resp, 7);
-    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(7))));
-    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::BodySection { .. })), "{attrs:?}");
+    assert!(attrs.is_empty(), "a truncated row carries nothing, not even its UID: {attrs:?}");
     assert!(rest.is_empty(), "{:?}", String::from_utf8_lossy(rest));
+}
+
+#[test]
+fn a_list_that_closed_keeps_its_attributes_when_only_the_tail_is_bad() {
+    let (rest, resp) = parse_response(b"* 3 FETCH (UID 3 FLAGS (\\Seen)) junk\r\n").unwrap();
+    let attrs = attrs_of(resp, 3);
+    assert_eq!(attrs.len(), 2, "{attrs:?}");
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(3))));
+    assert!(rest.is_empty());
+}
+
+#[test]
+fn a_literal_size_the_strict_grammar_rejects_is_not_a_literal() {
+    // u32::MAX + 1 would stall the decode waiting for 4 GiB; usize::MAX wrapped
+    // the scan position and looped forever. Neither is an announcement.
+    for line in [
+        &b"* 1 FETCH (UID 1 BODY[] {4294967296}\r\n"[..],
+        &b"* 1 FETCH (UID 1 BODY[] {18446744073709551615}\r\n"[..],
+    ] {
+        let (rest, resp) = parse_response(line).unwrap();
+        assert!(attrs_of(resp, 1).is_empty());
+        assert!(rest.is_empty(), "{:?}", String::from_utf8_lossy(rest));
+    }
 }
 
 #[test]
@@ -1021,12 +1041,14 @@ fn a_fetch_line_with_nothing_readable_is_an_empty_fetch() {
 
 #[test]
 fn only_a_fetch_line_gets_the_lenient_read() {
+    // Guard, not proof: passes before the lenient read existed too.
     assert!(matches!(parse_response(b"* 5 BOGUS xyz\r\n"), Err(nom::Err::Error(_))));
     assert!(matches!(parse_response(b"* 5 EXPUNGE extra\r\n"), Err(nom::Err::Error(_))));
 }
 
 #[test]
 fn a_well_formed_fetch_line_is_untouched() {
+    // Guard, not proof: passes before the lenient read existed too.
     let (rest, resp) = parse_response(b"* 2 FETCH (UID 2 FLAGS (\\Seen) RFC822.SIZE 10)\r\n").unwrap();
     let attrs = attrs_of(resp, 2);
     assert_eq!(attrs.len(), 3, "{attrs:?}");

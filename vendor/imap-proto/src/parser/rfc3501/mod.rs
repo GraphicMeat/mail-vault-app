@@ -607,35 +607,57 @@ fn message_data_fetch(i: &[u8]) -> IResult<&[u8], Response<'_>> {
 // `Incomplete`): keep the attributes that did parse (UID, FLAGS, MODSEQ lead
 // on every server seen), skip to the framing end of the line, and yield a
 // `Response::Fetch` with what there is. Downstream, a row without ENVELOPE is
-// logged and reported as skipped; a row without UID in a listing is caught by
-// the EXISTS count. The skipped bytes are logged once, bounded, so a report
-// can finally carry the line the parser could not read.
-pub(crate) fn message_data_fetch_lenient(i: &[u8]) -> IResult<&[u8], Response<'_>> {
+// logged and reported as skipped; a row the grammar could not read to its
+// closing paren carries no attributes at all, so a flags listing never sees a
+// UID with empty flags. The skipped bytes are logged once, bounded, so a
+// report can finally carry the line the parser could not read.
+fn message_data_fetch_lenient(i: &[u8]) -> IResult<&[u8], Response<'_>> {
     let (line, (num, _)) = tuple((number, tag_no_case(" FETCH ")))(i)?;
 
     // Best effort: every attribute before the one that failed. `separated_list0`
     // stops on an element `Error` and keeps what it has; an `Incomplete` means
     // the buffer ends inside a good attribute and must propagate.
-    let attrs = match tuple((tag("("), separated_list0(tag(" "), msg_att)))(line) {
-        Ok((_, (_, attrs))) => attrs,
+    let (stopped_at, attrs) = match tuple((tag("("), separated_list0(tag(" "), msg_att)))(line) {
+        Ok((rest, (_, attrs))) => (rest, attrs),
         Err(nom::Err::Incomplete(n)) => return Err(nom::Err::Incomplete(n)),
-        Err(_) => Vec::new(),
+        Err(_) => (line, Vec::new()),
+    };
+    let uid = attrs.iter().find_map(|a| match a {
+        AttributeValue::Uid(u) => Some(*u),
+        _ => None,
+    });
+
+    // The list closed and only what follows it is bad: the attributes are
+    // whole. It did not close: this is a row we know nothing about, not even
+    // its UID — a `(UID FLAGS)` row that kept its UID and lost its FLAGS would
+    // repaint the message's flags as empty downstream.
+    let attrs = if stopped_at.first() == Some(&b')') {
+        attrs
+    } else {
+        Vec::new()
     };
 
     let (remaining, skipped) = line_end_literal_aware(line)?;
+    let from = (line.len() - stopped_at.len()).min(skipped.len());
+    let shown = &skipped[from..];
     tracing::warn!(
-        "[imap-proto] unreadable FETCH line for message {} skipped ({} bytes): {}",
+        "[imap-proto] unreadable FETCH line for message seq={} uid={} skipped ({} bytes), from the failing item: {}",
         num,
+        uid.map_or_else(|| "?".to_string(), |u| u.to_string()),
         skipped.len(),
-        String::from_utf8_lossy(&skipped[..skipped.len().min(4096)])
+        String::from_utf8_lossy(&shown[..shown.len().min(2048)])
     );
     Ok((remaining, Response::Fetch(num, attrs)))
 }
 
 /// The framing end of the current line: everything up to and including its
-/// CRLF, with every `{n}` literal announcement and its `n` payload bytes
-/// stepped over (a literal's payload may hold CRLFs and parentheses of its
-/// own). `Incomplete` until that CRLF is in the buffer.
+/// line feed (a bare LF ends a line too), with every `{n}` literal
+/// announcement and its `n` payload bytes stepped over (a literal's payload
+/// may hold CRLFs and parentheses of its own). `Incomplete` until that line
+/// feed is in the buffer.
+///
+/// Sound for every line whose framing is well-formed; a server that ends a
+/// line in `{n}` that is not a literal cannot be framed by anything.
 fn line_end_literal_aware(i: &[u8]) -> IResult<&[u8], &[u8]> {
     let mut at = 0;
     loop {
@@ -646,7 +668,12 @@ fn line_end_literal_aware(i: &[u8]) -> IResult<&[u8], &[u8]> {
         let crlf = nl > 0 && i[nl - 1] == b'\r';
         match literal_size_at_end(&i[..nl.saturating_sub(1)]) {
             Some(n) if crlf => {
-                at = nl + 1 + n;
+                // `n` is a u32, so on 64-bit this cannot wrap; the guard says
+                // so rather than trusting it.
+                let Some(next) = (nl + 1).checked_add(n) else {
+                    return Ok((&i[nl + 1..], &i[..nl + 1]));
+                };
+                at = next;
                 if at > i.len() {
                     return Err(nom::Err::Incomplete(Needed::new(at - i.len())));
                 }
@@ -657,7 +684,9 @@ fn line_end_literal_aware(i: &[u8]) -> IResult<&[u8], &[u8]> {
 }
 
 /// `Some(n)` when `head` ends in `{n}` or `{n+}`: the bytes after the CRLF
-/// that follows are a literal's payload, not the next line.
+/// that follows are a literal's payload, not the next line. `n` is bounded
+/// exactly as the strict grammar bounds it (`u32`): a larger figure is not a
+/// literal announcement, it is garbage, and must not size a skip.
 fn literal_size_at_end(head: &[u8]) -> Option<usize> {
     let body = head.strip_suffix(b"}")?;
     let open = body.iter().rposition(|&b| b == b'{')?;
@@ -666,7 +695,11 @@ fn literal_size_at_end(head: &[u8]) -> Option<usize> {
     if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
         return None;
     }
-    std::str::from_utf8(digits).ok()?.parse().ok()
+    std::str::from_utf8(digits)
+        .ok()?
+        .parse::<u32>()
+        .ok()
+        .map(|n| n as usize)
 }
 
 /// `* N FETCH (...)` read leniently; the framing CRLF is consumed by the

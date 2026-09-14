@@ -1649,6 +1649,12 @@ mod tests {
     /// line; the reconcile's UID listing fails; the session holds unread bytes.
     /// Before the fix, that pruned 505 cached headers off disk. The sync may
     /// report the failure — it must never delete cached mail because of it.
+    ///
+    /// The lenient FETCH read frames the splice at the injected line's LF and
+    /// leaves a tail that is not a `* ` line, so the stream still errors; were
+    /// the tail ever a valid line, the row lost to the splice carries no UID
+    /// and the EXISTS count in `search_all_uid_flags` fails the listing
+    /// instead.
     #[tokio::test]
     async fn a_poisoned_reconcile_never_prunes_the_cache() {
         let dir = scratch_dir("poisoned_reconcile");

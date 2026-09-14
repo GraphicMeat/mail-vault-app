@@ -532,11 +532,12 @@ async fn parses_a_latin1_filename_in_bodystructure() {
     assert!(emails[0].has_attachments, "the PDF is still an attachment");
 }
 
-// ── A poisoned message is skipped by name, on the same connection ──────────
+// ── A poisoned message is skipped, on the same connection ──────────────────
 
 /// The header fetch is the one the poison rides on. `Trigger::with` fires on
 /// every FETCH that names BODYSTRUCTURE, so one session can be reused across
-/// the three header paths below.
+/// the three header paths below. The lenient read yields an empty row for the
+/// poisoned line, so the page reports one skipped item without a UID to name.
 fn poisoned_inbox(uid: u32) -> Scenario {
     Scenario::new()
         .mailbox(synthetic_mailbox("INBOX", 3))
@@ -553,7 +554,7 @@ fn sorted_uids(rows: &[EmailHeader]) -> Vec<u32> {
 }
 
 #[async_std::test]
-async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
+async fn a_poisoned_uid_is_skipped_without_a_reconnect() {
     let server = MockImap::start(poisoned_inbox(2));
     let mut sess = session(&server).await;
     let connections = server.connection_count();
@@ -563,7 +564,7 @@ async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
         .expect("the other two messages are perfectly readable");
     assert_eq!(total, 3);
     assert_eq!(sorted_uids(&page), vec![1, 3]);
-    assert_eq!(skipped, vec![Some(2)], "the caller must learn what was left out: {skipped:?}");
+    assert_eq!(skipped, vec![None], "a row the grammar could not finish names nothing: {skipped:?}");
 
     // Same session: the socket survived the bad line.
     let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3)
@@ -571,7 +572,7 @@ async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
         .expect("same for the virtualized-scroll path");
     assert_eq!(total, 3);
     assert_eq!(sorted_uids(&rows), vec![1, 3]);
-    assert_eq!(skipped, vec![Some(2)], "{skipped:?}");
+    assert_eq!(skipped, vec![None], "a row the grammar could not finish names nothing: {skipped:?}");
 
     let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3])
         .await
@@ -579,6 +580,28 @@ async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
     assert_eq!(sorted_uids(&rows), vec![1, 3]);
 
     assert_eq!(server.connection_count(), connections, "three poisoned pages, zero reconnects");
+}
+
+/// A `(UID FLAGS)` listing row the grammar cannot finish must vanish, not
+/// arrive as `(uid, [])`: the flag sync would write empty flags to the cache
+/// and the backup would rename the vault copy without `\Seen`.
+#[async_std::test]
+async fn a_poisoned_flags_row_is_absent_not_empty() {
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(synthetic_mailbox("INBOX", 3))
+            .fault(Trigger::with("FETCH", "(UID FLAGS)"), Action::PoisonFetchUid(2)),
+    );
+    let mut sess = session(&server).await;
+
+    let flags = fetch_flags_from(&mut sess, "INBOX", 1).await.expect("two rows are an answer");
+    assert!(!flags.iter().any(|(uid, _)| *uid == 2), "uid 2 must not arrive with empty flags: {flags:?}");
+    assert_eq!(flags.len(), 2, "{flags:?}");
+
+    let err = search_all_uid_flags(&mut sess, "INBOX")
+        .await
+        .expect_err("a reconcile listing short of EXISTS must fail, never prune");
+    assert!(!err.is_empty());
 }
 
 #[async_std::test]
