@@ -25,8 +25,15 @@ fn main() {
                 if let Some(p) = git(&["rev-parse", "--git-path", "HEAD"]) {
                     println!("cargo:rerun-if-changed={p}");
                 }
+                // `--git-path` is pure path resolution — it prints a path even when
+                // `logs/HEAD` doesn't exist (reflogs off via `core.logAllRefUpdates=false`,
+                // or a fresh clone before the first commit). A `rerun-if-changed` on a
+                // missing path is exactly the "vanishes -> rebuild every build" failure
+                // mode this is meant to avoid, so only watch it once it's really there.
                 if let Some(p) = git(&["rev-parse", "--git-path", "logs/HEAD"]) {
-                    println!("cargo:rerun-if-changed={p}");
+                    if std::path::Path::new(&p).exists() {
+                        println!("cargo:rerun-if-changed={p}");
+                    }
                 }
                 // ponytail: `-dirty` is read only when this script reruns; watching the
                 // index would rebuild on every `git status`.
