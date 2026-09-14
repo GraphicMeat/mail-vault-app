@@ -60,7 +60,6 @@ export {
   listCachedUids,
   getEmailHeadersByUids,
   getEmailHeaders,
-  saveGraphIdMap,
   loadGraphIdMap,
 } from './caches.js';
 

@@ -472,6 +472,11 @@ export async function graphListMessages(accessToken, folderId, top, skip) {
   return await tauriInvoke('graph_list_messages', { accessToken, folderId, top, skip: skip || 0 });
 }
 
+/** One uid per [graphId, internetMessageId] entry, from the ledger the backup shares. */
+export async function graphAllocateUids(accountId, mailbox, entries) {
+  return await tauriInvoke('graph_allocate_uids', { accountId, mailbox, entries });
+}
+
 export async function graphGetMessage(accessToken, messageId) {
   return await tauriInvoke('graph_get_message', { accessToken, messageId });
 }

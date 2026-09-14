@@ -263,18 +263,14 @@ export async function getEmailHeaders(accountId, mailbox) {
 
 // ── Graph ID map persistence (UID → Graph message ID) ───────────────────
 
-// Neither of these swallows its error, unlike the header caches above. This
-// file is the uid allocation ledger for a Graph mailbox: a read that fails
-// quietly reads as "nothing allocated yet" and renumbers the mailbox from 1,
-// and a write that fails quietly leaves uids handed out in memory but free on
-// disk, so the next launch gives the same numbers to different messages. A
-// failed load is a broken mailbox load; a corrupted vault is forever.
-export async function saveGraphIdMap(accountId, mailbox, mapObj) {
-  if (!invoke) return;
-  const data = JSON.stringify(mapObj);
-  await invoke('save_graph_id_map', { accountId, mailbox, data });
-}
-
+// This file is the uid allocation ledger for a Graph mailbox, and
+// `mailvault_core::graph_ledger` (via the `graph_allocate_uids` command) is
+// its only writer — the Outlook backup files mail through the same
+// allocator, so a second writer here could erase uids the backup already
+// handed out. This read does not swallow its error: a ledger that exists but
+// cannot be read is not the same as no ledger, and treating it as "nothing
+// allocated yet" renumbers the mailbox from 1. A failed load is a broken
+// mailbox load; a corrupted vault is forever.
 export async function loadGraphIdMap(accountId, mailbox) {
   if (!invoke) return null;
   const data = await invoke('load_graph_id_map', { accountId, mailbox });

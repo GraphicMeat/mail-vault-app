@@ -74,8 +74,10 @@ export function getAccountCacheMailboxes(accountId) {
 //
 // So MailVault mints the uid instead of deriving it, the way an IMAP server
 // does: the first sight of a Graph id takes the next number and keeps it for
-// good. The map below is that allocation ledger, not a cache of the last
-// listing.
+// good. The minting itself happens in Rust (`mailvault_core::graph_ledger`,
+// via the `graph_allocate_uids` command), the ledger's only writer, because
+// the Outlook backup files mail through the same allocator. The map below is
+// this session's read cache of that ledger, not a cache of the last listing.
 //
 // It is never pruned by absence. Graph pages the newest 200, so everything
 // below that window reads as "not in this listing" whether it was deleted or
@@ -203,8 +205,10 @@ export async function listGraphMessages(accountId, mailbox, token, folderId, { t
 }
 
 /**
- * Stamp each header with its allocated uid and its Graph id, allocating fresh
- * numbers for ids this mailbox has never seen. Mutates and returns `headers`.
+ * Stamp each header with its allocated uid and its Graph id. Ids this session
+ * already knows are answered from memory; the rest go to the Rust allocator,
+ * which is the ledger's only writer and has persisted them before it answers.
+ * Mutates and returns `headers`.
  */
 async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) {
   if (headers.length !== graphMessageIds.length) {
@@ -222,23 +226,40 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
   await restoreGraphIdMap(accountId, mailbox);
 
   const key = `${accountId}:${mailbox}`;
-  const ledger = _graphIdMap.get(key) || new Map();
+  const known = _graphIdMap.get(key) || new Map();
   const uidByGraphId = new Map();
-  let nextUid = 0;
-  for (const [uid, graphId] of ledger) {
-    uidByGraphId.set(graphId, uid);
-    if (uid > nextUid) nextUid = uid;
-  }
+  for (const [uid, graphId] of known) uidByGraphId.set(graphId, uid);
 
-  const fresh = [];
+  const unknown = [];
   headers.forEach((header, i) => {
     const graphId = graphMessageIds[i];
-    let uid = uidByGraphId.get(graphId);
-    if (uid === undefined) {
-      uid = ++nextUid;
-      uidByGraphId.set(graphId, uid);
-      fresh.push([uid, graphId]);
+    if (!uidByGraphId.has(graphId) && !unknown.some(([id]) => id === graphId)) {
+      unknown.push([graphId, header.messageId ?? null]);
     }
+  });
+
+  if (unknown.length > 0) {
+    const api = await import('./api.js');
+    const uids = await api.graphAllocateUids(accountId, mailbox, unknown);
+    if (!Array.isArray(uids) || uids.length !== unknown.length) {
+      throw new Error(
+        `[graphIdMap] ${accountId}:${mailbox} allocator answered ${uids?.length} uids `
+        + `for ${unknown.length} ids — refusing to pair them by position`
+      );
+    }
+    // Only now, with the numbers on disk, does this session start using them.
+    const grown = new Map(known);
+    unknown.forEach(([graphId], i) => {
+      grown.set(uids[i], graphId);
+      uidByGraphId.set(graphId, uids[i]);
+    });
+    _graphIdMap.set(key, grown);
+    console.log('[graphIdMap] Allocated %d uids for %s:%s (%d known)', unknown.length, accountId, mailbox, grown.size);
+  }
+
+  headers.forEach((header, i) => {
+    const graphId = graphMessageIds[i];
+    const uid = uidByGraphId.get(graphId);
     header.uid = uid;
     header.seq = uid;
     // Self-describing row: the sidecar cache stores headers verbatim, so a
@@ -246,25 +267,5 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
     // ledger for it.
     header._graphId = graphId;
   });
-
-  // A repeat listing of mail we already know allocates nothing and writes
-  // nothing — the steady state costs no disk at all.
-  if (fresh.length === 0) return headers;
-
-  // Persist before committing to memory, never after. A uid that is live in
-  // this session but absent from disk is handed out again next launch, to a
-  // different message — the corruption this ledger exists to prevent. On a
-  // failed write the old ledger stays in place untouched and the caller gets
-  // the error, so the retry re-reads disk and allocates from the truth.
-  const grown = new Map(ledger);
-  for (const [uid, graphId] of fresh) grown.set(uid, graphId);
-
-  const db = await import('./db.js');
-  await db.saveGraphIdMap(accountId, mailbox, Object.fromEntries(grown));
-
-  _graphIdMap.set(key, grown);
-  console.log('[graphIdMap] Allocated %d new uids for %s:%s (%d total)',
-    fresh.length, accountId, mailbox, grown.size);
-
   return headers;
 }

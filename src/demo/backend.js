@@ -861,7 +861,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'load_email_cache_partial': { const rows = visible(accountId, mailbox).sort((a, b) => b.uid - a.uid); return JSON.stringify({ emails: rows.slice(0, args.limit || 500).map(header), totalEmails: rows.length }); }
       case 'load_email_cache': return JSON.stringify(visible(accountId, mailbox).map(header));
       case 'load_email_cache_by_uids': return (args.uids || []).map(uid => { const row = find({ accountId, mailbox, uid }); return row ? header(row) : null; }).filter(Boolean);
-      case 'save_email_cache': case 'save_mailbox_cache': case 'save_graph_id_map': case 'clear_email_cache': case 'delete_mailbox_cache': return null;
+      case 'save_email_cache': case 'save_mailbox_cache': case 'clear_email_cache': case 'delete_mailbox_cache': return null;
       case 'load_mailbox_cache': return JSON.stringify({ mailboxes: accountMailboxes(accountId), fetchedAt: sessionNow, lastKnownGoodMailboxes: accountMailboxes(accountId), lastKnownGoodAt: sessionNow });
       case 'list_cached_uids': return { uids: local(accountId, mailbox).map(row => row.uid), changed: [] };
       case 'local_index_append': {

@@ -999,22 +999,6 @@ pub(crate) fn graph_ledger_path(app_handle: &tauri::AppHandle, account_id: &str,
 }
 
 #[tauri::command]
-fn save_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let dir = vault::root(&app_handle)?
-        .join("email_cache")
-        .join(&base_name);
-
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("save_graph_id_map: failed to create dir: {}", e))?;
-
-    fs::write(dir.join(GRAPH_ID_MAP_FILE), data.as_bytes())
-        .map_err(|e| format!("save_graph_id_map: failed to write: {}", e))?;
-
-    Ok(())
-}
-
-#[tauri::command]
 fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
     let file = graph_ledger_path(&app_handle, &account_id, &mailbox)?;
 
@@ -1026,6 +1010,24 @@ fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: 
         .map_err(|e| format!("load_graph_id_map: failed to read: {}", e))?;
 
     Ok(Some(data))
+}
+
+/// Uids for a Graph listing, from the allocator the backup uses too
+/// (`mailvault_core::graph_ledger`). `entries` pairs each Graph id with its
+/// internetMessageId, in listing order; the answer is one uid per entry. The
+/// ledger is persisted before this returns, and a failure returns no uids.
+#[tauri::command]
+async fn graph_allocate_uids(
+    app_handle: tauri::AppHandle,
+    account_id: String,
+    mailbox: String,
+    entries: Vec<(String, Option<String>)>,
+) -> Result<Vec<u32>, String> {
+    let ledger = graph_ledger_path(&app_handle, &account_id, &mailbox)?;
+    let cur = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    tokio::task::spawn_blocking(move || mailvault_core::graph_ledger::allocate(&ledger, &cur, &entries))
+        .await
+        .map_err(|e| format!("graph_allocate_uids panicked: {}", e))?
 }
 
 // ── Email header cache ───────────────────────────────────────────────────
@@ -5106,7 +5108,7 @@ fn main() {
             save_mailbox_cache,
             load_mailbox_cache,
             delete_mailbox_cache,
-            save_graph_id_map,
+            graph_allocate_uids,
             load_graph_id_map,
             save_attachment_to,
             export_fetch::fetch_remote_asset,
