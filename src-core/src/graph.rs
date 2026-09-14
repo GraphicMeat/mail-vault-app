@@ -279,6 +279,31 @@ pub const WELL_KNOWN: [(&str, &str); 6] = [
     ("archive", "Archive"),
 ];
 
+/// Why a `$batch` could not resolve the well-known folders. Throttling is the
+/// one failure that clears on its own in seconds, so it is a variant of its own
+/// and not a string the caller would have to grep.
+#[derive(Debug, PartialEq)]
+pub enum BatchError {
+    /// A sub-request was throttled; `retry_after` is what Graph said, in
+    /// seconds, uncapped — the log reports the server's number, the sleep clamps
+    /// it.
+    Throttled { id: String, retry_after: u64 },
+    /// Anything else: a 5xx sub-response, a missing status.
+    Broken(String),
+}
+
+impl BatchError {
+    pub fn message(&self) -> String {
+        match self {
+            BatchError::Throttled { id, retry_after } => format!(
+                "Graph $batch sub-request {} answered (429:retry_after={})",
+                id, retry_after
+            ),
+            BatchError::Broken(m) => m.clone(),
+        }
+    }
+}
+
 /// `{"responses":[{"id":"sentitems","status":200,"body":{"id":"AAMk…"}}, …]}`
 /// -> `[("sentitems", "AAMk…")]`. A 404 is a mailbox without that folder (no
 /// Archive), and a 200 without a body id has nothing to tag: both are skipped.
@@ -287,8 +312,11 @@ pub const WELL_KNOWN: [(&str, &str); 6] = [
 /// 200 and throttles or errors the sub-requests INDIVIDUALLY, so a 429 in here
 /// is the same outage as a 429 on the POST — and dropping it would tag nothing
 /// and key every folder by display name, the degradation this resolution
-/// exists to remove.
-pub fn parse_well_known_batch(json: &serde_json::Value) -> Result<Vec<(String, String)>, String> {
+/// exists to remove. A throttled sub-request is the common case and reads back
+/// as `Throttled`, which `resolve_well_known_ids` retries once.
+pub fn parse_well_known_batch(
+    json: &serde_json::Value,
+) -> Result<Vec<(String, String)>, BatchError> {
     let mut out = Vec::new();
     for r in json["responses"].as_array().into_iter().flatten() {
         let id = r["id"].as_str().unwrap_or("?");
@@ -300,21 +328,26 @@ pub fn parse_well_known_batch(json: &serde_json::Value) -> Result<Vec<(String, S
             }
             Some(404) => {}
             Some(429) => {
-                // Reported, not slept on, so it is NOT capped the way
-                // `retry_after_secs` is: the log should say what Graph said.
-                let wait = r["headers"]["Retry-After"]
+                // Carried uncapped, so the log says what Graph said; the caller
+                // clamps it the way `retry_after_secs` clamps the POST's.
+                let retry_after = r["headers"]["Retry-After"]
                     .as_str()
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(1);
-                return Err(format!(
-                    "Graph $batch sub-request {} answered (429:retry_after={})",
-                    id, wait
-                ));
+                return Err(BatchError::Throttled { id: id.to_string(), retry_after });
             }
             Some(status) => {
-                return Err(format!("Graph $batch sub-request {} answered {}", id, status))
+                return Err(BatchError::Broken(format!(
+                    "Graph $batch sub-request {} answered {}",
+                    id, status
+                )))
             }
-            None => return Err(format!("Graph $batch sub-request {} answered no status", id)),
+            None => {
+                return Err(BatchError::Broken(format!(
+                    "Graph $batch sub-request {} answered no status",
+                    id
+                )))
+            }
         }
     }
     Ok(out)
@@ -437,8 +470,11 @@ impl GraphClient {
     /// language calls the folder; the listing's displayName does not.
     ///
     /// A 429 is retried once after `retry-after`, because throttling is the one
-    /// failure that clears on its own in seconds. Anything else — a second 429
-    /// included — is an `Err` the caller retries on its own schedule.
+    /// failure that clears on its own in seconds. It counts whether Graph
+    /// answered the POST 429 or answered 200 and threw the 429 in a
+    /// SUB-response, which is the common shape: one retry budget covers both.
+    /// Anything else — a second 429 included — is an `Err` the caller retries on
+    /// its own schedule.
     async fn resolve_well_known_ids(&self) -> Result<Vec<(String, String)>, String> {
         let requests: Vec<serde_json::Value> = WELL_KNOWN
             .iter()
@@ -482,7 +518,15 @@ impl GraphClient {
                 .json()
                 .await
                 .map_err(|e| format!("Graph $batch parse error: {}", e))?;
-            return parse_well_known_batch(&json);
+            match parse_well_known_batch(&json) {
+                Err(BatchError::Throttled { id, retry_after }) if !retried => {
+                    let wait = retry_after.clamp(1, 5);
+                    warn!("[Graph] $batch sub-request {} throttled, one retry in {}s", id, wait);
+                    tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                    retried = true;
+                }
+                other => return other.map_err(|e| e.message()),
+            }
         }
     }
 
@@ -1324,19 +1368,31 @@ mod tests {
             { "id": "inbox", "status": 200, "body": { "id": "fld-inbox" } },
             { "id": "sentitems", "status": 429, "headers": { "Retry-After": "7" } }
         ]});
+        // Throttle and breakage are separate variants, because the caller retries
+        // the first once and gives up on the second.
         let err = parse_well_known_batch(&throttled).unwrap_err();
-        assert!(err.contains("sentitems"), "names the sub-request: {err}");
-        assert!(err.contains("(429:retry_after=7)"), "carries the throttle marker: {err}");
+        assert_eq!(err, BatchError::Throttled { id: "sentitems".to_string(), retry_after: 7 });
+        assert!(
+            err.message().contains("(429:retry_after=7)"),
+            "carries the throttle marker: {}",
+            err.message()
+        );
 
         let broken = serde_json::json!({ "responses": [
             { "id": "inbox", "status": 500, "body": { "error": { "code": "InternalServerError" } } }
         ]});
-        let err = parse_well_known_batch(&broken).unwrap_err();
-        assert!(err.contains("inbox") && err.contains("500"), "{err}");
+        match parse_well_known_batch(&broken).unwrap_err() {
+            BatchError::Broken(msg) => assert!(msg.contains("inbox") && msg.contains("500"), "{msg}"),
+            e => panic!("a 5xx sub-response is not a throttle: {e:?}"),
+        }
 
-        // A 429 with no Retry-After still names a wait, so the marker is uniform.
+        // A 429 with no Retry-After still names a wait, so the marker is uniform
+        // and the retry has a floor.
         let bare = serde_json::json!({ "responses": [{ "id": "archive", "status": 429 }] });
-        assert!(parse_well_known_batch(&bare).unwrap_err().contains("(429:retry_after=1)"));
+        assert_eq!(
+            parse_well_known_batch(&bare).unwrap_err(),
+            BatchError::Throttled { id: "archive".to_string(), retry_after: 1 }
+        );
 
         // A 404 is a mailbox without that folder (no Archive), not a failure.
         let missing = serde_json::json!({ "responses": [

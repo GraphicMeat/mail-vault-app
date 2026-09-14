@@ -356,12 +356,15 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     (moved, failed)
 }
 
-/// What one `adopt_dirs` call did. `moved` and `blocked` count locations;
-/// `failed` carries renames the filesystem refused.
+/// What one `adopt_dirs` call did. `moved` and `blocked` count locations,
+/// `blocked_by` names the destinations that already existed — a blocked adoption
+/// leaves a legacy directory on disk and this is the only trace a support log
+/// will have of it — and `failed` carries renames the filesystem refused.
 #[derive(Debug, Default)]
 pub struct Adopted {
     pub moved: usize,
     pub blocked: usize,
+    pub blocked_by: Vec<String>,
     pub failed: Vec<String>,
 }
 
@@ -402,8 +405,14 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
     .collect();
 
     if app_side.iter().any(|(src, _)| src.exists()) {
-        if app_side.iter().any(|(_, dst)| dst.exists()) {
+        let existing: Vec<String> = app_side
+            .iter()
+            .filter(|(_, dst)| dst.exists())
+            .map(|(_, dst)| dst.display().to_string())
+            .collect();
+        if !existing.is_empty() {
             out.blocked += 1;
+            out.blocked_by.extend(existing);
         } else {
             for (src, dst) in &app_side {
                 if src.exists() {
@@ -420,6 +429,7 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
         if src.exists() {
             if dst.exists() {
                 out.blocked += 1;
+                out.blocked_by.push(dst.display().to_string());
             } else {
                 mv(&src, &dst, &mut out);
             }
@@ -448,6 +458,11 @@ pub async fn vault_adopt_mailbox_dirs(
         // Shallowest first, as `vault_rename_mailbox` does: a no-op for the flat
         // storage keys sent today, and the order the nesting index and mirror
         // need the day a localized folder with children is adopted.
+        //
+        // A user who switched UI language more than once has two legacy
+        // directories for one folder ("Gesendet" and "Enviados", both -> "Sent"):
+        // the first pair in this order wins and the other stays where it is,
+        // because only a merge could do better and this command never merges.
         let mut pairs = pairs;
         pairs.sort_by_key(|p| p.from.len());
         let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
@@ -463,7 +478,9 @@ pub async fn vault_adopt_mailbox_dirs(
                 } else if out.moved > 0 {
                     report.adopted.push(label);
                 } else if out.blocked > 0 {
-                    report.skipped_both_exist.push(label);
+                    report
+                        .skipped_both_exist
+                        .push(format!("{} (exists: {})", label, out.blocked_by.join(", ")));
                 }
             }
             Ok(report)
@@ -474,10 +491,17 @@ pub async fn vault_adopt_mailbox_dirs(
             }
         }
         let report = result?;
-        info!(
+        let line = format!(
             "vault_adopt_mailbox_dirs: {} — adopted {:?}, left in place {:?}, failed {}",
             account_id, report.adopted, report.skipped_both_exist, report.failed.len()
         );
+        // A left-behind legacy directory is the one outcome nobody will look for
+        // until a mailbox reads short, so it logs at warn.
+        if report.skipped_both_exist.is_empty() {
+            info!("{}", line);
+        } else {
+            warn!("{}", line);
+        }
         if !report.failed.is_empty() {
             return Err(format!("vault adopt incomplete: {}", report.failed.join("; ")));
         }
@@ -911,6 +935,13 @@ mod tests {
 
         assert_eq!(out.moved, 0, "a partial move would pair one ledger with another numbering's files");
         assert_eq!(out.blocked, 1);
+        // The log is the only trace of the legacy dir left behind, so it names
+        // the destination that blocked the move, not just the pair.
+        assert_eq!(
+            out.blocked_by,
+            vec![to.cur.parent().unwrap().display().to_string()],
+            "names the vault dir that already existed"
+        );
         assert!(from.cur.join("1:2,S.eml").exists());
         assert!(from.sidecar_dir.join("graph_id_map.json").exists());
         assert!(!to.sidecar_dir.exists());
@@ -945,6 +976,11 @@ mod tests {
         let out2 = adopt_dirs(&from, &to);
         assert_eq!(out2.moved, 0);
         assert_eq!(out2.blocked, 2, "app side and mirror both blocked");
+        assert!(
+            out2.blocked_by.contains(&to.mirror_cur.clone().unwrap().parent().unwrap().display().to_string()),
+            "the mirror destination is named too: {:?}",
+            out2.blocked_by
+        );
         assert!(from_mirror.join("2:2,S.eml").exists());
         assert_eq!(file_count(tmp.path()), before2);
     }
