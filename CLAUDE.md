@@ -40,7 +40,7 @@ This file is for local agent guidance and repo-specific working rules. Stable ar
 
 - `app.html` is the desktop window entry point.
 - Root `package.json` uses `"type": "module"`; Node scripts using `require()` should use `.cjs`.
-- `CLAUDE.md` is tracked so every worktree gets it; `architecture.md` stays gitignored and local-only.
+- `CLAUDE.md` and `architecture.md` are tracked so every worktree gets them.
 - Update `architecture.md` when architectural boundaries or core data flow change.
 - Do not store secrets, account credentials, provider hostnames, or signing identities in local guidance docs.
 
