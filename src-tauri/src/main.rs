@@ -79,6 +79,7 @@ mod attachment_extract;
 mod backup;
 mod commands;
 mod custody;
+mod daemon_channel;
 mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
 mod export_fetch;
@@ -5146,6 +5147,12 @@ async fn daemon_rpc(
     Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
 }
 
+/// The daemon bridge: send one fire-and-forget notification on the channel.
+#[tauri::command]
+fn daemon_channel_notify(method: String, params: serde_json::Value) {
+    daemon_channel::notify(&method, params);
+}
+
 /// `mailvault --extract-pdf`: read PDF bytes from stdin, write extracted text
 /// to stdout. Runs only in its own re-exec'd process (see `attachment_extract.rs`'s
 /// non-macOS `pdf_text_layer`), never in the main app or the search-index
@@ -5492,7 +5499,8 @@ fn main() {
             daemon_rpc,
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset,
             search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild,
-            search_index::vault_search, search_index::vault_rows
+            search_index::vault_search, search_index::vault_rows,
+            daemon_channel_notify
         ])
         .setup(|app| {
             app.state::<insights::InsightsSnapshots>().start_cleanup();
@@ -5594,6 +5602,7 @@ fn main() {
             // After resolve: the index lives in the vault root resolve just picked.
             // Only spawns; the worker thread opens the index.
             search_index::start(app.handle());
+            daemon_channel::start(app.handle());
 
             // A vault written before 2.5.0's `.eml` rename, or by any build
             // between it and the writer fix, still holds extension-less files.
@@ -5874,6 +5883,7 @@ fn main() {
                             pool.shutdown(),
                         ).await;
                     });
+                    daemon_channel::stop();
                     shutdown_daemon_child();
                 }
                 #[cfg(target_os = "linux")]
