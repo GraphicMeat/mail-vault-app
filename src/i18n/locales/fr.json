@@ -396,6 +396,7 @@
   "errors.operationRunning": "Une opération est déjà en cours",
   "errors.removalPartiallyFailed": "Suppression partiellement échouée : {{errors}}. Certains e-mails peuvent rester à destination.",
   "errors.smtpPrefixed": "SMTP : {{msg}}",
+  "errors.daemonUnavailable": "Le service d'arrière-plan de MailVault ne répond pas. Redémarrez MailVault et réessayez.",
   "errors.tauriUnavailable": "L'invocation Tauri n'est pas disponible",
   "errors.uidNotInMaildir": "E-mail UID {{uid}} introuvable dans le Maildir",
   "export.dialog.exportFailed": "Échec de l'export : {{err}}",

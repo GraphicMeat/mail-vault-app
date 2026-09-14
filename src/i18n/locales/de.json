@@ -397,6 +397,7 @@
   "errors.operationRunning": "Es läuft bereits ein Vorgang",
   "errors.removalPartiallyFailed": "Entfernen teilweise fehlgeschlagen: {{errors}}. Einige E-Mails können am Ziel verbleiben.",
   "errors.smtpPrefixed": "SMTP: {{msg}}",
+  "errors.daemonUnavailable": "Der MailVault-Hintergrunddienst antwortet nicht. Starte MailVault neu und versuche es erneut.",
   "errors.tauriUnavailable": "Tauri-Aufruf nicht verfügbar",
   "errors.uidNotInMaildir": "E-Mail mit UID {{uid}} nicht im Maildir gefunden",
   "export.dialog.exportFailed": "Export fehlgeschlagen: {{err}}",

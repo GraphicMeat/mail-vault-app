@@ -396,6 +396,7 @@
   "errors.operationRunning": "已有操作正在进行",
   "errors.removalPartiallyFailed": "移除部分失败：{{errors}}。部分邮件可能仍留在目标位置。",
   "errors.smtpPrefixed": "SMTP：{{msg}}",
+  "errors.daemonUnavailable": "MailVault 后台服务没有响应。请重新启动 MailVault 后重试。",
   "errors.tauriUnavailable": "Tauri invoke 不可用",
   "errors.uidNotInMaildir": "在 Maildir 中未找到 UID {{uid}} 的邮件",
   "export.dialog.exportFailed": "导出失败：{{err}}",

@@ -819,6 +819,7 @@
   "errors.noGraphIdDelete": "Cannot delete: no Graph message ID found for this email.",
   "errors.noGraphIdForUid": "No Graph message ID for UID {{uid}}",
   "errors.noGraphIdMove": "Cannot move: no Graph message ID for some of the selected emails.",
+  "errors.daemonUnavailable": "The MailVault background service is not responding. Restart MailVault and try again.",
   "errors.tauriUnavailable": "Tauri invoke not available",
   "errors.uidNotInMaildir": "Email UID {{uid}} not found in Maildir",
   "errors.billingTimeout": "Billing service timed out. Please try again.",

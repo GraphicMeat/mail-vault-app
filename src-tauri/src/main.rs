@@ -5084,6 +5084,12 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
     VERIFIED_SOCKET_INO.store(0, std::sync::atomic::Ordering::SeqCst);
 }
 
+/// Marker string `daemon_rpc` returns for every failure before a response
+/// line is read (spawn, build check, token, connect, auth, write, EOF). The
+/// frontend's `daemonClient.js` classifier is text-matched, so this must stay
+/// a literal `errors.` catalog key — the real reason goes to `warn!` instead.
+const DAEMON_UNAVAILABLE: &str = "errors.daemonUnavailable";
+
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
@@ -5093,6 +5099,12 @@ async fn daemon_rpc(
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
+    let method_name = method.clone();
+    let unavailable = |why: String| {
+        warn!("daemon_rpc {method_name}: {why}");
+        DAEMON_UNAVAILABLE.to_string()
+    };
+
     let (socket_path, token_path) = daemon_ipc_paths()?;
     // Blocking: spawn check, heartbeat, possibly a restart. Never on a tokio worker.
     {
@@ -5100,17 +5112,18 @@ async fn daemon_rpc(
         let sock = socket_path.clone();
         tokio::task::spawn_blocking(move || ensure_daemon_running(&app, &sock))
             .await
-            .map_err(|e| format!("Task join error: {e}"))??;
+            .map_err(|e| unavailable(format!("task join error: {e}")))?
+            .map_err(unavailable)?;
     }
 
     // Read auth token
     let token = std::fs::read_to_string(&token_path)
-        .map_err(|_| "Daemon token not found — is the daemon running?".to_string())?;
+        .map_err(|e| unavailable(format!("daemon token not found: {e}")))?;
 
     // Connect to daemon socket
     let stream = UnixStream::connect(&socket_path)
         .await
-        .map_err(|e| format!("Cannot connect to daemon — is it running? ({})", e))?;
+        .map_err(|e| unavailable(format!("cannot connect to daemon: {e}")))?;
 
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
@@ -5119,18 +5132,18 @@ async fn daemon_rpc(
     let auth_msg = serde_json::json!({"token": token.trim()});
     let mut buf = serde_json::to_vec(&auth_msg).unwrap();
     buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+    writer.write_all(&buf).await.map_err(|e| unavailable(e.to_string()))?;
 
     // Read auth response
     let auth_resp = lines.next_line().await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Daemon closed connection during auth".to_string())?;
+        .map_err(|e| unavailable(e.to_string()))?
+        .ok_or_else(|| unavailable("daemon closed connection during auth".to_string()))?;
 
     let auth_result: serde_json::Value = serde_json::from_str(&auth_resp)
-        .map_err(|e| format!("Invalid auth response: {}", e))?;
+        .map_err(|e| unavailable(format!("invalid auth response: {e}")))?;
 
     if auth_result.get("error").is_some() {
-        return Err("Daemon authentication failed".to_string());
+        return Err(unavailable("daemon authentication failed".to_string()));
     }
 
     // Send JSON-RPC request
@@ -5145,12 +5158,12 @@ async fn daemon_rpc(
     });
     let mut buf = serde_json::to_vec(&rpc_req).unwrap();
     buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| e.to_string())?;
+    writer.write_all(&buf).await.map_err(|e| unavailable(e.to_string()))?;
 
     // Read response
     let resp_line = lines.next_line().await
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "Daemon closed connection before responding".to_string())?;
+        .map_err(|e| unavailable(e.to_string()))?
+        .ok_or_else(|| unavailable("daemon closed connection before responding".to_string()))?;
 
     let resp: serde_json::Value = serde_json::from_str(&resp_line)
         .map_err(|e| format!("Invalid RPC response: {}", e))?;

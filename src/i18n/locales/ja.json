@@ -396,6 +396,7 @@
   "errors.operationRunning": "すでに操作が実行中です",
   "errors.removalPartiallyFailed": "削除が一部失敗しました: {{errors}}。一部のメールが移動先に残る可能性があります。",
   "errors.smtpPrefixed": "SMTP: {{msg}}",
+  "errors.daemonUnavailable": "MailVault のバックグラウンドサービスが応答しません。MailVault を再起動してもう一度お試しください。",
   "errors.tauriUnavailable": "Tauri の invoke が利用できません",
   "errors.uidNotInMaildir": "UID {{uid}} のメールが Maildir に見つかりません",
   "export.dialog.exportFailed": "書き出しに失敗しました: {{err}}",

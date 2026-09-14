@@ -107,6 +107,28 @@ function mapArgs(command, args) {
   return mapped;
 }
 
+// ── Daemon-owned commands ───────────────────────────────────────────────────
+// Commands migrated to the daemon under their own names and payloads
+// (spec 2026-09-14 §3.1). Unlike DAEMON_COMMANDS above: no heartbeat gate and
+// no invoke fallback. Their Tauri twins are deleted in the same phase.
+export const DAEMON_OWNED = new Set([]);
+
+async function sendToDaemon(command, args) {
+  try {
+    return await daemonCall(command, mapArgs(command, args));
+  } catch (e) {
+    // daemonClient.js's classifier is untouched (its mapping stays
+    // byte-identical for legacy DAEMON_COMMANDS callers), so a real
+    // daemon_rpc pre-response failure surfaces here as the literal
+    // errors.daemonUnavailable message rather than a DAEMON_OFFLINE code —
+    // check both, plus NO_TAURI for a webview with no Tauri bridge at all.
+    if (e?.message === 'errors.daemonUnavailable' || e?.code === 'DAEMON_OFFLINE' || e?.code === 'NO_TAURI') {
+      throw Object.assign(new Error(t('errors.daemonUnavailable')), { code: 'DAEMON_UNAVAILABLE' });
+    }
+    throw e;
+  }
+}
+
 // ── Health gate ─────────────────────────────────────────────────────────────
 // The daemon must respond to a heartbeat before any commands are routed to it.
 // Until the heartbeat succeeds, all commands fall through to Tauri invoke.
@@ -202,6 +224,8 @@ if (IS_TAURI) {
  * @returns {Promise<any>}
  */
 export async function send(command, args = {}) {
+  if (DAEMON_OWNED.has(command)) return sendToDaemon(command, args);
+
   const daemonMethod = DAEMON_COMMANDS[command];
 
   // Only route to daemon if heartbeat confirmed it's alive
