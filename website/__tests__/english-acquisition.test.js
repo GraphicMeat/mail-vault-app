@@ -90,7 +90,8 @@ describe('English acquisition journey', () => {
         const value=el.getAttribute('href') || el.getAttribute('src');
         if(/^(https?:|mailto:)/.test(value)) continue;
         const url=new URL(value,'https://mailvaultapp.com/'+file);
-        if(url.pathname==='/gm.js') continue;
+        // `/demo/` is the gitignored `npm run build:demo` bundle; CI unit runs never build it.
+        if(url.pathname==='/gm.js' || url.pathname.startsWith('/demo/')) continue;
         const path=resolve(root,'.'+(url.pathname.endsWith('/')?url.pathname+'index.html':url.pathname));
         expect(existsSync(path), `${file}: ${value}`).toBe(true);
         if(url.hash) {
@@ -100,7 +101,10 @@ describe('English acquisition journey', () => {
         }
       }
       for(const image of doc.querySelectorAll('img[srcset]')) {
-        for(const entry of image.srcset.split(',')) expect(existsSync(resolve(root,'.'+entry.trim().split(/\s+/)[0]))).toBe(true);
+        for(const entry of image.srcset.split(',')) {
+          const src=entry.trim().split(/\s+/)[0];
+          if(!src.startsWith('/demo/')) expect(existsSync(resolve(root,'.'+src)), `${file}: ${src}`).toBe(true);
+        }
       }
     }
   });
