@@ -383,8 +383,9 @@ export const config = {
           // Same hatch for the mock SMTP listener, same loopback-only rule.
           // Without it lettre insists on STARTTLS and no send can ever succeed.
           MAILVAULT_SMTP_PLAINTEXT: '1',
-          // Graph requests go to the loopback mock above. The app ignores any
-          // base that is not loopback, so a shipped binary cannot be pointed away.
+          // Graph requests go to the loopback mock above. Read by debug builds
+          // only (a release binary never looks at it), and even then honoured
+          // only for a loopback base.
           MAILVAULT_GRAPH_BASE: mockGraph.base,
         },
       });
