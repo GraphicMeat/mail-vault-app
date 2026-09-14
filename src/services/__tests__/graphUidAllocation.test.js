@@ -191,6 +191,14 @@ describe('Graph uid allocation (JS side)', () => {
     expect(h.calls.map(c => c.entries)).toEqual([[['new', '<new@outlook.com>']]]);
   });
 
+  it('files an id the ledger holds twice under its lowest uid, as the backup does', async () => {
+    h.disk.set(`${ACCT}:INBOX`, { 1: 'a', 2: 'b', 3: 'a' });
+    serve(['a', 'b']);
+    const { headers } = await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+    expect(uidsById(headers)).toEqual({ a: 1, b: 2 });
+    expect(h.calls).toEqual([]);
+  });
+
   it('refuses to allocate when the ledger exists but cannot be read', async () => {
     h.failLoad = true;
     serve(['a', 'b']);

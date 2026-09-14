@@ -228,7 +228,11 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
   const key = `${accountId}:${mailbox}`;
   const known = _graphIdMap.get(key) || new Map();
   const uidByGraphId = new Map();
-  for (const [uid, graphId] of known) uidByGraphId.set(graphId, uid);
+  for (const [uid, graphId] of known) {
+    // Lowest uid wins for an id the ledger holds twice, the rule the Rust
+    // allocator applies, so the app and the backup file it under one number.
+    if (!uidByGraphId.has(graphId) || uid < uidByGraphId.get(graphId)) uidByGraphId.set(graphId, uid);
+  }
 
   const unknown = [];
   headers.forEach((header, i) => {
