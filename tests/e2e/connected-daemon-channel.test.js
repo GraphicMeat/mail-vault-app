@@ -49,18 +49,30 @@ describe('Daemon channel — ping round-trip', function () {
     // races the channel's first connect, and that drop is spec-conformant,
     // not a bug (Task 0.10 covers the post-connect respawn/reconnect case).
     // An actual invoke failure (command rejected) is a different, real bug —
-    // throw immediately rather than retrying it away, same as the plan's own
+    // fail at once rather than retrying it away, same as the plan's own
     // Task 0.10 Step 1 `pingRoundTrip` helper does.
+    //
+    // A `throw` from inside the waitUntil condition itself does NOT abort the
+    // wait: webdriverio 9.24.0's Timer stores a rejected condition as
+    // `_lastError` and keeps re-ticking until the full timeout elapses (a
+    // failed invoke followed by a later successful one would still pass). So
+    // record the failure in this outer variable, return `true` to end the
+    // wait immediately, and throw only after `waitUntil` resolves.
+    let invokeFailure = null;
     await browser.waitUntil(async () => {
       const r = await invoke(nonce);
       if (!r || r.ok !== true) {
-        throw new Error(`daemon_channel_notify invoke failed: ${JSON.stringify(r)}`);
+        invokeFailure = r;
+        return true; // end the wait now; checked below
       }
       return browser.execute((n) => (window.__DAEMON_PING_EVENTS__ || []).some((p) => p && p.nonce === n), nonce);
     }, {
       timeout: 30_000, interval: 500,
       timeoutMsg: `no daemon-ping event reached the frontend for nonce ${nonce} after retrying the notify for 30s`,
     });
+    if (invokeFailure) {
+      throw new Error(`daemon_channel_notify invoke failed: ${JSON.stringify(invokeFailure)}`);
+    }
 
     await browser.execute(() => window.__DAEMON_PING_EVENTS_STOP__ && window.__DAEMON_PING_EVENTS_STOP__());
   });
