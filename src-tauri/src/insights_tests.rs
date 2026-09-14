@@ -160,6 +160,22 @@ fn insights_corrupt_or_missing_metadata_stays_partial_and_unknown() {
     assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
 }
 #[test]
+fn insights_a_mailbox_cache_holding_only_its_uid_ledger_is_not_a_problem() {
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    let cache = folder(dir.path());
+    fs::remove_file(cache.join("_meta.json")).unwrap();
+    fs::write(cache.join("graph_id_map.json"), r#"{"1":"g-a"}"#).unwrap();
+    let state = InsightsSnapshots::default();
+    let p = page(&state, &begin(&state, dir.path(), &custody));
+    assert!(
+        p["coverage"]["errors"].as_array().unwrap().iter().all(|e| e["code"] != "unreadableLocation"),
+        "{}",
+        p["coverage"]
+    );
+    assert_eq!(p["coverage"]["warnings"]["unreadableFiles"], 0, "{}", p["coverage"]);
+}
+#[test]
 fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());

@@ -741,6 +741,12 @@ fn inventory(
                         }
                         metadata(&mut snapshot, &mut location, &meta);
                     }
+                    // An Outlook mailbox only the backup has seen, or one "Clear
+                    // cached emails" emptied, keeps just its uid ledger: no header
+                    // cache, so nothing to report.
+                    Err(_)
+                        if !meta_path.exists()
+                            && path.join(mailvault_core::graph_ledger::LEDGER_FILE).exists() => {}
                     Err(code) => snapshot.problem(&code, &account, Some(&location.mailbox)),
                 }
                 for file in snapshot.children(path, &account) {
