@@ -39,6 +39,8 @@ pub struct DaemonState {
     /// IMAP ops only *feed* it — a captive portal must never lock the user out
     /// of an action they explicitly asked for.
     pub net: Arc<NetGate>,
+    /// Woken by `daemon.shutdown`; main's signal task runs the SIGTERM cleanup.
+    pub shutdown: Arc<tokio::sync::Notify>,
 }
 
 /// Start the daemon socket server.
@@ -168,25 +170,11 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         );
     }
 
+    if let Some(resp) = crate::handlers::daemon::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
-        "ping" => RpcResponse::success(id, serde_json::json!({"pong": true})),
-
-        "daemon.heartbeat" => RpcResponse::success(id, serde_json::json!({
-            "alive": true,
-            "uptime_secs": state.started_at.elapsed().as_secs(),
-            "version": env!("CARGO_PKG_VERSION"),
-            "online": state.net.is_online(),
-        })),
-
-        "daemon.status" => RpcResponse::success(
-            id,
-            serde_json::json!({
-                "version": env!("CARGO_PKG_VERSION"),
-                "uptime_secs": state.started_at.elapsed().as_secs(),
-                "data_dir": state.data_dir.to_string_lossy(),
-            }),
-        ),
-
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
         // Forced probe. The app calls this on the webview's `online` event, so
@@ -285,6 +273,7 @@ impl DaemonState {
             imap_pool,
             sync_engine,
             contacts,
+            shutdown: Arc::new(tokio::sync::Notify::new()),
         })
     }
 }
@@ -361,6 +350,15 @@ mod tests {
     }
 
     // ── Routing ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn daemon_methods_route_through_the_domain_router_and_ungated() {
+        let dir = scratch("router");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), false);
+        let resp = handle_request(&state, req("daemon.heartbeat", json!({}))).await;
+        assert_eq!(resp.result.expect("heartbeat works with the vault gone")["buildId"], json!(mailvault_core::BUILD_ID));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[tokio::test]
     async fn an_unknown_method_names_itself_in_the_error() {

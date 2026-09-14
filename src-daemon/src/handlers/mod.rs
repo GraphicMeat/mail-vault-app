@@ -16,6 +16,8 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{error, info};
 
+pub(crate) mod daemon;
+
 pub(crate) fn handle_contacts_index_get(
     contacts: Arc<contacts_index::ContactsState>,
     params: Value,

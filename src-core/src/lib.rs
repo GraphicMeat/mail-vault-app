@@ -18,3 +18,13 @@ pub mod dns;
 pub mod spellcheck;
 pub mod transfer_stats;
 pub mod net;
+
+pub const BUILD_ID: &str = env!("MAILVAULT_BUILD_ID");
+
+#[cfg(test)]
+mod build_id_tests {
+    #[test]
+    fn the_build_id_is_never_empty() {
+        assert!(!super::BUILD_ID.trim().is_empty());
+    }
+}

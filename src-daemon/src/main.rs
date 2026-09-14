@@ -173,8 +173,18 @@ async fn main() {
     info!("Data directory: {:?}", data_dir);
     info!("Mail directory: {:?} (available: {})", mail_dir, mail_dir_ok);
 
-    // Singleton guard — exit immediately if another daemon owns the lock
-    let _lock_file = match acquire_singleton_lock(&data_dir) {
+    // Singleton guard — exit if another daemon owns the lock. A daemon that was
+    // just told to shut down (`daemon.shutdown`) may still hold the lock for a
+    // moment while it releases it; wait it out instead of exiting immediately.
+    let mut lock = acquire_singleton_lock(&data_dir);
+    for _ in 0..20 {
+        if lock.is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        lock = acquire_singleton_lock(&data_dir);
+    }
+    let _lock_file = match lock {
         Some(f) => f,
         None => {
             info!("Another daemon is already running for this data directory. Exiting.");
@@ -245,6 +255,7 @@ async fn main() {
         idle,
         contacts: Arc::clone(&contacts),
         net,
+        shutdown: Arc::new(tokio::sync::Notify::new()),
     });
 
     // Start background classification queue worker
@@ -284,6 +295,7 @@ async fn main() {
     let socket_cleanup = socket_path.clone();
     let pool_cleanup = Arc::clone(&state.imap_pool);
     let idle_cleanup = Arc::clone(&state.idle);
+    let shutdown_cleanup = Arc::clone(&state.shutdown);
     tokio::spawn(async move {
         let ctrl_c = tokio::signal::ctrl_c();
 
@@ -295,13 +307,16 @@ async fn main() {
             tokio::select! {
                 _ = ctrl_c => info!("Received SIGINT"),
                 _ = sigterm.recv() => info!("Received SIGTERM"),
+                _ = shutdown_cleanup.notified() => info!("Received daemon.shutdown"),
             }
         }
 
         #[cfg(not(unix))]
         {
-            ctrl_c.await.ok();
-            info!("Received shutdown signal");
+            tokio::select! {
+                _ = ctrl_c => info!("Received SIGINT"),
+                _ = shutdown_cleanup.notified() => info!("Received daemon.shutdown"),
+            }
         }
 
         // Stop the IDLE watchers first: a session parked in IDLE answers
