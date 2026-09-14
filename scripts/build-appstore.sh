@@ -216,14 +216,16 @@ echo -e "${YELLOW}🔏 Signing for App Store...${NC}"
 # Sign all nested components
 echo "   Signing nested components..."
 
-# Sign the daemon binary
+# Sign the daemon binary. A standalone binary cannot own a sandbox; with
+# app-sandbox + inherit it runs inside the app's sandbox when the app spawns it.
 DAEMON_PATH="$APP_PATH/Contents/MacOS/mailvault-daemon"
+DAEMON_ENTITLEMENTS="src-daemon/entitlements-appstore.plist"
 if [ -f "$DAEMON_PATH" ]; then
     codesign --force --options runtime --timestamp \
-        --entitlements "$ENTITLEMENTS" \
+        --entitlements "$DAEMON_ENTITLEMENTS" \
         --sign "$APP_SIGNING_IDENTITY" \
         "$DAEMON_PATH"
-    echo "   ✓ Signed daemon binary"
+    echo "   ✓ Signed daemon binary (app-sandbox + inherit)"
 fi
 
 # Sign any frameworks
@@ -246,9 +248,10 @@ for dylib in "$APP_PATH/Contents/Frameworks"/*.dylib; do
     fi
 done
 
-# Sign the main app bundle
+# Sign the main app bundle. No --deep: it would re-sign the daemon with the
+# app's entitlements (app-sandbox without inherit), which aborts it at launch.
 echo "   Signing main app bundle..."
-codesign --force --deep --options runtime --timestamp \
+codesign --force --options runtime --timestamp \
     --entitlements "$ENTITLEMENTS" \
     --sign "$APP_SIGNING_IDENTITY" \
     "$APP_PATH"
@@ -260,6 +263,14 @@ echo ""
 echo -e "${YELLOW}🔍 Verifying signature...${NC}"
 codesign --verify --verbose "$APP_PATH"
 echo -e "${GREEN}✅ Signature verified${NC}"
+
+if [ -f "$DAEMON_PATH" ]; then
+    if ! codesign -d --entitlements - "$DAEMON_PATH" 2>/dev/null | grep -q "com.apple.security.inherit"; then
+        echo -e "${RED}❌ mailvault-daemon is not signed with com.apple.security.inherit; it would abort at launch${NC}"
+        exit 1
+    fi
+    echo "   ✓ mailvault-daemon carries com.apple.security.inherit"
+fi
 
 # Create installer package
 echo ""
