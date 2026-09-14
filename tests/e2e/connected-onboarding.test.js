@@ -239,12 +239,12 @@ describe('onboarding', function () {
      *
      * It must walk the WHOLE catalog. The first version of this test clicked
      * next four times and stayed green against the real defect: the only
-     * feature whose box differed was `devices`, the last one and the one with no
-     * screenshot, so a partial sweep never reached the thing it was testing.
+     * feature whose box differed was `devices`, then the last one and the only one
+     * with no screenshot, so a partial sweep never reached the thing it was testing.
      */
     it('does not move the Continue button while browsing every feature', async function () {
       const total = await $$('[data-testid^="premium-tile-"]').length;
-      expect(total).toBe(11);
+      expect(total).toBe(12);
 
       const seen = [], tops = [];
       for (let i = 0; i < total; i++) {
@@ -259,10 +259,11 @@ describe('onboarding', function () {
         await $('[data-testid="premium-next"]').click();
       }
 
-      // Proof the sweep was not vacuous: ten distinct features, including the
-      // one with no screenshot.
+      // Proof the sweep was not vacuous: every feature distinct, including the
+      // ones with no screenshot.
       expect(new Set(seen).size).toBe(total);
       expect(seen).toContain('devices');
+      expect(seen).toContain('attachment-search');
       expect(new Set(tops)).toEqual(new Set([tops[0]]));
     });
 
