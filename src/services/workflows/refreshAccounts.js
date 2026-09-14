@@ -117,6 +117,7 @@ export async function refreshAllAccounts(options = {}) {
             newCount: newForAccount.length,
             newestSender: newest.from || newest.sender || '',
             newestSubject: newest.subject || '',
+            newestUid: newest.uid,
           });
         }
       } else if (isGraphAccount(account)) {
@@ -150,6 +151,7 @@ export async function refreshAllAccounts(options = {}) {
                 newCount: newHeaders.length,
                 newestSender: newest.from || newest.sender || '',
                 newestSubject: newest.subject || '',
+                newestUid: newest.uid,
               });
             }
           }
@@ -199,6 +201,7 @@ export async function refreshAllAccounts(options = {}) {
               newCount: newHeaders.length,
               newestSender: newest.from || newest.sender || '',
               newestSubject: newest.subject || '',
+              newestUid: newest.uid,
             });
           }
         } catch (e) {

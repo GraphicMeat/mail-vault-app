@@ -603,6 +603,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         throw new DemoUnsupportedError(`daemon:${method || 'unknown'}`);
       }
       case 'take_pending_mailto': return null;
+      case 'take_notification_open': return null;
       case ['send', 'notification'].join('_'): return { success: true, simulated: true };
       case 'check_running_from_dmg': return false;
       case 'read_logs': return '[demo] MailVault browser session — no native logs';

@@ -146,6 +146,21 @@ describe('the ticker', () => {
   });
 });
 
+describe('a held new-mail banner', () => {
+  // Released after the session, a banner that clicks to nothing is a banner
+  // that lost the one thing the user would click it for.
+  it('keeps the email it opens', async () => {
+    const target = { accountId: 'a1', mailbox: 'INBOX', uid: 7 };
+    useFocusStore.getState().start(1);
+    await notify('Ada', 'Hello', undefined, target);
+
+    useFocusStore.getState().abandon();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(sendNotification.mock.calls).toEqual([['Ada', 'Hello', undefined, target]]);
+  });
+});
+
 describe('the persisted file', () => {
   // The clock ticks once a second. If it went through `persist`, a 25-minute
   // session would rewrite the whole settings file ~1500 times.

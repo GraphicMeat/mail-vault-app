@@ -90,6 +90,7 @@ mod iap;
 mod mailto;
 pub use mailvault_core::imap;
 mod migration;
+mod notification_open;
 mod notification_sound;
 mod op_journal;
 mod restore;
@@ -812,8 +813,22 @@ async fn check_network_connectivity() -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn send_notification(app_handle: tauri::AppHandle, title: String, body: String, sound: Option<String>) -> Result<(), String> {
+fn send_notification(
+    app_handle: tauri::AppHandle,
+    title: String,
+    body: String,
+    sound: Option<String>,
+    target: Option<notification_open::NotificationTarget>,
+) -> Result<(), String> {
     info!("send_notification called: {} - {}", title, body);
+
+    // The plugin's banner cannot report a click; this one opens `target`.
+    #[cfg(target_os = "macos")]
+    if notification_open::mac::available() {
+        let sound = notification_sound::sound_name(sound.as_deref());
+        return notification_open::mac::show(&title, &body, sound, target.as_ref());
+    }
+    let _ = target;
 
     use tauri_plugin_notification::NotificationExt;
     let notification = app_handle
@@ -5058,7 +5073,8 @@ fn main() {
         .manage(search_index::SearchIndexState::default())
         .manage(custody::CustodyState::default())
         .manage(insights::InsightsSnapshots::default())
-        .manage(mailto::PendingMailto::default());
+        .manage(mailto::PendingMailto::default())
+        .manage(notification_open::PendingNotificationOpen::default());
 
     #[cfg(target_os = "linux")]
     let builder = builder.manage(PendingUpdate::default());
@@ -5071,6 +5087,7 @@ fn main() {
             apply_menu_labels,
             dropped_files::read_dropped_files,
             take_pending_mailto,
+            notification_open::take_notification_open,
             e2e_queue_mailto,
             mailto_default_status,
             mailto_make_default,
@@ -5236,6 +5253,8 @@ fn main() {
         ])
         .setup(|app| {
             app.state::<insights::InsightsSnapshots>().start_cleanup();
+            #[cfg(target_os = "macos")]
+            notification_open::mac::install(app.handle());
             // `mailto:` from the OS. The queue is the source of truth and the
             // event is only a wake-up: when the click *launches* the app the URL
             // lands here before the webview exists, so a listener alone would

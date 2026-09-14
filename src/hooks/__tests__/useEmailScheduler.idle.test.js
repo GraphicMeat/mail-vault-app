@@ -153,7 +153,7 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
 
   it('repaints the open folder and tells the user about the new mail', async () => {
     mailStore.setState({ accounts: [IMAP_A], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { name: 'Ada' }, subject: 'Difference engine' }] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Difference engine' }] });
     eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
 
     renderHook(() => useEmailScheduler());
@@ -163,19 +163,20 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockLoadUnifiedInbox).not.toHaveBeenCalled();
     expect(mockGetHeaders).toHaveBeenCalledWith('a1', 'INBOX', 1);
     expect(mockNotify).toHaveBeenCalledTimes(1);
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine');
+    // A click on the banner opens that message in the folder it arrived in.
+    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 });
   });
 
   it('notifies for an account that is not on screen without repainting the list', async () => {
     mailStore.setState({ accounts: [IMAP_A, IMAP_B], activeAccountId: 'a1', activeMailbox: 'INBOX' });
-    mockGetHeaders.mockResolvedValue({ emails: [{ from: { address: 'b@two.co' }, subject: 'Elsewhere' }] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 12, from: { address: 'b@two.co' }, subject: 'Elsewhere' }] });
     eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a2', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
 
     renderHook(() => useEmailScheduler());
     await flush();
 
     expect(mockLoadEmails).not.toHaveBeenCalled();
-    expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere');
+    expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 });
   });
 
   it('attaches the selected sound to incoming mail', async () => {
@@ -187,7 +188,20 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     renderHook(() => useEmailScheduler());
     await flush();
 
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping');
+    // No uid on that header: the banner still opens its folder.
+    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping', { accountId: 'a1', mailbox: 'INBOX' });
+  });
+
+  it('opens only the folder when the banner shows no preview', async () => {
+    settingsStore.setState({ notificationSettings: { ...settingsState().notificationSettings, showPreview: false } });
+    mailStore.setState({ accounts: [IMAP_A] });
+    mockGetHeaders.mockResolvedValue({ emails: [{ uid: 7, from: { name: 'Ada' }, subject: 'Hello' }] });
+    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
+
+    renderHook(() => useEmailScheduler());
+    await flush();
+
+    expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX' });
   });
 
   it('does not send a sound or banner for a muted folder', async () => {

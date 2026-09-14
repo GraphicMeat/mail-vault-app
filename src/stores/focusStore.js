@@ -75,7 +75,7 @@ function flushHeld(held) {
   // A released batch gets one chime, even when it has several banners.
   let playedSound = false;
   for (const n of held) {
-    notify(n.title, n.body, playedSound ? undefined : n.sound);
+    notify(n.title, n.body, playedSound ? undefined : n.sound, n.target);
     if (n.sound) playedSound = true;
   }
 }
@@ -86,7 +86,7 @@ export const useFocusStore = create(
       durationMin: 25,      // persisted — the last preset chosen
       endsAt: null,         // persisted — epoch ms while a session runs
 
-      // { title, body, sound? } held while a session runs.
+      // { title, body, sound?, target? } held while a session runs.
       // ponytail: a relaunch drops held notifications; persist them if anyone misses one
       held: [],
 
@@ -155,15 +155,18 @@ export const useFocusStore = create(
  * one. Never rejects: a notification that could not be shown is not worth
  * failing a backup or a sync over.
  */
-export function notify(title, body, sound) {
+export function notify(title, body, sound, target) {
   const selectedSound = normalizeNotificationSound(sound);
   const audible = selectedSound !== 'none';
   const s = useFocusStore.getState();
   if (s.endsAt) {
-    s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}) });
+    s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}), ...(target ? { target } : {}) });
     return Promise.resolve();
   }
-  return (audible ? sendNotification(title, body, selectedSound) : sendNotification(title, body))
+  const sent = target
+    ? sendNotification(title, body, audible ? selectedSound : undefined, target)
+    : audible ? sendNotification(title, body, selectedSound) : sendNotification(title, body);
+  return sent
     .catch(err => console.error('[focus] notification failed:', err));
 }
 

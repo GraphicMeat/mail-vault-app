@@ -677,8 +677,9 @@ export async function backupCancel() {
   return tauriInvoke('backup_cancel', {});
 }
 
-export async function sendNotification(title, body, sound) {
-  return tauriInvoke('send_notification', { title, body, ...(sound ? { sound } : {}) });
+// `target` ({ accountId, mailbox, uid? }) is what a click on the banner opens.
+export async function sendNotification(title, body, sound, target) {
+  return tauriInvoke('send_notification', { title, body, ...(sound ? { sound } : {}), ...(target ? { target } : {}) });
 }
 
 export async function previewNotificationSound(sound) {

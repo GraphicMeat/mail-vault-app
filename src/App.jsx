@@ -62,6 +62,7 @@ import { migrationManager } from './services/migrationManager.js';
 import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
+import { openNotificationTarget, startNotificationOpenBridge } from './utils/notificationOpen';
 import { registerComposeOpener } from './utils/composeOpener';
 import { sameReply } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
@@ -825,6 +826,31 @@ function App() {
     };
     quickLoadAccounts();
   }, []);
+
+  // A click on a new-mail banner. Gated on quick load: a click that launched
+  // the app is already queued, and opening it needs the accounts in the store.
+  useEffect(() => {
+    if (!quickLoadDone) return;
+    let stop = null;
+    let active = true;
+    Promise.all([
+      import('@tauri-apps/api/core'),
+      import('@tauri-apps/api/event'),
+    ]).then(([{ invoke }, { listen }]) => {
+      const bridge = startNotificationOpenBridge({
+        invoke,
+        listen,
+        open: (target) => {
+          openMailFromSidebar();
+          return openNotificationTarget(target, useMailStore.getState)
+            .catch(e => console.warn('[notification] could not open the clicked email:', e));
+        },
+      });
+      if (!active) bridge.stop();
+      else stop = bridge.stop;
+    }).catch(() => {}); // not in Tauri
+    return () => { active = false; if (stop) stop(); };
+  }, [quickLoadDone, openMailFromSidebar]);
 
   // Full initialization with delay (includes keychain access)
   // Gated on shouldStartFullInit(): fires once quick load has run and either

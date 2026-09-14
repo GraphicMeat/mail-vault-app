@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **Clicking a new-mail notification opens that email.** On macOS, clicking the banner brings MailVault forward in the account and folder the message arrived in and opens the message it showed. With message previews turned off, the banner names no message, so the click opens the folder instead. A notification held back during a focus session keeps its message when it is delivered afterwards.
+
 ### Fixed
 - **Compose opens the first time you ask.** The first compose window after MailVault started, whether a reply, a forward or a new message, could come up as "Compose could not open" instead, and stayed that way until the message was dismissed. The editor inside the window was being thrown away while the window was still appearing. It is now created once the window is on screen. That message also blamed an app update for every failure; it now says so only when part of the app really failed to load.
 - **A message restored from the backup mirror stays in the list and survives Clear cached emails.** A copy the backup brought back from the external mirror was named with only the flags the mirror name carried, so MailVault did not count it as archived: once the server deleted the message its row disappeared, and Clear cached emails removed the file, only for the next backup to restore it the same way. Restored copies are now marked archived, every vault copy a backup counts as backed up is marked on that run (including a message MailVault cached when you opened it), and the Microsoft 365 backup names its own copies the same way.

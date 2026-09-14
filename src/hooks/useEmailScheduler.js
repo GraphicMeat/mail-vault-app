@@ -39,15 +39,24 @@ export function useEmailScheduler() {
     const { shouldNotify } = useSettingsStore.getState();
     const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
     const selectedSound = normalizeNotificationSound(sound);
-    const notifyEmail = (title, body) => selectedSound === 'none'
-      ? notify(title, body)
-      : notify(title, body, selectedSound);
 
     for (const result of perAccountResults) {
-      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject } = result;
+      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid } = result;
 
       // Per-account per-folder filtering
       if (!shouldNotify(accountId, folder)) continue;
+
+      // A click opens the message the banner shows, in the folder it arrived
+      // in. Without a preview the banner names no message, so it opens the folder.
+      const uid = Number(newestUid);
+      const target = {
+        accountId,
+        mailbox: folder,
+        ...(showPreview && Number.isSafeInteger(uid) && uid > 0 ? { uid } : {}),
+      };
+      const notifyEmail = (title, body) => selectedSound === 'none'
+        ? notify(title, body, undefined, target)
+        : notify(title, body, selectedSound, target);
 
       if (newCount === 1) {
         // Single new email
@@ -128,6 +137,7 @@ export function useEmailScheduler() {
         accountId, accountEmail: account?.email, folder: mailbox, newCount: newEmails,
         newestSender: newest?.from?.name || newest?.from?.address,
         newestSubject: newest?.subject,
+        newestUid: newest?.uid,
       }]);
     }
     return onScreen;
