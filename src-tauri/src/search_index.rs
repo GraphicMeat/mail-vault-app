@@ -428,6 +428,7 @@ fn run_pass(app: &tauri::AppHandle, st: &SearchIndexState, reopen: bool, rebuild
                 |account_id, vault_dir, uid, filename, part_index| {
                     read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index)
                 },
+                &|| !st.interrupt.load(SeqCst),
             );
         }
     }

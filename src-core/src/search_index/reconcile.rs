@@ -93,6 +93,10 @@ struct Row {
     size: i64,
     mtime_ns: i64,
     body_state: i64,
+    /// The message has attachment-shaped MIME parts but no rows in
+    /// `attachments` yet: either never reconciled since the attachments
+    /// feature shipped, or reconciled while the setting was off.
+    needs_attachment_backfill: bool,
 }
 
 /// `(account_id, vault_dir)` for every `Maildir/<account>/<dir>` holding a
@@ -197,7 +201,8 @@ pub fn reconcile_mailbox(
             Some(row)
                 if row.size == file.size
                     && row.mtime_ns == file.mtime_ns
-                    && !(row.body_state == BODY_PENDING && config.bodies) =>
+                    && !(row.body_state == BODY_PENDING && config.bodies)
+                    && !(row.needs_attachment_backfill && config.attachments) =>
             {
                 if row.filename == file.filename {
                     stats.unchanged += 1;
@@ -283,12 +288,21 @@ pub fn reconcile_mailbox(
 
 fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::Result<HashMap<u32, Row>> {
     let mut st = conn.prepare_cached(
-        "SELECT id, uid, filename, size, mtime_ns, body_state FROM messages WHERE account_id = ?1 AND vault_dir = ?2",
+        "SELECT m.id, m.uid, m.filename, m.size, m.mtime_ns, m.body_state,
+                m.has_attachments AND NOT EXISTS (SELECT 1 FROM attachments a WHERE a.message_row = m.id)
+         FROM messages m WHERE m.account_id = ?1 AND m.vault_dir = ?2",
     )?;
     let rows = st.query_map(params![account_id, vault_dir], |r| {
         Ok((
             r.get::<_, u32>(1)?,
-            Row { id: r.get(0)?, filename: r.get(2)?, size: r.get(3)?, mtime_ns: r.get(4)?, body_state: r.get(5)? },
+            Row {
+                id: r.get(0)?,
+                filename: r.get(2)?,
+                size: r.get(3)?,
+                mtime_ns: r.get(4)?,
+                body_state: r.get(5)?,
+                needs_attachment_backfill: r.get(6)?,
+            },
         ))
     })?;
     rows.collect()
@@ -417,6 +431,7 @@ pub fn run_pending_extractions(
     bodies: bool,
     extractor: &dyn super::attachments::TextExtractor,
     read_part: impl Fn(&str, &str, u32, &str, usize) -> Option<(super::attachments::AttachmentInput, IndexDoc)>,
+    keep_going: &dyn Fn() -> bool,
 ) -> usize {
     use super::attachments::extract;
 
@@ -445,6 +460,12 @@ pub fn run_pending_extractions(
 
     let mut changed = 0usize;
     for (message_row, part_index, uid, account_id, vault_dir, filename) in pending {
+        // Checked per part, not just once per batch: a configure/rebuild/vault
+        // switch must not wait out the rest of a 50-part batch, whose Vision
+        // calls and subprocess timeouts can each take tens of seconds.
+        if !keep_going() {
+            break;
+        }
         let Some((input, doc)) = read_part(&account_id, &vault_dir, uid, &filename, part_index as usize) else { continue };
         // Images only extract when the OCR toggle is on; every other
         // attachment-shaped part extracts once attachments are on at all
@@ -452,8 +473,11 @@ pub fn run_pending_extractions(
         // `config.attachments` is false).
         let enabled = if input.mime.to_lowercase().starts_with("image/") { image_text_enabled } else { true };
         let (state, text) = extract(&input, premium, enabled, extractor);
-        if state == "pending" {
-            continue; // transient: leave it, the next sweep retries
+        if matches!(state, "pending" | "disabled" | "not_premium") {
+            // Transient or setting-gated: leave it pending so a later toggle
+            // (image text, premium) or retry picks it up, instead of burning
+            // a terminal state on a condition that can still change.
+            continue;
         }
         let Ok(tx) = conn.transaction() else { continue };
         if tx
@@ -480,7 +504,7 @@ pub fn run_pending_extractions(
         // the FTS row when the user has bodies indexing turned off.
         let body_text = if bodies { cap_chars(doc.body_text.clone(), MAX_BODY_CHARS) } else { String::new() };
         let _ = delete_fts(&tx, message_row);
-        if !doc.subject.is_empty() || !body_text.is_empty() || !attach_text.is_empty() {
+        if !doc.subject.is_empty() || !addrs.is_empty() || !body_text.is_empty() || !attach_text.is_empty() {
             let _ = insert_fts(&tx, message_row, &doc.subject, &addrs, &body_text, &attach_text);
         }
         if tx.commit().is_ok() {
@@ -1137,7 +1161,7 @@ mod tests {
                 crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
                 IndexDoc { subject: "Invoice".into(), ..IndexDoc::default() },
             ))
-        });
+        }, &|| true);
         assert_eq!(changed, 1);
 
         let (state, text): (String, Option<String>) = conn.query_row("SELECT state, text FROM attachments", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
@@ -1169,7 +1193,7 @@ mod tests {
                 crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
                 IndexDoc { subject: "Invoice".into(), body_text: "a very secret body about quokkas".into(), ..IndexDoc::default() },
             ))
-        });
+        }, &|| true);
         assert_eq!(changed, 1);
 
         let body_hits: i64 = conn.query_row("SELECT count(*) FROM msg_fts WHERE msg_fts MATCH '\"quokkas\"'", [], |r| r.get(0)).unwrap();
@@ -1207,7 +1231,7 @@ mod tests {
                 crate::search_index::attachments::AttachmentInput { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000, bytes: vec![] },
                 IndexDoc::default(),
             ))
-        });
+        }, &|| true);
         assert_eq!(changed, 0, "a transient error changes nothing observable");
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending", "must still be pending so the next sweep retries it");
@@ -1223,7 +1247,7 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
-        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None);
+        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None, &|| true);
         assert_eq!(changed, 0);
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending");
