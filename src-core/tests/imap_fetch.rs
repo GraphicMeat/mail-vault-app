@@ -17,7 +17,7 @@ async fn connects_lists_and_fetches_a_small_inbox() {
     assert_eq!(mailboxes[0].name, "INBOX");
 
     select_mailbox(&mut sess, "INBOX").await.expect("select");
-    let (emails, total, _more, _sizes) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (emails, total, _more, _sizes) = fetch_emails_page(&mut sess, "INBOX", 1, 10)
         .await
         .expect("fetch page");
 
@@ -46,7 +46,7 @@ async fn decodes_rfc2047_subjects_and_utf8_bodies() {
     let mut sess = session(&server).await;
     select_mailbox(&mut sess, "INBOX").await.unwrap();
 
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.unwrap();
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
     assert_eq!(emails[0].subject, "Ärende påminnelse");
     assert_eq!(emails[0].from.name.as_deref(), Some("Ana"));
 }
@@ -67,7 +67,7 @@ async fn strips_quoted_string_escapes_from_envelope_fields() {
     let mut sess = session(&server).await;
     select_mailbox(&mut sess, "INBOX").await.unwrap();
 
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.unwrap();
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
     assert_eq!(
         emails[0].subject,
         "Pratęskite žurnalo \"Iliustruotoji istorija\" prenumeratą"
@@ -90,7 +90,7 @@ async fn survives_a_message_with_no_subject_and_no_references() {
     let mut sess = session(&server).await;
     select_mailbox(&mut sess, "INBOX").await.unwrap();
 
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.unwrap();
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
     assert_eq!(emails.len(), 1);
     assert!(emails[0].references.as_ref().map_or(true, |r| r.is_empty()));
 }
@@ -179,8 +179,8 @@ async fn paginates_a_large_mailbox_newest_first() {
     let mut sess = session(&server).await;
     select_mailbox(&mut sess, "INBOX").await.unwrap();
 
-    let (page1, total, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 50, &[]).await.unwrap();
-    let (page2, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 2, 50, &[]).await.unwrap();
+    let (page1, total, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 50).await.unwrap();
+    let (page2, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 2, 50).await.unwrap();
 
     assert_eq!(total, 250);
     assert_eq!(page1.len(), 50);
@@ -345,14 +345,14 @@ async fn list_pages_carry_size_and_attachment_presence() {
     let server = MockImap::start(Scenario::new().mailbox(inbox));
     let mut sess = session(&server).await;
 
-    let (page, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.expect("page");
+    let (page, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.expect("page");
     let invoice = page.iter().find(|e| e.uid == 1).expect("invoice row");
     let plain = page.iter().find(|e| e.uid == 2).expect("plain row");
     assert!(invoice.has_attachments, "the paperclip must come from the list fetch, not from opening");
     assert!(!plain.has_attachments);
     assert_eq!(invoice.size, Some(WITH_PDF.len() as u32));
 
-    let (by_uid, _) = fetch_headers_by_uids(&mut sess, "INBOX", &[1], &[]).await.expect("by uid");
+    let (by_uid, _) = fetch_headers_by_uids(&mut sess, "INBOX", &[1]).await.expect("by uid");
     assert!(by_uid[0].has_attachments, "the daemon's cold sync and backfill use this path");
     assert_eq!(by_uid[0].size, Some(WITH_PDF.len() as u32));
 }
@@ -375,7 +375,7 @@ async fn a_poisoned_item_costs_only_itself() {
     let mut sess = session(&server).await;
     let connections = server.connection_count();
 
-    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10)
         .await
         .expect("the two readable messages are a page");
     assert_eq!(total, 3, "the mailbox still holds three");
@@ -394,7 +394,7 @@ async fn a_poisoned_uid_header_fetch_returns_the_others() {
     );
     let mut sess = session(&server).await;
 
-    let (rows, total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[])
+    let (rows, total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3])
         .await
         .expect("two of three is an answer");
     assert_eq!(total, 3);
@@ -493,7 +493,7 @@ async fn parses_an_icloud_message_id_with_unescaped_quotes() {
     );
     let mut sess = session(&server).await;
 
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10)
         .await
         .expect("an unescaped inner quote must not fail the page");
     assert_eq!(emails.len(), 1);
@@ -525,7 +525,7 @@ async fn parses_a_latin1_filename_in_bodystructure() {
     );
     let mut sess = session(&server).await;
 
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10)
         .await
         .expect("one non-UTF-8 byte in a filename must not fail the page");
     assert_eq!(emails.len(), 1);
@@ -558,7 +558,7 @@ async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
     let mut sess = session(&server).await;
     let connections = server.connection_count();
 
-    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10)
         .await
         .expect("the other two messages are perfectly readable");
     assert_eq!(total, 3);
@@ -566,14 +566,14 @@ async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
     assert_eq!(skipped, vec![Some(2)], "the caller must learn what was left out: {skipped:?}");
 
     // Same session: the socket survived the bad line.
-    let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3, &[])
+    let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3)
         .await
         .expect("same for the virtualized-scroll path");
     assert_eq!(total, 3);
     assert_eq!(sorted_uids(&rows), vec![1, 3]);
     assert_eq!(skipped, vec![Some(2)], "{skipped:?}");
 
-    let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[])
+    let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3])
         .await
         .expect("and for the daemon's cold sync / backfill path");
     assert_eq!(sorted_uids(&rows), vec![1, 3]);
@@ -586,7 +586,7 @@ async fn insights_imap_dates_preserve_rfc_date_and_receive_time() {
     let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX").push_msg(Message::new(1, eml("dates", "ana@example.test", "body")).with_internal_date("09-Sep-2026 00:30:00 +0000"))));
     let mut sess = session(&server).await;
     select_mailbox(&mut sess, "INBOX").await.unwrap();
-    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[]).await.unwrap();
+    let (emails, _, _, _) = fetch_emails_page(&mut sess, "INBOX", 1, 10).await.unwrap();
     let row = serde_json::to_value(&emails[0]).unwrap();
     assert_eq!(row["date"], "Thu, 01 Jan 2026 12:00:00 +0000");
     assert_eq!(row["messageDate"], "Thu, 01 Jan 2026 12:00:00 +0000");

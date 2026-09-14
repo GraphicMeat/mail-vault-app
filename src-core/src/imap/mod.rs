@@ -726,79 +726,26 @@ fn selected(mailbox: &str, mbox: Mailbox) -> Result<Mailbox, String> {
     Ok(mbox)
 }
 
-/// The header fetch for one sequence range, minus a poison list.
-///
-/// With `skip` empty this is the single `FETCH start:end (spec)` it always was.
-/// With something in it, the range is resolved to UIDs first — a `(UID)` reply
-/// is one atom per line and parses on any server — the poisoned UIDs are
-/// dropped, and the rest go out as a UID FETCH. Two round trips, but only for a
-/// mailbox that has already failed once.
-///
-// ponytail: a poison whose line carried no `UID` item (`uid=?` in the marker)
-// is not skippable — there is nothing to name in the exclusion — and its error
-// stands. Nothing in the wild has produced one; `CorruptFetchItem` does.
+/// The header fetch for one sequence range.
 async fn fetch_headers_for_range(
     session: &mut ImapSession,
-    mailbox: &str,
     range: &str,
-    skip: &[u32],
     what: &str,
     fail: &str,
-) -> Result<(Vec<Fetch>, Vec<Option<u32>>), String> {
-    if skip.is_empty() {
-        let stream = session
-            .fetch(range, HEADER_FETCH_SPEC)
-            .await
-            .map_err(|e| format!("{}: {}", fail, e))?;
-        return Ok((collect_fetches_strict(stream, what).await?, Vec::new()));
-    }
-
+) -> Result<Vec<Fetch>, String> {
     let stream = session
-        .fetch(range, "(UID)")
+        .fetch(range, HEADER_FETCH_SPEC)
         .await
         .map_err(|e| format!("{}: {}", fail, e))?;
-    let ids = collect_fetches_strict(stream, what).await?;
-
-    let mut wanted = Vec::new();
-    let mut dropped = Vec::new();
-    for f in &ids {
-        let Some(uid) = f.uid else { continue };
-        if skip.contains(&uid) {
-            dropped.push(uid);
-        } else {
-            wanted.push(uid);
-        }
-    }
-    info!(
-        "[IMAP] {} ({}): skipping {} unparseable uid(s) {:?}",
-        what,
-        mailbox,
-        dropped.len(),
-        dropped
-    );
-    let skipped: Vec<Option<u32>> = dropped.into_iter().map(Some).collect();
-
-    if wanted.is_empty() {
-        return Ok((Vec::new(), skipped));
-    }
-
-    let stream = session
-        .uid_fetch(compress_uid_ranges(&wanted), HEADER_FETCH_SPEC)
-        .await
-        .map_err(|e| format!("{}: {}", fail, e))?;
-    Ok((collect_fetches_strict(stream, what).await?, skipped))
+    collect_fetches_strict(stream, what).await
 }
 
 /// Fetch email headers by page (newest first).
-///
-/// `skip` holds UIDs a previous attempt proved unparseable; pass `&[]` for the
-/// normal case.
 pub async fn fetch_emails_page(
     session: &mut ImapSession,
     mailbox: &str,
     page: u32,
     limit: u32,
-    skip: &[u32],
 ) -> Result<(Vec<EmailHeader>, u32, bool, Vec<Option<u32>>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let total = mbox.exists;
@@ -816,15 +763,9 @@ pub async fn fetch_emails_page(
     }
 
     let range = format!("{}:{}", start, end);
-    let (fetches, mut skipped_uids) = fetch_headers_for_range(
-        session,
-        mailbox,
-        &range,
-        skip,
-        "fetch_emails_page",
-        "FETCH failed",
-    )
-    .await?;
+    let fetches =
+        fetch_headers_for_range(session, &range, "fetch_emails_page", "FETCH failed").await?;
+    let mut skipped_uids: Vec<Option<u32>> = Vec::new();
 
     let mut emails = Vec::new();
 
@@ -849,7 +790,6 @@ pub async fn fetch_emails_range(
     mailbox: &str,
     start_index: u32,
     end_index: u32,
-    skip: &[u32],
 ) -> Result<(Vec<EmailHeader>, u32, Vec<Option<u32>>), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let total = mbox.exists;
@@ -869,15 +809,10 @@ pub async fn fetch_emails_range(
     let imap_end = total - clamped_start;
 
     let range = format!("{}:{}", imap_start, imap_end);
-    let (fetches, mut skipped_uids) = fetch_headers_for_range(
-        session,
-        mailbox,
-        &range,
-        skip,
-        "fetch_emails_range",
-        "FETCH range failed",
-    )
-    .await?;
+    let fetches =
+        fetch_headers_for_range(session, &range, "fetch_emails_range", "FETCH range failed")
+            .await?;
+    let mut skipped_uids: Vec<Option<u32>> = Vec::new();
 
     let mut emails = Vec::new();
 
@@ -1108,13 +1043,11 @@ pub async fn search_all_uid_flags(
 }
 
 /// Fetch headers for specific UIDs — used for delta-sync to fetch only new
-/// emails. `skip` holds UIDs a previous attempt proved unparseable; they are
-/// dropped from the request rather than asked for again.
+/// emails.
 pub async fn fetch_headers_by_uids(
     session: &mut ImapSession,
     mailbox: &str,
     uids: &[u32],
-    skip: &[u32],
 ) -> Result<(Vec<EmailHeader>, u32), String> {
     let mbox = select_mailbox(session, mailbox).await?;
     let total = mbox.exists;
@@ -1124,17 +1057,7 @@ pub async fn fetch_headers_by_uids(
     }
 
     // Sort descending so newest emails arrive first
-    let mut sorted_uids: Vec<u32> = uids.iter().copied().filter(|u| !skip.contains(u)).collect();
-    if sorted_uids.len() < uids.len() {
-        info!(
-            "[IMAP] fetch_headers_by_uids ({}): skipping {} unparseable uid(s)",
-            mailbox,
-            uids.len() - sorted_uids.len()
-        );
-        if sorted_uids.is_empty() {
-            return Ok((Vec::new(), total));
-        }
-    }
+    let mut sorted_uids: Vec<u32> = uids.to_vec();
     sorted_uids.sort_unstable_by(|a, b| b.cmp(a));
 
     // Chunk into batches of 200 to avoid IMAP command-length limits
@@ -1536,69 +1459,20 @@ where
     Ok(out)
 }
 
-/// A FETCH item no parser could read, named by the numbers its own line carried.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Poison {
-    pub seq: u32,
-    pub uid: Option<u32>,
-}
-
-/// Read back the `[poison seq=N uid=M]` marker `compact_fetch_error` writes.
-/// `uid=?` (a line with no `UID` item) parses as `uid: None` — nothing to skip.
-pub fn poison_in(err: &str) -> Option<Poison> {
-    let marker = err.split_once("[poison seq=")?.1.split_once(']')?.0;
-    let (seq, uid) = marker.split_once(" uid=")?;
-    Some(Poison {
-        seq: seq.parse().ok()?,
-        uid: uid.parse().ok(),
-    })
-}
-
-/// Shrink async-imap's decoder error to something a log line can hold, and name
-/// the message that caused it.
+/// Shrink async-imap's decoder error to something a log line can hold.
 ///
 /// The decoder's text is `{nom error:?} during parsing of {buf:?}`, where `buf`
-/// is the WHOLE unparsed remainder of the stream — and the nom Debug prints that
-/// same buffer a second time as a decimal byte array. One bad line in a 500-row
-/// page therefore produced a multi-megabyte error string, logged in full.
-///
-/// What a caller actually needs is the failing line and the `seq`/`uid` on it,
-/// so it can retry the page without that one message. The wording keeps
-/// `unparseable` and `page incomplete`: the daemon's backfill greps the first.
+/// is the WHOLE unparsed remainder of the stream, printed twice. The wording
+/// keeps `unparseable` and `page incomplete`: the daemon's backfill greps the
+/// first. A FETCH line is read leniently by the vendored parser and never gets
+/// here; what does is a line no grammar frames (a keepalive spliced mid-line,
+/// a non-FETCH reply the parser lacks).
 fn compact_fetch_error(what: &str, dropped: usize, decoder_text: &str) -> String {
-    // `buf` is `{:?}`-escaped, so the line break inside it is the four
-    // characters \ r \ n, not a real CRLF.
-    let line = decoder_text
-        .split_once("during parsing of \"")
-        .map(|(_, rest)| rest.split("\\r\\n").next().unwrap_or(rest))
-        .unwrap_or("");
-
-    let seq = line
-        .split_once("* ")
-        .and_then(|(_, r)| r.split_once(" FETCH"))
-        .and_then(|(n, _)| n.parse::<u32>().ok());
-
-    let Some(seq) = seq else {
-        // Not a FETCH line at all — keep the old shape, just bounded.
-        return format!(
-            "{}: {} FETCH item(s) unparseable ({}); page incomplete",
-            what,
-            dropped,
-            truncate(decoder_text, 300)
-        );
-    };
-
-    let uid = line
-        .split_once("UID ")
-        .and_then(|(_, r)| r.split(|c: char| !c.is_ascii_digit()).next())
-        .and_then(|n| n.parse::<u32>().ok());
-
     format!(
-        "{}: FETCH reply unparseable [poison seq={} uid={}] {}; page incomplete",
+        "{}: {} FETCH item(s) unparseable ({}); page incomplete",
         what,
-        seq,
-        uid.map_or_else(|| "?".to_string(), |u| u.to_string()),
-        truncate(line, 200)
+        dropped,
+        truncate(decoder_text, 300)
     )
 }
 

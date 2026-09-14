@@ -102,9 +102,10 @@ pub enum Action {
     /// item in the FETCH stream on demand; no real server can be asked for one.
     CorruptFetchItem(usize),
 
-    /// Replace the untagged FETCH item carrying this UID with a line that no
-    /// parser can read, keeping its own `* <seq>` and `UID <n>` — so the error
-    /// can name the message and the client can retry the page without it.
+    /// Replace the untagged FETCH item carrying this UID with a line the
+    /// strict grammar cannot read, keeping its own `* <seq>` and `UID <n>` —
+    /// so the vendored parser's lenient read still yields a row that names the
+    /// message, and the client can report it as skipped.
     ///
     /// Unlike `CorruptFetchItem`, which is addressed by position, this one is
     /// addressed by UID and so survives a re-fetch of a different range. It
