@@ -36,7 +36,6 @@
   "e52c854d5631": "Demo",
   "38cfaf72c1d2": "Prova la demo",
   "2e6e39064a93": "Apri la demo di MailVault in una nuova finestra",
-  "5c6081a5e6f9": "Una posta in arrivo da esplorare.",
   "eb4ecc961cd6": "3 account · 300 email di esempio",
   "52ab7dda981d": "Nessuna registrazione. Nessuna installazione.",
   "b3e88b0e0c7d": "Prova la demo dal vivo ↗",
@@ -47,5 +46,9 @@
   "3197ae330fe6": "Prova la demo dal vivo in una nuova finestra",
   "0499bffe57aa": "Apri la demo in una nuova finestra",
   "36bf4cfd6777": "Sì. Impostazioni > Aspetto > Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. Segui il puntatore è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. Segna quello che sto leggendo ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi.",
-  "fdc278a8183a": "Sì. Impostazioni &rsaquo; Aspetto &rsaquo; Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. <strong>Segui il puntatore</strong> è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. <strong>Segna quello che sto leggendo</strong> ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi."
+  "fdc278a8183a": "Sì. Impostazioni &rsaquo; Aspetto &rsaquo; Evidenziazione offre due modi in cui l’elenco dei messaggi mostra dove sei. <strong>Segui il puntatore</strong> è l’opzione predefinita e funziona come MailVault ha sempre fatto: una riga si illumina quando il mouse ci passa sopra e il messaggio che hai aperto porta una fascia colorata. <strong>Segna quello che sto leggendo</strong> ribalta le cose: il puntatore non cambia nulla, il messaggio aperto è riempito di un grigio pieno e gli altri messaggi della stessa conversazione prendono un grigio più chiaro, così a colpo d’occhio sai sia che cosa stai leggendo sia a che cosa appartiene. Le due opzioni valgono per ogni account e ogni cartella, e puoi passare dall’una all’altra quando vuoi.",
+  "dafe57f4c96e": "Tutto quello che c’è in Gratuito, più queste 12 funzioni. Selezionane una per vedere come funziona.",
+  "5171c5fa6dfd": "Ricerca negli allegati",
+  "3e68239a7886": "Le stesse 12 funzioni che trovi nell’introduzione dell’app. Apri una funzione per esplorarla.",
+  "c72215870bcd": "Cerca all'interno di allegati PDF, Word, Excel e PowerPoint, insieme ai tuoi messaggi."
 }

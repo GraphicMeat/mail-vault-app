@@ -36,7 +36,6 @@
   "e52c854d5631": "Demo",
   "38cfaf72c1d2": "Probar la demo",
   "2e6e39064a93": "Abrir la demo de MailVault en una ventana nueva",
-  "5c6081a5e6f9": "Una bandeja de entrada que puedes explorar.",
   "eb4ecc961cd6": "3 cuentas · 300 correos de ejemplo",
   "52ab7dda981d": "Sin registro. Sin instalación.",
   "b3e88b0e0c7d": "Probar la demo en directo ↗",
@@ -47,5 +46,9 @@
   "3197ae330fe6": "Probar la demo en directo en una ventana nueva",
   "0499bffe57aa": "Abrir la demo en una ventana nueva",
   "36bf4cfd6777": "Sí. Ajustes > Apariencia > Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. Seguir el puntero es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. Marcar lo que estoy leyendo le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.",
-  "fdc278a8183a": "Sí. Ajustes &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras."
+  "fdc278a8183a": "Sí. Ajustes &rsaquo; Apariencia &rsaquo; Resaltado ofrece dos maneras de que la lista de mensajes muestre dónde estás. <strong>Seguir el puntero</strong> es la opción por defecto y funciona como MailVault lo ha hecho siempre: una fila se ilumina al pasar el ratón por encima y el mensaje que abriste lleva una banda teñida. <strong>Marcar lo que estoy leyendo</strong> le da la vuelta: el puntero no cambia nada, el mensaje abierto queda relleno de un gris firme y los demás mensajes de la misma conversación toman un gris más claro, así que de un vistazo sabes qué estás leyendo y a qué pertenece. Las dos opciones valen para todas las cuentas y carpetas, y puedes cambiar de una a otra cuando quieras.",
+  "dafe57f4c96e": "Todo lo de Gratis, más estas 12 funciones. Selecciona una para ver cómo funciona.",
+  "5171c5fa6dfd": "Búsqueda en adjuntos",
+  "3e68239a7886": "Las mismas 12 funciones que verás en la introducción de la app. Abre una función para explorarla.",
+  "c72215870bcd": "Busca dentro de archivos adjuntos PDF, Word, Excel y PowerPoint, junto a tus mensajes."
 }

@@ -36,7 +36,6 @@
   "e52c854d5631": "Demo",
   "38cfaf72c1d2": "Demo ausprobieren",
   "2e6e39064a93": "MailVault-Demo in einem neuen Fenster öffnen",
-  "5c6081a5e6f9": "Ein Posteingang zum Erkunden.",
   "eb4ecc961cd6": "3 Konten · 300 Beispiel-E-Mails",
   "52ab7dda981d": "Keine Anmeldung. Keine Installation.",
   "b3e88b0e0c7d": "Live-Demo ausprobieren ↗",
@@ -47,5 +46,9 @@
   "3197ae330fe6": "Live-Demo in einem neuen Fenster ausprobieren",
   "0499bffe57aa": "Demo in einem neuen Fenster öffnen",
   "36bf4cfd6777": "Ja. Einstellungen > Erscheinungsbild > Hervorhebung bietet zwei Arten, wie die Nachrichtenliste zeigt, wo du gerade bist. Dem Zeiger folgen ist die Voreinstellung und arbeitet so, wie MailVault es immer getan hat: Eine Zeile leuchtet auf, wenn die Maus darüberfährt, und die geöffnete Nachricht trägt ein getöntes Band. Markieren, was ich lese dreht das um: Der Zeiger ändert nichts, die geöffnete Nachricht ist mit einem satten Grau gefüllt, und die übrigen Nachrichten derselben Konversation nehmen ein helleres Grau an, sodass ein Blick dir sagt, was du liest und wozu es gehört. Beide Optionen gelten für jedes Konto und jeden Ordner, und du kannst jederzeit zwischen ihnen wechseln.",
-  "fdc278a8183a": "Ja. Einstellungen &rsaquo; Erscheinungsbild &rsaquo; Hervorhebung bietet zwei Arten, wie die Nachrichtenliste zeigt, wo du gerade bist. <strong>Dem Zeiger folgen</strong> ist die Voreinstellung und arbeitet so, wie MailVault es immer getan hat: Eine Zeile leuchtet auf, wenn die Maus darüberfährt, und die geöffnete Nachricht trägt ein getöntes Band. <strong>Markieren, was ich lese</strong> dreht das um: Der Zeiger ändert nichts, die geöffnete Nachricht ist mit einem satten Grau gefüllt, und die übrigen Nachrichten derselben Konversation nehmen ein helleres Grau an, sodass ein Blick dir sagt, was du liest und wozu es gehört. Beide Optionen gelten für jedes Konto und jeden Ordner, und du kannst jederzeit zwischen ihnen wechseln."
+  "fdc278a8183a": "Ja. Einstellungen &rsaquo; Erscheinungsbild &rsaquo; Hervorhebung bietet zwei Arten, wie die Nachrichtenliste zeigt, wo du gerade bist. <strong>Dem Zeiger folgen</strong> ist die Voreinstellung und arbeitet so, wie MailVault es immer getan hat: Eine Zeile leuchtet auf, wenn die Maus darüberfährt, und die geöffnete Nachricht trägt ein getöntes Band. <strong>Markieren, was ich lese</strong> dreht das um: Der Zeiger ändert nichts, die geöffnete Nachricht ist mit einem satten Grau gefüllt, und die übrigen Nachrichten derselben Konversation nehmen ein helleres Grau an, sodass ein Blick dir sagt, was du liest und wozu es gehört. Beide Optionen gelten für jedes Konto und jeden Ordner, und du kannst jederzeit zwischen ihnen wechseln.",
+  "dafe57f4c96e": "Alles aus Kostenlos, plus diese 12 Funktionen. Wähle eine aus, um zu sehen, wie sie funktioniert.",
+  "5171c5fa6dfd": "Anhangsuche",
+  "3e68239a7886": "Dieselben 12 Funktionen, die dir die App beim Einrichten zeigt. Öffne eine Funktion, um sie zu erkunden.",
+  "c72215870bcd": "Durchsuche PDF-, Word-, Excel- und PowerPoint-Anhänge direkt neben deinen Nachrichten."
 }
