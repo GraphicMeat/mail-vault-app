@@ -5,7 +5,7 @@
  * and folder B's uid 34 collapsed into a single row before anyone clicked.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const ACTIVE_MAILBOX = 'INBOX.Archive.Projekt Nystart.Lieferanten.CRM Centralstation';
 
@@ -131,9 +131,13 @@ describe('one message filed in two folders is one search row', () => {
     _accountId: 'acct-1', source: 'local', messageId: MID, ...over,
   });
 
-  beforeEach(() => { state.activeMailbox = 'UNIFIED'; });
+  beforeEach(() => {
+    state.activeMailbox = 'UNIFIED';
+    delete state.backedUpKeys; delete state.backedUpScopes; delete state.backupConfigured;
+  });
+  afterEach(() => { delete state.backedUpKeys; delete state.backedUpScopes; delete state.backupConfigured; });
 
-  it('collapses the vault copies and keeps the one the view can vouch for', async () => {
+  it('collapses the vault copies, the open view first when no scan decides', async () => {
     localResults = [
       hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
       hit({ uid: 41, _mailbox: 'INBOX' }),
@@ -143,9 +147,26 @@ describe('one message filed in two folders is one search row', () => {
 
     const rows = useSearchStore.getState().searchResults;
     expect(rows).toHaveLength(1);
-    // UNIFIED reads INBOX's backup scan, so INBOX's copy is the one whose
-    // backup-drive dot is known rather than "not connected".
+    // No backup scan either way: the open view's folder (INBOX for UNIFIED) wins.
     expect(rows[0]).toMatchObject({ uid: 41, _mailbox: 'INBOX', source: 'local' });
+  });
+
+  it('keeps the copy the backup drive is known to hold, whichever folder it is in', async () => {
+    // Each row's dot is read from its OWN folder's scan: here the label copy
+    // was scanned and found on the drive, INBOX's scan never ran.
+    state.backupConfigured = true;
+    state.backedUpScopes = new Set(['acct-1:[Gmail]/All Mail']);
+    state.backedUpKeys = new Set(['acct-1:[Gmail]/All Mail:912']);
+    localResults = [
+      hit({ uid: 41, _mailbox: 'INBOX' }),
+      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
+    ];
+    useSearchStore.setState({ searchQuery: 'sparneliai' });
+    await useSearchStore.getState().performSearch();
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ uid: 912, _mailbox: '[Gmail]/All Mail' });
   });
 
   it('prefers the open folder over INBOX outside the unified view', async () => {
