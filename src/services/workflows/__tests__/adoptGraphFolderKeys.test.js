@@ -32,8 +32,8 @@ const GERMAN_LISTING = [
   { id: 'f7', displayName: 'Projekte', wellKnownName: null, storageKey: 'Projekte' },
 ];
 
-/** An English mailbox: `Drafts` and `Archive` already equal their keys, the
- *  other four do not. */
+/** An English mailbox: `Drafts` and `Archive` already equal their keys, `Inbox`
+ *  differs from `INBOX` by case alone, and three genuinely differ. */
 const ENGLISH_LISTING = [
   { id: 'f1', displayName: 'Inbox', wellKnownName: 'inbox', storageKey: 'INBOX' },
   { id: 'f2', displayName: 'Sent Items', wellKnownName: 'sentitems', storageKey: 'Sent' },
@@ -171,6 +171,27 @@ describe('adoptGraphFolderKeys', () => {
     expect(settingsState.markGraphFolderKeysAdopted).toHaveBeenCalledWith('g1');
   });
 
+  // Every install awaits this at first paint, IMAP-only ones included, and the
+  // settings IPC is what it would wait on.
+  it('does not wait on the settings store when no account is Graph', async () => {
+    settingsPersist = { hasHydrated: vi.fn(() => true), onFinishHydration: vi.fn() };
+    await adoptGraphFolderKeys([IMAP]);
+    expect(settingsPersist.hasHydrated).not.toHaveBeenCalled();
+    expect(api.vaultAdoptMailboxDirs).not.toHaveBeenCalled();
+  });
+
+  it('warns when an adoption was blocked, because a legacy directory is still on disk', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    api.vaultAdoptMailboxDirs.mockResolvedValue({
+      adopted: [], skipped_both_exist: ['Gesendet -> Sent (exists: /v/Maildir/g1/Sent)'], failed: [],
+    });
+    await adoptGraphFolderKeys([GRAPH]);
+    expect(warn).toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    expect(settingsState.markGraphFolderKeysAdopted).toHaveBeenCalledWith('g1');
+  });
+
   it('leaves the flag unset and logs when the report carries a failure', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     api.vaultAdoptMailboxDirs.mockResolvedValue({ adopted: [], skipped_both_exist: [], failed: ['x'] });
@@ -205,11 +226,13 @@ describe('adoptGraphFolderKeysFromListing', () => {
     expect(pairs.some(p => p.from === 'Projekte' || p.to === 'Projekte')).toBe(false);
   });
 
-  it('sends only the English names that differ from their key, and still flags', async () => {
+  // `Inbox -> INBOX` is one directory on a case-insensitive volume (every
+  // default macOS one), so the pair can only block itself and log a skip that
+  // means nothing.
+  it('sends only the English names that differ from their key by more than case, and still flags', async () => {
     await adoptGraphFolderKeysFromListing(GRAPH, ENGLISH_LISTING);
     const [, , pairs] = api.vaultAdoptMailboxDirs.mock.calls[0];
     expect(pairs).toEqual([
-      { from: 'Inbox', to: 'INBOX' },
       { from: 'Sent Items', to: 'Sent' },
       { from: 'Deleted Items', to: 'Trash' },
       { from: 'Junk Email', to: 'Junk' },

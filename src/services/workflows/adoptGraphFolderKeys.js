@@ -68,6 +68,11 @@ async function hydrated() {
  * is read.
  */
 export async function adoptGraphFolderKeys(accounts) {
+  // Ahead of the hydration wait: every install awaits this at first paint (the
+  // quick load in App.jsx awaits it right above the setState that renders the
+  // account list), and an IMAP-only one has nothing to adopt, so it must not
+  // wait on the settings IPC.
+  if (!(accounts || []).some(isGraphAccount)) return;
   await hydrated();
   for (const account of accounts || []) {
     const settings = useSettingsStore.getState();
@@ -86,7 +91,10 @@ export async function adoptGraphFolderKeys(accounts) {
       if (moved) settings.setLastMailbox(account.id, moved[1]);
       settings.markGraphFolderKeysAdopted(account.id);
       if (report?.adopted?.length || report?.skipped_both_exist?.length) {
-        console.log('[adoptGraphFolderKeys]', account.email, JSON.stringify(report));
+        // A blocked pair means a legacy directory is still on disk holding mail
+        // the new key will not show: warn, so a support log carries it.
+        const log = report.skipped_both_exist?.length ? console.warn : console.log;
+        log('[adoptGraphFolderKeys]', account.email, JSON.stringify(report));
       }
     } catch (e) {
       console.warn('[adoptGraphFolderKeys] failed for', account.email, e);
@@ -108,8 +116,12 @@ export async function adoptGraphFolderKeysFromListing(account, graphFolders) {
   await hydrated();
   const settings = useSettingsStore.getState();
   if (settings.graphFolderKeysAdoptedFromListing?.[account.id]) return;
+  // Case-insensitively: an English mailbox lists "Inbox" against the key
+  // "INBOX", and on a case-insensitive volume (every default macOS one) that
+  // pair is one directory, so it can only block itself and log a skip that
+  // means nothing.
   const pairs = (graphFolders || [])
-    .filter((f) => f.wellKnownName && f.storageKey && f.displayName !== f.storageKey)
+    .filter((f) => f.wellKnownName && f.storageKey && f.displayName.toLowerCase() !== f.storageKey.toLowerCase())
     .map((f) => ({ from: f.displayName, to: f.storageKey }));
   try {
     if (pairs.length) {
@@ -122,7 +134,8 @@ export async function adoptGraphFolderKeysFromListing(account, graphFolders) {
       const moved = pairs.find((p) => p.from === last);
       if (moved) settings.setLastMailbox(account.id, moved.to);
       if (report?.adopted?.length || report?.skipped_both_exist?.length) {
-        console.log('[adoptGraphFolderKeys] listing pass', account.email, JSON.stringify(report));
+        const log = report.skipped_both_exist?.length ? console.warn : console.log;
+        log('[adoptGraphFolderKeys] listing pass', account.email, JSON.stringify(report));
       }
     }
     settings.markGraphFolderKeysAdoptedFromListing(account.id);
