@@ -41,6 +41,8 @@ pub struct DaemonState {
     pub net: Arc<NetGate>,
     /// Woken by `daemon.shutdown`; main's signal task runs the SIGTERM cleanup.
     pub shutdown: Arc<tokio::sync::Notify>,
+    /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
+    pub events: crate::events::EventBus,
 }
 
 /// Start the daemon socket server.
@@ -138,6 +140,21 @@ async fn handle_connection(
     // Step 2: Process JSON-RPC requests
     while let Some(line) = lines.next_line().await? {
         let response = match ipc::parse_request(&line) {
+            Ok(req) if req.method == "channel.open" => {
+                // Subscribe before answering: no event emitted after the client
+                // sees this response can be missed.
+                let rx = state.events.subscribe();
+                let mut buf = serde_json::to_vec(&RpcResponse::success(
+                    req.id.unwrap_or(Value::Null),
+                    serde_json::json!({"channel": true}),
+                ))
+                .unwrap_or_default();
+                buf.push(b'\n');
+                writer.write_all(&buf).await?;
+                // From here the connection is a duplex notification channel:
+                // no more request/response framing, ever.
+                return crate::channel::run(Arc::clone(&state), rx, lines, writer).await;
+            }
             Ok(req) => handle_request(&state, req).await,
             Err(err_resp) => err_resp,
         };
@@ -274,6 +291,7 @@ impl DaemonState {
             sync_engine,
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
+            events: crate::events::EventBus::new(crate::events::CAPACITY),
         })
     }
 }
@@ -565,6 +583,69 @@ mod tests {
 
         assert_eq!(err.kind(), std::io::ErrorKind::AddrInUse);
         let _ = std::fs::remove_dir_all(&other);
+        served.stop();
+    }
+
+    // ── channel.open ─────────────────────────────────────────────────
+
+    async fn open_channel(served: &Served) -> (tokio::io::Lines<BufReader<OwnedReadHalf>>, OwnedWriteHalf) {
+        let (mut lines, mut w) = served.connect().await;
+        send(&mut w, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
+        recv(&mut lines).await;
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"channel.open","id":3}"#).await;
+        let opened = recv(&mut lines).await;
+        assert_eq!(opened["result"], json!({"channel": true}));
+        assert_eq!(opened["id"], json!(3));
+        (lines, w)
+    }
+
+    #[tokio::test]
+    async fn an_open_channel_forwards_bus_events() {
+        let served = Served::start().await;
+        let (mut lines, _w) = open_channel(&served).await;
+        served.state.events.emit("search-index-progress", json!({"indexed": 5}));
+        let ev = recv(&mut lines).await;
+        assert_eq!(ev["method"], "event");
+        assert_eq!(ev["params"]["name"], "search-index-progress");
+        assert_eq!(ev["params"]["payload"], json!({"indexed": 5}));
+        assert!(ev.get("id").is_none(), "events carry no id");
+        served.stop();
+    }
+
+    #[tokio::test]
+    async fn a_ping_notification_on_the_channel_comes_back_as_an_event() {
+        let served = Served::start().await;
+        let (mut lines, mut w) = open_channel(&served).await;
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"n1"}}"#).await;
+        let ev = recv(&mut lines).await;
+        assert_eq!(ev["params"]["name"], "daemon-ping");
+        assert_eq!(ev["params"]["payload"], json!({"nonce": "n1"}));
+        served.stop();
+    }
+
+    #[tokio::test]
+    async fn an_unknown_notification_is_ignored_and_the_channel_stays_open() {
+        let served = Served::start().await;
+        let (mut lines, mut w) = open_channel(&served).await;
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"nope.nope","params":{}}"#).await;
+        send(&mut w, "not json").await;
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"after"}}"#).await;
+        let ev = recv(&mut lines).await;
+        assert_eq!(ev["params"]["payload"]["nonce"], "after", "nothing was answered to the bad lines");
+        served.stop();
+    }
+
+    #[tokio::test]
+    async fn a_request_connection_never_receives_events() {
+        let served = Served::start().await;
+        let (mut lines, mut w) = served.connect().await;
+        send(&mut w, &format!(r#"{{"token":"{}"}}"#, served.state.token)).await;
+        recv(&mut lines).await;
+        served.state.events.emit("x", json!({}));
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"ping","id":9}"#).await;
+        let resp = recv(&mut lines).await;
+        assert_eq!(resp["id"], json!(9));
+        assert_eq!(resp["result"], json!({"pong": true}));
         served.stop();
     }
 }

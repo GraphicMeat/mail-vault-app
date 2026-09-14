@@ -1,9 +1,11 @@
 mod auth;
+mod channel;
 pub mod classification;
 mod classification_worker;
 pub mod contacts_index;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::imap;
+mod events;
 mod handlers;
 mod idle_watch;
 mod inference;
@@ -256,6 +258,7 @@ async fn main() {
         contacts: Arc::clone(&contacts),
         net,
         shutdown: Arc::new(tokio::sync::Notify::new()),
+        events: events::EventBus::new(events::CAPACITY),
     });
 
     // Start background classification queue worker
