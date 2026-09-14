@@ -46,19 +46,21 @@ describe('Daemon channel — ping round-trip', function () {
     // app's channel hasn't finished its on-demand daemon spawn yet, in which
     // case the notification is silently dropped, not queued. So retry the
     // invoke itself on each poll rather than sending it once: a single send
-    // races the channel's first connect and is not what this test means to
-    // exercise (that race belongs to Task 0.10's reconnect coverage).
-    let lastInvoke = null;
-    try {
-      await browser.waitUntil(async () => {
-        lastInvoke = await invoke(nonce);
-        if (lastInvoke && lastInvoke.ok !== true) return false;
-        return browser.execute((n) => (window.__DAEMON_PING_EVENTS__ || []).some((p) => p && p.nonce === n), nonce);
-      }, { timeout: 30_000, interval: 500 });
-    } catch (e) {
-      throw new Error(`no daemon-ping event reached the frontend after retrying the notify every 500ms for 30s `
-        + `— last invoke result: ${JSON.stringify(lastInvoke)}`);
-    }
+    // races the channel's first connect, and that drop is spec-conformant,
+    // not a bug (Task 0.10 covers the post-connect respawn/reconnect case).
+    // An actual invoke failure (command rejected) is a different, real bug —
+    // throw immediately rather than retrying it away, same as the plan's own
+    // Task 0.10 Step 1 `pingRoundTrip` helper does.
+    await browser.waitUntil(async () => {
+      const r = await invoke(nonce);
+      if (!r || r.ok !== true) {
+        throw new Error(`daemon_channel_notify invoke failed: ${JSON.stringify(r)}`);
+      }
+      return browser.execute((n) => (window.__DAEMON_PING_EVENTS__ || []).some((p) => p && p.nonce === n), nonce);
+    }, {
+      timeout: 30_000, interval: 500,
+      timeoutMsg: `no daemon-ping event reached the frontend for nonce ${nonce} after retrying the notify for 30s`,
+    });
 
     await browser.execute(() => window.__DAEMON_PING_EVENTS_STOP__ && window.__DAEMON_PING_EVENTS_STOP__());
   });

@@ -4702,6 +4702,15 @@ static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::ne
 /// that already holds LIFECYCLE, never the other way around).
 static DAEMON_LIFECYCLE: Mutex<()> = Mutex::new(());
 
+/// Set at the very start of `RunEvent::Exit`, before `daemon_channel::stop()`
+/// and `shutdown_daemon_child()` run. A reconnect attempt already blocked
+/// inside `ensure_daemon_running` (e.g. behind `DAEMON_LIFECYCLE` held by a
+/// vault-switch restart) can still be running after `shutdown_daemon_child()`
+/// has released `DAEMON_CHILD` — this flag is what stops `ensure_daemon_socket`
+/// from spawning a fresh orphan daemon in that window, checked right before
+/// the spawn while still holding `DAEMON_CHILD` (no new lock, same order).
+static APP_EXITING: AtomicBool = AtomicBool::new(false);
+
 /// Our own on-demand child's pid right now, if we have one. Locks `DAEMON_CHILD`
 /// just long enough to read it — never held across a wait.
 fn daemon_child_pid() -> Option<libc::pid_t> {
@@ -4849,6 +4858,13 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
             }
             Err(_) => { *guard = None; }
         }
+    }
+
+    // Checked here, still holding `guard` (DAEMON_CHILD): a reconnect that
+    // reached this point after `shutdown_daemon_child()` already ran must not
+    // spawn an orphan the app will never clean up.
+    if APP_EXITING.load(Ordering::SeqCst) {
+        return Err("app is exiting".into());
     }
 
     // Spawn new daemon
@@ -5869,6 +5885,10 @@ fn main() {
                 }
                 tauri::RunEvent::Exit => {
                     info!("Application exiting — logging out IMAP sessions, cleaning up daemon child if on-demand");
+                    // Before anything else: stops a reconnect blocked inside
+                    // ensure_daemon_running from spawning an orphan daemon
+                    // once shutdown_daemon_child() below has released DAEMON_CHILD.
+                    APP_EXITING.store(true, Ordering::SeqCst);
                     // Runs on the main thread and blocks the quit, so keep the
                     // budget tight: an unreachable server must cost the user a
                     // beachball, not a hang. Worst case here plus

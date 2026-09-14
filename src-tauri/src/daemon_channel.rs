@@ -40,6 +40,12 @@ pub fn stop() {
     CONNECTED.store(false, SeqCst);
 }
 
+/// A connection has to survive at least this long before a later drop resets
+/// backoff back to 250 ms. Without this, a daemon that accepts `channel.open`
+/// and then dies immediately (a stale/crash-looping sidecar) would reconnect
+/// every 250 ms forever instead of backing off.
+const MIN_LIVE_TO_RESET_BACKOFF: std::time::Duration = std::time::Duration::from_secs(5);
+
 async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
     let mut backoff = None;
     let mut warned = false;
@@ -47,14 +53,24 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
         match connect(&app).await {
             Ok((lines, writer)) => {
                 while rx.try_recv().is_ok() {} // queued for a connection that is gone
+                // connect() can block for seconds inside ensure_daemon_running
+                // (e.g. behind a vault-switch daemon restart); re-check here,
+                // right before flipping CONNECTED and telling the frontend,
+                // so an app already exiting never surfaces a phantom reconnect.
+                if STOPPING.load(SeqCst) {
+                    return;
+                }
                 CONNECTED.store(true, SeqCst);
-                backoff = None;
                 warned = false;
                 info!("daemon channel connected");
                 let _ = app.emit("daemon-reconnected", json!({}));
+                let connected_at = std::time::Instant::now();
                 pump(&app, lines, writer, &mut rx).await;
                 CONNECTED.store(false, SeqCst);
                 info!("daemon channel closed");
+                if connected_at.elapsed() >= MIN_LIVE_TO_RESET_BACKOFF {
+                    backoff = None;
+                }
             }
             Err(e) if !warned => {
                 warn!("daemon channel: {e}");
@@ -79,30 +95,48 @@ async fn read_line(lines: &mut Lines<BufReader<OwnedReadHalf>>) -> Result<Value,
     serde_json::from_str(&line).map_err(|e| e.to_string())
 }
 
+/// How long the auth + `channel.open` handshake gets once the socket accepts
+/// the connection, before it counts as a failed attempt and backs off. A
+/// daemon that accepts the connection but never answers (wedged, or an old
+/// build that hangs instead of erroring) must not stall the reconnect loop
+/// forever.
+const HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
 async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<OwnedReadHalf>>, OwnedWriteHalf), String> {
     let (socket, token_path) = crate::daemon_ipc_paths()?;
-    {
+    // Both ensure_daemon_running (blocking: socket check, heartbeat, possible
+    // restart) and the token file read are blocking I/O — neither belongs on
+    // a tokio worker, so both run inside the one spawn_blocking closure.
+    let token = {
         let app = app.clone();
         let socket = socket.clone();
-        tokio::task::spawn_blocking(move || crate::ensure_daemon_running(&app, &socket))
-            .await
-            .map_err(|e| e.to_string())??;
-    }
+        tokio::task::spawn_blocking(move || {
+            crate::ensure_daemon_running(&app, &socket)?;
+            std::fs::read_to_string(&token_path).map_err(|e| format!("token: {e}"))
+        })
+        .await
+        .map_err(|e| e.to_string())??
+    };
     if STOPPING.load(SeqCst) {
         return Err("app is exiting".into());
     }
-    let token = std::fs::read_to_string(&token_path).map_err(|e| format!("token: {e}"))?;
     let (r, mut w) = tokio::net::UnixStream::connect(&socket).await.map_err(|e| e.to_string())?.into_split();
     let mut lines = BufReader::new(r).lines();
-    write_line(&mut w, &json!({"token": token.trim()})).await?;
-    if read_line(&mut lines).await?.get("error").is_some() {
-        return Err("daemon rejected the token".into());
-    }
-    write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {}, "id": 1})).await?;
-    let opened = read_line(&mut lines).await?;
-    if let Some(err) = opened.get("error") {
-        return Err(format!("channel.open refused (daemon too old?): {err}"));
-    }
+    let handshake = async {
+        write_line(&mut w, &json!({"token": token.trim()})).await?;
+        if read_line(&mut lines).await?.get("error").is_some() {
+            return Err("daemon rejected the token".to_string());
+        }
+        write_line(&mut w, &json!({"jsonrpc": "2.0", "method": "channel.open", "params": {}, "id": 1})).await?;
+        let opened = read_line(&mut lines).await?;
+        if let Some(err) = opened.get("error") {
+            return Err(format!("channel.open refused (daemon too old?): {err}"));
+        }
+        Ok::<(), String>(())
+    };
+    tokio::time::timeout(HANDSHAKE_TIMEOUT, handshake)
+        .await
+        .map_err(|_| "channel handshake timed out".to_string())??;
     Ok((lines, w))
 }
 
