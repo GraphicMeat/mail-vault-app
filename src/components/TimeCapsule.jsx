@@ -15,7 +15,7 @@ import { IS_APPSTORE_BUILD } from '../utils/buildFlags.js';
 import { PremiumFeaturesLink } from './PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../hooks/usePremiumPricing.js';
 import { mailboxLabel } from '../utils/imapUtf7';
-import { t as tr, t, useT   } from '../i18n/index.js';
+import { t as tr, t, tErr, useT   } from '../i18n/index.js';
 
 const ROW_HEIGHT = 56;
 
@@ -132,7 +132,7 @@ function PremiumGate({ onUpgrade }) {
 
 // ── Snapshot List ─────────────────────────────────────────────────────────
 
-function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onRetry, onDelete, onConfirmDelete, accountEmail }) {
+export function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOpen, onCreate, onRetry, onDelete, onConfirmDelete, accountEmail }) {
   const t = useT();
   return (
     <div className="settings-form space-y-6 overflow-y-auto h-full">
@@ -157,7 +157,7 @@ function SnapshotList({ snapshots, loading, creating, error, confirmDelete, onOp
 
       {error && (
         <div role="alert" className="flex items-center gap-2 p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-mail-danger text-xs">
-          <AlertCircle size={14} className="shrink-0" /><span className="flex-1 min-w-0 break-words">{error}</span>
+          <AlertCircle size={14} className="shrink-0" /><span className="flex-1 min-w-0 break-words">{tErr(error)}</span>
           <Button size="sm" onClick={onRetry} disabled={loading}>{t('common.retry')}</Button>
         </div>
       )}

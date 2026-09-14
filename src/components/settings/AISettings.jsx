@@ -10,7 +10,7 @@ import {
   Sparkles, Trash2, AlertCircle, XCircle, Upload, FileDown, Lock,
   Info, Brain, ChevronDown, ChevronRight, Save, Plus,
 } from 'lucide-react';
-import { t as tr, useT  } from '../../i18n/index.js';
+import { t as tr, tErr, useT  } from '../../i18n/index.js';
 
 export function AISettings() {
   const t = useT();
@@ -98,7 +98,7 @@ export function AISettings() {
       {error && (
         <div className="p-3 rounded-lg bg-mail-danger-tint border border-mail-danger/20 text-xs text-mail-danger flex items-center gap-2">
           <AlertCircle size={14} className="shrink-0" />
-          <span className="flex-1">{error}</span>
+          <span className="flex-1">{tErr(error)}</span>
           <button onClick={() => setError(null)}><XCircle size={14} /></button>
         </div>
       )}

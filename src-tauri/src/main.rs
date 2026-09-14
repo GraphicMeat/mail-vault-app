@@ -5105,7 +5105,7 @@ async fn daemon_rpc(
         DAEMON_UNAVAILABLE.to_string()
     };
 
-    let (socket_path, token_path) = daemon_ipc_paths()?;
+    let (socket_path, token_path) = daemon_ipc_paths().map_err(unavailable)?;
     // Blocking: spawn check, heartbeat, possibly a restart. Never on a tokio worker.
     {
         let app = app_handle.clone();
