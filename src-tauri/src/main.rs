@@ -4687,10 +4687,25 @@ async fn check_for_updates(handle: tauri::AppHandle, show_no_update: bool) {
 // Bridges frontend invoke() calls to the mailvault-daemon Unix socket.
 // In on-demand mode, auto-spawns the daemon if the socket isn't reachable.
 
-use std::sync::{LazyLock, Mutex};
+use std::sync::{LazyLock, Mutex, MutexGuard};
 
 /// Tracks a daemon child process spawned in on-demand mode.
 static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::new(|| Mutex::new(None));
+
+/// Serializes daemon stop/verify/restart (`ensure_daemon_running`, `stop_daemon`)
+/// against a concurrent `daemon_rpc` auto-spawn, so a build-mismatch restart and
+/// an on-demand spawn from another request can never race each other.
+/// Lock order: LIFECYCLE then CHILD — always take this one first; never take it
+/// while already holding `DAEMON_CHILD` (both `ensure_daemon_socket` and
+/// `shutdown_daemon_child` only ever take CHILD alone, nested inside a caller
+/// that already holds LIFECYCLE, never the other way around).
+static DAEMON_LIFECYCLE: Mutex<()> = Mutex::new(());
+
+/// Our own on-demand child's pid right now, if we have one. Locks `DAEMON_CHILD`
+/// just long enough to read it — never held across a wait.
+fn daemon_child_pid() -> Option<libc::pid_t> {
+    DAEMON_CHILD.lock().ok()?.as_ref().map(|c| c.id() as libc::pid_t)
+}
 
 /// `$HOME/.mailvault/{mv.sock, mv.token}`; must match src-daemon's `ipc_dir()`.
 /// Inside the sandbox HOME is the container home, the same for app and daemon.
@@ -4726,6 +4741,13 @@ fn read_daemon_pid_file(path: &Path) -> Option<libc::pid_t> {
     parse_daemon_pid(&std::fs::read_to_string(path).ok()?)
 }
 
+/// True if `file_name` names the daemon binary. Tolerates the " (deleted)"
+/// suffix Linux appends to `/proc/<pid>/exe`'s readlink target once a package
+/// upgrade replaces the file backing an already-running process.
+fn is_daemon_exe_name(file_name: &str) -> bool {
+    file_name.strip_suffix(" (deleted)").unwrap_or(file_name) == "mailvault-daemon"
+}
+
 /// True only if `pid` is a running process whose executable is named
 /// `mailvault-daemon` — never signal a pid before confirming this: a stale
 /// pid file naming a since-reused pid must not kill an unrelated process.
@@ -4743,7 +4765,7 @@ fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
         .ok()
         .and_then(|s| Path::new(s).file_name())
         .and_then(|n| n.to_str())
-        == Some("mailvault-daemon")
+        .is_some_and(is_daemon_exe_name)
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -4751,8 +4773,7 @@ fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
     std::fs::read_link(format!("/proc/{pid}/exe"))
         .ok()
         .and_then(|p| p.file_name().and_then(|n| n.to_str().map(str::to_owned)))
-        .as_deref()
-        == Some("mailvault-daemon")
+        .is_some_and(|s| is_daemon_exe_name(&s))
 }
 
 /// `kill(pid, 0)` sends no signal, only checks whether the process exists (and
@@ -4905,12 +4926,20 @@ fn socket_ino(path: &Path) -> u64 {
 
 /// A daemon is listening AND it is this build's (spec §3.3). Blocking: call it
 /// from a blocking thread.
+///
+/// Holds `DAEMON_LIFECYCLE` for the whole check (socket ensure + build verify,
+/// including a possible restart) so a concurrent `daemon_rpc` auto-spawn can
+/// never race a restart triggered by this one.
 pub(crate) fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+    let lifecycle = DAEMON_LIFECYCLE.lock().unwrap_or_else(|p| p.into_inner());
     ensure_daemon_socket(app_handle, socket_path)?;
-    verify_daemon_build(app_handle, socket_path)
+    verify_daemon_build(app_handle, socket_path, &lifecycle)
 }
 
-fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+/// Must only run with `DAEMON_LIFECYCLE` held — the `lifecycle` parameter is
+/// proof of that (not used by the body), enforced by every caller going
+/// through `ensure_daemon_running` above.
+fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path, lifecycle: &MutexGuard<'_, ()>) -> Result<(), String> {
     use mailvault_core::daemon_ipc::{call, check_build, BuildCheck};
     use std::sync::atomic::Ordering::SeqCst;
     let ino = socket_ino(socket_path);
@@ -4928,10 +4957,14 @@ fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path) -> Res
         BuildCheck::Restart => {
             if RESTARTED_FOR_BUILD.compare_exchange(false, true, SeqCst, SeqCst).is_ok() {
                 warn!("daemon build {theirs:?} differs from app build {}; restarting it", mailvault_core::BUILD_ID);
-                stop_daemon();
+                stop_daemon_locked(lifecycle);
                 ensure_daemon_socket(app_handle, socket_path)?;
-                return verify_daemon_build(app_handle, socket_path); // can only be Same or Accept now
+                return verify_daemon_build(app_handle, socket_path, lifecycle); // can only be Same or Accept now
             }
+            // With DAEMON_LIFECYCLE held for the whole of ensure_daemon_running,
+            // only one caller can ever be in this arm — the CAS above cannot
+            // lose. If it somehow did, don't cache a mismatched build as verified.
+            return Err("daemon build verification raced with another restart".to_string());
         }
     }
     VERIFIED_SOCKET_INO.store(socket_ino(socket_path), SeqCst);
@@ -4940,7 +4973,17 @@ fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path) -> Res
 
 /// Stop whichever daemon owns the socket, ours or an orphan left behind by a
 /// crashed app, with the same cleanup as SIGTERM (`daemon.shutdown`), then
-/// reap or kill our own tracked child. Blocking.
+/// reap or kill our own tracked child. Blocking. Takes `DAEMON_LIFECYCLE` so
+/// this can never race a concurrent `daemon_rpc` auto-spawn or restart.
+pub(crate) fn stop_daemon() {
+    let lifecycle = DAEMON_LIFECYCLE.lock().unwrap_or_else(|p| p.into_inner());
+    stop_daemon_locked(&lifecycle);
+}
+
+/// Must only run with `DAEMON_LIFECYCLE` held — by `stop_daemon()` above, or
+/// by `verify_daemon_build`'s restart arm (which already holds it via
+/// `ensure_daemon_running`, so recursing into `stop_daemon()` there would
+/// deadlock).
 ///
 /// Returns only once the socket is gone and, when a pid was known, that pid
 /// is confirmed dead — or after the SIGKILL escalation below runs out. A
@@ -4949,9 +4992,18 @@ fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path) -> Res
 /// (src-daemon/src/main.rs `acquire_singleton_lock` loop), which a graceful
 /// shutdown can exceed when IMAP LOGOUT hangs — so the caller waits here
 /// rather than racing a respawn against that window.
-pub(crate) fn stop_daemon() {
+fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
     if let Ok((socket, token_path)) = daemon_ipc_paths() {
         let known_pid = read_daemon_pid_file(&daemon_pid_path());
+        // Trap: if the pid file names our own on-demand child, it is a zombie
+        // the moment it exits (we never reaped it yet), and kill(pid, 0) keeps
+        // reporting a zombie as "alive" forever. Waiting for it to go "dead"
+        // here — or treating it as an orphan to SIGTERM/SIGKILL ourselves —
+        // would spin until every deadline below and could double-signal a
+        // child that `shutdown_daemon_child()` already owns and can properly
+        // try_wait()/reap. So: our own child's lifecycle is entirely its job.
+        let is_own_child = known_pid.is_some() && known_pid == daemon_child_pid();
+
         if let Ok(token) = std::fs::read_to_string(&token_path) {
             let _ = mailvault_core::daemon_ipc::call(&socket, &token, "daemon.shutdown", serde_json::json!({}), std::time::Duration::from_secs(1));
         }
@@ -4960,34 +5012,54 @@ pub(crate) fn stop_daemon() {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
 
-        // R3: an orphan from a build too old to answer `daemon.shutdown` (or
-        // one the RPC above simply never reached) leaves the socket behind.
-        // Signal its pid ourselves instead of waiting on it forever.
-        if socket.exists() {
-            match known_pid {
-                Some(pid) if pid_is_mailvault_daemon(pid) => {
-                    warn!("orphan daemon (pid {pid}) did not clear its socket after daemon.shutdown; sending SIGTERM");
-                    // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
-                    unsafe { libc::kill(pid, libc::SIGTERM) };
-                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
-                    while (socket.exists() || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
-                        std::thread::sleep(std::time::Duration::from_millis(50));
-                    }
-                    if !pid_is_dead(pid) {
-                        warn!("orphan daemon (pid {pid}) ignored SIGTERM; sending SIGKILL");
-                        // SAFETY: pid was confirmed to be a mailvault-daemon process and SIGTERM already failed to stop it.
-                        unsafe { libc::kill(pid, libc::SIGKILL) };
-                        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
-                        while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+        if !is_own_child {
+            // The socket disappearing doesn't guarantee the pid has actually
+            // exited yet (the daemon removes the socket just before
+            // process::exit) — wait for that too, same bounded/polled style.
+            if let Some(pid) = known_pid {
+                let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
+                while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+            }
+
+            // R3: an orphan from a build too old to answer `daemon.shutdown`
+            // (or one the RPC above simply never reached) leaves the socket
+            // and/or pid behind. Signal it ourselves instead of waiting forever.
+            let still_up = socket.exists() || known_pid.is_some_and(|pid| !pid_is_dead(pid));
+            if still_up {
+                match known_pid {
+                    Some(pid) if pid_is_mailvault_daemon(pid) => {
+                        warn!("orphan daemon (pid {pid}) did not clear its socket/pid after daemon.shutdown; sending SIGTERM");
+                        // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
+                        unsafe { libc::kill(pid, libc::SIGTERM) };
+                        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                        while (socket.exists() || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
                             std::thread::sleep(std::time::Duration::from_millis(50));
                         }
+                        if !pid_is_dead(pid) {
+                            // Ruling-2: the pid could have exited and been reused by an
+                            // unrelated process in the up-to-3s window since the last
+                            // check — re-verify identity right before an irreversible kill.
+                            if pid_is_mailvault_daemon(pid) {
+                                warn!("orphan daemon (pid {pid}) ignored SIGTERM; sending SIGKILL");
+                                // SAFETY: identity re-checked immediately above; SIGTERM already failed to stop it.
+                                unsafe { libc::kill(pid, libc::SIGKILL) };
+                                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+                                while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+                                    std::thread::sleep(std::time::Duration::from_millis(50));
+                                }
+                            } else {
+                                warn!("pid {pid} is no longer a mailvault-daemon process (likely exited and the pid was reused); not sending SIGKILL");
+                            }
+                        }
+                        if socket.exists() {
+                            let _ = std::fs::remove_file(&socket);
+                        }
                     }
-                    if socket.exists() {
-                        let _ = std::fs::remove_file(&socket);
-                    }
+                    Some(pid) => warn!("daemon pid file names pid {pid}, which is not a mailvault-daemon process; leaving the socket alone"),
+                    None => warn!("daemon socket outlived daemon.shutdown and no pid file was found; leaving it alone"),
                 }
-                Some(pid) => warn!("daemon pid file names pid {pid}, which is not a mailvault-daemon process; leaving the socket alone"),
-                None => warn!("daemon socket outlived daemon.shutdown and no pid file was found; leaving it alone"),
             }
         }
     }
@@ -5875,6 +5947,25 @@ mod tests {
         assert_eq!(crate::parse_daemon_pid("not a pid"), None);
         assert_eq!(crate::parse_daemon_pid("-1"), None);
         assert_eq!(crate::parse_daemon_pid("0"), None);
+    }
+
+    #[test]
+    fn is_daemon_exe_name_matches_the_plain_binary_name() {
+        assert!(crate::is_daemon_exe_name("mailvault-daemon"));
+    }
+
+    #[test]
+    fn is_daemon_exe_name_tolerates_the_proc_deleted_suffix() {
+        // Linux's /proc/<pid>/exe readlink appends this after a package
+        // upgrade replaces the file backing an already-running process.
+        assert!(crate::is_daemon_exe_name("mailvault-daemon (deleted)"));
+    }
+
+    #[test]
+    fn is_daemon_exe_name_rejects_anything_else() {
+        assert!(!crate::is_daemon_exe_name("mailvault"));
+        assert!(!crate::is_daemon_exe_name("mailvault-daemon-old"));
+        assert!(!crate::is_daemon_exe_name(""));
     }
 
     #[test]
