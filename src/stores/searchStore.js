@@ -6,6 +6,7 @@ import { useMailStore } from './mailStore';
 import { useSettingsStore } from './settingsStore';
 import { emailKey, flattenMailboxes } from './slices/unifiedHelpers';
 import { mailboxDescendants, SUBTREE_PREFIX } from '../services/workflows/mailboxTree';
+import { normalizeMessageId } from '../utils/emailParser';
 
 // The folders a server-side "all folders" search has to visit. \Noselect boxes
 // are pure containers — SELECT fails on them — and a path can appear twice once
@@ -57,29 +58,43 @@ export function searchScope(folder, { activeMailbox, mailboxes }) {
   return { targets, localMailbox: targets.length === 1 ? targets[0] : null, restrictTo };
 }
 
-// Merge the three sources into the list the UI shows: one row per
-// (account, mailbox, uid), newest first, preferring the copy that knows most
-// about where it lives. Called once per finished folder during a fan-out, so
-// it has to stay pure.
-function finalize(allResults) {
-  const seen = new Map();
+// Merge the three sources into the list the UI shows: one row per message,
+// newest first, preferring the copy that knows most about where it lives.
+// Called once per finished folder during a fan-out, so it has to stay pure.
+function finalize(allResults, preferMailbox) {
   const sourcePriority = { 'local': 3, 'local-only': 3, 'server-search': 2, 'server': 1 };
-
-  for (const email of allResults) {
-    // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
-    // two different messages, and this loop kept exactly one of them —
-    // by source priority, so the row on screen could already be a message
-    // other than the one that matched.
-    // `emailKey` always returns a string, so the messageId fallback has to
-    // be chosen on the uid, not on a falsy key that never comes.
-    const key = email.uid != null ? emailKey(email) : `mid:${email.messageId}`;
-    const existing = seen.get(key);
-    if (!existing || (sourcePriority[email.source] || 0) > (sourcePriority[existing.source] || 0)) {
-      seen.set(key, email);
+  const rank = (e) => sourcePriority[e.source] || 0;
+  const dedupe = (rows, keyOf) => {
+    const seen = new Map();
+    for (const email of rows) {
+      const key = keyOf(email);
+      const existing = seen.get(key);
+      if (!existing || rank(email) > rank(existing)
+        || (rank(email) === rank(existing) && email._mailbox === preferMailbox && existing._mailbox !== preferMailbox)) {
+        seen.set(key, email);
+      }
     }
-  }
+    return Array.from(seen.values());
+  };
 
-  return Array.from(seen.values()).sort((a, b) => {
+  // A bare uid is not a key: folder A's uid 34 and folder B's uid 34 are
+  // two different messages, and this loop kept exactly one of them —
+  // by source priority, so the row on screen could already be a message
+  // other than the one that matched.
+  // `emailKey` always returns a string, so the messageId fallback has to
+  // be chosen on the uid, not on a falsy key that never comes.
+  const perCopy = dedupe(allResults, e => (e.uid != null ? emailKey(e) : `mid:${e.messageId}`));
+  // One message can still sit in two folders of one account: archived from
+  // INBOX and backed up from a Gmail label. Two rows with two different
+  // custody glyphs read as two messages. The open folder's copy wins a tie —
+  // it is the scope whose backup scan the row's dot is read from.
+  let unkeyed = 0;
+  const perMessage = dedupe(perCopy, e => {
+    const mid = normalizeMessageId(e.messageId);
+    return mid ? `${e._accountId || e._srcAccountId || ''}|${mid}` : `#${unkeyed++}`;
+  });
+
+  return perMessage.sort((a, b) => {
     const dateA = new Date(a.date || a.internalDate || 0);
     const dateB = new Date(b.date || b.internalDate || 0);
     return dateB - dateA;
@@ -121,6 +136,8 @@ export const useSearchStore = create((set, get) => ({
     const superseded = () => runId !== searchRun;
     const { searchQuery, searchFilters } = get();
     const { emails, localEmails, activeMailbox, activeAccountId, accounts, savedEmailIds, mailboxes } = useMailStore.getState();
+    // The folder whose backup scan a row's dot reads (see `isBackedUp`).
+    const preferMailbox = activeMailbox === 'UNIFIED' ? 'INBOX' : activeMailbox;
 
     if (!searchQuery.trim() && !searchFilters.sender && !searchFilters.dateFrom && !searchFilters.dateTo) {
       set({ searchActive: false, searchResults: [], isSearching: false, searchProgress: null });
@@ -250,12 +267,12 @@ export const useSearchStore = create((set, get) => ({
           // which only fills at the end reads as a search that found nothing.
           if (targets.length > 1) {
             if (superseded()) return;
-            set({ searchResults: finalize(allResults), searchProgress: { done: i + 1, total: targets.length } });
+            set({ searchResults: finalize(allResults, preferMailbox), searchProgress: { done: i + 1, total: targets.length } });
           }
         }
       }
 
-      const deduplicatedResults = finalize(allResults);
+      const deduplicatedResults = finalize(allResults, preferMailbox);
 
       if (superseded()) return;
       console.log(`[Search] Total unique results: ${deduplicatedResults.length}`);

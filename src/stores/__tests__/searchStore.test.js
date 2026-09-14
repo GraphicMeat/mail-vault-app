@@ -119,6 +119,75 @@ describe('search results carry their own location', () => {
 });
 
 /**
+ * One message, two vault folders: a Gmail message archived from INBOX is also
+ * backed up from another label, and the index holds both files. Search listed
+ * it twice — one row "Saved in your vault and backup drive", its twin "Backup
+ * drive not connected" — because the dedup key names the folder.
+ */
+describe('one message filed in two folders is one search row', () => {
+  const MID = '<CAF+sparneliai@mail.gmail.com>';
+  const hit = (over) => ({
+    subject: 'Fwd: Vištų sparneliai', from: { address: 'agne@example.com' },
+    _accountId: 'acct-1', source: 'local', messageId: MID, ...over,
+  });
+
+  beforeEach(() => { state.activeMailbox = 'UNIFIED'; });
+
+  it('collapses the vault copies and keeps the one the view can vouch for', async () => {
+    localResults = [
+      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
+      hit({ uid: 41, _mailbox: 'INBOX' }),
+    ];
+    useSearchStore.setState({ searchQuery: 'sparneliai' });
+    await useSearchStore.getState().performSearch();
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows).toHaveLength(1);
+    // UNIFIED reads INBOX's backup scan, so INBOX's copy is the one whose
+    // backup-drive dot is known rather than "not connected".
+    expect(rows[0]).toMatchObject({ uid: 41, _mailbox: 'INBOX', source: 'local' });
+  });
+
+  it('prefers the open folder over INBOX outside the unified view', async () => {
+    state.activeMailbox = '[Gmail]/All Mail';
+    localResults = [
+      hit({ uid: 41, _mailbox: 'INBOX' }),
+      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
+    ];
+    useSearchStore.setState({ searchQuery: 'sparneliai', searchFilters: {
+      location: 'local', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+    } });
+    await useSearchStore.getState().performSearch();
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ uid: 912, _mailbox: '[Gmail]/All Mail' });
+  });
+
+  it('keeps the vault copy over a server hit, whatever brackets the id wears', async () => {
+    serverByMailbox = { INBOX: [{ uid: 41, subject: 'Fwd: Vištų sparneliai', messageId: MID.slice(1, -1) }] };
+    localResults = [hit({ uid: 912, _mailbox: '[Gmail]/All Mail', source: 'local-only' })];
+    useSearchStore.setState({ searchQuery: 'sparneliai' });
+    await useSearchStore.getState().performSearch();
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ _mailbox: '[Gmail]/All Mail', source: 'local-only' });
+  });
+
+  it('never merges the same Message-ID across two accounts', async () => {
+    localResults = [
+      hit({ uid: 41, _mailbox: 'INBOX' }),
+      hit({ uid: 41, _mailbox: 'INBOX', _accountId: 'acct-2' }),
+    ];
+    useSearchStore.setState({ searchQuery: 'sparneliai' });
+    await useSearchStore.getState().performSearch();
+
+    expect(useSearchStore.getState().searchResults.map(r => r._accountId).sort()).toEqual(['acct-1', 'acct-2']);
+  });
+});
+
+/**
  * "All folders" meant two things in one search: the vault half walked every
  * folder, the server half SELECTed INBOX and stopped. bson73 (discussion #1)
  * has 59 nested folders and a backup that looked smaller than his server —

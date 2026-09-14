@@ -212,7 +212,8 @@ describe('a vault search hit in Sent, from the All Inboxes "Inbox"', () => {
     // over every folder, which is how an "Inbox" search reaches Sent.
     expect(mockSearchLocalEmails).toHaveBeenCalledWith(ACCT_A.id, 'didelis laiskas',
       expect.objectContaining({ mailbox: null, restrictTo: null }));
-    expect(rows.map(r => r.uid).sort()).toEqual([282, 283]);
+    // Two files, one Message-ID: search shows the message once, the first copy.
+    expect(rows.map(r => r.uid)).toEqual([282]);
     for (const row of rows) {
       expect(row._accountId).toBe(ACCT_A.id);
       expect(row._mailbox).toBe('Sent');
