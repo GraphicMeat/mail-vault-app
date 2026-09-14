@@ -7,6 +7,7 @@
  * The launcher starts it in onPrepare; spec workers are other processes, so
  * they drive it over HTTP: PUT /__mock/folders replaces the mailbox, and
  * GET /__mock/requests lists what the app asked for since the last DELETE.
+ * PUT/DELETE /__mock/hold pauses and later releases one message's MIME answer.
  *
  * `list_folders` also resolves the six well-known folder ids in one `$batch` of
  * `GET /me/mailFolders/{well-known}?$select=id`, and the app reads a message's
@@ -35,6 +36,8 @@ const rfcAddress = (r) => (r?.emailAddress?.name
 export function startMockGraph() {
   let folders = [];      // [{ id, displayName, wellKnownName, messages: [{ id, internetMessageId, receivedDateTime, subject, mime }] }]
   let requests = [];     // [{ method, path }]
+  let held = null;       // a message id whose MIME answer waits for DELETE /__mock/hold
+  let waiting = [];      // answers parked behind that hold
 
   const json = (res, status, body) => {
     res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -120,6 +123,9 @@ export function startMockGraph() {
     if (m) {
       const msg = folders.flatMap((f) => f.messages).find((x) => x.id === m[1]);
       if (!msg) return notFound;
+      // An explicit `mime: null` is not a missing `mime` (which is built below):
+      // listed, gone by the time its content is asked for.
+      if (msg.mime === null) return notFound;
       return { status: 200, raw: mimeOf(msg), contentType: 'message/rfc822' };
     }
 
@@ -162,6 +168,21 @@ export function startMockGraph() {
       if (req.method === 'DELETE') requests = [];
       return json(res, 200, requests);
     }
+    if (path === '/__mock/hold') {
+      if (req.method === 'PUT') {
+        let body = '';
+        req.on('data', (c) => { body += c; });
+        req.on('end', () => { held = JSON.parse(body).id; json(res, 200, { ok: true }); });
+        return;
+      }
+      if (req.method === 'DELETE') {
+        held = null;
+        const released = waiting.length;
+        waiting.forEach((answer) => answer());
+        waiting = [];
+        return json(res, 200, { released });
+      }
+    }
 
     requests.push({ method: req.method, path });
     if (!/^Bearer \S+/.test(req.headers.authorization || '')) return json(res, 401, { error: { code: 'InvalidAuthenticationToken' } });
@@ -183,7 +204,16 @@ export function startMockGraph() {
       return;
     }
 
-    send(res, route(req.method, path, url.searchParams));
+    const out = route(req.method, path, url.searchParams);
+    // A held message's MIME answer waits for DELETE /__mock/hold. Only a real
+    // MIME answer parks: a 404 (unknown id, or `mime: null`) is answered at
+    // once, which is the order the custody branch's own $value route has.
+    const value = path.match(/^\/v1\.0\/me\/messages\/([^/]+)\/\$value$/);
+    if (value && held === value[1] && out.raw !== undefined) {
+      waiting.push(() => send(res, out));
+      return;
+    }
+    send(res, out);
   });
 
   return new Promise((resolve) => {
@@ -268,6 +298,12 @@ export const LEGACY_EML = '1:2,S.eml';
  * "Gesendet" with its ledger and index and no English twin (must move), and
  * Trash under "Papierkorb" beside an existing English "Trash" (must stay).
  * Runs in beforeSession, after resetAppState wiped the data dir.
+ *
+ * The ledger and the index carry a SENTINEL the mock cannot produce: uid 4242
+ * for the Graph id `msg-legacy-only`, a message no scenario folder serves. An
+ * implementation that deleted these two files and rebuilt them from a fresh
+ * Sent listing would satisfy "the ledger names msg-fld-sent-1" and "an index
+ * exists"; only a file that was MOVED still holds 4242.
  */
 export function seedLegacyGraphDirs(home, accountId) {
   const data = appDataDir(home);
@@ -277,9 +313,9 @@ export function seedLegacyGraphDirs(home, accountId) {
   writeFileSync(join(sentCur, LEGACY_EML), 'From: a@mock.test\r\nSubject: legacy sent\r\nMessage-ID: <legacy-sent@mock.test>\r\n\r\nx\r\n');
   const sentCache = join(data, 'email_cache', `${cacheBase}_${LEGACY_SENT_DIR}`);
   mkdirSync(sentCache, { recursive: true });
-  writeFileSync(join(sentCache, 'graph_id_map.json'), JSON.stringify({ 1: 'msg-fld-sent-1' }));
+  writeFileSync(join(sentCache, 'graph_id_map.json'), JSON.stringify({ 4242: 'msg-legacy-only' }));
   mkdirSync(join(data, 'maildir', accountId, LEGACY_SENT_DIR), { recursive: true });
-  writeFileSync(join(data, 'maildir', accountId, LEGACY_SENT_DIR, 'local-index.json'), '[]');
+  writeFileSync(join(data, 'maildir', accountId, LEGACY_SENT_DIR, 'local-index.json'), JSON.stringify([{ uid: 4242 }]));
 
   const trashCur = join(data, 'Maildir', accountId, LEGACY_TRASH_DIR, 'cur');
   mkdirSync(trashCur, { recursive: true });

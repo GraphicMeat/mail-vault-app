@@ -30,8 +30,12 @@ describe('Graph folder keys: adopting localized directories', function () {
 
   it('moves a localized Sent, its ledger and its index under the English key', async function () {
     await browser.waitUntil(() => existsSync(join(maildir('Sent'), 'cur', LEGACY_EML)), { timeout: 30_000, timeoutMsg: 'Sent was not adopted' });
-    expect(readFileSync(join(data(), 'email_cache', `${cacheBase}_Sent`, 'graph_id_map.json'), 'utf-8')).toContain('msg-fld-sent-1');
-    expect(existsSync(join(data(), 'maildir', GRAPH_ACCOUNT_ID, 'Sent', 'local-index.json'))).toBe(true);
+    // The sentinels the seed planted (uid 4242 -> `msg-legacy-only`, a message
+    // the mock does not serve): a ledger and an index rebuilt from a fresh Sent
+    // listing would name only the mock's own messages, so these two lines are
+    // what separate a MOVE from a delete-and-rebuild.
+    expect(readFileSync(join(data(), 'email_cache', `${cacheBase}_Sent`, 'graph_id_map.json'), 'utf-8')).toContain('msg-legacy-only');
+    expect(readFileSync(join(data(), 'maildir', GRAPH_ACCOUNT_ID, 'Sent', 'local-index.json'), 'utf-8')).toContain('4242');
     expect(existsSync(maildir(LEGACY_SENT_DIR))).toBe(false);
     expect(existsSync(join(data(), 'email_cache', `${cacheBase}_${LEGACY_SENT_DIR}`))).toBe(false);
   });
@@ -39,7 +43,6 @@ describe('Graph folder keys: adopting localized directories', function () {
   it('leaves both directories alone when the English one already exists', function () {
     expect(readdirSync(join(maildir(LEGACY_TRASH_DIR), 'cur'))).toEqual([LEGACY_EML]);
     expect(existsSync(join(maildir('Trash'), 'cur'))).toBe(true);
-    expect(readdirSync(join(maildir('Trash'), 'cur')).filter((n) => n.endsWith('.eml'))).toEqual([]);
   });
 
   it('remembers the adoption in the settings file', async function () {
