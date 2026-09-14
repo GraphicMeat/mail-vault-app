@@ -75,7 +75,7 @@
     "autoprefixer": "^10.4.16",
     "imapflow": "^1.2.10",
     "jsdom": "^29.0.0",
-    "mailparser": "^3.9.3",
+    "mailparser": "^3.9.20",
     "nodemailer": "^9.1.1",
     "postcss": "^8.4.32",
     "tailwindcss": "^3.3.6",
