@@ -146,6 +146,23 @@ describe('Graph uid allocation (JS side)', () => {
     expect(getGraphMessageId(ACCT, 'INBOX', 3)).toBe('y');
   });
 
+  it('forgets the mailbox and fails when the ledger lost numbers memory still uses', async () => {
+    serve(['a', 'b']);
+    await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+    expect(getGraphMessageId(ACCT, 'INBOX', 1)).toBe('a');
+
+    // The ledger file is gone while this session still files a under 1 and b
+    // under 2, so the allocator starts over and hands 1 to c.
+    h.disk.clear();
+    serve(['c', 'a', 'b']);
+    await expect(listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id')).rejects.toThrow(/uid 1 to c/);
+    expect(getGraphMessageId(ACCT, 'INBOX', 1)).toBeNull();
+
+    // Memory comes from the ledger again, so the numbers agree with it.
+    const { headers } = await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+    expect(uidsById(headers)).toEqual({ c: 1, a: 2, b: 3 });
+  });
+
   it('takes uids another writer allocated from the ledger on disk after a restart', async () => {
     // The backup allocated 1-3 while the app was closed.
     h.disk.set(`${ACCT}:INBOX`, { 1: 'a', 2: 'b', 3: 'c' });

@@ -253,6 +253,19 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
     // added its numbers, and copying the old snapshot over them would drop
     // them from memory (never from disk, which Rust owns).
     const grown = new Map(_graphIdMap.get(key) || known);
+    const clash = unknown.findIndex(([graphId], i) => grown.has(uids[i]) && grown.get(uids[i]) !== graphId);
+    if (clash !== -1) {
+      // The ledger on disk no longer holds what this session remembers (lost
+      // or deleted under it), so the allocator handed out a number memory
+      // already files another message under. Forget this mailbox so the next
+      // listing reads the ledger again, and fail this one rather than show two
+      // messages under one uid.
+      _graphIdMap.delete(key);
+      throw new Error(
+        `[graphIdMap] ${accountId}:${mailbox} allocator gave uid ${uids[clash]} to ${unknown[clash][0]}, `
+        + `which this session files under ${grown.get(uids[clash])}: dropped this mailbox's uid memory`
+      );
+    }
     unknown.forEach(([graphId], i) => {
       grown.set(uids[i], graphId);
       uidByGraphId.set(graphId, uids[i]);
