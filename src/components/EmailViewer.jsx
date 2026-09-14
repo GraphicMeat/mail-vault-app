@@ -39,7 +39,7 @@ import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey, selectionKey, spansMailboxes } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes, rowKey } from '../stores/slices/unifiedHelpers';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -773,7 +773,8 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
               </div>
               <button
                 data-testid="email-body-retry"
-                onClick={() => selectEmail(selectedEmail.uid, 'server')}
+                // A bare uid names no message in a spanning view.
+                onClick={() => selectEmail(rowKey(selectedEmail, spansMailboxes(useMailStore.getState())), 'server')}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-mail-text bg-mail-bg
                           border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
               >

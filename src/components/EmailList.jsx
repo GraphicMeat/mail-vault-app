@@ -5,7 +5,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, emailKey as messageKey } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey } from '../stores/slices/unifiedHelpers';
 import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
@@ -347,7 +347,7 @@ function EmailListComponent({ stacked = false }) {
             const sender = groups.find(s => s.senderEmail === fr.senderEmail);
             const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.topicId}` === fr.topicKey);
             const email = topic?.emails.find(e => e.uid === fr.emailUid);
-            if (email) selectEmail(email.uid, email.source, email._mailbox);
+            if (email) selectEmail(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
           }
         }
       }
@@ -1290,7 +1290,7 @@ function EmailListComponent({ stacked = false }) {
                           // stamped `_mailbox` is the answer.
                           const mailbox = item.email._mailbox
                             || (item.email._fromSentFolder ? getSentMailboxPath() : null);
-                          selectEmail(item.email.uid, item.email.source, mailbox);
+                          selectEmail(rowKey(item.email, spansMailboxes(useMailStore.getState())), item.email.source, mailbox);
                           if (layoutMode !== 'three-column') {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }

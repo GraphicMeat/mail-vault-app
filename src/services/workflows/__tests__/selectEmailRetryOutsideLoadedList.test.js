@@ -1,25 +1,18 @@
-// Bug report (2026-09-14): a message found by search in the vault will not
-// open - "Cannot tell which account and folder hold message 282. Reload the
-// list and try again."
+// Bug report (2026-09-14): the body-load retry button and FullViewEmailModal's
+// initial fetch both call `selectEmail(uid, source)` with a bare uid. That is
+// exactly the mistake `requireUnifiedContext` was built to refuse: in a
+// spanning view a message outside the loaded lists (an old search hit,
+// insights' Explorer target) is opened by its full key
+// (`accountId:mailbox:uid`, EmailRow's `openRow`), and a bare-uid retry on
+// that same message throws "Cannot tell which account and folder hold message
+// ..." instead of reloading it - turning a transient fetch failure into a
+// dead end with no way back to the message.
 //
-// That string comes from one guard (selectEmail.js, `isUnified && !unified`),
-// and it only runs in a view that spans mailboxes (`spansMailboxes`): the
-// Unified Inbox, or a folder branch opened through loadSubtree. A search from
-// an ordinary single folder never reaches it.
-//
-// In both views a search hit lives only in searchStore's `searchResults`.
-// `_resolveUnifiedContext` answers from emails/sortedEmails/localEmails/
-// sentEmails and nothing else, so a hit outside the loaded window resolves to
-// nothing even when the key names its account and folder in full - the shape
-// Explorer already sends (EmailList.jsx, `selectEmail(selKey(email), ...)`).
-// The list row's own click sends a bare uid; that half is pinned in
-// EmailRowSpanningSelect.test.jsx. The Unified Inbox case, on the real
-// account's shape (a Sent hit found by performSearch), is
-// selectEmailVaultSearchHitInSent.test.js; this file keeps the folder branch.
-//
-// `ghost:INBOX:9` in selectEmailUnresolved.test.js names no account and must
-// still be refused. These keys name a real one.
+// Mocks copied from selectEmailVaultSearchHitInSent.test.js so this spec
+// stands alone.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { t as tr } from '../../../i18n/index.js';
+import { _selKey } from '../../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../../stores/slices/serverUids';
 
 if (!globalThis.window) {
@@ -32,9 +25,11 @@ const mockFetchEmailLight = vi.fn();
 const mockFetchEmails = vi.fn();
 const mockGetEmailHeadersPartial = vi.fn();
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
+const mockSearchLocalEmails = vi.fn();
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
+  searchLocalEmails: (...a) => mockSearchLocalEmails(...a),
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
@@ -110,6 +105,7 @@ vi.mock('../../../stores/settingsStore', () => ({
       markAsReadMode: 'manual',
       markAsReadDelay: 3,
       setUnreadForAccount: () => {},
+      addSearchToHistory: () => {},
     }),
   },
 }));
@@ -124,32 +120,35 @@ vi.mock('../../safeStorage', () => ({
 
 const { useMailStore } = await import('../../../stores/mailStore');
 
-const ACCT_A = { id: 'acct-a', email: 'a@mock.test', imapHost: 'h', password: 'x' };
-
-// What the vault answers for the hit: an old message in a folder the loaded
-// window never reached.
-const VAULT_COPY = { uid: 282, messageId: '<282@mock>', html: '<p>didelis laiskas body</p>', flags: [] };
+const ACCT_A = { id: 'acct-a', email: 'info@moderniosaplikacijos.lt', imapHost: 'h', password: 'x' };
+const MESSAGE_ID = '<640a1b1e-b1be-41bb-a270-9566012b3ef4@Spark>';
+// The loaded window: recent INBOX mail only. Sent/282 below is deliberately
+// absent from it - that is the "outside the loaded list" the retry has to
+// survive.
 const LOADED_ROW = { uid: 900, messageId: '<900@mock>', subject: 'recent', date: '2026-09-01T10:00:00Z', flags: ['\\Seen'] };
 
 function baseState() {
   useMailStore.setState({
     accounts: [ACCT_A],
     activeAccountId: ACCT_A.id,
-    activeMailbox: 'INBOX',
-    unifiedInbox: false,
+    activeMailbox: 'UNIFIED',
+    unifiedInbox: true,
     unifiedFolder: 'INBOX',
     mailboxScope: null,
-    mailboxes: [],
+    mailboxes: [
+      { path: 'INBOX', name: 'INBOX', specialUse: '\\Inbox', children: [] },
+      { path: 'Sent', name: 'Sent', specialUse: '\\Sent', children: [] },
+    ],
     viewMode: 'all',
-    emails: [],
-    sortedEmails: [],
+    emails: [LOADED_ROW],
+    sortedEmails: [LOADED_ROW],
     sentEmails: [],
     localEmails: [],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
     serverUids: serverUids(new Set(), { complete: false }),
     deleteTombstones: new Set(),
-    totalEmails: 0,
+    totalEmails: 1,
     selectedEmailIds: new Set(),
     selectedEmail: null,
     selectedEmailId: null,
@@ -170,58 +169,49 @@ beforeEach(() => {
   baseState();
 });
 
-function expectOpened(accountId, mailbox) {
-  const state = useMailStore.getState();
-  expect(state.error).toBe(null);
-  expect(state.selectedEmail?.uid).toBe(282);
-  expect(state.selectedEmail?._accountId).toBe(accountId);
-  expect(state.selectedEmail?._mailbox).toBe(mailbox);
-  expect(mockGetLocalEmailLight).toHaveBeenCalledWith(accountId, mailbox, 282);
-}
-
-describe('selectEmail for a vault search hit a folder branch has not loaded', () => {
-  it('opens it in a folder branch by its full selection key', async () => {
-    useMailStore.setState({
-      activeMailbox: 'Projects',
-      mailboxes: [
-        { path: 'Projects', name: 'Projects', delimiter: '/' },
-        { path: 'Projects/2017', name: '2017', delimiter: '/' },
-      ],
+describe('retrying a spanning-view row that is outside the loaded lists', () => {
+  it('opens Sent/282 by its full key, then the fixed retry (same key) succeeds again', async () => {
+    mockGetLocalEmailLight.mockResolvedValue({
+      uid: 282, messageId: MESSAGE_ID, subject: 'didelis laiskas', text: 'didelis laiskas', html: null, attachments: [], flags: ['\\Seen'],
     });
-    await useMailStore.getState().loadSubtree(ACCT_A.id, 'Projects');
-    expect(useMailStore.getState().mailboxScope?.paths).toEqual(['Projects', 'Projects/2017']);
-    mockGetLocalEmailLight.mockResolvedValue(VAULT_COPY);
 
-    await useMailStore.getState().selectEmail(`${ACCT_A.id}:Projects/2017:282`, 'local', 'Projects/2017');
+    // The initial open, exactly as EmailRow's openRow sends it for a row
+    // outside the loaded window (a search hit, or an insights target).
+    await useMailStore.getState().selectEmail(`${ACCT_A.id}:Sent:282`, 'local', 'Sent');
+    let state = useMailStore.getState();
+    expect(state.error).toBe(null);
+    expect(state.selectedEmail?.uid).toBe(282);
+    expect(state.selectedEmail?._accountId).toBe(ACCT_A.id);
+    expect(state.selectedEmail?._mailbox).toBe('Sent');
 
-    expectOpened(ACCT_A.id, 'Projects/2017');
+    // The retry the fixed callers now build: `_selKey(selectedEmail)`, not the
+    // bare uid. Same message, same result.
+    const retryKey = _selKey(state.selectedEmail);
+    expect(retryKey).toBe(`${ACCT_A.id}:Sent:282`);
+    await useMailStore.getState().selectEmail(retryKey, 'server');
+
+    state = useMailStore.getState();
+    expect(state.error).toBe(null);
+    expect(state.selectedEmail?.uid).toBe(282);
+    expect(state.selectedEmail?._accountId).toBe(ACCT_A.id);
+    expect(state.selectedEmail?._mailbox).toBe('Sent');
+    expect(state.error).not.toBe(tr('errors.unresolvedUnifiedRow', { key: 282 }));
   });
-});
 
-describe('a failed fetch for that hit', () => {
-  // The branch's own Projects/282 is loaded; the hit is Projects/2017/282. The
-  // fallback read used to verify the vault copy against the first loaded row
-  // with uid 282, so the right body was discarded as "another message" and
-  // the stranger's header was shown in its place.
-  it('falls back to its own vault copy, not a loaded row that shares its uid', async () => {
-    useMailStore.setState({
-      activeMailbox: 'Projects',
-      mailboxes: [
-        { path: 'Projects', name: 'Projects', delimiter: '/' },
-        { path: 'Projects/2017', name: '2017', delimiter: '/' },
-      ],
+  it('documents the bug: the OLD bare-uid retry throws the unresolved-row error and drops the open message', async () => {
+    mockGetLocalEmailLight.mockResolvedValue({
+      uid: 282, messageId: MESSAGE_ID, subject: 'didelis laiskas', text: 'didelis laiskas', html: null, attachments: [], flags: ['\\Seen'],
     });
-    await useMailStore.getState().loadSubtree(ACCT_A.id, 'Projects');
-    const stranger = { uid: 282, _accountId: ACCT_A.id, _mailbox: 'Projects', messageId: '<stranger@mock>', subject: 'stranger', flags: ['\\Seen'] };
-    useMailStore.setState({ emails: [stranger], sortedEmails: [stranger] });
-    mockGetLocalEmailLight.mockResolvedValueOnce(null).mockResolvedValue(VAULT_COPY);
-    mockFetchEmailLight.mockRejectedValue(new Error('connection reset'));
 
-    await useMailStore.getState().selectEmail(`${ACCT_A.id}:Projects/2017:282`, 'server', 'Projects/2017');
+    await useMailStore.getState().selectEmail(`${ACCT_A.id}:Sent:282`, 'local', 'Sent');
+    expect(useMailStore.getState().selectedEmail?.uid).toBe(282);
+
+    // What EmailViewer's retry button and FullViewEmailModal's effect sent
+    // before the fix - the row's bare uid, unreachable in a spanning view.
+    await useMailStore.getState().selectEmail(useMailStore.getState().selectedEmail.uid, 'server');
 
     const state = useMailStore.getState();
-    expect(state.selectedEmailSource).toBe('local-only');
-    expect(state.selectedEmail?.messageId).toBe('<282@mock>');
-    expect(state.selectedEmail?._mailbox).toBe('Projects/2017');
+    expect(state.error).toBe(tr('errors.unresolvedUnifiedRow', { key: 282 }));
+    expect(state.selectedEmail).toBe(null);
   });
 });

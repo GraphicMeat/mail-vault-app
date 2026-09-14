@@ -3,7 +3,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
-import { resolveEmailLocation, emailScopeKey } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey } from '../../stores/slices/unifiedHelpers';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
@@ -56,9 +56,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         return;
       }
 
-      // Need to fetch full content - use selectEmail
+      // Need to fetch full content - use selectEmail. A bare uid names no
+      // message in a spanning view.
       try {
-        await selectEmail(initialEmail.uid, initialEmail.source || 'server');
+        await selectEmail(rowKey(initialEmail, spansMailboxes(useMailStore.getState())), initialEmail.source || 'server');
       } catch (e) {
         console.error('Failed to fetch full email:', e);
         // Even if fetch fails, set the initial email so we show something

@@ -7,7 +7,7 @@ import { isOutgoingRow } from '../utils/sentFolder';
 import { listRowGround } from '../utils/listRowGround';
 import { getCachedAlerts } from '../utils/linkSafety';
 import { useMailStore } from '../stores/mailStore';
-import { emailScopeKey, selectionKey } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes, rowKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
@@ -68,6 +68,13 @@ function StarToggle({ email, actions, size }) {
   );
 }
 
+// In a spanning view a bare uid names no message, so the click carries the
+// row's full key. A single-folder list keeps the uid: selectEmail reads its
+// first argument as a bare uid there.
+function openRow(email, onSelect) {
+  onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
+}
+
 export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
   const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
@@ -117,7 +124,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       className={`virtual-row group relative flex items-center gap-3 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
-      onClick={() => onSelect(email.uid, email.source, email._mailbox)}
+      onClick={() => openRow(email, onSelect)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input
@@ -251,7 +258,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
       className={`virtual-row group relative flex items-center gap-2 px-4 border-b border-mail-border
                  cursor-pointer
                  ${listRowGround({ highlight, selected: isSelected && !isChecked, related: isRelated && !isChecked, unread: isUnread })}`}
-      onClick={() => onSelect(email.uid, email.source, email._mailbox)}
+      onClick={() => openRow(email, onSelect)}
     >
       <div onClick={(e) => { e.stopPropagation(); onToggleSelection(email.uid, email._accountId, email._mailbox); }}>
         <input type="checkbox" checked={isChecked} onChange={() => {}} aria-label={t('workspace.selectMessage')} className="custom-checkbox" />

@@ -7,7 +7,7 @@ import { ensureFreshToken } from '../authUtils';
 import { hasRealAttachments, hydrateInlineImages } from '../attachmentUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { getGraphMessageId, resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
+import { requireUnifiedContext, bodyMatchesHeader, spansMailboxes, selectionKey, _parseSelKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { _shouldPrefetch, getCacheCurrentSizeMB } from '../../stores/slices/cacheSlice';
 import { applySeenLocally, _setSeenOnServer, applyServerRemoval } from './messageMutations';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
@@ -286,15 +286,21 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
-
   // A spanning view's key must name its account and folder. Guessing the
   // active account here is what aimed reply, mark-unread and delete at a
   // stranger's message under the same uid — the delete side was closed in
-  // Phase 1 (requireUnifiedContext); this closes the viewer's.
-  if (isUnified && !unified) {
-    publish({ loadingEmail: false, selectedEmail: null, selectedThread: null, error: t('errors.unresolvedUnifiedRow', { key: String(uid) }) });
-    return;
+  // Phase 1 (requireUnifiedContext); this closes the viewer's. Loaded-list
+  // resolution (the common case) and the account:mailbox:uid fallback (a
+  // search hit outside the loaded window) are the same ladder delete already
+  // climbs, so it is shared here rather than reimplemented.
+  let unified = null;
+  if (isUnified) {
+    try {
+      unified = requireUnifiedContext(uid, state);
+    } catch (error) {
+      publish({ loadingEmail: false, selectedEmail: null, selectedThread: null, error: error.message });
+      return;
+    }
   }
 
   const accountId = unified?.accountId || state.activeAccountId;
@@ -462,7 +468,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // email whose body is its subject. `_bodyError` is what makes the two
     // distinguishable downstream (EmailViewer shows it, with a retry).
     const headerOnly = () => {
-      const headerEmail = get().emails.find(e => e.uid === realUid);
+      const headerEmail = _rowOf(get(), accountId, mailbox, realUid);
       if (!headerEmail) {
         publish({ error: decodeImapUtf7(`Failed to load email (UID ${realUid}, ${mailbox}): ${detail}`) });
         return;
@@ -476,7 +482,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     try {
       // Same check as the primary read: a fallback is still a render, and the
       // wrong message is worse here than an honest "body did not load".
-      const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, get().emails.find(e => e.uid === realUid));
+      const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, _rowOf(get(), accountId, mailbox, realUid));
       if (!isCurrent()) return;
       if (localEmail) {
         publish({ selectedEmail: withAccount(localEmail), selectedEmailSource: 'local-only' });
