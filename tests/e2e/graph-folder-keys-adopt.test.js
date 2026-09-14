@@ -2,9 +2,9 @@
  * E2E (Graph conf): directories written under a localized name are adopted.
  *
  * beforeSession (wdio.graph.conf.js) planted, before the app launched, a Sent
- * folder under "Gesendet" with its uid ledger and index and no English twin,
- * and a Trash under "Papierkorb" beside an existing English "Trash". Launch
- * must move the first under `Sent` as a unit and leave the second pair alone.
+ * folder under "Gesendet" with its uid ledger and no English twin, and a Trash
+ * under "Papierkorb" beside an existing English "Trash". Launch must move the
+ * first under `Sent` as a unit and leave the second pair alone.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,14 +28,13 @@ describe('Graph folder keys: adopting localized directories', function () {
     expect(existsSync(join(maildir(LEGACY_TRASH_DIR), 'cur', LEGACY_EML))).toBe(true);
   });
 
-  it('moves a localized Sent, its ledger and its index under the English key', async function () {
+  it('moves a localized Sent and its ledger under the English key', async function () {
     await browser.waitUntil(() => existsSync(join(maildir('Sent'), 'cur', LEGACY_EML)), { timeout: 30_000, timeoutMsg: 'Sent was not adopted' });
-    // The sentinels the seed planted (uid 4242 -> `msg-legacy-only`, a message
-    // the mock does not serve): a ledger and an index rebuilt from a fresh Sent
-    // listing would name only the mock's own messages, so these two lines are
-    // what separate a MOVE from a delete-and-rebuild.
+    // The sentinel the seed planted (uid 4242 -> `msg-legacy-only`, a message the
+    // mock does not serve): a ledger rebuilt from a fresh Sent listing would name
+    // only the mock's own messages, so this line is what separates a MOVE from a
+    // delete-and-rebuild.
     expect(readFileSync(join(data(), 'email_cache', `${cacheBase}_Sent`, 'graph_id_map.json'), 'utf-8')).toContain('msg-legacy-only');
-    expect(readFileSync(join(data(), 'maildir', GRAPH_ACCOUNT_ID, 'Sent', 'local-index.json'), 'utf-8')).toContain('4242');
     expect(existsSync(maildir(LEGACY_SENT_DIR))).toBe(false);
     expect(existsSync(join(data(), 'email_cache', `${cacheBase}_${LEGACY_SENT_DIR}`))).toBe(false);
   });

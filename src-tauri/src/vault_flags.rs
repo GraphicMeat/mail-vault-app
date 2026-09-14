@@ -363,6 +363,10 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
 #[derive(Debug, Default)]
 pub struct Adopted {
     pub moved: usize,
+    /// How many of `moved` were app-side locations. The custody rows follow the
+    /// app's files, not the mirror, so the caller renames them on this and not
+    /// on `moved`.
+    pub app_moved: usize,
     pub blocked: usize,
     pub blocked_by: Vec<String>,
     pub failed: Vec<String>,
@@ -371,12 +375,15 @@ pub struct Adopted {
 /// Move a mailbox written under a legacy localized name (`from`) under its
 /// storage key (`to`), the one-time adoption for Graph accounts.
 ///
-/// The three app-side locations (the Maildir mailbox dir, the index dir, the
-/// sidecar dir with the uid ledger) move as a UNIT, and only when none of
-/// their destinations exists: moving a subset would pair one ledger with
-/// another numbering's vault files. The mirror moves on its own, when its
-/// source exists and its destination does not. `fs::rename` only; nothing is
-/// deleted, an existing destination is left alone and counted as blocked.
+/// The two app-side locations (the Maildir mailbox dir and the sidecar dir with
+/// the uid ledger) move as a UNIT, and only when neither destination exists:
+/// moving one without the other would pair one ledger with another numbering's
+/// vault files. There is no third: the local index and the archived-headers
+/// cache are not locations any more, their contents live in the custody store,
+/// and the caller renames those rows when `app_moved` says the app side moved.
+/// The mirror moves on its own, when its source exists and its destination does
+/// not. `fs::rename` only; nothing is deleted, an existing destination is left
+/// alone and counted as blocked.
 pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
@@ -397,7 +404,6 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
     let mut out = Adopted::default();
     let app_side: Vec<(PathBuf, PathBuf)> = [
         (up(&from.cur), up(&to.cur)),
-        (up(&from.index), up(&to.index)),
         (Some(from.sidecar_dir.clone()), Some(to.sidecar_dir.clone())),
     ]
     .into_iter()
@@ -421,6 +427,8 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
             }
         }
     }
+    // The mirror has not run yet, so everything counted so far is app-side.
+    out.app_moved = out.moved;
 
     if let (Some(src), Some(dst)) = (
         from.mirror_cur.as_deref().and_then(up),
@@ -456,8 +464,8 @@ pub async fn vault_adopt_mailbox_dirs(
 ) -> Result<AdoptReport, String> {
     tokio::task::spawn_blocking(move || {
         // Shallowest first, as `vault_rename_mailbox` does: a no-op for the flat
-        // storage keys sent today, and the order the nesting index and mirror
-        // need the day a localized folder with children is adopted.
+        // storage keys sent today, and the order the nesting mirror needs the
+        // day a localized folder with children is adopted.
         //
         // A user who switched UI language more than once has two legacy
         // directories for one folder ("Gesendet" and "Enviados", both -> "Sent"):
@@ -466,13 +474,33 @@ pub async fn vault_adopt_mailbox_dirs(
         let mut pairs = pairs;
         pairs.sort_by_key(|p| p.from.len());
         let (root, needs_release) = crate::backup::resolve_backup_path(&app_handle, None);
+        // Outside the closure: a pair that fails `dirs_for` returns early, and the
+        // pairs that already moved still need the sweep.
+        let mut any_moved = false;
         let result = (|| -> Result<AdoptReport, String> {
             let mut report = AdoptReport::default();
             for p in &pairs {
                 let from = dirs_for(&app_handle, &account_id, &p.from, account_email.as_deref(), root.as_deref())?;
                 let to = dirs_for(&app_handle, &account_id, &p.to, account_email.as_deref(), root.as_deref())?;
                 let out = adopt_dirs(&from, &to);
+                any_moved |= out.moved > 0;
                 let label = format!("{} -> {}", p.from, p.to);
+                // The custody store holds what the retired local index and
+                // archived-headers cache used to, so its rows follow the app-side
+                // directories: a blocked pair or a mirror-only move renames
+                // nothing, the rows stay with the directory that stayed.
+                //
+                // A failure here lands in `failed`, so the command returns Err, the
+                // JS flag stays unset and the next launch retries the pair — by
+                // then the directories are already moved, so only this rename is
+                // redone. `UPDATE ... WHERE mailbox_path = from` matches nothing the
+                // second time, which is the idempotence that retry needs.
+                if out.app_moved > 0 {
+                    match crate::custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::rename_mailbox(c, &account_id, &p.from, &p.to)) {
+                        Ok(_) => {}
+                        Err(e) => report.failed.push(format!("custody {} -> {} ({})", p.from, p.to, e)),
+                    }
+                }
                 if !out.failed.is_empty() {
                     report.failed.push(format!("{}: {}", label, out.failed.join("; ")));
                 } else if out.moved > 0 {
@@ -485,6 +513,9 @@ pub async fn vault_adopt_mailbox_dirs(
             }
             Ok(report)
         })();
+        if any_moved {
+            crate::search_index::sweep_soon(&app_handle); // the old folders' rows go, the new ones' come
+        }
         if needs_release {
             if let Some(ref p) = root {
                 crate::backup::release_backup_path(p);
@@ -880,9 +911,6 @@ mod tests {
     fn seed_app_side(from: &Dirs) {
         fs::create_dir_all(&from.cur).unwrap();
         fs::write(from.cur.join("1:2,S.eml"), b"body").unwrap();
-        fs::write(&from.archived_cache, b"{\"emails\":[]}").unwrap();
-        fs::create_dir_all(from.index.parent().unwrap()).unwrap();
-        fs::write(&from.index, b"[]").unwrap();
         fs::create_dir_all(&from.sidecar_dir).unwrap();
         fs::write(from.sidecar_dir.join("graph_id_map.json"), b"{\"1\":\"msg-1\"}").unwrap();
         fs::write(from.sidecar_dir.join("1.json"), b"{\"uid\":1}").unwrap();
@@ -900,7 +928,7 @@ mod tests {
     }
 
     #[test]
-    fn adopt_dirs_moves_the_three_app_dirs_and_the_ledger_when_every_destination_is_absent() {
+    fn adopt_dirs_moves_both_app_dirs_and_the_ledger_when_every_destination_is_absent() {
         let tmp = tempfile::tempdir().unwrap();
         let from = rename_fixture(tmp.path(), "Gesendet", "a_Gesendet");
         let to = rename_fixture(tmp.path(), "Sent", "a_Sent");
@@ -909,12 +937,11 @@ mod tests {
 
         let out = adopt_dirs(&from, &to);
 
-        assert_eq!(out.moved, 3, "vault dir, index dir, sidecar dir");
+        assert_eq!(out.moved, 2, "vault dir, sidecar dir");
+        assert_eq!(out.app_moved, 2, "both of them app-side");
         assert_eq!(out.blocked, 0);
         assert!(out.failed.is_empty());
         assert!(to.cur.join("1:2,S.eml").exists());
-        assert!(to.archived_cache.exists(), "archived_headers.json travels with the mailbox dir");
-        assert!(to.index.exists());
         assert!(to.sidecar_dir.join("graph_id_map.json").exists(), "the ledger travels with the sidecar dir");
         assert!(!from.cur.parent().unwrap().exists());
         assert!(!from.sidecar_dir.exists());
@@ -934,6 +961,7 @@ mod tests {
         let out = adopt_dirs(&from, &to);
 
         assert_eq!(out.moved, 0, "a partial move would pair one ledger with another numbering's files");
+        assert_eq!(out.app_moved, 0, "so the caller leaves the custody rows where they are");
         assert_eq!(out.blocked, 1);
         // The log is the only trace of the legacy dir left behind, so it names
         // the destination that blocked the move, not just the pair.
@@ -963,6 +991,7 @@ mod tests {
         let out = adopt_dirs(&from, &to);
 
         assert_eq!(out.moved, 1, "the mirror moved");
+        assert_eq!(out.app_moved, 0, "the mirror is not the app side: the custody rows stay put");
         assert_eq!(out.blocked, 1, "the app side did not");
         assert!(to.mirror_cur.clone().unwrap().join("1:2,S.eml").exists());
         assert!(!from_mirror.exists());
@@ -994,7 +1023,7 @@ mod tests {
         to.mirror_cur = None;
         seed_app_side(&from);
         let out = adopt_dirs(&from, &to);
-        assert_eq!((out.moved, out.blocked), (3, 0));
+        assert_eq!((out.moved, out.blocked), (2, 0));
         assert!(out.failed.is_empty());
     }
 }

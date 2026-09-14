@@ -295,15 +295,17 @@ export const LEGACY_EML = '1:2,S.eml';
 
 /**
  * What a German UI on v2.11.0 through v2.13.1 left behind: Sent under
- * "Gesendet" with its ledger and index and no English twin (must move), and
- * Trash under "Papierkorb" beside an existing English "Trash" (must stay).
- * Runs in beforeSession, after resetAppState wiped the data dir.
+ * "Gesendet" with its uid ledger and no English twin (must move), and Trash
+ * under "Papierkorb" beside an existing English "Trash" (must stay). Runs in
+ * beforeSession, after resetAppState wiped the data dir. No `local-index.json`:
+ * that file is legacy, the custody store imports one at startup, and the
+ * mailbox directory move carries any leftover anyway.
  *
- * The ledger and the index carry a SENTINEL the mock cannot produce: uid 4242
- * for the Graph id `msg-legacy-only`, a message no scenario folder serves. An
- * implementation that deleted these two files and rebuilt them from a fresh
- * Sent listing would satisfy "the ledger names msg-fld-sent-1" and "an index
- * exists"; only a file that was MOVED still holds 4242.
+ * The ledger carries a SENTINEL the mock cannot produce: uid 4242 for the Graph
+ * id `msg-legacy-only`, a message no scenario folder serves. An implementation
+ * that deleted the ledger and rebuilt it from a fresh Sent listing would
+ * satisfy "the ledger names msg-fld-sent-1"; only a file that was MOVED still
+ * holds 4242.
  */
 export function seedLegacyGraphDirs(home, accountId) {
   const data = appDataDir(home);
@@ -314,8 +316,6 @@ export function seedLegacyGraphDirs(home, accountId) {
   const sentCache = join(data, 'email_cache', `${cacheBase}_${LEGACY_SENT_DIR}`);
   mkdirSync(sentCache, { recursive: true });
   writeFileSync(join(sentCache, 'graph_id_map.json'), JSON.stringify({ 4242: 'msg-legacy-only' }));
-  mkdirSync(join(data, 'maildir', accountId, LEGACY_SENT_DIR), { recursive: true });
-  writeFileSync(join(data, 'maildir', accountId, LEGACY_SENT_DIR, 'local-index.json'), JSON.stringify([{ uid: 4242 }]));
 
   const trashCur = join(data, 'Maildir', accountId, LEGACY_TRASH_DIR, 'cur');
   mkdirSync(trashCur, { recursive: true });
