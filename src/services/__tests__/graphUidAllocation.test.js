@@ -13,6 +13,8 @@ const h = vi.hoisted(() => ({
   failAllocate: false,
   failLoad: false,
   shortReply: false,
+  parkAllocations: false,
+  parked: [],
 }));
 
 vi.mock('../db.js', () => ({
@@ -28,6 +30,7 @@ vi.mock('../api.js', () => ({
   // Stand-in for the Rust allocator: next free number after what is on "disk".
   graphAllocateUids: vi.fn(async (accountId, mailbox, entries) => {
     h.calls.push({ accountId, mailbox, entries });
+    if (h.parkAllocations) await new Promise((resolve) => h.parked.push(resolve));
     if (h.failAllocate) throw new Error('Outlook uid ledger could not be saved');
     const key = `${accountId}:${mailbox}`;
     const ledger = { ...(h.disk.get(key) || {}) };
@@ -76,6 +79,8 @@ describe('Graph uid allocation (JS side)', () => {
     h.failAllocate = false;
     h.failLoad = false;
     h.shortReply = false;
+    h.parkAllocations = false;
+    h.parked = [];
     clearGraphIdMap(ACCT);
   });
 
@@ -112,6 +117,33 @@ describe('Graph uid allocation (JS side)', () => {
     serve(['z', 'a', 'b', 'c']);
     const { headers } = await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
     expect(uidsById(headers)).toEqual({ a: 1, b: 2, c: 3, z: 4 });
+  });
+
+  it('keeps both numbers in memory when two listings of one mailbox overlap', async () => {
+    serve(['a']);
+    await listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+
+    // Each listing reads memory and then waits on Rust. The second starts while
+    // the first is still waiting, so both hold the same read; whichever is
+    // answered last must not copy that read over the other's number.
+    h.parkAllocations = true;
+    try {
+      serve(['x', 'a']);
+      const first = listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+      await vi.waitFor(() => expect(h.parked).toHaveLength(1));
+      serve(['y', 'a']);
+      const second = listGraphMessages(ACCT, 'INBOX', 'token', 'folder-id');
+      await vi.waitFor(() => expect(h.parked).toHaveLength(2));
+      h.parkAllocations = false;
+      h.parked.splice(0).forEach((release) => release());
+      await Promise.all([first, second]);
+    } finally {
+      h.parkAllocations = false;
+      h.parked.splice(0).forEach((release) => release());
+    }
+
+    expect(getGraphMessageId(ACCT, 'INBOX', 2)).toBe('x');
+    expect(getGraphMessageId(ACCT, 'INBOX', 3)).toBe('y');
   });
 
   it('takes uids another writer allocated from the ledger on disk after a restart', async () => {

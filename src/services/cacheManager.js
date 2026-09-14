@@ -248,13 +248,17 @@ async function _allocateGraphUids(accountId, mailbox, headers, graphMessageIds) 
       );
     }
     // Only now, with the numbers on disk, does this session start using them.
-    const grown = new Map(known);
+    // Merge into what memory holds now, not the snapshot read before the
+    // await: a listing of this mailbox that finished meanwhile has already
+    // added its numbers, and copying the old snapshot over them would drop
+    // them from memory (never from disk, which Rust owns).
+    const grown = new Map(_graphIdMap.get(key) || known);
     unknown.forEach(([graphId], i) => {
       grown.set(uids[i], graphId);
       uidByGraphId.set(graphId, uids[i]);
     });
     _graphIdMap.set(key, grown);
-    console.log('[graphIdMap] Allocated %d uids for %s:%s (%d known)', unknown.length, accountId, mailbox, grown.size);
+    console.log('[graphIdMap] Allocated %d uids for %s:%s (%d total)', unknown.length, accountId, mailbox, grown.size);
   }
 
   headers.forEach((header, i) => {
