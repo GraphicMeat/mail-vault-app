@@ -25,16 +25,19 @@
  * finished first and the case would be green for the wrong reason, so that is a
  * failure here, not a pass.
  *
- * ── Why 901 and 902 ───────────────────────────────────────────────────────
- * Every other uid in yoda's INBOX is spoken for: 903 (connected-delete-undo),
- * 904 and 905 (connected-storage-matrix), 906 (compose identities and reply
- * account), 907/908/909 (the body-fetch faults), 910 (the attachments message).
- * 901 and 902 are claimed by nothing.
+ * ── Why its own two messages ──────────────────────────────────────────────
+ * It used to borrow fixture uids 901 and 902, on the belief that nothing else
+ * touched them. connected-custody-claims runs earlier and takes yoda's OLDEST
+ * message, bins it and expunges it behind the app, so in a full run 901 was
+ * already gone and this case failed before it started (green alone, red in the
+ * suite). Every fixture uid on yoda is somebody's, so this spec APPENDs its own
+ * pair, dated now so they head the list, the way connected-cleanup-rules does.
  *
  * ── What this leaves behind ───────────────────────────────────────────────
- * 901 really is deleted, so a hook moves it back out of Trash before each case
- * and after the last one. One mock server serves the whole run: a message this
- * spec strands is a message every later spec file is missing. 902 is only read.
+ * Nothing. The deleted message is moved back out of Trash before each case,
+ * and after the last one both are expunged from INBOX and Trash. One mock
+ * server serves the whole run: a message this spec strands is a message every
+ * later spec file has to account for.
  */
 
 import { ImapFlow } from 'imapflow';
@@ -43,8 +46,21 @@ import { waitForApp, waitForEmails } from './helpers.js';
 
 const YODA = 'yoda@mock.test';
 const YODA_SERVER = 2;              // MOCK_ACCOUNTS order: luke, vader, yoda
-const DELETED = 'Yoda message 901'; // the one the user deletes
-const KEPT = 'Yoda message 902';    // the one they open while it is in flight
+const DELETED = 'Reader race deletes this';   // the one the user deletes
+const KEPT = 'Reader race keeps this open';    // the one they open while it is in flight
+
+const rfc822 = (subject, date) => Buffer.from([
+  'From: Racer <racer@mock.test>',
+  `To: ${YODA}`,
+  `Subject: ${subject}`,
+  `Date: ${date.toUTCString()}`,
+  `Message-ID: <${subject.toLowerCase().replaceAll(' ', '-')}@mock.test>`,
+  'MIME-Version: 1.0',
+  'Content-Type: text/plain; charset=utf-8',
+  '',
+  `${subject} - body`,
+  '',
+].join('\r\n'));
 
 describe('A finished delete and the message opened while it ran', function () {
   this.timeout(240_000);
@@ -75,7 +91,7 @@ describe('A finished delete and the message opened while it ran', function () {
     }
   });
 
-  /** Put 901 back in INBOX if a case left it in Trash. */
+  /** Put the deleted message back in INBOX if a case left it in Trash. */
   async function restoreStranded() {
     try {
       if ((await uidsIn('INBOX', DELETED)).length > 0) return;
@@ -92,6 +108,41 @@ describe('A finished delete and the message opened while it ran', function () {
       });
     } catch (e) {
       console.warn('[delete-reader-race] restore failed:', e.message);
+    }
+  }
+
+  /** APPEND `subject` to INBOX unless the server already has it there. */
+  async function seed(subject, date) {
+    if ((await uidsIn('INBOX', subject)).length > 0) return;
+    await withYoda(async (client) => {
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        await client.append('INBOX', rfc822(subject, date), [], date);
+      } finally {
+        lock.release();
+      }
+    });
+  }
+
+  /** Expunge both messages from wherever they ended up. */
+  async function purge() {
+    for (const mailbox of ['INBOX', 'Trash']) {
+      for (const subject of [DELETED, KEPT]) {
+        try {
+          const uids = await uidsIn(mailbox, subject);
+          if (!uids.length) continue;
+          await withYoda(async (client) => {
+            const lock = await client.getMailboxLock(mailbox);
+            try {
+              await client.messageDelete(uids, { uid: true });
+            } finally {
+              lock.release();
+            }
+          });
+        } catch (e) {
+          console.warn(`[delete-reader-race] could not purge "${subject}" from ${mailbox}:`, e.message);
+        }
+      }
     }
   }
 
@@ -187,8 +238,13 @@ describe('A finished delete and the message opened while it ran', function () {
     expect(yodaId).toBeTruthy();
   });
 
-  beforeEach(restoreStranded);
-  after(restoreStranded);
+  beforeEach(async function () {
+    await restoreStranded();
+    const now = Date.now();
+    await seed(DELETED, new Date(now));
+    await seed(KEPT, new Date(now - 60_000));
+  });
+  after(purge);
 
   it('keeps the second message open when the first one\'s delete lands', async function () {
     await activate(yodaId);
@@ -197,7 +253,7 @@ describe('A finished delete and the message opened while it ran', function () {
       timeoutMsg: `yoda's INBOX never rendered both "${DELETED}" and "${KEPT}"`,
     });
 
-    // 1. The user is reading 901.
+    // 1. The user is reading the first message.
     await openAndWait(DELETED, `the reading pane never opened "${DELETED}"`);
 
     // 2. …and deletes it. The row menu is the same workflow the reading pane's
@@ -210,13 +266,13 @@ describe('A finished delete and the message opened while it ran', function () {
 
     // The reader closes right there, synchronously with the click — that half
     // is correct and is what makes the assertion at the end mean something: a
-    // pane still showing 902 later cannot be a pane that was never cleared.
+    // pane still showing the second message later cannot be one that was never cleared.
     await browser.waitUntil(async () => (await readerSubject()) === '', {
       timeout: 30_000, interval: 200,
       timeoutMsg: 'the reading pane never closed on the delete the user asked for',
     });
 
-    // 3. Still inside the 4s MOVE stall, the user opens 902.
+    // 3. Still inside the 4s MOVE stall, the user opens the second.
     const landed = await openAndWait(
       KEPT, `"${KEPT}" never opened while the delete was in flight`, 20_000,
     );
@@ -234,7 +290,7 @@ describe('A finished delete and the message opened while it ran', function () {
     // triggers a chance to close the pane too, if it is going to.
     await browser.pause(2000);
 
-    // 5. The bug, in one line: 902 is still open.
+    // 5. The bug, in one line: the second message is still open.
     expect(await readerSubject()).toContain(KEPT);
     expect(await browser.execute(() =>
       (window.__MAIL_STORE__.getState().selectedEmail?.subject || ''))).toContain(KEPT);
