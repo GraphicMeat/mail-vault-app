@@ -12,14 +12,19 @@
 //! - the uid of a vault file with its Message-ID that no ledger entry owns, so
 //!   mail an earlier backup already stored is not fetched again;
 //! - otherwise one more than every uid in the ledger AND every uid a file name
-//!   on disk carries, so a copy filed under some older numbering can never block
-//!   the message the ledger hands that number to.
+//!   carries in the vault's `cur/` or `orphaned/` — never the external backup
+//!   mirror, which this floor never sees — so a copy filed under some older
+//!   numbering can never block the message the ledger hands that number to.
+//!   A backup restores mirror-only files into the vault (its pre-sync) before
+//!   it allocates, so it sees them there; an app listing that allocates
+//!   before any backup has run can hand out a uid only the mirror holds.
 
 use crate::fsx;
 use crate::maildir::{mirror_filename_uid, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
+use tracing::warn;
 
 pub const LEDGER_FILE: &str = "graph_id_map.json";
 
@@ -215,6 +220,56 @@ pub fn plan_fetch(
         .enumerate()
         .filter(|(_, uid)| !local.contains(uid) && planned.insert(*uid))
         .collect())
+}
+
+/// Empty the header cache at `cache_dir` (`<vault>/email_cache`) but keep every
+/// mailbox's uid ledger. The vault's files and the app's in-memory map go on
+/// using the ledger's numbers after "Clear cached emails", and a ledger rebuilt
+/// from the files that survive it would hand one of those numbers to a new
+/// message. Best effort, like the delete it replaces: a failure is logged and
+/// the rest is still cleared.
+pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
+    let entries = match std::fs::read_dir(cache_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+        Err(e) => {
+            warn!("[email_cache] could not list {}: {}", cache_dir.display(), e);
+            return;
+        }
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        // file_type does not follow symlinks: a link is removed, never its target.
+        if !entry.file_type().is_ok_and(|t| t.is_dir()) {
+            logged(&path, std::fs::remove_file(&path));
+            continue;
+        }
+        let children = match std::fs::read_dir(&path) {
+            Ok(children) => children,
+            Err(e) => {
+                warn!("[email_cache] could not list {}, left as is: {}", path.display(), e);
+                continue;
+            }
+        };
+        let mut kept = false;
+        for child in children.flatten() {
+            let child_path = child.path();
+            match child.file_type() {
+                Ok(t) if t.is_file() && child.file_name() == LEDGER_FILE => kept = true,
+                Ok(t) if t.is_dir() => logged(&child_path, std::fs::remove_dir_all(&child_path)),
+                _ => logged(&child_path, std::fs::remove_file(&child_path)),
+            }
+        }
+        if !kept {
+            logged(&path, std::fs::remove_dir(&path));
+        }
+    }
+}
+
+fn logged(path: &Path, result: std::io::Result<()>) {
+    if let Err(e) = result {
+        warn!("[email_cache] could not remove {}: {}", path.display(), e);
+    }
 }
 
 #[cfg(test)]
@@ -490,14 +545,60 @@ mod tests {
 
     #[test]
     fn a_deleted_ledger_is_rebuilt_with_the_vaults_numbering() {
-        // Clearing the email cache deletes the ledger. The files stay, and a
-        // rebuilt ledger must give them back their numbers.
+        // A ledger can still go missing on its own: deleted by hand, or a
+        // vault moved or restored without its email_cache. The files stay,
+        // and a rebuilt ledger must give them back their numbers.
         let m = mailbox();
         seed(&m, &[(1, "a"), (2, "b"), (3, "c")]);
         for (uid, n) in [(1, "a"), (2, "b"), (3, "c")] { file(&m, uid, n); }
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["z", "a", "b", "c"])).unwrap(), vec![4, 1, 2, 3]);
         fs::remove_file(&m.ledger).unwrap();
         assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["z", "a", "b", "c"])).unwrap(), vec![4, 1, 2, 3]);
+    }
+
+    #[test]
+    fn clearing_the_cache_keeps_every_ledger_and_nothing_else() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("email_cache");
+        let inbox = cache.join("acct_INBOX"); // an Outlook mailbox: has a ledger
+        let sent = cache.join("acct_Sent"); // an IMAP mailbox: no ledger
+        fs::create_dir_all(inbox.join("nested")).unwrap();
+        fs::create_dir_all(&sent).unwrap();
+        let ledger = br#"{"1":"g-a","2":"g-b"}"#;
+        fs::write(inbox.join(LEDGER_FILE), ledger).unwrap();
+        fs::write(inbox.join("_meta.json"), b"{}").unwrap();
+        fs::write(inbox.join("1.json"), b"{}").unwrap();
+        fs::write(inbox.join("nested").join(LEDGER_FILE), ledger).unwrap(); // only a mailbox's own ledger is kept
+        fs::write(sent.join("_meta.json"), b"{}").unwrap();
+        fs::write(cache.join("acct_Old.json"), b"[]").unwrap(); // a legacy monolithic cache file
+
+        clear_cache_keeping_ledgers(&cache);
+
+        assert_eq!(fs::read(inbox.join(LEDGER_FILE)).unwrap(), ledger);
+        let left: Vec<_> = fs::read_dir(&inbox).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(left, vec![std::ffi::OsString::from(LEDGER_FILE)]);
+        assert!(!sent.exists(), "a mailbox cache without a ledger is removed whole");
+        assert!(!cache.join("acct_Old.json").exists());
+    }
+
+    #[test]
+    fn clearing_a_cache_that_does_not_exist_does_nothing() {
+        let tmp = tempfile::tempdir().unwrap();
+        clear_cache_keeping_ledgers(&tmp.path().join("email_cache"));
+        assert!(!tmp.path().join("email_cache").exists());
+    }
+
+    #[test]
+    fn numbering_carries_on_after_the_cache_and_the_cached_bodies_are_cleared() {
+        // "Clear cached emails" deletes every body the app cached and then the
+        // email cache. Memory still files a..e under 1..5 and only two files
+        // survive: the next new message must get 6, not 3.
+        let m = mailbox();
+        seed(&m, &[(1, "a"), (2, "b"), (3, "c"), (4, "d"), (5, "e")]);
+        file(&m, 1, "a");
+        file(&m, 2, "b");
+        clear_cache_keeping_ledgers(m.ledger.parent().unwrap().parent().unwrap());
+        assert_eq!(allocate(&m.ledger, &m.cur, &listed(&["new"])).unwrap(), vec![6]);
     }
 
     #[test]

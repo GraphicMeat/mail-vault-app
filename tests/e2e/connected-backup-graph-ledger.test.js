@@ -20,6 +20,9 @@
  *   Receipts  a ledger that cannot be parsed. That folder fails loudly and
  *             nothing in it is written; the other folders are not held up.
  *
+ * The last case runs no backup at all: it drives the app's own "Clear cached
+ * emails" and checks that it does not lose these ledgers either.
+ *
  * The Graph account is synthetic (not in accounts.json) and only the backup
  * command sees it, through the loopback Graph mock (tests/e2e/mockGraph.js).
  */
@@ -323,5 +326,45 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(result.completed_folders).toBe(1);
     expect(result.error_message).toMatch(/^Receipts was not backed up: /);
     expect(result.error_message).toMatch(/ledger/i);
+  });
+
+  it('"Clear cached emails" keeps every uid ledger, so numbering carries on', async function () {
+    // Last on purpose: it clears the email cache and every app-cached body for
+    // the whole session.
+    //
+    // The app's listing path takes two uids for mail no backup has stored yet
+    // (no file holds them). "Clear cached emails" then runs the two commands
+    // below, and the app still files that mail under those uids in memory. A
+    // ledger rebuilt from the files that survive would start again right
+    // after them, on a number memory already uses.
+    const APP_ONLY = [msg('inbox', 'app-only-1', 70), msg('inbox', 'app-only-2', 71)];
+    const AFTER_CLEAR = msg('inbox', 'after-clear', 72);
+    expect(Math.max(...Object.keys(readLedger('INBOX')).map(Number))).toBe(8); // anti-vacuity: where the cases above left INBOX
+
+    const minted = await invoke('graph_allocate_uids', {
+      accountId: ACCOUNT_ID,
+      mailbox: 'INBOX',
+      entries: APP_ONLY.map((m) => [m.id, m.internetMessageId]),
+    });
+    expect(minted).toEqual([9, 10]);
+    const before = readLedger('INBOX');
+    const cacheDir = join(root, 'email_cache', cacheBase(ACCOUNT_ID, 'INBOX'));
+    writeFileSync(join(cacheDir, '_meta.json'), '{}'); // a header cache the clear must still remove
+
+    // The order StorageSettings runs them in.
+    const bodies = await invoke('maildir_clear_cache', {});
+    if (bodies?.__error) throw new Error(`maildir_clear_cache: ${bodies.__error}`);
+    const headers = await invoke('clear_email_cache', { accountId: null });
+    if (headers?.__error) throw new Error(`clear_email_cache: ${headers.__error}`);
+    expect(existsSync(join(cacheDir, '_meta.json'))).toBe(false); // the clear ran
+
+    const next = await invoke('graph_allocate_uids', {
+      accountId: ACCOUNT_ID,
+      mailbox: 'INBOX',
+      entries: [[AFTER_CLEAR.id, AFTER_CLEAR.internetMessageId]],
+    });
+    expect(next).toEqual([11]);
+    expect(readLedger('INBOX')).toEqual({ ...before, 11: AFTER_CLEAR.id });
+    expect(existsSync(ledgerPath('Archive'))).toBe(true);
   });
 });

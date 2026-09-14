@@ -1464,9 +1464,10 @@ fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>, m
             }
         }
     } else {
-        // Clear all cache
-        let _ = fs::remove_dir_all(&cache_dir);
-        info!("Cleared all email cache");
+        // Clear all cache, except every Outlook uid ledger: the vault and the
+        // app's memory still use those numbers (see the helper for why).
+        mailvault_core::graph_ledger::clear_cache_keeping_ledgers(&cache_dir);
+        info!("Cleared all email cache (Outlook uid ledgers kept)");
     }
 
     Ok(())
