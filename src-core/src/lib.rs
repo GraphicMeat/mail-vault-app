@@ -18,6 +18,8 @@ pub mod dns;
 pub mod spellcheck;
 pub mod transfer_stats;
 pub mod net;
+#[cfg(unix)]
+pub mod daemon_ipc;
 
 pub const BUILD_ID: &str = env!("MAILVAULT_BUILD_ID");
 
