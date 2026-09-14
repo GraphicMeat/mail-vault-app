@@ -1875,7 +1875,7 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
         let status = result?;
         // The daemon reads the storage location once at startup — restart it so it
         // does not keep syncing into the old folder.
-        shutdown_daemon_child();
+        stop_daemon();
         let _ = app_handle.emit("vault-status", status.clone());
         Ok(status)
     })
@@ -1901,7 +1901,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
     .map_err(|e| format!("Task join error: {}", e));
     search_index::reopen(&app_handle);
     let result = result?;
-    shutdown_daemon_child();
+    let _ = tokio::task::spawn_blocking(stop_daemon).await;
     let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
 }
@@ -1924,7 +1924,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
     .map_err(|e| format!("Task join error: {}", e));
     search_index::reopen(&app_handle);
     let result = result?;
-    shutdown_daemon_child();
+    let _ = tokio::task::spawn_blocking(stop_daemon).await;
     let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
 }
@@ -1940,7 +1940,7 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
         custody::reopen(&app_handle);
         search_index::reopen(&app_handle);
         let status = result?;
-        shutdown_daemon_child();
+        stop_daemon();
         let _ = app_handle.emit("vault-status", status.clone());
         Ok(status)
     })
@@ -4692,6 +4692,79 @@ use std::sync::{LazyLock, Mutex};
 /// Tracks a daemon child process spawned in on-demand mode.
 static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::new(|| Mutex::new(None));
 
+/// `$HOME/.mailvault/{mv.sock, mv.token}`; must match src-daemon's `ipc_dir()`.
+/// Inside the sandbox HOME is the container home, the same for app and daemon.
+pub(crate) fn daemon_ipc_paths() -> Result<(PathBuf, PathBuf), String> {
+    let dir = dirs::home_dir().ok_or_else(|| "Could not resolve home directory".to_string())?.join(".mailvault");
+    Ok((dir.join("mv.sock"), dir.join("mv.token")))
+}
+
+/// Path to the daemon's PID file. This is NOT under `daemon_ipc_paths()`'s
+/// `~/.mailvault` — the daemon writes it into its app data dir
+/// (src-daemon/src/main.rs `get_data_dir()` + `write_pid_file`, which join
+/// `dirs::data_local_dir()` with the app identifier and `daemon.pid`).
+/// `dirs::data_local_dir()` resolves to the sandbox container's data dir for
+/// both processes, same as `home_dir()` does for the container home above, so
+/// this needs no `AppHandle` to match Tauri's `app_data_dir()` (same
+/// identifier, `com.mailvault.app`, from tauri.conf.json).
+fn daemon_pid_path() -> PathBuf {
+    dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.mailvault.app")
+        .join("daemon.pid")
+}
+
+/// Parse a PID file's content: a bare integer, optionally with surrounding
+/// whitespace (`write_pid_file` writes no newline, but don't depend on that).
+/// Anything else — empty, garbage, negative, non-numeric — is not a pid we
+/// trust enough to signal.
+fn parse_daemon_pid(content: &str) -> Option<libc::pid_t> {
+    content.trim().parse::<libc::pid_t>().ok().filter(|&pid| pid > 0)
+}
+
+fn read_daemon_pid_file(path: &Path) -> Option<libc::pid_t> {
+    parse_daemon_pid(&std::fs::read_to_string(path).ok()?)
+}
+
+/// True only if `pid` is a running process whose executable is named
+/// `mailvault-daemon` — never signal a pid before confirming this: a stale
+/// pid file naming a since-reused pid must not kill an unrelated process.
+#[cfg(target_os = "macos")]
+fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
+    let mut buf = [0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    // SAFETY: `buf` is sized exactly to Apple's documented
+    // PROC_PIDPATHINFO_MAXSIZE; proc_pidpath writes at most buf.len() bytes
+    // and returns the byte count written, or -1 on error (no such pid, etc).
+    let n = unsafe { libc::proc_pidpath(pid, buf.as_mut_ptr() as *mut _, buf.len() as u32) };
+    if n <= 0 {
+        return false;
+    }
+    std::str::from_utf8(&buf[..n as usize])
+        .ok()
+        .and_then(|s| Path::new(s).file_name())
+        .and_then(|n| n.to_str())
+        == Some("mailvault-daemon")
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pid_is_mailvault_daemon(pid: libc::pid_t) -> bool {
+    std::fs::read_link(format!("/proc/{pid}/exe"))
+        .ok()
+        .and_then(|p| p.file_name().and_then(|n| n.to_str().map(str::to_owned)))
+        .as_deref()
+        == Some("mailvault-daemon")
+}
+
+/// `kill(pid, 0)` sends no signal, only checks whether the process exists (and
+/// is ours to signal). ESRCH means it is gone; any other outcome (alive, or
+/// EPERM because it's alive but owned by someone else) is not "dead".
+fn pid_is_dead(pid: libc::pid_t) -> bool {
+    // SAFETY: signal 0 is documented as a pure existence/permission check —
+    // it never actually signals the process.
+    let ret = unsafe { libc::kill(pid, 0) };
+    ret == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH)
+}
+
 /// Find the daemon binary. Checks next to the app binary first, then common build paths.
 fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     // 1. Next to the Tauri app binary (release layout)
@@ -4727,7 +4800,7 @@ fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
 }
 
 /// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
-fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
     // Already running?
     if socket_path.exists() {
         // Quick liveness check: can we connect?
@@ -4820,6 +4893,108 @@ pub fn shutdown_daemon_child() {
     }
 }
 
+/// Inode of the socket whose daemon last passed the build check (0 = none).
+static VERIFIED_SOCKET_INO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// One restart per app run for a build mismatch; a stale staged sidecar must not loop.
+static RESTARTED_FOR_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn socket_ino(path: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata(path).map(|m| m.ino()).unwrap_or(0)
+}
+
+/// A daemon is listening AND it is this build's (spec §3.3). Blocking: call it
+/// from a blocking thread.
+pub(crate) fn ensure_daemon_running(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+    ensure_daemon_socket(app_handle, socket_path)?;
+    verify_daemon_build(app_handle, socket_path)
+}
+
+fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path) -> Result<(), String> {
+    use mailvault_core::daemon_ipc::{call, check_build, BuildCheck};
+    use std::sync::atomic::Ordering::SeqCst;
+    let ino = socket_ino(socket_path);
+    if ino != 0 && VERIFIED_SOCKET_INO.load(SeqCst) == ino {
+        return Ok(());
+    }
+    let (_, token_path) = daemon_ipc_paths()?;
+    let token = std::fs::read_to_string(&token_path).map_err(|e| format!("daemon token: {e}"))?;
+    let beat = call(socket_path, &token, "daemon.heartbeat", serde_json::json!({}), std::time::Duration::from_secs(3))
+        .map_err(|e| format!("daemon heartbeat: {e:?}"))?;
+    let theirs = beat.get("buildId").and_then(|v| v.as_str()).map(str::to_owned);
+    match check_build(mailvault_core::BUILD_ID, theirs.as_deref(), RESTARTED_FOR_BUILD.load(SeqCst)) {
+        BuildCheck::Same => {}
+        BuildCheck::Accept => warn!("daemon build {theirs:?} still differs from app build {} after a restart; using it", mailvault_core::BUILD_ID),
+        BuildCheck::Restart => {
+            if RESTARTED_FOR_BUILD.compare_exchange(false, true, SeqCst, SeqCst).is_ok() {
+                warn!("daemon build {theirs:?} differs from app build {}; restarting it", mailvault_core::BUILD_ID);
+                stop_daemon();
+                ensure_daemon_socket(app_handle, socket_path)?;
+                return verify_daemon_build(app_handle, socket_path); // can only be Same or Accept now
+            }
+        }
+    }
+    VERIFIED_SOCKET_INO.store(socket_ino(socket_path), SeqCst);
+    Ok(())
+}
+
+/// Stop whichever daemon owns the socket, ours or an orphan left behind by a
+/// crashed app, with the same cleanup as SIGTERM (`daemon.shutdown`), then
+/// reap or kill our own tracked child. Blocking.
+///
+/// Returns only once the socket is gone and, when a pid was known, that pid
+/// is confirmed dead — or after the SIGKILL escalation below runs out. A
+/// replacement daemon must never be spawned while the old one still holds its
+/// singleton lock: the daemon's own startup lock retry is capped at 2s
+/// (src-daemon/src/main.rs `acquire_singleton_lock` loop), which a graceful
+/// shutdown can exceed when IMAP LOGOUT hangs — so the caller waits here
+/// rather than racing a respawn against that window.
+pub(crate) fn stop_daemon() {
+    if let Ok((socket, token_path)) = daemon_ipc_paths() {
+        let known_pid = read_daemon_pid_file(&daemon_pid_path());
+        if let Ok(token) = std::fs::read_to_string(&token_path) {
+            let _ = mailvault_core::daemon_ipc::call(&socket, &token, "daemon.shutdown", serde_json::json!({}), std::time::Duration::from_secs(1));
+        }
+        let deadline = std::time::Instant::now() + DAEMON_STOP_GRACE;
+        while socket.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+
+        // R3: an orphan from a build too old to answer `daemon.shutdown` (or
+        // one the RPC above simply never reached) leaves the socket behind.
+        // Signal its pid ourselves instead of waiting on it forever.
+        if socket.exists() {
+            match known_pid {
+                Some(pid) if pid_is_mailvault_daemon(pid) => {
+                    warn!("orphan daemon (pid {pid}) did not clear its socket after daemon.shutdown; sending SIGTERM");
+                    // SAFETY: pid was just confirmed to be a running mailvault-daemon process.
+                    unsafe { libc::kill(pid, libc::SIGTERM) };
+                    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                    while (socket.exists() || !pid_is_dead(pid)) && std::time::Instant::now() < deadline {
+                        std::thread::sleep(std::time::Duration::from_millis(50));
+                    }
+                    if !pid_is_dead(pid) {
+                        warn!("orphan daemon (pid {pid}) ignored SIGTERM; sending SIGKILL");
+                        // SAFETY: pid was confirmed to be a mailvault-daemon process and SIGTERM already failed to stop it.
+                        unsafe { libc::kill(pid, libc::SIGKILL) };
+                        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(1);
+                        while !pid_is_dead(pid) && std::time::Instant::now() < deadline {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
+                    }
+                    if socket.exists() {
+                        let _ = std::fs::remove_file(&socket);
+                    }
+                }
+                Some(pid) => warn!("daemon pid file names pid {pid}, which is not a mailvault-daemon process; leaving the socket alone"),
+                None => warn!("daemon socket outlived daemon.shutdown and no pid file was found; leaving it alone"),
+            }
+        }
+    }
+    shutdown_daemon_child(); // reaps an exited child; SIGTERM then SIGKILL if ours is still up
+    VERIFIED_SOCKET_INO.store(0, std::sync::atomic::Ordering::SeqCst);
+}
+
 #[tauri::command]
 async fn daemon_rpc(
     app_handle: tauri::AppHandle,
@@ -4829,18 +5004,15 @@ async fn daemon_rpc(
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
-    // Must match src-daemon's ipc_dir(): $HOME/.mailvault (the sandbox container
-    // home when sandboxed). NOT app_data_dir — the path there is too long for
-    // SUN_LEN and the daemon never binds it.
-    let ipc_dir = dirs::home_dir()
-        .ok_or_else(|| "Could not resolve home directory".to_string())?
-        .join(".mailvault");
-
-    let socket_path = ipc_dir.join("mv.sock");
-    let token_path = ipc_dir.join("mv.token");
-
-    // Auto-spawn daemon if not running (on-demand mode)
-    ensure_daemon_running(&app_handle, &socket_path)?;
+    let (socket_path, token_path) = daemon_ipc_paths()?;
+    // Blocking: spawn check, heartbeat, possibly a restart. Never on a tokio worker.
+    {
+        let app = app_handle.clone();
+        let sock = socket_path.clone();
+        tokio::task::spawn_blocking(move || ensure_daemon_running(&app, &sock))
+            .await
+            .map_err(|e| format!("Task join error: {e}"))??;
+    }
 
     // Read auth token
     let token = std::fs::read_to_string(&token_path)
@@ -5666,6 +5838,44 @@ mod custody_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn daemon_ipc_paths_live_under_home_dot_mailvault() {
+        let (sock, token) = crate::daemon_ipc_paths().unwrap();
+        let home = dirs::home_dir().unwrap().join(".mailvault");
+        assert_eq!(sock, home.join("mv.sock"));
+        assert_eq!(token, home.join("mv.token"));
+    }
+
+    #[test]
+    fn daemon_pid_path_lives_under_the_app_data_dir_not_the_ipc_dir() {
+        // Must match src-daemon's get_data_dir() + write_pid_file, and must
+        // differ from daemon_ipc_paths()'s ~/.mailvault — they are two
+        // different directories the daemon writes into.
+        let expected = dirs::data_local_dir().unwrap().join("com.mailvault.app").join("daemon.pid");
+        assert_eq!(crate::daemon_pid_path(), expected);
+        let (sock, _) = crate::daemon_ipc_paths().unwrap();
+        assert_ne!(crate::daemon_pid_path().parent(), sock.parent());
+    }
+
+    #[test]
+    fn parse_daemon_pid_reads_a_bare_integer() {
+        assert_eq!(crate::parse_daemon_pid("4242"), Some(4242));
+    }
+
+    #[test]
+    fn parse_daemon_pid_tolerates_a_trailing_newline() {
+        assert_eq!(crate::parse_daemon_pid("4242\n"), Some(4242));
+        assert_eq!(crate::parse_daemon_pid("  4242  \n"), Some(4242));
+    }
+
+    #[test]
+    fn parse_daemon_pid_rejects_garbage() {
+        assert_eq!(crate::parse_daemon_pid(""), None);
+        assert_eq!(crate::parse_daemon_pid("not a pid"), None);
+        assert_eq!(crate::parse_daemon_pid("-1"), None);
+        assert_eq!(crate::parse_daemon_pid("0"), None);
+    }
 
     #[test]
     fn an_explicit_update_track_wins_over_the_build() {
