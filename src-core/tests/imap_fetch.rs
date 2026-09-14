@@ -567,19 +567,12 @@ async fn a_poisoned_uid_is_skipped_without_a_reconnect() {
     assert_eq!(skipped, vec![None], "a row the grammar could not finish names nothing: {skipped:?}");
 
     // Same session: the socket survived the bad line.
-    let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3)
-        .await
-        .expect("same for the virtualized-scroll path");
-    assert_eq!(total, 3);
-    assert_eq!(sorted_uids(&rows), vec![1, 3]);
-    assert_eq!(skipped, vec![None], "a row the grammar could not finish names nothing: {skipped:?}");
-
     let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3])
         .await
         .expect("and for the daemon's cold sync / backfill path");
     assert_eq!(sorted_uids(&rows), vec![1, 3]);
 
-    assert_eq!(server.connection_count(), connections, "three poisoned pages, zero reconnects");
+    assert_eq!(server.connection_count(), connections, "two poisoned pages, zero reconnects");
 }
 
 /// A `(UID FLAGS)` listing row the grammar cannot finish must vanish, not

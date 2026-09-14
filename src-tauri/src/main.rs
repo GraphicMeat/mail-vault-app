@@ -5184,7 +5184,6 @@ fn main() {
             commands::smtp_build_draft_mime,
             commands::imap_get_mailboxes,
             commands::imap_get_emails,
-            commands::imap_get_emails_range,
             commands::imap_check_mailbox_status,
             commands::imap_folder_status,
             commands::imap_fetch_changed_flags,

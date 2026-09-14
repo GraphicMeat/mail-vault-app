@@ -692,10 +692,6 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         const limit = args.limit || 200;
         return { emails: rows.slice(0, limit).map(header), total: rows.length };
       }
-      case 'imap_get_emails_range': {
-        const rows = visible(accountId, mailbox).sort((a, b) => b.uid - a.uid);
-        return { emails: rows.slice(args.startIndex || 0, (args.endIndex || rows.length) + 1).map(header), total: rows.length };
-      }
       case 'imap_check_mailbox_status': {
         const rows = visible(accountId, mailbox); const max = rows.reduce((highest, row) => Math.max(highest, row.uid), 0);
         return { exists: rows.length, uidValidity: 1, uidNext: max + 1, highestModseq: max + 1 };

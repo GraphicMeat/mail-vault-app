@@ -118,16 +118,6 @@ export async function fetchEmails(account, mailbox = 'INBOX', page = 1, limit = 
   });
 }
 
-export async function fetchEmailsRange(account, mailbox = 'INBOX', startIndex = 0, endIndex = 50) {
-  if (IS_TAURI) {
-    return tauriInvoke('imap_get_emails_range', { account, mailbox, startIndex, endIndex });
-  }
-  return httpRequest('/emails-range', {
-    method: 'POST',
-    body: JSON.stringify({ account, mailbox, startIndex, endIndex }),
-  });
-}
-
 // ── Delta-sync helpers ────────────────────────────────────────────────────
 
 export async function checkMailboxStatus(account, mailbox = 'INBOX') {

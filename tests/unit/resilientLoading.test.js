@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 
 /**
  * Determines if an account has valid credentials (password or OAuth2).
- * Mirrors the check in loadMoreEmails, loadEmailRange, useBackgroundCaching.
+ * Mirrors the check in loadMoreEmails, useBackgroundCaching.
  */
 function hasCredentials(account) {
   if (!account) return false;

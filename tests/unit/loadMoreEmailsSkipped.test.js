@@ -42,7 +42,6 @@ vi.mock('../../src/services/db', () => ({
 const mockFetchEmails = vi.fn();
 vi.mock('../../src/services/api', () => ({
   fetchEmails: (...args) => mockFetchEmails(...args),
-  fetchEmailsRange: vi.fn(),
   fetchEmailLight: vi.fn().mockResolvedValue(null),
   backupScanUids: vi.fn().mockResolvedValue(null),
   backupGetExternalLocation: vi.fn().mockResolvedValue({ status: 'ready' }),

@@ -784,55 +784,6 @@ pub async fn fetch_emails_page(
     Ok((emails, total, has_more, skipped_uids))
 }
 
-/// Fetch email headers by display index range (for virtualized scrolling)
-pub async fn fetch_emails_range(
-    session: &mut ImapSession,
-    mailbox: &str,
-    start_index: u32,
-    end_index: u32,
-) -> Result<(Vec<EmailHeader>, u32, Vec<Option<u32>>), String> {
-    let mbox = select_mailbox(session, mailbox).await?;
-    let total = mbox.exists;
-
-    if total == 0 {
-        return Ok((Vec::new(), 0, Vec::new()));
-    }
-
-    let clamped_start = start_index.min(total - 1);
-    let clamped_end = end_index.min(total);
-
-    if clamped_start >= clamped_end {
-        return Ok((Vec::new(), total, Vec::new()));
-    }
-
-    let imap_start = (total - clamped_end + 1).max(1);
-    let imap_end = total - clamped_start;
-
-    let range = format!("{}:{}", imap_start, imap_end);
-    let fetches =
-        fetch_headers_for_range(session, &range, "fetch_emails_range", "FETCH range failed")
-            .await?;
-    let mut skipped_uids: Vec<Option<u32>> = Vec::new();
-
-    let mut emails = Vec::new();
-
-    for fetch in &fetches {
-        match parse_header_from_fetch(fetch) {
-            Ok(mut header) => {
-                header.display_index = Some(total - header.seq);
-                emails.push(header);
-            }
-            Err(e) => {
-                warn!("Failed to parse range message uid={:?}: {}", fetch.uid, e);
-                skipped_uids.push(fetch.uid);
-            }
-        }
-    }
-
-    emails.sort_by_key(|e| e.display_index);
-    Ok((emails, total, skipped_uids))
-}
-
 /// Check mailbox status — returns (exists, uid_validity, uid_next, highest_mod_seq).
 /// Uses CONDSTORE-aware SELECT if the server supports it.
 /// Used for delta-sync: detect changes without fetching any messages.

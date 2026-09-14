@@ -188,37 +188,6 @@ pub async fn imap_get_emails(
     }))
 }
 
-// ── Fetch emails by index range ─────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_get_emails_range(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    mailbox: Option<String>,
-    start_index: Option<u32>,
-    end_index: Option<u32>,
-) -> Result<serde_json::Value, String> {
-    let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-    let start = start_index.unwrap_or(0);
-    let end = end_index.unwrap_or(50);
-
-    let (emails, total, skipped_uids) =
-        with_background(&pool, &account, |mut session| async move {
-            let result = imap::fetch_emails_range(&mut session, &mailbox, start, end).await
-                .map_err(|e| format!("Failed to fetch emails range: {}", e))?;
-            Ok((result, session, Some(mailbox)))
-        }).await?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "emails": emails,
-        "total": total,
-        "startIndex": start,
-        "endIndex": end,
-        "skippedUids": skipped_uids
-    }))
-}
-
 // ── Check mailbox status (delta-sync) ───────────────────────────────────
 
 #[tauri::command]

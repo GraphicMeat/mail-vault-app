@@ -1,8 +1,8 @@
-// ── loadMoreEmails workflow — pagination and range loading ──
+// ── loadMoreEmails workflow — pagination ──
 
 import * as db from '../db';
 import * as api from '../api';
-import { ensureFreshToken, resolveServerAccount } from '../authUtils';
+import { resolveServerAccount } from '../authUtils';
 import { getSyncStatus } from '../syncService';
 import { saveRestoreDescriptor as _saveRestore } from '../cacheManager';
 import { _buildRestoreDescriptor } from '../../stores/slices/unifiedHelpers';
@@ -10,10 +10,6 @@ import { serverUids } from '../../stores/slices/serverUids';
 import {
   getLoadMoreTimer, setLoadMoreTimer,
 } from '../../stores/slices/messageListSlice';
-import { mergeRanges, evictExcess } from './helpers/rangeLoading';
-
-// Module-level range retry state
-const _rangeRetryDelays = new Map();
 
 // How many 1s waits we'll grant a daemon backfill before paginating ourselves.
 // The daemon is meant to clear `backfilling` when it stops, but a daemon that
@@ -272,116 +268,5 @@ export async function loadMoreEmails() {
       if (timer) clearTimeout(timer);
       setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, nextDelay));
     }
-  }
-}
-
-
-// ── loadEmailRange workflow ──
-
-export async function loadEmailRange(startIndex, endIndex) {
-  const { useMailStore } = await import('../../stores/mailStore');
-  const get = () => useMailStore.getState();
-
-  const { activeAccountId, accounts, activeMailbox, loadedRanges, loadingRanges, savedEmailIds } = get();
-  let account = accounts.find(a => a.id === activeAccountId);
-  account = await ensureFreshToken(account);
-
-  const hasCredentials = account && (account.password || (account.authType === 'oauth2' && account.oauth2AccessToken));
-  if (!hasCredentials) return;
-
-  // Check if this range is already loaded
-  const isRangeLoaded = (start, end) => {
-    for (const range of loadedRanges) {
-      if (range.start <= start && range.end >= end) return true;
-    }
-    return false;
-  };
-
-  if (isRangeLoaded(startIndex, endIndex)) return;
-
-  const rangeKey = `${startIndex}-${endIndex}`;
-  if (loadingRanges.has(rangeKey)) return;
-
-  const newLoadingRanges = new Set(loadingRanges);
-  newLoadingRanges.add(rangeKey);
-  useMailStore.setState({ loadingRanges: newLoadingRanges });
-
-  try {
-    const result = await api.fetchEmailsRange(account, activeMailbox, startIndex, endIndex);
-
-    const previousTotal = get().totalEmails;
-    if (previousTotal > 0 && result.total !== previousTotal) {
-      console.warn(`[loadEmailRange] Mailbox total changed (${previousTotal} -> ${result.total}), restarting`);
-      const loadingRangesAfter = new Set(get().loadingRanges);
-      loadingRangesAfter.delete(rangeKey);
-      useMailStore.setState({ loadingRanges: loadingRangesAfter });
-      get().loadEmails();
-      return;
-    }
-
-    if (result.emails && result.emails.length > 0) {
-      const currentEmails = get().emails;
-      const existingUids = new Set(currentEmails.map(e => e.uid));
-
-      const newEntries = [];
-      for (const email of result.emails) {
-        if (!existingUids.has(email.uid)) {
-          newEntries.push({ ...email, isLocal: savedEmailIds.has(email.uid), source: 'server' });
-        }
-      }
-
-      const merged = [...currentEmails, ...newEntries];
-      for (const e of merged) {
-        if (e._ts === undefined) e._ts = new Date(e.date || e.internalDate || 0).getTime();
-      }
-      merged.sort((a, b) => b._ts - a._ts);
-
-      const finalEmails = evictExcess(merged);
-
-      const newLoadedRanges = [...get().loadedRanges, { start: startIndex, end: endIndex }];
-      const mergedRanges = mergeRanges(newLoadedRanges);
-
-      const loadingRangesAfter = new Set(get().loadingRanges);
-      loadingRangesAfter.delete(rangeKey);
-      const rangeServerUidSet = new Set(get().serverUids.uids);
-      for (const e of result.emails) rangeServerUidSet.add(e.uid);
-
-      useMailStore.setState({
-        loadedRanges: mergedRanges,
-        loadingRanges: loadingRangesAfter,
-        emails: finalEmails,
-        totalEmails: result.total,
-        // Widening only — carry the existing completeness claim forward.
-        serverUids: serverUids(rangeServerUidSet, { complete: get().serverUids.complete })
-      });
-
-      get().updateSortedEmails();
-
-      // Only the range just fetched — see the note in loadMoreEmails.
-      if (newEntries.length) {
-        db.saveEmailHeaders(activeAccountId, activeMailbox, newEntries, result.total)
-          .catch(e => console.warn('[loadEmailRange] Failed to cache headers:', e));
-      }
-
-      if (result.skippedUids && result.skippedUids.length > 0) {
-        // Same as loadMoreEmails: the skip is a property of the message, not
-        // of this attempt, so re-requesting the range would loop for ever.
-        console.warn(`[loadEmailRange] ${result.skippedUids.length} unreadable message(s) left out of range ${startIndex}-${endIndex}`);
-      }
-    }
-  } catch (error) {
-    console.error('[loadEmailRange] Failed:', error);
-    const loadingRangesAfter = new Set(get().loadingRanges);
-    loadingRangesAfter.delete(rangeKey);
-    useMailStore.setState({ loadingRanges: loadingRangesAfter });
-
-    const prevDelay = _rangeRetryDelays.get(rangeKey) || 0;
-    const nextDelay = prevDelay === 0 ? 3000 : Math.min(prevDelay * 2, 120000);
-    _rangeRetryDelays.set(rangeKey, nextDelay);
-    console.log(`[loadEmailRange] Retrying range ${startIndex}-${endIndex} in ${nextDelay / 1000}s`);
-    setTimeout(() => {
-      _rangeRetryDelays.delete(rangeKey);
-      get().loadEmailRange(startIndex, endIndex);
-    }, nextDelay);
   }
 }

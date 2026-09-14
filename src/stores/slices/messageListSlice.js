@@ -13,10 +13,7 @@ import {
   _loadEmailsViaGraph,
   loadSentHeaders as _loadSentHeaders,
 } from '../../services/workflows/loadEmails';
-import {
-  loadMoreEmails as _loadMoreEmails,
-  loadEmailRange as _loadEmailRange,
-} from '../../services/workflows/loadMoreEmails';
+import { loadMoreEmails as _loadMoreEmails } from '../../services/workflows/loadMoreEmails';
 import { findSentMailboxPath } from '../../utils/sentFolder';
 import { emailScopeKey, _resolveMailboxPath } from './unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
@@ -260,8 +257,6 @@ export const createMessageListSlice = (set, get) => ({
 
   // Track which ranges have been loaded
   loadedRanges: [], // Array of {start, end} objects
-  // Loading state for specific ranges
-  loadingRanges: new Set(), // Set of "start-end" strings
 
   // Update sorted emails (memoization for performance) — pure synchronous derivation
   updateSortedEmails: () => {
@@ -469,7 +464,6 @@ export const createMessageListSlice = (set, get) => ({
   loadEmails: () => _loadEmails(),
   _loadEmailsViaGraph: (account, activeAccountId, activeMailbox, generation) => _loadEmailsViaGraph(account, activeAccountId, activeMailbox, generation),
   loadMoreEmails: () => _loadMoreEmails(),
-  loadEmailRange: (startIndex, endIndex) => _loadEmailRange(startIndex, endIndex),
   loadSentHeaders: (accountId) => _loadSentHeaders(accountId),
 
   // ── Pure synchronous derivations (stay inline) ──

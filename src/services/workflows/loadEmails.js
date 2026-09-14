@@ -263,7 +263,6 @@ export async function loadEmails() {
         useMailStore.setState({
           emails: partialHeaders.emails,
           loadedRanges: [{ start: 0, end: partialHeaders.emails.length }],
-          loadingRanges: new Set(),
           totalEmails: cachedHeaders.totalEmails,
           loading: false,
           loadingMore: true,
@@ -286,7 +285,6 @@ export async function loadEmails() {
         hasMoreEmails: true,
         totalEmails: 0,
         loadedRanges: [],
-        loadingRanges: new Set(),
         emails: []
       });
       get().updateSortedEmails();
