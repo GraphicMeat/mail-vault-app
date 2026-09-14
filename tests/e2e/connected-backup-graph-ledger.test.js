@@ -237,7 +237,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(firstRun.success).toBe(true);
     expect(firstRun.errors).toBe(1);
     expect(firstRun.error_message).toMatch(/ledger/i);
-    expect(firstRun.error_message).toMatch(/Receipts/);
+    expect(firstRun.error_message).toMatch(/^Receipts was not backed up: /);
     expect(readFileSync(ledgerPath('Receipts'), 'utf8')).toBe('{"1":"graph-receipts-m1",');
     expect(readdirSync(cur('Receipts'))).toEqual(['1:2,.eml']);
   });
@@ -321,7 +321,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(result.cancelled).toBe(true);
     // Inbox is folder 0, Receipts 1, Slow 2. Counting Receipts would resume at Slow.
     expect(result.completed_folders).toBe(1);
-    expect(result.error_message).toMatch(/Receipts/);
+    expect(result.error_message).toMatch(/^Receipts was not backed up: /);
     expect(result.error_message).toMatch(/ledger/i);
   });
 });
