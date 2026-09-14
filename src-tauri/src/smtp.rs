@@ -139,10 +139,15 @@ fn build_mime_opts(
     let from_mailbox: Mailbox = {
         let addr: lettre::Address = from_address.parse()
             .map_err(|e| format!("Invalid from email: {}", e))?;
-        match account.name.as_deref() {
-            Some(name) if !name.is_empty() => Mailbox::new(Some(name.to_string()), addr),
-            _ => Mailbox::new(None, addr),
-        }
+        // Compose falls back to the address as the display name when none is
+        // set. lettre RFC 2047-encodes such a name (`@` is not atom-safe) and
+        // Purelymail rejects that header ("501 5.1.7 Invalid or unparseable
+        // From address"). A name that is just an address says nothing: drop
+        // it, and never let it name the login under a send-as override.
+        let name = account.name.as_deref().map(str::trim).filter(|n| {
+            !n.is_empty() && !n.eq_ignore_ascii_case(from_address) && !n.eq_ignore_ascii_case(&account.email)
+        });
+        Mailbox::new(name.map(String::from), addr)
     };
 
     let to_mailboxes = parse_address_list(&email.to)
@@ -744,6 +749,43 @@ mod tests {
                 "override {:?} produced: {}", override_value, raw
             );
         }
+    }
+
+    fn named(email: &str, from_email: Option<&str>, name: &str) -> ImapConfig {
+        ImapConfig { name: Some(name.to_string()), ..account(email, from_email) }
+    }
+
+    #[test]
+    fn from_header_drops_a_name_that_is_the_address() {
+        // Compose falls back to the address when no display name is set. lettre
+        // RFC 2047-encodes it (`@` is not atom-safe), and Purelymail rejects
+        // that header with "501 5.1.7 Invalid or unparseable From address".
+        for name in ["prime@graphicmeat.com", "PRIME@graphicmeat.com", " prime@graphicmeat.com "] {
+            let raw = headers_of(&named("prime@graphicmeat.com", None, name));
+            assert_eq!(from_line(&raw), "From: prime@graphicmeat.com", "name {:?}", name);
+        }
+    }
+
+    #[test]
+    fn from_header_drops_a_name_that_is_the_login_under_send_as() {
+        // The same fallback under a send-as override names the login, which
+        // would both break the header and leak the login address.
+        let raw = headers_of(&named("ABC@fastmail.fm", Some("DEF@fastmail.fm"), "ABC@fastmail.fm"));
+        assert_eq!(from_line(&raw), "From: DEF@fastmail.fm");
+        assert!(!raw.contains("ABC@fastmail.fm"), "login leaked into headers: {}", raw);
+    }
+
+    #[test]
+    fn from_header_drops_a_blank_name() {
+        let raw = headers_of(&named("me@x.com", None, "   "));
+        assert_eq!(from_line(&raw), "From: me@x.com");
+    }
+
+    #[test]
+    fn from_header_keeps_a_real_name() {
+        let raw = headers_of(&named("prime@graphicmeat.com", None, "Rokas"));
+        let from = from_line(&raw);
+        assert!(from.contains("Rokas") && from.ends_with("<prime@graphicmeat.com>"), "From was: {}", from);
     }
 
     fn message_id_line(raw: &str) -> String {
