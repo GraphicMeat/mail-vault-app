@@ -237,7 +237,9 @@ const GRAPH_BASE_DEFAULT: &str = "https://graph.microsoft.com/v1.0";
 /// client at a mock on this machine with `MAILVAULT_GRAPH_BASE`. The override is
 /// honoured only for a plain-http loopback URL with no userinfo, because every
 /// request carries the user's bearer token and a base anywhere else would hand
-/// it over. Same rule as `MAILVAULT_IMAP_PLAINTEXT` on the IMAP side.
+/// it over. The loopback rule is the one `MAILVAULT_IMAP_PLAINTEXT` applies on
+/// the IMAP side; unlike that hatch, this one is only ever read in debug
+/// builds (`graph_base_env`).
 fn resolve_graph_base(env: Option<&str>) -> String {
     let Some(raw) = env.map(str::trim).filter(|s| !s.is_empty()) else {
         return GRAPH_BASE_DEFAULT.to_string();
@@ -266,7 +268,20 @@ fn resolve_graph_base(env: Option<&str>) -> String {
 
 fn graph_base() -> &'static str {
     static BASE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-    BASE.get_or_init(|| resolve_graph_base(std::env::var("MAILVAULT_GRAPH_BASE").ok().as_deref()))
+    BASE.get_or_init(|| resolve_graph_base(graph_base_env().as_deref()))
+}
+
+/// The e2e override, read in debug builds only (like `MAILVAULT_TEST_CREDENTIALS`):
+/// a shipped binary ignores it, so whoever launches MailVault cannot point the
+/// user's Outlook token at a listener of their own, loopback or not.
+#[cfg(debug_assertions)]
+fn graph_base_env() -> Option<String> {
+    std::env::var("MAILVAULT_GRAPH_BASE").ok()
+}
+
+#[cfg(not(debug_assertions))]
+fn graph_base_env() -> Option<String> {
+    None
 }
 
 /// Well-known folder name -> the storage key every store uses for it.
