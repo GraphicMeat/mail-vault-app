@@ -118,6 +118,9 @@ describe('Outlook backup files every message under its ledger uid', function () 
     await fetch(`${browser.mockGraph.origin}/__mock/requests`, { method: 'DELETE' });
   }
 
+  const hold = (id) => fetch(`${browser.mockGraph.origin}/__mock/hold`, { method: 'PUT', body: JSON.stringify({ id }) });
+  const release = () => fetch(`${browser.mockGraph.origin}/__mock/hold`, { method: 'DELETE' });
+
   /** Graph ids whose MIME the app downloaded since the last serve(). */
   async function mimeFetches() {
     const log = await (await fetch(`${browser.mockGraph.origin}/__mock/requests`)).json();
@@ -182,7 +185,8 @@ describe('Outlook backup files every message under its ledger uid', function () 
     ]);
   });
 
-  after(function () {
+  after(async function () {
+    if (browser.mockGraph?.origin) await release();
     if (mirrorRoot) rmSync(mirrorRoot, { recursive: true, force: true });
   });
 
@@ -233,6 +237,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(firstRun.success).toBe(true);
     expect(firstRun.errors).toBe(1);
     expect(firstRun.error_message).toMatch(/ledger/i);
+    expect(firstRun.error_message).toMatch(/Receipts/);
     expect(readFileSync(ledgerPath('Receipts'), 'utf8')).toBe('{"1":"graph-receipts-m1",');
     expect(readdirSync(cur('Receipts'))).toEqual(['1:2,.eml']);
   });
@@ -277,5 +282,46 @@ describe('Outlook backup files every message under its ledger uid', function () 
     expect(result.emails_backed_up).toBe(1);
     expect(messageIdAt(cur('INBOX'), 8, vaultNames)).toBe(APP_ALLOCATED.internetMessageId);
     expect(messageIdAt(mirror('INBOX'), 8, mirrorNames)).toBe(APP_ALLOCATED.internetMessageId);
+  });
+
+  it('a run cancelled after a folder the ledger refused resumes at that folder, and says why', async function () {
+    // Receipts' ledger is still unreadable. Slow comes after it: its newer
+    // message is gone (404), its older one is held on the mock, and the run is
+    // cancelled while it waits. A resumed run skips folders by position, so the
+    // checkpoint must not pass Receipts; and the refusal, not the later 404, is
+    // what the user reads.
+    const HELD = msg('slow', 'held', 1);
+    const GONE = { ...msg('slow', 'gone', 30), mime: null };
+    await serve([
+      { id: 'folder-inbox', displayName: 'Inbox', messages: [...INBOX, INBOX_NEW] },
+      { id: 'folder-receipts', displayName: 'Receipts', messages: [...RECEIPTS, RECEIPTS_NEW] },
+      { id: 'folder-slow', displayName: 'Slow', messages: [HELD, GONE] },
+    ]);
+    await hold(HELD.id);
+
+    // Started without waiting on it: a pending executeAsync holds the WebDriver
+    // session, and backup_cancel has to go through that same session.
+    await browser.execute((cmd, args) => {
+      window.__graphLedgerRun = window.__TAURI__.core.invoke(cmd, args)
+        .catch((e) => ({ __error: String(e && e.message || e) }));
+    }, 'backup_run_account', { accountId: ACCOUNT_ID, accountJson: JSON.stringify(account), backupPath: null, skipFolders: 0 });
+
+    await browser.waitUntil(async () => (await mimeFetches()).includes(HELD.id), {
+      timeout: 60_000,
+      interval: 200,
+      timeoutMsg: 'the backup never asked for the held message',
+    });
+    expect(await mimeFetches()).toContain(GONE.id); // anti-vacuity: the 404 came before the hold
+    await invoke('backup_cancel', {});
+    await release();
+
+    const result = await browser.executeAsync((done) => { window.__graphLedgerRun.then(done); });
+    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
+    console.log('[graph-ledger] cancelled run ->', JSON.stringify(result));
+    expect(result.cancelled).toBe(true);
+    // Inbox is folder 0, Receipts 1, Slow 2. Counting Receipts would resume at Slow.
+    expect(result.completed_folders).toBe(1);
+    expect(result.error_message).toMatch(/Receipts/);
+    expect(result.error_message).toMatch(/ledger/i);
   });
 });

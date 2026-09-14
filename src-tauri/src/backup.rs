@@ -1087,6 +1087,10 @@ async fn run_graph_backup(
     // The server's words for the last message that could not be fetched. A
     // count alone leaves the user with "something failed" and nowhere to look.
     let mut last_message_error: Option<String> = None;
+    // The first folder the uid ledger refused, and why. It stored nothing: a
+    // resumed run skips folders by position, so its checkpoint must not pass
+    // this one, and these are the words the user needs to read.
+    let mut refused: Option<(usize, String)> = None;
 
     info!(
         "backup(graph): starting for account {} ({} folders, skipping first {})",
@@ -1120,6 +1124,28 @@ async fn run_graph_backup(
                 .join("cur")
         });
 
+        // List the whole folder before numbering any of it. The uid a message
+        // is filed under comes from the ledger the app keeps, never from where
+        // the message sits in this listing: Graph lists newest first, so one
+        // arrival moves every position, and filing by position put the oldest
+        // message under the number the ledger gives the new one. One call for
+        // the folder also means one read of the vault and one ledger write.
+        let mut listed: Vec<crate::graph::GraphMessage> = Vec::new();
+        let mut skip = 0u32;
+        let page_size = 100u32;
+        loop {
+            if cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let (messages, next_link) = client.list_messages(&folder.id, page_size, skip).await?;
+            let page_len = messages.len();
+            listed.extend(messages);
+            if page_len == 0 || next_link.is_none() || page_len < page_size as usize {
+                break;
+            }
+            skip += page_size;
+        }
+
         // Get local UIDs, after the pre-sync with the mirror, as the IMAP path
         // does: a message restored here is not downloaded only to be skipped.
         // Off the runtime workers for the same reason too.
@@ -1152,28 +1178,6 @@ async fn run_graph_backup(
             .map_err(|e| format!("folder listing panicked: {}", e))?
         };
 
-        // List the whole folder before numbering any of it. The uid a message
-        // is filed under comes from the ledger the app keeps, never from where
-        // the message sits in this listing: Graph lists newest first, so one
-        // arrival moves every position, and filing by position put the oldest
-        // message under the number the ledger gives the new one. One call for
-        // the folder also means one read of the vault and one ledger write.
-        let mut listed: Vec<crate::graph::GraphMessage> = Vec::new();
-        let mut skip = 0u32;
-        let page_size = 100u32;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                break;
-            }
-            let (messages, next_link) = client.list_messages(&folder.id, page_size, skip).await?;
-            let page_len = messages.len();
-            listed.extend(messages);
-            if page_len == 0 || next_link.is_none() || page_len < page_size as usize {
-                break;
-            }
-            skip += page_size;
-        }
-
         if !listed.is_empty() && !cancel.load(Ordering::Relaxed) {
             let entries: Vec<(String, Option<String>)> = listed
                 .iter()
@@ -1195,7 +1199,7 @@ async fn run_graph_backup(
                 Err(e) => {
                     warn!("backup(graph): {} not backed up: {}", mailbox_path, e);
                     total_errors += 1;
-                    last_message_error = Some(e);
+                    refused.get_or_insert((folder_idx, format!("{} was not backed up: {}", mailbox_path, e)));
                 }
                 Ok(plan) => {
                     for (idx, uid) in plan {
@@ -1309,9 +1313,17 @@ async fn run_graph_backup(
         errors: total_errors,
         duration_secs: duration,
         success: !cancelled,
-        error_message: partial_error_message(total_errors, total_backed_up, last_message_error.as_deref()),
+        error_message: refused
+            .as_ref()
+            .map(|(_, why)| why.clone())
+            .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())),
         cancelled,
-        completed_folders,
+        // What the scheduler resumes from after a cancel. A folder the ledger
+        // refused stored nothing, and a resumed run would skip it.
+        completed_folders: match &refused {
+            Some((idx, _)) if cancelled => completed_folders.min(*idx),
+            _ => completed_folders,
+        },
         external_copy_ok: total_ext_failures == 0,
         external_copy_error: if total_ext_failures > 0 {
             Some(format!("{} emails failed to copy to external backup", total_ext_failures))
