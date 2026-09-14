@@ -24,6 +24,9 @@ pub fn parse_response(msg: &[u8]) -> ParseResult<'_> {
         rfc3501::continue_req,
         rfc3501::response_data,
         rfc3501::response_tagged,
+        // MailVault patch, last on purpose: only a FETCH line every strict
+        // grammar rejected gets here (see message_data_fetch_lenient).
+        rfc3501::response_data_lenient_fetch,
     ))(msg)
 }
 

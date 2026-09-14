@@ -12,9 +12,9 @@ use nom::{
     bytes::streaming::{tag, tag_no_case, take_while, take_while1},
     character::streaming::char,
     combinator::{map, map_res, opt, recognize, value},
-    multi::{many0, many1},
+    multi::{many0, many1, separated_list0},
     sequence::{delimited, pair, preceded, terminated, tuple},
-    IResult,
+    IResult, Needed,
 };
 
 use crate::{
@@ -594,6 +594,85 @@ fn message_data_fetch(i: &[u8]) -> IResult<&[u8], Response<'_>> {
         tuple((number, tag_no_case(" FETCH "), msg_att_list)),
         |(num, _, attrs)| Response::Fetch(num, attrs),
     )(i)
+}
+
+// MailVault patch: a FETCH line the grammar cannot read costs that one
+// message, not the connection.
+//
+// async-imap answers any decoder `Error` by closing the stream, so one
+// malformed `* N FETCH (...)` — iCloud produces them by the dozen in a
+// business mailbox, and nobody has yet seen the full line to say why — took
+// the page, the socket and every message behind it. `parse_response` tries
+// this only after the strict grammar failed with `Error` (nom's `alt` keeps an
+// `Incomplete`): keep the attributes that did parse (UID, FLAGS, MODSEQ lead
+// on every server seen), skip to the framing end of the line, and yield a
+// `Response::Fetch` with what there is. Downstream, a row without ENVELOPE is
+// logged and reported as skipped; a row without UID in a listing is caught by
+// the EXISTS count. The skipped bytes are logged once, bounded, so a report
+// can finally carry the line the parser could not read.
+pub(crate) fn message_data_fetch_lenient(i: &[u8]) -> IResult<&[u8], Response<'_>> {
+    let (line, (num, _)) = tuple((number, tag_no_case(" FETCH ")))(i)?;
+
+    // Best effort: every attribute before the one that failed. `separated_list0`
+    // stops on an element `Error` and keeps what it has; an `Incomplete` means
+    // the buffer ends inside a good attribute and must propagate.
+    let attrs = match tuple((tag("("), separated_list0(tag(" "), msg_att)))(line) {
+        Ok((_, (_, attrs))) => attrs,
+        Err(nom::Err::Incomplete(n)) => return Err(nom::Err::Incomplete(n)),
+        Err(_) => Vec::new(),
+    };
+
+    let (remaining, skipped) = line_end_literal_aware(line)?;
+    tracing::warn!(
+        "[imap-proto] unreadable FETCH line for message {} skipped ({} bytes): {}",
+        num,
+        skipped.len(),
+        String::from_utf8_lossy(&skipped[..skipped.len().min(4096)])
+    );
+    Ok((remaining, Response::Fetch(num, attrs)))
+}
+
+/// The framing end of the current line: everything up to and including its
+/// CRLF, with every `{n}` literal announcement and its `n` payload bytes
+/// stepped over (a literal's payload may hold CRLFs and parentheses of its
+/// own). `Incomplete` until that CRLF is in the buffer.
+fn line_end_literal_aware(i: &[u8]) -> IResult<&[u8], &[u8]> {
+    let mut at = 0;
+    loop {
+        let Some(nl) = i[at..].iter().position(|&b| b == b'\n') else {
+            return Err(nom::Err::Incomplete(Needed::new(1)));
+        };
+        let nl = at + nl;
+        let crlf = nl > 0 && i[nl - 1] == b'\r';
+        match literal_size_at_end(&i[..nl.saturating_sub(1)]) {
+            Some(n) if crlf => {
+                at = nl + 1 + n;
+                if at > i.len() {
+                    return Err(nom::Err::Incomplete(Needed::new(at - i.len())));
+                }
+            }
+            _ => return Ok((&i[nl + 1..], &i[..nl + 1])),
+        }
+    }
+}
+
+/// `Some(n)` when `head` ends in `{n}` or `{n+}`: the bytes after the CRLF
+/// that follows are a literal's payload, not the next line.
+fn literal_size_at_end(head: &[u8]) -> Option<usize> {
+    let body = head.strip_suffix(b"}")?;
+    let open = body.iter().rposition(|&b| b == b'{')?;
+    let digits = &body[open + 1..];
+    let digits = digits.strip_suffix(b"+").unwrap_or(digits);
+    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    std::str::from_utf8(digits).ok()?.parse().ok()
+}
+
+/// `* N FETCH (...)` read leniently; the framing CRLF is consumed by the
+/// line scan, so unlike `response_data` there is no trailing delimiter.
+pub(crate) fn response_data_lenient_fetch(i: &[u8]) -> IResult<&[u8], Response<'_>> {
+    preceded(tag(b"* "), message_data_fetch_lenient)(i)
 }
 
 // message-data    = nz-number SP ("EXPUNGE" / ("FETCH" SP msg-att))

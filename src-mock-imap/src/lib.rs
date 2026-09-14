@@ -477,9 +477,14 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
             for line in untagged.iter_mut() {
                 let Some(seq) = fetch_seq_of(line, *uid) else { continue };
                 // INTERNALDATE wants a quoted date; a bare atom is unparseable
-                // for imap-proto, patched or not.
-                *line = format!("* {} FETCH (UID {} FLAGS () INTERNALDATE notadate)", seq, uid)
-                    .into_bytes();
+                // for imap-proto, patched or not. The header literal behind it
+                // holds a `)` and CRLFs so the lenient read has to step over
+                // it, exactly as a real header page would.
+                *line = format!(
+                    "* {} FETCH (UID {} FLAGS () INTERNALDATE notadate BODY[HEADER.FIELDS (REFERENCES)] {{17}}\r\nReferences: )\r\n\r\n)",
+                    seq, uid
+                )
+                .into_bytes();
             }
         }
     }

@@ -954,3 +954,81 @@ fn test_parsing_of_bye_response() {
         rsp => panic!("unexpected response {rsp:?}"),
     };
 }
+
+// ── MailVault patch: a FETCH line the grammar rejects ─────────────────────
+
+fn attrs_of(resp: Response<'_>, seq: u32) -> Vec<AttributeValue<'_>> {
+    match resp {
+        Response::Fetch(n, attrs) if n == seq => attrs,
+        other => panic!("expected FETCH {seq}, got {other:?}"),
+    }
+}
+
+#[test]
+fn an_unreadable_fetch_line_costs_only_that_message() {
+    // iCloud shape: an unescaped inner quote in the subject makes ENVELOPE
+    // fail; the header literal behind it carries a CRLF and a `)` that must
+    // not end the line early; the next line must parse as itself.
+    let input: &[u8] = b"* 673 FETCH (UID 673 FLAGS (\\Seen) ENVELOPE (\"Mon, 19 Mar 2018 09:39:54 +0800\" \"Fwd: \"Tomorrow\" presentation\" NIL NIL NIL NIL NIL NIL NIL NIL) BODY[HEADER.FIELDS (REFERENCES)] {22}\r\nReferences: <a)@b>\r\n\r\n)\r\n* 674 FETCH (UID 674 FLAGS ())\r\n";
+
+    let (rest, resp) = parse_response(input).unwrap();
+    let attrs = attrs_of(resp, 673);
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(673))), "{attrs:?}");
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Flags(_))), "{attrs:?}");
+    assert!(!attrs.iter().any(|a| matches!(a, AttributeValue::Envelope(_))), "{attrs:?}");
+    assert!(rest.starts_with(b"* 674 FETCH"), "the scan must stop at the line's own CRLF: {:?}", String::from_utf8_lossy(rest));
+
+    let (rest, resp) = parse_response(rest).unwrap();
+    let attrs = attrs_of(resp, 674);
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(674))));
+    assert!(rest.is_empty());
+}
+
+#[test]
+fn an_unreadable_fetch_line_is_incomplete_until_its_literal_arrives() {
+    let full: &[u8] = b"* 1 FETCH (UID 1 INTERNALDATE notadate BODY[HEADER.FIELDS (X)] {7}\r\nab)cd\r\n)\r\n";
+    let announce = full.windows(3).position(|w| w == b"{7}").unwrap();
+    // Cut inside the announcement, inside the payload, and before the closing paren.
+    for cut in [announce + 1, announce + 7, full.len() - 2] {
+        assert!(
+            matches!(parse_response(&full[..cut]), Err(nom::Err::Incomplete(_))),
+            "cut at {cut}: {:?}",
+            parse_response(&full[..cut])
+        );
+    }
+    let (rest, resp) = parse_response(full).unwrap();
+    let attrs = attrs_of(resp, 1);
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(1))));
+    assert!(rest.is_empty());
+}
+
+#[test]
+fn a_literal_ahead_of_the_bad_attribute_is_stepped_over() {
+    let input: &[u8] = b"* 7 FETCH (UID 7 BODY[HEADER.FIELDS (X)] {7}\r\nab)cd\r\n INTERNALDATE notadate)\r\n";
+    let (rest, resp) = parse_response(input).unwrap();
+    let attrs = attrs_of(resp, 7);
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::Uid(7))));
+    assert!(attrs.iter().any(|a| matches!(a, AttributeValue::BodySection { .. })), "{attrs:?}");
+    assert!(rest.is_empty(), "{:?}", String::from_utf8_lossy(rest));
+}
+
+#[test]
+fn a_fetch_line_with_nothing_readable_is_an_empty_fetch() {
+    let (rest, resp) = parse_response(b"* 999 FETCH (UID notanumber FLAGS ())\r\n").unwrap();
+    assert!(attrs_of(resp, 999).is_empty());
+    assert!(rest.is_empty());
+}
+
+#[test]
+fn only_a_fetch_line_gets_the_lenient_read() {
+    assert!(matches!(parse_response(b"* 5 BOGUS xyz\r\n"), Err(nom::Err::Error(_))));
+    assert!(matches!(parse_response(b"* 5 EXPUNGE extra\r\n"), Err(nom::Err::Error(_))));
+}
+
+#[test]
+fn a_well_formed_fetch_line_is_untouched() {
+    let (rest, resp) = parse_response(b"* 2 FETCH (UID 2 FLAGS (\\Seen) RFC822.SIZE 10)\r\n").unwrap();
+    let attrs = attrs_of(resp, 2);
+    assert_eq!(attrs.len(), 3, "{attrs:?}");
+    assert!(rest.is_empty());
+}

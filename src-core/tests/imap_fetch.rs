@@ -357,32 +357,35 @@ async fn list_pages_carry_size_and_attachment_presence() {
     assert_eq!(by_uid[0].size, Some(WITH_PDF.len() as u32));
 }
 
-// ── B4: a poisoned FETCH stream ────────────────────────────────────────────
+// ── A poisoned FETCH item costs only itself ────────────────────────────────
 //
-// async-imap's decoder stops advancing after a line it cannot parse, so one
-// bad item costs every item behind it and the page comes back SHORT — the same
-// shape as a mailbox that really holds that many. The lenient collector logged
-// the shortfall and returned what it had; a listing path must fail instead, and
-// let the caller's retry decide.
+// The vendored imap-proto reads a FETCH line its grammar rejects as a partial
+// row (what parsed before the bad attribute) instead of an Error, which
+// async-imap would answer by closing the socket. The row has no ENVELOPE, so
+// the header path logs it and lists it in `skipped`; every other row in the
+// page arrives, on the same connection.
 
 #[async_std::test]
-async fn a_poisoned_item_fails_the_page_instead_of_shortening_it() {
+async fn a_poisoned_item_costs_only_itself() {
     let server = MockImap::start(
         Scenario::new()
             .mailbox(synthetic_mailbox("INBOX", 3))
             .fault(Trigger::on("FETCH"), Action::CorruptFetchItem(2)),
     );
     let mut sess = session(&server).await;
+    let connections = server.connection_count();
 
-    let err = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
+    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
         .await
-        .expect_err("a page missing items it never saw is not a page");
-    assert!(err.contains("unparseable"), "unhelpful error: {err}");
-    assert!(err.contains("fetch_emails_page"), "the error must name the path: {err}");
+        .expect("the two readable messages are a page");
+    assert_eq!(total, 3, "the mailbox still holds three");
+    assert_eq!(page.len(), 2, "{page:?}");
+    assert_eq!(skipped, vec![None], "a line with no UID is reported, unnamed: {skipped:?}");
+    assert_eq!(server.connection_count(), connections, "the socket must survive the bad line");
 }
 
 #[async_std::test]
-async fn a_poisoned_item_fails_a_uid_header_fetch_too() {
+async fn a_poisoned_uid_header_fetch_returns_the_others() {
     // The daemon's cold sync and every backfill run through this one.
     let server = MockImap::start(
         Scenario::new()
@@ -391,17 +394,15 @@ async fn a_poisoned_item_fails_a_uid_header_fetch_too() {
     );
     let mut sess = session(&server).await;
 
-    let err = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[])
+    let (rows, total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[])
         .await
-        .expect_err("a short UID fetch must not read as the whole answer");
-    assert!(err.contains("unparseable"), "unhelpful error: {err}");
+        .expect("two of three is an answer");
+    assert_eq!(total, 3);
+    assert_eq!(rows.len(), 2, "{rows:?}");
 }
 
 #[async_std::test]
 async fn search_still_returns_what_parsed() {
-    // Search stays lenient on purpose: its rows are a filtered view the user
-    // asked for, not an enumeration anything downstream reconciles against, so
-    // half the hits beats an error with no hits at all.
     let server = MockImap::start(
         Scenario::new()
             .mailbox(synthetic_mailbox("INBOX", 3))
@@ -413,8 +414,7 @@ async fn search_still_returns_what_parsed() {
         .await
         .expect("search must not fail over a poisoned item");
     assert_eq!(total, 3, "the SEARCH itself matched all three");
-    assert!(!rows.is_empty(), "the rows that parsed must survive");
-    assert!(rows.len() < 3, "the fault must actually poison an item: {rows:?}");
+    assert_eq!(rows.len(), 2, "the rows that parsed must survive: {rows:?}");
 }
 
 // ── A bounded fetch ────────────────────────────────────────────────────────
@@ -532,10 +532,11 @@ async fn parses_a_latin1_filename_in_bodystructure() {
     assert!(emails[0].has_attachments, "the PDF is still an attachment");
 }
 
-// ── Naming and skipping a poisoned message ─────────────────────────────────
+// ── A poisoned message is skipped by name, on the same connection ──────────
 
-/// The header fetch is the one the poison rides on; the `(UID)` pass the skip
-/// path makes must stay clean, which is what `Trigger::with` scopes here.
+/// The header fetch is the one the poison rides on. `Trigger::with` fires on
+/// every FETCH that names BODYSTRUCTURE, so one session can be reused across
+/// the three header paths below.
 fn poisoned_inbox(uid: u32) -> Scenario {
     Scenario::new()
         .mailbox(synthetic_mailbox("INBOX", 3))
@@ -545,57 +546,39 @@ fn poisoned_inbox(uid: u32) -> Scenario {
         )
 }
 
-#[async_std::test]
-async fn a_poisoned_item_names_its_seq_and_uid() {
-    let server = MockImap::start(poisoned_inbox(2));
-    let mut sess = session(&server).await;
-
-    let err = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
-        .await
-        .expect_err("a page missing items it never saw is not a page");
-
-    assert!(err.contains("unparseable"), "unhelpful error: {err}");
-    assert!(err.contains("page incomplete"), "unhelpful error: {err}");
-    assert!(err.contains("[poison seq=2 uid=2]"), "the error must name the message: {err}");
-    assert_eq!(poison_in(&err), Some(Poison { seq: 2, uid: Some(2) }));
-    assert!(
-        err.len() < 600,
-        "the decoder's dump of the whole buffer must not reach the log ({} bytes)",
-        err.len()
-    );
+fn sorted_uids(rows: &[EmailHeader]) -> Vec<u32> {
+    let mut uids: Vec<u32> = rows.iter().map(|e| e.uid).collect();
+    uids.sort_unstable();
+    uids
 }
 
 #[async_std::test]
-async fn a_skip_list_fetches_the_page_around_the_poison() {
+async fn a_poisoned_uid_is_skipped_by_name_without_a_reconnect() {
     let server = MockImap::start(poisoned_inbox(2));
-
     let mut sess = session(&server).await;
-    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[2])
+    let connections = server.connection_count();
+
+    let (page, total, _more, skipped) = fetch_emails_page(&mut sess, "INBOX", 1, 10, &[])
         .await
         .expect("the other two messages are perfectly readable");
-    assert_eq!(total, 3, "the mailbox still holds three");
-    let mut uids: Vec<u32> = page.iter().map(|e| e.uid).collect();
-    uids.sort_unstable();
-    assert_eq!(uids, vec![1, 3]);
-    assert!(skipped.contains(&Some(2)), "the caller must learn what was left out: {skipped:?}");
+    assert_eq!(total, 3);
+    assert_eq!(sorted_uids(&page), vec![1, 3]);
+    assert_eq!(skipped, vec![Some(2)], "the caller must learn what was left out: {skipped:?}");
 
-    let mut sess = session(&server).await;
-    let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3, &[2])
+    // Same session: the socket survived the bad line.
+    let (rows, total, skipped) = fetch_emails_range(&mut sess, "INBOX", 0, 3, &[])
         .await
         .expect("same for the virtualized-scroll path");
     assert_eq!(total, 3);
-    let mut uids: Vec<u32> = rows.iter().map(|e| e.uid).collect();
-    uids.sort_unstable();
-    assert_eq!(uids, vec![1, 3]);
-    assert!(skipped.contains(&Some(2)), "{skipped:?}");
+    assert_eq!(sorted_uids(&rows), vec![1, 3]);
+    assert_eq!(skipped, vec![Some(2)], "{skipped:?}");
 
-    let mut sess = session(&server).await;
-    let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[2])
+    let (rows, _total) = fetch_headers_by_uids(&mut sess, "INBOX", &[1, 2, 3], &[])
         .await
         .expect("and for the daemon's cold sync / backfill path");
-    let mut uids: Vec<u32> = rows.iter().map(|e| e.uid).collect();
-    uids.sort_unstable();
-    assert_eq!(uids, vec![1, 3]);
+    assert_eq!(sorted_uids(&rows), vec![1, 3]);
+
+    assert_eq!(server.connection_count(), connections, "three poisoned pages, zero reconnects");
 }
 
 #[async_std::test]
