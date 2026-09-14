@@ -467,8 +467,9 @@ fn serialize(cmd: &Command, response: Response, actions: &[Action]) -> Vec<u8> {
     }
 
     // PoisonFetchUid: the item for one UID becomes a line the strict grammar
-    // cannot read, keeping its own sequence number and UID so the lenient
-    // read still names the message it dropped.
+    // cannot read. The lenient read yields an EMPTY row for it (a list that did
+    // not close keeps nothing, not even the UID); the seq and UID it still
+    // carries are what the parser's warn line names.
     // `cmd.name` is "FETCH" for `UID FETCH` too, so both shapes are covered.
     if let Some(Action::PoisonFetchUid(uid)) = actions
         .iter()

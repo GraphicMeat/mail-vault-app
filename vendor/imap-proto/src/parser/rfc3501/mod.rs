@@ -604,9 +604,9 @@ fn message_data_fetch(i: &[u8]) -> IResult<&[u8], Response<'_>> {
 // business mailbox, and nobody has yet seen the full line to say why — took
 // the page, the socket and every message behind it. `parse_response` tries
 // this only after the strict grammar failed with `Error` (nom's `alt` keeps an
-// `Incomplete`): keep the attributes that did parse (UID, FLAGS, MODSEQ lead
-// on every server seen), skip to the framing end of the line, and yield a
-// `Response::Fetch` with what there is. Downstream, a row without ENVELOPE is
+// `Incomplete`): skip to the framing end of the line and yield a
+// `Response::Fetch` that keeps its attributes only when the attribute list
+// closed and just the tail was bad. Downstream, a row without ENVELOPE is
 // logged and reported as skipped; a row the grammar could not read to its
 // closing paren carries no attributes at all, so a flags listing never sees a
 // UID with empty flags. The skipped bytes are logged once, bounded, so a
@@ -631,6 +631,10 @@ fn message_data_fetch_lenient(i: &[u8]) -> IResult<&[u8], Response<'_>> {
     // whole. It did not close: this is a row we know nothing about, not even
     // its UID — a `(UID FLAGS)` row that kept its UID and lost its FLAGS would
     // repaint the message's flags as empty downstream.
+    //
+    // Relies on every `msg_att` alternative consuming balanced parentheses; a
+    // sub-parser that stops on an inner `)` would pass this check with a
+    // truncated list.
     let attrs = if stopped_at.first() == Some(&b')') {
         attrs
     } else {

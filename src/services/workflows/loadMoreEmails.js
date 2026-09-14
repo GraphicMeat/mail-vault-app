@@ -242,12 +242,12 @@ export async function loadMoreEmails() {
       }
 
       if (serverResult.skippedUids && serverResult.skippedUids.length > 0) {
-        console.warn(`[loadMoreEmails] ${serverResult.skippedUids.length} messages skipped on page ${nextPage}, will re-request`);
-        useMailStore.setState({ currentPage: nextPage - 1, hasMoreEmails: true });
-        let timer = getLoadMoreTimer();
-        if (timer) clearTimeout(timer);
-        setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 5000));
-      } else if (serverResult.hasMore) {
+        // A row the server described in a form the parser cannot read. The
+        // parser reproduces that on every fetch, so re-requesting the page
+        // would loop for ever; the row is left out and named in the daemon log.
+        console.warn(`[loadMoreEmails] ${serverResult.skippedUids.length} unreadable message(s) left out of page ${nextPage}`);
+      }
+      if (serverResult.hasMore) {
         let timer = getLoadMoreTimer();
         if (timer) clearTimeout(timer);
         setLoadMoreTimer(setTimeout(() => { setLoadMoreTimer(null); get().loadMoreEmails(); }, 200));
@@ -364,12 +364,9 @@ export async function loadEmailRange(startIndex, endIndex) {
       }
 
       if (result.skippedUids && result.skippedUids.length > 0) {
-        console.warn(`[loadEmailRange] ${result.skippedUids.length} messages skipped, scheduling retry for range ${startIndex}-${endIndex}`);
-        setTimeout(() => {
-          const currentRanges = get().loadedRanges.filter(r => !(r.start === startIndex && r.end === endIndex));
-          useMailStore.setState({ loadedRanges: currentRanges });
-          get().loadEmailRange(startIndex, endIndex);
-        }, 5000);
+        // Same as loadMoreEmails: the skip is a property of the message, not
+        // of this attempt, so re-requesting the range would loop for ever.
+        console.warn(`[loadEmailRange] ${result.skippedUids.length} unreadable message(s) left out of range ${startIndex}-${endIndex}`);
       }
     }
   } catch (error) {

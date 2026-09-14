@@ -1427,11 +1427,14 @@ where
 
 /// Collect a FETCH stream, or fail if any item did not parse.
 ///
-/// B4. A listing path cannot return a short page: the decoder stops advancing
-/// after the line it choked on, so the rows behind it are gone too, and what
-/// comes back is indistinguishable from a mailbox that really holds that many.
-/// Downstream that is a header cache pruned against a partial answer. An error
-/// leaves the previous contents alone and lets the caller retry.
+/// B4. A listing path cannot return a short page. A FETCH line the grammar
+/// rejects is read leniently by the vendored parser and never reaches here;
+/// what does is a line nothing can frame (a keepalive spliced mid-line, a reply
+/// shape the parser lacks), after which async-imap closes the stream and the
+/// rows behind it are gone. What comes back is indistinguishable from a mailbox
+/// that really holds that many; downstream that is a header cache pruned
+/// against a partial answer. An error leaves the previous contents alone and
+/// lets the caller retry.
 async fn collect_fetches_strict<S>(stream: S, what: &str) -> Result<Vec<Fetch>, String>
 where
     S: futures::Stream<Item = async_imap::error::Result<Fetch>> + Unpin,

@@ -219,43 +219,6 @@ describe('nextRetryDelay — exponential backoff', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Skipped UIDs response handling
-// ---------------------------------------------------------------------------
-describe('skipped UIDs from server response', () => {
-  it('empty skippedUids means all messages parsed successfully', () => {
-    const response = { emails: [mkEmail(1), mkEmail(2)], total: 100, skippedUids: [] };
-    expect(response.skippedUids).toHaveLength(0);
-    expect(response.emails).toHaveLength(2);
-  });
-
-  it('skippedUids contains UIDs that failed to parse', () => {
-    const response = {
-      emails: [mkEmail(1), mkEmail(3)],
-      total: 100,
-      skippedUids: [2]
-    };
-    expect(response.skippedUids).toContain(2);
-    expect(response.emails.map(e => e.uid)).not.toContain(2);
-  });
-
-  it('skippedUids can contain null for messages with no UID', () => {
-    const response = {
-      emails: [mkEmail(1)],
-      total: 100,
-      skippedUids: [null, 5]
-    };
-    expect(response.skippedUids).toHaveLength(2);
-    expect(response.skippedUids).toContain(null);
-  });
-
-  it('page should be re-requested when skippedUids is non-empty', () => {
-    const response = { emails: [mkEmail(1)], total: 100, hasMore: true, skippedUids: [2, 3] };
-    const shouldRetry = response.skippedUids && response.skippedUids.length > 0;
-    expect(shouldRetry).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Online/offline state transitions
 // ---------------------------------------------------------------------------
 describe('offline pause / online resume logic', () => {
