@@ -12,12 +12,16 @@
 //! - the uid of a vault file with its Message-ID that no ledger entry owns, so
 //!   mail an earlier backup already stored is not fetched again;
 //! - otherwise one more than every uid in the ledger AND every uid a file name
-//!   carries in the vault's `cur/` or `orphaned/` — never the external backup
-//!   mirror, which this floor never sees — so a copy filed under some older
-//!   numbering can never block the message the ledger hands that number to.
-//!   A backup restores mirror-only files into the vault (its pre-sync) before
-//!   it allocates, so it sees them there; an app listing that allocates
-//!   before any backup has run can hand out a uid only the mirror holds.
+//!   carries in the vault's `cur/` or `orphaned/`, so a copy filed there under
+//!   some older numbering can never block the message the ledger hands that
+//!   number to.
+//!
+//! The external backup mirror is not read here. A backup restores mirror-only
+//! files into the vault (its pre-sync) before it allocates, so it sees them. An
+//! app listing does not: it can hand a new message a uid only the mirror still
+//! holds (for example an old flagless backup copy that "Clear cached emails"
+//! removed from the vault), and the next pre-sync then restores that old copy
+//! under the new message's uid, so the new message is not backed up.
 
 use crate::fsx;
 use crate::maildir::{mirror_filename_uid, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
@@ -254,8 +258,14 @@ pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
         let mut kept = false;
         for child in children.flatten() {
             let child_path = child.path();
+            // By name, before any type lookup: on a filesystem without d_type
+            // the lookup is a stat that can fail, and a symlinked ledger is still
+            // the file `load` reads.
+            if child.file_name() == LEDGER_FILE {
+                kept = true;
+                continue;
+            }
             match child.file_type() {
-                Ok(t) if t.is_file() && child.file_name() == LEDGER_FILE => kept = true,
                 Ok(t) if t.is_dir() => logged(&child_path, std::fs::remove_dir_all(&child_path)),
                 _ => logged(&child_path, std::fs::remove_file(&child_path)),
             }
@@ -586,6 +596,23 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         clear_cache_keeping_ledgers(&tmp.path().join("email_cache"));
         assert!(!tmp.path().join("email_cache").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clearing_the_cache_keeps_a_ledger_whatever_its_file_type() {
+        // Kept by name, never by type: a symlinked ledger is still the ledger.
+        let tmp = tempfile::tempdir().unwrap();
+        let inbox = tmp.path().join("email_cache").join("acct_INBOX");
+        fs::create_dir_all(&inbox).unwrap();
+        let target = tmp.path().join("elsewhere.json");
+        fs::write(&target, br#"{"1":"g-a"}"#).unwrap();
+        std::os::unix::fs::symlink(&target, inbox.join(LEDGER_FILE)).unwrap();
+
+        clear_cache_keeping_ledgers(&tmp.path().join("email_cache"));
+
+        assert_eq!(load(&inbox.join(LEDGER_FILE)).unwrap().len(), 1, "the symlinked ledger is kept");
+        assert!(target.exists());
     }
 
     #[test]
