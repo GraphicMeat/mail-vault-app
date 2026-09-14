@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { appDataDir } from './mockImap.js';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails } from './helpers.js';
 
 const wait = (predicate, message) => browser.waitUntil(predicate, { timeout: 20000, interval: 150, timeoutMsg: message });
 function diskSettings() {
@@ -185,8 +185,7 @@ describe('Explorer in the native mailbox', function () {
     const path = await browser.execute(() => document.querySelector('[aria-label="Explorer path"]').textContent);
     const paths = await browser.execute(() => window.__SETTINGS_STORE__.getState().explorerPaths);
     await wait(() => { const s = diskSettings(); return s?.emailListView === 'explorer' && s.explorerGrouping === 'sender' && JSON.stringify(s.explorerPaths) === JSON.stringify(paths); }, 'Explorer settings written to disk');
-    await browser.refresh();
-    await waitForApp();
+    await reloadApp();
     await wait(() => browser.execute(() => window.__SETTINGS_STORE__?.persist.hasHydrated()), 'Settings hydrated after reload');
     await wait(() => browser.execute(() => document.querySelector('[data-testid="explorer-view"]')?.dataset.grouping === 'sender'), 'Explorer preference restored');
     await wait(() => browser.execute(path => document.querySelector('[aria-label="Explorer path"]')?.textContent === path, path), 'Explorer path restored after headers load');

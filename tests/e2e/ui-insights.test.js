@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { clickReachable, setControl, openInsights, waitForInsights, setInsightsRange,
   nativeInvoke, cacheScenarioHeaders, captureInsights, summaryText, startNativeProbe, stopNativeProbe, nativeProbeOutcomes } from './insightsHelpers.js';
 
@@ -300,8 +300,7 @@ describe('Insights native workspace and responsive states', function () {
     const preferences = settings['mailvault-settings'].state.insightsPreferences;
     assert.equal(preferences.direction, 'both'); assert.equal(preferences.startDate, '2026-09-01');
     assert.equal(Object.keys(preferences).some(key => /headers|messages|copies|coverage|progress|selectedDay/i.test(key)), false);
-    await browser.execute(() => location.reload());
-    await waitForApp(); await startNativeProbe(); await openInsights();
+    await reloadApp(); await startNativeProbe(); await openInsights();
     assert.equal(await browser.execute(() => document.querySelector('[data-testid="insights-direction"]').value), 'both');
     assert.equal(await browser.execute(() => document.querySelector('[data-testid="insights-tab-timeline"]').getAttribute('aria-selected')), 'true');
     await setInsightsRange('2000-01-01', '2000-01-31');

@@ -25,7 +25,7 @@
  * bug; the grey row is what says the proof is still doing the deciding.
  */
 
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -188,8 +188,7 @@ describe('Search results carry their custody proof', function () {
     // from are rebuilt from that file on every read. A verdict that only existed
     // in the session would survive the two searches above and die here, which is
     // the same silence the original bug produced.
-    await browser.execute(() => window.location.reload());
-    await waitForApp();
+    await reloadApp();
     await waitForEmails();
     await switchToFolder(LUKE, 'INBOX');
 

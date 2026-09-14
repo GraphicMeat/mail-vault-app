@@ -40,7 +40,7 @@
  * next to its definition in mockImap.js).
  */
 
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
 
 describe('Bulk delete everywhere', function () {
   this.timeout(180_000);
@@ -480,8 +480,7 @@ describe('Bulk delete everywhere', function () {
 
   it('does not bring the rows back on reload — the vault and backup purges actually ran', async function () {
     requireSubjects(deletedSubjects, 'deletedSubjects', 'follows a hand-edited checkbox');
-    await browser.execute(() => window.location.reload());
-    await waitForApp();
+    await reloadApp();
 
     // A fresh boot always lands on account 1's INBOX, not wherever this spec
     // left off — navigate back to the folder that was purged to prove it.

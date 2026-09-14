@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
-import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 import { appDataDir, MOCK_PASSWORD, trackMailbox } from './mockImap.js';
 
 const SELECT = '#new-email-sound';
@@ -161,8 +161,7 @@ describe('Mac incoming email sounds', function () {
         return saved['mailvault-settings']?.state?.notificationSettings?.sound === 'Ping';
       } catch { return false; }
     }, 'Sound selection was not saved to disk');
-    await browser.refresh();
-    await waitForApp();
+    await reloadApp();
     await waitForEmails();
     await openNotifications();
     assert.equal(await browser.execute(sel => document.querySelector(sel).value, SELECT), 'Ping');

@@ -18,7 +18,7 @@
  *     every row that shows up there is one this spec put there.
  */
 
-import { waitForApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, switchToFolder, visibleRowSubjects } from './helpers.js';
 import { SEND_REFUSED_TO } from './mockImap.js';
 import {
   openComposeFresh,
@@ -195,8 +195,7 @@ describe('Connected Compose Autosave — drafts land in the vault', function () 
     // with the message still open in it. That is what a crash, a quit, or a
     // reload looks like from the draft's point of view, and it is the case the
     // whole feature exists for — every in-memory copy goes at once.
-    await browser.execute(() => window.location.reload());
-    await waitForApp();
+    await reloadApp();
     await waitForEmails();
 
     await switchToFolder(account.email, 'Drafts', { requireRows: false });

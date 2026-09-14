@@ -81,6 +81,29 @@ export async function waitForApp(timeout = 30_000) {
 }
 
 /**
+ * Reload the webview and wait for the NEW page to be ready.
+ *
+ * tauri-wd answers `refresh()` / `location.reload()` before the old document
+ * unloads, so a bare `waitForApp()` straight after reads 'ready' off the page
+ * that is about to die, and the next store read races the fresh boot. Mark
+ * the old document, wait for the mark to be gone, then wait for the app.
+ */
+export async function reloadApp(timeout = 30_000) {
+  await browser.execute(() => { window.__e2eBeforeReload = true; window.location.reload(); });
+  await browser.waitUntil(
+    async () => {
+      try {
+        return await browser.execute(() => window.__e2eBeforeReload !== true);
+      } catch {
+        return false; // mid-navigation
+      }
+    },
+    { timeout, interval: 100, timeoutMsg: `Page did not reload within ${timeout}ms` },
+  );
+  return waitForApp(timeout);
+}
+
+/**
  * Wait for at least one email row to appear in the email list.
  * Times out after 60 seconds (emails may need IMAP fetch).
  */

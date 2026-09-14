@@ -28,7 +28,7 @@
  */
 
 import { ImapFlow } from 'imapflow';
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
 import { MOCK_PASSWORD } from './mockImap.js';
 
 describe('Custody claims', function () {
@@ -261,8 +261,7 @@ describe('Custody claims', function () {
         // path enumerates the mailbox afresh and marks the set complete. That
         // is the state a user actually sees — the app relaunched, and one row
         // in the list is gold.
-        await browser.execute(() => window.location.reload());
-        await waitForApp();
+        await reloadApp();
         await waitForEmails();
         await switchToFolder(account, 'INBOX');
         // The vault copy stays under INBOX and re-derives from the vault.
@@ -438,8 +437,7 @@ describe('Custody claims', function () {
       // The stamp lives on the vault's index entry. An in-memory one would die
       // with the session and the row would go quiet on the next launch, which
       // is the same silence the original bug produced.
-      await browser.execute(() => window.location.reload());
-      await waitForApp();
+      await reloadApp();
       await waitForEmails();
       await switchToFolder(YODA, 'INBOX');
 

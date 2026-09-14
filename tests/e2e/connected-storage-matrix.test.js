@@ -79,7 +79,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  waitForApp, waitForEmails,
+  waitForApp, reloadApp, waitForEmails,
   clickSidebarItem, folderHeaderText, switchToFolder, churnAccounts,
 } from './helpers.js';
 import { appDataDir } from './mockImap.js';
@@ -802,8 +802,7 @@ describe('Storage matrix diagnostics', function () {
         console.warn(`[reload-root-cause] sidecar for uid ${uid} survived the delete's own reconcile — the prune fix did not run/land as expected`);
       }
 
-      await browser.execute(() => window.location.reload());
-      await waitForApp();
+      await reloadApp();
       await switchToFolder(VADER, 'Matrix');
 
       const rowImmediatelyAfterReload = await rowFor(subject);
@@ -1078,8 +1077,7 @@ describe('Storage matrix diagnostics', function () {
       console.log('[reload-durability] journal at the moment the row vanished:', JSON.stringify(journalMidFlight));
 
       // The server is still sitting on the 4s MOVE.
-      await browser.execute(() => window.location.reload());
-      await waitForApp();
+      await reloadApp();
       console.log('[reload-durability] journal right after reload:', JSON.stringify(pendingOpJournal()));
       // Wait for the launch replay to actually finish before asking the UI
       // anything. It waits on the keychain and then a 4s-stalled MOVE, and a
@@ -1182,8 +1180,7 @@ describe('Storage matrix diagnostics', function () {
       await switchToUnified();
       console.log('[unified] row after churning three accounts and returning:', JSON.stringify(await rowFor(subject)));
 
-      await browser.execute(() => window.location.reload());
-      await waitForApp();
+      await reloadApp();
       await switchToUnified();
 
       // After a reload the tombstone is gone, so this is the real question:

@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appDataDir } from './mockImap.js';
-import { waitForApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { waitForApp, reloadApp, waitForEmails, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
 
 const LUKE = '11111111-1111-4111-8111-111111111111';
 const VADER = '22222222-2222-4222-8222-222222222222';
@@ -158,8 +158,7 @@ describe('Sidebar backup status placement', function () {
     const schedules = diskSettings().backupSchedules;
     assert.equal(schedules[LUKE].enabled, true);
     assert.equal(schedules[VADER].enabled, true);
-    await browser.refresh();
-    assert.equal(await waitForApp(), 'ready');
+    assert.equal(await reloadApp(), 'ready');
     await wait(() => browser.execute(() => window.__SETTINGS_STORE__?.persist.hasHydrated()), 'Settings did not hydrate after reload');
     assert.equal(await browser.execute(() => window.__SETTINGS_STORE__.getState().sidebarBackupStatusLocation), 'hidden');
     assert.equal(await browser.execute(() => document.querySelectorAll('.mail-sidebar .sidebar-backup-status').length), 0);
