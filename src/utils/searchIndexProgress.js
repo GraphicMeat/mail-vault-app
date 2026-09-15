@@ -11,9 +11,15 @@ export function wantsProgressUi(s) {
   return left > 0 && (!s.firstPassDone || left >= BIG_BACKLOG);
 }
 
-/** The build the user hid is over: the next big pass may open the modal again. */
+/**
+ * The build the user hid is over: the next big pass may open the modal again.
+ * `firstPassDone` is required even when `complete` is true — a folder finishing
+ * mid-build makes `indexed === total` for one batch (a folder boundary), which
+ * is not the pass finishing (review 1.10 I1; the daemon now counts every folder
+ * up front so this stays rare, but the rule itself must not trust it either).
+ */
 export function buildFinished(s) {
-  return !!s && (!!s.complete || (!!s.firstPassDone && backlog(s) < BIG_BACKLOG));
+  return !!s && !!s.firstPassDone && (!!s.complete || backlog(s) < BIG_BACKLOG);
 }
 
 export function progressPercent(s) {

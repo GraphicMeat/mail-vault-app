@@ -20,8 +20,12 @@ describe('search index progress rule', () => {
     expect(wantsProgressUi(s({ indexed: 1, total: 900, complete: true }))).toBe(false);
     expect(wantsProgressUi(null)).toBe(false);
   });
-  it('a build is finished when complete, or first pass done with a small backlog', () => {
-    expect(buildFinished(s({ complete: true }))).toBe(true);
+  it('a build is finished only once the first pass is done, and complete or a small backlog', () => {
+    // review 1.10 I1: `complete` alone can be a folder boundary mid-build
+    // (indexed === total for that folder, firstPassDone still false) — must
+    // not count as finished on its own.
+    expect(buildFinished(s({ complete: true, firstPassDone: false }))).toBe(false);
+    expect(buildFinished(s({ complete: true, firstPassDone: true }))).toBe(true);
     expect(buildFinished(s({ firstPassDone: true, indexed: 10, total: 12 }))).toBe(true);
     expect(buildFinished(s({ firstPassDone: false, indexed: 10, total: 12 }))).toBe(false);
     expect(buildFinished(s({ state: 'idle', firstPassDone: false, indexed: 500, total: 3000 }))).toBe(false);
