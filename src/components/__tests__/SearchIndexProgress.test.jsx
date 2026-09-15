@@ -176,4 +176,20 @@ describe('SearchIndexProgress', () => {
       editor.remove();
     }
   });
+
+  it('a focused checkbox is not text entry: opens the modal normally', async () => {
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    document.body.appendChild(checkbox);
+    checkbox.focus();
+    try {
+      await mount();
+      act(() => progress(building()));
+      await act(async () => { vi.advanceTimersByTime(1600); });
+      expect(modal()).not.toBeNull();
+      expect(chip()).toBeNull();
+    } finally {
+      checkbox.remove();
+    }
+  });
 });

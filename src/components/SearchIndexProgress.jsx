@@ -8,17 +8,24 @@ import { formatBytes } from '../utils/formatBytes';
 import { status, onProgress, onDaemonReconnected } from '../services/searchIndex';
 import { wantsProgressUi, buildFinished, progressPercent, OPEN_DELAY_MS } from '../utils/searchIndexProgress';
 
+// input types that accept typed text (a bare `type` attribute defaults the
+// DOM's `.type` to 'text', so "no type" is covered without a special case).
+const TEXT_ENTRY_INPUT_TYPES = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number']);
+
 /**
  * True while focus is in something the user is typing into. `useDialogA11y`
  * moves focus into a dialog the instant it opens, so opening unprompted here
  * would steal keystrokes from Compose (native inputs) or the rich-text body
  * (TipTap/ProseMirror render a `contenteditable` root, not an <input>).
+ * Checkbox/radio/button inputs (e.g. a row's selection checkbox) are not
+ * text entry and must not start minimized (review 1.10 N1).
  */
 function isEditableFocused() {
   const el = typeof document !== 'undefined' ? document.activeElement : null;
   if (!el) return false;
-  if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') return true;
-  return el.isContentEditable === true || !!el.closest?.('[contenteditable]');
+  if (el.tagName === 'TEXTAREA') return true;
+  if (el.tagName === 'INPUT') return TEXT_ENTRY_INPUT_TYPES.has((el.type || 'text').toLowerCase());
+  return el.isContentEditable === true || !!el.closest?.('[contenteditable]:not([contenteditable="false"])');
 }
 
 /** Progress of a big index pass (first build, rebuild, backlog >= 500): a dismissable modal, minimized to a chip. */
