@@ -101,7 +101,6 @@ pub use mailvault_core::imap;
 mod migration;
 mod notification_open;
 mod notification_sound;
-mod op_journal;
 mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
@@ -1011,10 +1010,10 @@ fn op_journal_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 #[tauri::command]
-fn op_journal_queue(app_handle: tauri::AppHandle, entry: op_journal::OpEntry) -> Result<u64, String> {
+fn op_journal_queue(app_handle: tauri::AppHandle, entry: mailvault_core::op_journal::OpEntry) -> Result<u64, String> {
     let dir = op_journal_dir(&app_handle)?;
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create data directory: {}", e))?;
-    op_journal::queue(&dir, entry)
+    mailvault_core::op_journal::queue(&dir, entry)
 }
 
 #[tauri::command]
@@ -1026,13 +1025,13 @@ fn op_journal_clear(
     uids: Vec<u32>,
     arg: serde_json::Value,
 ) -> Result<(), String> {
-    op_journal::clear(&op_journal_dir(&app_handle)?, &op, &account_id, &mailbox, &uids, &arg)
+    mailvault_core::op_journal::clear(&op_journal_dir(&app_handle)?, &op, &account_id, &mailbox, &uids, &arg)
 }
 
 /// Every unfinished server op, oldest first.
 #[tauri::command]
-fn op_journal_read(app_handle: tauri::AppHandle) -> Result<Vec<op_journal::OpEntry>, String> {
-    Ok(op_journal::read(&op_journal_dir(&app_handle)?))
+fn op_journal_read(app_handle: tauri::AppHandle) -> Result<Vec<mailvault_core::op_journal::OpEntry>, String> {
+    Ok(mailvault_core::op_journal::read(&op_journal_dir(&app_handle)?))
 }
 
 #[tauri::command]
@@ -1803,18 +1802,10 @@ async fn verify_archived_emails(
 async fn read_pending_operation(
     app_handle: tauri::AppHandle,
 ) -> Result<Option<serde_json::Value>, String> {
-    let path = app_handle.path().app_data_dir()
-        .map_err(|e| format!("app_data_dir: {}", e))?
-        .join("pending_operations.json");
-    if !path.exists() {
-        return Ok(None);
-    }
-    let data = tokio::fs::read_to_string(&path)
+    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
+    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_read(&dir))
         .await
-        .map_err(|e| format!("read pending_operations.json: {}", e))?;
-    let val: serde_json::Value = serde_json::from_str(&data)
-        .map_err(|e| format!("parse pending_operations.json: {}", e))?;
-    Ok(Some(val))
+        .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -1822,30 +1813,20 @@ async fn save_pending_operation(
     app_handle: tauri::AppHandle,
     operation: serde_json::Value,
 ) -> Result<(), String> {
-    let path = app_handle.path().app_data_dir()
-        .map_err(|e| format!("app_data_dir: {}", e))?
-        .join("pending_operations.json");
-    let json = serde_json::to_string_pretty(&operation)
-        .map_err(|e| format!("serialize: {}", e))?;
-    tokio::fs::write(&path, json)
+    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
+    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_save(&dir, &operation))
         .await
-        .map_err(|e| format!("write pending_operations.json: {}", e))?;
-    Ok(())
+        .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
 async fn clear_pending_operation(
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    let path = app_handle.path().app_data_dir()
-        .map_err(|e| format!("app_data_dir: {}", e))?
-        .join("pending_operations.json");
-    if path.exists() {
-        tokio::fs::remove_file(&path)
-            .await
-            .map_err(|e| format!("remove pending_operations.json: {}", e))?;
-    }
-    Ok(())
+    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
+    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_clear(&dir))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]

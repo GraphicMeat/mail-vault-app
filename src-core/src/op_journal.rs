@@ -115,7 +115,7 @@ fn write(data_dir: &Path, journal: &Journal) -> Result<(), String> {
         return Ok(());
     }
     let data = serde_json::to_string(journal).map_err(|e| format!("serialize op journal: {}", e))?;
-    mailvault_core::fsx::write_atomic(&journal_path(data_dir), data.as_bytes())
+    crate::fsx::write_atomic(&journal_path(data_dir), data.as_bytes())
         .map_err(|e| format!("write op journal: {}", e))
 }
 
@@ -156,6 +156,49 @@ pub fn clear(
     }
     journal.ops.retain(|e| !e.uids.is_empty());
     write(data_dir, &journal)
+}
+
+// ── Pending operation persistence ───────────────────────────────────────────
+//
+// A single in-flight bulk operation the UI is mid-way through (separate from
+// the op journal above, which is confirmed-but-unconfirmed server mutations).
+// Lives in the app data dir for the same reason the journal does: it has to
+// be readable before a relocatable vault is necessarily present.
+
+fn pending_operation_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("pending_operations.json")
+}
+
+/// `None` when there is no pending operation. An unparseable file is an
+/// error, same as today — swallowing it here would silently drop the one
+/// piece of state that lets the UI resume.
+pub fn pending_operation_read(data_dir: &Path) -> Result<Option<serde_json::Value>, String> {
+    let path = pending_operation_path(data_dir);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(&path).map_err(|e| format!("read pending_operations.json: {}", e))?;
+    let val: serde_json::Value =
+        serde_json::from_str(&data).map_err(|e| format!("parse pending_operations.json: {}", e))?;
+    Ok(Some(val))
+}
+
+/// Unlike the old command body, this creates the data directory first: the
+/// old one had no `create_dir_all` and relied on it already existing from an
+/// earlier launch (oddity: harmless in practice, but a gap this port closes).
+pub fn pending_operation_save(data_dir: &Path, operation: &serde_json::Value) -> Result<(), String> {
+    std::fs::create_dir_all(data_dir).map_err(|e| format!("create data directory: {}", e))?;
+    let json = serde_json::to_string_pretty(operation).map_err(|e| format!("serialize: {}", e))?;
+    crate::fsx::write_atomic(&pending_operation_path(data_dir), json.as_bytes())
+        .map_err(|e| format!("write pending_operations.json: {}", e))
+}
+
+pub fn pending_operation_clear(data_dir: &Path) -> Result<(), String> {
+    let path = pending_operation_path(data_dir);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("remove pending_operations.json: {}", e))?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -238,5 +281,36 @@ mod tests {
         assert!(!d.path().join("pending_server_delete.json").exists(), "imported file is removed");
         assert!(journal_path(d.path()).exists());
         assert_eq!(read(d.path()).len(), 2, "second read does not import twice");
+    }
+
+    #[test]
+    fn pending_operation_round_trips_and_clears() {
+        let d = tmp();
+        assert_eq!(pending_operation_read(d.path()).unwrap(), None);
+
+        let op = serde_json::json!({"kind": "bulkDelete", "uids": [1, 2, 3]});
+        pending_operation_save(d.path(), &op).unwrap();
+        assert_eq!(pending_operation_read(d.path()).unwrap(), Some(op));
+
+        pending_operation_clear(d.path()).unwrap();
+        assert_eq!(pending_operation_read(d.path()).unwrap(), None);
+        // Clearing an already-absent file is not an error.
+        pending_operation_clear(d.path()).unwrap();
+    }
+
+    #[test]
+    fn pending_operation_save_creates_the_data_directory() {
+        let parent = tmp();
+        let d = parent.path().join("not-yet-created");
+        assert!(!d.exists());
+        pending_operation_save(&d, &serde_json::json!({"a": 1})).unwrap();
+        assert_eq!(pending_operation_read(&d).unwrap(), Some(serde_json::json!({"a": 1})));
+    }
+
+    #[test]
+    fn an_unparseable_pending_operation_file_is_an_error() {
+        let d = tmp();
+        std::fs::write(pending_operation_path(d.path()), "{ not json").unwrap();
+        assert!(pending_operation_read(d.path()).is_err());
     }
 }
