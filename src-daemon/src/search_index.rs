@@ -11,6 +11,7 @@ use mailvault_core::search_index::plan::{bodies_action, collect_burst, needs_ful
 use mailvault_core::search_index::reconcile::{self, AttachmentMeta, IndexConfig, IndexDoc};
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use mailvault_core::search_index::{self as core, db, lock, SharedConn};
+use mailvault_core::maildir::vault_filename_uid;
 use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, parse_eml_bytes_light, parse_flags_from_filename, part_filename, read_light_at};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
@@ -687,6 +688,34 @@ fn rebuild_index(st: &SearchIndexState) {
     }
 }
 
+/// Task 1.10 review I1: a count-only listing of every listed folder's `cur`,
+/// run once at the start of a full sweep before any folder is reconciled, so
+/// `total` (`mailvault_core::search_index::db::counts`, summed over
+/// `mailbox_scan.file_count`) counts every folder from the very first
+/// progress emit — not just the folders `reconcile_mailbox` has already
+/// visited this pass. `INSERT OR IGNORE`: a folder already scanned (this pass
+/// or an earlier one) keeps its real, authoritative count; `reconcile_mailbox`
+/// still overwrites it with `INSERT OR REPLACE` once it actually visits that
+/// folder. Same filename filter as `reconcile::list_cur`'s uid parse, so this
+/// count matches what that later, authoritative listing will find. An
+/// unreadable folder is skipped: `reconcile_mailbox` will report or skip it
+/// too, so there is nothing here worth prefilling.
+fn prescan_folder_counts(st: &SearchIndexState, maildir: &Path, dirs: &[(String, String)]) {
+    for (account, dir) in dirs {
+        let cur = maildir.join(account).join(dir).join("cur");
+        let Ok(entries) = std::fs::read_dir(&cur) else { continue };
+        let n = entries.flatten().filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()).is_some()).count();
+        if let Some(conn) = lock(&st.db).as_ref() {
+            if let Err(e) = conn.execute(
+                "INSERT OR IGNORE INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, unixepoch(), ?3)",
+                rusqlite::params![account, dir, n as i64],
+            ) {
+                warn!("search index prescan {account}/{dir}: {e}");
+            }
+        }
+    }
+}
+
 pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, only: Option<Vec<(String, String)>>) -> SweepOutcome {
     *g(&st.phase) = "indexing";
     emit(st);
@@ -705,6 +734,10 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
     // A listing that failed is not "these folders are gone": no prune.
     // An unplugged or unreadable vault lists nothing; pruning then would drop the whole index.
     if full && listed && maildir.is_dir() && keep_going() {
+        // Task 1.10 review I1: count every folder before reconciling any of them,
+        // so `total` (and so `complete`) is right from the very first emit of a
+        // first pass, not just after every folder has had its own turn.
+        prescan_folder_counts(st, maildir, &dirs);
         if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
             warn!("search index prune: {e}");
         }
@@ -1135,6 +1168,43 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert_eq!(crate::search_index::status_json(&st)["state"], "unavailable");
         assert!(!index_file(tmp.path()).exists());
+    }
+
+    /// Task 1.10 review I1: `total` must count every listed folder from the
+    /// very first progress emit of a first pass, not only the folders
+    /// reconciled so far — otherwise an emit right after a folder's own
+    /// batch commits reads `indexed == total` (falsely "complete") until
+    /// later folders are visited, and the progress UI flickers/closes early.
+    #[test]
+    fn a_first_pass_counts_every_folder_before_the_first_emit() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 3);
+        seed(tmp.path(), "acct", "Archive", 3);
+        let st = state(tmp.path());
+        let mut rx = st.bus.subscribe();
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+
+        // The first progress emit where anything has actually been indexed:
+        // whichever folder's batch commits first, before the other is visited.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let mut first_indexed = None;
+        while std::time::Instant::now() < deadline {
+            match rx.try_recv() {
+                Ok(line) => {
+                    if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                        if name == "search-index-progress" && payload["indexed"].as_u64().unwrap_or(0) > 0 {
+                            first_indexed = Some(payload);
+                            break;
+                        }
+                    }
+                }
+                Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
+            }
+        }
+        let s = first_indexed.expect("no progress emit with indexed > 0 within 20s");
+        assert_eq!(s["total"].as_u64(), Some(6), "total must count BOTH folders from the first indexed emit, not just the one folder reconciled so far: {s}");
+        assert_eq!(s["complete"].as_bool(), Some(false), "6 total, 3 indexed is not complete: {s}");
     }
 
     /// Review I1 (task-1.6-review.md): while the vault is unreachable, `st.vault_root`
