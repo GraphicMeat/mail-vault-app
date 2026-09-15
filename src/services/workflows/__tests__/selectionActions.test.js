@@ -128,6 +128,7 @@ const { loadEmails: realLoadEmails } = await import('../loadEmails');
 const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
+const OTHER_ACCOUNT = { id: 'acct2', email: 'other@mock.test' };
 
 // Two messages in one RFC thread, both unread.
 function seedThread(flags = { 1: [], 2: [] }) {
@@ -633,6 +634,201 @@ describe('deleteSelectedFromServer', () => {
 // `#` shortcut. It used to hold the row on screen (and a modal over a backdrop)
 // for the whole server round trip; the bulk paths never did.
 describe('deleteEmailFromServer', () => {
+  it('keeps a newly opened reader when the journal write finishes', async () => {
+    let releaseQueue;
+    let releaseDelete;
+    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { releaseQueue = resolve; }));
+    mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { releaseDelete = resolve; }));
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(releaseQueue).toBeTypeOf('function'));
+
+    // The user can open another row while the durable delete intent is being
+    // written. The optimistic removal must only clear the reader it started
+    // with, not this fresh selection.
+    useMailStore.setState({ selectedEmailId: 2, selectedEmail: { uid: 2 } });
+    releaseQueue();
+    await vi.waitFor(() => expect(releaseDelete).toBeTypeOf('function'));
+
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+    expect(useMailStore.getState().selectedEmail).toEqual({ uid: 2 });
+    releaseDelete();
+    await pending;
+
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+    expect(useMailStore.getState().selectedEmail).toEqual({ uid: 2 });
+  });
+
+  it('does not alter a same-UID reader after switching account during the journal write', async () => {
+    let releaseQueue;
+    let releaseDelete;
+    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { releaseQueue = resolve; }));
+    mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { releaseDelete = resolve; }));
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(releaseQueue).toBeTypeOf('function'));
+
+    // UID 1 is a different message in another account. The delete must keep
+    // the switched-to view intact through both optimistic and confirmed work.
+    const other = { ...seedThread()[0], subject: 'Other account message' };
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeAccountId: OTHER_ACCOUNT.id,
+      activeMailbox: 'INBOX', emails: [other], sentEmails: [], totalEmails: 1,
+      selectedEmailId: 1, selectedEmail: { uid: 1, subject: other.subject },
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+    releaseQueue();
+    await vi.waitFor(() => expect(releaseDelete).toBeTypeOf('function'));
+
+    expect(useMailStore.getState().activeAccountId).toBe(OTHER_ACCOUNT.id);
+    expect(useMailStore.getState().emails).toEqual([other]);
+    expect(useMailStore.getState().selectedEmail).toEqual({ uid: 1, subject: other.subject });
+    releaseDelete();
+    await pending;
+
+    expect(useMailStore.getState().activeAccountId).toBe(OTHER_ACCOUNT.id);
+    expect(useMailStore.getState().emails).toEqual([other]);
+    expect(useMailStore.getState().selectedEmail).toEqual({ uid: 1, subject: other.subject });
+  });
+
+  it('preserves another account when switching during archive lookup', async () => {
+    let release;
+    mockGetArchivedEmailIds.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const other = { ...seedThread()[0], subject: 'other-account' };
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeAccountId: OTHER_ACCOUNT.id,
+      emails: [other], totalEmails: 1, selectedEmailId: 1, selectedEmail: other,
+    });
+    release(new Set());
+    await pending;
+
+    expect(useMailStore.getState().emails).toEqual([other]);
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', [], null, { removedUids: [1] },
+    );
+  });
+
+  it('does not persist a spanning view into the deleted mailbox cache', async () => {
+    let release;
+    mockGetArchivedEmailIds.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const other = {
+      ...seedThread()[0], subject: 'other-account',
+      _accountId: OTHER_ACCOUNT.id, _mailbox: 'INBOX',
+    };
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeAccountId: OTHER_ACCOUNT.id,
+      activeMailbox: 'UNIFIED', emails: [other], totalEmails: 1,
+      selectedEmailId: _selKey(other), selectedEmail: other,
+    });
+    release(new Set());
+    await pending;
+
+    expect(useMailStore.getState().emails).toEqual([other]);
+    expect(useMailStore.getState().totalEmails).toBe(1);
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', [], null, { removedUids: [1] },
+    );
+  });
+
+  it.each(['UNIFIED', 'subtree'])('decrements the count after an ordinary %s delete', async view => {
+    const rows = seedThread().map(email => ({
+      ...email, _accountId: ACCOUNT.id, _mailbox: view === 'UNIFIED' ? 'INBOX' : 'Kunden.Child',
+    }));
+    primeStore(rows, []);
+    useMailStore.setState({
+      activeMailbox: view === 'UNIFIED' ? 'UNIFIED' : 'Kunden',
+      mailboxScope: view === 'UNIFIED' ? null : { root: 'Kunden', paths: ['Kunden', 'Kunden.Child'] },
+      selectedThread: null, selectedEmailId: _selKey(rows[0]), selectedEmail: rows[0],
+    });
+
+    await useMailStore.getState().deleteEmailFromServer(_selKey(rows[0]));
+
+    expect(useMailStore.getState().totalEmails).toBe(1);
+  });
+
+  it('does not persist subtree rows into the root mailbox cache', async () => {
+    let release;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    primeStore(seedThread(), []);
+    useMailStore.setState({ selectedThread: null, selectedEmailId: 1, selectedEmail: { uid: 1 } });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const child = {
+      ...seedThread()[1], _accountId: ACCOUNT.id, _mailbox: 'INBOX.Child',
+    };
+    useMailStore.setState({
+      mailboxScope: { root: 'INBOX', paths: ['INBOX', 'INBOX.Child'] },
+      emails: [child], totalEmails: 1,
+      selectedEmailId: _selKey(child), selectedEmail: child,
+    });
+    release();
+    await pending;
+
+    expect(mockSaveEmailHeaders).toHaveBeenCalledWith(
+      ACCOUNT.id, 'INBOX', [], null, { removedUids: [1] },
+    );
+  });
+
+  it('preserves bare folder rows after leaving unified during delete', async () => {
+    let release;
+    mockDeleteEmail.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    const own = { ...seedThread()[0], _accountId: ACCOUNT.id, _mailbox: 'INBOX' };
+    primeStore([own], []);
+    useMailStore.setState({ activeMailbox: 'UNIFIED', selectedEmailId: _selKey(own), selectedEmail: own });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(_selKey(own));
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const other = { ...seedThread()[0], subject: 'other-account' };
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeAccountId: OTHER_ACCOUNT.id,
+      activeMailbox: 'INBOX', emails: [other], totalEmails: 1,
+      selectedEmailId: 1, selectedEmail: other,
+    });
+    release();
+    await pending;
+
+    expect(useMailStore.getState().emails).toEqual([other]);
+  });
+
+  it('restores the live thread snapshot after a failed delete', async () => {
+    let release;
+    mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
+    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    const rows = seedThread();
+    primeStore(rows, []);
+    useMailStore.setState({ selectedEmailId: 1, selectedEmail: rows[0] });
+
+    const pending = useMailStore.getState().deleteEmailFromServer(1);
+    const rejected = expect(pending).rejects.toThrow('nope');
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const thread = {
+      threadId: 'a@mock', subject: 'General', emails: rows,
+      lastEmail: rows[1], messageCount: 2,
+    };
+    useMailStore.setState({ selectedThread: thread, selectedEmailId: 2, selectedEmail: null });
+    release();
+    await rejected;
+
+    expect(useMailStore.getState().selectedThread).toEqual(thread);
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+  });
+
   it('pulls the row out of the list before the server answers', async () => {
     let release;
     mockDeleteEmail.mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));

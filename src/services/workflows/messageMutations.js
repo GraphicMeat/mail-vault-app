@@ -506,19 +506,43 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     const loc = resolveEmailLocation(e, state);
     return loc ? e.uid === realUid && loc.accountId === accountId && loc.mailbox === mailbox : isThisEmail(e);
   };
-  const threadUpdate = pruneSelectedThread(state, isThisMessage);
+  // The journal write above is awaited. Read the view again before the
+  // optimistic paint: a reader opened during that write belongs to the user,
+  // not to this delete. If the user changed account/folder, keep that view's
+  // rows and reader completely untouched; the uid may exist there too.
+  const liveState = get();
+  const sameView = liveState.activeAccountId === state.activeAccountId
+    && liveState.activeMailbox === state.activeMailbox
+    && liveState.mailboxScope === state.mailboxScope;
+  const liveSelectedEmailId = sameView ? liveState.selectedEmailId : null;
+  const threadBeforeDelete = sameView ? liveState.selectedThread : null;
+  const selectedEmailIdBeforeDelete = sameView ? liveState.selectedEmailId : null;
+  const threadUpdate = sameView ? pruneSelectedThread(liveState, isThisMessage) : null;
+  // Keep the ownership of the row removed by the optimistic paint. The
+  // completion path runs after more awaits, by which time that paint has
+  // already removed the only row that could prove this message belonged to a
+  // spanning view. The view identity prevents this count from leaking into a
+  // different account or folder that happens to span mailboxes too.
+  const optimisticView = sameView && isUnified ? {
+    accountId: liveState.activeAccountId,
+    mailbox: liveState.activeMailbox,
+    mailboxScope: liveState.mailboxScope,
+    targetWasInView: [...liveState.emails, ...liveState.sentEmails].some(isThisEmail),
+  } : null;
   // Only a delete that CLOSES the reader hands it a new message: a thread with
   // messages left keeps the one pruneSelectedThread moved to.
   const closedReader = threadUpdate
     ? threadUpdate.selectedThread === null
-    : (selectedEmailId === uid || selectedEmailId === realUid);
-  const openNext = closedReader ? _openAfterDelete(state, isThisEmail, isThisEmail) : null;
+    : (liveSelectedEmailId === uid || liveSelectedEmailId === realUid);
+  const openNext = closedReader ? _openAfterDelete(liveState, isThisEmail, isThisEmail) : null;
   useMailStore.setState({
-    deleteTombstones: new Set(state.deleteTombstones).add(tombstone),
-    emails: state.emails.filter(e => !isThisEmail(e)),
-    sentEmails: state.sentEmails.filter(e => !isThisEmail(e)),
-    selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => k !== uid && k !== realUid)),
-    ...(threadUpdate ?? (selectedEmailId === uid || selectedEmailId === realUid
+    deleteTombstones: new Set(liveState.deleteTombstones).add(tombstone),
+    emails: sameView ? liveState.emails.filter(e => !isThisEmail(e)) : liveState.emails,
+    sentEmails: sameView ? liveState.sentEmails.filter(e => !isThisEmail(e)) : liveState.sentEmails,
+    selectedEmailIds: sameView
+      ? new Set([...liveState.selectedEmailIds].filter(k => k !== uid && k !== realUid))
+      : liveState.selectedEmailIds,
+    ...(threadUpdate ?? (closedReader
       ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null }
       : {})),
   });
@@ -546,9 +570,13 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     // since moved on from is not this delete's to reopen.
     const cur = get();
     if (threadUpdate && cur.selectedThread === threadUpdate.selectedThread && cur.selectedEmailId === threadUpdate.selectedEmailId) {
-      useMailStore.setState({ selectedThread: state.selectedThread, selectedEmailId });
+      useMailStore.setState({
+        selectedThread: threadBeforeDelete,
+        selectedEmailId: selectedEmailIdBeforeDelete,
+      });
     }
-    if (!isUnified) get().loadEmails();
+    if (!isUnified
+      && get().activeAccountId === accountId && get().activeMailbox === mailbox) get().loadEmails();
   };
 
   if (isLocalOnly) {
@@ -608,8 +636,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
 
   await applyServerRemoval(realUid, {
     accountId, mailbox, isUnified, skipRefresh,
+    optimisticView,
     // Never over a message this delete just opened.
-    clearSelection: !threadUpdate && selectedEmailId === uid && !openNext,
+    clearSelection: sameView && !threadUpdate && selectedEmailId === uid && !openNext,
     deletedByUs: true,
   });
 
@@ -775,7 +804,11 @@ export function selectionStillNames(get, { uid, accountId, mailbox, keys } = {})
   if (keys) return keys.has(id);
   // A single folder's list keys by bare uid; a spanning one (and a merged Sent
   // copy anywhere) by the full key, which has to agree on the folder too.
-  if (id === uid) return true;
+  if (id === uid) {
+    // A bare UID is meaningful only in the view that supplied it. Once the
+    // user changes account/folder, the same number may name another message.
+    return get().activeAccountId === accountId && get().activeMailbox === mailbox;
+  }
   const k = _parseSelKey(id);
   return k.uid === uid && k.accountId === accountId && k.mailbox === mailbox;
 }
@@ -796,7 +829,7 @@ export function selectionStillNames(get, { uid, accountId, mailbox, keys } = {})
 // `removedUids` is what stops the sidecar re-hydrating the row on reload.
 export async function applyServerRemoval(uid, {
   accountId, mailbox, isUnified = false, skipRefresh = false, clearSelection = true,
-  deletedByUs = false,
+  deletedByUs = false, optimisticView = null,
 } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
@@ -822,7 +855,6 @@ export async function applyServerRemoval(uid, {
   const sameMessage = (e) => e.uid === uid
     && (e._mailbox == null || e._mailbox === mailbox)
     && (e._accountId == null || e._accountId === accountId);
-  const isRemoved = isUnified ? sameMessage : (e) => e.uid === uid;
   // `localEmails` can still contain the optimistic row after a local-only
   // delete has removed its Maildir file. Ask the durable archive index instead
   // and fail closed when it cannot prove that the vault copy survived.
@@ -837,9 +869,34 @@ export async function applyServerRemoval(uid, {
       console.warn('[deleteEmail] Could not verify surviving vault copy:', error);
     }
   }
-  const filteredEmails = get().emails.filter(e => !isRemoved(e));
-  const filteredSent = get().sentEmails.filter(e => !isRemoved(e));
-  const newTotal = Math.max(0, (get().totalEmails || 0) - 1);
+  // Every read above yielded to the user. Re-check the live view now: the
+  // original delete may have started in Unified, then landed after the user
+  // switched to another account's folder. A UID is only safe to filter from a
+  // single-folder view when that folder is the target; a spanning view can
+  // filter by the row's stamped account and mailbox.
+  const live = get();
+  const liveSpansMailboxes = live.activeMailbox === 'UNIFIED' || !!live.mailboxScope;
+  const targetViewMatches = live.activeAccountId === accountId && live.activeMailbox === mailbox;
+  const viewMatches = liveSpansMailboxes || targetViewMatches;
+  const isRemoved = liveSpansMailboxes
+    ? sameMessage
+    : targetViewMatches ? (e) => e.uid === uid : () => false;
+  const currentEmails = live.emails;
+  const currentSentEmails = live.sentEmails;
+  const targetIsInSpanningView = liveSpansMailboxes
+    && [...currentEmails, ...currentSentEmails].some(sameMessage);
+  const sameOptimisticView = optimisticView
+    && live.activeAccountId === optimisticView.accountId
+    && live.activeMailbox === optimisticView.mailbox
+    && live.mailboxScope === optimisticView.mailboxScope;
+  const totalIncludesTarget = targetViewMatches
+    || targetIsInSpanningView
+    || (sameOptimisticView && optimisticView.targetWasInView);
+  const filteredEmails = currentEmails.filter(e => !isRemoved(e));
+  const filteredSent = currentSentEmails.filter(e => !isRemoved(e));
+  const newTotal = totalIncludesTarget
+    ? Math.max(0, (live.totalEmails || 0) - 1)
+    : live.totalEmails;
   const updates = {
     emails: filteredEmails,
     sentEmails: filteredSent,
@@ -861,7 +918,7 @@ export async function applyServerRemoval(uid, {
   // The vault rows already in memory carry custody with them (db.getArchivedEmails
   // stamps it at read time), so stamp them here too rather than waiting for the
   // next disk read — the row must go gold in this paint, not the one after.
-  if (deletedByUs) updates.localEmails = get().localEmails.map(e => (
+  if (deletedByUs && viewMatches) updates.localEmails = get().localEmails.map(e => (
     sameMessage(e) ? { ...e, serverDeleted: true } : e
   ));
 
@@ -879,11 +936,29 @@ export async function applyServerRemoval(uid, {
   useMailStore.setState(updates);
   get().updateSortedEmails();
 
+  const exactTargetFolder = !liveSpansMailboxes && targetViewMatches;
   if (!isUnified) {
-    await db.saveEmailHeaders(accountId, mailbox, filteredEmails, newTotal, { removedUids: [uid] });
+    // When the user changed folders while this delete was on the wire, the
+    // rows in memory belong to another mailbox. Prune the target sidecar by
+    // UID while leaving its existing rows/count intact; never write the other
+    // mailbox's rows into this cache.
+    await db.saveEmailHeaders(
+      accountId, mailbox,
+      exactTargetFolder ? filteredEmails : [],
+      exactTargetFolder ? newTotal : null,
+      { removedUids: [uid] },
+    );
   }
 
-  if (!skipRefresh && !isUnified) get().loadEmails();
+  // Saving the sidecar is another await. The user may switch views while it
+  // runs, so validate the destination again before a reload can repaint the
+  // newly active mailbox.
+  const current = get();
+  if (!skipRefresh && !isUnified
+    && current.activeAccountId === accountId && current.activeMailbox === mailbox
+    && current.activeMailbox !== 'UNIFIED' && !current.mailboxScope) {
+    current.loadEmails();
+  }
 }
 
 
