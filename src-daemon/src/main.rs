@@ -62,7 +62,11 @@ fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
         return (app_dir.clone(), true);
     }
     let dir = PathBuf::from(&path);
-    if dir.join(".mailvault-vault.json").exists() || dir.join("Maildir").exists() {
+    // Task 2.5 (deviation 6): the same "does this look like a vault" rule the
+    // app uses, so the two processes never disagree about a folder that holds
+    // e.g. only `custody/` — with custody opening here (Task 2.9a/b), that
+    // divergence used to decide where a second, orphaned store could open.
+    if mailvault_core::vault_layout::read_marker(&dir).is_some() || mailvault_core::vault_layout::looks_like_vault(&dir) {
         return (dir, true);
     }
     warn!("Configured mail storage {} is not reachable — mail operations disabled until it is back", path);
@@ -300,6 +304,7 @@ async fn daemon_main() {
         data_dir: mail_dir.clone(),
         app_dir: data_dir.clone(),
         mail_dir_ok,
+        vault_closed: std::sync::atomic::AtomicBool::new(false),
         started_at: std::time::Instant::now(),
         llm: llm_state,
         inference: inference_engine,
@@ -435,7 +440,15 @@ mod tests {
     fn a_marked_vault_folder_becomes_the_mail_dir() {
         let app = scratch("marked-app");
         let vault = scratch("marked-vault");
-        std::fs::write(vault.join(".mailvault-vault.json"), "{}").unwrap();
+        // Task 2.5: `resolve_mail_dir` now reads the marker through
+        // `mailvault_core::vault_layout::read_marker`, which — like the app's
+        // own `write_marker` — requires the real shape, not just any file at
+        // that name.
+        std::fs::write(
+            vault.join(".mailvault-vault.json"),
+            serde_json::json!({"app": "mailvault", "vaultId": "abc", "createdAt": 1}).to_string(),
+        )
+        .unwrap();
         std::fs::write(
             app.join("vault-meta.json"),
             serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
@@ -443,6 +456,41 @@ mod tests {
         .unwrap();
 
         assert_eq!(resolve_mail_dir(&app), (vault.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn a_folder_with_only_custody_and_no_marker_is_still_a_vault() {
+        // deviation 6: the daemon used to require the marker OR a `Maildir`
+        // dir specifically; it now shares the app's broader `looks_like_vault`
+        // rule (any non-index VAULT_DIRS entry), so a vault holding only
+        // `custody/` + `email_cache/` reads the same way in both processes.
+        let app = scratch("custody-only-app");
+        let vault = scratch("custody-only-vault");
+        std::fs::create_dir_all(vault.join("custody")).unwrap();
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(resolve_mail_dir(&app), (vault.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn an_empty_configured_folder_is_not_a_vault() {
+        let app = scratch("empty-configured-app");
+        let vault = scratch("empty-configured-vault");
+        std::fs::write(
+            app.join("vault-meta.json"),
+            serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(resolve_mail_dir(&app), (app.clone(), false));
         let _ = std::fs::remove_dir_all(&app);
         let _ = std::fs::remove_dir_all(&vault);
     }

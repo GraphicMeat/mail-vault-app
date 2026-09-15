@@ -1318,7 +1318,7 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
-        daemon_index_call(&app_handle, "search_index_close");
+        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
         custody::close(&app_handle);
         let result = vault::adopt(&app_handle, &path);
         custody::reopen(&app_handle);
@@ -1326,7 +1326,7 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
             Ok(s) => s,
             Err(e) => {
                 drop(suspended);
-                daemon_index_call(&app_handle, "search_index_reopen");
+                daemon_vault_lifecycle_call(&app_handle, "vault_reopen", std::time::Duration::from_secs(60));
                 return Err(e);
             }
         };
@@ -1370,7 +1370,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
     let result = tokio::task::spawn_blocking(move || {
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
-        daemon_index_call(&handle, "search_index_close");
+        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
         custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to(&handle, &path, move |p| {
@@ -1385,7 +1385,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
         match follow_up {
             MoveFollowUp::ReopenIndex => {
                 drop(suspended);
-                daemon_index_call(&handle, "search_index_reopen");
+                daemon_vault_lifecycle_call(&handle, "vault_reopen", std::time::Duration::from_secs(60));
             }
             // The root moved (success, or a failure that fell back to a
             // different root): the channel respawns the daemon on it only
@@ -1413,7 +1413,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
     let result = tokio::task::spawn_blocking(move || {
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
-        daemon_index_call(&handle, "search_index_close");
+        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
         custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to_default(&handle, move |p| {
@@ -1428,7 +1428,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
         match follow_up {
             MoveFollowUp::ReopenIndex => {
                 drop(suspended);
-                daemon_index_call(&handle, "search_index_reopen");
+                daemon_vault_lifecycle_call(&handle, "vault_reopen", std::time::Duration::from_secs(60));
             }
             MoveFollowUp::RestartDaemon => {
                 stop_daemon();
@@ -1449,7 +1449,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
-        daemon_index_call(&app_handle, "search_index_close");
+        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
         custody::close(&app_handle);
         let result = vault::reset(&app_handle);
         custody::reopen(&app_handle);
@@ -1457,7 +1457,7 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
             Ok(s) => s,
             Err(e) => {
                 drop(suspended);
-                daemon_index_call(&app_handle, "search_index_reopen");
+                daemon_vault_lifecycle_call(&app_handle, "vault_reopen", std::time::Duration::from_secs(60));
                 return Err(e);
             }
         };
@@ -3581,19 +3581,53 @@ pub(crate) fn sweep_index_soon() {
     daemon_channel::notify("search_index.sweep_soon", serde_json::json!({}));
 }
 
-/// `search_index_close` / `search_index_reopen` on the daemon, blocking, for the
-/// vault handlers: the daemon must release index.db before the app copies it.
-/// No daemon = nothing holds the index: log and go on. While `DAEMON_SUSPENDED`
-/// is held and no daemon is currently live, `ensure_daemon_running` fails fast
-/// instead of spawning one (addendum D.5) — same log-and-go-on outcome.
-pub(crate) fn daemon_index_call(app: &tauri::AppHandle, method: &str) {
-    let result = daemon_ipc_paths().and_then(|(socket, token_path)| {
-        ensure_daemon_running(app, &socket)?;
-        let token = std::fs::read_to_string(&token_path).map_err(|e| e.to_string())?;
-        mailvault_core::daemon_ipc::call(&socket, &token, method, serde_json::json!({}), std::time::Duration::from_secs(60)).map_err(|e| format!("{e:?}"))
-    });
-    if let Err(e) = result {
-        warn!("{method}: {e}");
+/// One blocking daemon RPC: ensure the daemon is up, read its token, one
+/// request/response round trip. Used by code that isn't already async — the
+/// vault move handlers' `spawn_blocking` bodies below, and (Task 2.9b) the
+/// app's custody/insights/backup bridge callers.
+///
+/// Renamed from `daemon_index_call` (Task 2.5): it now returns the result
+/// instead of always swallowing it, so a bridge caller can act on an error.
+/// The vault handlers keep today's log-and-go-on behaviour themselves, via
+/// `daemon_vault_lifecycle_call` below. While `DAEMON_SUSPENDED` is held and
+/// no daemon is currently live, `ensure_daemon_running` fails fast instead of
+/// spawning one (addendum D.5) — surfaced here as an ordinary `Err`.
+pub(crate) fn daemon_call_blocking(
+    app: &tauri::AppHandle,
+    method: &str,
+    params: serde_json::Value,
+    timeout: std::time::Duration,
+) -> Result<serde_json::Value, String> {
+    let (socket, token_path) = daemon_ipc_paths()?;
+    ensure_daemon_running(app, &socket)?;
+    let token = std::fs::read_to_string(&token_path).map_err(|e| e.to_string())?;
+    mailvault_core::daemon_ipc::call(&socket, &token, method, params, timeout).map_err(|e| format!("{e:?}"))
+}
+
+/// True when a `daemon_call_blocking` error is the daemon answering
+/// JSON-RPC METHOD_NOT_FOUND — a build that has not been rebuilt yet with
+/// this RPC (server.rs's default arm: `"Unknown method: {method}"`,
+/// textually; the blocking `mailvault_core::daemon_ipc::CallError::Rpc`
+/// variant carries only the message, not the numeric code). Widest window:
+/// the mini's runner daemon reports build id `dev` and restarts on every
+/// spec, so an in-flight vault move can catch an old binary mid-restart.
+/// Callers must treat this exactly like the daemon being unreachable — log
+/// and continue the vault operation — never as a hard failure of the move.
+fn is_stale_daemon_method(e: &str) -> bool {
+    e.contains("Unknown method:")
+}
+
+/// `vault_close` / `vault_reopen` on the daemon, blocking, for the vault
+/// handlers: the daemon must release index.db (and, from Task 2.9a/b,
+/// custody.db) before the app copies it. No daemon, or a daemon too old to
+/// know the method, both mean nothing holds either store: log and go on.
+fn daemon_vault_lifecycle_call(app: &tauri::AppHandle, method: &str, timeout: std::time::Duration) {
+    if let Err(e) = daemon_call_blocking(app, method, serde_json::json!({}), timeout) {
+        if is_stale_daemon_method(&e) {
+            warn!("{method}: daemon does not know this method yet (stale build); continuing as if unreachable");
+        } else {
+            warn!("{method}: {e}");
+        }
     }
 }
 
@@ -3712,16 +3746,40 @@ const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 /// Per-method reply budget for `daemon_rpc` (C8). When `Some`, `rpc_attempt`
 /// wraps the *whole* attempt in it — connect, auth write, auth read, request
 /// write and response read together, not only the final response read. `None`
-/// (every legacy dotted method, unchanged) means no timeout at all — only
-/// this small, explicit family of search-index/vault-index RPCs gets one.
-/// `search_index_destroy` gets the longest budget because the daemon itself
-/// waits up to 120s for the index worker to finish before replying.
+/// (every legacy dotted method, unchanged) means no timeout at all.
+///
+/// Task 2.5 Step 4: every Phase 2 daemon-owned name is added here now, ahead
+/// of its route landing (Tasks 2.6-2.9a), so a later task cannot forget the
+/// budget. `search_index_destroy` gets the longest of the pre-existing family
+/// because the daemon itself waits up to 120s for the index worker to finish
+/// before replying; the 600s family covers vault-wide scans/migrations and
+/// the mirror-spanning flag-rename forwarders (Task 2.9b); the 120s family
+/// is one big read or write; everything else is a single-row/one-mailbox op.
 fn reply_timeout(method: &str) -> Option<std::time::Duration> {
+    use std::time::Duration;
     match method {
-        "search_index_destroy" => Some(std::time::Duration::from_secs(150)),
-        "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild" => {
-            Some(std::time::Duration::from_secs(30))
+        "search_index_destroy" => Some(Duration::from_secs(150)),
+
+        "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
+        | "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_attachment"
+        | "maildir_read_raw_source" | "maildir_exists" | "maildir_list" | "maildir_store" | "maildir_delete"
+        | "maildir_delete_many" | "maildir_set_flags" | "cache_attachment" | "cached_attachment_path"
+        | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
+        | "list_cached_uids" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
+        | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
+        | "read_pending_operation" | "save_pending_operation" | "clear_pending_operation" | "local_index_read"
+        | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
+        | "maildir_orphan_stats" => Some(Duration::from_secs(30)),
+
+        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache" | "vault_close" => {
+            Some(Duration::from_secs(120))
         }
+
+        "maildir_clear_cache" | "maildir_migrate_json_to_eml" | "maildir_migrate_email_dirs" | "maildir_purge_orphans"
+        | "prefetch_attachments" | "vault_apply_flags" | "vault_rename_mailbox" | "vault_adopt_mailbox_dirs" => {
+            Some(Duration::from_secs(600))
+        }
+
         _ => None,
     }
 }
@@ -4830,6 +4888,72 @@ mod tests {
         assert_eq!(crate::reply_timeout("sync.now"), None);
         assert_eq!(crate::reply_timeout("daemon.heartbeat"), None);
         assert_eq!(crate::reply_timeout("snapshot.create"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 2.5 Step 4: every Phase 2 daemon-owned name has a reply_timeout
+    // entry, added ahead of its route landing so a later task cannot forget it.
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn reply_timeout_gives_every_phase_2_thirty_second_method_thirty_seconds() {
+        for method in [
+            "maildir_read", "maildir_read_light", "maildir_read_light_batch", "maildir_read_attachment",
+            "maildir_read_raw_source", "maildir_exists", "maildir_list", "maildir_store", "maildir_delete",
+            "maildir_delete_many", "maildir_set_flags", "cache_attachment", "cached_attachment_path",
+            "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
+            "list_cached_uids", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
+            "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
+            "read_pending_operation", "save_pending_operation", "clear_pending_operation", "local_index_read",
+            "local_index_append", "local_index_remove", "custody_status", "maildir_repair_generation",
+            "maildir_orphan_stats",
+        ] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    #[test]
+    fn reply_timeout_gives_every_phase_2_hundred_twenty_second_method_that_budget() {
+        for method in ["load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache", "vault_close"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
+        }
+    }
+
+    #[test]
+    fn reply_timeout_gives_every_phase_2_ten_minute_method_that_budget() {
+        for method in [
+            "maildir_clear_cache", "maildir_migrate_json_to_eml", "maildir_migrate_email_dirs",
+            "maildir_purge_orphans", "prefetch_attachments", "vault_apply_flags", "vault_rename_mailbox",
+            "vault_adopt_mailbox_dirs",
+        ] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(600)), "method={method}");
+        }
+    }
+
+    /// `vault_reopen` is deliberately absent from the plan's table (only the
+    /// blocking `daemon_call_blocking` call sites use it, each passing their
+    /// own explicit `Duration`, never through this async-`daemon_rpc` table).
+    #[test]
+    fn reply_timeout_is_none_for_vault_reopen() {
+        assert_eq!(crate::reply_timeout("vault_reopen"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 2.5 Step 3: vault_close/vault_reopen stale-daemon-reply mapping
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_method_not_found_reply_is_recognized_as_a_stale_daemon_method() {
+        // The exact shape `daemon_ipc::call` hands back for a JSON-RPC
+        // METHOD_NOT_FOUND error (server.rs's default arm), formatted through
+        // `{e:?}` at the `daemon_call_blocking` call site.
+        assert!(crate::is_stale_daemon_method("Rpc(\"Unknown method: vault_close\")"));
+    }
+
+    #[test]
+    fn other_daemon_errors_are_not_mistaken_for_a_stale_method() {
+        assert!(!crate::is_stale_daemon_method("Unreachable(\"cannot connect to daemon: os error 61\")"));
+        assert!(!crate::is_stale_daemon_method("Rpc(\"custody store unavailable: closed\")"));
     }
 
     // -----------------------------------------------------------------------

@@ -11,6 +11,7 @@ pub mod search_index;
 pub mod vault_eml;
 pub mod vault_files;
 pub mod vault_flags;
+pub mod vault_layout;
 pub mod op_journal;
 pub mod custody;
 pub mod mime;

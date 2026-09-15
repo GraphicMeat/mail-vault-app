@@ -12,7 +12,7 @@
 //! startup and held for the process lifetime — a raw path loses sandbox access
 //! across restarts.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::Manager;
@@ -20,31 +20,10 @@ use tracing::{info, warn};
 
 use crate::external_location::{self, SLOT_VAULT};
 use mailvault_core::custody::db::{DB_DIR as CUSTODY_DIR, DB_FILE as CUSTODY_FILE};
-
-/// Mail-data directories that live in the vault. Everything else under the app
-/// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 7] = [
-    "Maildir",          // the messages
-    "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
-    "email_cache",      // header sidecars
-    "attachment_cache", // extracted attachments
-    "mailboxes",        // per-account folder lists
-    "search_index",     // offline search index (derived; rebuilt from Maildir)
-    "custody",          // custody records (what each stored message is); never derived, never deleted
-];
-
-/// Marker written at the vault root so a re-selected folder can be recognised
-/// as this app's vault (and told apart from someone else's).
-const MARKER_FILE: &str = ".mailvault-vault.json";
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VaultMarker {
-    pub app: String,
-    #[serde(rename = "vaultId")]
-    pub vault_id: String,
-    #[serde(rename = "createdAt")]
-    pub created_at: u64,
-}
+// Task 2.5 (spec deviation 6): the vault-is-ready rule is shared with the
+// daemon's `resolve_mail_dir` so the two processes never disagree about
+// whether a folder holds mail.
+pub use mailvault_core::vault_layout::{looks_like_vault, read_marker, VaultMarker, MARKER_FILE, VAULT_DIRS};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VaultStatus {
@@ -85,20 +64,9 @@ fn new_vault_id() -> String {
     format!("{:x}-{:x}", now_millis(), std::process::id())
 }
 
-pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
-    let raw = std::fs::read_to_string(dir.join(MARKER_FILE)).ok()?;
-    serde_json::from_str::<VaultMarker>(&raw).ok().filter(|m| m.app == "mailvault")
-}
-
 fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
     let data = serde_json::to_string_pretty(marker).map_err(|e| e.to_string())?;
     std::fs::write(dir.join(MARKER_FILE), data).map_err(|e| format!("Cannot write vault marker: {}", e))
-}
-
-/// True if the folder already holds mail data, marker or not. A search index
-/// alone is derived data, not mail.
-fn looks_like_vault(dir: &Path) -> bool {
-    VAULT_DIRS.iter().filter(|d| **d != "search_index").any(|d| dir.join(d).exists())
 }
 
 /// Resolve the configured vault (if any) and start security-scoped access.

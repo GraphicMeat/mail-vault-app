@@ -1,22 +1,18 @@
 //! The search index RPCs (spec 2026-09-14 §5.3), same names and payloads as the
 //! app's former Tauri commands. Every route blocks on the index: spawn_blocking.
+//!
+//! `vault_close` / `vault_reopen` live here too (Task 2.5, spec deviation 8):
+//! they replace the old `search_index_close` / `search_index_reopen` names.
+//! Renamed, not just moved, because Task 2.9a/b makes them close/reopen
+//! custody as well — "search index" stopped describing what they guard.
+use crate::handlers::common::{blocking, done};
 use crate::ipc::{self, RpcResponse};
 use crate::search_index as si;
 use crate::server::DaemonState;
 use serde_json::Value;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
-
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
-    tokio::task::spawn_blocking(f).await.map_err(|e| format!("Task join error: {e}"))
-}
-
-fn done(id: Value, r: Result<Value, String>) -> RpcResponse {
-    match r {
-        Ok(v) => RpcResponse::success(id, v),
-        Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
-    }
-}
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     let st = Arc::clone(&state.search_index);
@@ -31,8 +27,19 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "search_index_rebuild" => done(id, blocking(move || { si::rebuild(&st); Value::Null }).await),
         // Two minutes: the worker finishes its current batch or compaction first.
         "search_index_destroy" => done(id, blocking(move || si::destroy(&st, Duration::from_secs(120))).await),
-        "search_index_close" => done(id, blocking(move || { si::close(&st); Value::Null }).await),
-        "search_index_reopen" => done(id, blocking(move || { si::reopen(&st); Value::Null }).await),
+        // Set the flag before closing: a request racing in right now must see
+        // the vault as unavailable, not slip through between the two.
+        "vault_close" => {
+            state.vault_closed.store(true, Ordering::SeqCst);
+            done(id, blocking(move || { si::close(&st); Value::Null }).await)
+        }
+        // Reverse order: only clear the flag once the reopen (and, from Task
+        // 2.9a/b, custody's) has actually installed its connection.
+        "vault_reopen" => {
+            let reply = done(id, blocking(move || { si::reopen(&st); Value::Null }).await);
+            state.vault_closed.store(false, Ordering::SeqCst);
+            reply
+        }
         "vault_search" => {
             let Some(request) = params.get("request").and_then(|r| serde_json::from_value::<mailvault_core::search_index::query::SearchRequest>(r.clone()).ok()) else {
                 return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing request"));
@@ -108,9 +115,34 @@ mod tests {
     #[tokio::test]
     async fn destroy_on_a_switching_index_is_busy() {
         let (_t, s) = st();
-        assert_eq!(call(&s, "search_index_close", json!({})).await.result, Some(serde_json::Value::Null));
+        assert_eq!(call(&s, "vault_close", json!({})).await.result, Some(serde_json::Value::Null));
         assert_eq!(call(&s, "search_index_destroy", json!({})).await.result.unwrap(), json!({"ok": false, "error": "searchIndex.busy"}));
-        assert_eq!(call(&s, "search_index_reopen", json!({})).await.result, Some(serde_json::Value::Null));
+        assert_eq!(call(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
+    }
+
+    #[tokio::test]
+    async fn vault_close_sets_the_flag_before_closing_and_reopen_clears_it_after() {
+        let (_t, s) = st();
+        assert!(!s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
+        call(&s, "vault_close", json!({})).await;
+        assert!(s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
+        call(&s, "vault_reopen", json!({})).await;
+        assert!(!s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    /// A route gated on `vault_root` (Task 2.6+) must see the vault as
+    /// unreachable between `vault_close` and `vault_reopen`, and reachable
+    /// again immediately after — this is what `common::vault_root` reads.
+    #[tokio::test]
+    async fn vault_root_is_gated_between_close_and_reopen_and_clear_after() {
+        let (_t, s) = st();
+        assert!(crate::handlers::common::vault_root(&s).is_ok());
+        call(&s, "vault_close", json!({})).await;
+        let err = crate::handlers::common::vault_root(&s).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        assert!(err.contains("being moved"), "{err}");
+        call(&s, "vault_reopen", json!({})).await;
+        assert!(crate::handlers::common::vault_root(&s).is_ok());
     }
 
     #[tokio::test]
@@ -125,6 +157,18 @@ mod tests {
         let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
         let resp = crate::server::handle_request_for_test(&s, "search_index_status", json!({})).await;
         assert_eq!(resp.result.unwrap()["state"], "unavailable");
+    }
+
+    /// `vault_close`/`vault_reopen` are the app's own move machinery, called
+    /// whether or not the vault is currently reachable — they must never
+    /// themselves be refused by the mail-dir gate (unlike the routes gated
+    /// through `common::vault_root`, which they toggle).
+    #[tokio::test]
+    async fn vault_close_and_reopen_are_not_behind_the_mail_dir_gate() {
+        let tmp = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
+        assert_eq!(crate::server::handle_request_for_test(&s, "vault_close", json!({})).await.result, Some(serde_json::Value::Null));
+        assert_eq!(crate::server::handle_request_for_test(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
     }
 
     #[tokio::test]

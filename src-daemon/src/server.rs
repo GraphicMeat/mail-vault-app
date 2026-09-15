@@ -11,6 +11,7 @@ use crate::llm;
 use crate::sync_engine;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
@@ -25,6 +26,11 @@ pub struct DaemonState {
     pub app_dir: PathBuf,
     /// False when a custom mail folder is configured but unreachable.
     pub mail_dir_ok: bool,
+    /// Set between `vault_close` and `vault_reopen` (Task 2.5, spec deviation
+    /// 8): every vault-rooted Phase 2 route refuses through
+    /// `handlers::common::vault_root` while this is set, so nothing writes
+    /// into a root the app is mid-copy on.
+    pub vault_closed: AtomicBool,
     pub started_at: std::time::Instant,
     pub llm: Arc<llm::LlmState>,
     pub inference: Arc<inference::InferenceEngine>,
@@ -294,6 +300,7 @@ impl DaemonState {
             data_dir: mail_dir.clone(),
             app_dir: app_dir.clone(),
             mail_dir_ok,
+            vault_closed: AtomicBool::new(false),
             started_at: std::time::Instant::now(),
             llm: Arc::new(llm::LlmState::new(app_dir.clone())),
             inference: Arc::new(inference::InferenceEngine::new()),
