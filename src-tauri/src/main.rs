@@ -4659,11 +4659,14 @@ static VERIFIED_SOCKET_INO: std::sync::atomic::AtomicU64 = std::sync::atomic::At
 static RESTARTED_FOR_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// Auth token cached from the last slow-path `ensure_daemon_running` run, for
-/// `daemon_rpc`'s fast path (C7) to reuse without a file read. Only ever
-/// trustworthy alongside a matching `VERIFIED_SOCKET_INO`: cleared at every
-/// site that resets that inode to 0 (a fresh spawn, or `stop_daemon_locked`),
-/// so a token from a build-mismatch restart or a stopped daemon is never
-/// replayed against whatever now owns the socket path.
+/// `daemon_rpc`'s fast path (C7) to reuse without a file read. Trusted only
+/// while `VERIFIED_SOCKET_INO != 0` and the channel is connected. The token
+/// itself persists across daemon restarts (`src-daemon/src/auth.rs`
+/// `load_or_generate_token_at` reuses the existing `mv.token` whenever it is
+/// well-formed); the inode gate, not the token, keeps the fast path off an
+/// unverified daemon. Cleared at every site that resets the inode to 0 (a
+/// fresh spawn, `stop_daemon_locked`, or a fast-path retry) purely to keep
+/// the two in lockstep, not because the token itself goes stale.
 static DAEMON_TOKEN: Mutex<Option<String>> = Mutex::new(None);
 
 fn cached_daemon_token() -> Option<String> {
@@ -4859,6 +4862,15 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
 /// build check (`verified_ino != 0`), and a token was cached from an earlier
 /// slow-path run. Any one of those missing forces the slow path — this never
 /// does I/O itself, just the decision.
+///
+/// ponytail: known ceiling — `connected`/`verified_ino` are read here, not
+/// re-stat'd, so a daemon started outside this app (a second app instance,
+/// or one run by hand) that replaces ours in the few ms between the old
+/// socket's EOF reaching `daemon_channel::pump` and `CONNECTED` flipping to
+/// false can receive one fast-path request never build-checked. Upgrade path
+/// if that ever matters: compare a live `stat` of the socket inode here too,
+/// which costs the `spawn_blocking` hop C7 exists to avoid — not worth it for
+/// a multi-millisecond window.
 fn rpc_fast_path(connected: bool, verified_ino: u64, token: Option<&str>) -> Option<String> {
     if connected && verified_ino != 0 {
         token.map(str::to_owned)
@@ -4882,6 +4894,7 @@ fn map_rpc_error(error: &serde_json::Value, method: &str) -> String {
 /// One attempt at the auth handshake + JSON-RPC round trip over a fresh
 /// connection, given an already-known token (fast or slow path — this
 /// function doesn't care which).
+#[derive(Debug)]
 enum RpcOutcome {
     /// A successful RPC result.
     Ok(serde_json::Value),
@@ -4899,6 +4912,16 @@ enum RpcOutcome {
     Unavailable { message: String, retryable: bool },
 }
 
+/// C8 / M3 (controller ruling): when `timeout` is `Some`, it bounds the
+/// *whole* attempt — connect, auth write, auth read, request write and
+/// response read together — not just the final read. A daemon that accepts
+/// the connection and then never answers auth would otherwise hang
+/// `vault_search`/`search_index_destroy` forever despite their 30s/150s
+/// budgets. Expiry always returns `retryable: false` (never retried,
+/// regardless of how far the inner attempt got — a connect that is merely
+/// slow and a request already on the wire are indistinguishable from out
+/// here, and retrying a possibly-already-sent mutating RPC is the unsafe
+/// default). Legacy methods (`timeout: None`) are unbounded, unchanged.
 async fn rpc_attempt(
     socket_path: &Path,
     token: &str,
@@ -4906,6 +4929,20 @@ async fn rpc_attempt(
     params: &serde_json::Value,
     timeout: Option<std::time::Duration>,
 ) -> RpcOutcome {
+    let attempt = rpc_attempt_inner(socket_path, token, method, params);
+    match timeout {
+        Some(t) => tokio::time::timeout(t, attempt).await.unwrap_or_else(|_| RpcOutcome::Unavailable {
+            message: format!("no reply in {}s", t.as_secs()),
+            retryable: false,
+        }),
+        None => attempt.await,
+    }
+}
+
+/// The auth handshake + one JSON-RPC round trip, with no time budget of its
+/// own — `rpc_attempt` above applies the whole-call timeout when the method
+/// has one.
+async fn rpc_attempt_inner(socket_path: &Path, token: &str, method: &str, params: &serde_json::Value) -> RpcOutcome {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
@@ -4955,15 +4992,7 @@ async fn rpc_attempt(
     }
 
     // From here on, the request is on the wire: never retryable.
-    let read = lines.next_line();
-    let read_result = match timeout {
-        Some(t) => match tokio::time::timeout(t, read).await {
-            Ok(r) => r,
-            Err(_) => return RpcOutcome::Unavailable { message: format!("no reply in {}s", t.as_secs()), retryable: false },
-        },
-        None => read.await,
-    };
-    let resp_line = match read_result {
+    let resp_line = match lines.next_line().await {
         Ok(Some(l)) => l,
         Ok(None) => return RpcOutcome::Unavailable { message: "daemon closed connection before responding".to_string(), retryable: false },
         Err(e) => return RpcOutcome::Unavailable { message: e.to_string(), retryable: false },
@@ -5012,8 +5041,10 @@ async fn daemon_rpc(
                 return Err(DAEMON_UNAVAILABLE.to_string());
             }
             RpcOutcome::Unavailable { retryable: true, message } => {
-                // A restarted daemon issues a new token; ours (and the
-                // inode it was verified against) can no longer be trusted.
+                // The daemon may have died or been replaced; drop the cached
+                // verification so the slow path re-checks the socket and
+                // build. (The token file persists across restarts, so auth
+                // alone does not detect a replacement.)
                 warn!("daemon_rpc {method}: fast path failed ({message}); retrying once through the slow path");
                 set_cached_daemon_token(None);
                 VERIFIED_SOCKET_INO.store(0, Ordering::SeqCst);
@@ -6223,6 +6254,144 @@ iVBORw0KGgo=\r\n\
     fn map_rpc_error_falls_back_when_the_message_is_missing() {
         let err = serde_json::json!({"code": -32000});
         assert_eq!(crate::map_rpc_error(&err, "vault_search"), "Unknown daemon error");
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.6b fix round 1 (I2, M3): rpc_attempt's retryable classification
+    // and the whole-call timeout, against a scripted UnixListener. No
+    // AppHandle needed — rpc_attempt takes only a socket path and a token.
+    // -----------------------------------------------------------------------
+
+    fn tmp_socket_path() -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("mv.sock");
+        (dir, path)
+    }
+
+    #[tokio::test]
+    async fn rpc_attempt_is_retryable_when_no_daemon_is_listening() {
+        let (_dir, path) = tmp_socket_path(); // nothing bound here — connect fails immediately
+        match rpc_attempt(&path, "tok", "sync.now", &serde_json::json!({}), None).await {
+            RpcOutcome::Unavailable { retryable: true, .. } => {}
+            other => panic!("expected a retryable Unavailable, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_attempt_is_retryable_when_auth_is_rejected() {
+        let (_dir, path) = tmp_socket_path();
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            let (stream, _) = listener.accept().await.unwrap();
+            let (r, mut w) = stream.into_split();
+            let mut lines = BufReader::new(r).lines();
+            let _auth_line = lines.next_line().await.unwrap();
+            w.write_all(b"{\"error\":\"bad token\"}\n").await.unwrap();
+        });
+
+        match rpc_attempt(&path, "tok", "sync.now", &serde_json::json!({}), None).await {
+            RpcOutcome::Unavailable { retryable: true, .. } => {}
+            other => panic!("expected a retryable Unavailable, got {other:?}"),
+        }
+    }
+
+    /// Negative control for this test (documented, not run automatically):
+    /// on the runner copy only, flip `rpc_attempt_inner`'s post-write EOF arm
+    /// (`"daemon closed connection before responding"`) from `retryable:
+    /// false` to `retryable: true`, rerun this test — it must fail — then
+    /// restore the file from the worktree via rsync and confirm the md5s
+    /// match again.
+    #[tokio::test]
+    async fn rpc_attempt_is_not_retryable_once_the_request_was_sent_and_the_server_drops() {
+        let (_dir, path) = tmp_socket_path();
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            let (stream, _) = listener.accept().await.unwrap();
+            let (r, mut w) = stream.into_split();
+            let mut lines = BufReader::new(r).lines();
+            let _auth_line = lines.next_line().await.unwrap();
+            w.write_all(b"{}\n").await.unwrap();
+            let _request_line = lines.next_line().await.unwrap(); // the request landed
+            // Drop the connection here, deliberately answering nothing.
+        });
+
+        match rpc_attempt(&path, "tok", "search_index_status", &serde_json::json!({}), None).await {
+            RpcOutcome::Unavailable { retryable: false, .. } => {}
+            other => panic!("expected a non-retryable Unavailable, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn rpc_attempt_maps_method_not_found_to_the_outdated_key() {
+        let (_dir, path) = tmp_socket_path();
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            let (stream, _) = listener.accept().await.unwrap();
+            let (r, mut w) = stream.into_split();
+            let mut lines = BufReader::new(r).lines();
+            let _auth_line = lines.next_line().await.unwrap();
+            w.write_all(b"{}\n").await.unwrap();
+            let _request_line = lines.next_line().await.unwrap();
+            w.write_all(b"{\"error\":{\"code\":-32601,\"message\":\"Unknown method: x\"}}\n").await.unwrap();
+        });
+
+        match rpc_attempt(&path, "tok", "some_new_method", &serde_json::json!({}), None).await {
+            RpcOutcome::Direct(msg) => assert_eq!(msg, "errors.daemonOutdated"),
+            other => panic!("expected Direct(errors.daemonOutdated), got {other:?}"),
+        }
+    }
+
+    /// M3: a listener that answers the auth handshake and then never replies
+    /// to the request must still be caught by the whole-call budget, and
+    /// must never be retried.
+    #[tokio::test]
+    async fn rpc_attempt_response_timeout_is_bounded_and_not_retryable() {
+        let (_dir, path) = tmp_socket_path();
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        tokio::spawn(async move {
+            use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+            let (stream, _) = listener.accept().await.unwrap();
+            let (r, mut w) = stream.into_split();
+            let mut lines = BufReader::new(r).lines();
+            let _auth_line = lines.next_line().await.unwrap();
+            w.write_all(b"{}\n").await.unwrap();
+            let _request_line = lines.next_line().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await; // never replies
+        });
+
+        let started = std::time::Instant::now();
+        let outcome = rpc_attempt(&path, "tok", "vault_search", &serde_json::json!({}), Some(std::time::Duration::from_millis(100))).await;
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "the whole-call timeout must fire near its 100ms budget, not hang");
+        match outcome {
+            RpcOutcome::Unavailable { retryable: false, message } => assert!(message.contains("no reply in 0s"), "{message}"),
+            other => panic!("expected a non-retryable timeout, got {other:?}"),
+        }
+    }
+
+    /// M3: the whole-call budget also covers the auth phase, not just the
+    /// response read — a daemon that accepts the connection and then hangs
+    /// before ever answering auth must not block `daemon_rpc` forever, and
+    /// (per the controller's ruling) must not be retried either, even though
+    /// an immediate auth failure normally would be.
+    #[tokio::test]
+    async fn rpc_attempt_auth_timeout_is_bounded_and_not_retryable() {
+        let (_dir, path) = tmp_socket_path();
+        let listener = tokio::net::UnixListener::bind(&path).unwrap();
+        tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.unwrap(); // accepted, never read, never replied
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+        });
+
+        let started = std::time::Instant::now();
+        let outcome = rpc_attempt(&path, "tok", "vault_search", &serde_json::json!({}), Some(std::time::Duration::from_millis(100))).await;
+        assert!(started.elapsed() < std::time::Duration::from_secs(2), "the whole-call timeout must fire near its 100ms budget, not hang");
+        match outcome {
+            RpcOutcome::Unavailable { retryable: false, .. } => {}
+            other => panic!("even a hang during auth must be non-retryable under a whole-call budget, got {other:?}"),
+        }
     }
 }
 
