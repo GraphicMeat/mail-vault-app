@@ -26,9 +26,10 @@
 use crate::fsx;
 use crate::maildir::{mirror_filename_uid, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fs::File;
+use std::fs::{File, TryLockError};
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 use tracing::warn;
 
 pub const LEDGER_FILE: &str = "graph_id_map.json";
@@ -40,26 +41,106 @@ pub const LEDGER_FILE: &str = "graph_id_map.json";
 /// name, not type").
 pub const LEDGER_LOCK_FILE: &str = ".graph-ledger.lock";
 
-/// Open (creating if needed) and take a blocking exclusive OS lock on the
+/// Never park a whole process's `STATE` mutex on a dead or catastrophically
+/// slow drive forever (Task 2.7 forward constraint F1): `try_lock` in a
+/// bounded loop instead of one blocking `lock()` call.
+const LEDGER_LOCK_BUDGET: Duration = Duration::from_secs(30);
+const LEDGER_LOCK_POLL: Duration = Duration::from_millis(10);
+
+/// `try_lock` in a loop for up to `budget` instead of blocking forever.
+/// `lock_path` is only for the error text.
+fn try_lock_bounded(file: &File, lock_path: &Path, budget: Duration) -> Result<(), String> {
+    let start = Instant::now();
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(()),
+            Err(TryLockError::WouldBlock) => {
+                if start.elapsed() >= budget {
+                    return Err(format!("Outlook uid ledger is busy: {}", lock_path.display()));
+                }
+                std::thread::sleep(LEDGER_LOCK_POLL);
+            }
+            Err(TryLockError::Error(e)) => {
+                return Err(format!("could not lock {}: {}", lock_path.display(), e));
+            }
+        }
+    }
+}
+
+/// Open (creating if needed) and take a bounded exclusive OS lock on the
 /// vault-wide ledger lock file, mirroring the in-process `STATE` mutex above
-/// but across processes (R2.2: two Macs on one NAS vault, or the app and the
-/// backup run in the same process today but on separate `allocate` calls).
-/// The returned `File` holds the lock for as long as it lives; it releases on
-/// drop, including on every early `?` return in `allocate`.
-fn lock_across_processes(ledger_path: &Path) -> Result<File, String> {
+/// but across processes. The real pair this guards is the daemon's listing
+/// racing the app's backup (Task 2.7), not two Macs sharing one NAS vault:
+/// `STATE` alone already serializes same-process callers today, and `flock`
+/// is not a guarantee across two HOSTS sharing one vault over a network
+/// mount — SMB/NFS do not reliably enforce it across machines, and an NFS
+/// export mounted `nolock` makes the lock call itself return an error, which
+/// surfaces here as an ordinary lock failure rather than allocating
+/// unprotected.
+///
+/// Three tiers, cheapest and most correct first (2.4 review I2):
+/// 1. create (if needed) the dir and the file, open read-write, lock it —
+///    the normal path.
+/// 2. that failed (a read-only `email_cache`, a read-only volume) but the
+///    lock file already exists: open it read-only and lock that descriptor
+///    instead. `flock` works on a read-only fd, so a read-only vault still
+///    gets a real cross-process lock as long as some earlier writer created
+///    the file.
+/// 3. the lock file does not exist either, on a vault nothing can write to:
+///    there is nothing to lock and no writer will ever manage to create it.
+///    Warn and continue with no lock (`Ok(None)`) rather than failing a
+///    listing that has nothing new to allocate — a vault this unwritable
+///    cannot `persist` a fresh id either, so a real allocation still fails
+///    loud on its own, at the write it actually needs.
+///
+/// The returned `File`, when present, holds the lock for as long as it
+/// lives; it releases on drop, including on every early `?` return in
+/// `allocate`.
+fn lock_across_processes(ledger_path: &Path) -> Result<Option<File>, String> {
     let cache_dir = ledger_path.parent().and_then(Path::parent).ok_or_else(|| {
         format!("Outlook uid ledger {} has no email_cache parent", ledger_path.display())
     })?;
-    std::fs::create_dir_all(cache_dir)
-        .map_err(|e| format!("could not create {}: {}", cache_dir.display(), e))?;
-    let lock_path = cache_dir.join(LEDGER_LOCK_FILE);
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(&lock_path)
-        .map_err(|e| format!("could not open ledger lock {}: {}", lock_path.display(), e))?;
-    file.lock().map_err(|e| format!("could not lock {}: {}", lock_path.display(), e))?;
-    Ok(file)
+    lock_file_at(cache_dir, LEDGER_LOCK_BUDGET)
+}
+
+/// The tiered open-and-lock documented on `lock_across_processes`, factored
+/// out so `with_ledger_lock` (F2) takes the exact same lock on the exact same
+/// file, keyed directly by the `email_cache` dir instead of derived from a
+/// ledger path one level below it.
+fn lock_file_at(email_cache_dir: &Path, budget: Duration) -> Result<Option<File>, String> {
+    let lock_path = email_cache_dir.join(LEDGER_LOCK_FILE);
+    let rw = std::fs::create_dir_all(email_cache_dir)
+        .and_then(|_| std::fs::OpenOptions::new().create(true).write(true).open(&lock_path));
+    let file = match rw {
+        Ok(file) => file,
+        Err(rw_err) => match std::fs::OpenOptions::new().read(true).open(&lock_path) {
+            Ok(file) => file,
+            Err(_) => {
+                warn!(
+                    "Outlook uid ledger: could not create or open the lock file {} ({}); continuing without a cross-process lock",
+                    lock_path.display(),
+                    rw_err
+                );
+                return Ok(None);
+            }
+        },
+    };
+    try_lock_bounded(&file, &lock_path, budget)?;
+    Ok(Some(file))
+}
+
+/// Take the vault-wide ledger lock the same way `allocate` does — same file,
+/// same three tiers, same `STATE` mutex first — and run `f` under it.
+/// `rename_dirs`/`adopt_dirs` hold this around moving a mailbox's
+/// `email_cache/<base>/` dir (which carries `graph_id_map.json`), so an
+/// in-flight `allocate` for the OLD name can never persist the ledger back
+/// into the directory the rename just moved out from under it (2.4 review
+/// forward constraint F2). `allocate` never takes `WRITER`, so lock order
+/// `WRITER` -> this cannot cycle.
+pub fn with_ledger_lock<T>(email_cache_dir: &Path, f: impl FnOnce() -> T) -> Result<T, String> {
+    let _memo = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _cross_process_lock = lock_file_at(email_cache_dir, LEDGER_LOCK_BUDGET)?;
+    Ok(f())
 }
 
 /// uid -> Graph message id.
@@ -69,9 +150,9 @@ pub type Ledger = BTreeMap<u32, String>;
 /// never allocate from the same stale read. The value is a memo of the
 /// Message-IDs read from vault files, per `cur/` dir and uid: the app seeds a
 /// folder 200 ids at a time, and reading every file again per page is quadratic.
-// ponytail: one lock for every mailbox, not one per ledger path: two processes
-// on one vault (two Macs on a NAS vault) can still race, add a file lock on
-// the ledger if that is supported. It also means a first call over a large
+// ponytail: one lock for every mailbox, not one per ledger path. The file
+// lock above now covers two processes racing the SAME ledger (Task 2.4);
+// this is the contention ceiling that remains: a first call over a large
 // rebuilt folder on a slow drive, which reads every unowned file while
 // holding this lock, blocks every OTHER Outlook mailbox's listing and backup
 // too, not just its own; split to one lock per ledger path if that
@@ -459,6 +540,88 @@ mod tests {
         assert_eq!(result.unwrap(), vec![2, 1]);
     }
 
+    /// 2.4 review I2, tier 3: the lock file has never been created and the
+    /// `email_cache` top level cannot create it (a read-only vault volume) —
+    /// a listing with nothing new to allocate must not fail just because the
+    /// cross-process lock could not be taken. `STATE` still guards the
+    /// in-process case, and a real write would still fail at `persist` (see
+    /// the next test).
+    #[test]
+    #[cfg(unix)]
+    fn a_read_only_vault_with_no_lock_file_still_lists_when_nothing_is_new() {
+        let m = mailbox();
+        seed(&m, &[(1, "a")]);
+        let email_cache = m.ledger.parent().unwrap().parent().unwrap().to_path_buf();
+        set_mode(&email_cache, 0o555);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["a"]));
+        set_mode(&email_cache, 0o755);
+        assert_eq!(result.unwrap(), vec![1]);
+        assert!(!email_cache.join(LEDGER_LOCK_FILE).exists(), "tier 3 never creates the lock file it could not write");
+    }
+
+    /// 2.4 review I2, tier 2: the lock file already exists but is itself
+    /// read-only (owner ran out of space or root rotated permissions) while
+    /// its directory is not. `flock` works on a read-only descriptor, so this
+    /// still gets a real lock rather than falling all the way to tier 3.
+    #[test]
+    #[cfg(unix)]
+    fn a_read_only_lock_file_that_already_exists_still_gets_locked() {
+        let m = mailbox();
+        seed(&m, &[(1, "a")]);
+        let email_cache = m.ledger.parent().unwrap().parent().unwrap().to_path_buf();
+        let lock_path = email_cache.join(LEDGER_LOCK_FILE);
+        fs::write(&lock_path, b"").unwrap();
+        set_mode(&lock_path, 0o444);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["a"]));
+        set_mode(&lock_path, 0o644);
+        assert_eq!(result.unwrap(), vec![1]);
+    }
+
+    /// 2.4 review I2: the lenient tier 3 (no lock, just a warning) must never
+    /// let an actual write through unprotected. When there IS something new
+    /// to allocate, the same unwritable vault that could not create the lock
+    /// file also cannot `persist` the ledger, so this still fails loud —
+    /// exactly the fail-loud behaviour the controller kept I2 for.
+    #[test]
+    #[cfg(unix)]
+    fn a_read_only_vault_still_fails_loud_when_something_new_needs_persisting() {
+        let m = mailbox();
+        seed(&m, &[(1, "a")]);
+        let mailbox_dir = m.ledger.parent().unwrap().to_path_buf();
+        let email_cache = mailbox_dir.parent().unwrap().to_path_buf();
+        set_mode(&mailbox_dir, 0o555);
+        set_mode(&email_cache, 0o555);
+        let result = allocate(&m.ledger, &m.cur, &listed(&["a", "new"]));
+        set_mode(&email_cache, 0o755);
+        set_mode(&mailbox_dir, 0o755);
+        assert!(result.is_err(), "a vault that cannot create the lock file cannot persist a fresh id either");
+    }
+
+    /// 2.4 review F1: a lock stuck past its budget returns a transient error
+    /// instead of parking the caller (and `STATE`) forever. Same-process, two
+    /// separate `File`s on the same path: the review's own Check 1 already
+    /// establishes that BSD `flock` conflicts across open file descriptions
+    /// within one process, so this needs no child process to be a genuine
+    /// proof, and it runs in well under a second instead of the 30s budget.
+    #[test]
+    fn a_lock_stuck_past_its_budget_returns_busy_instead_of_blocking_forever() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path().join("email_cache");
+        fs::create_dir_all(&cache_dir).unwrap();
+        let lock_path = cache_dir.join(LEDGER_LOCK_FILE);
+        let holder = fs::OpenOptions::new().create(true).write(true).open(&lock_path).unwrap();
+        holder.lock().unwrap();
+
+        let start = Instant::now();
+        let err = lock_file_at(&cache_dir, Duration::from_millis(200)).unwrap_err();
+        let waited = start.elapsed();
+
+        assert!(err.contains("busy"), "{err}");
+        assert!(waited >= Duration::from_millis(200), "returned in {:?}, must wait out the budget", waited);
+        assert!(waited < Duration::from_secs(3), "returned in {:?}, expected to give up near the budget, not hang", waited);
+        drop(holder);
+    }
+
     #[test]
     fn a_new_uid_never_lands_on_a_file_the_ledger_did_not_issue() {
         // The shape found on a real account: ledger 1-6, and a seventh file
@@ -833,43 +996,65 @@ mod tests {
     /// could satisfy trivially): a child re-exec of this very test binary
     /// holds the file lock for a fixed window while the real test's `allocate`
     /// call is in flight, and the wait is timed.
+    ///
+    /// 2.4 review M1: the parent used to guess the child had exec'd, started
+    /// libtest and taken the lock after a fixed 150ms sleep. On a loaded box
+    /// (core tests run in parallel) a slower child let the parent take the
+    /// lock first and return in ~0ms, failing the `waited >= 300ms` assert.
+    /// The child now writes a marker file right after it holds the lock; the
+    /// parent polls for it (bounded) before it starts timing at all, so the
+    /// wait it measures is bounded only by `HOLD_MS`, not by scheduling luck.
     #[test]
     fn a_lock_held_by_another_process_blocks_allocate_until_released() {
-        const HOLD_MS: u64 = 600;
+        const HOLD_MS: u64 = 300;
         let env_key = "MV_GRAPH_LEDGER_LOCK_TEST_PATH";
-        if let Ok(path) = std::env::var(env_key) {
+        if let Ok(spec) = std::env::var(env_key) {
             // Running as the child: hold the OS lock for a fixed window, then exit.
-            let path = PathBuf::from(path);
+            let parts: Vec<&str> = spec.split('|').collect();
+            let (path, marker) = (PathBuf::from(parts[0]), PathBuf::from(parts[1]));
             fs::create_dir_all(path.parent().unwrap()).unwrap();
             let file = fs::OpenOptions::new().create(true).write(true).open(&path).unwrap();
             file.lock().unwrap();
+            fs::write(&marker, b"locked").unwrap();
             std::thread::sleep(std::time::Duration::from_millis(HOLD_MS));
             return;
         }
 
         let m = mailbox();
         let lock_path = m.ledger.parent().unwrap().parent().unwrap().join(LEDGER_LOCK_FILE);
+        // Beside the lock file, not beside the ledger: the child's own
+        // `create_dir_all(path.parent())` only creates `email_cache/`, not
+        // the mailbox subdir the ledger lives in.
+        let marker_path = lock_path.with_file_name("lock_held_marker.txt");
         let exe = std::env::current_exe().unwrap();
         let mut child = std::process::Command::new(&exe)
             .arg("graph_ledger::tests::a_lock_held_by_another_process_blocks_allocate_until_released")
             .arg("--exact")
-            .env(env_key, &lock_path)
+            .env(env_key, format!("{}|{}", lock_path.display(), marker_path.display()))
             .spawn()
             .unwrap();
-        // Give the child a moment to actually acquire the lock before racing it.
-        std::thread::sleep(std::time::Duration::from_millis(150));
 
-        let start = std::time::Instant::now();
+        // Wait for the child to actually hold the OS lock, bounded, instead
+        // of guessing how long exec + libtest startup + scheduling takes.
+        let poll_start = Instant::now();
+        while !marker_path.exists() {
+            assert!(poll_start.elapsed() < Duration::from_secs(10), "child never took the lock");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        let start = Instant::now();
         let uids = allocate(&m.ledger, &m.cur, &listed(&["a"])).unwrap();
         let waited = start.elapsed();
 
         assert!(child.wait().unwrap().success());
         assert_eq!(uids, vec![1]);
         assert!(
-            waited >= std::time::Duration::from_millis(300),
-            "allocate returned in {:?}, expected to wait on the child process's lock",
-            waited
+            waited >= Duration::from_millis(HOLD_MS.saturating_sub(50)),
+            "allocate returned in {:?}, expected to wait roughly {}ms on the child process's lock",
+            waited,
+            HOLD_MS
         );
+        let _ = fs::remove_file(&marker_path);
     }
 
     /// Two processes each allocating 200 fresh ids for the SAME ledger must
