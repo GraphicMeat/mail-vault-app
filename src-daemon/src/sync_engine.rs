@@ -616,12 +616,7 @@ impl SyncEngine {
                     "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
                     account.email, mailbox, sidecar_count
                 );
-                // Same tree-read + mailbox lock as `write_headers`/`write_cache_meta_full`
-                // below: an unlocked wipe here could race a concurrent backfill's
-                // writes to this same mailbox (Task 2.3 review I1).
-                with_mailbox_write_lock(&self.data_dir, &cache_dir, || {
-                    let _ = fs::remove_dir_all(&cache_dir);
-                });
+                wipe_generation(&self.data_dir, &cache_dir);
                 None
             };
             let (headers, _total, _has_more, _skipped) =
@@ -1061,6 +1056,19 @@ fn with_mailbox_write_lock<T>(root: &Path, cache_dir: &Path, f: impl FnOnce() ->
     f()
 }
 
+/// The cold path's UIDVALIDITY-change wipe: drop the whole generation under
+/// the same tree-read + mailbox lock `write_headers`/`write_cache_meta_full`
+/// take, so a concurrent backfill chunk-write to the SAME mailbox can never
+/// race it (Task 2.3 review I1). One fn used by both the production call
+/// site and the regression test below, so the test exercises the exact call
+/// `sync_mailbox` makes rather than a hand-rolled copy of the wrap (Task 2.4
+/// review M2).
+fn wipe_generation(root: &Path, cache_dir: &Path) {
+    with_mailbox_write_lock(root, cache_dir, || {
+        let _ = fs::remove_dir_all(cache_dir);
+    });
+}
+
 fn write_cache_meta_full(
     root: &Path,
     cache_dir: &Path,
@@ -1265,32 +1273,38 @@ mod tests {
     /// `a_clear_racing_saves_never_leaves_a_half_written_mailbox`, which caught
     /// the sibling bug the same way: every `write_headers` call below must
     /// succeed, never race the wipe.
+    ///
+    /// 2.4 review M2: this used to call `with_mailbox_write_lock(&d2, &d2, ...)`
+    /// directly — a hand-rolled copy of the cold path's wrap, with `root ==
+    /// cache_dir`, which production never does. It now calls `wipe_generation`,
+    /// the exact fn the cold path calls, against a real `root/email_cache/<base>`
+    /// layout, so a regression at the call site (not just in the wrap itself)
+    /// would fail this test.
     #[test]
     fn a_cold_wipe_never_races_a_concurrent_mailbox_write() {
-        let dir = scratch_dir("cold_wipe_race");
+        let root = scratch_dir("cold_wipe_race");
+        let cache_dir = root.join("email_cache").join("acct_INBOX");
         for round in 0..20u32 {
-            write_headers(&dir, &dir, &[test_header(round)]).unwrap();
+            write_headers(&root, &cache_dir, &[test_header(round)]).unwrap();
 
             let barrier = Arc::new(std::sync::Barrier::new(2));
-            let (d1, b1) = (dir.clone(), barrier.clone());
+            let (r1, c1, b1) = (root.clone(), cache_dir.clone(), barrier.clone());
             let writer = std::thread::spawn(move || {
                 b1.wait();
                 for i in 0..20u32 {
-                    write_headers(&d1, &d1, &[test_header(1000 + round * 100 + i)]).unwrap();
+                    write_headers(&r1, &c1, &[test_header(1000 + round * 100 + i)]).unwrap();
                 }
             });
-            let (d2, b2) = (dir.clone(), barrier.clone());
+            let (r2, c2, b2) = (root.clone(), cache_dir.clone(), barrier.clone());
             let remover = std::thread::spawn(move || {
                 b2.wait();
-                // The fixed cold-path wipe, exactly as `sync_mailbox` now calls it.
-                with_mailbox_write_lock(&d2, &d2, || {
-                    let _ = fs::remove_dir_all(&d2);
-                });
+                // The exact fn the cold path calls.
+                wipe_generation(&r2, &c2);
             });
             writer.join().unwrap();
             remover.join().unwrap();
         }
-        let _ = fs::remove_dir_all(&dir);
+        let _ = fs::remove_dir_all(&root);
     }
 
     /// A backfill that gave up must NOT keep reporting as in-flight: the app

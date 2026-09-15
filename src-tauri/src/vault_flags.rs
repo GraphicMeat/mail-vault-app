@@ -1,8 +1,8 @@
 //! The three Tauri commands for read-state changes and mailbox renames — spec
 //! deviation 1: they resolve the backup mirror's security-scoped bookmark
 //! around every call, which a daemon cannot do, so they stay registered as
-//! forwarders (Phase 2 keeps the app doing the actual file/custody work; the
-//! daemon takes it over in a later phase per that deviation). Everything that
+//! forwarders (Phase 2 keeps the app doing the actual file/custody work,
+//! until Task 2.9b per that deviation). Everything that
 //! does not need an `AppHandle` — `FlagChange`, `Applied`, `store_flags`,
 //! `merge_flags`, `Dirs`, `apply_files`, `rename_dirs`, `Adopted`,
 //! `adopt_dirs`, `AdoptReport`, `RenamePair` and their tests — moved to

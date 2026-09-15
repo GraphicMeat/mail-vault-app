@@ -546,8 +546,9 @@ pub fn delete_mailbox_cache(root: &Path, account_id: &str) -> Result<(), String>
 // ── Flag patch ───────────────────────────────────────────────────────────
 
 /// Set `flags` on one cached header. `false` when there is no such sidecar or
-/// it already says this. Task 2.4 replaces `vault_flags::patch_flags_field` —
-/// a plain, unlocked `fs::write` — with this atomic, locked version.
+/// it already says this. `vault_flags::apply_files` calls this — the atomic,
+/// locked replacement for the old plain, unlocked `fs::write` in the deleted
+/// `vault_flags::patch_flags_field`.
 pub fn patch_flags(root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> bool {
     let base_name = cache_base_name(account_id, mailbox);
     let path = sidecar_dir(root, account_id, mailbox).join(format!("{}.json", uid));

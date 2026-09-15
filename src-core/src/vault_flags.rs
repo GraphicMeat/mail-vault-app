@@ -21,6 +21,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::graph_ledger;
 use crate::maildir::mirror_file_map;
 use crate::vault_eml::parse_flags_from_filename;
 use crate::vault_files::{build_maildir_filename, cur_path};
@@ -278,35 +279,60 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
-    let mut pairs: Vec<(PathBuf, PathBuf)> = Vec::new();
-    if let (Some(a), Some(b)) = (up(&from.cur), up(&to.cur)) {
-        pairs.push((a, b));
-    }
-    pairs.push((from.sidecar_dir.clone(), to.sidecar_dir.clone()));
-    if let (Some(a), Some(b)) = (
-        from.mirror_cur.as_deref().and_then(up),
-        to.mirror_cur.as_deref().and_then(up),
-    ) {
-        pairs.push((a, b));
-    }
-
-    let mut moved = 0;
-    let mut failed = Vec::new();
-    for (src, dst) in pairs {
+    fn do_move(src: &Path, dst: &Path, moved: &mut usize, failed: &mut Vec<String>) {
         if !src.exists() || dst.exists() {
-            continue; // ponytail: an existing destination is left alone; merge if it ever matters
+            return; // ponytail: an existing destination is left alone; merge if it ever matters
         }
         if let Some(p) = dst.parent() {
             let _ = fs::create_dir_all(p);
         }
-        match fs::rename(&src, &dst) {
-            Ok(()) => moved += 1,
+        match fs::rename(src, dst) {
+            Ok(()) => *moved += 1,
             Err(e) => {
                 warn!("vault_rename: {:?} -> {:?}: {}", src, dst, e);
                 failed.push(format!("{} ({})", src.display(), e));
             }
         }
     }
+
+    let mut moved = 0;
+    let mut failed = Vec::new();
+
+    if let (Some(a), Some(b)) = (up(&from.cur), up(&to.cur)) {
+        do_move(&a, &b, &mut moved, &mut failed);
+    }
+
+    // The sidecar dir carries `graph_id_map.json`: hold the vault-wide ledger
+    // lock across this one move so an in-flight `allocate` for the OLD name
+    // (Task 2.9a: from another process) can never persist the ledger back
+    // into the directory this just moved out from under it (2.4 review
+    // forward constraint F2). Same three-tier lock `allocate` itself takes —
+    // a vault too unwritable to take the lock is also too unwritable to move
+    // anything into, so a lock failure here is reported like any other.
+    match from.sidecar_dir.parent() {
+        Some(email_cache_dir) => {
+            let (mut m, mut f) = (0, Vec::new());
+            match graph_ledger::with_ledger_lock(email_cache_dir, || do_move(&from.sidecar_dir, &to.sidecar_dir, &mut m, &mut f)) {
+                Ok(()) => {
+                    moved += m;
+                    failed.extend(f);
+                }
+                Err(e) => {
+                    warn!("vault_rename: could not take the ledger lock for {}: {}", email_cache_dir.display(), e);
+                    failed.push(format!("{} (ledger lock: {})", from.sidecar_dir.display(), e));
+                }
+            }
+        }
+        None => do_move(&from.sidecar_dir, &to.sidecar_dir, &mut moved, &mut failed),
+    }
+
+    if let (Some(a), Some(b)) = (
+        from.mirror_cur.as_deref().and_then(up),
+        to.mirror_cur.as_deref().and_then(up),
+    ) {
+        do_move(&a, &b, &mut moved, &mut failed);
+    }
+
     (moved, failed)
 }
 
@@ -342,15 +368,15 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
     fn up(p: &Path) -> Option<PathBuf> {
         p.parent().map(|q| q.to_path_buf())
     }
-    fn mv(src: &Path, dst: &Path, out: &mut Adopted) {
+    fn mv(src: &Path, dst: &Path, moved: &mut usize, failed: &mut Vec<String>) {
         if let Some(p) = dst.parent() {
             let _ = fs::create_dir_all(p);
         }
         match fs::rename(src, dst) {
-            Ok(()) => out.moved += 1,
+            Ok(()) => *moved += 1,
             Err(e) => {
                 warn!("vault_adopt: {:?} -> {:?}: {}", src, dst, e);
-                out.failed.push(format!("{} ({})", src.display(), e));
+                failed.push(format!("{} ({})", src.display(), e));
             }
         }
     }
@@ -375,8 +401,35 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
             out.blocked_by.extend(existing);
         } else {
             for (src, dst) in &app_side {
-                if src.exists() {
-                    mv(src, dst, &mut out);
+                if !src.exists() {
+                    continue;
+                }
+                // The sidecar dir carries `graph_id_map.json`: hold the
+                // vault-wide ledger lock across this one move, same as
+                // `rename_dirs` (2.4 review forward constraint F2).
+                if *src == from.sidecar_dir {
+                    match from.sidecar_dir.parent() {
+                        Some(email_cache_dir) => {
+                            let (mut m, mut f) = (0, Vec::new());
+                            match graph_ledger::with_ledger_lock(email_cache_dir, || mv(src, dst, &mut m, &mut f)) {
+                                Ok(()) => {
+                                    out.moved += m;
+                                    out.failed.extend(f);
+                                }
+                                Err(e) => {
+                                    warn!(
+                                        "vault_adopt: could not take the ledger lock for {}: {}",
+                                        email_cache_dir.display(),
+                                        e
+                                    );
+                                    out.failed.push(format!("{} (ledger lock: {})", src.display(), e));
+                                }
+                            }
+                        }
+                        None => mv(src, dst, &mut out.moved, &mut out.failed),
+                    }
+                } else {
+                    mv(src, dst, &mut out.moved, &mut out.failed);
                 }
             }
         }
@@ -393,7 +446,7 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
                 out.blocked += 1;
                 out.blocked_by.push(dst.display().to_string());
             } else {
-                mv(&src, &dst, &mut out);
+                mv(&src, &dst, &mut out.moved, &mut out.failed);
             }
         }
     }
@@ -631,13 +684,20 @@ mod tests {
     }
 
     /// `apply_everywhere` holds `WRITER` for one call spanning both halves: a
-    /// second caller blocks until the first's custody callback has returned,
-    /// not just until its file rename has. Timing-based like the existing
-    /// `two_callers_of_apply_in_both_complete_under_the_one_writer_lock`: if
-    /// the lock were released before the callback ran (or not held at all),
-    /// the second call could start — and finish — while the first's slow
-    /// callback is still in flight, and the measured wall time would fall
-    /// well short of the callback's own sleep.
+    /// second caller's callback must not START until the first's callback has
+    /// RETURNED. An ordering probe, not a total-wall-time guess (2.4 review
+    /// I1: the old version asserted `elapsed >= SLOW_MS`, which held even
+    /// with `WRITER.lock()` deleted, because `start` was taken before either
+    /// thread spawned and the two callbacks' sleeps summed past `SLOW_MS`
+    /// regardless of ordering).
+    ///
+    /// `state` goes 0 -> 1 (A entered its callback) -> 2 (A's callback
+    /// returned). B polls for `1` before calling `apply_everywhere` at all —
+    /// a bounded handshake, not a fixed sleep guessing when A's thread has
+    /// been scheduled (the same flake class M1 removes from the ledger-lock
+    /// subprocess test) — so B is provably already trying to enter its own
+    /// callback while A is inside its callback. If `WRITER` did not span the
+    /// callback, B's callback could run while `state` is still `1`.
     #[test]
     fn writer_spans_the_custody_callback_not_just_the_file_rename() {
         let f = fixture();
@@ -646,24 +706,37 @@ mod tests {
         fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
         const SLOW_MS: u64 = 150;
 
-        let start = std::time::Instant::now();
+        let state = std::sync::atomic::AtomicU8::new(0);
+        let state = &state;
         std::thread::scope(|scope| {
             scope.spawn(|| {
                 apply_everywhere(d, &[change(1, &["\\Seen"])], false, |_patch| {
+                    state.store(1, std::sync::atomic::Ordering::SeqCst);
                     std::thread::sleep(std::time::Duration::from_millis(SLOW_MS));
+                    state.store(2, std::sync::atomic::Ordering::SeqCst);
                     Ok(1)
                 })
             });
-            // Give the first call a head start into its callback before the
-            // second one tries to acquire WRITER.
-            std::thread::sleep(std::time::Duration::from_millis(30));
-            scope.spawn(|| apply_everywhere(d, &[change(2, &["\\Seen"])], false, |_patch| Ok(1)));
-        });
 
-        assert!(
-            start.elapsed() >= std::time::Duration::from_millis(SLOW_MS),
-            "the second call must not finish before the first callback does"
-        );
+            // Wait until A is provably inside its callback (bounded, not a
+            // fixed guess) before B even calls apply_everywhere.
+            let poll_start = std::time::Instant::now();
+            while state.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                assert!(poll_start.elapsed() < std::time::Duration::from_secs(10), "A never entered its callback");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+
+            scope.spawn(|| {
+                apply_everywhere(d, &[change(2, &["\\Seen"])], false, |_patch| {
+                    assert_eq!(
+                        state.load(std::sync::atomic::Ordering::SeqCst),
+                        2,
+                        "B's callback must not start until A's callback has returned"
+                    );
+                    Ok(1)
+                })
+            });
+        });
     }
 
     /// A `Dirs` pair for one mailbox rename, laid out the way `dirs_for` builds
@@ -715,6 +788,63 @@ mod tests {
         assert_eq!(rename_dirs(&from, &to), (0, vec![]));
     }
 
+    /// 2.4 review forward constraint F2: `rename_dirs` must not move the
+    /// sidecar dir (which carries `graph_id_map.json`) while another holder
+    /// of the vault-wide ledger lock — a concurrent `graph_ledger::allocate`
+    /// in the real system — is still using it. An ordering probe like
+    /// `writer_spans_the_custody_callback_not_just_the_file_rename`: the
+    /// "allocation" thread flips `state` to 1 on entry and 2 on exit; the
+    /// rename thread only starts once it sees `1`, and its own assertion
+    /// (made from inside the locked move) must see `2`.
+    #[test]
+    fn rename_dirs_waits_for_an_in_flight_ledger_holder_before_moving_the_sidecar() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let from = rename_fixture(base, "Projects", "a_Projects");
+        let to = rename_fixture(base, "Work", "a_Work");
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::create_dir_all(&from.sidecar_dir).unwrap();
+        fs::write(from.sidecar_dir.join("graph_id_map.json"), br#"{"1":"g-a"}"#).unwrap();
+        let email_cache_dir = from.sidecar_dir.parent().unwrap().to_path_buf();
+
+        let state = std::sync::atomic::AtomicU8::new(0);
+        let state = &state;
+        std::thread::scope(|scope| {
+            // Simulates an in-flight `graph_ledger::allocate`: same lock,
+            // held for a while.
+            scope.spawn(|| {
+                graph_ledger::with_ledger_lock(&email_cache_dir, || {
+                    state.store(1, std::sync::atomic::Ordering::SeqCst);
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                    state.store(2, std::sync::atomic::Ordering::SeqCst);
+                })
+                .unwrap();
+            });
+
+            // Wait until the "allocation" is provably holding the lock
+            // before even calling rename_dirs.
+            let poll_start = std::time::Instant::now();
+            while state.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                assert!(poll_start.elapsed() < std::time::Duration::from_secs(10), "holder never took the lock");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+
+            scope.spawn(|| {
+                let (moved, failed) = rename_dirs(&from, &to);
+                assert_eq!(failed, Vec::<String>::new(), "{failed:?}");
+                assert!(moved >= 1);
+                assert_eq!(
+                    state.load(std::sync::atomic::Ordering::SeqCst),
+                    2,
+                    "the sidecar move must not run until the lock holder released it"
+                );
+            });
+        });
+
+        assert!(to.sidecar_dir.join("graph_id_map.json").exists());
+        assert!(!from.sidecar_dir.exists(), "the ledger must not be left behind in the old dir");
+    }
+
     /// A source that WOULD NOT move is not the same answer as a source that was
     /// never there: only the first one leaves the vault half-renamed, and the
     /// count alone cannot tell the caller which it got.
@@ -747,12 +877,20 @@ mod tests {
     }
 
     /// Every regular file under `base`, so "nothing was deleted" is a count.
+    /// Excludes `graph_ledger::LEDGER_LOCK_FILE`: taking the vault-wide
+    /// ledger lock around the sidecar move (F2) now creates that file as a
+    /// side effect, which is not the kind of "something got deleted" bug
+    /// these counts exist to catch.
     fn file_count(base: &Path) -> usize {
         fn walk(p: &Path, n: &mut usize) {
             if let Ok(rd) = fs::read_dir(p) {
                 for e in rd.flatten() {
                     let path = e.path();
-                    if path.is_dir() { walk(&path, n) } else { *n += 1 }
+                    if path.is_dir() {
+                        walk(&path, n)
+                    } else if path.file_name().and_then(|n| n.to_str()) != Some(graph_ledger::LEDGER_LOCK_FILE) {
+                        *n += 1
+                    }
                 }
             }
         }
