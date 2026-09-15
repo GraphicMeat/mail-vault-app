@@ -32,7 +32,7 @@ pub struct SearchIndexState {
     pub(crate) phase: Mutex<&'static str>, // "idle" | "indexing" | "unavailable" | "off"
     pub(crate) interrupt: AtomicBool,
     pub(crate) switch: SwitchGuard,
-    pub(crate) destroy_reply: Mutex<Option<mpsc::Sender<Result<(), &'static str>>>>,
+    pub(crate) destroy_reply: Mutex<Vec<mpsc::Sender<Result<(), &'static str>>>>,
 }
 
 impl SearchIndexState {
@@ -49,7 +49,7 @@ impl SearchIndexState {
             phase: Mutex::new("unavailable"),
             interrupt: AtomicBool::new(false),
             switch: SwitchGuard::default(),
-            destroy_reply: Mutex::new(None),
+            destroy_reply: Mutex::new(Vec::new()),
         })
     }
 }
@@ -441,14 +441,23 @@ pub fn destroy(st: &SearchIndexState, timeout: Duration) -> Value {
     if st.switch.is_switching() {
         return serde_json::json!({"ok": false, "error": "searchIndex.busy"});
     }
-    *g(&st.enabled) = Some(false);
+    let before = std::mem::replace(&mut *g(&st.enabled), Some(false));
     let (tx, rx) = mpsc::channel();
-    *g(&st.destroy_reply) = Some(tx);
+    g(&st.destroy_reply).push(tx);
     st.interrupt.store(true, SeqCst);
     send(st, Signal::Destroy);
     match rx.recv_timeout(timeout) {
         Ok(Ok(())) => serde_json::json!({"ok": true}),
-        Ok(Err(key)) => serde_json::json!({"ok": false, "error": key}),
+        Ok(Err(key)) => {
+            if key == "searchIndex.busy" {
+                // A switch began after the check above: nothing was deleted, so nothing is off.
+                let mut enabled = g(&st.enabled);
+                if *enabled == Some(false) {
+                    *enabled = before;
+                }
+            }
+            serde_json::json!({"ok": false, "error": key})
+        }
         Err(_) => serde_json::json!({"ok": false, "error": "searchIndex.destroyFailed"}),
     }
 }
@@ -458,11 +467,16 @@ fn destroy_index(st: &SearchIndexState) -> Result<(), &'static str> {
     if st.switch.is_switching() {
         return Err("searchIndex.busy");
     }
+    let gen = st.switch.current();
     *lock(&st.db) = None; // drop = checkpoint; then the files can go
     *g(&st.root) = None;
     let dir = st.vault_root.join(db::DB_DIR);
     let mut stuck = false;
     for suffix in ["", "-wal", "-shm", "-journal"] {
+        // A vault operation may start between the check above and this unlink.
+        if st.switch.is_switching() || st.switch.current() != gen {
+            return Err("searchIndex.busy");
+        }
         let path = dir.join(format!("{}{suffix}", db::DB_FILE));
         if let Err(e) = std::fs::remove_file(&path) {
             if e.kind() != std::io::ErrorKind::NotFound {
@@ -519,13 +533,17 @@ fn worker(st: &SearchIndexState, rx: mpsc::Receiver<Signal>) {
         let Plan { reopen, rebuild, destroy, only } = plan(collect_burst(first, &rx, COALESCE));
         if destroy {
             let outcome = destroy_index(st);
-            if let Some(tx) = g(&st.destroy_reply).take() {
+            let waiting = std::mem::take(&mut *g(&st.destroy_reply));
+            for tx in waiting {
                 let _ = tx.send(outcome);
             }
-            continue;
+            if *g(&st.enabled) != Some(true) {
+                continue;
+            }
+            // A configure {enabled:true} landed behind the destroy: plan() dropped its Reopen.
         }
         let full = needs_full(last_full.elapsed(), only.is_none());
-        run_pass(st, reopen, rebuild, if full { None } else { only });
+        run_pass(st, reopen || destroy, rebuild, if full { None } else { only });
         // Not cut short = complete. A pass skipped because the index is unconfigured
         // or closed counts too: the configure or reopen that changes that forces its
         // own full pass. Resetting here is also what keeps a zero timeout from spinning.
@@ -1208,5 +1226,96 @@ mod tests {
         let conn = guard.as_ref().unwrap();
         assert!(db::first_pass_done(conn));
         assert_eq!(db::counts(conn).indexed, 1200);
+    }
+
+    fn manual_channel(st: &std::sync::Arc<crate::search_index::SearchIndexState>) -> std::sync::mpsc::Receiver<mailvault_core::search_index::plan::Signal> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *st.signals.lock().unwrap() = Some(tx);
+        rx
+    }
+
+    fn spawn_destroy(st: &std::sync::Arc<crate::search_index::SearchIndexState>) -> std::thread::JoinHandle<serde_json::Value> {
+        let st = std::sync::Arc::clone(st);
+        std::thread::spawn(move || crate::search_index::destroy(&st, std::time::Duration::from_secs(10)))
+    }
+
+    fn wait_reply_slot(st: &crate::search_index::SearchIndexState) {
+        while st.destroy_reply.lock().unwrap().is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100)); // its Destroy signal is sent right after the slot
+    }
+
+    fn spawn_worker(st: &std::sync::Arc<crate::search_index::SearchIndexState>, rx: std::sync::mpsc::Receiver<mailvault_core::search_index::plan::Signal>) {
+        let st = std::sync::Arc::clone(st);
+        std::thread::spawn(move || crate::search_index::worker(&st, rx));
+    }
+
+    #[test]
+    fn two_concurrent_destroys_both_get_ok() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 2);
+        let st = state(tmp.path());
+        let rx = manual_channel(&st);
+        let a = spawn_destroy(&st);
+        wait_reply_slot(&st);
+        let b = spawn_destroy(&st);
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        spawn_worker(&st, rx);
+        let (ra, rb) = (a.join().unwrap(), b.join().unwrap());
+        assert_eq!((ra, rb), (serde_json::json!({"ok": true}), serde_json::json!({"ok": true})), "both callers of a destroy that succeeded");
+    }
+
+    #[test]
+    fn configure_on_while_a_destroy_is_queued_builds_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 3);
+        let st = state(tmp.path());
+        let rx = manual_channel(&st);
+        let d = spawn_destroy(&st);
+        wait_reply_slot(&st);
+        crate::search_index::configure(&st, cfg()); // user turns it back on before the worker got to the destroy
+        spawn_worker(&st, rx);
+        assert_eq!(d.join().unwrap()["ok"], true);
+        wait_for(&st, "built again after the queued destroy", |s| s["available"] == true && s["firstPassDone"] == true);
+    }
+
+    #[test]
+    fn a_switch_that_begins_after_destroy_was_accepted_keeps_enabled() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 2);
+        let st = state(tmp.path());
+        crate::search_index::configure(&st, cfg()); // no channel yet: only sets config + enabled
+        let rx = manual_channel(&st);
+        let d = spawn_destroy(&st);
+        wait_reply_slot(&st);
+        crate::search_index::close(&st); // 1.7 vault move starts after destroy passed its switch check
+        spawn_worker(&st, rx);
+        assert_eq!(d.join().unwrap(), serde_json::json!({"ok": false, "error": "searchIndex.busy"}));
+        assert_eq!(*st.enabled.lock().unwrap(), Some(true), "a busy destroy must not leave the index switched off");
+    }
+
+    /// Review Minor 5: every other "off" assertion is satisfied by `status_json`'s
+    /// own `enabled` short-circuit before the worker does anything; this test
+    /// drives the worker far enough to exercise `run_pass`'s off-branch itself
+    /// (the code that releases a connection a live index left open).
+    #[test]
+    fn switching_off_releases_the_open_connection_but_keeps_the_file() {
+        use mailvault_core::search_index::lock;
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 2);
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        wait_for(&st, "first pass", |s| s["firstPassDone"] == true);
+        let mut off = cfg();
+        off.enabled = false;
+        crate::search_index::configure(&st, off);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while lock(&st.db).is_some() {
+            assert!(std::time::Instant::now() < deadline, "timed out waiting for the connection to release");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        assert!(index_file(tmp.path()).exists(), "off keeps the file; only destroy deletes it");
     }
 }
