@@ -7,11 +7,9 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 
 pub(crate) use mailvault_core::vault_eml::{
     find_file_by_uid, parse_address_str, parse_eml_bytes_light, parse_flags_from_filename,
-    LightEmail, ParsedEmail,
 };
 pub(crate) use mailvault_core::vault_files::{
-    build_maildir_filename, delete_maildir_files, MaildirClearCacheResult, MaildirEmailSummary,
-    MaildirStorageStats,
+    build_maildir_filename, delete_maildir_files, MaildirClearCacheResult,
 };
 pub(crate) use mailvault_core::header_cache::cache_base_name;
 
@@ -1290,12 +1288,17 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 }
 
 // ==========================================
-// Maildir .eml storage commands
+// Maildir .eml storage commands (remaining app-side writers)
 //
-// Bodies live in mailvault_core::vault_files (Task 2.2); the types
-// (ParsedEmail, LightEmail, MaildirEmailSummary, MaildirStorageStats,
-// MaildirClearCacheResult) are re-exported near the top of this file so these
-// commands stay registered under the same names with the same JSON shapes.
+// The read family and the attachment cache (maildir_read, maildir_read_light,
+// maildir_read_light_batch, maildir_read_raw_source, maildir_read_attachment,
+// maildir_exists, maildir_list, maildir_storage_stats, maildir_orphan_stats,
+// cache_attachment, cached_attachment_path, prefetch_attachments) moved to
+// the daemon (Task 2.6, `handlers::vault_files`) — DAEMON_OWNED in
+// transport.js, no Tauri command left. Bodies for what stays here live in
+// mailvault_core::vault_files (Task 2.2); MaildirClearCacheResult is
+// re-exported near the top of this file so maildir_clear_cache keeps the
+// same JSON shape.
 // ==========================================
 
 // ── Mail storage location ───────────────────────────────────────────────────
@@ -1664,25 +1667,6 @@ async fn maildir_repair_generation(
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Count what previous repairs moved out of the uid namespace, for one account
-/// or the whole vault.
-#[tauri::command]
-async fn maildir_orphan_stats(
-    app_handle: tauri::AppHandle,
-    account_id: Option<String>,
-) -> Result<mailvault_core::maildir::OrphanStats, String> {
-    tokio::task::spawn_blocking(move || {
-        let base = vault::root(&app_handle)?.join("Maildir");
-        let mut total = mailvault_core::maildir::OrphanStats::default();
-        for mailbox_dir in mailvault_core::vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
-            let s = mailvault_core::maildir::orphan_stats(&mailbox_dir);
-            total.count += s.count;
-            total.bytes += s.bytes;
-        }
-        Ok(total)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
 /// Delete every orphan folder for one account, or the whole vault.
 ///
 /// These are messages the current server does not have, so this is the one
@@ -1830,117 +1814,6 @@ async fn clear_pending_operation(
 }
 
 #[tauri::command]
-fn maildir_read(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<Option<ParsedEmail>, String> {
-    mailvault_core::vault_files::read(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
-}
-
-#[tauri::command]
-fn maildir_read_light(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<Option<LightEmail>, String> {
-    mailvault_core::vault_files::read_light(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
-}
-
-#[tauri::command]
-async fn maildir_read_light_batch(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uids: Vec<u32>,
-) -> Result<Vec<Option<LightEmail>>, String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        Ok(mailvault_core::vault_files::read_light_batch(&root, &account_id, &mailbox, &uids))
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
-fn maildir_read_attachment(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-    attachment_index: usize,
-) -> Result<String, String> {
-    mailvault_core::vault_files::read_attachment(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
-}
-
-// ── Attachment cache ────────────────────────────────────────────────────────
-// One file per (account, mailbox, uid, part) under <vault>/attachment_cache,
-// named so that a click, the prefetch and the "already downloaded" check all
-// land on the same path without a registry. Bodies live in
-// mailvault_core::vault_files; PREFETCH_LOCK/PREFETCH_HIGH_WATER are the
-// app's own copy of the process-local state (the daemon gets its own later).
-
-#[tauri::command]
-fn cache_attachment(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<String, String> {
-    mailvault_core::vault_files::cache_attachment(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
-}
-
-#[tauri::command]
-fn cached_attachment_path(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<Option<String>, String> {
-    mailvault_core::vault_files::cached_attachment_path(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
-}
-
-// One sweep at a time, on a blocking thread; a second mailbox finishing its
-// body pass queues behind the first. The high-water mark keeps a refresh from
-// re-reading the whole mailbox: only uids above the last sweep are opened.
-// ponytail: the mark is per process, so a body cached later for an OLDER uid
-// waits for the next launch; a per-uid marker file would close that gap.
-static PREFETCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-static PREFETCH_HIGH_WATER: std::sync::Mutex<Vec<(String, u32)>> = std::sync::Mutex::new(Vec::new());
-
-#[tauri::command]
-async fn prefetch_attachments(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<usize, String> {
-    let root = vault::root(&app_handle)?;
-    tauri::async_runtime::spawn_blocking(move || {
-        let _one_at_a_time = PREFETCH_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        mailvault_core::vault_files::prefetch_attachments(&root, &account_id, &mailbox, &PREFETCH_HIGH_WATER)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
-fn maildir_read_raw_source(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<String, String> {
-    mailvault_core::vault_files::read_raw_source(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
-}
-
-#[tauri::command]
-fn maildir_exists(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<bool, String> {
-    Ok(mailvault_core::vault_files::exists(&vault::root(&app_handle)?, &account_id, &mailbox, uid))
-}
-
-#[tauri::command]
-async fn maildir_list(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    require_flag: Option<String>,
-) -> Result<Vec<MaildirEmailSummary>, String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        mailvault_core::vault_files::list(&root, &account_id, &mailbox, require_flag.as_deref())
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
 fn maildir_delete(
     app_handle: tauri::AppHandle,
     account_id: String,
@@ -1993,14 +1866,6 @@ fn maildir_set_flags(
         nudge_index(&account_id, &mailbox);
     }
     Ok(())
-}
-
-#[tauri::command]
-fn maildir_storage_stats(
-    app_handle: tauri::AppHandle,
-    account_id: Option<String>,
-) -> Result<MaildirStorageStats, String> {
-    Ok(mailvault_core::vault_files::storage_stats(&vault::root(&app_handle)?, account_id.as_deref()))
 }
 
 #[tauri::command]
@@ -4263,23 +4128,12 @@ fn main() {
             open_with_dialog,
             open_email_window,
             maildir_store,
-            maildir_read,
-            maildir_read_light,
-            maildir_read_light_batch,
-            maildir_read_attachment,
-            cache_attachment,
-            cached_attachment_path,
-            prefetch_attachments,
-            maildir_read_raw_source,
-            maildir_exists,
-            maildir_list,
             maildir_delete,
             maildir_delete_many,
             maildir_set_flags,
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            maildir_storage_stats,
             maildir_clear_cache,
             maildir_migrate_json_to_eml,
             maildir_migrate_email_dirs,
@@ -4293,7 +4147,6 @@ fn main() {
             custody::local_index_remove,
             custody::custody_status,
             maildir_repair_generation,
-            maildir_orphan_stats,
             maildir_purge_orphans,
             archive_emails,
             cancel_archive,

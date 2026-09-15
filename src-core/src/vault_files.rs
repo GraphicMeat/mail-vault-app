@@ -594,7 +594,16 @@ pub fn cached_attachment_path(root: &Path, account_id: &str, mailbox: &str, uid:
 /// Sweep a mailbox's cached .eml files newest-first (uid order) and write
 /// every real attachment above `above_uid` to the cache. Returns the paths it
 /// wrote, in sweep order, and the highest uid it saw.
-fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, above_uid: u32) -> Result<(Vec<PathBuf>, u32), String> {
+///
+/// `gate` is called before each file: the daemon passes a closure re-checking
+/// `handlers::common::vault_root` (Task 2.6) under a *fresh* `vault_gate`
+/// read-side acquisition each time, rather than the caller holding one gate
+/// for the whole sweep — a mailbox can hold thousands of messages, and
+/// `vault_close`'s writer-drain (`with_vault_write`'s write-side barrier)
+/// must not be blocked out for the full sweep's duration. A `gate` error
+/// (vault closed for a move mid-sweep) stops the sweep at that file; whatever
+/// was already written stays (already-cached files are still valid).
+fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, above_uid: u32, gate: &dyn Fn() -> Result<(), String>) -> Result<(Vec<PathBuf>, u32), String> {
     let entries = fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
     let mut files: Vec<(u32, PathBuf)> = entries.flatten()
         .filter_map(|entry| {
@@ -609,6 +618,7 @@ fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, m
     let mut written = Vec::new();
     for (uid, path) in files {
         if uid <= above_uid { break; }
+        gate()?;
         let Ok(raw) = fs::read(&path) else { continue };
         // A message with no Content-Disposition header has no attachment part.
         if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { continue; }
@@ -630,20 +640,24 @@ fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, m
 }
 
 /// One sweep at a time is the caller's job (a lock around this call); the
-/// high-water mark is passed in so each caller (the app today, the daemon
-/// later) owns its own — it resets whenever the process holding it restarts.
+/// high-water mark is passed in so the caller (the daemon, Task 2.6) owns
+/// its own — it resets whenever the process holding it restarts.
+///
+/// `gate`: see `prefetch_attachments_in` — called once per file, never once
+/// for the whole sweep.
 pub fn prefetch_attachments(
     root: &Path,
     account_id: &str,
     mailbox: &str,
     high_water: &std::sync::Mutex<Vec<(String, u32)>>,
+    gate: &dyn Fn() -> Result<(), String>,
 ) -> Result<usize, String> {
     let cache_dir = root.join("attachment_cache");
     let cur_dir = cur_path(root, account_id, mailbox);
     let key = format!("{}/{}", account_id, mailbox);
     let above = high_water.lock().unwrap_or_else(|p| p.into_inner())
         .iter().find(|(k, _)| *k == key).map(|(_, uid)| *uid).unwrap_or(0);
-    let (written, max_uid) = prefetch_attachments_in(&cache_dir, &cur_dir, account_id, mailbox, above)?;
+    let (written, max_uid) = prefetch_attachments_in(&cache_dir, &cur_dir, account_id, mailbox, above, gate)?;
     let mut marks = high_water.lock().unwrap_or_else(|p| p.into_inner());
     match marks.iter_mut().find(|(k, _)| *k == key) {
         Some(entry) => entry.1 = max_uid,
@@ -1061,7 +1075,7 @@ R0lGODlhAQABAAAAACw=\r\n\
             (9, &photo_with_inline_and_pixel()),
             (3, PLAIN_EMAIL),
         ]);
-        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
+        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &|| Ok(())).unwrap();
         let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
         // The photo only: the cid: logo is part of the HTML and the unnamed
         // 1x1 gif is a tracking pixel — neither is something the user attached.
@@ -1069,7 +1083,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(max_uid, 9);
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
 
-        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
+        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &|| Ok(())).unwrap();
         assert!(again.is_empty());
     }
 
@@ -1079,7 +1093,7 @@ R0lGODlhAQABAAAAACw=\r\n\
             (5, &multipart_with_attachment()),
             (9, &photo_with_inline_and_pixel()),
         ]);
-        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5).unwrap();
+        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5, &|| Ok(())).unwrap();
         assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
     }
 }

@@ -259,9 +259,9 @@ describe('Connected Attachments', function () {
     // `browser.execute` does not await a Promise; `executeAsync` does.
     await browser.waitUntil(
       () => browser.executeAsync((accountId, done) => {
-        window.__TAURI__.core.invoke('cached_attachment_path', {
+        window.__TAURI__.core.invoke('daemon_rpc', { method: 'cached_attachment_path', params: {
           accountId, mailbox: 'INBOX', uid: 910, attachmentIndex: 0,
-        }).then((path) => done(typeof path === 'string' && path.endsWith('pixel.png')), () => done(false));
+        } }).then((path) => done(typeof path === 'string' && path.endsWith('pixel.png')), () => done(false));
       }, yoda.id),
       { timeout: 60_000, interval: 500, timeoutMsg: 'the prefetch never cached the PNG' },
     );

@@ -111,11 +111,43 @@ function mapArgs(command, args) {
 // Commands migrated to the daemon under their own names and payloads
 // (spec 2026-09-14 §3.1). Unlike DAEMON_COMMANDS above: no heartbeat gate and
 // no invoke fallback. Their Tauri twins are deleted in the same phase.
-export const DAEMON_OWNED = new Set(['vault_search', 'vault_rows', 'search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy']);
+//
+// Task 2.6 adds the vault read family and the attachment cache: unlike the
+// old app-side `maildir_*` Tauri commands `transportRouting.test.js` above
+// keeps out of DAEMON_COMMANDS, these route through `mailvault_core::vault_files`
+// in the daemon (Task 2.2) — the exact same bodies, filename format and JSON
+// shapes the deleted Tauri commands used, not the old daemon-only format that
+// test guards against.
+export const DAEMON_OWNED = new Set([
+  'vault_search', 'vault_rows', 'search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy',
+  'maildir_read', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source', 'maildir_read_attachment',
+  'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
+  'cache_attachment', 'cached_attachment_path', 'prefetch_attachments',
+]);
 
 async function sendToDaemon(command, args) {
   try {
-    return await daemonCall(command, mapArgs(command, args));
+    const realPromise = daemonCall(command, mapArgs(command, args));
+    // Task 2.6: before this, a command that moved into DAEMON_OWNED had
+    // previously only ever gone through `tauriInvoke` below (the one place
+    // this observer hook lives), so e2e specs that watch native invokes by
+    // name (`__INSIGHTS_NATIVE_OBSERVER__`, e.g. connected-insights.test.js
+    // asserting `maildir_read`/`prefetch_attachments` are or are not called)
+    // would silently stop seeing these calls the moment they moved here —
+    // the real invoke becomes `daemon_rpc`, not the command's own name. Same
+    // seam as `tauriInvoke`, applied to the daemon-owned path.
+    if (import.meta.env.VITE_E2E === '1' && typeof window.__INSIGHTS_NATIVE_OBSERVER__ === 'function') {
+      try {
+        const barrier = window.__INSIGHTS_NATIVE_OBSERVER__(command, realPromise);
+        if (barrier && typeof barrier.then === 'function') {
+          return await Promise.allSettled([realPromise, barrier]).then(([native]) => {
+            if (native.status === 'rejected') throw native.reason;
+            return native.value;
+          });
+        }
+      } catch { /* Observation must not change the native outcome. */ }
+    }
+    return await realPromise;
   } catch (e) {
     // daemonClient.js's classifier is untouched (its mapping stays
     // byte-identical for legacy DAEMON_COMMANDS callers) and is not trusted

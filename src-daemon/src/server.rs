@@ -61,6 +61,14 @@ pub struct DaemonState {
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
+    /// Task 2.6: one attachment-prefetch sweep at a time, process-wide — the
+    /// daemon's own copy of the app's `PREFETCH_LOCK` static (main.rs:1898).
+    pub prefetch_lock: std::sync::Mutex<()>,
+    /// Per-(account,mailbox) newest-uid-already-swept mark — the daemon's own
+    /// copy of `PREFETCH_HIGH_WATER` (main.rs:1899). Resets on every daemon
+    /// restart (reconnect, vault switch, version mismatch): cheap (skips
+    /// existing cache files by stat), inventory-maildir oddity 9.
+    pub prefetch_high_water: std::sync::Mutex<Vec<(String, u32)>>,
 }
 
 /// Start the daemon socket server.
@@ -213,6 +221,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::vault_files::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
@@ -323,6 +335,8 @@ impl DaemonState {
             shutdown: Arc::new(tokio::sync::Notify::new()),
             search_index: crate::search_index::SearchIndexState::new(mail_dir, mail_dir_ok, events.clone()),
             events,
+            prefetch_lock: std::sync::Mutex::new(()),
+            prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         })
     }
 }

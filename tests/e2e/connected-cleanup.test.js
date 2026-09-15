@@ -45,8 +45,10 @@ describe('Email Cleanup account reads', function () {
       const original = window.__TAURI__;
       window.__CLEANUP_TEST__ = { original, calls: [] };
       const invoke = async (command, args) => {
-        // Force the uncached path regardless of background caching.
-        if (command === 'maildir_read_light' && args?.accountId === id && args?.uid === 39) return null;
+        // Force the uncached path regardless of background caching. Task 2.6:
+        // maildir_read_light moved to the daemon, so the app now calls it as
+        // `daemon_rpc` with the method inside `args`, not as a bare command.
+        if (command === 'daemon_rpc' && args?.method === 'maildir_read_light' && args?.params?.accountId === id && args?.params?.uid === 39) return null;
         if (['imap_get_email_light', 'archive_emails'].includes(command)) {
           window.__CLEANUP_TEST__.calls.push({ command, args });
         }
@@ -119,7 +121,7 @@ describe('Email Cleanup account reads', function () {
     });
     const saved = await browser.executeAsync(async (accountId, done) => {
       try {
-        done(await window.__CLEANUP_TEST__.original.core.invoke('maildir_read_light', { accountId, mailbox: 'INBOX', uid: 39 }));
+        done(await window.__CLEANUP_TEST__.original.core.invoke('daemon_rpc', { method: 'maildir_read_light', params: { accountId, mailbox: 'INBOX', uid: 39 } }));
       } catch (error) { done({ error: String(error) }); }
     }, browser.mockAccounts[0].id);
     expect(saved.subject).toBe('Luke message 39');

@@ -31,7 +31,7 @@ async function maildirEmailCount() {
     try {
       const invoke = window.__TAURI_INTERNALS__?.invoke;
       if (!invoke) return done({ error: 'No Tauri invoke found' });
-      const stats = await invoke('maildir_storage_stats', { accountId: null });
+      const stats = await invoke('daemon_rpc', { method: 'maildir_storage_stats', params: { accountId: null } });
       done({ count: stats?.emailCount ?? 0 });
     } catch (e) {
       done({ error: e.message || String(e) });

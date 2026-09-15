@@ -113,7 +113,7 @@ const rows = () => browser.execute(() =>
 
 /** The vault's own answer for a message — read off its file, not the list. */
 async function vaultFlags(accountId, mailbox, uid) {
-  const light = await invoke('maildir_read_light', { accountId, mailbox, uid });
+  const light = await invoke('daemon_rpc', { method: 'maildir_read_light', params: { accountId, mailbox, uid } });
   if (light?.__error) throw new Error(`maildir_read_light: ${light.__error}`);
   return light ? light.flags : null;
 }

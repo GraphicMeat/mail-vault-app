@@ -13,11 +13,18 @@ const { t } = await import('../../i18n/index.js');
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
 
-  it('owns exactly the search index commands in phase 1', async () => {
+  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
     const names = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
-    expect(names).toEqual(['search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status', 'vault_rows', 'vault_search']);
+    expect(names).toEqual([
+      'cache_attachment', 'cached_attachment_path',
+      'maildir_exists', 'maildir_list', 'maildir_orphan_stats',
+      'maildir_read', 'maildir_read_attachment', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source',
+      'maildir_storage_stats', 'prefetch_attachments',
+      'search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status',
+      'vault_rows', 'vault_search',
+    ]);
   });
 
   it('routes a member to the daemon under its own name with camelCase args, no heartbeat needed', async () => {

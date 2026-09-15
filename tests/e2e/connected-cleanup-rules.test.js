@@ -156,8 +156,8 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
   }, command, args);
 
   /** What the vault holds for a uid, or `{ error }` when the read fails. */
-  const vaultCopy = (uid) => invokeApp('maildir_read_light', {
-    accountId: yodaId, mailbox: 'INBOX', uid,
+  const vaultCopy = (uid) => invokeApp('daemon_rpc', {
+    method: 'maildir_read_light', params: { accountId: yodaId, mailbox: 'INBOX', uid },
   });
 
   const settingsText = () => browser.execute(() =>
@@ -341,7 +341,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
         const invoke = window.__TAURI_INTERNALS__.invoke;
         const out = {};
         try {
-          out.vault = await invoke('maildir_read_light', { accountId, mailbox: 'INBOX', uid });
+          out.vault = await invoke('daemon_rpc', { method: 'maildir_read_light', params: { accountId, mailbox: 'INBOX', uid } });
         } catch (e) { out.vaultError = String(e); }
         try {
           const raw = await invoke('local_index_read', { accountId, mailbox: 'INBOX' });

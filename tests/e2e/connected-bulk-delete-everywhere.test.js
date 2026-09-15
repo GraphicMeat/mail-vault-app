@@ -535,9 +535,10 @@ describe('Bulk delete everywhere', function () {
       });
       const disk = await browser.executeAsync((accountId, mailbox, done) => {
         const inv = window.__TAURI__.core.invoke;
+        const maildirList = (requireFlag) => inv('daemon_rpc', { method: 'maildir_list', params: { accountId, mailbox, requireFlag } });
         Promise.all([
-          inv('maildir_list', { accountId, mailbox, requireFlag: null }).catch(e => ({ __error: String(e) })),
-          inv('maildir_list', { accountId, mailbox, requireFlag: 'archived' }).catch(e => ({ __error: String(e) })),
+          maildirList(null).catch(e => ({ __error: String(e) })),
+          maildirList('archived').catch(e => ({ __error: String(e) })),
           inv('local_index_read', { accountId, mailbox }).catch(e => ({ __error: String(e) })),
         ]).then(([all, archived, index]) => done({ all, archived, index })).catch(e => done({ __error: String(e) }));
       }, vaderId, 'Archive');
