@@ -212,10 +212,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // budget — and a `vault_close` that times out stops the daemon (I2
         // fix, `should_stop_after_lifecycle_call`) while this sweep is still
         // writing. So `root` is resolved once (fixed for the call — the
-        // vault does not move mid-call, only closes), but `gate` re-takes
-        // `with_vault_write` per file inside `vault_files::prefetch_attachments`
-        // (core, Task 2.6 fix round): a move can interleave between files
-        // instead of waiting out the whole sweep.
+        // vault does not move mid-call, only closes), and `gate` wraps each
+        // file's *entire* read+parse+write in its own `with_vault_write` call
+        // (Task 2.6 fix round 1, I1): `vault_files::prefetch_attachments_in`
+        // calls `gate(&mut work)` once per file, so the read side is held for
+        // exactly that file's disk work, never left to run unguarded after a
+        // bare pre-check — a move can still interleave between files instead
+        // of waiting out the whole sweep.
         "prefetch_attachments" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
             let mailbox = req!(str_arg(&id, params, "mailbox"));
@@ -226,7 +229,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let _one_sweep_at_a_time = state.prefetch_lock.lock().unwrap_or_else(|p| p.into_inner());
                     let root = vault_root(&state)?;
                     let gate_state = Arc::clone(&state);
-                    let gate = move || with_vault_write(&gate_state, |_| Ok(()));
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
                     vault_files::prefetch_attachments(&root, &account_id, &mailbox, &state.prefetch_high_water, &gate).map(|n| Value::from(n as u64))
                 })
                 .await
@@ -245,7 +248,15 @@ mod tests {
 
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let tmp = tempfile::tempdir().unwrap();
-        let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), mail_dir_ok);
+        // I2 fix (2.6 review): the vault root and the app-dir fallback must be
+        // distinct tempdirs, or "nothing written under the fallback root"
+        // can never fail regardless of what the gate does. The app_dir here
+        // is leaked (not a `TempDir` guard) so every existing `st(..)`
+        // call site keeps returning just the vault root; tests that need to
+        // inspect or seed the app_dir itself (the two below) build their own
+        // `DaemonState` directly instead of going through `st`.
+        let app_dir = tempfile::tempdir().unwrap().keep();
+        let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, mail_dir_ok);
         (tmp, s)
     }
 
@@ -288,6 +299,103 @@ mod tests {
         assert_eq!(err.message, "Email UID 42 not found");
     }
 
+    // M1 fix (2.6 review): `seed_email`'s fixed input pins every field of the
+    // reads that only had structural coverage before. `text` is compared
+    // separately with `.trim()` — mailparse's body-before-boundary trailing
+    // CRLF is already handled the same way elsewhere in this crate
+    // (`vault_files.rs`'s own `out[2].text.as_deref().map(str::trim)`), not a
+    // new exception invented for this test.
+    #[tokio::test]
+    async fn maildir_read_returns_the_full_parse_as_literal_json() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let r = call(&s, "maildir_read", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
+        let mut got = r.result.unwrap();
+        let text = got.as_object_mut().unwrap().remove("text").unwrap();
+        assert_eq!(text.as_str().unwrap().trim(), "body");
+        assert_eq!(got, json!({
+            "uid": 7,
+            "messageId": null,
+            "subject": "hi",
+            "from": {"name": null, "address": "a@b.com"},
+            "to": [{"name": null, "address": "c@d.com"}],
+            "cc": [],
+            "bcc": [],
+            "replyTo": [],
+            "date": null,
+            "flags": [],
+            "html": null,
+            // mailparse's raw body includes the trailing CRLF before the next
+            // boundary marker (unlike `get_body()` for text, which trims it):
+            // the fixture's part is "data\r\n" (6 bytes), not "data" (4).
+            "attachments": [{
+                "filename": "pixel.png",
+                "contentType": "application/octet-stream",
+                "contentDisposition": "Attachment",
+                "size": 6,
+                "contentId": null,
+                "content": "ZGF0YQ0K"
+            }],
+            "rawSource": "RnJvbTogYUBiLmNvbQ0KVG86IGNAZC5jb20NClN1YmplY3Q6IGhpDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9WA0KDQotLVgNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpib2R5DQotLVgNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtOyBuYW1lPXBpeGVsLnBuZw0KQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9cGl4ZWwucG5nDQoNCmRhdGENCi0tWC0tDQo=",
+            "hasAttachments": true,
+            "isArchived": false
+        }));
+    }
+
+    #[tokio::test]
+    async fn maildir_read_light_returns_the_light_parse_as_literal_json() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let r = call(&s, "maildir_read_light", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
+        let mut got = r.result.unwrap();
+        let text = got.as_object_mut().unwrap().remove("text").unwrap();
+        assert_eq!(text.as_str().unwrap().trim(), "body");
+        assert_eq!(got, json!({
+            "uid": 7,
+            "messageId": null,
+            "subject": "hi",
+            "from": {"name": null, "address": "a@b.com"},
+            "to": [{"name": null, "address": "c@d.com"}],
+            "cc": [],
+            "bcc": [],
+            "replyTo": [],
+            "date": null,
+            "flags": [],
+            "html": null,
+            // Same trailing-CRLF-before-boundary note as `maildir_read`'s test.
+            "attachments": [{
+                "filename": "pixel.png",
+                "contentType": "application/octet-stream",
+                "contentDisposition": "Attachment",
+                "size": 6,
+                "contentId": null
+            }],
+            "hasAttachments": true,
+            "isArchived": false
+        }));
+    }
+
+    #[tokio::test]
+    async fn maildir_read_raw_source_returns_the_whole_file_as_base64() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let r = call(&s, "maildir_read_raw_source", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
+        assert_eq!(
+            r.result.unwrap(),
+            json!("RnJvbTogYUBiLmNvbQ0KVG86IGNAZC5jb20NClN1YmplY3Q6IGhpDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9WA0KDQotLVgNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpib2R5DQotLVgNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtOyBuYW1lPXBpeGVsLnBuZw0KQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9cGl4ZWwucG5nDQoNCmRhdGENCi0tWC0tDQo=")
+        );
+    }
+
+    #[tokio::test]
+    async fn cached_attachment_path_is_a_literal_absolute_path_under_the_root() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        call(&s, "cache_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
+        let r = call(&s, "cached_attachment_path", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
+        let want = t.path().join("attachment_cache").join("acc_INBOX_7_0_pixel.png").to_string_lossy().to_string();
+        assert_eq!(r.result.unwrap(), json!(want));
+    }
+
     #[tokio::test]
     async fn cache_attachment_then_cached_attachment_path_agree_on_an_absolute_path_under_the_root() {
         let (t, s) = st(true);
@@ -302,22 +410,53 @@ mod tests {
         assert_eq!(looked_up, Value::String(path.to_string()));
     }
 
+    // I2 fix (2.6 review): the old version of this test used the same
+    // tempdir for the vault root and the app_dir fallback, so "nothing
+    // written under the fallback root" could never fail no matter what the
+    // gate did. Two distinct dirs here, with an `.eml` seeded under app_dir
+    // specifically — a route that silently fell back to `state.app_dir`
+    // would find it and could cache something; the assertion below only
+    // means something because that file exists and is reachable if the gate
+    // is bypassed.
     #[tokio::test]
-    async fn a_gated_route_refuses_and_writes_nothing_under_the_fallback_root() {
-        let (t, s) = st(false);
+    async fn a_gated_route_creates_nothing_under_either_root_when_the_folder_is_unreachable() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), false);
+        seed_email(app_dir.path(), "acc", "INBOX", 7);
+
         let r = call(&s, "maildir_read_light", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1})).await;
-        let err = r.error.unwrap();
-        assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
-        assert!(!s.app_dir.join("Maildir").exists());
-        let _ = t;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+        let r = call(&s, "cache_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+        let r = call(&s, "prefetch_attachments", json!({"accountId": "acc", "mailbox": "INBOX"})).await;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+
+        assert!(!app_dir.path().join("attachment_cache").exists());
+        assert!(!vault.path().join("attachment_cache").exists());
     }
 
+    // I2 fix, second reason a route can be gated: `mail_dir_ok=true` but the
+    // vault is mid-move (`vault_closed`). Same two-tempdir shape, seeded
+    // under the vault root this time (the folder *is* reachable, just
+    // temporarily closed).
     #[tokio::test]
-    async fn a_gated_write_route_refuses_while_the_vault_is_unreachable() {
-        let (_t, s) = st(false);
-        let r = call(&s, "cache_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1, "attachmentIndex": 0})).await;
-        let err = r.error.unwrap();
-        assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
+    async fn a_gated_route_creates_nothing_under_either_root_while_the_vault_is_being_moved() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        seed_email(vault.path(), "acc", "INBOX", 7);
+        s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        let r = call(&s, "maildir_read_light", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1})).await;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+        let r = call(&s, "cache_attachment", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "attachmentIndex": 0})).await;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+        let r = call(&s, "prefetch_attachments", json!({"accountId": "acc", "mailbox": "INBOX"})).await;
+        assert!(r.error.unwrap().message.starts_with("E_VAULT_UNAVAILABLE:"));
+
+        assert!(!app_dir.path().join("attachment_cache").exists());
+        assert!(!vault.path().join("attachment_cache").exists());
     }
 
     #[tokio::test]

@@ -595,15 +595,28 @@ pub fn cached_attachment_path(root: &Path, account_id: &str, mailbox: &str, uid:
 /// every real attachment above `above_uid` to the cache. Returns the paths it
 /// wrote, in sweep order, and the highest uid it saw.
 ///
-/// `gate` is called before each file: the daemon passes a closure re-checking
-/// `handlers::common::vault_root` (Task 2.6) under a *fresh* `vault_gate`
-/// read-side acquisition each time, rather than the caller holding one gate
-/// for the whole sweep — a mailbox can hold thousands of messages, and
+/// `gate` runs the given file's *entire* read+parse+write inside itself: the
+/// daemon passes a closure wrapping `handlers::common::with_vault_write`
+/// (Task 2.6 fix round 1, I1) around `work`, so a fresh `vault_gate`
+/// read-side guard is held for exactly this one file's disk work, not the
+/// whole sweep — a mailbox can hold thousands of messages, and
 /// `vault_close`'s writer-drain (`with_vault_write`'s write-side barrier)
-/// must not be blocked out for the full sweep's duration. A `gate` error
-/// (vault closed for a move mid-sweep) stops the sweep at that file; whatever
-/// was already written stays (already-cached files are still valid).
-fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, above_uid: u32, gate: &dyn Fn() -> Result<(), String>) -> Result<(Vec<PathBuf>, u32), String> {
+/// must not be blocked out for the full sweep's duration. Passing the work
+/// *into* the gate (rather than checking the gate and then doing the work
+/// unguarded) closes the check-then-act window a bare pre-check would leave:
+/// `vault_close` can only observe this file's write as complete or not yet
+/// started, never half-written. A `gate` error (vault closed for a move
+/// mid-sweep) stops the sweep before that file's work runs; whatever was
+/// already written by earlier files stays (already-cached files are still
+/// valid).
+fn prefetch_attachments_in(
+    cache_dir: &Path,
+    cur_dir: &Path,
+    account_id: &str,
+    mailbox: &str,
+    above_uid: u32,
+    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+) -> Result<(Vec<PathBuf>, u32), String> {
     let entries = fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
     let mut files: Vec<(u32, PathBuf)> = entries.flatten()
         .filter_map(|entry| {
@@ -618,23 +631,25 @@ fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, m
     let mut written = Vec::new();
     for (uid, path) in files {
         if uid <= above_uid { break; }
-        gate()?;
-        let Ok(raw) = fs::read(&path) else { continue };
-        // A message with no Content-Disposition header has no attachment part.
-        if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { continue; }
-        let Ok(parsed) = mailparse::parse_mail(&raw) else { continue };
-        let (mut text, mut html, mut metas) = (None, None, Vec::new());
-        walk_mime_parts_light(&parsed, &mut text, &mut html, &mut metas);
-        let mut parts = Vec::new();
-        collect_attachment_parts(&parsed, &mut parts);
-        for (index, (part, meta)) in parts.iter().zip(&metas).enumerate() {
-            if !is_real_attachment(&meta.content_type, &meta.content_id, &meta.filename, meta.size, html.as_deref()) { continue; }
-            if attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part)).exists() { continue; }
-            match write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part) {
-                Ok(dest) => written.push(dest),
-                Err(e) => warn!("Attachment prefetch skipped uid {} part {}: {}", uid, index, e),
+        gate(&mut || {
+            let Ok(raw) = fs::read(&path) else { return Ok(()) };
+            // A message with no Content-Disposition header has no attachment part.
+            if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { return Ok(()); }
+            let Ok(parsed) = mailparse::parse_mail(&raw) else { return Ok(()) };
+            let (mut text, mut html, mut metas) = (None, None, Vec::new());
+            walk_mime_parts_light(&parsed, &mut text, &mut html, &mut metas);
+            let mut parts = Vec::new();
+            collect_attachment_parts(&parsed, &mut parts);
+            for (index, (part, meta)) in parts.iter().zip(&metas).enumerate() {
+                if !is_real_attachment(&meta.content_type, &meta.content_id, &meta.filename, meta.size, html.as_deref()) { continue; }
+                if attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part)).exists() { continue; }
+                match write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part) {
+                    Ok(dest) => written.push(dest),
+                    Err(e) => warn!("Attachment prefetch skipped uid {} part {}: {}", uid, index, e),
+                }
             }
-        }
+            Ok(())
+        })?;
     }
     Ok((written, max_uid))
 }
@@ -643,14 +658,14 @@ fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, m
 /// high-water mark is passed in so the caller (the daemon, Task 2.6) owns
 /// its own — it resets whenever the process holding it restarts.
 ///
-/// `gate`: see `prefetch_attachments_in` — called once per file, never once
-/// for the whole sweep.
+/// `gate`: see `prefetch_attachments_in` — wraps one file's work at a time,
+/// never the whole sweep.
 pub fn prefetch_attachments(
     root: &Path,
     account_id: &str,
     mailbox: &str,
     high_water: &std::sync::Mutex<Vec<(String, u32)>>,
-    gate: &dyn Fn() -> Result<(), String>,
+    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
 ) -> Result<usize, String> {
     let cache_dir = root.join("attachment_cache");
     let cur_dir = cur_path(root, account_id, mailbox);
@@ -1075,7 +1090,8 @@ R0lGODlhAQABAAAAACw=\r\n\
             (9, &photo_with_inline_and_pixel()),
             (3, PLAIN_EMAIL),
         ]);
-        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &|| Ok(())).unwrap();
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &noop_gate).unwrap();
         let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
         // The photo only: the cid: logo is part of the HTML and the unnamed
         // 1x1 gif is a tracking pixel — neither is something the user attached.
@@ -1083,7 +1099,7 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(max_uid, 9);
         assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
 
-        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &|| Ok(())).unwrap();
+        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0, &noop_gate).unwrap();
         assert!(again.is_empty());
     }
 
@@ -1093,7 +1109,54 @@ R0lGODlhAQABAAAAACw=\r\n\
             (5, &multipart_with_attachment()),
             (9, &photo_with_inline_and_pixel()),
         ]);
-        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5, &|| Ok(())).unwrap();
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5, &noop_gate).unwrap();
         assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
+    }
+
+    // Task 2.6 fix round 1, I1: the per-file gate must hold each file's
+    // *entire* read+parse+write, not just check-then-let-it-run unguarded.
+    // Order probe (not timing): the fake gate flips "closed" only after the
+    // first file's `work` has fully returned, simulating `vault_close`'s
+    // flag landing between files, never mid-write. If `work` ran outside the
+    // gate (the pre-fix shape), this test could not tell the difference —
+    // the fix is what makes "closed flips right after work() returns, and
+    // the next file's gate call sees it before its own work runs" observable
+    // at all, since the signature no longer allows a bare pre-check.
+    #[test]
+    fn a_gate_error_between_files_stops_the_sweep_and_leaves_the_high_water_mark_untouched() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let root = root_dir.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("5:2,S"), multipart_with_attachment()).unwrap();
+        fs::write(cur.join("9:2,S"), photo_with_inline_and_pixel()).unwrap();
+
+        let closed = std::sync::atomic::AtomicBool::new(false);
+        let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
+            if closed.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string());
+            }
+            let r = work();
+            // Flip only after `work` (this file's whole read+parse+write)
+            // has returned — never mid-write.
+            closed.store(true, std::sync::atomic::Ordering::SeqCst);
+            r
+        };
+        let high_water = std::sync::Mutex::new(Vec::new());
+        let err = prefetch_attachments(root, "acct", "INBOX", &high_water, &gate).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+
+        // Only uid 9 (processed first, newest-first) was cached; uid 5's
+        // gate call never ran, so no attachment_cache write happened after
+        // the flag flipped.
+        let cache = root.join("attachment_cache");
+        let mut entries: Vec<String> = fs::read_dir(&cache).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+        entries.sort();
+        assert_eq!(entries, vec!["acct_INBOX_9_0_photo.png"]);
+
+        // The high-water mark is not advanced on error — same contract as
+        // before this fix, the next sweep starts from scratch.
+        assert!(high_water.lock().unwrap().is_empty());
     }
 }

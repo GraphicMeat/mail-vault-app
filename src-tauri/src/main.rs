@@ -3485,8 +3485,8 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         "search_index_destroy" => Some(Duration::from_secs(150)),
 
         "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
-        | "maildir_read" | "maildir_read_light" | "maildir_read_light_batch" | "maildir_read_attachment"
-        | "maildir_read_raw_source" | "maildir_exists" | "maildir_list" | "maildir_store" | "maildir_delete"
+        | "maildir_read" | "maildir_read_light" | "maildir_read_attachment"
+        | "maildir_read_raw_source" | "maildir_exists" | "maildir_store" | "maildir_delete"
         | "maildir_delete_many" | "maildir_set_flags" | "cache_attachment" | "cached_attachment_path"
         | "save_email_cache" | "load_email_cache_partial" | "load_email_cache_meta" | "load_email_cache_by_uids"
         | "list_cached_uids" | "save_mailbox_cache" | "load_mailbox_cache" | "delete_mailbox_cache"
@@ -3495,7 +3495,15 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
         | "maildir_orphan_stats" => Some(Duration::from_secs(30)),
 
-        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache" | "vault_close" => {
+        // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
+        // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
+        // `src/services/db/emails.js`) — a full MIME parse per file, with no
+        // chunking on this path (unlike `getArchivedEmails`, which chunks at
+        // 200). The old Tauri commands they replace had no budget at all, so
+        // 30s (bounding what used to be unbounded) can time out a large
+        // archive on a slow drive that used to just run slow and succeed.
+        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache" | "vault_close"
+        | "maildir_read_light_batch" | "maildir_list" => {
             Some(Duration::from_secs(120))
         }
 
@@ -4592,8 +4600,8 @@ mod tests {
     #[test]
     fn reply_timeout_gives_every_phase_2_thirty_second_method_thirty_seconds() {
         for method in [
-            "maildir_read", "maildir_read_light", "maildir_read_light_batch", "maildir_read_attachment",
-            "maildir_read_raw_source", "maildir_exists", "maildir_list", "maildir_store", "maildir_delete",
+            "maildir_read", "maildir_read_light", "maildir_read_attachment",
+            "maildir_read_raw_source", "maildir_exists", "maildir_store", "maildir_delete",
             "maildir_delete_many", "maildir_set_flags", "cache_attachment", "cached_attachment_path",
             "save_email_cache", "load_email_cache_partial", "load_email_cache_meta", "load_email_cache_by_uids",
             "list_cached_uids", "save_mailbox_cache", "load_mailbox_cache", "delete_mailbox_cache",
@@ -4608,7 +4616,13 @@ mod tests {
 
     #[test]
     fn reply_timeout_gives_every_phase_2_hundred_twenty_second_method_that_budget() {
-        for method in ["load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache", "vault_close"] {
+        // I3 (2.6 review fix round 1): `maildir_read_light_batch`/`maildir_list`
+        // moved here from the 30s tier — they can cover a whole mailbox's
+        // uids in one unchunked call, a full MIME parse per file.
+        for method in [
+            "load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache", "vault_close",
+            "maildir_read_light_batch", "maildir_list",
+        ] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
         }
     }
