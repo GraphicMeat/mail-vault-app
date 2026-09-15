@@ -134,9 +134,26 @@ describe('Search index destroy', function () {
     await browser.waitUntil(() => browser.execute(() => !!document.querySelector('[role="alertdialog"]')), { timeout: 5_000, timeoutMsg: 'no confirm dialog' });
     expect((await status()).state).not.toBe('off'); // nothing happens before Confirm
     await browser.execute(() => { const b = document.querySelectorAll('[role="alertdialog"] button'); b[b.length - 1].click(); });
-    await browser.waitUntil(async () => (await status()).state === 'off', { timeout: 60_000, interval: 500, timeoutMsg: 'index never reported off' });
+    // Both status() "off" and Settings' off row (search-index-off/Build) read
+    // the `searchIndexEnabled` store flag, which SearchIndexSettings.jsx flips
+    // to false BEFORE it awaits destroy() — so neither proves the files are
+    // gone or that the reply was ok, not busy/failed (review 1.11 I2). Wait on
+    // real evidence instead: the files gone, AND the confirm dialog closed
+    // with no error shown (an ok reply, not busy/failed re-showing the row).
+    try {
+      await browser.waitUntil(
+        async () => indexFiles().length === 0
+          && !(await browser.execute(() => !!document.querySelector('[role="alertdialog"]')))
+          && !(await visible('search-index-error')),
+        { timeout: 10_000, interval: 250, timeoutMsg: 'index files never disappeared, or the confirm dialog/error never cleared' },
+      );
+    } catch (e) {
+      console.log('[destroy spec] still present after Confirm:', indexFiles()); // failure detail, outside the polled condition
+      throw e;
+    }
     expect(indexFiles()).toEqual([]);
     await browser.waitUntil(() => visible('search-index-off'), { timeout: 5_000, timeoutMsg: 'Settings never said the index is off' });
+    expect((await status()).state).toBe('off');
     await closeSettings();
   });
 
