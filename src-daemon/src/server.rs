@@ -635,6 +635,63 @@ mod tests {
         served.stop();
     }
 
+    /// Final review Important 1 / deferred #26: `run` used to share one task
+    /// and one `select!` between reading incoming notifications and writing
+    /// bus events out. A write that blocks — the client isn't reading, and a
+    /// macOS/Linux AF_UNIX socket's default buffer is only ~8 KB each way —
+    /// used to stop that same task from ever getting back to
+    /// `lines.next_line()`, so a client that goes quiet after `channel.open`
+    /// (exactly what a wedged app-side channel looks like, Phase 1's nudge
+    /// volume makes this reachable) could never have another notification
+    /// dispatched, forever. The fix spawns the bus→socket forwarder as its
+    /// own task so `run`'s read+dispatch loop never shares a stalled write.
+    ///
+    /// This test never reads `lines` again after `channel.open`, and floods
+    /// the bus with far more than 8 KB from a second connection's-independent
+    /// producer, so the forwarder's write blocks solidly for the rest of the
+    /// test. It then sends one notification and proves — via a THIRD,
+    /// separate bus subscriber, so the proof doesn't depend on the write ever
+    /// reaching the non-reading client — that `dispatch` still ran. Bounded
+    /// by a timeout so a regression fails, not hangs, the test suite.
+    #[tokio::test]
+    async fn dispatch_keeps_progressing_while_the_client_never_reads_a_flooded_bus() {
+        let served = Served::start().await;
+        let (_lines, mut w) = open_channel(&served).await;
+        // `_lines` is deliberately never read again below.
+
+        let mut proof_rx = served.state.events.subscribe();
+
+        let bus = served.state.events.clone();
+        let flood = tokio::spawn(async move {
+            let payload = "x".repeat(64 * 1024);
+            for i in 0..80 {
+                bus.emit("flood", json!({ "i": i, "pad": payload.clone() }));
+            }
+        });
+        // emit() is a synchronous, non-blocking broadcast send — joining here
+        // just guarantees all 80 events are already queued for this
+        // connection's forwarder before the notification below is sent.
+        flood.await.expect("flood task panicked");
+
+        send(&mut w, r#"{"jsonrpc":"2.0","method":"daemon.ping","params":{"nonce":"through-the-flood"}}"#).await;
+
+        let dispatched = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                match proof_rx.recv().await {
+                    Ok(line) if line.contains("through-the-flood") => return true,
+                    Ok(_) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return false,
+                }
+            }
+        })
+        .await
+        .expect("dispatch must not hang while the client is not reading (deadlock regression)");
+        assert!(dispatched, "the daemon.ping notification sent after the flood was never dispatched");
+
+        served.stop();
+    }
+
     #[tokio::test]
     async fn a_request_connection_never_receives_events() {
         let served = Served::start().await;

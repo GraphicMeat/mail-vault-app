@@ -9,7 +9,8 @@ use tauri::Emitter;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines};
 use tokio::net::unix::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
-use tracing::{debug, info, warn};
+use tokio::sync::watch;
+use tracing::{debug, error, info, warn};
 
 static TX: OnceLock<UnboundedSender<String>> = OnceLock::new();
 static CONNECTED: AtomicBool = AtomicBool::new(false);
@@ -65,7 +66,35 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 info!("daemon channel connected");
                 let _ = app.emit("daemon-reconnected", json!({}));
                 let connected_at = std::time::Instant::now();
-                pump(&app, lines, writer, &mut rx).await;
+
+                // Reader (pump) and writer run as two independent tasks so a
+                // blocked write (the daemon isn't reading, e.g. it's stuck
+                // writing its own burst of events) never stalls the read
+                // side — with both directions sharing one task and one
+                // select!, a blocked write used to stop us from draining the
+                // daemon's outgoing buffer, which could in turn block the
+                // daemon's own write, wedging both ends forever once each
+                // side's ~8 KB socket buffer filled. `dead` (a watch, not a
+                // Notify: its `changed()` is stateful, so a side that sends
+                // `true` before the other side starts watching is still
+                // observed — no lost-wakeup race) lets whichever side ends
+                // first wake the other so the connection tears down as a unit.
+                let (dead_tx, dead_rx) = watch::channel(false);
+                let write_task = tokio::spawn(write_loop(writer, rx, dead_tx.clone(), dead_rx.clone()));
+                pump(&app, lines, dead_tx, dead_rx).await;
+                rx = match write_task.await {
+                    Ok(returned_rx) => returned_rx,
+                    Err(e) => {
+                        // The writer task never panics in normal operation
+                        // (every fallible op is matched, not unwrapped); if
+                        // it ever does, the receiver it owned is gone with
+                        // it. Fall back to a fresh one so this loop keeps
+                        // reconnecting — notify() will silently no-op (TX's
+                        // sender now has no matching receiver) until restart.
+                        error!("daemon channel: writer task failed: {e}");
+                        unbounded_channel().1
+                    }
+                };
                 CONNECTED.store(false, SeqCst);
                 info!("daemon channel closed");
                 if connected_at.elapsed() >= MIN_LIVE_TO_RESET_BACKOFF {
@@ -140,25 +169,45 @@ async fn connect(app: &tauri::AppHandle) -> Result<(Lines<BufReader<OwnedReadHal
     Ok((lines, w))
 }
 
-async fn pump(app: &tauri::AppHandle, mut lines: Lines<BufReader<OwnedReadHalf>>, mut w: OwnedWriteHalf, rx: &mut UnboundedReceiver<String>) {
+/// Reads daemon events and re-emits them to the frontend. Never writes —
+/// see `write_loop` for why the two are split across tasks.
+async fn pump(app: &tauri::AppHandle, mut lines: Lines<BufReader<OwnedReadHalf>>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) {
     loop {
         tokio::select! {
             line = lines.next_line() => match line {
                 Ok(Some(l)) => {
                     if let Some((name, payload)) = parse_event(&l) {
-                        let _ = app.emit(&name, payload);
+                        if app.emit(&name, payload).is_err() {
+                            debug!("daemon channel: failed to emit {name} to the frontend");
+                        }
                     }
                 }
-                _ => return,
+                _ => { let _ = dead_tx.send(true); return; }
             },
+            _ = dead_rx.changed() => return,
+        }
+    }
+}
+
+/// Drains the outgoing mpsc into the write half, one write per message (line
+/// + newline in the same buffer). Returns the receiver so the next
+/// connection attempt can reuse it — `rx` outlives any single connection,
+/// since `TX`'s sender (used by `notify()`) is set once for the app's life.
+async fn write_loop(mut w: OwnedWriteHalf, mut rx: UnboundedReceiver<String>, dead_tx: watch::Sender<bool>, mut dead_rx: watch::Receiver<bool>) -> UnboundedReceiver<String> {
+    loop {
+        tokio::select! {
             out = rx.recv() => match out {
                 Some(msg) => {
-                    if w.write_all(msg.as_bytes()).await.is_err() || w.write_all(b"\n").await.is_err() {
-                        return;
+                    let mut buf = msg.into_bytes();
+                    buf.push(b'\n');
+                    if w.write_all(&buf).await.is_err() {
+                        let _ = dead_tx.send(true);
+                        return rx;
                     }
                 }
-                None => return,
+                None => { let _ = dead_tx.send(true); return rx; } // TX's sender dropped — does not happen while the app runs.
             },
+            _ = dead_rx.changed() => return rx,
         }
     }
 }

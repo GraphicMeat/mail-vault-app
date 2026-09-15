@@ -23,34 +23,60 @@ pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Val
     }
 }
 
+/// Drains the bus into the socket, one write per event. Its own task so a
+/// write that blocks (the client isn't reading, e.g. it is itself stuck
+/// writing a burst of notifications) never stalls `run`'s read loop below —
+/// with both directions sharing one task and one `select!`, a blocked write
+/// used to stop the read side from draining the client's outgoing buffer,
+/// which could in turn block the client's own write, wedging both ends
+/// forever once each side's ~8 KB socket buffer filled.
+async fn forward_bus_to_socket(mut rx: broadcast::Receiver<Arc<str>>, mut writer: OwnedWriteHalf) {
+    loop {
+        match outgoing(rx.recv().await) {
+            Some(line) => {
+                let mut buf = line.into_bytes();
+                buf.push(b'\n');
+                if writer.write_all(&buf).await.is_err() {
+                    return;
+                }
+            }
+            None => return,
+        }
+    }
+}
+
 /// `rx` is subscribed BEFORE `channel.open` is answered, so no event emitted
 /// after the client saw the answer is missed.
 pub(crate) async fn run(
     state: Arc<DaemonState>,
-    mut rx: broadcast::Receiver<Arc<str>>,
+    rx: broadcast::Receiver<Arc<str>>,
     mut lines: Lines<BufReader<OwnedReadHalf>>,
-    mut writer: OwnedWriteHalf,
+    writer: OwnedWriteHalf,
 ) -> std::io::Result<()> {
-    loop {
+    let mut forwarder = tokio::spawn(forward_bus_to_socket(rx, writer));
+    let result = loop {
         tokio::select! {
-            msg = rx.recv() => match outgoing(msg) {
-                Some(line) => {
-                    writer.write_all(line.as_bytes()).await?;
-                    writer.write_all(b"\n").await?;
-                }
-                None => return Ok(()),
-            },
-            // Both branches are cancel-safe (broadcast recv, Lines::next_line).
-            line = lines.next_line() => match line? {
-                None => return Ok(()),
-                Some(l) => {
+            // Cancel-safe (Lines::next_line); re-polling the JoinHandle on
+            // the next iteration after this branch wins is also safe — its
+            // state lives in the spawned task, not in this poll.
+            line = lines.next_line() => match line {
+                Ok(Some(l)) => {
                     if let Ok(req) = ipc::parse_request(&l) {
                         dispatch(&state, &req.method, req.params).await;
+                    } else {
+                        tracing::debug!("channel: ignoring non-JSON-RPC notification line");
                     }
                 }
+                Ok(None) => break Ok(()),
+                Err(e) => break Err(e),
             },
+            // The forwarder ended (bus closed, or the write side is dead) —
+            // a one-directional failure means the connection is dead either way.
+            _ = &mut forwarder => break Ok(()),
         }
-    }
+    };
+    forwarder.abort();
+    result
 }
 
 #[cfg(test)]
