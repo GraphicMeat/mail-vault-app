@@ -789,6 +789,59 @@ mod tests {
         assert_eq!(fs::read(find_by_uid(&cur, 7).unwrap()).unwrap(), b"one");
     }
 
+    // -- read_light_batch (moved from src-tauri/src/light_batch_tests.rs) --
+
+    fn light_batch_eml(subject: &str) -> Vec<u8> {
+        format!("From: A <a@x.test>\r\nTo: b@x.test\r\nSubject: {subject}\r\nMessage-ID: <{subject}@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\nContent-Type: text/plain\r\n\r\nbody of {subject}\r\n").into_bytes()
+    }
+
+    #[test]
+    fn batch_keeps_one_slot_per_requested_uid_in_order() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("5:2,S.eml"), light_batch_eml("five")).unwrap();
+        fs::write(cur.join("9:2,AF.eml"), light_batch_eml("nine")).unwrap();
+        fs::write(cur.join("12.eml"), light_batch_eml("legacy")).unwrap(); // no colon: not a vault row
+        fs::write(cur.join("14:2,.eml"), b"\xff\xfe not mime at all").unwrap();
+
+        let out = read_light_batch(root, "acct", "INBOX", &[9, 404, 5, 12, 14]);
+        assert_eq!(out.len(), 5);
+        let nine = out[0].as_ref().expect("uid 9");
+        assert_eq!(nine.uid, 9);
+        assert_eq!(nine.subject, "nine");
+        assert!(nine.flags.iter().any(|f| f == "archived"));
+        assert!(nine.flags.iter().any(|f| f == "\\Flagged"));
+        assert!(out[1].is_none(), "missing uid");
+        assert_eq!(out[2].as_ref().expect("uid 5").text.as_deref().map(str::trim), Some("body of five"));
+        assert!(out[3].is_none(), "legacy name without colon stays invisible, as before");
+    }
+
+    #[test]
+    fn batch_matches_the_per_uid_lookup_it_replaces() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        for uid in 1..=40u32 {
+            fs::write(cur.join(format!("{uid}:2,S.eml")), light_batch_eml(&format!("m{uid}"))).unwrap();
+        }
+        let uids: Vec<u32> = (0..=41).rev().collect();
+        let batch = read_light_batch(root, "acct", "INBOX", &uids);
+        for (i, uid) in uids.iter().enumerate() {
+            let single = find_by_uid(&cur, *uid).and_then(|p| {
+                let name = p.file_name()?.to_string_lossy().to_string();
+                parse_eml_bytes_light(&fs::read(&p).ok()?, *uid, parse_flags_from_filename(&name)).ok()
+            });
+            assert_eq!(
+                serde_json::to_value(&batch[i]).unwrap(),
+                serde_json::to_value(&single).unwrap(),
+                "uid {uid}"
+            );
+        }
+    }
+
     // -- Attachment cache --
 
     const PLAIN_EMAIL: &[u8] = b"From: alice@example.com\r\n\
