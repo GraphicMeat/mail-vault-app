@@ -1,8 +1,10 @@
-//! Maildir operations — store, read, list, delete .eml files.
-//!
-//! All functions take an explicit `data_dir` path (no Tauri dependency).
-//! Layout: {data_dir}/Maildir/{account_id}/{mailbox}/cur/{uid}:2,{flags}.eml
-//! (the app's own format — see `vault_files` for the writer and readers).
+//! Maildir filename and repair helpers: uid parsing (`vault_filename_uid`,
+//! `find_by_uid`, `uid_file_map`), the external-mirror uid rule, copy
+//! verification, generation repair and orphan handling. The vault file
+//! writer and readers (`store`, `read`, `list`, `delete`, `set_flags`, …)
+//! live in `vault_files`, not here.
+//! Layout: {root}/Maildir/{account_id}/{mailbox}/cur/{uid}:2,{flags}.eml
+//! (the app's own format).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -298,8 +300,9 @@ pub struct GenerationRepair {
 }
 
 /// Strip the angle brackets and surrounding space so both sides of the join
-/// agree. `parse_header` keeps `<...>`; a sidecar written by the frontend may
-/// not, and neither side is worth rewriting for this.
+/// agree. `read_message_id` keeps `<...>` from the header value; a sidecar
+/// written by the frontend may not, and neither side is worth rewriting for
+/// this.
 pub fn normalize_message_id(raw: &str) -> String {
     raw.trim().trim_start_matches('<').trim_end_matches('>').trim().to_string()
 }
@@ -370,8 +373,9 @@ fn header_section(bytes: &[u8]) -> &[u8] {
 /// Read just the Message-ID of an `.eml`, without parsing the message.
 ///
 /// Reads at most 128 KiB: this runs once per vault file during a repair, and a
-/// full `parse_header` (addresses, snippet extraction, MIME walk) over a
-/// 14k-message mailbox is minutes of work to answer one question.
+/// full `vault_eml::parse_eml_bytes` (addresses, snippet extraction, MIME
+/// walk) over a 14k-message mailbox is minutes of work to answer one
+/// question.
 pub fn read_message_id(path: &Path) -> Option<String> {
     let mut buf = Vec::new();
     fs::File::open(path).ok()?.take(128 * 1024).read_to_end(&mut buf).ok()?;

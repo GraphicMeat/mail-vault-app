@@ -78,9 +78,11 @@ pub fn delete_maildir_files(cur_dir: &Path, uids: &HashSet<u32>) -> usize {
 /// (always replace) vs `maildir_store_raw`'s (skip if a file for this uid
 /// already exists). Returns whether a write happened.
 ///
-/// The new name is written first with `write_atomic`, then a differently
-/// named old file for the same uid is removed — a failed or killed write
-/// leaves the previous copy intact (oddity 1; was remove-then-plain-write).
+/// The new name is written first with `write_atomic`, then every OTHER file
+/// for the same uid is removed — not just the one `find_by_uid` would have
+/// returned, so a crash-left duplicate from an earlier interrupted store does
+/// not survive the next one (M4). A failed or killed write leaves every
+/// existing copy intact (oddity 1; was remove-then-plain-write).
 pub fn store(
     root: &Path,
     account_id: &str,
@@ -93,17 +95,26 @@ pub fn store(
     let dir = cur_path(root, account_id, mailbox);
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
 
-    let existing = find_by_uid(&dir, uid);
-    if !overwrite && existing.is_some() {
-        return Ok(false);
-    }
-
     let filename = build_maildir_filename(uid, flags);
     let new_path = dir.join(&filename);
 
+    // One pass over the directory both answers "does uid already exist" and
+    // collects every stale file the write below must clean up.
+    let stale: Vec<PathBuf> = fs::read_dir(&dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()) == Some(uid))
+        .map(|e| e.path())
+        .collect();
+
+    if !overwrite && !stale.is_empty() {
+        return Ok(false);
+    }
+
     write_atomic(&new_path, raw).map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
-    if let Some(old) = existing {
+    for old in stale {
         if old != new_path {
             let _ = fs::remove_file(&old);
         }
@@ -146,8 +157,16 @@ pub fn read_light(root: &Path, account_id: &str, mailbox: &str, uid: u32) -> Res
 pub fn read_light_batch(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<Option<LightEmail>> {
     let cur_dir = cur_path(root, account_id, mailbox);
     let files = maildir::uid_file_map(&cur_dir);
+    read_light_listed(&cur_dir, &files, uids)
+}
+
+/// `read_light_batch` against a listing taken earlier. A uid the listing
+/// lacks must never reach `read_light_at`: passing it a hint of `None` would
+/// make it fall back to `find_file_by_uid`, one full directory rescan per
+/// missing uid — exactly the quadratic cost the listing exists to remove.
+fn read_light_listed(cur_dir: &Path, files: &HashMap<u32, PathBuf>, uids: &[u32]) -> Vec<Option<LightEmail>> {
     uids.iter()
-        .map(|uid| read_light_at(&cur_dir, *uid, files.get(uid).map(|p| p.as_path())))
+        .map(|uid| read_light_at(cur_dir, *uid, Some(files.get(uid)?.as_path())))
         .collect()
 }
 
@@ -412,7 +431,7 @@ pub fn migrate_json_to_eml(root: &Path) -> String {
             let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
             let eml_path = cur_dir.join(&eml_filename);
 
-            match fs::write(&eml_path, &raw_bytes) {
+            match write_atomic(&eml_path, &raw_bytes) {
                 Ok(_) => {
                     let _ = fs::remove_file(&path);
                     migrated += 1;
@@ -521,7 +540,7 @@ fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u
     }
     fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
     let body = part.get_body_raw().map_err(|e| format!("Failed to get attachment body: {}", e))?;
-    fs::write(&dest, &body).map_err(|e| format!("Failed to write file: {}", e))?;
+    write_atomic(&dest, &body).map_err(|e| format!("Failed to write file: {}", e))?;
     Ok(dest)
 }
 
@@ -767,6 +786,83 @@ mod tests {
             .map(|e| e.file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names, vec!["7:2,FS.eml"]);
         assert_eq!(fs::read(cur.join("7:2,FS.eml")).unwrap(), b"two");
+
+        // Storing the same flags again (same target filename) still leaves
+        // exactly one file, holding the latest content.
+        assert!(store(root, "acct", "INBOX", 7, b"three", &["flagged".to_string(), "seen".to_string()], true).unwrap());
+        let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(names, vec!["7:2,FS.eml"]);
+        assert_eq!(fs::read(cur.join("7:2,FS.eml")).unwrap(), b"three");
+    }
+
+    #[test]
+    fn store_removes_every_stale_file_for_the_uid_not_just_the_first() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        // Two files left behind for uid 7 by an earlier interrupted store.
+        fs::write(cur.join("7:2,S.eml"), b"old-a").unwrap();
+        fs::write(cur.join("7:2,AS.eml"), b"old-b").unwrap();
+
+        assert!(store(root, "acct", "INBOX", 7, b"new", &["flagged".to_string()], true).unwrap());
+
+        let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(names, vec!["7:2,F.eml"], "both stale files must be swept, not just one");
+        assert_eq!(fs::read(cur.join("7:2,F.eml")).unwrap(), b"new");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn store_into_a_read_only_dir_fails_and_keeps_the_old_file() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        assert!(store(root, "acct", "INBOX", 7, b"one", &["seen".to_string()], true).unwrap());
+        let cur = cur_path(root, "acct", "INBOX");
+
+        let writable = fs::metadata(&cur).unwrap().permissions();
+        let mut readonly = writable.clone();
+        readonly.set_mode(0o555);
+        fs::set_permissions(&cur, readonly).unwrap();
+
+        let result = store(root, "acct", "INBOX", 7, b"two", &["flagged".to_string(), "seen".to_string()], true);
+
+        // Restore before any assertion can short-circuit, so tempdir cleanup
+        // (which needs to delete files inside `cur`) never fails.
+        fs::set_permissions(&cur, writable).unwrap();
+
+        if result.is_ok() {
+            return; // running as root: permissions aren't enforced, nothing to prove
+        }
+        assert!(result.is_err());
+        assert_eq!(fs::read(cur.join("7:2,S.eml")).unwrap(), b"one", "the old file must survive a failed write");
+    }
+
+    #[test]
+    fn list_and_delete_ignore_non_canonical_uid_prefixes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("07:2,S.eml"), b"x").unwrap();
+        fs::write(cur.join("+7:2,S.eml"), b"x").unwrap();
+        fs::write(cur.join("7:2,S.eml"), b"x").unwrap();
+
+        let listed = list(root, "acct", "INBOX", None).unwrap();
+        assert_eq!(listed.len(), 1, "only the canonical name is a vault row");
+        assert_eq!(listed[0].uid, 7);
+
+        let mut uids = HashSet::new();
+        uids.insert(7u32);
+        let removed = delete_maildir_files(&cur, &uids);
+        assert_eq!(removed, 1);
+        assert!(!cur.join("7:2,S.eml").exists());
+        assert!(cur.join("07:2,S.eml").exists(), "leading zero must not be swept as uid 7");
+        assert!(cur.join("+7:2,S.eml").exists(), "leading + must not be swept as uid 7");
     }
 
     #[test]
@@ -780,6 +876,24 @@ mod tests {
     }
 
     // -- read_light_batch (moved from src-tauri/src/light_batch_tests.rs) --
+
+    #[test]
+    fn a_uid_missing_from_the_listing_is_never_looked_up_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+
+        // The listing is taken before this file exists.
+        let files = maildir::uid_file_map(&cur);
+        fs::write(cur.join("7:2,S.eml"), light_batch_eml("seven")).unwrap();
+
+        let out = read_light_listed(&cur, &files, &[7]);
+        assert!(
+            out[0].is_none(),
+            "a uid absent from the listing must not be looked up again, even though a file for it exists now"
+        );
+    }
 
     fn light_batch_eml(subject: &str) -> Vec<u8> {
         format!("From: A <a@x.test>\r\nTo: b@x.test\r\nSubject: {subject}\r\nMessage-ID: <{subject}@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\nContent-Type: text/plain\r\n\r\nbody of {subject}\r\n").into_bytes()
@@ -903,7 +1017,7 @@ R0lGODlhAQABAAAAACw=\r\n\
     }
 
     fn dir_path_cache() -> PathBuf {
-        tempfile::tempdir().unwrap().into_path().join("attachment_cache")
+        tempfile::tempdir().unwrap().keep().join("attachment_cache")
     }
 
     fn leaf(p: &Path) -> String {

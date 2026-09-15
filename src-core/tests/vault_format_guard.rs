@@ -18,31 +18,51 @@ fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Review M2 (task-1.2-review.md): stops only at `#[cfg(test)]` immediately
-/// followed by an INLINE module (`mod name {`, ending the line with `{`,
-/// which in every watched file today runs to the end of the file) — never at
-/// a bare `mod x;` declaration or a `#[path = ".."]`-attributed one, neither
-/// of which is a module BODY. Those lines carry no FORBIDDEN substring, so
-/// leaving them in `out` is harmless; the fix is only to stop *breaking* on
-/// them, so a watched file with an out-of-line test module declared mid-file
-/// (e.g. `src-tauri/src/main.rs`'s `mod x;` pattern) is not silently
-/// un-guarded past that point. No line is ever dropped from `out`, so hit
-/// line numbers stay exact (the 1.2 review's own invariant: "truncation only
-/// drops a tail").
+/// Review M2 (task-1.2-review.md, sharpened by task-2.2-review.md M2): skips
+/// only the BRACE-MATCHED body of `#[cfg(test)]` followed by an INLINE module
+/// (`mod name {`, ending the line with `{`) and resumes scanning right after
+/// its closing brace — never at a bare `mod x;` declaration or a
+/// `#[path = ".."]`-attributed one, neither of which is a module body. A
+/// watched file can have non-test code AFTER its inline test module (e.g.
+/// `src-core/src/imap/mod.rs`, `src-tauri/src/mailto.rs`'s `mod platform {}`
+/// blocks); stopping at the first test module, as an earlier version of this
+/// function did, silently un-guards everything past it. Skipped body lines
+/// are replaced with blank placeholders, one per line, so no line is ever
+/// dropped or added and hit line numbers stay exact (the 1.2 review's own
+/// invariant: "truncation only drops a tail" — here nothing is truncated,
+/// only redacted in place).
 fn non_test_text(src: &str) -> String {
     let lines: Vec<&str> = src.lines().collect();
     let mut out = String::new();
-    for (i, l) in lines.iter().enumerate() {
+    let mut i = 0;
+    while i < lines.len() {
+        let l = lines[i];
+        out.push_str(l);
+        out.push('\n');
         if l.trim_start().starts_with("#[cfg(test)]") {
             if let Some(next) = lines.get(i + 1) {
                 let n = next.trim_start();
                 if n.starts_with("mod ") && n.trim_end().ends_with('{') {
-                    break; // an inline test module: everything after this is test code
+                    // Brace-count from the `mod x {` line (depth 1) through
+                    // its matching close, blanking each skipped line.
+                    let mut depth = 0i32;
+                    let mut j = i + 1;
+                    loop {
+                        let body_line = lines[j];
+                        depth += body_line.matches('{').count() as i32;
+                        depth -= body_line.matches('}').count() as i32;
+                        out.push('\n');
+                        j += 1;
+                        if depth <= 0 || j >= lines.len() {
+                            break;
+                        }
+                    }
+                    i = j;
+                    continue;
                 }
             }
         }
-        out.push_str(l);
-        out.push('\n');
+        i += 1;
     }
     out
 }
@@ -86,4 +106,18 @@ fn non_test_text_stops_at_an_inline_test_module() {
     let src = "fn a() {}\n#[cfg(test)]\nmod tests {\n    fn hidden() { maildir::build_filename(); }\n}\n";
     let kept = non_test_text(src);
     assert!(!kept.contains("build_filename"), "code inside an inline test module must not be scanned: {kept:?}");
+}
+
+/// Review M2 (task-2.2-review.md): a watched file can have non-test code
+/// AFTER its inline test module. The old implementation `break`s at the first
+/// one and silently stops guarding the rest of the file.
+#[test]
+fn non_test_text_resumes_scanning_after_an_inline_test_module_ends() {
+    let src = "fn a() {}\n#[cfg(test)]\nmod tests {\n    fn hidden() {}\n}\nfn b() { maildir::build_filename(); }\n";
+    let kept = non_test_text(src);
+    assert!(
+        kept.contains("build_filename"),
+        "code after an inline test module must still be scanned: {kept:?}"
+    );
+    assert_eq!(kept.lines().count(), src.lines().count(), "no line dropped or added");
 }
