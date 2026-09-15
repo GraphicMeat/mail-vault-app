@@ -6,9 +6,12 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 pub(crate) use mailvault_core::vault_eml::{
-    collect_attachment_parts, find_file_by_uid, is_real_attachment, parse_address_str,
-    parse_eml_bytes_light, parse_flags_from_filename, part_filename, read_light_at, walk_mime_parts_light,
-    LightEmail, MaildirAddress,
+    find_file_by_uid, parse_address_str, parse_eml_bytes_light, parse_flags_from_filename,
+    LightEmail, ParsedEmail,
+};
+pub(crate) use mailvault_core::vault_files::{
+    build_maildir_filename, delete_maildir_files, MaildirClearCacheResult, MaildirEmailSummary,
+    MaildirStorageStats,
 };
 
 /// Localize the menu bar without rebuilding it.
@@ -78,7 +81,6 @@ use serde::{Deserialize, Serialize};
 use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
-use walkdir::WalkDir;
 
 mod archive;
 mod backup;
@@ -1745,72 +1747,12 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 
 // ==========================================
 // Maildir .eml storage commands
+//
+// Bodies live in mailvault_core::vault_files (Task 2.2); the types
+// (ParsedEmail, LightEmail, MaildirEmailSummary, MaildirStorageStats,
+// MaildirClearCacheResult) are re-exported near the top of this file so these
+// commands stay registered under the same names with the same JSON shapes.
 // ==========================================
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct MaildirAttachment {
-    filename: Option<String>,
-    #[serde(rename = "contentType")]
-    content_type: String,
-    #[serde(rename = "contentDisposition")]
-    content_disposition: Option<String>,
-    size: usize,
-    #[serde(rename = "contentId")]
-    content_id: Option<String>,
-    content: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-struct ParsedEmail {
-    uid: u32,
-    #[serde(rename = "messageId")]
-    message_id: Option<String>,
-    subject: String,
-    from: MaildirAddress,
-    to: Vec<MaildirAddress>,
-    cc: Vec<MaildirAddress>,
-    bcc: Vec<MaildirAddress>,
-    #[serde(rename = "replyTo")]
-    reply_to: Vec<MaildirAddress>,
-    date: Option<String>,
-    flags: Vec<String>,
-    text: Option<String>,
-    html: Option<String>,
-    attachments: Vec<MaildirAttachment>,
-    #[serde(rename = "rawSource")]
-    raw_source: String,
-    #[serde(rename = "hasAttachments")]
-    has_attachments: bool,
-    #[serde(rename = "isArchived")]
-    is_archived: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MaildirEmailSummary {
-    uid: u32,
-    flags: Vec<String>,
-    #[serde(rename = "isArchived")]
-    is_archived: bool,
-    size: u64,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MaildirStorageStats {
-    #[serde(rename = "totalBytes")]
-    total_bytes: u64,
-    #[serde(rename = "totalMB")]
-    total_mb: f64,
-    #[serde(rename = "emailCount")]
-    email_count: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MaildirClearCacheResult {
-    #[serde(rename = "deletedCount")]
-    deleted_count: u32,
-    #[serde(rename = "skippedArchived")]
-    skipped_archived: u32,
-}
 
 // ── Mail storage location ───────────────────────────────────────────────────
 
@@ -1984,29 +1926,11 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// One-line wrapper over the root-based core fn — the vault root is a
+/// Tauri-only concept (`vault::root` reads `VaultState`), everything else
+/// about the path lives in `mailvault_core::vault_files::cur_path`.
 pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    let safe_mailbox = mailvault_core::search_index::text::vault_dir_name(mailbox);
-    let base = vault::root(app_handle)?;
-    Ok(base.join("Maildir").join(account_id).join(&safe_mailbox).join("cur"))
-}
-
-pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
-    let mut flag_chars: Vec<char> = Vec::new();
-    for f in flags {
-        match f.to_lowercase().as_str() {
-            "archived" | "a" => flag_chars.push('A'),
-            "draft" | "d" => flag_chars.push('D'),
-            "flagged" | "f" => flag_chars.push('F'),
-            "replied" | "r" => flag_chars.push('R'),
-            "seen" | "s" => flag_chars.push('S'),
-            "trashed" | "t" => flag_chars.push('T'),
-            _ => {}
-        }
-    }
-    flag_chars.sort();
-    flag_chars.dedup();
-    let flag_str: String = flag_chars.into_iter().collect();
-    format!("{}:2,{}.eml", uid, flag_str)
+    Ok(mailvault_core::vault_files::cur_path(&vault::root(app_handle)?, account_id, mailbox))
 }
 
 /// Rename the vault's message files that pre-date the `.eml` suffix.
@@ -2039,155 +1963,11 @@ pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
-/// Delete every Maildir file in `cur_dir` whose uid is in `uids`.
-/// One directory pass — the per-uid `find_file_by_uid` rescans the whole
-/// directory each call, which is quadratic over a bulk selection.
-/// Vault filenames are always `<uid>:2,<flags>.eml` (see `build_maildir_filename`),
-/// so the uid is the run of digits before the first ':'.
-pub fn delete_maildir_files(cur_dir: &Path, uids: &std::collections::HashSet<u32>) -> usize {
-    let mut removed = 0usize;
-    if let Ok(entries) = fs::read_dir(cur_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let uid = match name.split(':').next().and_then(|s| s.parse::<u32>().ok()) {
-                Some(u) => u,
-                None => continue,
-            };
-            if !uids.contains(&uid) {
-                continue;
-            }
-            match fs::remove_file(entry.path()) {
-                Ok(()) => removed += 1,
-                Err(e) => warn!("maildir purge: failed to remove {:?}: {}", entry.path(), e),
-            }
-        }
-    }
-    removed
-}
-
-fn walk_mime_parts(
-    part: &mailparse::ParsedMail,
-    text_body: &mut Option<String>,
-    html_body: &mut Option<String>,
-    attachments: &mut Vec<MaildirAttachment>,
-) {
-    let content_type = part.ctype.mimetype.to_lowercase();
-
-    if !part.subparts.is_empty() {
-        for sub in &part.subparts {
-            walk_mime_parts(sub, text_body, html_body, attachments);
-        }
-        return;
-    }
-
-    // Leaf part
-    let disposition = part.get_content_disposition();
-    let is_attachment = disposition.disposition == mailparse::DispositionType::Attachment;
-    let is_inline_non_text = disposition.disposition == mailparse::DispositionType::Inline
-        && !content_type.starts_with("text/");
-
-    if is_attachment || is_inline_non_text {
-        if let Ok(body) = part.get_body_raw() {
-            use base64::Engine;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(&body);
-            let filename = disposition.params.get("filename")
-                .or_else(|| part.ctype.params.get("name"))
-                .cloned();
-            let content_id = part.headers.iter()
-                .find(|h| h.get_key().eq_ignore_ascii_case("Content-ID"))
-                .map(|h| h.get_value());
-
-            attachments.push(MaildirAttachment {
-                filename,
-                content_type: content_type.clone(),
-                content_disposition: Some(format!("{:?}", disposition.disposition)),
-                size: body.len(),
-                content_id,
-                content: b64,
-            });
-        }
-    } else if content_type == "text/plain" && text_body.is_none() {
-        *text_body = part.get_body().ok();
-    } else if content_type == "text/html" && html_body.is_none() {
-        *html_body = part.get_body().ok();
-    }
-}
-
-fn has_real_attachments_full(attachments: &[MaildirAttachment], html: Option<&str>) -> bool {
-    attachments.iter().any(|att| {
-        is_real_attachment(&att.content_type, &att.content_id, &att.filename, att.size, html)
-    })
-}
-
-fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEmail, String> {
-    let parsed = mailparse::parse_mail(raw)
-        .map_err(|e| format!("Failed to parse email: {}", e))?;
-
-    let headers = &parsed.headers;
-    let get_header = |name: &str| -> Option<String> {
-        headers.iter()
-            .find(|h| h.get_key().eq_ignore_ascii_case(name))
-            .map(|h| h.get_value())
-    };
-
-    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
-    let message_id = get_header("Message-ID");
-    let date = get_header("Date");
-
-    let from_str = get_header("From").unwrap_or_default();
-    let from_addrs = parse_address_str(&from_str);
-    let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
-        name: Some("Unknown".to_string()),
-        address: "unknown@unknown.com".to_string(),
-    });
-
-    let to = get_header("To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let cc = get_header("Cc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let bcc = get_header("Bcc")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-    let reply_to = get_header("Reply-To")
-        .map(|v| parse_address_str(&v))
-        .unwrap_or_default();
-
-    let mut text_body: Option<String> = None;
-    let mut html_body: Option<String> = None;
-    let mut attachments: Vec<MaildirAttachment> = Vec::new();
-
-    walk_mime_parts(&parsed, &mut text_body, &mut html_body, &mut attachments);
-
-    let is_archived = flags.iter().any(|f| f == "archived");
-    let has_attachments = has_real_attachments_full(&attachments, html_body.as_deref());
-
-    use base64::Engine;
-    let raw_source = base64::engine::general_purpose::STANDARD.encode(raw);
-
-    Ok(ParsedEmail {
-        uid,
-        message_id,
-        subject,
-        from,
-        to,
-        cc,
-        bcc,
-        reply_to,
-        date,
-        flags,
-        text: text_body,
-        html: html_body,
-        attachments,
-        raw_source,
-        has_attachments,
-        is_archived,
-    })
-}
-
-/// Store an .eml file to Maildir — callable from commands.rs
-/// Only writes if the file doesn't already exist for this UID.
+/// Store an .eml file to Maildir — callable from commands.rs.
+/// Only writes if the file doesn't already exist for this UID. The existence
+/// check (and so whether the base64 decode even runs) stays here so a badly
+/// encoded payload for an already-cached uid still no-ops instead of erroring;
+/// the write itself is `mailvault_core::vault_files::store` with `overwrite: false`.
 pub fn maildir_store_raw(
     app_handle: &tauri::AppHandle,
     account_id: &str,
@@ -2198,7 +1978,8 @@ pub fn maildir_store_raw(
 ) -> Result<(), String> {
     use base64::Engine;
 
-    let cur_dir = maildir_cur_path(app_handle, account_id, mailbox)?;
+    let root = vault::root(app_handle)?;
+    let cur_dir = mailvault_core::vault_files::cur_path(&root, account_id, mailbox);
     fs::create_dir_all(&cur_dir)
         .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
 
@@ -2207,19 +1988,15 @@ pub fn maildir_store_raw(
         return Ok(());
     }
 
-    let filename = build_maildir_filename(uid, flags);
-    let file_path = cur_dir.join(&filename);
-
     let raw_bytes = base64::engine::general_purpose::STANDARD
         .decode(raw_source_base64)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
-    fs::write(&file_path, &raw_bytes)
-        .map_err(|e| format!("Failed to write .eml file: {}", e))?;
-
-    info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    let written = mailvault_core::vault_files::store(&root, account_id, mailbox, uid, &raw_bytes, flags, false)?;
     // Here, not at the caller: the already-cached return above must not wake the index.
-    nudge_index(account_id, mailbox);
+    if written {
+        nudge_index(account_id, mailbox);
+    }
     Ok(())
 }
 
@@ -2234,26 +2011,14 @@ fn maildir_store(
 ) -> Result<(), String> {
     use base64::Engine;
 
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    fs::create_dir_all(&cur_dir)
-        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
-
-    // Remove existing file for this UID if any (maildir_store always overwrites)
-    if let Some(existing) = find_file_by_uid(&cur_dir, uid) {
-        let _ = fs::remove_file(&existing);
-    }
-
-    let filename = build_maildir_filename(uid, &flags);
-    let file_path = cur_dir.join(&filename);
-
+    let root = vault::root(&app_handle)?;
     let raw_bytes = base64::engine::general_purpose::STANDARD
         .decode(&raw_source_base64)
         .map_err(|e| format!("Failed to decode base64: {}", e))?;
 
-    fs::write(&file_path, &raw_bytes)
-        .map_err(|e| format!("Failed to write .eml file: {}", e))?;
-
-    info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
+    // Always overwrites (a differently-named old file is removed after the
+    // new one lands — mailvault_core::vault_files::store, oddity 1).
+    mailvault_core::vault_files::store(&root, &account_id, &mailbox, uid, &raw_bytes, &flags, true)?;
     nudge_index(&account_id, &mailbox);
     Ok(())
 }
@@ -2270,81 +2035,6 @@ fn maildir_mailbox_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox
     let cur = maildir_cur_path(app_handle, account_id, mailbox)?;
     cur.parent().map(|p| p.to_path_buf())
         .ok_or_else(|| "Maildir path has no parent".to_string())
-}
-
-/// Message-ID → uid for the mailbox's *current* generation, read from the
-/// sidecar cache the sync engine already maintains.
-///
-/// The sidecars are the only complete, already-on-disk picture of what the
-/// server holds right now; asking the server instead would put a full header
-/// fetch in front of every mailbox open. A message the cache hasn't reached is
-/// read as absent, which is the safe direction — `orphaned/` keeps the file
-/// either way, and the next repair after a fuller sync re-binds it.
-fn sidecar_message_id_map(
-    app_handle: &tauri::AppHandle,
-    account_id: &str,
-    mailbox: &str,
-) -> (std::collections::HashMap<String, u32>, u64) {
-    let mut map = std::collections::HashMap::new();
-    let mut sidecars = 0u64;
-    let dir = match vault::root(app_handle) {
-        Ok(root) => root.join("email_cache").join(cache_base_name(account_id, mailbox)),
-        Err(_) => return (map, 0),
-    };
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(_) => return (map, 0),
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        // `_meta.json` and anything else that isn't `{uid}.json`.
-        let uid: u32 = match name.strip_suffix(".json").and_then(|s| s.parse().ok()) {
-            Some(u) => u,
-            None => continue,
-        };
-        sidecars += 1;
-        let value: serde_json::Value = match fs::read_to_string(entry.path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-        {
-            Some(v) => v,
-            None => continue,
-        };
-        // Sidecars written by the frontend carry `messageId`; ones serialized
-        // from `EmailHeader` carry `message_id`.
-        let raw = value.get("messageId").or_else(|| value.get("message_id"))
-            .and_then(|v| v.as_str());
-        if let Some(raw) = raw {
-            let id = mailvault_core::maildir::normalize_message_id(raw);
-            if !id.is_empty() {
-                map.insert(id, uid);
-            }
-        }
-    }
-    (map, sidecars)
-}
-
-/// What the sync engine last recorded for this mailbox: the UIDVALIDITY its
-/// UIDs belong to, and how many messages the server said it holds.
-///
-/// Both are `None` for a mailbox that has never synced, and for Graph accounts
-/// — which have no IMAP UID space to reissue, so there is nothing here for a
-/// repair to do.
-fn cached_sync_meta(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> (Option<u32>, Option<u64>) {
-    let read = || -> Option<serde_json::Value> {
-        let path = vault::root(app_handle).ok()?
-            .join("email_cache")
-            .join(cache_base_name(account_id, mailbox))
-            .join("_meta.json");
-        serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
-    };
-    match read() {
-        Some(meta) => (
-            meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
-            meta.get("totalEmails").and_then(|v| v.as_u64()),
-        ),
-        None => (None, None),
-    }
 }
 
 /// Bring a mailbox's vault files onto the server's current UID generation.
@@ -2364,7 +2054,8 @@ async fn maildir_repair_generation(
     mailbox: String,
 ) -> Result<mailvault_core::maildir::GenerationRepair, String> {
     tokio::task::spawn_blocking(move || {
-        let (cached_uv, cached_total) = cached_sync_meta(&app_handle, &account_id, &mailbox);
+        let root = vault::root(&app_handle)?;
+        let (cached_uv, cached_total) = mailvault_core::vault_files::cached_sync_meta(&root, &account_id, &mailbox);
         let uid_validity = match cached_uv {
             Some(uv) => uv,
             // Nothing to compare against. Stamping the vault with a generation
@@ -2390,7 +2081,7 @@ async fn maildir_repair_generation(
         // message in the vault would read as gone. Nothing runs until the cache
         // covers the mailbox; until then the vault stays as it is, which is no
         // worse than before, and `_readVerifiedLocal` still guards what opens.
-        let (id_to_uid, sidecars) = sidecar_message_id_map(&app_handle, &account_id, &mailbox);
+        let (id_to_uid, sidecars) = mailvault_core::vault_files::sidecar_message_id_map(&root, &account_id, &mailbox);
         let total = cached_total.unwrap_or(0);
         if total == 0 || sidecars < total {
             info!(
@@ -2439,7 +2130,7 @@ async fn maildir_orphan_stats(
     tokio::task::spawn_blocking(move || {
         let base = vault::root(&app_handle)?.join("Maildir");
         let mut total = mailvault_core::maildir::OrphanStats::default();
-        for mailbox_dir in orphan_mailbox_dirs(&base, account_id.as_deref()) {
+        for mailbox_dir in mailvault_core::vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
             let s = mailvault_core::maildir::orphan_stats(&mailbox_dir);
             total.count += s.count;
             total.bytes += s.bytes;
@@ -2461,7 +2152,7 @@ async fn maildir_purge_orphans(
     tokio::task::spawn_blocking(move || {
         let base = vault::root(&app_handle)?.join("Maildir");
         let mut removed = 0u64;
-        for mailbox_dir in orphan_mailbox_dirs(&base, account_id.as_deref()) {
+        for mailbox_dir in mailvault_core::vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
             match mailvault_core::maildir::purge_orphans(&mailbox_dir) {
                 Ok(n) => removed += n,
                 Err(e) => warn!("maildir_purge_orphans: {}", e),
@@ -2470,32 +2161,6 @@ async fn maildir_purge_orphans(
         info!("maildir_purge_orphans: removed {} files", removed);
         Ok(removed)
     }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Every `Maildir/{account}/{mailbox}` directory, scoped to one account when
-/// asked. Two levels, not a full walk — the vault below these is large.
-fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
-    let accounts: Vec<PathBuf> = match account_id {
-        Some(id) => vec![base.join(id)],
-        None => fs::read_dir(base)
-            .into_iter()
-            .flatten()
-            .flatten()
-            .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
-            .map(|e| e.path())
-            .collect(),
-    };
-    for account_dir in accounts {
-        if let Ok(entries) = fs::read_dir(&account_dir) {
-            for entry in entries.flatten() {
-                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    dirs.push(entry.path());
-                }
-            }
-        }
-    }
-    dirs
 }
 
 #[tauri::command]
@@ -2645,23 +2310,7 @@ fn maildir_read(
     mailbox: String,
     uid: u32,
 ) -> Result<Option<ParsedEmail>, String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-
-    let file_path = match find_file_by_uid(&cur_dir, uid) {
-        Some(p) => p,
-        None => return Ok(None),
-    };
-
-    let filename = file_path.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let flags = parse_flags_from_filename(&filename);
-
-    let raw = fs::read(&file_path)
-        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
-
-    let email = parse_eml_bytes(&raw, uid, flags)?;
-    Ok(Some(email))
+    mailvault_core::vault_files::read(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
 }
 
 #[tauri::command]
@@ -2671,34 +2320,7 @@ fn maildir_read_light(
     mailbox: String,
     uid: u32,
 ) -> Result<Option<LightEmail>, String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-
-    let file_path = match find_file_by_uid(&cur_dir, uid) {
-        Some(p) => p,
-        None => return Ok(None),
-    };
-
-    let filename = file_path.file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let flags = parse_flags_from_filename(&filename);
-
-    let raw = fs::read(&file_path)
-        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
-
-    let email = parse_eml_bytes_light(&raw, uid, flags)?;
-    Ok(Some(email))
-}
-
-/// One slot per requested uid, in request order: `None` when the vault has no
-/// `<uid>:` file or it does not parse. The folder is listed once
-/// (`uid_file_map`); resolving each uid with `find_file_by_uid` rescanned the
-/// whole directory per uid, quadratic over a folder.
-pub(crate) fn read_light_batch_in(cur_dir: &Path, uids: &[u32]) -> Vec<Option<LightEmail>> {
-    let files = mailvault_core::maildir::uid_file_map(cur_dir);
-    uids.iter()
-        .map(|uid| read_light_at(cur_dir, *uid, Some(files.get(uid)?.as_path())))
-        .collect()
+    mailvault_core::vault_files::read_light(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
 }
 
 #[tauri::command]
@@ -2709,8 +2331,8 @@ async fn maildir_read_light_batch(
     uids: Vec<u32>,
 ) -> Result<Vec<Option<LightEmail>>, String> {
     tokio::task::spawn_blocking(move || {
-        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-        Ok(read_light_batch_in(&cur_dir, &uids))
+        let root = vault::root(&app_handle)?;
+        Ok(mailvault_core::vault_files::read_light_batch(&root, &account_id, &mailbox, &uids))
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -2722,156 +2344,24 @@ fn maildir_read_attachment(
     uid: u32,
     attachment_index: usize,
 ) -> Result<String, String> {
-    use base64::Engine;
-
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let file_path = find_file_by_uid(&cur_dir, uid)
-        .ok_or_else(|| format!("Email UID {} not found", uid))?;
-
-    let raw = fs::read(&file_path)
-        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
-
-    let parsed = mailparse::parse_mail(&raw)
-        .map_err(|e| format!("Failed to parse email: {}", e))?;
-
-    let mut attach_parts: Vec<&mailparse::ParsedMail> = Vec::new();
-    collect_attachment_parts(&parsed, &mut attach_parts);
-
-    let part = attach_parts.get(attachment_index)
-        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", attachment_index, attach_parts.len()))?;
-
-    let body = part.get_body_raw()
-        .map_err(|e| format!("Failed to get attachment body: {}", e))?;
-
-    Ok(base64::engine::general_purpose::STANDARD.encode(&body))
+    mailvault_core::vault_files::read_attachment(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
 }
 
 // ── Attachment cache ────────────────────────────────────────────────────────
 // One file per (account, mailbox, uid, part) under <vault>/attachment_cache,
 // named so that a click, the prefetch and the "already downloaded" check all
-// land on the same path without a registry. The part index is the position
-// among `collect_attachment_parts` — the same `_originalIndex` the viewer
-// hands `maildir_read_attachment`.
-
-fn fs_safe(s: &str) -> String {
-    s.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
-}
-
-fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
-    // A sender picks the filename; only its last component may name a file here.
-    let leaf = Path::new(filename)
-        .file_name()
-        .map(|f| f.to_string_lossy().to_string())
-        .filter(|f| !f.is_empty() && f != "." && f != "..")
-        .unwrap_or_else(|| "attachment".to_string());
-    cache_dir.join(format!("{}_{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index, leaf))
-}
-
-fn write_part_to_cache(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, part: &mailparse::ParsedMail) -> Result<PathBuf, String> {
-    let dest = attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part));
-    if dest.exists() {
-        return Ok(dest);
-    }
-    fs::create_dir_all(cache_dir)
-        .map_err(|e| format!("Failed to create attachment cache dir: {}", e))?;
-    let body = part.get_body_raw()
-        .map_err(|e| format!("Failed to get attachment body: {}", e))?;
-    fs::write(&dest, &body)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
-    Ok(dest)
-}
-
-fn read_eml(cur_dir: &Path, uid: u32) -> Result<Vec<u8>, String> {
-    let file_path = find_file_by_uid(cur_dir, uid)
-        .ok_or_else(|| format!("Email UID {} not found", uid))?;
-    fs::read(&file_path).map_err(|e| format!("Failed to read .eml file: {}", e))
-}
-
-/// Write one attachment part to the cache (a no-op when it is there already)
-/// and return its path.
-fn cache_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<PathBuf, String> {
-    let raw = read_eml(cur_dir, uid)?;
-    let parsed = mailparse::parse_mail(&raw)
-        .map_err(|e| format!("Failed to parse email: {}", e))?;
-    let mut parts = Vec::new();
-    collect_attachment_parts(&parsed, &mut parts);
-    let part = parts.get(index)
-        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", index, parts.len()))?;
-    write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part)
-}
-
-/// The cached path of one attachment part, if the file exists.
-// ponytail: parses the .eml for the part's filename on every mount check;
-// pass the name from the viewer if that ever shows up in a profile.
-fn cached_attachment_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize) -> Result<Option<PathBuf>, String> {
-    let raw = read_eml(cur_dir, uid)?;
-    let parsed = mailparse::parse_mail(&raw)
-        .map_err(|e| format!("Failed to parse email: {}", e))?;
-    let mut parts = Vec::new();
-    collect_attachment_parts(&parsed, &mut parts);
-    let part = parts.get(index)
-        .ok_or_else(|| format!("Attachment index {} out of range (total: {})", index, parts.len()))?;
-    let dest = attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part));
-    Ok(dest.exists().then_some(dest))
-}
-
-/// Sweep a mailbox's cached .eml files newest-first (uid order) and write
-/// every real attachment above `above_uid` to the cache. Returns the paths it
-/// wrote, in sweep order, and the highest uid it saw.
-fn prefetch_attachments_in(cache_dir: &Path, cur_dir: &Path, account_id: &str, mailbox: &str, above_uid: u32) -> Result<(Vec<PathBuf>, u32), String> {
-    let entries = fs::read_dir(cur_dir)
-        .map_err(|e| format!("Failed to read Maildir: {}", e))?;
-    let mut files: Vec<(u32, PathBuf)> = entries.flatten()
-        .filter_map(|entry| {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let uid: u32 = name.split(':').next()?.parse().ok()?;
-            Some((uid, entry.path()))
-        })
-        .collect();
-    files.sort_unstable_by(|a, b| b.0.cmp(&a.0));
-    let max_uid = files.first().map(|f| f.0).unwrap_or(0);
-
-    let mut written = Vec::new();
-    for (uid, path) in files {
-        if uid <= above_uid { break; }
-        let Ok(raw) = fs::read(&path) else { continue };
-        // A message with no Content-Disposition header has no attachment part.
-        if !raw.windows(19).any(|w| w.eq_ignore_ascii_case(b"content-disposition")) { continue; }
-        let Ok(parsed) = mailparse::parse_mail(&raw) else { continue };
-        let (mut text, mut html, mut metas) = (None, None, Vec::new());
-        walk_mime_parts_light(&parsed, &mut text, &mut html, &mut metas);
-        let mut parts = Vec::new();
-        collect_attachment_parts(&parsed, &mut parts);
-        for (index, (part, meta)) in parts.iter().zip(&metas).enumerate() {
-            if !is_real_attachment(&meta.content_type, &meta.content_id, &meta.filename, meta.size, html.as_deref()) { continue; }
-            if attachment_cache_path(cache_dir, account_id, mailbox, uid, index, &part_filename(part)).exists() { continue; }
-            match write_part_to_cache(cache_dir, account_id, mailbox, uid, index, part) {
-                Ok(dest) => written.push(dest),
-                Err(e) => warn!("Attachment prefetch skipped uid {} part {}: {}", uid, index, e),
-            }
-        }
-    }
-    Ok((written, max_uid))
-}
-
-fn attachment_cache_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(vault::root(app_handle)?.join("attachment_cache"))
-}
+// land on the same path without a registry. Bodies live in
+// mailvault_core::vault_files; PREFETCH_LOCK/PREFETCH_HIGH_WATER are the
+// app's own copy of the process-local state (the daemon gets its own later).
 
 #[tauri::command]
 fn cache_attachment(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<String, String> {
-    let cache_dir = attachment_cache_dir(&app_handle)?;
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let path = cache_attachment_in(&cache_dir, &cur_dir, &account_id, &mailbox, uid, attachment_index)?;
-    Ok(path.to_string_lossy().to_string())
+    mailvault_core::vault_files::cache_attachment(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
 }
 
 #[tauri::command]
 fn cached_attachment_path(app_handle: tauri::AppHandle, account_id: String, mailbox: String, uid: u32, attachment_index: usize) -> Result<Option<String>, String> {
-    let cache_dir = attachment_cache_dir(&app_handle)?;
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    Ok(cached_attachment_in(&cache_dir, &cur_dir, &account_id, &mailbox, uid, attachment_index)?
-        .map(|p| p.to_string_lossy().to_string()))
+    mailvault_core::vault_files::cached_attachment_path(&vault::root(&app_handle)?, &account_id, &mailbox, uid, attachment_index)
 }
 
 // One sweep at a time, on a blocking thread; a second mailbox finishing its
@@ -2884,21 +2374,10 @@ static PREFETCH_HIGH_WATER: std::sync::Mutex<Vec<(String, u32)>> = std::sync::Mu
 
 #[tauri::command]
 async fn prefetch_attachments(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<usize, String> {
-    let cache_dir = attachment_cache_dir(&app_handle)?;
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
+    let root = vault::root(&app_handle)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _one_at_a_time = PREFETCH_LOCK.lock().unwrap_or_else(|p| p.into_inner());
-        let key = format!("{}/{}", account_id, mailbox);
-        let above = PREFETCH_HIGH_WATER.lock().unwrap_or_else(|p| p.into_inner())
-            .iter().find(|(k, _)| *k == key).map(|(_, uid)| *uid).unwrap_or(0);
-        let (written, max_uid) = prefetch_attachments_in(&cache_dir, &cur_dir, &account_id, &mailbox, above)?;
-        let mut marks = PREFETCH_HIGH_WATER.lock().unwrap_or_else(|p| p.into_inner());
-        match marks.iter_mut().find(|(k, _)| *k == key) {
-            Some(entry) => entry.1 = max_uid,
-            None => marks.push((key, max_uid)),
-        }
-        info!("Attachment prefetch {}/{}: {} written above uid {}", account_id, mailbox, written.len(), above);
-        Ok(written.len())
+        mailvault_core::vault_files::prefetch_attachments(&root, &account_id, &mailbox, &PREFETCH_HIGH_WATER)
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -2909,16 +2388,7 @@ fn maildir_read_raw_source(
     mailbox: String,
     uid: u32,
 ) -> Result<String, String> {
-    use base64::Engine;
-
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let file_path = find_file_by_uid(&cur_dir, uid)
-        .ok_or_else(|| format!("Email UID {} not found", uid))?;
-
-    let raw = fs::read(&file_path)
-        .map_err(|e| format!("Failed to read .eml file: {}", e))?;
-
-    Ok(base64::engine::general_purpose::STANDARD.encode(&raw))
+    mailvault_core::vault_files::read_raw_source(&vault::root(&app_handle)?, &account_id, &mailbox, uid)
 }
 
 #[tauri::command]
@@ -2928,8 +2398,7 @@ fn maildir_exists(
     mailbox: String,
     uid: u32,
 ) -> Result<bool, String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    Ok(find_file_by_uid(&cur_dir, uid).is_some())
+    Ok(mailvault_core::vault_files::exists(&vault::root(&app_handle)?, &account_id, &mailbox, uid))
 }
 
 #[tauri::command]
@@ -2939,50 +2408,9 @@ async fn maildir_list(
     mailbox: String,
     require_flag: Option<String>,
 ) -> Result<Vec<MaildirEmailSummary>, String> {
-    let rf_clone = require_flag.clone();
     tokio::task::spawn_blocking(move || {
-        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-
-        if !cur_dir.exists() {
-            info!("maildir_list: cur_dir does not exist: {:?} (require_flag={:?})", cur_dir, rf_clone);
-            return Ok(Vec::new());
-        }
-
-        let entries = fs::read_dir(&cur_dir)
-            .map_err(|e| format!("Failed to read Maildir: {}", e))?;
-
-        let mut results = Vec::new();
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-
-            let uid: u32 = match name.split(':').next().and_then(|s| s.parse().ok()) {
-                Some(u) => u,
-                None => continue,
-            };
-
-            let flags = parse_flags_from_filename(&name);
-            let is_archived = flags.iter().any(|f| f == "archived");
-
-            if let Some(ref required) = &require_flag {
-                if !flags.iter().any(|f| f == required) {
-                    continue;
-                }
-            }
-
-            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-
-            results.push(MaildirEmailSummary {
-                uid,
-                flags,
-                is_archived,
-                size,
-            });
-        }
-
-        if rf_clone.is_some() {
-            info!("maildir_list: require_flag={:?}, found {} results", rf_clone, results.len());
-        }
-        Ok(results)
+        let root = vault::root(&app_handle)?;
+        mailvault_core::vault_files::list(&root, &account_id, &mailbox, require_flag.as_deref())
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -2993,11 +2421,8 @@ fn maildir_delete(
     mailbox: String,
     uid: u32,
 ) -> Result<(), String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    if let Some(path) = find_file_by_uid(&cur_dir, uid) {
-        fs::remove_file(&path)
-            .map_err(|e| format!("Failed to delete .eml file: {}", e))?;
-        info!("Deleted email UID {} from {:?}", uid, path);
+    let removed = mailvault_core::vault_files::delete(&vault::root(&app_handle)?, &account_id, &mailbox, uid)?;
+    if removed {
         nudge_index(&account_id, &mailbox);
     }
     Ok(())
@@ -3037,19 +2462,8 @@ fn maildir_set_flags(
     uid: u32,
     flags: Vec<String>,
 ) -> Result<(), String> {
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let old_path = match find_file_by_uid(&cur_dir, uid) {
-        Some(p) => p,
-        None => return Err(format!("E_UID_NOT_IN_MAILDIR: Email UID {} not found in Maildir", uid)),
-    };
-
-    let new_filename = build_maildir_filename(uid, &flags);
-    let new_path = cur_dir.join(&new_filename);
-
-    if old_path != new_path {
-        fs::rename(&old_path, &new_path)
-            .map_err(|e| format!("Failed to rename file: {}", e))?;
-        info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
+    let renamed = mailvault_core::vault_files::set_flags(&vault::root(&app_handle)?, &account_id, &mailbox, uid, &flags)?;
+    if renamed {
         nudge_index(&account_id, &mailbox);
     }
     Ok(())
@@ -3060,184 +2474,25 @@ fn maildir_storage_stats(
     app_handle: tauri::AppHandle,
     account_id: Option<String>,
 ) -> Result<MaildirStorageStats, String> {
-    let base = vault::root(&app_handle)?
-        .join("Maildir");
-
-    let scan_dir = match account_id {
-        Some(ref id) => base.join(id),
-        None => base,
-    };
-
-    if !scan_dir.exists() {
-        return Ok(MaildirStorageStats { total_bytes: 0, total_mb: 0.0, email_count: 0 });
-    }
-
-    let mut total_bytes: u64 = 0;
-    let mut email_count: u32 = 0;
-
-    for entry in WalkDir::new(&scan_dir).into_iter().flatten() {
-        if entry.file_type().is_file() {
-            let name = entry.file_name().to_string_lossy();
-            if name.contains(":2,") {
-                if let Ok(meta) = entry.metadata() {
-                    total_bytes += meta.len();
-                    email_count += 1;
-                }
-            }
-        }
-    }
-
-    Ok(MaildirStorageStats {
-        total_bytes,
-        total_mb: total_bytes as f64 / (1024.0 * 1024.0),
-        email_count,
-    })
+    Ok(mailvault_core::vault_files::storage_stats(&vault::root(&app_handle)?, account_id.as_deref()))
 }
 
 #[tauri::command]
 fn maildir_clear_cache(
     app_handle: tauri::AppHandle,
 ) -> Result<MaildirClearCacheResult, String> {
-    let base = vault::root(&app_handle)?
-        .join("Maildir");
-
-    if !base.exists() {
-        return Ok(MaildirClearCacheResult { deleted_count: 0, skipped_archived: 0 });
-    }
-
-    let mut deleted_count: u32 = 0;
-    let mut skipped_archived: u32 = 0;
-
-    for entry in WalkDir::new(&base).into_iter().flatten() {
-        // `orphaned/` holds mail set aside by a UID generation repair: messages
-        // the current server does not have, so this copy may be the only one.
-        // "Clear cached emails" promises saved mail survives it, and a file in
-        // here whose flags happen to be empty would otherwise read as cache.
-        if entry.path().components().any(|c| c.as_os_str() == mailvault_core::maildir::ORPHAN_DIR) {
-            continue;
-        }
-        if entry.file_type().is_file() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.contains(":2,") {
-                let flags = parse_flags_from_filename(&name);
-                if flags.iter().any(|f| f == "archived") {
-                    skipped_archived += 1;
-                } else {
-                    if let Err(e) = fs::remove_file(entry.path()) {
-                        warn!("Failed to delete cached email {:?}: {}", entry.path(), e);
-                    } else {
-                        deleted_count += 1;
-                    }
-                }
-            }
-        }
-    }
-
-    info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
-    if deleted_count > 0 {
+    let result = mailvault_core::vault_files::clear_cache(&vault::root(&app_handle)?);
+    if result.deleted_count > 0 {
         sweep_index_soon(); // every folder of every account lost files
     }
-    Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
+    Ok(result)
 }
 
 #[tauri::command]
 fn maildir_migrate_json_to_eml(
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
-    use base64::Engine;
-
-    let base = vault::root(&app_handle)?
-        .join("Maildir");
-
-    if !base.exists() {
-        return Ok("No Maildir directory found, nothing to migrate.".to_string());
-    }
-
-    let mut migrated = 0u32;
-    let mut skipped = 0u32;
-    let mut errors = 0u32;
-
-    for entry in WalkDir::new(&base).into_iter().flatten() {
-        if !entry.file_type().is_file() { continue; }
-        let path = entry.path().to_path_buf();
-        let ext = path.extension().and_then(|e| e.to_str());
-        if ext != Some("json") { continue; }
-
-        let json_str = match fs::read_to_string(&path) {
-            Ok(s) => s,
-            Err(e) => {
-                warn!("Could not read {:?}: {}", path, e);
-                errors += 1;
-                continue;
-            }
-        };
-
-        let json_val: serde_json::Value = match serde_json::from_str(&json_str) {
-            Ok(v) => v,
-            Err(e) => {
-                warn!("Could not parse JSON {:?}: {}", path, e);
-                errors += 1;
-                continue;
-            }
-        };
-
-        let uid: u32 = match path.file_stem()
-            .and_then(|s| s.to_str())
-            .and_then(|s| s.parse().ok())
-        {
-            Some(u) => u,
-            None => {
-                warn!("Could not extract UID from {:?}", path);
-                errors += 1;
-                continue;
-            }
-        };
-
-        if let Some(raw_b64) = json_val.get("rawSource").and_then(|v| v.as_str()) {
-            let raw_bytes = match base64::engine::general_purpose::STANDARD.decode(raw_b64) {
-                Ok(b) => b,
-                Err(e) => {
-                    warn!("Could not decode rawSource for {:?}: {}", path, e);
-                    errors += 1;
-                    continue;
-                }
-            };
-
-            let cur_dir = match path.parent() {
-                Some(d) => d,
-                None => {
-                    warn!("migrate_json_to_eml: path {:?} has no parent dir", path);
-                    errors += 1;
-                    continue;
-                }
-            };
-            let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
-            let eml_path = cur_dir.join(&eml_filename);
-
-            match fs::write(&eml_path, &raw_bytes) {
-                Ok(_) => {
-                    let _ = fs::remove_file(&path);
-                    migrated += 1;
-                    info!("Migrated {:?} -> {:?}", path, eml_path);
-                }
-                Err(e) => {
-                    warn!("Failed to write .eml for {:?}: {}", path, e);
-                    errors += 1;
-                }
-            }
-        } else {
-            warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
-            let _ = fs::remove_file(&path);
-            skipped += 1;
-        }
-    }
-
-    let result = format!(
-        "Migration complete. Migrated: {}, Skipped (no rawSource): {}, Errors: {}",
-        migrated, skipped, errors
-    );
-    info!("{}", result);
-    Ok(result)
+    Ok(mailvault_core::vault_files::migrate_json_to_eml(&vault::root(&app_handle)?))
 }
 
 #[tauri::command]
@@ -3245,58 +2500,7 @@ fn maildir_migrate_email_dirs(
     app_handle: tauri::AppHandle,
     account_map: std::collections::HashMap<String, String>,
 ) -> Result<serde_json::Value, String> {
-    let base = vault::root(&app_handle)?;
-    let maildir_base = base.join("Maildir");
-
-    if !maildir_base.exists() {
-        return Ok(serde_json::json!({ "migrated": 0 }));
-    }
-
-    let mut migrated = 0u32;
-
-    for (email, uuid) in &account_map {
-        let email_dir = maildir_base.join(email);
-        let uuid_dir = maildir_base.join(uuid);
-
-        if !email_dir.exists() || email_dir == uuid_dir {
-            continue;
-        }
-
-        if let Ok(mailbox_entries) = fs::read_dir(&email_dir) {
-            for mb_entry in mailbox_entries.flatten() {
-                if !mb_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-                let mb_name = mb_entry.file_name();
-                let src_cur = mb_entry.path().join("cur");
-                if !src_cur.exists() { continue; }
-
-                let dst_cur = uuid_dir.join(&mb_name).join("cur");
-                if let Err(e) = fs::create_dir_all(&dst_cur) {
-                    tracing::warn!("Migration: failed to create {:?}: {}", dst_cur, e);
-                    continue;
-                }
-
-                if let Ok(files) = fs::read_dir(&src_cur) {
-                    for file in files.flatten() {
-                        let fname = file.file_name();
-                        let dst_path = dst_cur.join(&fname);
-                        if !dst_path.exists() {
-                            if let Err(e) = fs::rename(file.path(), &dst_path) {
-                                tracing::warn!("Migration: failed to move {:?}: {}", fname, e);
-                            } else {
-                                migrated += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let _ = fs::remove_dir_all(&email_dir);
-    }
-
-    info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
+    let migrated = mailvault_core::vault_files::migrate_email_dirs(&vault::root(&app_handle)?, &account_map);
     if migrated > 0 {
         sweep_index_soon(); // folders moved between account dirs
     }
@@ -5947,10 +5151,6 @@ fn main() {
 // ── Unit tests ──────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-#[path = "light_batch_tests.rs"]
-mod light_batch_tests;
-
-#[cfg(test)]
 #[path = "custody_tests.rs"]
 mod custody_tests;
 
@@ -6040,12 +5240,6 @@ mod tests {
         assert_eq!(update_feed_override(Some("beta"), "2.12.0"), None);
     }
 
-    #[test]
-    fn a_vault_file_name_round_trips_through_the_builder() {
-        // The names round-trip through the builder without changing the name.
-        assert_eq!(build_maildir_filename(12, &parse_flags_from_filename("12:2,AS.eml")), "12:2,AS.eml");
-    }
-
     /// The `.eml` sweep must not depend on the background helper being up.
     /// Discussion #13: 2.5.0 ran the rename from the daemon only, and the app,
     /// which is the process that always runs, never swept anything.
@@ -6087,199 +5281,6 @@ mod tests {
         )
         .expect("write into a missing directory should succeed");
         assert_eq!(std::fs::read(&written).unwrap(), b"pixels");
-    }
-
-    // -- Attachment cache --
-
-    fn photo_with_inline_and_pixel() -> Vec<u8> {
-        b"From: dave@example.com\r\n\
-Subject: Photo\r\n\
-MIME-Version: 1.0\r\n\
-Content-Type: multipart/mixed; boundary=\"MIX\"\r\n\
-\r\n\
---MIX\r\n\
-Content-Type: text/html\r\n\
-\r\n\
-<html><body><img src=\"cid:logo123\"></body></html>\r\n\
---MIX\r\n\
-Content-Type: image/png; name=\"photo.png\"\r\n\
-Content-Disposition: attachment; filename=\"photo.png\"\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-iVBORw0KGgo=\r\n\
---MIX\r\n\
-Content-Type: image/png\r\n\
-Content-ID: <logo123>\r\n\
-Content-Disposition: inline\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-iVBORw0KGgo=\r\n\
---MIX\r\n\
-Content-Type: image/gif\r\n\
-Content-Disposition: inline\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-R0lGODlhAQABAAAAACw=\r\n\
---MIX--\r\n".to_vec()
-    }
-
-    fn maildir_with(files: &[(u32, &[u8])]) -> (tempfile::TempDir, PathBuf, PathBuf) {
-        let dir = tempfile::tempdir().unwrap();
-        let cur = dir.path().join("cur");
-        fs::create_dir_all(&cur).unwrap();
-        for (uid, raw) in files {
-            fs::write(cur.join(format!("{}:2,S", uid)), raw).unwrap();
-        }
-        (dir, cur, dir_path_cache())
-    }
-
-    fn dir_path_cache() -> PathBuf {
-        tempfile::tempdir().unwrap().into_path().join("attachment_cache")
-    }
-
-    fn leaf(p: &Path) -> String {
-        p.file_name().unwrap().to_string_lossy().to_string()
-    }
-
-    #[test]
-    fn cache_attachment_writes_the_part_once() {
-        let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(leaf(&path), "acct_INBOX_7_0_report.pdf");
-        assert_eq!(fs::read(&path).unwrap(), b"%PDF-1.4\n");
-
-        let again = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(again, path);
-        assert_eq!(fs::read_dir(&cache).unwrap().count(), 1);
-    }
-
-    #[test]
-    fn cache_attachment_keeps_a_hostile_filename_inside_the_cache() {
-        let raw = String::from_utf8(multipart_with_attachment()).unwrap()
-            .replace("filename=\"report.pdf\"", "filename=\"../../escape.pdf\"");
-        let (_d, cur, cache) = maildir_with(&[(7, raw.as_bytes())]);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(path.parent().unwrap(), cache);
-        assert_eq!(leaf(&path), "acct_INBOX_7_0_escape.pdf");
-    }
-
-    #[test]
-    fn cached_attachment_in_reports_only_what_exists() {
-        let (_d, cur, cache) = maildir_with(&[(7, &multipart_with_attachment())]);
-        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), None);
-        let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
-        assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), Some(path));
-    }
-
-    #[test]
-    fn prefetch_walks_newest_first_and_skips_what_is_not_an_attachment() {
-        let (_d, cur, cache) = maildir_with(&[
-            (5, &multipart_with_attachment()),
-            (9, &photo_with_inline_and_pixel()),
-            (3, PLAIN_EMAIL),
-        ]);
-        let (written, max_uid) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
-        let names: Vec<String> = written.iter().map(|p| leaf(p)).collect();
-        // The photo only: the cid: logo is part of the HTML and the unnamed
-        // 1x1 gif is a tracking pixel — neither is something the user attached.
-        assert_eq!(names, vec!["acct_INBOX_9_0_photo.png", "acct_INBOX_5_0_report.pdf"]);
-        assert_eq!(max_uid, 9);
-        assert_eq!(fs::read_dir(&cache).unwrap().count(), 2);
-
-        let (again, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 0).unwrap();
-        assert!(again.is_empty());
-    }
-
-    #[test]
-    fn prefetch_sweeps_only_above_the_uid_it_already_saw() {
-        let (_d, cur, cache) = maildir_with(&[
-            (5, &multipart_with_attachment()),
-            (9, &photo_with_inline_and_pixel()),
-        ]);
-        let (written, _) = prefetch_attachments_in(&cache, &cur, "acct", "INBOX", 5).unwrap();
-        assert_eq!(written.iter().map(|p| leaf(p)).collect::<Vec<_>>(), vec!["acct_INBOX_9_0_photo.png"]);
-    }
-
-    // -- Fixtures --
-
-    const PLAIN_EMAIL: &[u8] = b"From: alice@example.com\r\n\
-Subject: Hello\r\n\
-Date: Wed, 19 Feb 2026 10:00:00 +0000\r\n\
-Content-Type: text/plain\r\n\
-\r\n\
-Hello, World!";
-
-    fn multipart_with_attachment() -> Vec<u8> {
-        b"From: bob@example.com\r\n\
-Subject: With attachment\r\n\
-MIME-Version: 1.0\r\n\
-Content-Type: multipart/mixed; boundary=\"BOUNDARY\"\r\n\
-\r\n\
---BOUNDARY\r\n\
-Content-Type: text/plain\r\n\
-\r\n\
-Body text\r\n\
---BOUNDARY\r\n\
-Content-Type: application/pdf; name=\"report.pdf\"\r\n\
-Content-Disposition: attachment; filename=\"report.pdf\"\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-JVBERi0xLjQK\r\n\
---BOUNDARY--\r\n".to_vec()
-    }
-
-    fn multipart_two_attachments() -> Vec<u8> {
-        b"From: eve@example.com\r\n\
-Subject: Two attachments\r\n\
-MIME-Version: 1.0\r\n\
-Content-Type: multipart/mixed; boundary=\"TWO\"\r\n\
-\r\n\
---TWO\r\n\
-Content-Type: text/html\r\n\
-\r\n\
-<p>Please review</p>\r\n\
---TWO\r\n\
-Content-Type: application/pdf; name=\"doc1.pdf\"\r\n\
-Content-Disposition: attachment; filename=\"doc1.pdf\"\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-JVBERi0xLjQK\r\n\
---TWO\r\n\
-Content-Type: image/png; name=\"screenshot.png\"\r\n\
-Content-Disposition: attachment; filename=\"screenshot.png\"\r\n\
-Content-Transfer-Encoding: base64\r\n\
-\r\n\
-iVBORw0KGgo=\r\n\
---TWO--\r\n".to_vec()
-    }
-
-    // -----------------------------------------------------------------------
-    // Full parse vs light parse consistency
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn full_and_light_parse_same_attachment_count() {
-        let raw = multipart_two_attachments();
-        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
-        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
-        assert_eq!(full.attachments.len(), light.attachments.len());
-        assert_eq!(full.has_attachments, light.has_attachments);
-    }
-
-    #[test]
-    fn full_and_light_parse_same_subject() {
-        let raw = multipart_with_attachment();
-        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
-        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
-        assert_eq!(full.subject, light.subject);
-    }
-
-    #[test]
-    fn full_and_light_parse_same_body_text() {
-        let raw = multipart_with_attachment();
-        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
-        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
-        assert_eq!(full.text, light.text);
     }
 
     // -----------------------------------------------------------------------
@@ -6547,40 +5548,6 @@ iVBORw0KGgo=\r\n\
         let a = Some(PathBuf::from("/vault/A"));
         assert_eq!(after_failed_move(a, None), MoveFollowUp::RestartDaemon);
     }
-}
-
-#[cfg(test)]
-mod purge_tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    fn touch(dir: &Path, name: &str) {
-        std::fs::write(dir.join(name), b"x").unwrap();
-    }
-
-    #[test]
-    fn deletes_only_requested_uids() {
-        let tmp = tempfile::tempdir().unwrap();
-        let cur = tmp.path();
-        touch(cur, "101:2,S");
-        touch(cur, "102:2,");
-        touch(cur, "103:2,S");
-        // A uid that is a prefix of another must not be swept up.
-        touch(cur, "1010:2,S");
-
-        let mut uids = HashSet::new();
-        uids.insert(101u32);
-        uids.insert(103u32);
-
-        let removed = delete_maildir_files(cur, &uids);
-
-        assert_eq!(removed, 2);
-        assert!(!cur.join("101:2,S").exists());
-        assert!(!cur.join("103:2,S").exists());
-        assert!(cur.join("102:2,").exists());
-        assert!(cur.join("1010:2,S").exists(), "1010 must survive a purge of 101");
-    }
-
 }
 
 #[cfg(test)]

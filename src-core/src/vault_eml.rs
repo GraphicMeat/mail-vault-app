@@ -287,6 +287,170 @@ pub fn part_filename(part: &mailparse::ParsedMail) -> String {
         .unwrap_or_else(|| "attachment".to_string())
 }
 
+// ── Full parse (base64 content, whole message) ──────────────────────────────
+// Moved verbatim from src-tauri/src/main.rs:1750-1786, 2068-2187 (Task 2.2 Step
+// 1). Used by `maildir_read`, whose viewer wants the full body plus attachment
+// bytes; every other reader uses the light parser above.
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MaildirAttachment {
+    pub filename: Option<String>,
+    #[serde(rename = "contentType")]
+    pub content_type: String,
+    #[serde(rename = "contentDisposition")]
+    pub content_disposition: Option<String>,
+    pub size: usize,
+    #[serde(rename = "contentId")]
+    pub content_id: Option<String>,
+    pub content: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ParsedEmail {
+    pub uid: u32,
+    #[serde(rename = "messageId")]
+    pub message_id: Option<String>,
+    pub subject: String,
+    pub from: MaildirAddress,
+    pub to: Vec<MaildirAddress>,
+    pub cc: Vec<MaildirAddress>,
+    pub bcc: Vec<MaildirAddress>,
+    #[serde(rename = "replyTo")]
+    pub reply_to: Vec<MaildirAddress>,
+    pub date: Option<String>,
+    pub flags: Vec<String>,
+    pub text: Option<String>,
+    pub html: Option<String>,
+    pub attachments: Vec<MaildirAttachment>,
+    #[serde(rename = "rawSource")]
+    pub raw_source: String,
+    #[serde(rename = "hasAttachments")]
+    pub has_attachments: bool,
+    #[serde(rename = "isArchived")]
+    pub is_archived: bool,
+}
+
+pub fn walk_mime_parts(
+    part: &mailparse::ParsedMail,
+    text_body: &mut Option<String>,
+    html_body: &mut Option<String>,
+    attachments: &mut Vec<MaildirAttachment>,
+) {
+    let content_type = part.ctype.mimetype.to_lowercase();
+
+    if !part.subparts.is_empty() {
+        for sub in &part.subparts {
+            walk_mime_parts(sub, text_body, html_body, attachments);
+        }
+        return;
+    }
+
+    // Leaf part
+    let disposition = part.get_content_disposition();
+    let is_attachment = disposition.disposition == mailparse::DispositionType::Attachment;
+    let is_inline_non_text = disposition.disposition == mailparse::DispositionType::Inline
+        && !content_type.starts_with("text/");
+
+    if is_attachment || is_inline_non_text {
+        if let Ok(body) = part.get_body_raw() {
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&body);
+            let filename = disposition.params.get("filename")
+                .or_else(|| part.ctype.params.get("name"))
+                .cloned();
+            let content_id = part.headers.iter()
+                .find(|h| h.get_key().eq_ignore_ascii_case("Content-ID"))
+                .map(|h| h.get_value());
+
+            attachments.push(MaildirAttachment {
+                filename,
+                content_type: content_type.clone(),
+                content_disposition: Some(format!("{:?}", disposition.disposition)),
+                size: body.len(),
+                content_id,
+                content: b64,
+            });
+        }
+    } else if content_type == "text/plain" && text_body.is_none() {
+        *text_body = part.get_body().ok();
+    } else if content_type == "text/html" && html_body.is_none() {
+        *html_body = part.get_body().ok();
+    }
+}
+
+pub fn has_real_attachments_full(attachments: &[MaildirAttachment], html: Option<&str>) -> bool {
+    attachments.iter().any(|att| {
+        is_real_attachment(&att.content_type, &att.content_id, &att.filename, att.size, html)
+    })
+}
+
+pub fn parse_eml_bytes(raw: &[u8], uid: u32, flags: Vec<String>) -> Result<ParsedEmail, String> {
+    let parsed = mailparse::parse_mail(raw)
+        .map_err(|e| format!("Failed to parse email: {}", e))?;
+
+    let headers = &parsed.headers;
+    let get_header = |name: &str| -> Option<String> {
+        headers.iter()
+            .find(|h| h.get_key().eq_ignore_ascii_case(name))
+            .map(|h| h.get_value())
+    };
+
+    let subject = get_header("Subject").unwrap_or_else(|| "(No Subject)".to_string());
+    let message_id = get_header("Message-ID");
+    let date = get_header("Date");
+
+    let from_str = get_header("From").unwrap_or_default();
+    let from_addrs = parse_address_str(&from_str);
+    let from = from_addrs.into_iter().next().unwrap_or(MaildirAddress {
+        name: Some("Unknown".to_string()),
+        address: "unknown@unknown.com".to_string(),
+    });
+
+    let to = get_header("To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let cc = get_header("Cc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let bcc = get_header("Bcc")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+    let reply_to = get_header("Reply-To")
+        .map(|v| parse_address_str(&v))
+        .unwrap_or_default();
+
+    let mut text_body: Option<String> = None;
+    let mut html_body: Option<String> = None;
+    let mut attachments: Vec<MaildirAttachment> = Vec::new();
+
+    walk_mime_parts(&parsed, &mut text_body, &mut html_body, &mut attachments);
+
+    let is_archived = flags.iter().any(|f| f == "archived");
+    let has_attachments = has_real_attachments_full(&attachments, html_body.as_deref());
+
+    use base64::Engine;
+    let raw_source = base64::engine::general_purpose::STANDARD.encode(raw);
+
+    Ok(ParsedEmail {
+        uid,
+        message_id,
+        subject,
+        from,
+        to,
+        cc,
+        bcc,
+        reply_to,
+        date,
+        flags,
+        text: text_body,
+        html: html_body,
+        attachments,
+        raw_source,
+        has_attachments,
+        is_archived,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -708,6 +872,35 @@ iVBORw0KGgo=\r\n\
             --outer--\r\n";
         let email = parse_eml_bytes_light(raw, 1, vec![]).unwrap();
         assert!(email.has_attachments, "Email with real PDF attachment should set has_attachments");
+    }
+
+    // -----------------------------------------------------------------------
+    // Full parse vs light parse consistency (moved from src-tauri/src/main.rs:6261-6286)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn full_and_light_parse_same_attachment_count() {
+        let raw = multipart_two_attachments();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.attachments.len(), light.attachments.len());
+        assert_eq!(full.has_attachments, light.has_attachments);
+    }
+
+    #[test]
+    fn full_and_light_parse_same_subject() {
+        let raw = multipart_with_attachment();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.subject, light.subject);
+    }
+
+    #[test]
+    fn full_and_light_parse_same_body_text() {
+        let raw = multipart_with_attachment();
+        let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
+        let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
+        assert_eq!(full.text, light.text);
     }
 
     #[test]
