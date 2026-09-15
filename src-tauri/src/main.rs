@@ -4697,9 +4697,12 @@ static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::ne
 /// against a concurrent `daemon_rpc` auto-spawn, so a build-mismatch restart and
 /// an on-demand spawn from another request can never race each other.
 /// Lock order: LIFECYCLE then CHILD — always take this one first; never take it
-/// while already holding `DAEMON_CHILD` (both `ensure_daemon_socket` and
-/// `shutdown_daemon_child` only ever take CHILD alone, nested inside a caller
-/// that already holds LIFECYCLE, never the other way around).
+/// while already holding `DAEMON_CHILD`. `ensure_daemon_socket` only ever
+/// takes CHILD alone, nested inside a caller that already holds LIFECYCLE.
+/// `shutdown_daemon_child` also only ever takes CHILD alone, but is not
+/// always nested inside LIFECYCLE: `stop_daemon` holds LIFECYCLE across it,
+/// while `RunEvent::Exit` calls it bare at app shutdown — `APP_EXITING`,
+/// not this lock, is what guards that path against a concurrent spawn.
 static DAEMON_LIFECYCLE: Mutex<()> = Mutex::new(());
 
 /// Set at the very start of `RunEvent::Exit`, before `daemon_channel::stop()`
@@ -4880,6 +4883,12 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
         .map_err(|e| format!("Failed to spawn daemon: {}", e))?;
 
     *guard = Some(child);
+    // A freshly spawned daemon has never had its build checked, whatever
+    // inode last passed on this socket path. On Linux (ext4/tmpfs) a fresh
+    // inode can reuse a just-freed number, so a stale VERIFIED_SOCKET_INO
+    // could otherwise match the respawned daemon's socket by coincidence and
+    // let it skip the build-mismatch check in ensure_daemon_running.
+    VERIFIED_SOCKET_INO.store(0, Ordering::SeqCst);
 
     // Wait for socket to appear (up to 3 seconds)
     for _ in 0..30 {
@@ -5106,19 +5115,21 @@ async fn daemon_rpc(
     };
 
     let (socket_path, token_path) = daemon_ipc_paths().map_err(unavailable)?;
-    // Blocking: spawn check, heartbeat, possibly a restart. Never on a tokio worker.
-    {
+    // Blocking: spawn check, heartbeat, possibly a restart, and the token
+    // file read — none of it belongs on a tokio worker, so both run inside
+    // the one spawn_blocking closure (mirrors daemon_channel::connect).
+    let token = {
         let app = app_handle.clone();
         let sock = socket_path.clone();
-        tokio::task::spawn_blocking(move || ensure_daemon_running(&app, &sock))
-            .await
-            .map_err(|e| unavailable(format!("task join error: {e}")))?
-            .map_err(unavailable)?;
-    }
-
-    // Read auth token
-    let token = std::fs::read_to_string(&token_path)
-        .map_err(|e| unavailable(format!("daemon token not found: {e}")))?;
+        let tok_path = token_path.clone();
+        tokio::task::spawn_blocking(move || {
+            ensure_daemon_running(&app, &sock)?;
+            std::fs::read_to_string(&tok_path).map_err(|e| format!("daemon token not found: {e}"))
+        })
+        .await
+        .map_err(|e| unavailable(format!("task join error: {e}")))?
+        .map_err(unavailable)?
+    };
 
     // Connect to daemon socket
     let stream = UnixStream::connect(&socket_path)
