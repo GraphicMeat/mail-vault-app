@@ -1,10 +1,12 @@
-//! Spec 2026-09-14 §5.1: the index reads the files the app writes, so the index
-//! and the shared parser must never touch core's older `<uid>:archived,seen:<ts>.eml`
-//! reader/writer. Those are deleted in Phase 2; until then nothing new may use them.
+//! Spec 2026-09-14 §5.1 / plan Task 2.2 Step 6: the app's vault filename
+//! format is `<uid>:2,<flags>.eml`, built by
+//! `mailvault_core::vault_files::build_maildir_filename`. Core's older
+//! `<uid>:archived,seen:<ts>.eml` reader/writer family (`maildir::build_filename`
+//! and friends) was deleted in Phase 2; nothing in any crate may bring it back.
 use std::path::{Path, PathBuf};
 
-const WATCHED: &[&str] = &["src-core/src/vault_eml.rs", "src-core/src/search_index", "src-daemon/src/search_index.rs", "src-daemon/src/handlers/search_index.rs"];
-const FORBIDDEN: &[&str] = &["read_light_batch(", "maildir::read_light", "EmailHeader", "build_filename", "parse_header(", "maildir::store(", "maildir::set_flags("];
+const WATCHED: &[&str] = &["src-core/src", "src-daemon/src", "src-tauri/src"];
+const FORBIDDEN: &[&str] = &["fn build_filename", ":archived,seen:"];
 
 fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
     if p.is_file() {
@@ -46,7 +48,7 @@ fn non_test_text(src: &str) -> String {
 }
 
 #[test]
-fn index_and_parser_code_never_name_the_legacy_vault_reader_or_writer() {
+fn no_crate_defines_or_references_the_legacy_vault_filename_format() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
     // Review M3: a missing watched path (a rename, or a `.rs` file replaced by
     // a directory module) must fail loudly, not silently guard nothing.
@@ -72,16 +74,16 @@ fn index_and_parser_code_never_name_the_legacy_vault_reader_or_writer() {
 /// exercise this branch. A synthetic source can.
 #[test]
 fn non_test_text_does_not_stop_at_a_bare_mod_declaration_and_keeps_line_numbers() {
-    let src = "fn a() {}\n#[cfg(test)]\nmod unit_tests;\nfn b() { maildir::read_light(); }\n";
+    let src = "fn a() {}\n#[cfg(test)]\nmod unit_tests;\nfn b() { maildir::build_filename(); }\n";
     let kept = non_test_text(src);
     let lines: Vec<&str> = kept.lines().collect();
     assert_eq!(lines.len(), 4, "no line dropped or added: {lines:?}");
-    assert!(lines[3].contains("maildir::read_light"), "code after a bare `mod x;` must still be scanned: {lines:?}");
+    assert!(lines[3].contains("maildir::build_filename"), "code after a bare `mod x;` must still be scanned: {lines:?}");
 }
 
 #[test]
 fn non_test_text_stops_at_an_inline_test_module() {
-    let src = "fn a() {}\n#[cfg(test)]\nmod tests {\n    fn hidden() { maildir::read_light(); }\n}\n";
+    let src = "fn a() {}\n#[cfg(test)]\nmod tests {\n    fn hidden() { maildir::build_filename(); }\n}\n";
     let kept = non_test_text(src);
-    assert!(!kept.contains("read_light"), "code inside an inline test module must not be scanned: {kept:?}");
+    assert!(!kept.contains("build_filename"), "code inside an inline test module must not be scanned: {kept:?}");
 }

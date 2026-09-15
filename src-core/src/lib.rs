@@ -11,7 +11,6 @@ pub mod vault_eml;
 pub mod vault_files;
 pub mod custody;
 pub mod mime;
-pub mod types;
 pub mod imap;
 pub mod graph;
 pub mod graph_ledger;
