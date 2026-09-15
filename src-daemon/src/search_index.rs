@@ -464,6 +464,15 @@ pub fn destroy(st: &SearchIndexState, timeout: Duration) -> Value {
 
 /// Runs on the worker only, so no second thread touches the files.
 fn destroy_index(st: &SearchIndexState) -> Result<(), &'static str> {
+    // Review I1: while the vault is unreachable, `st.vault_root` is the
+    // app-data FALLBACK root `resolve_mail_dir` hands back, never the real
+    // vault. Unlinking there and reporting success would "delete" nothing
+    // that matters while the real index survives untouched — worse than an
+    // honest failure. `rebuild_index` is already safe here (it reads `root`,
+    // which is `None` while unreachable, and returns early); this mirrors it.
+    if !st.mail_dir_ok {
+        return Err("searchIndex.destroyFailed");
+    }
     if st.switch.is_switching() {
         return Err("searchIndex.busy");
     }
@@ -1126,6 +1135,33 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert_eq!(crate::search_index::status_json(&st)["state"], "unavailable");
         assert!(!index_file(tmp.path()).exists());
+    }
+
+    /// Review I1 (task-1.6-review.md): while the vault is unreachable, `st.vault_root`
+    /// is the app-data FALLBACK root (what `resolve_mail_dir` hands back when
+    /// `mail_dir_ok` is false), never the real, unreachable vault. `destroy_index`
+    /// must never unlink anything there and report success — a "Delete" the user
+    /// asked for that quietly deletes nothing, while the real index.db (wherever
+    /// it actually is) survives untouched, is worse than a `destroyFailed` error.
+    #[test]
+    fn destroy_on_an_unreachable_vault_never_touches_the_fallback_root_and_fails() {
+        let tmp = tempfile::tempdir().unwrap();
+        // Stands in for whatever already lives under the fallback root's
+        // search_index dir — must survive a destroy attempt untouched.
+        let dir = tmp.path().join(mailvault_core::search_index::db::DB_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        let planted = dir.join(mailvault_core::search_index::db::DB_FILE);
+        std::fs::write(&planted, b"must survive: this is not the real vault's index").unwrap();
+
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        let reply = crate::search_index::destroy(&st, std::time::Duration::from_secs(20));
+        assert_eq!(reply, serde_json::json!({"ok": false, "error": "searchIndex.destroyFailed"}));
+        assert!(planted.exists(), "the fallback root's file must never be touched, let alone deleted, while the vault is unreachable");
+        assert_eq!(*st.enabled.lock().unwrap(), Some(false), "a failed (non-busy) destroy still leaves the index off, matching every other destroyFailed path");
     }
 
     #[test]
