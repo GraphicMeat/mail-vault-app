@@ -578,20 +578,31 @@ export function ThreadView({ thread, onComposeReply }) {
 
   // Resolve by full message identity: different folders may reuse the same UID.
   const threadId = thread.threadId;
+  const virtualizerContextRef = useRef({ threadId: null, readerLayout: null });
   useEffect(() => {
     setExpandedMessages({});
     setSelectedMessage(null);
   }, [threadId]);
   useLayoutEffect(() => {
-    virtualizer.measure();
-    // measure() clears the size cache. An expanded message can keep exactly
-    // the same height across layouts, so ResizeObserver won't report it again.
-    // Rebuild the estimated positions, then restore every mounted row's real
-    // height before painting or scrolling. Otherwise later rows overlap it.
-    virtualizer.getTotalSize();
-    scrollContainerRef.current?.querySelectorAll('[data-index]').forEach(node => {
-      virtualizer.measureElement(node);
-    });
+    const previous = virtualizerContextRef.current;
+    const needsFullReset = previous.threadId !== threadId || previous.readerLayout !== readerLayout;
+    previous.threadId = threadId;
+    previous.readerLayout = readerLayout;
+
+    // A layout switch changes the height of collapsed rows, and a different
+    // thread may reuse keys for unrelated messages. Those transitions need a
+    // complete reset. A reply refresh only adds/replaces one keyed item: the
+    // virtualizer's cache already has the measured heights for every row that
+    // stayed in the thread. Calling measure() there clears those heights, so
+    // offscreen rows fall back to the 72px estimate and overlap at narrow
+    // widths before their measurements are reported again.
+    if (needsFullReset) {
+      virtualizer.measure();
+      virtualizer.getTotalSize();
+      scrollContainerRef.current?.querySelectorAll('[data-index]').forEach(node => {
+        virtualizer.measureElement(node);
+      });
+    }
     const index = sortedEmails.findIndex(email => emailKey(email) === newestKey);
     if (index >= 0) virtualizer.scrollToIndex(index, { align: 'start' });
   }, [threadId, threadSortOrder, readerLayout, newestKey, virtualizer]);

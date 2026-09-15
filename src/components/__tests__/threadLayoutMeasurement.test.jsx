@@ -51,9 +51,9 @@ function resize() {
     }
   });
 }
-function assertNoOverlap() {
+function assertNoOverlap(expectedCount = emails.length) {
   const rows = [...document.querySelectorAll('.thread-reader-content [data-index]')];
-  expect(rows).toHaveLength(emails.length);
+  expect(rows).toHaveLength(expectedCount);
   for (let index = 1; index < rows.length; index++) {
     const previous = bounds(rows[index - 1]);
     const current = bounds(rows[index]);
@@ -111,4 +111,31 @@ it('continues measuring body growth and sort changes after a layout switch', () 
   act(() => useSettingsStore.getState().setThreadSortOrder('newest-first'));
   resize();
   assertNoOverlap();
+});
+
+it('keeps keyed row measurements when a sent reply is replaced after refresh', () => {
+  const optimistic = {
+    ...emails[3], uid: 101, _mailbox: 'Sent', date: '2026-09-05',
+    messageId: '<optimistic@example.test>',
+  };
+  const server = {
+    ...optimistic, uid: 202, date: '2026-09-05',
+  };
+  const withEmails = (items) => ({ ...thread, emails: items, messageCount: items.length });
+  const view = render(<ThreadView thread={thread} />);
+  resize();
+  assertNoOverlap();
+
+  // Compose inserts an optimistic Sent row, APPEND reconciliation removes it,
+  // then the server row arrives. The reader must retain sizes for rows that
+  // stayed in the conversation while the last row changed identity twice.
+  view.rerender(<ThreadView thread={withEmails([...emails, optimistic])} />);
+  resize();
+  assertNoOverlap(emails.length + 1);
+  view.rerender(<ThreadView thread={withEmails(emails)} />);
+  resize();
+  assertNoOverlap();
+  view.rerender(<ThreadView thread={withEmails([...emails, server])} />);
+  resize();
+  assertNoOverlap(emails.length + 1);
 });
