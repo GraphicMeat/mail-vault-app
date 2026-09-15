@@ -117,7 +117,7 @@ export function SearchIndexSettings() {
                     )}
                   </>
                 ) : info && (
-                  <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.unavailable')}</div>
+                  <div className="text-xs text-mail-text-muted">{t(info.error === 'errors.daemonOutdated' ? 'errors.daemonOutdated' : 'settings.searchIndex.unavailable')}</div>
                 )}
               </div>
               <div className="flex gap-2">

@@ -85,6 +85,13 @@ describe('Search index settings', () => {
     expect(screen.queryByTestId('search-index-status')).toBeNull();
   });
 
+  it('shows the outdated background service message when status carries that error', async () => {
+    statusReply = { available: false, state: 'unavailable', error: 'errors.daemonOutdated' };
+    render(<SearchIndexSettings />);
+    expect(await screen.findByText("MailVault's background service is out of date. Quit and reopen MailVault.")).toBeTruthy();
+    expect(screen.queryByText(/The index is not available right now/)).toBeNull();
+  });
+
   it('follows progress events', async () => {
     render(<SearchIndexSettings />);
     await waitFor(() => expect(statusText()).toContain('12 / 40'));
