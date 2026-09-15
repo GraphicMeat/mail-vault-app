@@ -70,7 +70,7 @@
       border: 1px solid rgba(255, 255, 255, 0.05);
     }
   </style>
-<link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+<link rel="stylesheet" href="/assets/english-site.css?v=20260910-community">
 <link rel="stylesheet" href="/assets/english-content.css?v=2">
 </head>
 
@@ -80,8 +80,8 @@
   <header class="mv-header">
 <div class="mv-wrap mv-nav">
 <div class="mv-brand-family"><a class="mv-brand" href="/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
-<nav class="mv-navlinks" aria-label="Main navigation"><a href="/#how-it-works">How it works</a><a href="/features.html">Features</a><a href="/pricing.html">Pricing</a><a href="/blog.html">Blog</a><a href="/docs.html">Help</a>
-<a href="/demo/?lang=en" target="_blank" rel="noopener" aria-label="Open the MailVault demo in a new window">Demo</a></nav>
+<nav class="mv-navlinks" aria-label="Main navigation"><a href="/#how-it-works">How it works</a><a href="/features.html">Features</a><a href="/pricing.html">Pricing</a><a href="/blog.html">Blog</a><a href="/docs.html">Help</a><a href="/demo/?lang=en" target="_blank" rel="noopener" aria-label="Open the MailVault demo in a new window">Demo</a>
+</nav>
 <div class="mv-navtools">
 <details class="mv-language" translate="no">
 <summary aria-label="Choose language, English selected"><svg class="mv-language-globe" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg><span class="mv-language-name">English</span><span class="mv-language-code" aria-hidden="true">EN</span><svg class="mv-language-chevron" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
@@ -124,11 +124,96 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.14.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.14.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 15, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Clicking a new-mail notification opens that email.</strong> On macOS, clicking the banner brings MailVault forward in the account and folder the message arrived in and opens the message it showed. With message previews turned off, the banner names no message, so the click opens the folder instead. A notification held back during a focus session keeps its message when it is delivered afterwards.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Thread messages keep their spacing after a reply.</strong> Sending a reply could leave the conversation's sender details and previews overlapping when the temporary sent copy was replaced by the server's copy. The reader now keeps existing message heights through the refresh.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search lists each message once.</strong> A message saved in more than one folder, such as a Gmail message archived from the inbox and backed up from another label, showed up as two identical results with two different save states. Search now shows it once, with the save state of the copy in the folder you are viewing.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message MailVault cannot read no longer stops the folder it is in.</strong> iCloud sometimes describes a message in a form MailVault's reader does not understand. Every such message used to end the connection, so the folder showed Connection problem and nothing loaded; a retry skipped at most three of them, forgot them when the app restarted, and the Inbox filled a few messages at a time. MailVault now reads past the message it cannot understand and shows every other one in the same pass, over the same connection. The unreadable message is still left out, and its description is written to the daemon log so a report can carry it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Compose opens the first time you ask.</strong> The first compose window after MailVault started, whether a reply, a forward or a new message, could come up as "Compose could not open" instead, and stayed that way until the message was dismissed. The editor inside the window was being thrown away while the window was still appearing. It is now created once the window is on screen. That message also blamed an app update for every failure; it now says so only when part of the app really failed to load.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message restored from the backup mirror stays in the list and survives Clear cached emails.</strong> A copy the backup brought back from the external mirror was named with only the flags the mirror name carried, so MailVault did not count it as archived: once the server deleted the message its row disappeared, and Clear cached emails removed the file, only for the next backup to restore it the same way. Restored copies are now marked archived, every vault copy a backup counts as backed up is marked on that run (including a message MailVault cached when you opened it), and the Microsoft 365 backup names its own copies the same way.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a message never runs anything it carries.</strong> A received message's HTML was shown in a frame that was allowed to run script, in MailVault's own window, so a message built to misbehave could act the moment you opened it, with no click needed. Every reading view (the message pane, the conversation and chat layouts, the full-screen view and the Open in window popup) now pins a policy that lets only MailVault's own display code run inside the frame and blocks everything the message itself brings, while dark mode, quote folding and signature folding keep working.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Show original message in a reply can no longer run anything the message carries.</strong> The quoted message was drawn straight into MailVault's own window, so markup built to misbehave could run there once you opened it. It now shows in a frame where nothing runs. A plain-text original, and the sender, subject and recipients in the quote header, are quoted as the text they are, so a line like "Ann <ann@example.com> wrote:" keeps its address instead of losing it.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Blank lines and line breaks arrive the way you typed them.</strong> A message written with empty lines between its paragraphs reached the recipient as one block of text: the empty lines had no height anywhere outside the compose window, and the plain-text copy that travels with every message put a blank line after each paragraph and three for every empty line. Both now match the compose window line for line, including a line break made with Shift-Return, and the plain-text copy marks list items, quotes and link addresses. Templates, plain-text signatures and forwarded messages also stop showing their empty lines twice as tall while you write.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Stored mail carries the <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.eml</code> extension again.</strong> Vault files were meant to end in <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">.eml</code> from 2.5.0 onwards, so that a message double-clicks open in Mail and a copied folder is usable anywhere, but only the files that already existed back then were renamed. Everything archived since landed without it. New messages are now written as <code class="text-sm px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 font-mono inline">1234:2,AS.eml</code>, the same name the external backup copy already used, and the files that missed out are renamed once when MailVault next starts.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Back up now runs now.</strong> Clicking Back up now on an account, or Back up all accounts now, starts the backup straight away and ahead of anything the schedule had lined up, even for an account that was already waiting its turn; before, the click was swallowed and the button spun for hours without a backup ever starting. A running backup no longer stops because you came back to the app either. It only pauses when the Mac sleeps or you go offline, and it resumes on its own afterwards. Every account card now shows where it stands, Queued while it waits and a progress bar from the moment its backup starts, whether you started it or the schedule did.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A paused backup picks up where it stopped.</strong> When MailVault paused an automatic backup because you went offline or the Mac slept, the queue never restarted: the card kept saying Cancelled with a spinner, the other accounts stayed queued, and Back up all accounts now stayed greyed out. The queue now resumes on its own, the card reflects the real state, a run that makes no progress for fifteen minutes is stopped and retried, and a folder the pause cut short is finished on the next run instead of being skipped.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Outlook folders are stored under one name whatever language you or your mailbox use.</strong> With MailVault in German, Spanish or any language other than English, an Outlook account's Sent, Drafts, Trash, Junk and Archive folders were saved under the translated word while the backup saved them under the English one: two copies of each folder on disk, two sets of numbering, and a backup status that could not agree with the folder list. Switching language moved the app to a third, empty copy. The folders are now filed by the name Outlook itself knows them by, so a mailbox set to German ("Gesendete Elemente") files the same way as an English one, the sidebar shows them in your language, and folders already saved under a translated name are moved under the shared one at the next start when nothing else lives there. Nothing is deleted: a folder that already exists under both names stays as it is.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An Outlook backup saves each new message instead of a second copy of an old one.</strong> The backup numbered Outlook mail by its place in the folder, newest first, while MailVault gives every message a number of its own that never changes. Each new arrival moved every place along by one, so the backup took the new message for one it already had and skipped it, then downloaded the oldest message again under the new message's number. The backup now files every message under MailVault's number, recognises the copies an earlier backup already saved so they are not downloaded again, and never files a new message over a copy that is already there. A folder whose numbers cannot be read is left untouched and named in the backup's error message instead of being filed by guesswork. Clear cached emails now keeps those numbers too, so mail listed after a clear cannot take a number that is already in use. Copies an earlier backup already filed under the wrong number are left as they are.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.13.1">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.13.1</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 10, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

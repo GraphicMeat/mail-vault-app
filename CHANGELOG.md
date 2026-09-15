@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.14.0] - 2026-09-15
+
 ### Added
 - **Clicking a new-mail notification opens that email.** On macOS, clicking the banner brings MailVault forward in the account and folder the message arrived in and opens the message it showed. With message previews turned off, the banner names no message, so the click opens the folder instead. A notification held back during a focus session keeps its message when it is delivered afterwards.
 
