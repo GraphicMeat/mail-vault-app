@@ -318,7 +318,7 @@ pub async fn run_with_backup(
     let final_ext_failures = ext_failures.load(Ordering::Relaxed);
     // Once per run, for archive_emails and each backup folder alike.
     if final_completed > 0 {
-        crate::search_index::nudge(&app_handle, &account_id, &mailbox);
+        crate::nudge_index(&account_id, &mailbox);
     }
 
     info!(

@@ -73,6 +73,10 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 warned = false;
                 info!("daemon channel connected");
                 let _ = app.emit("daemon-reconnected", json!({}));
+                // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
+                // Runs on the first connect too (CONNECTED is already true above), which is
+                // exactly what a freshly spawned daemon's empty index needs (addendum C3).
+                notify("search_index.sweep_soon", json!({}));
                 let connected_at = std::time::Instant::now();
 
                 // Reader (pump) and writer run as two independent tasks so a

@@ -280,7 +280,7 @@ pub async fn vault_apply_flags(
         }
         let applied = result?;
         if applied.renamed > 0 {
-            crate::search_index::nudge(&app_handle, &account_id, &mailbox); // filename-only updates
+            crate::nudge_index(&account_id, &mailbox); // filename-only updates
         }
         if applied.total() > 0 {
             info!(
@@ -514,7 +514,7 @@ pub async fn vault_adopt_mailbox_dirs(
             Ok(report)
         })();
         if any_moved {
-            crate::search_index::sweep_soon(&app_handle); // the old folders' rows go, the new ones' come
+            crate::sweep_index_soon(); // the old folders' rows go, the new ones' come
         }
         if needs_release {
             if let Some(ref p) = root {
@@ -580,7 +580,7 @@ pub async fn vault_rename_mailbox(
             Ok(moved)
         })();
         if moved > 0 {
-            crate::search_index::sweep_soon(&app_handle); // the old folders' rows go, the new ones' come
+            crate::sweep_index_soon(); // the old folders' rows go, the new ones' come
         }
         if needs_release {
             if let Some(ref p) = root {

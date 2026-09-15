@@ -6,9 +6,9 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 pub(crate) use mailvault_core::vault_eml::{
-    collect_attachment_parts, find_file_by_uid, has_real_attachments, is_real_attachment, parse_address_str,
+    collect_attachment_parts, find_file_by_uid, is_real_attachment, parse_address_str,
     parse_eml_bytes_light, parse_flags_from_filename, part_filename, read_light_at, walk_mime_parts_light,
-    LightAttachment, LightEmail, MaildirAddress,
+    LightEmail, MaildirAddress,
 };
 
 /// Localize the menu bar without rebuilding it.
@@ -81,7 +81,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use walkdir::WalkDir;
 
 mod archive;
-mod attachment_extract;
 mod backup;
 mod commands;
 mod custody;
@@ -102,7 +101,6 @@ mod notification_sound;
 mod op_journal;
 mod restore;
 pub use mailvault_core::oauth2;
-mod search_index;
 mod smtp;
 mod spellcheck;
 mod insights;
@@ -1833,15 +1831,23 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 #[tauri::command]
 async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
-        search_index::close(&app_handle);
+        let suspended = suspend_daemon();
+        daemon_index_call(&app_handle, "search_index_close");
         custody::close(&app_handle);
         let result = vault::adopt(&app_handle, &path);
         custody::reopen(&app_handle);
-        search_index::reopen(&app_handle);
-        let status = result?;
-        // The daemon reads the storage location once at startup — restart it so it
-        // does not keep syncing into the old folder.
+        let status = match result {
+            Ok(s) => s,
+            Err(e) => {
+                drop(suspended);
+                daemon_index_call(&app_handle, "search_index_reopen");
+                return Err(e);
+            }
+        };
+        // The daemon reads the storage location once at startup: the channel
+        // respawns it on the new root only once `suspended` clears below.
         stop_daemon();
+        drop(suspended);
         let _ = app_handle.emit("vault-status", status.clone());
         Ok(status)
     })
@@ -1854,21 +1860,28 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
 async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
-        search_index::close(&handle); // waits on the index mutex: not on a tokio worker
+        let suspended = suspend_daemon();
+        daemon_index_call(&handle, "search_index_close");
         custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to(&handle, &path, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
         });
         custody::reopen(&handle); // success or not: whatever root is current now
+        if result.is_err() {
+            drop(suspended);
+            daemon_index_call(&handle, "search_index_reopen");
+        } else {
+            stop_daemon();
+            drop(suspended);
+        }
         result
     })
     .await
-    .map_err(|e| format!("Task join error: {}", e));
-    search_index::reopen(&app_handle);
-    let result = result?;
-    let _ = tokio::task::spawn_blocking(stop_daemon).await;
-    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    .map_err(|e| format!("Task join error: {}", e))?;
+    if result.is_ok() {
+        let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    }
     result
 }
 
@@ -1877,21 +1890,28 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
 async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
-        search_index::close(&handle); // waits on the index mutex: not on a tokio worker
+        let suspended = suspend_daemon();
+        daemon_index_call(&handle, "search_index_close");
         custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to_default(&handle, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
         });
         custody::reopen(&handle); // success or not: whatever root is current now
+        if result.is_err() {
+            drop(suspended);
+            daemon_index_call(&handle, "search_index_reopen");
+        } else {
+            stop_daemon();
+            drop(suspended);
+        }
         result
     })
     .await
-    .map_err(|e| format!("Task join error: {}", e));
-    search_index::reopen(&app_handle);
-    let result = result?;
-    let _ = tokio::task::spawn_blocking(stop_daemon).await;
-    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    .map_err(|e| format!("Task join error: {}", e))?;
+    if result.is_ok() {
+        let _ = app_handle.emit("vault-status", vault::status(&app_handle));
+    }
     result
 }
 
@@ -1900,13 +1920,21 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 #[tauri::command]
 async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
-        search_index::close(&app_handle);
+        let suspended = suspend_daemon();
+        daemon_index_call(&app_handle, "search_index_close");
         custody::close(&app_handle);
         let result = vault::reset(&app_handle);
         custody::reopen(&app_handle);
-        search_index::reopen(&app_handle);
-        let status = result?;
+        let status = match result {
+            Ok(s) => s,
+            Err(e) => {
+                drop(suspended);
+                daemon_index_call(&app_handle, "search_index_reopen");
+                return Err(e);
+            }
+        };
         stop_daemon();
+        drop(suspended);
         let _ = app_handle.emit("vault-status", status.clone());
         Ok(status)
     })
@@ -2149,7 +2177,7 @@ pub fn maildir_store_raw(
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
     // Here, not at the caller: the already-cached return above must not wake the index.
-    search_index::nudge(app_handle, account_id, mailbox);
+    nudge_index(account_id, mailbox);
     Ok(())
 }
 
@@ -2184,7 +2212,7 @@ fn maildir_store(
         .map_err(|e| format!("Failed to write .eml file: {}", e))?;
 
     info!("Stored email UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
-    search_index::nudge(&app_handle, &account_id, &mailbox);
+    nudge_index(&account_id, &mailbox);
     Ok(())
 }
 
@@ -2353,7 +2381,7 @@ async fn maildir_repair_generation(
         }
         // Files changed uid in `cur/`: the index still maps the old uids to them.
         if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
-            search_index::nudge(&app_handle, &account_id, &mailbox);
+            nudge_index(&account_id, &mailbox);
         }
         Ok(report)
     }).await.map_err(|e| format!("Task join error: {}", e))?
@@ -2928,7 +2956,7 @@ fn maildir_delete(
         fs::remove_file(&path)
             .map_err(|e| format!("Failed to delete .eml file: {}", e))?;
         info!("Deleted email UID {} from {:?}", uid, path);
-        search_index::nudge(&app_handle, &account_id, &mailbox);
+        nudge_index(&account_id, &mailbox);
     }
     Ok(())
 }
@@ -2944,7 +2972,7 @@ fn maildir_delete_many(
     let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
     let removed = delete_maildir_files(&cur_dir, &uid_set);
     if removed > 0 {
-        search_index::nudge(&app_handle, &account_id, &mailbox);
+        nudge_index(&account_id, &mailbox);
     }
 
     let uids: Vec<u32> = uid_set.iter().copied().collect();
@@ -2980,7 +3008,7 @@ fn maildir_set_flags(
         fs::rename(&old_path, &new_path)
             .map_err(|e| format!("Failed to rename file: {}", e))?;
         info!("Updated flags for UID {}: {:?} -> {:?}", uid, old_path.file_name(), new_path.file_name());
-        search_index::nudge(&app_handle, &account_id, &mailbox);
+        nudge_index(&account_id, &mailbox);
     }
     Ok(())
 }
@@ -3065,7 +3093,7 @@ fn maildir_clear_cache(
 
     info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
     if deleted_count > 0 {
-        search_index::sweep_soon(&app_handle); // every folder of every account lost files
+        sweep_index_soon(); // every folder of every account lost files
     }
     Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
 }
@@ -3228,7 +3256,7 @@ fn maildir_migrate_email_dirs(
 
     info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
     if migrated > 0 {
-        search_index::sweep_soon(&app_handle); // folders moved between account dirs
+        sweep_index_soon(); // folders moved between account dirs
     }
     Ok(serde_json::json!({ "migrated": migrated }))
 }
@@ -3663,7 +3691,7 @@ async fn import_backup(
 
     info!("Backup imported: {} emails, {} new accounts", email_count, new_accounts.len());
     if email_count > 0 {
-        search_index::sweep_soon(&app_handle); // files landed in any number of accounts and folders
+        sweep_index_soon(); // files landed in any number of accounts and folders
     }
 
     Ok(ImportResult {
@@ -4028,7 +4056,7 @@ async fn import_mbox(
 
     info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
     if email_count > 0 {
-        search_index::sweep_soon(&app_handle); // a whole mailbox of new files: a full pass, not one nudge per message
+        sweep_index_soon(); // a whole mailbox of new files: a full pass, not one nudge per message
     }
 
     Ok(MboxImportResult {
@@ -4415,6 +4443,37 @@ static DAEMON_CHILD: LazyLock<Mutex<Option<std::process::Child>>> = LazyLock::ne
 /// not this lock, is what guards that path against a concurrent spawn.
 static DAEMON_LIFECYCLE: Mutex<()> = Mutex::new(());
 
+/// Set for the whole window a vault handler holds the index closed and is
+/// copying/moving files (spec addendum D / C4): a crash or restart mid-move
+/// must not let a reconnecting channel spawn a fresh daemon onto the root
+/// being moved. Only `DaemonSuspended`'s constructor/`Drop` touch this.
+static DAEMON_SUSPENDED: AtomicBool = AtomicBool::new(false);
+
+/// RAII guard for `DAEMON_SUSPENDED`. `Drop` clears the flag unconditionally
+/// (including when dropped while unwinding from a panic), so a crashed vault
+/// handler never leaves the daemon permanently unspawnable.
+struct DaemonSuspended;
+
+impl Drop for DaemonSuspended {
+    fn drop(&mut self) {
+        DAEMON_SUSPENDED.store(false, Ordering::SeqCst);
+    }
+}
+
+/// Only the four vault handlers below call this, for exactly the window
+/// between closing the index and either restarting the daemon (success) or
+/// reopening the index (failure).
+fn suspend_daemon() -> DaemonSuspended {
+    DAEMON_SUSPENDED.store(true, Ordering::SeqCst);
+    DaemonSuspended
+}
+
+/// Pure decision (addendum D.2): may `ensure_daemon_socket` spawn a fresh
+/// daemon right now? False while a vault handler holds `DAEMON_SUSPENDED`.
+fn may_spawn_daemon() -> bool {
+    !DAEMON_SUSPENDED.load(Ordering::SeqCst)
+}
+
 /// Set at the very start of `RunEvent::Exit`, before `daemon_channel::stop()`
 /// and `shutdown_daemon_child()` run. A reconnect attempt already blocked
 /// inside `ensure_daemon_running` (e.g. behind `DAEMON_LIFECYCLE` held by a
@@ -4580,6 +4639,15 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
         return Err("app is exiting".into());
     }
 
+    // Addendum D.2: a vault handler holds the index closed and is mid-move.
+    // The socket isn't live (we're past the top-of-function early return), so
+    // spawning here would open/create index.db inside a root being copied or
+    // deleted. A live daemon is still used by the branches above this point —
+    // only a fresh spawn is refused.
+    if !may_spawn_daemon() {
+        return Err("daemon suspended during a vault move".into());
+    }
+
     // Spawn new daemon
     let daemon_bin = find_daemon_binary(app_handle)
         .ok_or_else(|| "mailvault-daemon binary not found".to_string())?;
@@ -4729,6 +4797,34 @@ fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path, lifecy
     Ok(())
 }
 
+/// A vault writer changed `mailbox`: the daemon's index reconciles that folder
+/// soon. Fire-and-forget over the channel; a nudge lost while disconnected is
+/// caught by the reconnect's sweep_soon or the 15-minute sweep (spec §5.8).
+pub(crate) fn nudge_index(account_id: &str, mailbox: &str) {
+    daemon_channel::notify("search_index.nudge", serde_json::json!({"accountId": account_id, "mailbox": mailbox}));
+}
+
+/// A change wider than one folder: a full pass soon.
+pub(crate) fn sweep_index_soon() {
+    daemon_channel::notify("search_index.sweep_soon", serde_json::json!({}));
+}
+
+/// `search_index_close` / `search_index_reopen` on the daemon, blocking, for the
+/// vault handlers: the daemon must release index.db before the app copies it.
+/// No daemon = nothing holds the index: log and go on. While `DAEMON_SUSPENDED`
+/// is held and no daemon is currently live, `ensure_daemon_running` fails fast
+/// instead of spawning one (addendum D.5) — same log-and-go-on outcome.
+pub(crate) fn daemon_index_call(app: &tauri::AppHandle, method: &str) {
+    let result = daemon_ipc_paths().and_then(|(socket, token_path)| {
+        ensure_daemon_running(app, &socket)?;
+        let token = std::fs::read_to_string(&token_path).map_err(|e| e.to_string())?;
+        mailvault_core::daemon_ipc::call(&socket, &token, method, serde_json::json!({}), std::time::Duration::from_secs(60)).map_err(|e| format!("{e:?}"))
+    });
+    if let Err(e) = result {
+        warn!("{method}: {e}");
+    }
+}
+
 /// Stop whichever daemon owns the socket, ours or an orphan left behind by a
 /// crashed app, with the same cleanup as SIGTERM (`daemon.shutdown`), then
 /// reap or kill our own tracked child. Blocking. Takes `DAEMON_LIFECYCLE` so
@@ -4841,7 +4937,9 @@ const DAEMON_OUTDATED: &str = "errors.daemonOutdated";
 /// JSON-RPC 2.0 reserved code for "the method does not exist / is not available".
 const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
 
-/// Per-method budget for reading `daemon_rpc`'s response line (C8). `None`
+/// Per-method reply budget for `daemon_rpc` (C8). When `Some`, `rpc_attempt`
+/// wraps the *whole* attempt in it — connect, auth write, auth read, request
+/// write and response read together, not only the final response read. `None`
 /// (every legacy dotted method, unchanged) means no timeout at all — only
 /// this small, explicit family of search-index/vault-index RPCs gets one.
 /// `search_index_destroy` gets the longest budget because the daemon itself
@@ -4908,7 +5006,10 @@ enum RpcOutcome {
     /// happened strictly before the RPC request line was written — safe to
     /// retry on a fresh connection with a fresh token. Once that write
     /// succeeds, every later failure (response read, timeout, EOF) is
-    /// `retryable: false`: retrying would send the request twice.
+    /// `retryable: false`: retrying would send the request twice. When the
+    /// method has a reply budget (C8), that budget wraps the whole attempt
+    /// above (connect through response read), not only the response read —
+    /// a hang anywhere in the handshake ends up here too, not just a slow reply.
     Unavailable { message: String, retryable: bool },
 }
 
@@ -5091,44 +5192,7 @@ fn daemon_channel_notify(method: String, params: serde_json::Value) {
     daemon_channel::notify(&method, params);
 }
 
-/// `mailvault --extract-pdf`: read PDF bytes from stdin, write extracted text
-/// to stdout. Runs only in its own re-exec'd process (see `attachment_extract.rs`'s
-/// non-macOS `pdf_text_layer`), never in the main app or the search-index
-/// worker thread, so a crash here just exits non-zero/gets killed rather than
-/// taking anything else down. The `catch_unwind` below is a real safety net,
-/// not decorative: `src-tauri/Cargo.toml` sets `[profile.release] panic =
-/// "abort"`, but this workspace's root `Cargo.toml` declares no `[profile]`
-/// table, and Cargo only honours profile settings from the workspace root —
-/// a member manifest's own `[profile.*]` is silently ignored (confirmed via
-/// `cargo add`/`cargo fetch` here, which both warn "profiles for the non
-/// root package will be ignored"). So `panic = "abort"` in src-tauri's
-/// Cargo.toml is dead in every build of this binary, debug or release, and
-/// `catch_unwind` actually catches a `pdf-extract` panic today. It's kept
-/// regardless of that: if the workspace root ever grows a `[profile.release]`
-/// table and revives the abort setting, this still degrades gracefully to a
-/// non-zero exit instead of silently going from "caught" to "uncaught".
-#[cfg(not(target_os = "macos"))]
-fn extract_pdf_subprocess_main() -> i32 {
-    use std::io::Read;
-    let mut bytes = Vec::new();
-    if std::io::stdin().read_to_end(&mut bytes).is_err() {
-        return 1;
-    }
-    match std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(&bytes)) {
-        Ok(Ok(text)) => {
-            print!("{text}");
-            0
-        }
-        _ => 1,
-    }
-}
-
 fn main() {
-    #[cfg(not(target_os = "macos"))]
-    if std::env::args().nth(1).as_deref() == Some("--extract-pdf") {
-        std::process::exit(extract_pdf_subprocess_main());
-    }
-
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
         let location = info.location()
@@ -5259,7 +5323,6 @@ fn main() {
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
-        .manage(search_index::SearchIndexState::default())
         .manage(custody::CustodyState::default())
         .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default())
@@ -5436,8 +5499,6 @@ fn main() {
             github::github_check_star,
             daemon_rpc,
             vault_get_status, vault_inspect_folder, vault_adopt, vault_move_to, vault_move_to_default, vault_reset,
-            search_index::search_index_configure, search_index::search_index_status, search_index::search_index_rebuild,
-            search_index::vault_search, search_index::vault_rows,
             daemon_channel_notify
         ])
         .setup(|app| {
@@ -5537,9 +5598,6 @@ fn main() {
             // before any command can read or write an entry. The index worker
             // reads none of this, so it starts right after.
             custody::open_into(app.handle());
-            // After resolve: the index lives in the vault root resolve just picked.
-            // Only spawns; the worker thread opens the index.
-            search_index::start(app.handle());
             daemon_channel::start(app.handle());
 
             // A vault written before 2.5.0's `.eml` rename, or by any build
@@ -5549,7 +5607,6 @@ fn main() {
             // Maildir, every later one is a single read of the version marker.
             {
                 let root = vault::root(&app.handle()).ok();
-                let app_handle = app.handle().clone();
                 std::thread::spawn(move || {
                     let mig = sweep_vault_eml(root.as_deref());
                     if mig.renamed > 0 || mig.errors > 0 {
@@ -5562,7 +5619,7 @@ fn main() {
                     // between its listing and its read until the next full pass
                     // (SWEEP_EVERY). One full pass after the renames picks them up now.
                     if mig.renamed > 0 {
-                        search_index::sweep_soon(&app_handle);
+                        sweep_index_soon();
                     }
                 });
             }
@@ -5850,10 +5907,6 @@ fn main() {
 #[cfg(test)]
 #[path = "light_batch_tests.rs"]
 mod light_batch_tests;
-
-#[cfg(test)]
-#[path = "search_index_tests.rs"]
-mod search_index_tests;
 
 #[cfg(test)]
 #[path = "custody_tests.rs"]
@@ -6392,6 +6445,34 @@ iVBORw0KGgo=\r\n\
             RpcOutcome::Unavailable { retryable: false, .. } => {}
             other => panic!("even a hang during auth must be non-retryable under a whole-call budget, got {other:?}"),
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.7: DAEMON_SUSPENDED (addendum D) — both tests serialize on this
+    // lock since they're the only two touching the shared DAEMON_SUSPENDED
+    // static and cargo runs tests in parallel by default.
+    // -----------------------------------------------------------------------
+    static SUSPEND_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_suspended_daemon_is_never_spawned() {
+        let _serial = SUSPEND_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        assert!(may_spawn_daemon(), "baseline: nothing suspended yet");
+        let guard = suspend_daemon();
+        assert!(!may_spawn_daemon(), "must not spawn while a vault handler holds the guard");
+        drop(guard);
+        assert!(may_spawn_daemon(), "clears once the guard drops normally");
+    }
+
+    #[test]
+    fn the_suspension_clears_when_the_guard_drops_during_a_panic() {
+        let _serial = SUSPEND_TEST_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        assert!(may_spawn_daemon(), "baseline: nothing suspended yet");
+        let _ = std::panic::catch_unwind(|| {
+            let _guard = suspend_daemon();
+            panic!("simulated crash mid vault-move");
+        });
+        assert!(may_spawn_daemon(), "a panic must not leave the daemon permanently suspended");
     }
 }
 

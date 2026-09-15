@@ -1,7 +1,4 @@
 //! PDF text and OCR for the daemon's search index (moved from the app, spec 2026-09-14 §5.2).
-//! Starts as a no-op on every platform; Task 7 (macOS PDFKit/Vision) and Task 8 (non-macOS
-//! pdf-extract subprocess) replace `current_extractor()`'s body without touching any of
-//! its callers.
 
 use mailvault_core::search_index::attachments::{ExtractError, TextExtractor};
 
@@ -98,7 +95,7 @@ mod imp {
     impl TextExtractor for NativeExtractor {
         fn pdf_text_layer(&self, bytes: &[u8]) -> Result<(String, usize), ExtractError> {
             // `pdf-extract` panics on malformed input, and a panic here would
-            // take the whole app (or the search-index worker thread) down
+            // take the whole daemon (or the search-index worker thread) down
             // with it. Re-exec ourselves as `mailvault-daemon --extract-pdf` so
             // the parsing happens in a disposable child process instead: see
             // `extract_pdf_subprocess_main` in `main.rs` for the child side.
