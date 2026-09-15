@@ -94,6 +94,15 @@ describe('Search index settings', () => {
   });
 
   it('asks before deleting, then turns indexing off and deletes', async () => {
+    // Record what the store said the instant destroy() was called, not after
+    // the mock's promise settles: a reorder that moved the `false` write
+    // below `await destroy()` would still leave the store `false` by the
+    // time this test's later assertions run, but this catches it live.
+    let enabledAtDestroy;
+    destroy.mockImplementation(async () => {
+      enabledAtDestroy = useSettingsStore.getState().searchIndexEnabled;
+      return { ok: true };
+    });
     render(<SearchIndexSettings />);
     await waitFor(() => screen.getByTestId('search-index-status'));
     fireEvent.click(screen.getByTestId('search-index-delete'));
@@ -102,6 +111,7 @@ describe('Search index settings', () => {
     expect(destroy).not.toHaveBeenCalled();
     const buttons = dialog.querySelectorAll('button');
     await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
+    expect(enabledAtDestroy).toBe(false);
     expect(useSettingsStore.getState().searchIndexEnabled).toBe(false);
     expect(destroy).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
@@ -151,5 +161,20 @@ describe('Search index settings', () => {
     await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
     await waitFor(() => expect(screen.getByTestId('search-index-error')).toBeTruthy());
     expect(useSettingsStore.getState().searchIndexEnabled).toBe(false);
+  });
+
+  it('an unreachable daemon restores indexing and shows the translated error', async () => {
+    const daemonError = new Error('MailVault’s background service is not responding. Restart MailVault and try again.');
+    daemonError.code = 'DAEMON_UNAVAILABLE';
+    destroy.mockRejectedValue(daemonError);
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    fireEvent.click(screen.getByTestId('search-index-delete'));
+    const dialog = await screen.findByRole('alertdialog');
+    const buttons = dialog.querySelectorAll('button');
+    await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
+    await waitFor(() => expect(screen.getByTestId('search-index-error').textContent).toBe(daemonError.message));
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(true);
+    expect(screen.getByTestId('search-index-delete').disabled).toBe(false);
   });
 });

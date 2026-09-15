@@ -2113,7 +2113,7 @@
   "settings.searchIndex.unavailable": "現在インデックスを利用できません。検索は保管庫を直接読み込むため、時間がかかります。",
   "settings.searchIndex.rebuild": "インデックスを再構築",
   "settings.searchIndex.delete": "検索インデックスを削除",
-  "settings.searchIndex.deleteConfirmTitle": "検索インデックスを削除しますか?",
+  "settings.searchIndex.deleteConfirmTitle": "検索インデックスを削除しますか？",
   "settings.searchIndex.deleteConfirmBody": "{{size}} のインデックスを削除し、インデックス作成をオフにします。メールはそのまま残ります。インデックスを再構築するまで検索は遅くなります。",
   "settings.searchIndex.deleteConfirm": "インデックスを削除",
   "settings.searchIndex.off": "検索インデックスはオフになっています。検索は保管庫を直接読み込むため、時間がかかります。",

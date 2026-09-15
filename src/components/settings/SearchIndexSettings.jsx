@@ -47,7 +47,8 @@ export function SearchIndexSettings() {
         setError(key);
       }
     } catch (e) {
-      setSearchIndexEnabled(true); // the daemon never got the request
+      // unreachable or died mid-request: keep indexing on; a partly deleted index rebuilds
+      setSearchIndexEnabled(true);
       setError(e?.message || 'errors.daemonUnavailable');
     } finally {
       setDeleting(false);
