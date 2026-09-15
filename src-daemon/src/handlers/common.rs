@@ -43,6 +43,26 @@ pub(crate) fn vault_root(state: &Arc<DaemonState>) -> Result<PathBuf, String> {
     Ok(state.data_dir.clone())
 }
 
+/// I3 fix (Task 2.5 fix round 1): `vault_root` alone is check-then-act — a
+/// route that reads the root and only then writes can still be running when
+/// `vault_close` returns, so a move can copy a store the daemon is still
+/// writing into. Every Phase 2 write route (Tasks 2.6-2.9a) must go through
+/// this instead of a bare `vault_root` call: it takes `vault_gate`'s read
+/// side (shared across concurrent writers), re-checks `vault_root` under the
+/// lock, then runs `f` with the root — `vault_close` takes the gate's write
+/// side to wait out every writer already inside `f` before it closes the
+/// index. MUST run on a blocking thread (`handlers::common::blocking` /
+/// `spawn_blocking`): `vault_gate` is a `std::sync::RwLock` and must never be
+/// held across a tokio `.await`. A job spanning many files/mailboxes calls
+/// this once per file or per mailbox batch, re-checking each time, rather
+/// than once around the whole job — otherwise a move would wait out the
+/// entire job instead of just the current batch.
+pub(crate) fn with_vault_write<T>(state: &Arc<DaemonState>, f: impl FnOnce(&std::path::Path) -> Result<T, String>) -> Result<T, String> {
+    let _gate = state.vault_gate.read().unwrap_or_else(|p| p.into_inner());
+    let root = vault_root(state)?;
+    f(&root)
+}
+
 /// An `E_VAULT_UNAVAILABLE:` reply as an `RpcResponse`. `INTERNAL_ERROR` so
 /// `RpcOutcome::Direct` (`src-tauri/src/main.rs` `map_rpc_error`) passes the
 /// message to JS unchanged instead of treating it as a transport failure.
@@ -130,7 +150,9 @@ mod tests {
     #[test]
     fn str_arg_names_the_missing_key() {
         let err = str_arg(&json!(1), &json!({}), "accountId").unwrap_err();
-        assert_eq!(err.error.unwrap().code, ipc::INVALID_PARAMS);
+        let error = err.error.unwrap();
+        assert_eq!(error.code, ipc::INVALID_PARAMS);
+        assert!(error.message.contains("accountId"), "{}", error.message);
     }
 
     #[test]
@@ -147,14 +169,78 @@ mod tests {
     #[test]
     fn u32_arg_names_the_missing_key() {
         let err = u32_arg(&json!(1), &json!({}), "uid").unwrap_err();
-        assert_eq!(err.error.unwrap().code, ipc::INVALID_PARAMS);
+        let error = err.error.unwrap();
+        assert_eq!(error.code, ipc::INVALID_PARAMS);
+        assert!(error.message.contains("uid"), "{}", error.message);
         assert_eq!(u32_arg(&json!(1), &json!({"uid": 7}), "uid").unwrap(), 7);
     }
 
     #[test]
     fn vec_arg_names_the_missing_key() {
         let err = vec_arg::<u32>(&json!(1), &json!({}), "uids").unwrap_err();
-        assert_eq!(err.error.unwrap().code, ipc::INVALID_PARAMS);
+        let error = err.error.unwrap();
+        assert_eq!(error.code, ipc::INVALID_PARAMS);
+        assert!(error.message.contains("uids"), "{}", error.message);
         assert_eq!(vec_arg::<u32>(&json!(1), &json!({"uids": [1, 2]}), "uids").unwrap(), vec![1, 2]);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 2.5 fix round 1 (I3): with_vault_write
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn with_vault_write_runs_the_closure_with_the_vault_root() {
+        let st = state(true);
+        let root = with_vault_write(&st, |root| Ok(root.to_path_buf())).unwrap();
+        assert_eq!(root, st.data_dir);
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    #[test]
+    fn with_vault_write_refuses_while_the_vault_is_closed_for_a_move() {
+        let st = state(true);
+        st.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        let err = with_vault_write(&st, |_root| Ok(())).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        assert!(err.contains("being moved"), "{err}");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// The other half of the drain lives in `handlers::search_index`'s
+    /// `vault_close` route, tested end-to-end there against a real writer
+    /// blocked inside `with_vault_write`; this only proves the primitive
+    /// itself blocks a concurrent write side.
+    #[test]
+    fn with_vault_write_holds_the_gate_for_the_closures_duration() {
+        let st = state(true);
+        let order = Arc::new(std::sync::Mutex::new(Vec::<&str>::new()));
+        let order2 = Arc::clone(&order);
+        let st2 = Arc::clone(&st);
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let writer = std::thread::spawn(move || {
+            with_vault_write(&st2, |_root| {
+                order2.lock().unwrap().push("writer-in");
+                release_rx.recv().ok();
+                order2.lock().unwrap().push("writer-out");
+                Ok::<(), String>(())
+            })
+        });
+        // Give the writer a chance to actually enter the closure first.
+        while order.lock().unwrap().is_empty() {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let drain_order = Arc::clone(&order);
+        let st3 = Arc::clone(&st);
+        let drainer = std::thread::spawn(move || {
+            let _write_guard = st3.vault_gate.write().unwrap_or_else(|p| p.into_inner());
+            drain_order.lock().unwrap().push("drain-acquired");
+        });
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        assert_eq!(*order.lock().unwrap(), vec!["writer-in"], "the drain must not proceed while the writer is inside with_vault_write");
+        release_tx.send(()).unwrap();
+        writer.join().unwrap().unwrap();
+        drainer.join().unwrap();
+        assert_eq!(*order.lock().unwrap(), vec!["writer-in", "writer-out", "drain-acquired"]);
+        let _ = std::fs::remove_dir_all(&st.data_dir);
     }
 }

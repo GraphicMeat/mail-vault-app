@@ -3601,33 +3601,79 @@ pub(crate) fn daemon_call_blocking(
     let (socket, token_path) = daemon_ipc_paths()?;
     ensure_daemon_running(app, &socket)?;
     let token = std::fs::read_to_string(&token_path).map_err(|e| e.to_string())?;
-    mailvault_core::daemon_ipc::call(&socket, &token, method, params, timeout).map_err(|e| format!("{e:?}"))
+    mailvault_core::daemon_ipc::call(&socket, &token, method, params, timeout).map_err(|e| map_call_error(method, e))
+}
+
+/// I1 fix (Task 2.5 fix round 1): `daemon_call_blocking`'s old
+/// `.map_err(|e| format!("{e:?}"))` handed callers Rust `Debug` text
+/// (`Rpc("E_VAULT_UNAVAILABLE: ...")`, quotes escaped) instead of the
+/// daemon's own message, breaking every `E_*:`/`custody store unavailable:`
+/// text match the 2.9b forwarders and the insights bridge rely on. Same
+/// contract as the async path's `map_rpc_error`: a daemon-answered error
+/// passes through verbatim so its prefix survives; anything before a reply
+/// line was even read (unreachable, refused, timed out) becomes the
+/// `DAEMON_UNAVAILABLE` catalog key; a stale build's METHOD_NOT_FOUND
+/// becomes `DAEMON_OUTDATED`. The real reason always still reaches the log.
+fn map_call_error(method: &str, e: mailvault_core::daemon_ipc::CallError) -> String {
+    use mailvault_core::daemon_ipc::CallError;
+    match e {
+        CallError::Rpc(m) if m.starts_with("Unknown method:") => {
+            warn!("{method}: {m}");
+            DAEMON_OUTDATED.to_string()
+        }
+        CallError::Rpc(m) => m,
+        CallError::Unreachable(m) => {
+            warn!("{method}: {m}");
+            DAEMON_UNAVAILABLE.to_string()
+        }
+    }
 }
 
 /// True when a `daemon_call_blocking` error is the daemon answering
 /// JSON-RPC METHOD_NOT_FOUND — a build that has not been rebuilt yet with
-/// this RPC (server.rs's default arm: `"Unknown method: {method}"`,
-/// textually; the blocking `mailvault_core::daemon_ipc::CallError::Rpc`
-/// variant carries only the message, not the numeric code). Widest window:
-/// the mini's runner daemon reports build id `dev` and restarts on every
-/// spec, so an in-flight vault move can catch an old binary mid-restart.
-/// Callers must treat this exactly like the daemon being unreachable — log
+/// this RPC. Since `map_call_error` (I1) now maps that case to the
+/// `DAEMON_OUTDATED` catalog key up front, this is just an equality check —
+/// callers must treat it exactly like the daemon being unreachable — log
 /// and continue the vault operation — never as a hard failure of the move.
 fn is_stale_daemon_method(e: &str) -> bool {
-    e.contains("Unknown method:")
+    e == DAEMON_OUTDATED
+}
+
+/// I2 fix (Task 2.5 fix round 1): pure decision for `daemon_vault_lifecycle_call`
+/// below — a failed `vault_close`/`vault_reopen` must stop the daemon
+/// (`Err`); a successful one must leave it running (`Ok`). Split out so the
+/// decision itself is unit-testable without touching the real socket/global
+/// lifecycle state.
+fn should_stop_after_lifecycle_call(result: &Result<serde_json::Value, String>) -> bool {
+    result.is_err()
 }
 
 /// `vault_close` / `vault_reopen` on the daemon, blocking, for the vault
 /// handlers: the daemon must release index.db (and, from Task 2.9a/b,
 /// custody.db) before the app copies it. No daemon, or a daemon too old to
 /// know the method, both mean nothing holds either store: log and go on.
+///
+/// I2 fix (Task 2.5 fix round 1): a failed close/reopen against a LIVE
+/// daemon was previously just logged — the daemon could still be holding
+/// index.db/custody.db open while the app started copying the root, and a
+/// failed reopen left `vault_closed` stuck `true` forever, answering "the
+/// vault is being moved" to every read/write until the app restarted. Now
+/// any `Err` stops the daemon: cheap when there already isn't one to stop,
+/// and `DAEMON_SUSPENDED` (held by every vault handler across its whole
+/// move) blocks a respawn until the guard drops, so this can't race the
+/// move's own copy step. The channel respawns a fresh daemon against
+/// whichever root is current once the guard drops.
 fn daemon_vault_lifecycle_call(app: &tauri::AppHandle, method: &str, timeout: std::time::Duration) {
-    if let Err(e) = daemon_call_blocking(app, method, serde_json::json!({}), timeout) {
-        if is_stale_daemon_method(&e) {
+    let result = daemon_call_blocking(app, method, serde_json::json!({}), timeout);
+    if let Err(e) = &result {
+        if is_stale_daemon_method(e) {
             warn!("{method}: daemon does not know this method yet (stale build); continuing as if unreachable");
         } else {
-            warn!("{method}: {e}");
+            warn!("{method} failed ({e}); stopping the daemon so nothing holds the vault");
         }
+    }
+    if should_stop_after_lifecycle_call(&result) {
+        stop_daemon();
     }
 }
 
@@ -4939,21 +4985,55 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Task 2.5 Step 3: vault_close/vault_reopen stale-daemon-reply mapping
+    // Task 2.5 fix round 1 (I1): map_call_error / is_stale_daemon_method
     // -----------------------------------------------------------------------
 
     #[test]
+    fn map_call_error_a_stale_method_not_found_becomes_the_outdated_catalog_key() {
+        let e = mailvault_core::daemon_ipc::CallError::Rpc("Unknown method: vault_close".to_string());
+        assert_eq!(crate::map_call_error("vault_close", e), crate::DAEMON_OUTDATED);
+    }
+
+    #[test]
+    fn map_call_error_a_daemon_answered_error_passes_through_verbatim() {
+        let e = mailvault_core::daemon_ipc::CallError::Rpc(
+            "E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string(),
+        );
+        assert_eq!(
+            crate::map_call_error("maildir_store", e),
+            "E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved"
+        );
+    }
+
+    #[test]
+    fn map_call_error_an_unreachable_daemon_becomes_the_unavailable_catalog_key() {
+        let e = mailvault_core::daemon_ipc::CallError::Unreachable("cannot connect to daemon: os error 61".to_string());
+        assert_eq!(crate::map_call_error("vault_close", e), crate::DAEMON_UNAVAILABLE);
+    }
+
+    #[test]
     fn a_method_not_found_reply_is_recognized_as_a_stale_daemon_method() {
-        // The exact shape `daemon_ipc::call` hands back for a JSON-RPC
-        // METHOD_NOT_FOUND error (server.rs's default arm), formatted through
-        // `{e:?}` at the `daemon_call_blocking` call site.
-        assert!(crate::is_stale_daemon_method("Rpc(\"Unknown method: vault_close\")"));
+        assert!(crate::is_stale_daemon_method(crate::DAEMON_OUTDATED));
     }
 
     #[test]
     fn other_daemon_errors_are_not_mistaken_for_a_stale_method() {
-        assert!(!crate::is_stale_daemon_method("Unreachable(\"cannot connect to daemon: os error 61\")"));
-        assert!(!crate::is_stale_daemon_method("Rpc(\"custody store unavailable: closed\")"));
+        assert!(!crate::is_stale_daemon_method(crate::DAEMON_UNAVAILABLE));
+        assert!(!crate::is_stale_daemon_method("custody store unavailable: closed"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 2.5 fix round 1 (I2): should_stop_after_lifecycle_call
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn a_failed_lifecycle_call_must_stop_the_daemon() {
+        assert!(crate::should_stop_after_lifecycle_call(&Err("errors.daemonUnavailable".to_string())));
+    }
+
+    #[test]
+    fn a_successful_lifecycle_call_must_not_stop_the_daemon() {
+        assert!(!crate::should_stop_after_lifecycle_call(&Ok(serde_json::Value::Null)));
     }
 
     // -----------------------------------------------------------------------

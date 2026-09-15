@@ -305,6 +305,7 @@ async fn daemon_main() {
         app_dir: data_dir.clone(),
         mail_dir_ok,
         vault_closed: std::sync::atomic::AtomicBool::new(false),
+        vault_gate: std::sync::RwLock::new(()),
         started_at: std::time::Instant::now(),
         llm: llm_state,
         inference: inference_engine,

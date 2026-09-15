@@ -13,6 +13,7 @@ use serde_json::Value;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::info;
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     let st = Arc::clone(&state.search_index);
@@ -28,16 +29,45 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // Two minutes: the worker finishes its current batch or compaction first.
         "search_index_destroy" => done(id, blocking(move || si::destroy(&st, Duration::from_secs(120))).await),
         // Set the flag before closing: a request racing in right now must see
-        // the vault as unavailable, not slip through between the two.
+        // the vault as unavailable, not slip through between the two. I3 fix
+        // (Task 2.5 fix round 1): the flag alone is check-then-act — a
+        // writer that read the root before the flag flipped can still be
+        // mid-write. Drain: take (and immediately drop) `vault_gate`'s write
+        // side, which waits for every writer already inside
+        // `handlers::common::with_vault_write` to finish, before closing the
+        // index. M1: log lines so an e2e run can prove this reached a live
+        // daemon (`vault_close: closed` on completion), not just infer it.
         "vault_close" => {
+            info!("vault_close: closing the search index");
             state.vault_closed.store(true, Ordering::SeqCst);
-            done(id, blocking(move || { si::close(&st); Value::Null }).await)
+            let gate_state = Arc::clone(state);
+            let reply = done(
+                id,
+                blocking(move || {
+                    drop(gate_state.vault_gate.write().unwrap_or_else(|p| p.into_inner()));
+                    si::close(&st);
+                    Value::Null
+                })
+                .await,
+            );
+            info!("vault_close: closed");
+            reply
         }
-        // Reverse order: only clear the flag once the reopen (and, from Task
-        // 2.9a/b, custody's) has actually installed its connection.
+        // Reverse order: only clear the flag once `si::reopen` has actually
+        // installed its connection... for the search index. M2: this
+        // comment previously overstated what `si::reopen` does — it only
+        // ends the current switch and sends `Signal::Reopen`; the worker
+        // opens the new connection later, so in practice the flag clears
+        // before the index itself is open (harmless for the index, which
+        // answers `available: false` until then). From Task 2.9a, custody's
+        // reopen must be synchronous (installed) before this flag clears, or
+        // a gated custody route could pass the gate and still hit
+        // `custody store unavailable: closed`.
         "vault_reopen" => {
+            info!("vault_reopen: reopening");
             let reply = done(id, blocking(move || { si::reopen(&st); Value::Null }).await);
             state.vault_closed.store(false, Ordering::SeqCst);
+            info!("vault_reopen: reopened");
             reply
         }
         "vault_search" => {
@@ -63,7 +93,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 mod tests {
     use crate::ipc;
     use crate::server::DaemonState;
-    use serde_json::json;
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     fn st() -> (tempfile::TempDir, std::sync::Arc<DaemonState>) {
         let tmp = tempfile::tempdir().unwrap();
@@ -120,14 +152,64 @@ mod tests {
         assert_eq!(call(&s, "vault_reopen", json!({})).await.result, Some(serde_json::Value::Null));
     }
 
+    /// M3 rename (Task 2.5 fix round 1): the old name
+    /// `vault_close_sets_the_flag_before_closing_and_reopen_clears_it_after`
+    /// promised an order this body cannot observe (both calls already
+    /// returned by the time either assertion runs) — it only checks the
+    /// flag's value after each call, so it's named for that.
     #[tokio::test]
-    async fn vault_close_sets_the_flag_before_closing_and_reopen_clears_it_after() {
+    async fn vault_close_sets_the_flag_and_vault_reopen_clears_it() {
         let (_t, s) = st();
         assert!(!s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
         call(&s, "vault_close", json!({})).await;
         assert!(s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
         call(&s, "vault_reopen", json!({})).await;
         assert!(!s.vault_closed.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    // -------------------------------------------------------------------
+    // Task 2.5 fix round 1 (I3): the writer barrier, exercised through the
+    // real `vault_close` route rather than the raw `vault_gate` primitive
+    // (that half is covered directly in `handlers::common`'s tests).
+    // -------------------------------------------------------------------
+
+    /// A writer holding the gate (via `with_vault_write`, as every real
+    /// route will from Task 2.6 on) makes `vault_close` wait until it
+    /// finishes, instead of returning while the write may still be in
+    /// flight.
+    #[tokio::test]
+    async fn vault_close_waits_for_an_in_flight_writer_holding_the_gate() {
+        let (_t, s) = st();
+        let (release_tx, release_rx) = std::sync::mpsc::channel::<()>();
+        let s_writer = Arc::clone(&s);
+        let writer = tokio::task::spawn_blocking(move || {
+            crate::handlers::common::with_vault_write(&s_writer, |_root| {
+                release_rx.recv().ok();
+                Ok::<(), String>(())
+            })
+        });
+        // Give the writer a real chance to acquire the gate before vault_close starts.
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let s_close = Arc::clone(&s);
+        let closer = tokio::spawn(async move { call(&s_close, "vault_close", json!({})).await });
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(!closer.is_finished(), "vault_close must wait for the in-flight writer to release the gate");
+        release_tx.send(()).unwrap();
+        writer.await.unwrap().unwrap();
+        let resp = closer.await.unwrap();
+        assert_eq!(resp.result, Some(Value::Null));
+    }
+
+    /// A writer that starts only after `vault_close` has already set the
+    /// flag sees the moving error immediately — it never has to wait for a
+    /// close that already happened.
+    #[tokio::test]
+    async fn a_writer_starting_after_close_sees_the_moving_error() {
+        let (_t, s) = st();
+        call(&s, "vault_close", json!({})).await;
+        let err = crate::handlers::common::with_vault_write(&s, |_root| Ok::<(), String>(())).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        assert!(err.contains("being moved"), "{err}");
     }
 
     /// A route gated on `vault_root` (Task 2.6+) must see the vault as

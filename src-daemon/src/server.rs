@@ -31,6 +31,17 @@ pub struct DaemonState {
     /// `handlers::common::vault_root` while this is set, so nothing writes
     /// into a root the app is mid-copy on.
     pub vault_closed: AtomicBool,
+    /// I3 fix (Task 2.5 fix round 1): `vault_closed` alone is check-then-act
+    /// — a writer that already read `vault_root` can still be mid-write when
+    /// `vault_close` returns. Every vault write takes this lock's read side
+    /// via `handlers::common::with_vault_write` (many writers at once, never
+    /// blocking each other); `vault_close` takes the write side just long
+    /// enough to drain every writer already in flight before it closes the
+    /// index (and, from Task 2.9a/b, custody). Always taken from a blocking
+    /// thread (`spawn_blocking`), never held across a tokio `.await`. Long
+    /// jobs (Tasks 2.8, 2.9a) take it per file/mailbox batch, never once
+    /// around the whole job, so a drain can't be blocked out for minutes.
+    pub vault_gate: std::sync::RwLock<()>,
     pub started_at: std::time::Instant,
     pub llm: Arc<llm::LlmState>,
     pub inference: Arc<inference::InferenceEngine>,
@@ -301,6 +312,7 @@ impl DaemonState {
             app_dir: app_dir.clone(),
             mail_dir_ok,
             vault_closed: AtomicBool::new(false),
+            vault_gate: std::sync::RwLock::new(()),
             started_at: std::time::Instant::now(),
             llm: Arc::new(llm::LlmState::new(app_dir.clone())),
             inference: Arc::new(inference::InferenceEngine::new()),
