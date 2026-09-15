@@ -41,6 +41,14 @@ pub fn stop() {
     CONNECTED.store(false, SeqCst);
 }
 
+/// Whether the long-lived channel is connected right now. `daemon_rpc`'s fast
+/// path (C7) reads this to decide whether a live, already-handshaken daemon
+/// is worth skipping `ensure_daemon_running` for — never blocks, never touches
+/// the daemon itself.
+pub(crate) fn is_connected() -> bool {
+    CONNECTED.load(SeqCst)
+}
+
 /// A connection has to survive at least this long before a later drop resets
 /// backoff back to 250 ms. Without this, a daemon that accepts `channel.open`
 /// and then dies immediately (a stale/crash-looping sidecar) would reconnect

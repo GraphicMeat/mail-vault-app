@@ -4599,6 +4599,9 @@ fn ensure_daemon_socket(app_handle: &tauri::AppHandle, socket_path: &Path) -> Re
     // could otherwise match the respawned daemon's socket by coincidence and
     // let it skip the build-mismatch check in ensure_daemon_running.
     VERIFIED_SOCKET_INO.store(0, Ordering::SeqCst);
+    // A cached token is only trustworthy alongside the inode it was read
+    // for; the fresh child above has never had its token read yet.
+    set_cached_daemon_token(None);
 
     // Wait for socket to appear (up to 3 seconds)
     for _ in 0..30 {
@@ -4654,6 +4657,22 @@ pub fn shutdown_daemon_child() {
 static VERIFIED_SOCKET_INO: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 /// One restart per app run for a build mismatch; a stale staged sidecar must not loop.
 static RESTARTED_FOR_BUILD: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Auth token cached from the last slow-path `ensure_daemon_running` run, for
+/// `daemon_rpc`'s fast path (C7) to reuse without a file read. Only ever
+/// trustworthy alongside a matching `VERIFIED_SOCKET_INO`: cleared at every
+/// site that resets that inode to 0 (a fresh spawn, or `stop_daemon_locked`),
+/// so a token from a build-mismatch restart or a stopped daemon is never
+/// replayed against whatever now owns the socket path.
+static DAEMON_TOKEN: Mutex<Option<String>> = Mutex::new(None);
+
+fn cached_daemon_token() -> Option<String> {
+    DAEMON_TOKEN.lock().unwrap_or_else(|p| p.into_inner()).clone()
+}
+
+fn set_cached_daemon_token(token: Option<String>) {
+    *DAEMON_TOKEN.lock().unwrap_or_else(|p| p.into_inner()) = token;
+}
 
 fn socket_ino(path: &Path) -> u64 {
     use std::os::unix::fs::MetadataExt;
@@ -4801,6 +4820,7 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
     }
     shutdown_daemon_child(); // reaps an exited child; SIGTERM then SIGKILL if ours is still up
     VERIFIED_SOCKET_INO.store(0, std::sync::atomic::Ordering::SeqCst);
+    set_cached_daemon_token(None);
 }
 
 /// Marker string `daemon_rpc` returns for every failure before a response
@@ -4809,68 +4829,117 @@ fn stop_daemon_locked(_lifecycle: &MutexGuard<'_, ()>) {
 /// a literal `errors.` catalog key — the real reason goes to `warn!` instead.
 const DAEMON_UNAVAILABLE: &str = "errors.daemonUnavailable";
 
-#[tauri::command]
-async fn daemon_rpc(
-    app_handle: tauri::AppHandle,
-    method: String,
-    params: serde_json::Value,
-) -> Result<serde_json::Value, String> {
+/// Returned instead of the daemon's own message when a JSON-RPC error is
+/// METHOD_NOT_FOUND (C5): a `BuildCheck::Accept`'d daemon (still on the old
+/// build after our one restart) is missing this RPC entirely. A catalog key,
+/// same contract as `DAEMON_UNAVAILABLE` — the frontend text-matches it.
+const DAEMON_OUTDATED: &str = "errors.daemonOutdated";
+
+/// JSON-RPC 2.0 reserved code for "the method does not exist / is not available".
+const JSONRPC_METHOD_NOT_FOUND: i64 = -32601;
+
+/// Per-method budget for reading `daemon_rpc`'s response line (C8). `None`
+/// (every legacy dotted method, unchanged) means no timeout at all — only
+/// this small, explicit family of search-index/vault-index RPCs gets one.
+/// `search_index_destroy` gets the longest budget because the daemon itself
+/// waits up to 120s for the index worker to finish before replying.
+fn reply_timeout(method: &str) -> Option<std::time::Duration> {
+    match method {
+        "search_index_destroy" => Some(std::time::Duration::from_secs(150)),
+        "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild" => {
+            Some(std::time::Duration::from_secs(30))
+        }
+        _ => None,
+    }
+}
+
+/// Pure decision (C7): may `daemon_rpc` skip `ensure_daemon_running` and its
+/// `spawn_blocking` entirely? Only when the long-lived channel is already
+/// connected to a live daemon, that daemon's socket inode already passed the
+/// build check (`verified_ino != 0`), and a token was cached from an earlier
+/// slow-path run. Any one of those missing forces the slow path — this never
+/// does I/O itself, just the decision.
+fn rpc_fast_path(connected: bool, verified_ino: u64, token: Option<&str>) -> Option<String> {
+    if connected && verified_ino != 0 {
+        token.map(str::to_owned)
+    } else {
+        None
+    }
+}
+
+/// Maps a JSON-RPC error object to what `daemon_rpc` returns to the frontend.
+/// METHOD_NOT_FOUND becomes the `errors.daemonOutdated` catalog key (C5,
+/// logged with the method); every other code keeps the daemon's own message,
+/// unchanged from before this task.
+fn map_rpc_error(error: &serde_json::Value, method: &str) -> String {
+    if error.get("code").and_then(|c| c.as_i64()) == Some(JSONRPC_METHOD_NOT_FOUND) {
+        warn!("daemon_rpc {method}: daemon replied METHOD_NOT_FOUND (stale/accepted build)");
+        return DAEMON_OUTDATED.to_string();
+    }
+    error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown daemon error").to_string()
+}
+
+/// One attempt at the auth handshake + JSON-RPC round trip over a fresh
+/// connection, given an already-known token (fast or slow path — this
+/// function doesn't care which).
+enum RpcOutcome {
+    /// A successful RPC result.
+    Ok(serde_json::Value),
+    /// A real response from the daemon that isn't a plain success: an
+    /// RPC-level error (already mapped by `map_rpc_error`) or an unparseable
+    /// response line. Returned to the caller exactly as before this task —
+    /// never wrapped in `DAEMON_UNAVAILABLE`, never retried (the request line
+    /// was already written and answered).
+    Direct(String),
+    /// A transport/auth-level failure. `retryable` is true only when it
+    /// happened strictly before the RPC request line was written — safe to
+    /// retry on a fresh connection with a fresh token. Once that write
+    /// succeeds, every later failure (response read, timeout, EOF) is
+    /// `retryable: false`: retrying would send the request twice.
+    Unavailable { message: String, retryable: bool },
+}
+
+async fn rpc_attempt(
+    socket_path: &Path,
+    token: &str,
+    method: &str,
+    params: &serde_json::Value,
+    timeout: Option<std::time::Duration>,
+) -> RpcOutcome {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::UnixStream;
 
-    let method_name = method.clone();
-    let unavailable = |why: String| {
-        warn!("daemon_rpc {method_name}: {why}");
-        DAEMON_UNAVAILABLE.to_string()
+    let stream = match UnixStream::connect(socket_path).await {
+        Ok(s) => s,
+        Err(e) => return RpcOutcome::Unavailable { message: format!("cannot connect to daemon: {e}"), retryable: true },
     };
-
-    let (socket_path, token_path) = daemon_ipc_paths().map_err(unavailable)?;
-    // Blocking: spawn check, heartbeat, possibly a restart, and the token
-    // file read — none of it belongs on a tokio worker, so both run inside
-    // the one spawn_blocking closure (mirrors daemon_channel::connect).
-    let token = {
-        let app = app_handle.clone();
-        let sock = socket_path.clone();
-        let tok_path = token_path.clone();
-        tokio::task::spawn_blocking(move || {
-            ensure_daemon_running(&app, &sock)?;
-            std::fs::read_to_string(&tok_path).map_err(|e| format!("daemon token not found: {e}"))
-        })
-        .await
-        .map_err(|e| unavailable(format!("task join error: {e}")))?
-        .map_err(unavailable)?
-    };
-
-    // Connect to daemon socket
-    let stream = UnixStream::connect(&socket_path)
-        .await
-        .map_err(|e| unavailable(format!("cannot connect to daemon: {e}")))?;
-
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
 
-    // Send auth handshake
+    // Auth handshake
     let auth_msg = serde_json::json!({"token": token.trim()});
     let mut buf = serde_json::to_vec(&auth_msg).unwrap();
     buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| unavailable(e.to_string()))?;
-
-    // Read auth response
-    let auth_resp = lines.next_line().await
-        .map_err(|e| unavailable(e.to_string()))?
-        .ok_or_else(|| unavailable("daemon closed connection during auth".to_string()))?;
-
-    let auth_result: serde_json::Value = serde_json::from_str(&auth_resp)
-        .map_err(|e| unavailable(format!("invalid auth response: {e}")))?;
-
-    if auth_result.get("error").is_some() {
-        return Err(unavailable("daemon authentication failed".to_string()));
+    if let Err(e) = writer.write_all(&buf).await {
+        return RpcOutcome::Unavailable { message: e.to_string(), retryable: true };
     }
 
-    // Send JSON-RPC request
+    let auth_resp = match lines.next_line().await {
+        Ok(Some(l)) => l,
+        Ok(None) => return RpcOutcome::Unavailable { message: "daemon closed connection during auth".to_string(), retryable: true },
+        Err(e) => return RpcOutcome::Unavailable { message: e.to_string(), retryable: true },
+    };
+    let auth_result: serde_json::Value = match serde_json::from_str(&auth_resp) {
+        Ok(v) => v,
+        Err(e) => return RpcOutcome::Unavailable { message: format!("invalid auth response: {e}"), retryable: true },
+    };
+    if auth_result.get("error").is_some() {
+        return RpcOutcome::Unavailable { message: "daemon authentication failed".to_string(), retryable: true };
+    }
+
+    // JSON-RPC request
     static RPC_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = RPC_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-
     let rpc_req = serde_json::json!({
         "jsonrpc": "2.0",
         "method": method,
@@ -4879,22 +4948,110 @@ async fn daemon_rpc(
     });
     let mut buf = serde_json::to_vec(&rpc_req).unwrap();
     buf.push(b'\n');
-    writer.write_all(&buf).await.map_err(|e| unavailable(e.to_string()))?;
-
-    // Read response
-    let resp_line = lines.next_line().await
-        .map_err(|e| unavailable(e.to_string()))?
-        .ok_or_else(|| unavailable("daemon closed connection before responding".to_string()))?;
-
-    let resp: serde_json::Value = serde_json::from_str(&resp_line)
-        .map_err(|e| format!("Invalid RPC response: {}", e))?;
-
-    if let Some(error) = resp.get("error") {
-        let msg = error.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown daemon error");
-        return Err(msg.to_string());
+    if let Err(e) = writer.write_all(&buf).await {
+        // write_all failing partway through leaves no guarantee the daemon
+        // saw a coherent request line, so still safe to retry.
+        return RpcOutcome::Unavailable { message: e.to_string(), retryable: true };
     }
 
-    Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
+    // From here on, the request is on the wire: never retryable.
+    let read = lines.next_line();
+    let read_result = match timeout {
+        Some(t) => match tokio::time::timeout(t, read).await {
+            Ok(r) => r,
+            Err(_) => return RpcOutcome::Unavailable { message: format!("no reply in {}s", t.as_secs()), retryable: false },
+        },
+        None => read.await,
+    };
+    let resp_line = match read_result {
+        Ok(Some(l)) => l,
+        Ok(None) => return RpcOutcome::Unavailable { message: "daemon closed connection before responding".to_string(), retryable: false },
+        Err(e) => return RpcOutcome::Unavailable { message: e.to_string(), retryable: false },
+    };
+
+    let resp: serde_json::Value = match serde_json::from_str(&resp_line) {
+        Ok(v) => v,
+        Err(e) => return RpcOutcome::Direct(format!("Invalid RPC response: {e}")),
+    };
+
+    if let Some(error) = resp.get("error") {
+        return RpcOutcome::Direct(map_rpc_error(error, method));
+    }
+
+    RpcOutcome::Ok(resp.get("result").cloned().unwrap_or(serde_json::Value::Null))
+}
+
+#[tauri::command]
+async fn daemon_rpc(
+    app_handle: tauri::AppHandle,
+    method: String,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let (socket_path, token_path) = daemon_ipc_paths().map_err(|e| {
+        warn!("daemon_rpc {method}: {e}");
+        DAEMON_UNAVAILABLE.to_string()
+    })?;
+    let timeout = reply_timeout(&method);
+
+    // Fast path (C7): a live, build-verified channel with a cached token
+    // skips ensure_daemon_running (and its spawn_blocking) entirely. No
+    // blocking I/O here — is_connected/the atomics/the token mutex are all
+    // just reading in-memory state.
+    let fast_token = rpc_fast_path(
+        daemon_channel::is_connected(),
+        VERIFIED_SOCKET_INO.load(Ordering::SeqCst),
+        cached_daemon_token().as_deref(),
+    );
+
+    if let Some(token) = fast_token {
+        match rpc_attempt(&socket_path, &token, &method, &params, timeout).await {
+            RpcOutcome::Ok(v) => return Ok(v),
+            RpcOutcome::Direct(msg) => return Err(msg),
+            RpcOutcome::Unavailable { retryable: false, message } => {
+                warn!("daemon_rpc {method}: {message}");
+                return Err(DAEMON_UNAVAILABLE.to_string());
+            }
+            RpcOutcome::Unavailable { retryable: true, message } => {
+                // A restarted daemon issues a new token; ours (and the
+                // inode it was verified against) can no longer be trusted.
+                warn!("daemon_rpc {method}: fast path failed ({message}); retrying once through the slow path");
+                set_cached_daemon_token(None);
+                VERIFIED_SOCKET_INO.store(0, Ordering::SeqCst);
+            }
+        }
+    }
+
+    // Slow path: verify (and, if needed, spawn/restart) the daemon, then
+    // read a fresh token. Blocking I/O, so it all runs inside spawn_blocking
+    // (mirrors daemon_channel::connect).
+    let token = {
+        let app = app_handle.clone();
+        let sock = socket_path.clone();
+        let tok_path = token_path.clone();
+        let joined = tokio::task::spawn_blocking(move || {
+            ensure_daemon_running(&app, &sock)?;
+            std::fs::read_to_string(&tok_path).map_err(|e| format!("daemon token not found: {e}"))
+        })
+        .await
+        .map_err(|e| format!("task join error: {e}"));
+        match joined {
+            Ok(Ok(t)) => t,
+            Ok(Err(e)) | Err(e) => {
+                warn!("daemon_rpc {method}: {e}");
+                return Err(DAEMON_UNAVAILABLE.to_string());
+            }
+        }
+    };
+    set_cached_daemon_token(Some(token.clone()));
+
+    match rpc_attempt(&socket_path, &token, &method, &params, timeout).await {
+        RpcOutcome::Ok(v) => Ok(v),
+        RpcOutcome::Direct(msg) => Err(msg),
+        RpcOutcome::Unavailable { message, .. } => {
+            warn!("daemon_rpc {method}: {message}");
+            Err(DAEMON_UNAVAILABLE.to_string())
+        }
+    }
 }
 
 /// The daemon bridge: send one fire-and-forget notification on the channel.
@@ -5997,6 +6154,75 @@ iVBORw0KGgo=\r\n\
         let full = parse_eml_bytes(&raw, 1, vec![]).unwrap();
         let light = parse_eml_bytes_light(&raw, 1, vec![]).unwrap();
         assert_eq!(full.text, light.text);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.6b: daemon_rpc hardening — reply_timeout (C8)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn reply_timeout_gives_search_index_destroy_the_longest_budget() {
+        assert_eq!(crate::reply_timeout("search_index_destroy"), Some(std::time::Duration::from_secs(150)));
+    }
+
+    #[test]
+    fn reply_timeout_gives_the_search_and_vault_index_family_thirty_seconds() {
+        for method in ["vault_search", "vault_rows", "search_index_status", "search_index_configure", "search_index_rebuild"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    #[test]
+    fn reply_timeout_is_none_for_legacy_dotted_methods() {
+        assert_eq!(crate::reply_timeout("sync.now"), None);
+        assert_eq!(crate::reply_timeout("daemon.heartbeat"), None);
+        assert_eq!(crate::reply_timeout("snapshot.create"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.6b: daemon_rpc hardening — rpc_fast_path (C7)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn rpc_fast_path_allows_a_connected_verified_cached_call() {
+        assert_eq!(crate::rpc_fast_path(true, 42, Some("tok")), Some("tok".to_string()));
+    }
+
+    #[test]
+    fn rpc_fast_path_refuses_when_the_channel_is_not_connected() {
+        assert_eq!(crate::rpc_fast_path(false, 42, Some("tok")), None);
+    }
+
+    #[test]
+    fn rpc_fast_path_refuses_an_unverified_inode() {
+        assert_eq!(crate::rpc_fast_path(true, 0, Some("tok")), None);
+    }
+
+    #[test]
+    fn rpc_fast_path_refuses_without_a_cached_token() {
+        assert_eq!(crate::rpc_fast_path(true, 42, None), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.6b: daemon_rpc hardening — map_rpc_error (C5)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn map_rpc_error_method_not_found_becomes_the_outdated_catalog_key() {
+        let err = serde_json::json!({"code": -32601, "message": "Unknown method: search_index_status"});
+        assert_eq!(crate::map_rpc_error(&err, "search_index_status"), "errors.daemonOutdated");
+    }
+
+    #[test]
+    fn map_rpc_error_any_other_code_keeps_the_daemons_own_message() {
+        let err = serde_json::json!({"code": -32000, "message": "vault is busy"});
+        assert_eq!(crate::map_rpc_error(&err, "vault_search"), "vault is busy");
+    }
+
+    #[test]
+    fn map_rpc_error_falls_back_when_the_message_is_missing() {
+        let err = serde_json::json!({"code": -32000});
+        assert_eq!(crate::map_rpc_error(&err, "vault_search"), "Unknown daemon error");
     }
 }
 
