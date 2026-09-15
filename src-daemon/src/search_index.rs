@@ -745,7 +745,7 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
     let mut completed = full && listed;
     let mut parsed = 0usize;
     for (account, dir) in dirs {
-        let mut on_batch = |_n: usize| emit(st);
+        let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); };
         match reconcile::reconcile_mailbox(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &mut on_batch) {
             // configure/rebuild/close asked us to stop
             Ok(s) => {
@@ -781,8 +781,42 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
     SweepOutcome { parsed, completed }
 }
 
+/// Test seam for e2e only: how long to pause after `done` files. Pure, so the
+/// unit test never touches the process environment.
+pub(crate) fn batch_pause(done: usize, setting: Option<&str>) -> Option<Duration> {
+    if done == 0 || done % reconcile::BATCH != 0 {
+        return None;
+    }
+    let ms: u64 = setting?.trim().parse().ok()?;
+    Some(Duration::from_millis(ms.min(30_000)))
+}
+
+#[cfg(debug_assertions)]
+fn e2e_pause_after(done: usize) {
+    let setting = std::env::var("MAILVAULT_E2E_INDEX_BATCH_PAUSE_MS").ok();
+    if let Some(d) = batch_pause(done, setting.as_deref()) {
+        std::thread::sleep(d);
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn e2e_pause_after(_done: usize) {}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_e2e_batch_pause_applies_only_to_full_batches_and_a_valid_setting() {
+        use crate::search_index::batch_pause;
+        use std::time::Duration;
+        assert_eq!(batch_pause(500, Some("4000")), Some(Duration::from_millis(4000)));
+        assert_eq!(batch_pause(1000, Some("4000")), Some(Duration::from_millis(4000)));
+        assert_eq!(batch_pause(40, Some("4000")), None, "a small vault never pauses");
+        assert_eq!(batch_pause(0, Some("4000")), None);
+        assert_eq!(batch_pause(500, None), None);
+        assert_eq!(batch_pause(500, Some("soon")), None);
+        assert_eq!(batch_pause(500, Some("999999")), Some(Duration::from_secs(30)), "capped");
+    }
+
     fn eml_html() -> Vec<u8> {
         b"From: Ann Lee <ann@x.test>\r\nTo: Bob <bob@x.test>\r\nCc: carol@x.test\r\nSubject: Quarterly numbers\r\nMessage-ID: <q@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Revenue&nbsp;grew <b>12%</b></p><style>x{}</style>\r\n".to_vec()
     }

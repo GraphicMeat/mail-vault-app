@@ -20,6 +20,7 @@ import {
   seedLegacyCustody,
   seedCorruptCustody,
   seedAttachmentSearchMessage,
+  seedIndexBacklog,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 import { startMockGraph } from './tests/e2e/mockGraph.js';
@@ -387,6 +388,10 @@ export const config = {
           // only (a release binary never looks at it), and even then honoured
           // only for a loopback base.
           MAILVAULT_GRAPH_BASE: mockGraph.base,
+          // Debug daemons pause this long after every 500 indexed files, so an index
+          // pass over a seeded backlog lasts long enough to see and to interrupt.
+          // Vaults under 500 files never pause. Release builds ignore it.
+          MAILVAULT_E2E_INDEX_BATCH_PAUSE_MS: '4000',
         },
       });
 
@@ -448,6 +453,11 @@ export const config = {
       // runs during app setup.
       if ((specs || []).some((s) => s.includes('connected-attachment-search'))) {
         seedAttachmentSearchMessage(testDataDir, accounts[0].id);
+      }
+      // A real index backlog before boot (search index modal, destroy, resume).
+      const backlog = { 'connected-search-index-modal': 2000, 'connected-search-index-destroy': 1500, 'connected-search-index-resume': 3000 };
+      for (const [name, count] of Object.entries(backlog)) {
+        if ((specs || []).some((s) => s.includes(name))) seedIndexBacklog(testDataDir, accounts[0].id, count);
       }
     }
   },

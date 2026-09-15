@@ -1194,6 +1194,31 @@ export function seedAttachmentSearchMessage(home, accountId) {
   writeFileSync(join(cur, `${ATTACHMENT_SEARCH_UID}:2,S.eml`), raw);
 }
 
+/** A folder no mock server lists, so no mailbox load, repair or custody pass touches the seeds. */
+export const INDEX_SEED_FOLDER = 'IndexSeed';
+
+/**
+ * `count` small messages straight into the account's vault before boot, so the
+ * daemon's first index pass has a real backlog (spec 2026-09-14 §5.6, §5.7).
+ * With MAILVAULT_E2E_INDEX_BATCH_PAUSE_MS the pass pauses after every 500.
+ */
+export function seedIndexBacklog(home, accountId, count) {
+  const cur = join(appDataDir(home), 'Maildir', accountId, INDEX_SEED_FOLDER, 'cur');
+  mkdirSync(cur, { recursive: true });
+  for (let uid = 1; uid <= count; uid++) {
+    writeFileSync(join(cur, `${uid}:2,S.eml`), [
+      'From: Seed Sender <seed@mock.test>',
+      'To: luke@mock.test',
+      `Subject: Index seed ${uid}`,
+      'Date: Mon, 01 Sep 2026 10:00:00 +0000',
+      `Message-ID: <index-seed-${uid}@mock.test>`,
+      '',
+      `Seeded body ${uid}.`,
+      '',
+    ].join('\r\n'));
+  }
+}
+
 export const MOCK_PASSWORD = 'mock-password';
 
 /**
