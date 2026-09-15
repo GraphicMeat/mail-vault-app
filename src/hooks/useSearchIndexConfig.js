@@ -23,7 +23,9 @@ export function useSearchIndexConfig() {
       const key = JSON.stringify(next);
       if (key === last) return; // the store changes often; the config rarely
       last = key;
-      configure(next);
+      // A failed push leaves the daemon unconfigured for this key: clear the
+      // dedupe key so the next store change (or reconnect) retries it.
+      configure(next).then((ok) => { if (!ok && last === key) last = ''; });
     };
     const unsubHydrate = useSettingsStore.persist?.onFinishHydration?.(push);
     push();

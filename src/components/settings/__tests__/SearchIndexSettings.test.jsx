@@ -6,9 +6,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 let statusReply;
 let progress = null;
 const rebuild = vi.fn();
+const destroy = vi.fn();
 vi.mock('../../../services/searchIndex', () => ({
   status: () => Promise.resolve(statusReply),
   rebuild: (...args) => rebuild(...args),
+  destroy: (...args) => destroy(...args),
   onProgress: async (cb) => { progress = cb; return () => { progress = null; }; },
 }));
 
@@ -22,7 +24,8 @@ beforeEach(() => {
   statusReply = { available: true, state: 'indexing', indexed: 12, total: 40, sizeBytes: 2048, complete: false };
   progress = null;
   rebuild.mockReset().mockResolvedValue(undefined);
-  useSettingsStore.setState({ searchIndexBodies: true, searchIndexAttachments: true, searchIndexImageText: true });
+  destroy.mockReset().mockResolvedValue({ ok: true });
+  useSettingsStore.setState({ searchIndexBodies: true, searchIndexAttachments: true, searchIndexImageText: true, searchIndexEnabled: true });
 });
 afterEach(cleanup);
 
@@ -88,5 +91,65 @@ describe('Search index settings', () => {
     act(() => progress({ available: true, state: 'idle', indexed: 40, total: 40, sizeBytes: 4096, complete: true }));
     expect(statusText()).toBe(`40 / 40 indexed · ${formatBytes(4096)}`);
     expect(screen.queryByRole('progressbar')).toBeNull();
+  });
+
+  it('asks before deleting, then turns indexing off and deletes', async () => {
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    fireEvent.click(screen.getByTestId('search-index-delete'));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(dialog.textContent).toContain(formatBytes(2048));
+    expect(destroy).not.toHaveBeenCalled();
+    const buttons = dialog.querySelectorAll('button');
+    await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(false);
+    expect(destroy).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  });
+
+  it('cancelling the confirm deletes nothing', async () => {
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    fireEvent.click(screen.getByTestId('search-index-delete'));
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(dialog.querySelectorAll('button')[dialog.querySelectorAll('button').length - 2]);
+    expect(destroy).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(true);
+  });
+
+  it('when off, says so and offers Build, which turns indexing back on', async () => {
+    useSettingsStore.setState({ searchIndexEnabled: false });
+    statusReply = { available: false, state: 'off', indexed: 0, total: 0, sizeBytes: 0, complete: false, firstPassDone: false };
+    render(<SearchIndexSettings />);
+    expect(await screen.findByTestId('search-index-off')).toBeTruthy();
+    expect(screen.queryByTestId('search-index-delete')).toBeNull();
+    expect(screen.queryByTestId('search-index-rebuild')).toBeNull();
+    fireEvent.click(screen.getByTestId('search-index-build'));
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(true);
+  });
+
+  it('a busy vault restores indexing and shows why', async () => {
+    destroy.mockResolvedValue({ ok: false, error: 'searchIndex.busy' });
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    fireEvent.click(screen.getByTestId('search-index-delete'));
+    const dialog = await screen.findByRole('alertdialog');
+    const buttons = dialog.querySelectorAll('button');
+    await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
+    await waitFor(() => expect(screen.getByTestId('search-index-error').textContent).toBe('Your mail storage is being moved. Try again when that finishes.'));
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(true);
+    expect(screen.getByTestId('search-index-delete').disabled).toBe(false);
+  });
+
+  it('a failed delete keeps indexing off and shows why', async () => {
+    destroy.mockResolvedValue({ ok: false, error: 'searchIndex.destroyFailed' });
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    fireEvent.click(screen.getByTestId('search-index-delete'));
+    const dialog = await screen.findByRole('alertdialog');
+    const buttons = dialog.querySelectorAll('button');
+    await act(async () => { fireEvent.click(buttons[buttons.length - 1]); });
+    await waitFor(() => expect(screen.getByTestId('search-index-error')).toBeTruthy());
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(false);
   });
 });

@@ -16,8 +16,11 @@ const premium = { billingProfile: { hasSubscription: true, premiumAccess: true }
 const free = { billingProfile: null };
 
 // Settings hydrate through a Promise; the hook waits for that on purpose.
-beforeAll(() => vi.waitFor(() => expect(useSettingsStore.persist.hasHydrated()).toBe(true)));
-afterEach(() => { cleanup(); configure.mockReset(); });
+beforeAll(async () => {
+  await vi.waitFor(() => expect(useSettingsStore.persist.hasHydrated()).toBe(true));
+  configure.mockResolvedValue(true); // default: every push succeeds unless a test overrides it
+});
+afterEach(() => { cleanup(); configure.mockReset().mockResolvedValue(true); });
 
 describe('effectiveSearchIndexConfig', () => {
   it('bodies follow the toggle for everyone', () => {
@@ -82,5 +85,24 @@ describe('useSearchIndexConfig', () => {
     act(() => reconnect());
     expect(configure).toHaveBeenCalledTimes(2);
     expect(configure).toHaveBeenLastCalledWith({ enabled: true, bodies: true, attachments: false, imageText: false });
+    cleanup();
+    expect(reconnect).toBeNull();
+  });
+
+  it('retries after a failed push: the dedupe key clears so the next store change pushes again', async () => {
+    useSettingsStore.setState({ searchIndexBodies: true, searchIndexEnabled: true, billingProfile: null });
+    configure.mockResolvedValueOnce(false);
+    renderHook(() => useSearchIndexConfig());
+    await vi.waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+
+    // A store change unrelated to the search index still triggers push();
+    // the failed push left `last` cleared, so the same config is sent again.
+    await act(async () => { useSettingsStore.setState({ sendDelay: 31 }); });
+    await vi.waitFor(() => expect(configure).toHaveBeenCalledTimes(2));
+    expect(configure).toHaveBeenLastCalledWith({ enabled: true, bodies: true, attachments: false, imageText: false });
+
+    // A push that resolves true does not retry on the next unrelated change.
+    await act(async () => { useSettingsStore.setState({ sendDelay: 32 }); });
+    expect(configure).toHaveBeenCalledTimes(2);
   });
 });
