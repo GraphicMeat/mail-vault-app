@@ -540,8 +540,16 @@ mod tests {
 
     #[test]
     fn a_disabled_index_reports_off_and_search_unavailable() {
+        use mailvault_core::search_index::{db, lock};
         let tmp = tempfile::tempdir().unwrap();
         let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        // Open, root set and first pass done: the state search actually sees right
+        // after configure-off or destroy, not a closed index that already answers
+        // {available:false} on its own. Discriminates the `enabled` gate in
+        // `search_reply` from the "no connection" branch it would fall through to.
+        *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
+        *st.root.lock().unwrap() = Some(tmp.path().to_path_buf());
+        db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
         *st.enabled.lock().unwrap() = Some(false);
         let s = crate::search_index::status_json(&st);
         assert_eq!((s["available"].as_bool(), s["state"].as_str()), (Some(false), Some("off")));
