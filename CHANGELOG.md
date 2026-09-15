@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+- **You can delete the search index and build it again.** Settings → Storage → Search index has Delete search index. It shows the index size, and search keeps working (just slower) while the index is off. Build search index starts a fresh one.
+- **A big index build shows its progress.** The first build, a rebuild, or 500+ new messages open a small window with a progress bar and the index size. Hide shrinks it to a chip in the bottom-right corner. It never opens while you are typing, and it closes when the build finishes. If MailVault quits or its background service stops mid-build, the build picks up where it stopped.
+
 ## [2.14.0] - 2026-09-15
 
 ### Added
