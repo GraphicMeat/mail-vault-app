@@ -16,6 +16,8 @@ use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, pars
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+#[cfg(test)]
+use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
@@ -34,6 +36,11 @@ pub struct SearchIndexState {
     pub(crate) interrupt: AtomicBool,
     pub(crate) switch: SwitchGuard,
     pub(crate) destroy_reply: Mutex<Vec<mpsc::Sender<Result<(), &'static str>>>>,
+    /// Test-only: counts actual `read_dir` calls `prescan_folder_counts` makes
+    /// (never a folder it already knows), per-state so parallel tests never
+    /// interfere with each other's count.
+    #[cfg(test)]
+    pub(crate) prescan_reads: AtomicUsize,
 }
 
 impl SearchIndexState {
@@ -51,6 +58,8 @@ impl SearchIndexState {
             interrupt: AtomicBool::new(false),
             switch: SwitchGuard::default(),
             destroy_reply: Mutex::new(Vec::new()),
+            #[cfg(test)]
+            prescan_reads: AtomicUsize::new(0),
         })
     }
 }
@@ -688,23 +697,50 @@ fn rebuild_index(st: &SearchIndexState) {
     }
 }
 
-/// Task 1.10 review I1: a count-only listing of every listed folder's `cur`,
-/// run once at the start of a full sweep before any folder is reconciled, so
-/// `total` (`mailvault_core::search_index::db::counts`, summed over
-/// `mailbox_scan.file_count`) counts every folder from the very first
-/// progress emit — not just the folders `reconcile_mailbox` has already
-/// visited this pass. `INSERT OR IGNORE`: a folder already scanned (this pass
-/// or an earlier one) keeps its real, authoritative count; `reconcile_mailbox`
-/// still overwrites it with `INSERT OR REPLACE` once it actually visits that
-/// folder. Same filename filter as `reconcile::list_cur`'s uid parse, so this
-/// count matches what that later, authoritative listing will find. An
-/// unreadable folder is skipped: `reconcile_mailbox` will report or skip it
+/// Task 1.10 review I1: a count-only listing of every NOT-YET-SCANNED listed
+/// folder's `cur`, run once at the start of a full sweep before any folder is
+/// reconciled, so `total` (`mailvault_core::search_index::db::counts`, summed
+/// over `mailbox_scan.file_count`) counts every folder from the very first
+/// progress emit after this prescan — not just the folders `reconcile_mailbox`
+/// has already visited this pass.
+///
+/// Task 1.11 review I1: reads the known `mailbox_scan` keys ONCE and skips any
+/// folder already in it (this pass or an earlier one) — after the first full
+/// pass every folder has a row, so `INSERT OR IGNORE` was already a no-op on
+/// every later full sweep (every `SWEEP_EVERY`, every configure, reconnect and
+/// `sweep_soon`), but the `read_dir` of every folder was not: this used to
+/// re-walk the WHOLE vault a second time on top of `reconcile_mailbox`'s own
+/// listing, every 15 minutes. `reconcile_mailbox` still overwrites a known
+/// folder's row with `INSERT OR REPLACE` once it actually visits it. Also
+/// checks `keep_going` before each folder, so a queued destroy, configure or
+/// vault move never waits out the whole walk.
+///
+/// Same filename filter as `reconcile::list_cur`'s uid parse, but `list_cur`
+/// dedupes by uid and drops stat failures from its count while this counts
+/// directory entries — so this count is never FEWER than what that later,
+/// authoritative listing finds (it can be more, corrected on the real visit).
+/// An unreadable folder is skipped: `reconcile_mailbox` will report or skip it
 /// too, so there is nothing here worth prefilling.
-fn prescan_folder_counts(st: &SearchIndexState, maildir: &Path, dirs: &[(String, String)]) {
+fn prescan_folder_counts(st: &SearchIndexState, maildir: &Path, dirs: &[(String, String)], keep_going: &dyn Fn() -> bool) {
+    let known: std::collections::HashSet<(String, String)> = match lock(&st.db).as_ref() {
+        Some(conn) => conn
+            .prepare("SELECT account_id, vault_dir FROM mailbox_scan")
+            .and_then(|mut s| s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect())
+            .unwrap_or_default(), // a failed read only costs the prefill; reconcile still visits every folder
+        None => return,
+    };
     for (account, dir) in dirs {
+        if !keep_going() {
+            return;
+        }
+        if known.contains(&(account.clone(), dir.clone())) {
+            continue; // already has a real, authoritative count from a previous pass
+        }
         let cur = maildir.join(account).join(dir).join("cur");
         let Ok(entries) = std::fs::read_dir(&cur) else { continue };
         let n = entries.flatten().filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()).is_some()).count();
+        #[cfg(test)]
+        st.prescan_reads.fetch_add(1, SeqCst);
         if let Some(conn) = lock(&st.db).as_ref() {
             if let Err(e) = conn.execute(
                 "INSERT OR IGNORE INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, unixepoch(), ?3)",
@@ -734,10 +770,16 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
     // A listing that failed is not "these folders are gone": no prune.
     // An unplugged or unreadable vault lists nothing; pruning then would drop the whole index.
     if full && listed && maildir.is_dir() && keep_going() {
-        // Task 1.10 review I1: count every folder before reconciling any of them,
-        // so `total` (and so `complete`) is right from the very first emit of a
-        // first pass, not just after every folder has had its own turn.
-        prescan_folder_counts(st, maildir, &dirs);
+        // Task 1.10 review I1: count every not-yet-scanned folder before
+        // reconciling any of them, so `total` (and so `complete`) is right
+        // before any folder's own batches start landing, not just after every
+        // folder has had its own turn.
+        prescan_folder_counts(st, maildir, &dirs, &keep_going);
+        // Task 1.11 review M3: the phase-change emit above this block is
+        // still `0 of 0` on a first pass (no rows, no mailbox_scan yet) — emit
+        // again now the prescan has filled `total` in, so the pass's first
+        // meaningful progress event already carries the real total.
+        emit(st);
         if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
             warn!("search index prune: {e}");
         }
@@ -782,7 +824,11 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
 }
 
 /// Test seam for e2e only: how long to pause after `done` files. Pure, so the
-/// unit test never touches the process environment.
+/// unit test never touches the process environment. Its only non-test caller
+/// is `e2e_pause_after`'s `cfg(debug_assertions)` arm, so a release build
+/// (`cargo test` off, `debug_assertions` off) never calls it — gate it the
+/// same way, or a release build warns "function is never used".
+#[cfg(any(debug_assertions, test))]
 pub(crate) fn batch_pause(done: usize, setting: Option<&str>) -> Option<Duration> {
     if done == 0 || done % reconcile::BATCH != 0 {
         return None;
@@ -1162,6 +1208,33 @@ mod tests {
         }
     }
 
+    /// Polls a progress-bus subscriber until a `search-index-progress` payload
+    /// matches `pred`, or `timeout` elapses. Task 1.11 review M5: only
+    /// `TryRecvError::Empty` means "nothing yet" — `Lagged` (a skipped emit,
+    /// including the one under test) or `Closed` must fail loudly, never be
+    /// treated the same as empty and silently waited past.
+    fn recv_progress(
+        rx: &mut tokio::sync::broadcast::Receiver<std::sync::Arc<str>>,
+        pred: impl Fn(&serde_json::Value) -> bool,
+        timeout: std::time::Duration,
+    ) -> Option<serde_json::Value> {
+        let deadline = std::time::Instant::now() + timeout;
+        while std::time::Instant::now() < deadline {
+            match rx.try_recv() {
+                Ok(line) => {
+                    if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
+                        if name == "search-index-progress" && pred(&payload) {
+                            return Some(payload);
+                        }
+                    }
+                }
+                Err(tokio::sync::broadcast::error::TryRecvError::Empty) => std::thread::sleep(std::time::Duration::from_millis(20)),
+                Err(e) => panic!("progress bus error while waiting for an event: {e:?}"),
+            }
+        }
+        None
+    }
+
     fn index_file(root: &std::path::Path) -> std::path::PathBuf {
         root.join(mailvault_core::search_index::db::DB_DIR).join(mailvault_core::search_index::db::DB_FILE)
     }
@@ -1221,24 +1294,69 @@ mod tests {
 
         // The first progress emit where anything has actually been indexed:
         // whichever folder's batch commits first, before the other is visited.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
-        let mut first_indexed = None;
-        while std::time::Instant::now() < deadline {
-            match rx.try_recv() {
-                Ok(line) => {
-                    if let Some((name, payload)) = mailvault_core::daemon_ipc::parse_event(&line) {
-                        if name == "search-index-progress" && payload["indexed"].as_u64().unwrap_or(0) > 0 {
-                            first_indexed = Some(payload);
-                            break;
-                        }
-                    }
-                }
-                Err(_) => std::thread::sleep(std::time::Duration::from_millis(20)),
-            }
-        }
-        let s = first_indexed.expect("no progress emit with indexed > 0 within 20s");
+        let s = recv_progress(&mut rx, |p| p["indexed"].as_u64().unwrap_or(0) > 0, std::time::Duration::from_secs(20))
+            .expect("no progress emit with indexed > 0 within 20s");
         assert_eq!(s["total"].as_u64(), Some(6), "total must count BOTH folders from the first indexed emit, not just the one folder reconciled so far: {s}");
         assert_eq!(s["complete"].as_bool(), Some(false), "6 total, 3 indexed is not complete: {s}");
+    }
+
+    /// Task 1.11 review I1: after the first full pass every folder already has
+    /// a `mailbox_scan` row, so a later full sweep must not `read_dir` it
+    /// again — only `reconcile_mailbox`'s own listing should walk the vault a
+    /// second time. `prescan_reads` (test-only, per-state) counts actual
+    /// `read_dir` calls the prescan makes; it must not grow across the second
+    /// full sweep since both folders are already known.
+    #[test]
+    fn a_later_full_sweep_does_not_reread_a_folder_the_prescan_already_knows() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 2);
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        wait_for(&st, "first pass", |s| s["firstPassDone"] == true && s["state"] == "idle");
+        let after_first = st.prescan_reads.load(std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(after_first, 1, "the prescan must read_dir INBOX exactly once on the first full pass");
+
+        let mut rx = st.bus.subscribe();
+        crate::search_index::sweep_soon(&st);
+        let idle = recv_progress(&mut rx, |p| p["state"] == "idle", std::time::Duration::from_secs(20));
+        assert!(idle.is_some(), "the second full sweep never finished");
+        assert_eq!(
+            st.prescan_reads.load(std::sync::atomic::Ordering::SeqCst),
+            after_first,
+            "a folder the prescan already knows must not be read_dir'd again on a later full sweep"
+        );
+    }
+
+    /// Task 1.11 review I1: the prescan checks `keep_going` before each
+    /// folder, so an interrupt (destroy, configure, a vault move) stops it
+    /// partway through instead of waiting out the whole walk. Drives
+    /// `prescan_folder_counts` directly (no worker) so the interrupt can be
+    /// deterministic: `keep_going` returns true once, then false.
+    #[test]
+    fn an_interrupt_during_prescan_stops_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        seed(tmp.path(), "acct", "Archive", 1);
+        seed(tmp.path(), "acct", "Sent", 1);
+        let st = state(tmp.path());
+        let conn = mailvault_core::search_index::db::open(tmp.path()).unwrap();
+        *st.db.lock().unwrap() = Some(conn);
+
+        let dirs = vec![
+            ("acct".to_string(), "INBOX".to_string()),
+            ("acct".to_string(), "Archive".to_string()),
+            ("acct".to_string(), "Sent".to_string()),
+        ];
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let keep_going = || calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 1; // true once, then false
+        super::prescan_folder_counts(&st, &tmp.path().join("Maildir"), &dirs, &keep_going);
+
+        assert_eq!(
+            st.prescan_reads.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "an interrupt after the first folder must stop the walk before the rest are read"
+        );
     }
 
     /// Review I1 (task-1.6-review.md): while the vault is unreachable, `st.vault_root`
