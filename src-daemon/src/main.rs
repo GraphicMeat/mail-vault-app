@@ -292,6 +292,9 @@ async fn daemon_main() {
         std::time::Duration::from_secs(30),
     );
 
+    let events = events::EventBus::new(events::CAPACITY);
+    let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), mail_dir_ok, events.clone());
+
     let state = Arc::new(server::DaemonState {
         token,
         data_dir: mail_dir.clone(),
@@ -307,11 +310,15 @@ async fn daemon_main() {
         contacts: Arc::clone(&contacts),
         net,
         shutdown: Arc::new(tokio::sync::Notify::new()),
-        events: events::EventBus::new(events::CAPACITY),
+        events,
+        search_index: Arc::clone(&search_index_state),
     });
 
     // Start background classification queue worker
     classification_worker::start_classification_worker(Arc::clone(&state));
+
+    // Its own OS thread; it opens nothing until the app configures it.
+    search_index::start(Arc::clone(&state.search_index));
 
     // Debounced flush of the contacts index to disk (every 30s).
     {

@@ -19,6 +19,22 @@ pub(crate) fn outgoing(msg: Result<Arc<str>, RecvError>) -> Option<String> {
 pub(crate) async fn dispatch(state: &Arc<DaemonState>, method: &str, params: Value) {
     match method {
         "daemon.ping" => state.events.emit("daemon-ping", params),
+        // Addendum C1: never send while the mail dir is unreachable, same gate
+        // `handle_request` applies to sync./snapshot./contacts_index. requests.
+        // C2: only locks `signals` and sends on a non-blocking mpsc — no
+        // `.await`, no disk, no `db` lock in either arm.
+        "search_index.nudge" => {
+            if state.mail_dir_ok {
+                if let (Some(account), Some(mailbox)) = (params.get("accountId").and_then(Value::as_str), params.get("mailbox").and_then(Value::as_str)) {
+                    crate::search_index::nudge(&state.search_index, account, mailbox);
+                }
+            }
+        }
+        "search_index.sweep_soon" => {
+            if state.mail_dir_ok {
+                crate::search_index::sweep_soon(&state.search_index);
+            }
+        }
         other => tracing::debug!("channel: ignoring notification {other}"),
     }
 }
@@ -113,5 +129,36 @@ mod tests {
             bus.emit("n", json!(i));
         }
         assert!(matches!(rx.recv().await, Err(RecvError::Lagged(3))));
+    }
+
+    #[tokio::test]
+    async fn nudge_and_sweep_notifications_reach_the_index_worker_channel() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true);
+        let (tx, rx) = std::sync::mpsc::channel();
+        *state.search_index.signals.lock().unwrap() = Some(tx);
+        dispatch(&state, "search_index.nudge", json!({"accountId": "a1", "mailbox": "Projects/2026"})).await;
+        dispatch(&state, "search_index.sweep_soon", json!({})).await;
+        dispatch(&state, "search_index.nudge", json!({"mailbox": "INBOX"})).await; // no account: ignored
+        use mailvault_core::search_index::plan::Signal;
+        assert_eq!(rx.try_recv().unwrap(), Signal::Nudge { account_id: "a1".into(), vault_dir: mailvault_core::search_index::text::vault_dir_name("Projects/2026") });
+        assert_eq!(rx.try_recv().unwrap(), Signal::Sweep);
+        assert!(rx.try_recv().is_err());
+    }
+
+    /// Addendum C1 (Phase 0 carry): the two index-notification arms must never
+    /// send while the vault is unreachable, the same gate `handle_request`
+    /// already applies to `sync.*`/`snapshot.*`/`contacts_index.*` requests —
+    /// `dispatch` has no such gate of its own, so these two arms check
+    /// `mail_dir_ok` explicitly rather than relying on `open_into`'s own guard.
+    #[tokio::test]
+    async fn nudge_and_sweep_are_silent_when_the_mail_dir_is_unreachable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let state = crate::server::DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
+        let (tx, rx) = std::sync::mpsc::channel();
+        *state.search_index.signals.lock().unwrap() = Some(tx);
+        dispatch(&state, "search_index.nudge", json!({"accountId": "a1", "mailbox": "INBOX"})).await;
+        dispatch(&state, "search_index.sweep_soon", json!({})).await;
+        assert!(rx.try_recv().is_err(), "no signal must be sent while the mail dir is unreachable");
     }
 }

@@ -16,14 +16,34 @@ fn rust_files(p: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Review M2 (task-1.2-review.md): stops only at `#[cfg(test)]` immediately
+/// followed by an INLINE module (`mod name {`, or a `#[path...]`-attributed
+/// one — both run to the end of the file in every watched file today). A bare
+/// `mod x;` declaration is not a module body at all: those two lines are
+/// skipped and scanning continues, so a watched file with an out-of-line test
+/// module declared mid-file (e.g. `src-tauri/src/main.rs`'s `mod x;` pattern)
+/// is not silently un-guarded past that point.
 fn non_test_text(src: &str) -> String {
     let lines: Vec<&str> = src.lines().collect();
     let mut out = String::new();
+    let mut skip_next = false;
     for (i, l) in lines.iter().enumerate() {
+        if skip_next {
+            skip_next = false;
+            continue;
+        }
         if l.trim_start().starts_with("#[cfg(test)]") {
             if let Some(next) = lines.get(i + 1) {
                 let n = next.trim_start();
-                if n.starts_with("mod ") || n.starts_with("#[path") { break; }
+                if n.starts_with("#[path") || (n.starts_with("mod ") && n.trim_end().ends_with('{')) {
+                    break; // an inline test module: everything after this is test code
+                }
+                if n.starts_with("mod ") {
+                    // `mod x;`: not a body, just a declaration. Skip only these
+                    // two lines and keep scanning the rest of the file.
+                    skip_next = true;
+                    continue;
+                }
             }
         }
         out.push_str(l);
@@ -35,9 +55,13 @@ fn non_test_text(src: &str) -> String {
 #[test]
 fn index_and_parser_code_never_name_the_legacy_vault_reader_or_writer() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+    // Review M3: a missing watched path (a rename, or a `.rs` file replaced by
+    // a directory module) must fail loudly, not silently guard nothing.
+    for w in WATCHED {
+        assert!(root.join(w).exists(), "watched path missing: {w}");
+    }
     let mut files = Vec::new();
     for w in WATCHED { rust_files(&root.join(w), &mut files); }
-    assert!(files.iter().any(|f| f.ends_with("vault_eml.rs")), "the guard must see src-core/src/vault_eml.rs");
     let mut hits = Vec::new();
     for f in &files {
         let text = non_test_text(&std::fs::read_to_string(f).unwrap());

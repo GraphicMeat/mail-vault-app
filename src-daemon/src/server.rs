@@ -43,6 +43,7 @@ pub struct DaemonState {
     pub shutdown: Arc<tokio::sync::Notify>,
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
+    pub search_index: Arc<crate::search_index::SearchIndexState>,
 }
 
 /// Start the daemon socket server.
@@ -191,6 +192,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::search_index::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
@@ -255,6 +260,11 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
 }
 
 #[cfg(test)]
+pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
+    handle_request(state, RpcRequest { method: method.into(), params, id: Some(serde_json::json!(1)) }).await
+}
+
+#[cfg(test)]
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
     pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
@@ -276,11 +286,12 @@ impl DaemonState {
             Arc::clone(&net),
             std::time::Duration::from_millis(50),
         );
+        let events = crate::events::EventBus::new(crate::events::CAPACITY);
         Arc::new(DaemonState {
             net,
             idle,
             token: "a".repeat(64),
-            data_dir: mail_dir,
+            data_dir: mail_dir.clone(),
             app_dir: app_dir.clone(),
             mail_dir_ok,
             started_at: std::time::Instant::now(),
@@ -291,7 +302,8 @@ impl DaemonState {
             sync_engine,
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
-            events: crate::events::EventBus::new(crate::events::CAPACITY),
+            search_index: crate::search_index::SearchIndexState::new(mail_dir, mail_dir_ok, events.clone()),
+            events,
         })
     }
 }

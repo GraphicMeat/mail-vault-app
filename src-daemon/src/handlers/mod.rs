@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 pub(crate) mod daemon;
+pub(crate) mod search_index;
 
 pub(crate) fn handle_contacts_index_get(
     contacts: Arc<contacts_index::ContactsState>,

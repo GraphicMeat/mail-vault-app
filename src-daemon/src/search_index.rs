@@ -472,7 +472,10 @@ fn destroy_index(st: &SearchIndexState) -> Result<(), &'static str> {
     *g(&st.root) = None;
     let dir = st.vault_root.join(db::DB_DIR);
     let mut stuck = false;
-    for suffix in ["", "-wal", "-shm", "-journal"] {
+    // Reverse order (journal, shm, wal, then the database file itself): an
+    // abort mid-delete (a switch starting between two unlinks) never leaves a
+    // -wal without the index.db it belongs to.
+    for suffix in ["-journal", "-shm", "-wal", ""] {
         // A vault operation may start between the check above and this unlink.
         if st.switch.is_switching() || st.switch.current() != gen {
             return Err("searchIndex.busy");
@@ -652,7 +655,8 @@ fn rebuild_index(st: &SearchIndexState) {
     *lock(&st.db) = None; // drop = checkpoint; then the files can go
     let dir = root.join(db::DB_DIR);
     let mut stuck = false;
-    for suffix in ["", "-wal", "-shm", "-journal"] {
+    // Reverse order, same reasoning as destroy_index.
+    for suffix in ["-journal", "-shm", "-wal", ""] {
         // A vault operation may be copying these files, or `root` is no longer the vault.
         if st.switch.is_switching() || st.switch.current() != gen {
             return;
