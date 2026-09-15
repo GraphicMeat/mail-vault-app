@@ -248,7 +248,7 @@ export function attachmentMessage({ uid, to, from, subject, date }) {
  * sorted date-descending across every account, and the 700-message account
  * otherwise occupies every visible row (see connected-storage-matrix).
  */
-export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false, withAttachments = false, uidStart = 1 } = {}) {
+export function mailbox(name, count, { owner = 'user@example.com', attrs, subjectPrefix = 'Mock message', htmlQuoted = false, withAttachments = false, uidStart = 1, sentByOwner = false } = {}) {
   const messages = [];
   for (let uid = uidStart; uid < uidStart + count; uid++) {
     // Highest UID is newest, so the list has a stable, meaningful sort order.
@@ -261,7 +261,12 @@ export function mailbox(name, count, { owner = 'user@example.com', attrs, subjec
       raw: rfc822({
         uid,
         to: owner,
-        from: `Sender ${uid} <sender${uid}@example.com>`,
+        // `sentByOwner` (an outgoing mailbox): a real Sent folder holds mail
+        // FROM the account, never a third party — keep the display name
+        // distinct (specs read "Sender N" as text) but the address is the
+        // login, so send-as mining (which keys on address, not name) excludes
+        // it like every other message this account sent.
+        from: sentByOwner ? `Sender ${uid} <${owner}>` : `Sender ${uid} <sender${uid}@example.com>`,
         subject: `${subjectPrefix} ${uid}`,
         body: `Body of ${subjectPrefix.toLowerCase()} ${uid} for ${owner}.`,
         date: header,
@@ -662,7 +667,7 @@ function append(box, messages) {
  */
 export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null, nestedMailboxes = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
-  const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message' });
+  const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message', sentByOwner: true });
 
   // `inbox: 0` means an empty INBOX to the integration harness — leave it alone.
   if (inbox > 0) {
@@ -796,7 +801,9 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     append(sentBox, [htmlMarkerMessage({
       uid: inboxUidStart + inbox,
       owner,
-      from: 'Collision Sender <collide@example.com>',
+      // Sent, so From is the account's own address (see `sentByOwner` above)
+      // — a foreign address here used to leak into send-as mining.
+      from: `Collision Sender <${owner}>`,
       subject: HTML_COLLISION_SUBJECT,
       marker: HTML_COLLISION_MARKER,
       day: 64,
