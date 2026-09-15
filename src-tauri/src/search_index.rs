@@ -349,7 +349,7 @@ fn worker(app: tauri::AppHandle, rx: mpsc::Receiver<Signal>) {
         // is drained now or leaves `interrupt` set and a queued signal.
         st.interrupt.store(false, SeqCst);
         // A burst of two or more nudges waits up to COALESCE for the nudges behind it; a lone nudge runs now.
-        let Plan { reopen, rebuild, only } = plan(collect_burst(first, &rx, COALESCE));
+        let Plan { reopen, rebuild, only, .. } = plan(collect_burst(first, &rx, COALESCE));
         let full = needs_full(last_full.elapsed(), only.is_none());
         run_pass(&app, &st, reopen, rebuild, if full { None } else { only });
         // Not cut short = complete. A pass skipped because the index is unconfigured

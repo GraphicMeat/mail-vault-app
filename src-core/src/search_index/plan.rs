@@ -19,6 +19,8 @@ pub enum Signal {
     Configure,
     /// A vault operation finished: open the current root, then a full pass.
     Reopen,
+    /// Delete the index files and stay off (spec 2026-09-14 §5.5). Wins over everything queued with it.
+    Destroy,
 }
 
 /// What one drained burst of signals asks the worker to do.
@@ -26,12 +28,13 @@ pub enum Signal {
 pub struct Plan {
     pub reopen: bool,
     pub rebuild: bool,
+    pub destroy: bool,
     /// `Some(folders)` when every signal was a nudge; otherwise a full pass.
     pub only: Option<Vec<(String, String)>>,
 }
 
 pub fn plan(queue: Vec<Signal>) -> Plan {
-    let mut p = Plan { reopen: false, rebuild: false, only: None };
+    let mut p = Plan { reopen: false, rebuild: false, destroy: false, only: None };
     let mut full = false;
     let mut nudges: Vec<(String, String)> = Vec::new();
     for s in queue {
@@ -44,9 +47,16 @@ pub fn plan(queue: Vec<Signal>) -> Plan {
                 p.rebuild = true;
                 full = true;
             }
+            Signal::Destroy => {
+                p.destroy = true;
+                full = true;
+            }
             Signal::Sweep | Signal::Configure => full = true,
             Signal::Nudge { account_id, vault_dir } => nudges.push((account_id, vault_dir)),
         }
+    }
+    if p.destroy {
+        return Plan { reopen: false, rebuild: false, destroy: true, only: None };
     }
     if !full {
         // However many folders: a scoped pass over each costs dirents plus what
@@ -122,7 +132,7 @@ mod tests {
     }
 
     fn quiet() -> Plan {
-        Plan { reopen: false, rebuild: false, only: None }
+        Plan { reopen: false, rebuild: false, destroy: false, only: None }
     }
 
     fn folders(pairs: &[(&str, &str)]) -> Option<Vec<(String, String)>> {
@@ -137,6 +147,12 @@ mod tests {
             plan(vec![nudge("b", "INBOX"), nudge("a", "INBOX"), nudge("b", "INBOX")]),
             Plan { only: folders(&[("a", "INBOX"), ("b", "INBOX")]), ..quiet() }
         );
+    }
+
+    #[test]
+    fn destroy_is_planned_and_cancels_the_rest_of_the_burst() {
+        let p = plan(vec![Signal::Rebuild, nudge("a", "INBOX"), Signal::Destroy, Signal::Reopen]);
+        assert_eq!(p, Plan { reopen: false, rebuild: false, destroy: true, only: None });
     }
 
     #[test]
