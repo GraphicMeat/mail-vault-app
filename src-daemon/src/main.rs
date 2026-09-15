@@ -169,7 +169,7 @@ fn acquire_singleton_lock(_data_dir: &PathBuf) -> Option<std::fs::File> {
 /// not decorative: `src-daemon/Cargo.toml` sets `[profile.release] panic =
 /// "abort"`, but this workspace's root `Cargo.toml` declares no `[profile]`
 /// table, and Cargo only honours profile settings from the workspace root —
-/// a member manifest's own `[profile.*]` is ignored (cargo warns) (confirmed via
+/// a member manifest's own `[profile.*]` is ignored, with a cargo warning (confirmed via
 /// `cargo add`/`cargo fetch` here, which both warn "profiles for the non
 /// root package will be ignored"). So `panic = "abort"` in src-daemon's
 /// Cargo.toml is dead in every build of this binary, debug or release, and

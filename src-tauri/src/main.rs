@@ -1855,11 +1855,34 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// What a *failed* `vault_move_to`/`vault_move_to_default` does next (addendum
+/// D.4 amended, review I1): `vault::move_to` can already have changed the root
+/// before it returns `Err` (it falls back to the app data dir when `resolve`
+/// doesn't report `ready`), so `result.is_err()` alone can't decide whether the
+/// daemon — still reading whatever root it had before the call — needs
+/// restarting. Pure: takes the root just before and just after the op.
+#[derive(Debug, PartialEq, Eq)]
+enum MoveFollowUp {
+    /// The root the daemon last saw is still current: just reopen the index there.
+    ReopenIndex,
+    /// The root changed (or the move succeeded): restart the daemon onto it.
+    RestartDaemon,
+}
+
+fn after_failed_move(root_before: Option<PathBuf>, root_after: Option<PathBuf>) -> MoveFollowUp {
+    if root_before == root_after {
+        MoveFollowUp::ReopenIndex
+    } else {
+        MoveFollowUp::RestartDaemon
+    }
+}
+
 /// Copy the mail data to `path`, verify it, delete the originals, switch over.
 #[tauri::command]
 async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
+        let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
         daemon_index_call(&handle, "search_index_close");
         custody::close(&handle);
@@ -1868,20 +1891,32 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
             let _ = emitter.emit("vault-move-progress", p);
         });
         custody::reopen(&handle); // success or not: whatever root is current now
-        if result.is_err() {
-            drop(suspended);
-            daemon_index_call(&handle, "search_index_reopen");
+        let follow_up = if result.is_err() {
+            after_failed_move(root_before, vault::root(&handle).ok())
         } else {
-            stop_daemon();
-            drop(suspended);
+            MoveFollowUp::RestartDaemon
+        };
+        match follow_up {
+            MoveFollowUp::ReopenIndex => {
+                drop(suspended);
+                daemon_index_call(&handle, "search_index_reopen");
+            }
+            // The root moved (success, or a failure that fell back to a
+            // different root): the channel respawns the daemon on it only
+            // once `suspended` clears below.
+            MoveFollowUp::RestartDaemon => {
+                stop_daemon();
+                drop(suspended);
+            }
         }
         result
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
-    if result.is_ok() {
-        let _ = app_handle.emit("vault-status", vault::status(&app_handle));
-    }
+    // Pre-Phase-1 behaviour: emitted on success AND failure, so the UI always
+    // learns the vault's current status even when the move fell back to the
+    // app data dir.
+    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
 }
 
@@ -1890,6 +1925,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
 async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
+        let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
         daemon_index_call(&handle, "search_index_close");
         custody::close(&handle);
@@ -1898,20 +1934,26 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
             let _ = emitter.emit("vault-move-progress", p);
         });
         custody::reopen(&handle); // success or not: whatever root is current now
-        if result.is_err() {
-            drop(suspended);
-            daemon_index_call(&handle, "search_index_reopen");
+        let follow_up = if result.is_err() {
+            after_failed_move(root_before, vault::root(&handle).ok())
         } else {
-            stop_daemon();
-            drop(suspended);
+            MoveFollowUp::RestartDaemon
+        };
+        match follow_up {
+            MoveFollowUp::ReopenIndex => {
+                drop(suspended);
+                daemon_index_call(&handle, "search_index_reopen");
+            }
+            MoveFollowUp::RestartDaemon => {
+                stop_daemon();
+                drop(suspended);
+            }
         }
         result
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
-    if result.is_ok() {
-        let _ = app_handle.emit("vault-status", vault::status(&app_handle));
-    }
+    let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
 }
 
@@ -6473,6 +6515,37 @@ iVBORw0KGgo=\r\n\
             panic!("simulated crash mid vault-move");
         });
         assert!(may_spawn_daemon(), "a panic must not leave the daemon permanently suspended");
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 1.7 fix round 1 (review I1 / addendum D.4 amended): a failed move
+    // that already changed the root must restart the daemon, not reopen the
+    // index on the root it no longer has.
+    // -----------------------------------------------------------------------
+    #[test]
+    fn a_failed_move_that_left_the_root_unchanged_just_reopens_the_index() {
+        let a = Some(PathBuf::from("/vault/A"));
+        assert_eq!(after_failed_move(a.clone(), a), MoveFollowUp::ReopenIndex);
+    }
+
+    #[test]
+    fn a_failed_move_that_already_changed_the_root_restarts_the_daemon() {
+        let a = Some(PathBuf::from("/vault/A"));
+        let app_data_dir = Some(PathBuf::from("/app/data"));
+        assert_eq!(after_failed_move(a, app_data_dir), MoveFollowUp::RestartDaemon);
+    }
+
+    #[test]
+    fn an_unreachable_root_before_and_after_still_counts_as_unchanged() {
+        // vault::root(..).ok() is None whenever the vault is unreachable; two
+        // Nones must not read as "the root changed".
+        assert_eq!(after_failed_move(None, None), MoveFollowUp::ReopenIndex);
+    }
+
+    #[test]
+    fn losing_the_root_entirely_counts_as_a_change() {
+        let a = Some(PathBuf::from("/vault/A"));
+        assert_eq!(after_failed_move(a, None), MoveFollowUp::RestartDaemon);
     }
 }
 

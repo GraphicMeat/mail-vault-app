@@ -36,4 +36,17 @@ describe('the search index lives in the daemon', () => {
       expect(existsSync(f)).toBe(false);
     }
   });
+
+  // Task 1.7 fix round 1, review M2: the guard's own RED mutant (Drop doing
+  // nothing) doesn't touch the spawn gate in ensure_daemon_socket — cover
+  // that call site directly by source, since it's addendum D's whole point
+  // (a vault-move-suspended daemon must never be spawned fresh).
+  it('ensure_daemon_socket refuses to spawn while suspended, before it spawns', () => {
+    const start = main.indexOf('fn ensure_daemon_socket(');
+    expect(start).toBeGreaterThan(-1);
+    const spawnComment = main.indexOf('// Spawn new daemon', start);
+    expect(spawnComment).toBeGreaterThan(start);
+    const guardSection = main.slice(start, spawnComment);
+    expect(guardSection).toContain('may_spawn_daemon()');
+  });
 });

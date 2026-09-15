@@ -74,8 +74,9 @@ async fn run(app: tauri::AppHandle, mut rx: UnboundedReceiver<String>) {
                 info!("daemon channel connected");
                 let _ = app.emit("daemon-reconnected", json!({}));
                 // Nudges dropped while disconnected: one full pass catches them (spec §3.2).
-                // Runs on the first connect too (CONNECTED is already true above), which is
-                // exactly what a freshly spawned daemon's empty index needs (addendum C3).
+                // Runs on the first connect too (CONNECTED is already true above, addendum
+                // C3). Harmless on a fresh daemon (unconfigured until 1.8's re-push); catches
+                // nudges lost while a live daemon's channel was down.
                 notify("search_index.sweep_soon", json!({}));
                 let connected_at = std::time::Instant::now();
 
