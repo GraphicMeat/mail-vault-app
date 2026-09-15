@@ -122,7 +122,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
     const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke) return;
     send('maildir_storage_stats', { accountId: account.id })
-      .then(stats => setStorageSize(stats?.total_bytes ?? null))
+      .then(stats => setStorageSize(stats?.totalBytes ?? null))
       .catch(() => {});
     invoke('list_mailboxes', { accountJson: JSON.stringify(account) })
       .then(folders => setAccountFolders((folders || []).filter(f => !f.noselect).map(f => f.name || f.path)))

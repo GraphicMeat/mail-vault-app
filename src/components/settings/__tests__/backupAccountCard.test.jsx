@@ -36,6 +36,12 @@ vi.mock('../../../services/api', () => ({ backupStatus: vi.fn() }));
 vi.mock('../../../services/authUtils', () => ({ resolveServerAccount: vi.fn() }));
 vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
 
+// M4a (2.6 review): `maildir_storage_stats`'s daemon reply is `totalBytes`
+// (camelCase, always has been), but the card read `total_bytes` — a
+// pre-existing bug, not caused by moving the route into the daemon.
+const sendMock = vi.fn().mockResolvedValue({ totalBytes: 2048 });
+vi.mock('../../../services/transport', () => ({ send: (...a) => sendMock(...a) }));
+
 const { default: BackupAccountCard } = await import('../BackupAccountCard');
 const { useBackupStore } = await import('../../../stores/backupStore');
 const { useSettingsStore } = await import('../../../stores/settingsStore');
@@ -151,5 +157,22 @@ describe('BackupAccountCard - the run the store knows about', () => {
 
     expect(progress()).toBe(null);
     expect(button().disabled).toBe(false);
+  });
+});
+
+describe('BackupAccountCard - the stored size on the card', () => {
+  // The size fetch is gated on `window.__TAURI__?.core?.invoke` existing.
+  beforeEach(() => {
+    window.__TAURI__ = { core: { invoke: vi.fn().mockResolvedValue([]) } };
+  });
+  afterEach(() => {
+    delete window.__TAURI__;
+  });
+
+  it("shows the account's stored size once maildir_storage_stats replies", async () => {
+    renderCard();
+    // M4a: was stuck at '--' forever because the card read the wrong key
+    // (`total_bytes`) off a reply that has always been `totalBytes`.
+    await waitFor(() => expect(screen.getByText('2 KB')).toBeTruthy());
   });
 });
