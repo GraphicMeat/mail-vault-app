@@ -393,7 +393,7 @@ async fn fetch_and_store(
 
     // The server's own read state, not a hardcoded "seen": this name is what
     // restore uploads, what the mirror copies, and what a vault row reads back.
-    let flags = crate::vault_flags::store_flags(&email.flags);
+    let flags = mailvault_core::vault_flags::store_flags(&email.flags);
     // Path computation only — no disk touched, so it stays off the blocking pool.
     let cur_dir = super::maildir_cur_path(app_handle, account_id, mailbox)?;
 

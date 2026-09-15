@@ -849,14 +849,18 @@ async fn run_imap_backup_inner(
         // an auto-cached `<uid>:2,.eml` once a backup vouches for it.
         let changes = catch_up_changes(&server_flags, &local_uids);
         if !changes.is_empty() {
-            let dirs = crate::vault_flags::dirs_for(
-                &app_handle, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
-            )?;
+            let root = crate::vault::root(&app_handle)?;
+            let dirs = mailvault_core::vault_flags::dirs_for(
+                &root, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
+            );
             let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox_path.to_string());
             // Renames every stale file in both locations — disk work, and it
             // takes a process-wide writer lock while it does it.
             let applied = tokio::task::spawn_blocking(move || {
-                crate::vault_flags::apply_everywhere(&handle, &acct, &mbx, &dirs, &changes, false)
+                mailvault_core::vault_flags::apply_everywhere(&dirs, &changes, false, |patch| {
+                    crate::custody::with_conn(&handle, |c| mailvault_core::custody::entries::patch_flags_many(c, &acct, &mbx, patch))
+                        .map_err(|e| format!("{}/{}: {}", acct, mbx, e))
+                })
             })
                 .await
                 .map_err(|e| format!("flag catch-up panicked: {}", e))?;
@@ -959,14 +963,14 @@ fn orphaned_message_ids(app_dir: &std::path::Path) -> HashSet<String> {
 fn catch_up_changes(
     server_flags: &[(u32, Vec<String>)],
     local_uids: &HashSet<u32>,
-) -> Vec<crate::vault_flags::FlagChange> {
+) -> Vec<mailvault_core::vault_flags::FlagChange> {
     server_flags
         .iter()
         .filter(|(uid, _)| local_uids.contains(uid))
         .map(|(uid, flags)| {
             let mut flags = flags.clone();
             flags.push("archived".to_string());
-            crate::vault_flags::FlagChange { uid: *uid, flags }
+            mailvault_core::vault_flags::FlagChange { uid: *uid, flags }
         })
         .collect()
 }
