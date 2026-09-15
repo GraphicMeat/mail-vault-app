@@ -32,6 +32,7 @@ import { MoveToFolderDropdown } from './components/MoveToFolderDropdown';
 import { MigrationToast } from './components/MigrationToast';
 import { KeychainToast } from './components/KeychainToast';
 import { VaultAlertBanner } from './components/VaultAlertBanner';
+import { SearchIndexProgress } from './components/SearchIndexProgress';
 import { OfflineBanner } from './components/OfflineBanner';
 import { BugReportDialog } from './components/BugReportDialog';
 import { FocusLock } from './components/FocusLock';
@@ -1168,6 +1169,7 @@ function App() {
       <UndoToast />
       <OutboxTray onRestoreDraft={(cs) => openCompose(cs)} />
       <RestoreTray />
+      <SearchIndexProgress />
       <ShareUnlockModal onSubscribe={() => openSettings({ tab: 'billing' })} />
       <BackupUpsellModal onUpgrade={() => openSettings({ tab: 'billing' })} />
 
