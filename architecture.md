@@ -89,10 +89,10 @@ Maildir is the source of truth for locally saved email content. Cached JSON and 
 
 Two distinct locations, not one:
 
-- **Vault (working copy)** — the mail the app reads and writes. Defaults to the app data dir; the user can relocate it to any folder. `src-tauri/src/vault.rs` owns resolution, folder verification and the copy-verify-delete offload; every mail-data path goes through `vault::root()`. Only mail data moves (`Maildir`, `maildir`, `email_cache`, `attachment_cache`, `mailboxes`) — accounts, settings, logs, models and daemon bookkeeping stay in the app data dir so the app can boot and report an unreachable vault. When the vault cannot be resolved, mail-data commands fail rather than falling back to the app data dir, which would fork the archive.
+- **Vault (working copy)** — the mail the app reads and writes. Defaults to the app data dir; the user can relocate it to any folder. `src-tauri/src/vault.rs` owns resolution, folder verification and the copy-verify-delete offload; every mail-data path goes through `vault::root()`. Only mail data moves (`Maildir`, `maildir`, `email_cache`, `attachment_cache`, `mailboxes`, `search_index`, `custody`) — accounts, settings, logs, models and daemon bookkeeping stay in the app data dir so the app can boot and report an unreachable vault. When the vault cannot be resolved, mail-data commands fail rather than falling back to the app data dir, which would fork the archive.
 - **External backup (cold storage)** — a second, independent copy written during backups and never read for day-to-day use. Managed by `src-tauri/src/external_location.rs`; both locations persist through the same security-scoped bookmark slot mechanism (`SLOT_VAULT`, `SLOT_EXTERNAL_BACKUP`).
 
-The daemon resolves the vault independently from `<app_data_dir>/vault-meta.json` and keeps its own `app_dir` for logs, lock, models and classification state.
+The daemon resolves the vault independently from `<app_data_dir>/vault-meta.json` and keeps its own `app_dir` for logs, lock, models and classification state. A vault adopt/move/reset holds `DAEMON_SUSPENDED` (nothing may spawn a daemon onto a root mid-move), closes the daemon's search index (`search_index_close`), performs the move, then either stops the daemon so the channel respawns it on the new root, or, if the root did not change, reopens the index in place instead.
 
 ### Transfer accounting
 
@@ -114,6 +114,10 @@ This means:
 - Stores should own cross-screen state transitions.
 - Services should encapsulate integration details.
 - The daemon should own protocol and persistence details; the shell only forwards.
+
+Daemon-owned commands (listed as `DAEMON_OWNED` in `src/services/transport.js`) go straight to `daemon_rpc` under their own names instead of the request/response flow above. They never fall back to `invoke`; an unreachable daemon rejects with `errors.daemonUnavailable`.
+
+A second, long-lived channel (`src-tauri/src/daemon_channel.rs` ↔ `src-daemon/src/channel.rs`) carries two things outside the request/response flow: daemon bus events (e.g. `search-index-progress`), re-emitted by the shell as Tauri events for the frontend to render; and app → daemon fire-and-forget notifications (`search_index.nudge {accountId, mailbox}` from every vault writer, `search_index.sweep_soon`), dropped while disconnected and recovered by a `sweep_soon` sent on every (re)connect. The daemon starts unconfigured on each spawn, so the frontend re-pushes its effective index config on `daemon-reconnected`.
 
 ## State Management Guidelines
 
