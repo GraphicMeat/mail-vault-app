@@ -279,12 +279,16 @@ async fn daemon_main() {
     // costs nothing until something actually fails.
     let net = netgate::NetGate::new();
     net.spawn_watchdog();
+    let vault_closed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let vault_gate = Arc::new(std::sync::RwLock::new(()));
     let sync_eng = Arc::new(sync_engine::SyncEngine::new(
         Arc::clone(&imap_pool),
         mail_dir.clone(),
         data_dir.clone(),
         Arc::clone(&contacts),
         Arc::clone(&net),
+        Arc::clone(&vault_closed),
+        Arc::clone(&vault_gate),
     ));
 
     // IDLE watchers. 30 s first backoff, doubling — a provider that refuses
@@ -304,8 +308,8 @@ async fn daemon_main() {
         data_dir: mail_dir.clone(),
         app_dir: data_dir.clone(),
         mail_dir_ok,
-        vault_closed: std::sync::atomic::AtomicBool::new(false),
-        vault_gate: std::sync::RwLock::new(()),
+        vault_closed,
+        vault_gate,
         started_at: std::time::Instant::now(),
         llm: llm_state,
         inference: inference_engine,
@@ -320,6 +324,7 @@ async fn daemon_main() {
         search_index: Arc::clone(&search_index_state),
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
+        journal: std::sync::Mutex::new(()),
     });
 
     // Start background classification queue worker

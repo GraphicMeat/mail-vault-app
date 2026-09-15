@@ -30,7 +30,13 @@ pub struct DaemonState {
     /// 8): every vault-rooted Phase 2 route refuses through
     /// `handlers::common::vault_root` while this is set, so nothing writes
     /// into a root the app is mid-copy on.
-    pub vault_closed: AtomicBool,
+    ///
+    /// Task 2.7 (2.5 review I4): `Arc`-wrapped, not just a bare `AtomicBool`,
+    /// because `sync_engine::SyncEngine` now holds a clone of the exact same
+    /// flag — a sync write checks it directly (per write, never across an
+    /// `.await`) instead of going through a route at all, so `vault_close`
+    /// drains sync writers too, not only RPC-handler ones.
+    pub vault_closed: Arc<AtomicBool>,
     /// I3 fix (Task 2.5 fix round 1): `vault_closed` alone is check-then-act
     /// — a writer that already read `vault_root` can still be mid-write when
     /// `vault_close` returns. Every vault write takes this lock's read side
@@ -41,7 +47,10 @@ pub struct DaemonState {
     /// thread (`spawn_blocking`), never held across a tokio `.await`. Long
     /// jobs (Tasks 2.8, 2.9a) take it per file/mailbox batch, never once
     /// around the whole job, so a drain can't be blocked out for minutes.
-    pub vault_gate: std::sync::RwLock<()>,
+    ///
+    /// Task 2.7: also `Arc`-shared with `SyncEngine` (see `vault_closed`
+    /// above) so `vault_close`'s drain waits out an in-flight sync write too.
+    pub vault_gate: Arc<std::sync::RwLock<()>>,
     pub started_at: std::time::Instant,
     pub llm: Arc<llm::LlmState>,
     pub inference: Arc<inference::InferenceEngine>,
@@ -69,6 +78,16 @@ pub struct DaemonState {
     /// restart (reconnect, vault switch, version mismatch): cheap (skips
     /// existing cache files by stat), inventory-maildir oddity 9.
     pub prefetch_high_water: std::sync::Mutex<Vec<(String, u32)>>,
+    /// Task 2.7: guards `op_journal_queue`/`op_journal_clear`'s
+    /// load-modify-write. Both are handler routes on `spawn_blocking`, so
+    /// without this two concurrent `queueOp`s (a bulk flag change queues one
+    /// per message in a loop, `messageMutations.js`) race: both load the same
+    /// on-disk journal, both append, and the second write clobbers the
+    /// first's entry — a confirmed server op silently forgotten
+    /// (`inventory-cache.md` §4b.3). `op_journal_read` does not need it: every
+    /// write already goes through `fsx::write_atomic`, so a concurrent reader
+    /// only ever sees a complete journal, old or new, never a torn one.
+    pub journal: std::sync::Mutex<()>,
 }
 
 /// Start the daemon socket server.
@@ -225,6 +244,14 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::cache::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
+    if let Some(resp) = crate::handlers::journal::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
@@ -302,12 +329,16 @@ impl DaemonState {
         // A gate whose probe always answers "online": these tests are about
         // routing and state, never about connectivity.
         let net = NetGate::with_probe(Arc::new(|| Box::pin(async { true })));
+        let vault_closed = Arc::new(AtomicBool::new(false));
+        let vault_gate = Arc::new(std::sync::RwLock::new(()));
         let sync_engine = Arc::new(sync_engine::SyncEngine::new(
             Arc::clone(&imap_pool),
             mail_dir.clone(),
             app_dir.clone(),
             Arc::clone(&contacts),
             Arc::clone(&net),
+            Arc::clone(&vault_closed),
+            Arc::clone(&vault_gate),
         ));
         let idle = idle_watch::IdleWatchers::new(
             Arc::clone(&sync_engine),
@@ -323,8 +354,8 @@ impl DaemonState {
             data_dir: mail_dir.clone(),
             app_dir: app_dir.clone(),
             mail_dir_ok,
-            vault_closed: AtomicBool::new(false),
-            vault_gate: std::sync::RwLock::new(()),
+            vault_closed,
+            vault_gate,
             started_at: std::time::Instant::now(),
             llm: Arc::new(llm::LlmState::new(app_dir.clone())),
             inference: Arc::new(inference::InferenceEngine::new()),
@@ -337,6 +368,7 @@ impl DaemonState {
             events,
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
+            journal: std::sync::Mutex::new(()),
         })
     }
 }

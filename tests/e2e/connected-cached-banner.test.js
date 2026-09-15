@@ -85,11 +85,13 @@ describe('cached-data banner', function () {
     console.log(`[cached-banner] Maildir holds ${saved} saved emails`);
 
     // ── 2. Clear only the headers cache → "cache empty but local data exists".
+    // Task 2.7: clear_email_cache moved into the daemon (DAEMON_OWNED) — routed
+    // through daemon_rpc, same as every other moved-command e2e site.
     const clearResult = await browser.executeAsync(async (done) => {
       try {
         const invoke = window.__TAURI_INTERNALS__?.invoke;
         if (!invoke) return done({ error: 'No Tauri invoke found' });
-        await invoke('clear_email_cache', { accountId: null });
+        await invoke('daemon_rpc', { method: 'clear_email_cache', params: { accountId: null } });
         done({ ok: true });
       } catch (e) {
         done({ error: e.message || String(e) });

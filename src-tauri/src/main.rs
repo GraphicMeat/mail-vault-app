@@ -855,186 +855,32 @@ fn send_notification(
     Ok(())
 }
 
-// Email cache — per-email JSON sidecars
-// Directory structure: email_cache/<accountId>_<mailbox>/_meta.json + <uid>.json per email
-// Old monolithic format (single .json file) is auto-migrated on first save.
-// Body lives in mailvault_core::header_cache (shared with the daemon's sync engine).
-
-#[tauri::command]
-async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        mailvault_core::header_cache::save(&root, &account_id, &mailbox, &data)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-// ── Dedicated mailbox cache (instant folder loading) ─────────────────────
-
-#[tauri::command]
-fn save_mailbox_cache(app_handle: tauri::AppHandle, account_id: String, data: String) -> Result<(), String> {
-    mailvault_core::header_cache::save_mailbox_cache(&vault::root(&app_handle)?, &account_id, &data)
-}
-
-#[tauri::command]
-fn load_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<Option<String>, String> {
-    mailvault_core::header_cache::load_mailbox_cache(&vault::root(&app_handle)?, &account_id)
-}
-
-#[tauri::command]
-fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<(), String> {
-    mailvault_core::header_cache::delete_mailbox_cache(&vault::root(&app_handle)?, &account_id)
-}
-
-// ── Graph ID map cache (UID → Graph message ID) ────────────────────────
+// ── Graph ID map path (Task 2.7 carve-out) ─────────────────────────────────
+//
+// `graph_allocate_uids`/`load_graph_id_map` moved to the daemon (Task 2.7),
+// but the Graph backup (Phase 3, R2.2 ruling) still allocates from the SAME
+// ledger file under the SAME cross-process lock while it remains in the app
+// — moving only the listing path's half would reopen the double-uid bug the
+// lock exists to close. `graph_ledger_path` stays as the one place both the
+// app (`backup.rs`) and the (moved) daemon router name this file.
 
 /// Lives in the mailbox's sidecar directory alongside the `<uid>.json` files.
 /// Its presence is what tells a reader that this mailbox's UIDs were allocated
 /// by us over a date-ordered Graph listing rather than issued by an IMAP server
-/// in arrival order — see `load_from_sidecars`. `mailvault_core::graph_ledger`
-/// is the only code that writes this file; the name is shared so its listing
-/// path and the backup always allocate from the same copy.
+/// in arrival order. `mailvault_core::graph_ledger` is the only code that
+/// writes this file; the name is shared so its listing path and the backup
+/// always allocate from the same copy.
 const GRAPH_ID_MAP_FILE: &str = mailvault_core::graph_ledger::LEDGER_FILE;
 
-/// Where a mailbox's Outlook uid ledger lives. The app's listing path and the
-/// backup must name the same file, so both come here.
+/// Where a mailbox's Outlook uid ledger lives. The backup (still in-app,
+/// Phase 3) and the daemon's `graph_allocate_uids`/`load_graph_id_map`
+/// routes must name the same file, so both come here (the daemon builds the
+/// identical path itself from `vault_root`, since it has no `AppHandle`).
 pub(crate) fn graph_ledger_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
     Ok(vault::root(app_handle)?
         .join("email_cache")
         .join(cache_base_name(account_id, mailbox))
         .join(GRAPH_ID_MAP_FILE))
-}
-
-#[tauri::command]
-fn load_graph_id_map(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let file = graph_ledger_path(&app_handle, &account_id, &mailbox)?;
-
-    if !file.exists() {
-        return Ok(None);
-    }
-
-    let data = fs::read_to_string(&file)
-        .map_err(|e| format!("load_graph_id_map: failed to read: {}", e))?;
-
-    Ok(Some(data))
-}
-
-/// Uids for a Graph listing, from the allocator the backup uses too
-/// (`mailvault_core::graph_ledger`). `entries` pairs each Graph id with its
-/// internetMessageId, in listing order; the answer is one uid per entry. The
-/// ledger is persisted before this returns, and a failure returns no uids.
-#[tauri::command]
-async fn graph_allocate_uids(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    entries: Vec<(String, Option<String>)>,
-) -> Result<Vec<u32>, String> {
-    let ledger = graph_ledger_path(&app_handle, &account_id, &mailbox)?;
-    let cur = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    tokio::task::spawn_blocking(move || mailvault_core::graph_ledger::allocate(&ledger, &cur, &entries))
-        .await
-        .map_err(|e| format!("graph_allocate_uids panicked: {}", e))?
-}
-
-// ── Email header cache ───────────────────────────────────────────────────
-// Bodies live in mailvault_core::header_cache (shared with the daemon's sync
-// engine, Task 2.3).
-
-#[tauri::command]
-fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    mailvault_core::header_cache::load(&vault::root(&app_handle)?, &account_id, &mailbox)
-}
-
-/// Load only the N most recent emails from sidecar cache (fast initial display)
-#[tauri::command]
-async fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
-    tokio::task::spawn_blocking(move || {
-        mailvault_core::header_cache::load_partial(&vault::root(&app_handle)?, &account_id, &mailbox, limit)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Load email headers from sidecar cache for specific UIDs only.
-/// Much faster than parsing .eml files — reads pre-cached JSON sidecars.
-#[tauri::command]
-async fn load_email_cache_by_uids(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uids: Vec<u32>,
-) -> Result<Vec<serde_json::Value>, String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        Ok(mailvault_core::header_cache::load_by_uids(&root, &account_id, &mailbox, &uids))
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// List the UIDs a mailbox has sidecars for, plus which of them were written
-/// after `since_ms`.
-///
-/// Readdir only — no file is opened and nothing is parsed, so this costs one
-/// directory scan regardless of mailbox size. That's what lets a caller holding
-/// a stale in-memory header set re-read only the handful of messages that moved
-/// instead of all 15,000 (a full load is one read + one parse PER message).
-#[tauri::command]
-async fn list_cached_uids(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    since_ms: Option<f64>,
-) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        Ok(mailvault_core::header_cache::list_uids(&root, &account_id, &mailbox, since_ms))
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Load only cache metadata (no emails) — fast, for delta-sync parameters
-#[tauri::command]
-fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    mailvault_core::header_cache::load_meta(&vault::root(&app_handle)?, &account_id, &mailbox)
-}
-
-// ── Pending server ops ──────────────────────────────────────────────────────
-//
-// The journal lives in app_data_dir, NOT vault::root: the vault is relocatable
-// and can be an external volume that is absent at launch, which is exactly when
-// the replay needs to read this.
-
-fn op_journal_dir(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))
-}
-
-#[tauri::command]
-fn op_journal_queue(app_handle: tauri::AppHandle, entry: mailvault_core::op_journal::OpEntry) -> Result<u64, String> {
-    let dir = op_journal_dir(&app_handle)?;
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create data directory: {}", e))?;
-    mailvault_core::op_journal::queue(&dir, entry)
-}
-
-#[tauri::command]
-fn op_journal_clear(
-    app_handle: tauri::AppHandle,
-    op: String,
-    account_id: String,
-    mailbox: String,
-    uids: Vec<u32>,
-    arg: serde_json::Value,
-) -> Result<(), String> {
-    mailvault_core::op_journal::clear(&op_journal_dir(&app_handle)?, &op, &account_id, &mailbox, &uids, &arg)
-}
-
-/// Every unfinished server op, oldest first.
-#[tauri::command]
-fn op_journal_read(app_handle: tauri::AppHandle) -> Result<Vec<mailvault_core::op_journal::OpEntry>, String> {
-    Ok(mailvault_core::op_journal::read(&op_journal_dir(&app_handle)?))
-}
-
-#[tauri::command]
-fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>, mailbox: Option<String>) -> Result<(), String> {
-    mailvault_core::header_cache::clear(&vault::root(&app_handle)?, account_id.as_deref(), mailbox.as_deref())
 }
 
 #[tauri::command]
@@ -1778,39 +1624,6 @@ async fn verify_archived_emails(
             "mismatched": mismatched,
         }))
     }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-// ── Pending operation persistence ───────────────────────────────────────────
-
-#[tauri::command]
-async fn read_pending_operation(
-    app_handle: tauri::AppHandle,
-) -> Result<Option<serde_json::Value>, String> {
-    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
-    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_read(&dir))
-        .await
-        .map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
-async fn save_pending_operation(
-    app_handle: tauri::AppHandle,
-    operation: serde_json::Value,
-) -> Result<(), String> {
-    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
-    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_save(&dir, &operation))
-        .await
-        .map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
-async fn clear_pending_operation(
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    let dir = app_handle.path().app_data_dir().map_err(|e| format!("app_data_dir: {}", e))?;
-    tokio::task::spawn_blocking(move || mailvault_core::op_journal::pending_operation_clear(&dir))
-        .await
-        .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -4106,21 +3919,6 @@ fn main() {
             notification_sound::preview_notification_sound,
             set_badge_count,
             check_running_from_dmg,
-            save_email_cache,
-            load_email_cache,
-            load_email_cache_partial,
-            load_email_cache_meta,
-            load_email_cache_by_uids,
-            list_cached_uids,
-            clear_email_cache,
-            op_journal_queue,
-            op_journal_clear,
-            op_journal_read,
-            save_mailbox_cache,
-            load_mailbox_cache,
-            delete_mailbox_cache,
-            graph_allocate_uids,
-            load_graph_id_map,
             save_attachment_to,
             export_fetch::fetch_remote_asset,
             show_in_folder,
@@ -4152,9 +3950,6 @@ fn main() {
             cancel_archive,
             bulk_delete_emails,
             verify_archived_emails,
-            read_pending_operation,
-            save_pending_operation,
-            clear_pending_operation,
             commands::imap_test_connection,
             commands::smtp_test_connection,
             commands::imap_ensure_sent_mailbox,

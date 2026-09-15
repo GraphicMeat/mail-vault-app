@@ -293,6 +293,8 @@ mod tests {
             dir.to_path_buf(),
             ContactsState::new(dir.to_path_buf()),
             gate(true),
+            Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            Arc::new(std::sync::RwLock::new(())),
         )
     }
 

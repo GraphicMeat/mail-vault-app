@@ -261,20 +261,24 @@ describe('Outlook backup files every message under its ledger uid', function () 
 
   it('the app and the backup share one numbering', async function () {
     // What the app's listing path asks: known ids come back as filed.
-    const known = await invoke('graph_allocate_uids', {
+    // Task 2.7: graph_allocate_uids moved into the daemon (DAEMON_OWNED) —
+    // this file's own `invoke` stays generic (backup_run_account and friends
+    // below are still native), so only these call sites route through
+    // daemon_rpc.
+    const known = await invoke('daemon_rpc', { method: 'graph_allocate_uids', params: {
       accountId: ACCOUNT_ID,
       mailbox: 'INBOX',
       entries: [[INBOX_NEW.id, INBOX_NEW.internetMessageId], [newestFirst(INBOX)[0].id, null]],
-    });
+    } });
     expect(known).toEqual([7, 1]);
 
     // A message the app lists first gets its uid from the same ledger, and the
     // next backup files it there.
-    const minted = await invoke('graph_allocate_uids', {
+    const minted = await invoke('daemon_rpc', { method: 'graph_allocate_uids', params: {
       accountId: ACCOUNT_ID,
       mailbox: 'INBOX',
       entries: [[APP_ALLOCATED.id, APP_ALLOCATED.internetMessageId]],
-    });
+    } });
     expect(minted).toEqual([8]);
     expect(readLedger('INBOX')['8']).toBe(APP_ALLOCATED.id);
 
@@ -341,28 +345,29 @@ describe('Outlook backup files every message under its ledger uid', function () 
     const AFTER_CLEAR = msg('inbox', 'after-clear', 72);
     expect(Math.max(...Object.keys(readLedger('INBOX')).map(Number))).toBe(8); // anti-vacuity: where the cases above left INBOX
 
-    const minted = await invoke('graph_allocate_uids', {
+    const minted = await invoke('daemon_rpc', { method: 'graph_allocate_uids', params: {
       accountId: ACCOUNT_ID,
       mailbox: 'INBOX',
       entries: APP_ONLY.map((m) => [m.id, m.internetMessageId]),
-    });
+    } });
     expect(minted).toEqual([9, 10]);
     const before = readLedger('INBOX');
     const cacheDir = join(root, 'email_cache', cacheBase(ACCOUNT_ID, 'INBOX'));
     writeFileSync(join(cacheDir, '_meta.json'), '{}'); // a header cache the clear must still remove
 
-    // The order StorageSettings runs them in.
+    // The order StorageSettings runs them in. maildir_clear_cache is still
+    // native (Task 2.8); clear_email_cache moved in this task.
     const bodies = await invoke('maildir_clear_cache', {});
     if (bodies?.__error) throw new Error(`maildir_clear_cache: ${bodies.__error}`);
-    const headers = await invoke('clear_email_cache', { accountId: null });
+    const headers = await invoke('daemon_rpc', { method: 'clear_email_cache', params: { accountId: null } });
     if (headers?.__error) throw new Error(`clear_email_cache: ${headers.__error}`);
     expect(existsSync(join(cacheDir, '_meta.json'))).toBe(false); // the clear ran
 
-    const next = await invoke('graph_allocate_uids', {
+    const next = await invoke('daemon_rpc', { method: 'graph_allocate_uids', params: {
       accountId: ACCOUNT_ID,
       mailbox: 'INBOX',
       entries: [[AFTER_CLEAR.id, AFTER_CLEAR.internetMessageId]],
-    });
+    } });
     expect(next).toEqual([11]);
     expect(readLedger('INBOX')).toEqual({ ...before, 11: AFTER_CLEAR.id });
     expect(existsSync(ledgerPath('Archive'))).toBe(true);

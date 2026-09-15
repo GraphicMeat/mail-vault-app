@@ -100,6 +100,23 @@ export async function nativeInvoke(command, args) {
   return result;
 }
 
+/** Task 2.7: `save_mailbox_cache`/`save_email_cache` (and the rest of the
+ * header/mailbox cache, Outlook uid ledger, op journal and pending-operation
+ * family) moved into the daemon under `DAEMON_OWNED` — `nativeInvoke`'s raw
+ * `window.__TAURI__.core.invoke(cmd, ...)` no longer reaches a registered
+ * Tauri command for these, so callers must go through `daemon_rpc` instead
+ * (same pattern `connected-attachments.test.js` uses for its Task 2.6 name).
+ * Kept separate from `nativeInvoke` itself, which the many still-native
+ * commands in this file (`imap_get_mailboxes`, `imap_get_emails`, ...)
+ * continue to use unchanged. */
+export async function nativeDaemonInvoke(method, params) {
+  const result = await browser.executeAsync((m, p, done) => {
+    window.__TAURI__.core.invoke('daemon_rpc', { method: m, params: p }).then(done).catch(error => done({ __error: String(error) }));
+  }, method, params);
+  assert.ok(!result?.__error, `${method}: ${result?.__error}`);
+  return result;
+}
+
 /** Fixture preparation uses real IMAP extraction and the existing disk cache.
  * No Insights results, identities, dates or aggregation are injected. */
 export async function cacheScenarioHeaders() {
@@ -108,7 +125,7 @@ export async function cacheScenarioHeaders() {
     const response = await nativeInvoke('imap_get_mailboxes', { account });
     const mailboxes = response.mailboxes;
     assert.ok(Array.isArray(mailboxes));
-    await nativeInvoke('save_mailbox_cache', { accountId: account.id, data: JSON.stringify({ mailboxes, fetchedAt: Date.now() }) });
+    await nativeDaemonInvoke('save_mailbox_cache', { accountId: account.id, data: JSON.stringify({ mailboxes, fetchedAt: Date.now() }) });
     for (const folder of mailboxes) {
       const mailbox = folder.path || folder.name;
       if ((folder.attributes || folder.attrs || []).includes('\\Noselect')) continue;
@@ -122,13 +139,13 @@ export async function cacheScenarioHeaders() {
         assert.ok(headers.emails.length <= 200);
         total = headers.total;
         allUids.push(...headers.emails.map(header => header.uid));
-        await nativeInvoke('save_email_cache', { accountId: account.id, mailbox,
+        await nativeDaemonInvoke('save_email_cache', { accountId: account.id, mailbox,
           data: JSON.stringify({ emails: headers.emails, totalEmails: headers.total, lastSynced: Date.now(), uidValidity: status.uidValidity, uidNext: status.uidNext, highestModseq: status.highestModseq }) });
         hasMore = headers.hasMore;
         assert.ok(!hasMore || headers.emails.length > 0, 'Provider pagination must progress');
         page++;
       }
-      await nativeInvoke('save_email_cache', { accountId: account.id, mailbox,
+      await nativeDaemonInvoke('save_email_cache', { accountId: account.id, mailbox,
         data: JSON.stringify({ emails: [], totalEmails: total, serverUids: allUids, lastSynced: Date.now(), uidValidity: status.uidValidity, uidNext: status.uidNext, highestModseq: status.highestModseq }) });
       stats.push({ accountId: account.id, mailbox, loaded: allUids.length, total });
     }

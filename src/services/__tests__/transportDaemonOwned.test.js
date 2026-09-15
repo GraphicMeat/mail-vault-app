@@ -13,15 +13,25 @@ const { t } = await import('../../i18n/index.js');
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
 
-  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6)', async () => {
+  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
     const names = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
     expect(names).toEqual([
       'cache_attachment', 'cached_attachment_path',
+      'clear_email_cache', 'clear_pending_operation',
+      'delete_mailbox_cache',
+      'graph_allocate_uids',
+      'list_cached_uids',
+      'load_email_cache', 'load_email_cache_by_uids', 'load_email_cache_meta', 'load_email_cache_partial',
+      'load_graph_id_map', 'load_mailbox_cache',
       'maildir_exists', 'maildir_list', 'maildir_orphan_stats',
       'maildir_read', 'maildir_read_attachment', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source',
-      'maildir_storage_stats', 'prefetch_attachments',
+      'maildir_storage_stats',
+      'op_journal_clear', 'op_journal_queue', 'op_journal_read',
+      'prefetch_attachments',
+      'read_pending_operation',
+      'save_email_cache', 'save_mailbox_cache', 'save_pending_operation',
       'search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status',
       'vault_rows', 'vault_search',
     ]);

@@ -6,7 +6,7 @@ import { buildInsightsScenario } from './insightsFixture.js';
 import { waitForApp, waitForEmails } from './helpers.js';
 import { MOCK_PASSWORD, appDataDir } from './mockImap.js';
 import { clickReachable, setControl, openInsights, waitForInsights, setInsightsRange,
-  nativeInvoke, cacheScenarioHeaders, readNativeSnapshot, summaryText, captureInsights, startFrameProbe, stopFrameProbe, startNativeProbe, stopNativeProbe, waitForHeldNativeReply, releaseNativeReply, nativeProbeOutcomes } from './insightsHelpers.js';
+  nativeInvoke, nativeDaemonInvoke, cacheScenarioHeaders, readNativeSnapshot, summaryText, captureInsights, startFrameProbe, stopFrameProbe, startNativeProbe, stopNativeProbe, waitForHeldNativeReply, releaseNativeReply, nativeProbeOutcomes } from './insightsHelpers.js';
 
 const LARGE = process.env.E2E_INSIGHTS_LARGE === '1';
 const expected = buildInsightsScenario({ inboxCount: LARGE ? 50000 : 700 }).firstAccountExpected;
@@ -201,7 +201,7 @@ describe('Insights with real native mail data', function () {
     await client.connect();
     try { await client.mailboxOpen('INBOX'); await client.messageDelete('112', { uid: true }); } finally { await client.logout(); }
     // Refresh fixture caches via the actual provider after its real deletion.
-    await nativeInvoke('save_email_cache', { accountId: account.id, mailbox: 'INBOX', data: JSON.stringify({ emails: [], removedUids: [112], totalEmails: (LARGE ? 50000 : 700) - 1 }) });
+    await nativeDaemonInvoke('save_email_cache', { accountId: account.id, mailbox: 'INBOX', data: JSON.stringify({ emails: [], removedUids: [112], totalEmails: (LARGE ? 50000 : 700) - 1 }) });
     await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
     await displayedTotal(expected.received);
     await captureInsights('vault-only');

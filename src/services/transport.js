@@ -123,6 +123,13 @@ export const DAEMON_OWNED = new Set([
   'maildir_read', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source', 'maildir_read_attachment',
   'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments',
+  // Task 2.7: header caches, mailbox cache, Outlook uid ledger, op journal, pending operation.
+  'save_email_cache', 'load_email_cache', 'load_email_cache_partial', 'load_email_cache_meta',
+  'load_email_cache_by_uids', 'list_cached_uids', 'clear_email_cache',
+  'save_mailbox_cache', 'load_mailbox_cache', 'delete_mailbox_cache',
+  'graph_allocate_uids', 'load_graph_id_map',
+  'op_journal_queue', 'op_journal_clear', 'op_journal_read',
+  'read_pending_operation', 'save_pending_operation', 'clear_pending_operation',
 ]);
 
 async function sendToDaemon(command, args) {

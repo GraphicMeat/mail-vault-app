@@ -84,6 +84,12 @@ pub(crate) fn opt_str_arg(params: &Value, key: &str) -> Option<String> {
     params.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// An optional f64 param (`list_cached_uids`'s `sinceMs`) — absent or
+/// non-numeric both read as `None`.
+pub(crate) fn opt_f64_arg(params: &Value, key: &str) -> Option<f64> {
+    params.get(key).and_then(Value::as_f64)
+}
+
 /// A required u32 param (JSON numbers arrive as u64; every uid fits u32).
 pub(crate) fn u32_arg(id: &Value, params: &Value, key: &str) -> Result<u32, RpcResponse> {
     params
@@ -135,6 +141,19 @@ mod tests {
     fn vault_root_succeeds_when_ok_and_not_closed() {
         let st = state(true);
         assert_eq!(vault_root(&st).unwrap(), st.data_dir);
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// Task 2.7 (2.3 review F1): cache handlers must pass the IDENTICAL
+    /// `PathBuf` `sync_engine` writes into — the header-cache lock registry
+    /// (`mailvault_core::header_cache::lock_tree`/`lock_mailbox`) keys on the
+    /// raw path, so two spellings of the same root (e.g. one with a trailing
+    /// component resolved differently) would silently give a cache handler
+    /// and a sync write two different locks over one directory.
+    #[test]
+    fn vault_root_and_sync_engines_root_are_the_same_path() {
+        let st = state(true);
+        assert_eq!(vault_root(&st).unwrap(), st.sync_engine.data_dir());
         let _ = std::fs::remove_dir_all(&st.data_dir);
     }
 

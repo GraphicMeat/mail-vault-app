@@ -16,8 +16,10 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{error, info};
 
+pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod daemon;
+pub(crate) mod journal;
 pub(crate) mod search_index;
 pub(crate) mod vault_files;
 

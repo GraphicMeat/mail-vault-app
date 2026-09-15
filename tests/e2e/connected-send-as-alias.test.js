@@ -60,8 +60,14 @@ describe('Connected Send-As Alias', function () {
    * Seed the Sent header cache directly: alias discovery reads the cached
    * headers, and waiting for a Sent sync would make the assertion depend on
    * prefetch timing.
+   *
+   * Task 2.7: `save_email_cache` moved into the daemon (`DAEMON_OWNED`) — the
+   * raw `window.__TAURI__.core.invoke('save_email_cache', ...)` this file's
+   * own `invoke` helper does no longer reaches a registered Tauri command,
+   * so this one call site routes through `daemon_rpc` instead. `invoke`
+   * itself stays unchanged: `smtp_build_mime` below is still native.
    */
-  const seedSentCache = () => invoke('save_email_cache', {
+  const seedSentCache = () => invoke('daemon_rpc', { method: 'save_email_cache', params: {
     accountId: account.id,
     mailbox: 'Sent',
     data: JSON.stringify({
@@ -80,7 +86,7 @@ describe('Connected Send-As Alias', function () {
         flags: ['\\Seen'],
       }],
     }),
-  });
+  } });
 
   /** Decode the staged MIME and pull out its header block. */
   async function buildHeaders(account, extra = {}) {
