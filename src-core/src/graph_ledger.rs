@@ -26,11 +26,41 @@
 use crate::fsx;
 use crate::maildir::{mirror_filename_uid, normalize_message_id, read_message_id, vault_filename_uid, ORPHAN_DIR};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
 use tracing::warn;
 
 pub const LEDGER_FILE: &str = "graph_id_map.json";
+
+/// The vault-wide cross-process allocation lock, one level up from every
+/// mailbox's own ledger: `<email_cache>/.graph-ledger.lock`. A top-level file,
+/// never a mailbox dir — kept by name (never `type`) by every clear path, the
+/// same rule `LEDGER_FILE` already gets one level down (memory: "keep by
+/// name, not type").
+pub const LEDGER_LOCK_FILE: &str = ".graph-ledger.lock";
+
+/// Open (creating if needed) and take a blocking exclusive OS lock on the
+/// vault-wide ledger lock file, mirroring the in-process `STATE` mutex above
+/// but across processes (R2.2: two Macs on one NAS vault, or the app and the
+/// backup run in the same process today but on separate `allocate` calls).
+/// The returned `File` holds the lock for as long as it lives; it releases on
+/// drop, including on every early `?` return in `allocate`.
+fn lock_across_processes(ledger_path: &Path) -> Result<File, String> {
+    let cache_dir = ledger_path.parent().and_then(Path::parent).ok_or_else(|| {
+        format!("Outlook uid ledger {} has no email_cache parent", ledger_path.display())
+    })?;
+    std::fs::create_dir_all(cache_dir)
+        .map_err(|e| format!("could not create {}: {}", cache_dir.display(), e))?;
+    let lock_path = cache_dir.join(LEDGER_LOCK_FILE);
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|e| format!("could not open ledger lock {}: {}", lock_path.display(), e))?;
+    file.lock().map_err(|e| format!("could not lock {}: {}", lock_path.display(), e))?;
+    Ok(file)
+}
 
 /// uid -> Graph message id.
 pub type Ledger = BTreeMap<u32, String>;
@@ -117,6 +147,9 @@ fn persist(path: &Path, ledger: &Ledger) -> Result<(), String> {
 /// this returns; on any error no uid is returned and the ledger is unchanged.
 pub fn allocate(ledger_path: &Path, cur_dir: &Path, listed: &[(String, Option<String>)]) -> Result<Vec<u32>, String> {
     let mut memo = STATE.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    // Held across the whole load-scan-persist below, and released (by drop)
+    // on every path out of this function, including an early `?` return.
+    let _cross_process_lock = lock_across_processes(ledger_path)?;
     let mut ledger = load(ledger_path)?;
 
     // BTreeMap iterates uids ascending, so an id the file maps twice resolves
@@ -243,6 +276,14 @@ pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
     };
     for entry in entries.flatten() {
         let path = entry.path();
+        // By name, before any type lookup — same rule as `LEDGER_FILE` one
+        // level down: the vault-wide allocation lock is a top-level file here,
+        // never a mailbox dir, and unlinking it while another process holds it
+        // locked would silently drop R2.2's cross-process guarantee (the next
+        // `allocate` creates a fresh file whose lock excludes nobody).
+        if entry.file_name() == LEDGER_LOCK_FILE {
+            continue;
+        }
         // file_type does not follow symlinks: a link is removed, never its target.
         if !entry.file_type().is_ok_and(|t| t.is_dir()) {
             logged(&path, std::fs::remove_file(&path));
@@ -769,5 +810,116 @@ mod tests {
         let result = allocate(&m.ledger, &m.cur, &listed(&["b", "a"]));
         set_mode(&m.cur, 0o755);
         assert_eq!(result.unwrap(), vec![2, 1]);
+    }
+
+    // --- Task 2.4: cross-process ledger lock (R2.2) ---
+
+    #[test]
+    fn clearing_the_cache_keeps_the_ledger_lock_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let cache = tmp.path().join("email_cache");
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join(LEDGER_LOCK_FILE), b"").unwrap();
+        fs::write(cache.join("acct_Old.json"), b"[]").unwrap();
+
+        clear_cache_keeping_ledgers(&cache);
+
+        assert!(cache.join(LEDGER_LOCK_FILE).exists(), "the cross-process lock file must survive a clear");
+        assert!(!cache.join("acct_Old.json").exists());
+    }
+
+    /// The proof that `allocate` actually excludes a *different* OS process,
+    /// not just this one's in-memory `STATE` mutex (which a same-process test
+    /// could satisfy trivially): a child re-exec of this very test binary
+    /// holds the file lock for a fixed window while the real test's `allocate`
+    /// call is in flight, and the wait is timed.
+    #[test]
+    fn a_lock_held_by_another_process_blocks_allocate_until_released() {
+        const HOLD_MS: u64 = 600;
+        let env_key = "MV_GRAPH_LEDGER_LOCK_TEST_PATH";
+        if let Ok(path) = std::env::var(env_key) {
+            // Running as the child: hold the OS lock for a fixed window, then exit.
+            let path = PathBuf::from(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            let file = fs::OpenOptions::new().create(true).write(true).open(&path).unwrap();
+            file.lock().unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(HOLD_MS));
+            return;
+        }
+
+        let m = mailbox();
+        let lock_path = m.ledger.parent().unwrap().parent().unwrap().join(LEDGER_LOCK_FILE);
+        let exe = std::env::current_exe().unwrap();
+        let mut child = std::process::Command::new(&exe)
+            .arg("graph_ledger::tests::a_lock_held_by_another_process_blocks_allocate_until_released")
+            .arg("--exact")
+            .env(env_key, &lock_path)
+            .spawn()
+            .unwrap();
+        // Give the child a moment to actually acquire the lock before racing it.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+
+        let start = std::time::Instant::now();
+        let uids = allocate(&m.ledger, &m.cur, &listed(&["a"])).unwrap();
+        let waited = start.elapsed();
+
+        assert!(child.wait().unwrap().success());
+        assert_eq!(uids, vec![1]);
+        assert!(
+            waited >= std::time::Duration::from_millis(300),
+            "allocate returned in {:?}, expected to wait on the child process's lock",
+            waited
+        );
+    }
+
+    /// Two processes each allocating 200 fresh ids for the SAME ledger must
+    /// never hand out the same uid and must never lose one — the exact bug
+    /// R2.2 exists to close (one uid naming two messages). Each child writes
+    /// its uids to a file instead of stdout: libtest captures a passing test's
+    /// stdout internally, so a piped Command would not reliably see it.
+    #[test]
+    fn two_processes_allocating_two_hundred_ids_each_never_share_a_uid() {
+        let env_key = "MV_LEDGER_CONCURRENCY_CHILD";
+        if let Ok(spec) = std::env::var(env_key) {
+            let parts: Vec<&str> = spec.split('|').collect();
+            let (ledger, cur, out_file, prefix) =
+                (PathBuf::from(parts[0]), PathBuf::from(parts[1]), PathBuf::from(parts[2]), parts[3]);
+            let entries: Vec<(String, Option<String>)> =
+                (0..200).map(|i| (format!("{}-{}", prefix, i), None)).collect();
+            let uids = allocate(&ledger, &cur, &entries).unwrap();
+            let out = uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+            fs::write(&out_file, out).unwrap();
+            return;
+        }
+
+        let m = mailbox();
+        let exe = std::env::current_exe().unwrap();
+        let out0 = m.ledger.with_file_name("concurrency_out0.txt");
+        let out1 = m.ledger.with_file_name("concurrency_out1.txt");
+        let spawn = |out: &Path, prefix: &str| {
+            std::process::Command::new(&exe)
+                .arg("graph_ledger::tests::two_processes_allocating_two_hundred_ids_each_never_share_a_uid")
+                .arg("--exact")
+                .env(
+                    env_key,
+                    format!("{}|{}|{}|{}", m.ledger.display(), m.cur.display(), out.display(), prefix),
+                )
+                .spawn()
+                .unwrap()
+        };
+        let c0 = spawn(&out0, "p0");
+        let c1 = spawn(&out1, "p1");
+        assert!(c0.wait_with_output().unwrap().status.success());
+        assert!(c1.wait_with_output().unwrap().status.success());
+
+        let read = |p: &Path| -> Vec<u32> {
+            fs::read_to_string(p).unwrap().split(',').map(|s| s.parse().unwrap()).collect()
+        };
+        let mut all = read(&out0);
+        all.extend(read(&out1));
+        assert_eq!(all.len(), 400);
+        let distinct: HashSet<u32> = all.iter().copied().collect();
+        assert_eq!(distinct.len(), 400, "two processes must never share a uid");
+        assert_eq!(on_disk(&m).len(), 400);
     }
 }
