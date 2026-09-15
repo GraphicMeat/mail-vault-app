@@ -7,6 +7,7 @@ import { selectionKey, refreshSelectedThread } from './unifiedHelpers';
 import {
   selectEmail as _selectEmail,
   _prefetchAdjacentEmails,
+  cancelSelection as _cancelSelection,
 } from '../../services/workflows/selectEmail';
 import {
   markSelectedAsRead as _markSelectedAsRead,
@@ -44,6 +45,7 @@ export const createSelectionSlice = (set, get) => ({
 
   // Select a thread (shows all emails in the thread in the viewer)
   selectThread: (thread) => {
+    _cancelSelection();
     set(state => ({
       selectedThread: thread,
       // The same key the rows are drawn with, or the row never reads as open.
@@ -72,13 +74,16 @@ export const createSelectionSlice = (set, get) => ({
   // clears the same set rather than a subset that leaves the pane half-open.
   // `loadingEmail` too: closing during a body fetch must not leave the spinner
   // standing as the whole pane's content.
-  closeEmail: () => set({
-    selectedEmailId: null,
-    selectedEmail: null,
-    selectedEmailSource: null,
-    selectedThread: null,
-    loadingEmail: false,
-  }),
+  closeEmail: () => {
+    _cancelSelection();
+    set({
+      selectedEmailId: null,
+      selectedEmail: null,
+      selectedEmailSource: null,
+      selectedThread: null,
+      loadingEmail: false,
+    });
+  },
 
   // ── Passthrough wrappers to workflow functions ──
 

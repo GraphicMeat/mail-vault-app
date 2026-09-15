@@ -20,10 +20,11 @@ let _markAsReadTimer = null;
 
 let _insightsSelectionGeneration = 0;
 export function getSelectionGeneration() { return _insightsSelectionGeneration; }
-export function cancelInsightsSelection() {
+export function cancelSelection() {
   _insightsSelectionGeneration += 1;
   if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
 }
+export const cancelInsightsSelection = cancelSelection;
 
 
 // ── vault read, verified against the row it was read for ──
@@ -65,11 +66,28 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
   const { markAsReadMode, markAsReadDelay } = useSettingsStore.getState();
   if (markAsReadMode === 'manual' || email?.flags?.includes('\\Seen')) return email;
 
+  // Generation invalidation covers the normal selectEmail path, but closing
+  // or changing the reader can happen while a body fetch or server flag write
+  // is awaiting. Capture the exact reader view here as a second fence so a
+  // delayed callback cannot mark a same-UID message from another account or
+  // folder, or repaint a reader that has already been replaced.
+  const opened = useMailStore.getState();
+  const openedSelectionId = opened.selectedEmailId;
+  const selectionIsCurrent = () => {
+    const current = useMailStore.getState();
+    return openedSelectionId != null
+      && current.selectedEmailId === openedSelectionId
+      && current.activeAccountId === opened.activeAccountId
+      && current.activeMailbox === opened.activeMailbox
+      && current.mailboxScope === opened.mailboxScope;
+  };
+  const stillCurrent = () => isCurrent() && selectionIsCurrent();
+
   const doMark = async () => {
-    if (!isCurrent()) return;
+    if (!stillCurrent()) return;
     try {
       await markOnServer();
-      if (!isCurrent()) return;
+      if (!stillCurrent()) return;
       applySeenLocally(useMailStore, { accountId, mailbox, uid, read: true, isUnified });
     } catch (e) {
       console.warn('[selectEmail] Mark as read failed:', e);
@@ -78,7 +96,10 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
 
   if (markAsReadMode === 'delay') {
     if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
-    _markAsReadTimer = setTimeout(doMark, (markAsReadDelay || 3) * 1000);
+    _markAsReadTimer = setTimeout(() => {
+      _markAsReadTimer = null;
+      void doMark();
+    }, (markAsReadDelay || 3) * 1000);
     return email;
   }
 
@@ -170,9 +191,13 @@ function _rowOf(state, accountId, mailbox, uid) {
 async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
-  const isCurrent = () => generation === _insightsSelectionGeneration;
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+  const openedView = get();
+  const isCurrent = () => generation === _insightsSelectionGeneration
+    && get().activeAccountId === openedView.activeAccountId
+    && get().activeMailbox === openedView.activeMailbox
+    && get().mailboxScope === openedView.mailboxScope;
   const { accountId, mailbox, header } = location || {};
   const account = get().accounts.find(a => a.id === accountId);
   if (!account || !Number.isInteger(uid) || uid <= 0 || uid !== location.uid || !mailbox || mailbox === 'UNIFIED'
@@ -278,9 +303,13 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   if (locationOverride) return _selectExplicitEmail(uid, source, mailboxOverride, locationOverride);
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
-  const isCurrent = () => generation === _insightsSelectionGeneration;
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
+  const openedView = get();
+  const isCurrent = () => generation === _insightsSelectionGeneration
+    && get().activeAccountId === openedView.activeAccountId
+    && get().activeMailbox === openedView.activeMailbox
+    && get().mailboxScope === openedView.mailboxScope;
   const publish = patch => { if (isCurrent()) useMailStore.setState(patch); };
   if (!isCurrent()) return;
 

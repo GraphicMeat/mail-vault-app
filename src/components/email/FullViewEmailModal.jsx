@@ -20,6 +20,7 @@ import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { getSelectionGeneration } from '../../services/workflows/selectEmail';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -31,6 +32,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
+  const selectionOwnership = useRef(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
@@ -41,6 +43,24 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const theme = themeOverride ?? (emailViewerTheme === 'system' ? appTheme : emailViewerTheme);
   const isDark = theme === 'dark';
   const emailColors = getEmailColors(theme, palette);
+  const close = () => {
+    const owned = selectionOwnership.current;
+    const state = useMailStore.getState();
+    const currentView = state.activeAccountId === owned?.accountId
+      && state.activeMailbox === owned?.activeMailbox
+      && state.mailboxScope === owned?.mailboxScope;
+    const currentSelection = state.selectedEmailId;
+    const currentReader = currentSelection == null
+      || currentSelection === owned?.selectionId
+      || currentSelection === owned?.previousSelectionId;
+    if (owned && getSelectionGeneration() === owned.generation && currentView && currentReader) {
+      // closeEmail performs the generation invalidation and clears loadingEmail
+      // for this modal's own fetch. If another reader superseded it, the
+      // ownership checks above leave that reader untouched.
+      state.closeEmail();
+    }
+    onClose?.();
+  };
   useEffect(() => setThemeOverride(null), [initialEmail.uid, initialEmail._accountId, initialEmail._mailbox]);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
@@ -59,7 +79,18 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
       // Need to fetch full content - use selectEmail. A bare uid names no
       // message in a spanning view.
       try {
-        await selectEmail(rowKey(initialEmail, spansMailboxes(useMailStore.getState())), initialEmail.source || 'server');
+        const opened = useMailStore.getState();
+        const selectionId = rowKey(initialEmail, spansMailboxes(opened));
+        const selection = selectEmail(selectionId, initialEmail.source || 'server');
+        selectionOwnership.current = {
+          generation: getSelectionGeneration(),
+          accountId: opened.activeAccountId,
+          activeMailbox: opened.activeMailbox,
+          mailboxScope: opened.mailboxScope,
+          selectionId,
+          previousSelectionId: opened.selectedEmailId,
+        };
+        await selection;
       } catch (e) {
         console.error('Failed to fetch full email:', e);
         // Even if fetch fails, set the initial email so we show something
@@ -155,7 +186,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   return (
     <Dialog
       open={Boolean(email)}
-      onClose={onClose}
+      onClose={close}
       size="full"
       panelBg="bg-mail-surface"
       aria-label={t('email.fullView.fullMessage')}
@@ -173,7 +204,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
             {isDark ? t('emailActionBar.light') : t('emailActionBar.dark')}
           </Button>
-          <Button variant="ghost" icon onClick={onClose} aria-label={t('common.close')} className="flex-shrink-0">
+          <Button variant="ghost" icon onClick={close} aria-label={t('common.close')} className="flex-shrink-0">
             <X size={20} />
           </Button>
         </div>

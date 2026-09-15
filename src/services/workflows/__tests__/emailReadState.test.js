@@ -234,6 +234,127 @@ describe('selectEmail — auto mark as read', () => {
       expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'add', 'INBOX');
       expect(seenOf(1)).toBe(true);
     });
+
+    it('cancels the timer when the reader closes and restarts it on reopen', async () => {
+      markAsReadMode = 'delay';
+      primeStore([]);
+
+      await useMailStore.getState().selectEmail(1);
+      useMailStore.getState().closeEmail();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+
+      await useMailStore.getState().selectEmail(1);
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(mockUpdateEmailFlags).toHaveBeenCalledOnce();
+    });
+
+    it('cancels a stale same-UID timer when another account and folder is selected', async () => {
+      markAsReadMode = 'delay';
+      const accountB = { id: 'acct2', email: 'other@mock.test' };
+      const emailB = { uid: 1, subject: 'Other', flags: [], html: '<p>b</p>', text: 'b' };
+      let releaseA;
+      mockUpdateEmailFlags.mockImplementationOnce(() => new Promise(resolve => { releaseA = resolve; }));
+      mockFetchEmailLight.mockResolvedValueOnce({ uid: 1, subject: 'General', flags: [], html: '<p>a</p>', text: 'a' });
+      mockFetchEmailLight.mockResolvedValueOnce(emailB);
+      primeStore([]);
+
+      await useMailStore.getState().selectEmail(1);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(releaseA).toBeTypeOf('function');
+
+      useMailStore.setState({
+        accounts: [ACCOUNT, accountB], activeAccountId: accountB.id, activeMailbox: 'Sent',
+        emails: [{ ...emailB, _accountId: accountB.id, _mailbox: 'Sent' }],
+        selectedEmail: null, selectedEmailId: null,
+      });
+      await useMailStore.getState().selectEmail(1, 'server', 'Sent');
+      releaseA();
+      await Promise.resolve();
+
+      expect(useMailStore.getState().selectedEmail.uid).toBe(1);
+      expect(useMailStore.getState().selectedEmail.subject).toBe('Other');
+      expect(useMailStore.getState().emails[0].flags).not.toContain('\\Seen');
+      expect(mockUpdateEmailFlags).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mockUpdateEmailFlags).toHaveBeenCalledTimes(2);
+      expect(mockUpdateEmailFlags).toHaveBeenLastCalledWith(accountB, 1, ['\\Seen'], 'add', 'Sent');
+    });
+
+    it('ignores a mark-read completion after the reader closes', async () => {
+      markAsReadMode = 'delay';
+      let releaseMark;
+      mockUpdateEmailFlags.mockImplementationOnce(() => new Promise(resolve => { releaseMark = resolve; }));
+      primeStore([]);
+
+      await useMailStore.getState().selectEmail(1);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(releaseMark).toBeTypeOf('function');
+
+      useMailStore.getState().closeEmail();
+      releaseMark();
+      await Promise.resolve();
+
+      expect(useMailStore.getState().selectedEmail).toBeNull();
+      expect(useMailStore.getState().selectedEmailId).toBeNull();
+      expect(seenOf(1)).toBe(false);
+    });
+
+    it('does not publish or schedule a read after closing during the body fetch', async () => {
+      markAsReadMode = 'delay';
+      let releaseFetch;
+      mockFetchEmailLight.mockImplementationOnce(() => new Promise(resolve => { releaseFetch = resolve; }));
+      primeStore([]);
+
+      const pending = useMailStore.getState().selectEmail(1);
+      await vi.waitFor(() => expect(releaseFetch).toBeTypeOf('function'));
+      useMailStore.getState().closeEmail();
+      releaseFetch({ uid: 1, subject: 'General', flags: [], html: '<p>body</p>', text: 'body' });
+      await pending;
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(useMailStore.getState().selectedEmail).toBeNull();
+      expect(useMailStore.getState().selectedEmailId).toBeNull();
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    });
+
+    it('does not publish a stale body after the account and folder change during fetch', async () => {
+      markAsReadMode = 'delay';
+      const accountB = { id: 'acct2', email: 'other@mock.test' };
+      let releaseFetch;
+      mockFetchEmailLight.mockImplementationOnce(() => new Promise(resolve => { releaseFetch = resolve; }));
+      primeStore([]);
+
+      const pending = useMailStore.getState().selectEmail(1);
+      await vi.waitFor(() => expect(releaseFetch).toBeTypeOf('function'));
+      useMailStore.setState({
+        accounts: [ACCOUNT, accountB], activeAccountId: accountB.id, activeMailbox: 'Sent',
+        selectedEmail: null, selectedEmailId: null,
+      });
+      releaseFetch({ uid: 1, subject: 'Old account', flags: [], html: '<p>old</p>', text: 'old' });
+      await pending;
+
+      expect(useMailStore.getState().selectedEmail).toBeNull();
+      expect(useMailStore.getState().selectedEmailId).toBeNull();
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    });
+
+    it('cancels a pending timer when the reader switches to a thread', async () => {
+      markAsReadMode = 'delay';
+      primeStore([]);
+
+      await useMailStore.getState().selectEmail(1);
+      useMailStore.getState().selectThread({
+        threadId: 'thread-b', lastEmail: { uid: 2 }, emails: [{ uid: 2 }], messageCount: 1,
+      });
+      await vi.advanceTimersByTimeAsync(3000);
+
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+      expect(useMailStore.getState().selectedThread.threadId).toBe('thread-b');
+    });
   });
 });
 
