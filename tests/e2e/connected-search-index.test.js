@@ -88,7 +88,7 @@ describe('Search index', function () {
   }
 
   const indexStatus = () => browser.executeAsync((done) => {
-    window.__TAURI_INTERNALS__.invoke('search_index_status', {}).then(done, (e) => done({ error: String(e) }));
+    window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'search_index_status', params: {} }).then(done, (e) => done({ error: String(e) }));
   });
 
   const results = () => browser.execute(() => (window.__SEARCH_STORE__?.getState?.().searchResults || [])

@@ -165,6 +165,14 @@ describe('demo mailbox backend', () => {
     expect(backend.snapshot().messages).toEqual(baseline.messages);
   });
 
+  it('serves daemon-owned search index commands through daemon_rpc', async () => {
+    const backend = createDemoBackend();
+    const status = await backend.invoke('daemon_rpc', { method: 'search_index_status', params: {} });
+    expect(status).toMatchObject({ available: false, state: 'unavailable', firstPassDone: false });
+    await expect(backend.invoke('daemon_rpc', { method: 'search_index_destroy', params: {} })).resolves.toEqual({ ok: true });
+    await expect(backend.invoke('daemon_rpc', { method: 'vault_search', params: { request: { accountId: 'x', query: 'y' } } })).resolves.toEqual({ available: false });
+  });
+
   it('keeps native-shaped sync, folder, backup and browser file contracts usable', async () => {
     const backend = createDemoBackend();
     const account = backend.accounts[0];

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
-import { configure } from '../services/searchIndex';
+import { configure, onDaemonReconnected } from '../services/searchIndex';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent || '');
 
@@ -8,10 +8,10 @@ const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAge
 export function effectiveSearchIndexConfig(state, { isMac = IS_MAC } = {}) {
   const premium = hasPremiumAccess(state.billingProfile);
   const attachments = !!state.searchIndexAttachments && premium;
-  return { bodies: state.searchIndexBodies !== false, attachments, imageText: attachments && !!state.searchIndexImageText && isMac };
+  return { enabled: state.searchIndexEnabled !== false, bodies: state.searchIndexBodies !== false, attachments, imageText: attachments && !!state.searchIndexImageText && isMac };
 }
 
-/** Pushes the effective index config to the app whenever it can change. */
+/** Pushes the effective index config to the daemon whenever it can change. */
 export function useSearchIndexConfig() {
   useEffect(() => {
     let last = '';
@@ -28,6 +28,9 @@ export function useSearchIndexConfig() {
     const unsubHydrate = useSettingsStore.persist?.onFinishHydration?.(push);
     push();
     const unsub = useSettingsStore.subscribe(push);
-    return () => { unsubHydrate?.(); unsub(); };
+    let unlistenReconnect = null;
+    let alive = true;
+    onDaemonReconnected(() => { last = ''; push(); }).then((un) => { if (alive) unlistenReconnect = un; else un?.(); });
+    return () => { alive = false; unsubHydrate?.(); unsub(); unlistenReconnect?.(); };
   }, []);
 }

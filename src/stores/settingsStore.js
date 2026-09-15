@@ -392,11 +392,13 @@ export const useSettingsStore = create(
       setTrackerAlert: (key, info) => set(s => (
         key && info ? { trackerAlerts: { ...s.trackerAlerts, [key]: info } } : s
       )),
-      // Offline search index (app process). Attachments and image text are
+      // Offline search index (daemon). Attachments and image text are
       // premium and only take effect through `effectiveSearchIndexConfig`.
+      searchIndexEnabled: true,
       searchIndexBodies: true,
       searchIndexAttachments: true,
       searchIndexImageText: true,
+      setSearchIndexEnabled: (v) => set({ searchIndexEnabled: !!v }),
       setSearchIndexBodies: (v) => set({ searchIndexBodies: !!v }),
       setSearchIndexAttachments: (v) => set({ searchIndexAttachments: !!v }),
       setSearchIndexImageText: (v) => set({ searchIndexImageText: !!v }),
@@ -1050,6 +1052,7 @@ export const useSettingsStore = create(
           linkSafetyClickConfirm: true,
           trackerBlockingEnabled: true,
           trackerAlerts: {},
+          searchIndexEnabled: true,
           searchIndexBodies: true,
           searchIndexAttachments: true,
           searchIndexImageText: true,

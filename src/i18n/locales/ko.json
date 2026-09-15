@@ -397,6 +397,7 @@
   "errors.removalPartiallyFailed": "제거가 일부 실패했습니다: {{errors}}. 일부 메일이 대상에 남을 수 있습니다.",
   "errors.smtpPrefixed": "SMTP: {{msg}}",
   "errors.daemonUnavailable": "MailVault 백그라운드 서비스가 응답하지 않습니다. MailVault를 다시 시작한 후 다시 시도하세요.",
+  "errors.daemonOutdated": "MailVault 백그라운드 서비스가 오래되었습니다. MailVault를 종료한 후 다시 여세요.",
   "errors.tauriUnavailable": "Tauri invoke를 사용할 수 없습니다",
   "errors.uidNotInMaildir": "UID {{uid}} 메일을 Maildir에서 찾을 수 없습니다",
   "export.dialog.exportFailed": "내보내기 실패: {{err}}",

@@ -397,6 +397,7 @@
   "errors.removalPartiallyFailed": "La eliminación falló parcialmente: {{errors}}. Puede que algunos correos sigan en el destino.",
   "errors.smtpPrefixed": "SMTP: {{msg}}",
   "errors.daemonUnavailable": "El servicio en segundo plano de MailVault no responde. Reinicia MailVault e inténtalo de nuevo.",
+  "errors.daemonOutdated": "El servicio en segundo plano de MailVault está desactualizado. Cierra MailVault y vuelve a abrirlo.",
   "errors.tauriUnavailable": "La llamada de Tauri no está disponible",
   "errors.uidNotInMaildir": "No se encontró el correo con UID {{uid}} en el Maildir",
   "export.dialog.exportFailed": "La exportación falló: {{err}}",

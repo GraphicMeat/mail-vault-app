@@ -111,18 +111,25 @@ function mapArgs(command, args) {
 // Commands migrated to the daemon under their own names and payloads
 // (spec 2026-09-14 §3.1). Unlike DAEMON_COMMANDS above: no heartbeat gate and
 // no invoke fallback. Their Tauri twins are deleted in the same phase.
-export const DAEMON_OWNED = new Set([]);
+export const DAEMON_OWNED = new Set(['vault_search', 'vault_rows', 'search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy']);
 
 async function sendToDaemon(command, args) {
   try {
     return await daemonCall(command, mapArgs(command, args));
   } catch (e) {
     // daemonClient.js's classifier is untouched (its mapping stays
-    // byte-identical for legacy DAEMON_COMMANDS callers), so a real
-    // daemon_rpc pre-response failure surfaces here as the literal
-    // errors.daemonUnavailable message rather than a DAEMON_OFFLINE code —
-    // check both, plus NO_TAURI for a webview with no Tauri bridge at all.
-    if (e?.message === 'errors.daemonUnavailable' || e?.code === 'DAEMON_OFFLINE' || e?.code === 'NO_TAURI') {
+    // byte-identical for legacy DAEMON_COMMANDS callers) and is not trusted
+    // here (addendum C6): its substring match on "not running"/"connection
+    // refused" can mislabel a real daemon-side error (e.g. an IMAP "connection
+    // refused") as DAEMON_OFFLINE. Only the two literal markers `daemon_rpc`
+    // (Rust) actually returns are text-matched: `errors.daemonUnavailable`
+    // for every pre-response failure, `errors.daemonOutdated` for a stale
+    // accepted daemon (-32601, addendum C5) — plus NO_TAURI for a webview with
+    // no Tauri bridge at all. Anything else passes through unchanged.
+    if (e?.message === 'errors.daemonOutdated') {
+      throw Object.assign(new Error(t('errors.daemonOutdated')), { code: 'DAEMON_OUTDATED' });
+    }
+    if (e?.message === 'errors.daemonUnavailable' || e?.code === 'NO_TAURI') {
       throw Object.assign(new Error(t('errors.daemonUnavailable')), { code: 'DAEMON_UNAVAILABLE' });
     }
     throw e;

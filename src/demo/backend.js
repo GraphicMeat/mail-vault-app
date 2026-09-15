@@ -509,6 +509,9 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'demo_emit_event': emit(args.event, args.payload); return null;
       case 'daemon_rpc': {
         const method = args.method;
+        // Daemon-owned commands (search index, vault rows/search — spec
+        // 2026-09-14 §5) keep their Tauri names, not a dotted daemon method.
+        if (method && !method.includes('.')) return invoke(method, args.params || {});
         if (method === 'daemon.heartbeat') return { alive: true, version: 'browser-demo', uptime_secs: 0, online: true, simulated: true };
         if (method === 'daemon.status') return { version: 'browser-demo', uptime_secs: 0, data_dir: 'in-memory browser session', simulated: true };
         if (method === 'contacts_index.get') {
@@ -1023,9 +1026,10 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'oauth2_auth_url': case 'oauth2_exchange': case 'oauth2_refresh': case 'imap_test_connection': case 'smtp_test_connection': case 'store_password': case 'store_credentials': return unsupported(command);
       // The browser demo has no index: searchLocalEmails falls back to its scan.
       case 'vault_search': return { available: false };
-      case 'search_index_status': return { available: false, state: 'unavailable', indexed: 0, total: 0, sizeBytes: 0, complete: false };
+      case 'search_index_status': return { available: false, state: 'unavailable', firstPassDone: false, indexed: 0, total: 0, sizeBytes: 0, complete: false };
       case 'search_index_configure': return null;
       case 'search_index_rebuild': return null;
+      case 'search_index_destroy': return { ok: true };
       default: return unsupported(command);
     }
     return null;

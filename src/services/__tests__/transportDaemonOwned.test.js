@@ -10,15 +10,14 @@ const { send, DAEMON_OWNED } = await import('../transport.js');
 const { DaemonError } = await import('../daemonClient.js');
 const { t } = await import('../../i18n/index.js');
 
-// Captured before any test calls DAEMON_OWNED.clear() in beforeEach below —
-// proves Phase 0 ships the set empty, without pinning to source text.
-const initialSize = DAEMON_OWNED.size;
-
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
 
-  it('starts empty in phase 0', () => {
-    expect(initialSize).toBe(0);
+  it('owns exactly the search index commands in phase 1', async () => {
+    const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
+    const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
+    const names = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+    expect(names).toEqual(['search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status', 'vault_rows', 'vault_search']);
   });
 
   it('routes a member to the daemon under its own name with camelCase args, no heartbeat needed', async () => {
@@ -28,9 +27,9 @@ describe('daemon-owned commands', () => {
     expect(daemonCall).toHaveBeenCalledWith('owned_cmd', { accountId: 'a', mailbox: 'INBOX' });
   });
 
-  it.each(['DAEMON_OFFLINE', 'NO_TAURI'])('rejects with errors.daemonUnavailable on %s, never falling back to invoke', async (code) => {
+  it('rejects with errors.daemonUnavailable on NO_TAURI, never falling back to invoke', async () => {
     DAEMON_OWNED.add('owned_cmd');
-    daemonCall.mockRejectedValue(new DaemonError('gone', code));
+    daemonCall.mockRejectedValue(new DaemonError('Tauri invoke not available', 'NO_TAURI'));
     const err = await send('owned_cmd', {}).catch((e) => e);
     expect(err.code).toBe('DAEMON_UNAVAILABLE');
     expect(err.message).toBe(t('errors.daemonUnavailable'));
@@ -45,6 +44,21 @@ describe('daemon-owned commands', () => {
     const err = await send('owned_cmd', {}).catch((e) => e);
     expect(err.code).toBe('DAEMON_UNAVAILABLE');
     expect(err.message).toBe(t('errors.daemonUnavailable'));
+  });
+
+  it('maps errors.daemonOutdated to the outdated catalog key regardless of the daemonClient code', async () => {
+    DAEMON_OWNED.add('owned_cmd');
+    daemonCall.mockRejectedValue(new DaemonError('errors.daemonOutdated', 'RPC_ERROR'));
+    const err = await send('owned_cmd', {}).catch((e) => e);
+    expect(err.code).toBe('DAEMON_OUTDATED');
+    expect(err.message).toBe(t('errors.daemonOutdated'));
+  });
+
+  it('a daemon-side error containing "connection refused" passes through unchanged (C6: DAEMON_OFFLINE is no longer trusted)', async () => {
+    DAEMON_OWNED.add('owned_cmd');
+    const rpc = new DaemonError('IMAP connection refused', 'DAEMON_OFFLINE');
+    daemonCall.mockRejectedValue(rpc);
+    await expect(send('owned_cmd', {})).rejects.toBe(rpc);
   });
 
   it('passes a daemon-side error through unchanged', async () => {
