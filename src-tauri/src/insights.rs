@@ -703,7 +703,7 @@ fn inventory(
             }
             let candidates: Vec<_> = locations
                 .values()
-                .filter(|l| crate::cache_base_name(&account, &l.mailbox) == base)
+                .filter(|l| mailvault_core::header_cache::cache_base_name(&account, &l.mailbox) == base)
                 .cloned()
                 .collect();
             let mut location = if candidates.len() == 1 {
@@ -733,7 +733,7 @@ fn inventory(
                             if let Some(mailbox) = meta
                                 .get("mailbox")
                                 .and_then(Value::as_str)
-                                .filter(|m| crate::cache_base_name(&account, m) == base)
+                                .filter(|m| mailvault_core::header_cache::cache_base_name(&account, m) == base)
                             {
                                 location.mailbox = mailbox.into();
                                 location.limitation = None;
@@ -750,14 +750,11 @@ fn inventory(
                     Err(code) => snapshot.problem(&code, &account, Some(&location.mailbox)),
                 }
                 for file in snapshot.children(path, &account) {
-                    let Some(uid) = file
-                        .file_stem()
-                        .and_then(|n| n.to_str())
-                        .and_then(|n| n.parse::<u32>().ok())
-                    else {
+                    let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    let Some(uid) = mailvault_core::header_cache::is_header_file(name) else {
                         continue;
                     };
-                    if file.extension().and_then(|s| s.to_str()) == Some("json") && file.is_file() {
+                    if file.is_file() {
                         snapshot.add(Item {
                             path: file,
                             location: location.clone(),

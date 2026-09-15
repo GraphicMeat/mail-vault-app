@@ -638,30 +638,20 @@ pub fn prefetch_attachments(
 // The repair logic itself (`maildir::repair_generation`, `orphan_stats`,
 // `purge_orphans`) is already core; these feed it from the on-disk sidecars.
 
-/// Sanitized `<account>_<mailbox>` cache directory name. Duplicated from
-/// `src-tauri/src/main.rs::cache_base_name` because `cache_base_name` itself
-/// does not move to core until Task 2.3 (header cache); that task deletes
-/// this copy and points these two functions at the shared one.
-fn cache_base_name(account_id: &str, mailbox: &str) -> String {
-    format!("{}_{}",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-        mailbox.replace(|c: char| !c.is_alphanumeric(), "_"))
-}
-
 /// Message-ID → uid for the mailbox's *current* generation, read from the
 /// sidecar cache the sync engine already maintains.
 pub fn sidecar_message_id_map(root: &Path, account_id: &str, mailbox: &str) -> (HashMap<String, u32>, u64) {
     let mut map = HashMap::new();
     let mut sidecars = 0u64;
-    let dir = root.join("email_cache").join(cache_base_name(account_id, mailbox));
+    let dir = crate::header_cache::sidecar_dir(root, account_id, mailbox);
     let entries = match fs::read_dir(&dir) {
         Ok(e) => e,
         Err(_) => return (map, 0),
     };
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        // `_meta.json` and anything else that isn't `{uid}.json`.
-        let uid: u32 = match name.strip_suffix(".json").and_then(|s| s.parse().ok()) {
+        // `_meta.json` and `graph_id_map.json` don't parse as a uid.
+        let uid: u32 = match crate::header_cache::is_header_file(&name) {
             Some(u) => u,
             None => continue,
         };
@@ -690,7 +680,7 @@ pub fn sidecar_message_id_map(root: &Path, account_id: &str, mailbox: &str) -> (
 /// UIDs belong to, and how many messages the server said it holds.
 pub fn cached_sync_meta(root: &Path, account_id: &str, mailbox: &str) -> (Option<u32>, Option<u64>) {
     let read = || -> Option<serde_json::Value> {
-        let path = root.join("email_cache").join(cache_base_name(account_id, mailbox)).join("_meta.json");
+        let path = crate::header_cache::sidecar_dir(root, account_id, mailbox).join("_meta.json");
         serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
     };
     match read() {

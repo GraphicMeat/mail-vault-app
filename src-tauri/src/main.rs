@@ -13,6 +13,7 @@ pub(crate) use mailvault_core::vault_files::{
     build_maildir_filename, delete_maildir_files, MaildirClearCacheResult, MaildirEmailSummary,
     MaildirStorageStats,
 };
+pub(crate) use mailvault_core::header_cache::cache_base_name;
 
 /// Localize the menu bar without rebuilding it.
 ///
@@ -860,96 +861,13 @@ fn send_notification(
 // Email cache — per-email JSON sidecars
 // Directory structure: email_cache/<accountId>_<mailbox>/_meta.json + <uid>.json per email
 // Old monolithic format (single .json file) is auto-migrated on first save.
-
-pub(crate) fn cache_base_name(account_id: &str, mailbox: &str) -> String {
-    format!("{}_{}",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-        mailbox.replace(|c: char| !c.is_alphanumeric(), "_")
-    )
-}
+// Body lives in mailvault_core::header_cache (shared with the daemon's sync engine).
 
 #[tauri::command]
 async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String, data: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-    let base_dir = vault::root(&app_handle)?
-        .join("email_cache");
-
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let sidecar_dir = base_dir.join(&base_name);
-
-    fs::create_dir_all(&sidecar_dir)
-        .map_err(|e| format!("Failed to create sidecar directory: {}", e))?;
-
-    let parsed: serde_json::Value = serde_json::from_str(&data)
-        .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
-
-    // Write _meta.json, preserving fields the caller didn't supply.
-    //
-    // Most callers pass only (emails, totalEmails) — writing their missing
-    // uidValidity/uidNext/highestModseq as null wiped the sync metadata the
-    // daemon and the delta-sync path depend on, forcing a full page fetch on
-    // the next sync. Null now means "unchanged", not "clear it".
-    let meta_path = sidecar_dir.join("_meta.json");
-    let mut meta = fs::read_to_string(&meta_path)
-        .ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .unwrap_or_else(|| serde_json::json!({}));
-    if let Some(obj) = meta.as_object_mut() {
-        for key in ["totalEmails", "uidValidity", "uidNext", "highestModseq", "lastSynced"] {
-            match parsed.get(key) {
-                Some(v) if !v.is_null() => { obj.insert(key.to_string(), v.clone()); }
-                _ => {}
-            }
-        }
-    }
-    let meta_json = serde_json::to_string(&meta)
-        .map_err(|e| format!("save_email_cache: failed to serialize _meta.json: {}", e))?;
-    fs::write(&meta_path, meta_json)
-        .map_err(|e| format!("save_email_cache: failed to write _meta.json: {}", e))?;
-
-    // Write individual email files. Overwrite: the caller's copy carries the
-    // current flags, and skipping existing files meant a read/star/unread
-    // change never reached disk.
-    if let Some(emails) = parsed.get("emails").and_then(|e| e.as_array()) {
-        let mut written = 0usize;
-        for email in emails {
-            if let Some(uid) = email.get("uid").and_then(|u| u.as_u64()) {
-                let email_json = serde_json::to_string(email)
-                    .map_err(|e| format!("save_email_cache: failed to serialize email {}: {}", uid, e))?;
-                fs::write(sidecar_dir.join(format!("{}.json", uid)), email_json)
-                    .map_err(|e| format!("save_email_cache: failed to write email {}: {}", uid, e))?;
-                written += 1;
-            }
-        }
-        info!("Email cache saved: {} files in {}", written, base_name);
-    }
-
-    // Remove only UIDs the caller explicitly says are gone.
-    //
-    // This used to delete every sidecar not present in `emails` — but the store
-    // holds ~500 headers while the cache holds the whole mailbox, so an ordinary
-    // save truncated a 14k-message cache to 500. The list was then re-downloaded
-    // from the server page by page, which is what made restarts slow.
-    if let Some(removed) = parsed.get("removedUids").and_then(|v| v.as_array()) {
-        let mut deleted = 0usize;
-        for uid in removed.iter().filter_map(|v| v.as_u64()) {
-            if fs::remove_file(sidecar_dir.join(format!("{}.json", uid))).is_ok() {
-                deleted += 1;
-            }
-        }
-        if deleted > 0 {
-            info!("Email cache: removed {} expunged sidecars in {}", deleted, base_name);
-        }
-    }
-
-    // Delete old monolithic file if it exists
-    let old_monolithic = base_dir.join(format!("{}.json", base_name));
-    if old_monolithic.exists() {
-        let _ = fs::remove_file(&old_monolithic);
-        info!("Removed old monolithic cache file: {:?}", old_monolithic);
-    }
-
-    Ok(())
+        let root = vault::root(&app_handle)?;
+        mailvault_core::header_cache::save(&root, &account_id, &mailbox, &data)
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -957,48 +875,17 @@ async fn save_email_cache(app_handle: tauri::AppHandle, account_id: String, mail
 
 #[tauri::command]
 fn save_mailbox_cache(app_handle: tauri::AppHandle, account_id: String, data: String) -> Result<(), String> {
-    let dir = vault::root(&app_handle)?
-        .join("mailboxes")
-        .join(&account_id);
-
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("Failed to create mailbox cache directory: {}", e))?;
-
-    fs::write(dir.join("mailboxes.json"), data.as_bytes())
-        .map_err(|e| format!("Failed to write mailboxes.json: {}", e))?;
-
-    Ok(())
+    mailvault_core::header_cache::save_mailbox_cache(&vault::root(&app_handle)?, &account_id, &data)
 }
 
 #[tauri::command]
 fn load_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<Option<String>, String> {
-    let file = vault::root(&app_handle)?
-        .join("mailboxes")
-        .join(&account_id)
-        .join("mailboxes.json");
-
-    if !file.exists() {
-        return Ok(None);
-    }
-
-    let data = fs::read_to_string(&file)
-        .map_err(|e| format!("Failed to read mailboxes.json: {}", e))?;
-
-    Ok(Some(data))
+    mailvault_core::header_cache::load_mailbox_cache(&vault::root(&app_handle)?, &account_id)
 }
 
 #[tauri::command]
 fn delete_mailbox_cache(app_handle: tauri::AppHandle, account_id: String) -> Result<(), String> {
-    let dir = vault::root(&app_handle)?
-        .join("mailboxes")
-        .join(&account_id);
-
-    if dir.exists() {
-        fs::remove_dir_all(&dir)
-            .map_err(|e| format!("Failed to remove mailbox cache: {}", e))?;
-    }
-
-    Ok(())
+    mailvault_core::header_cache::delete_mailbox_cache(&vault::root(&app_handle)?, &account_id)
 }
 
 // ── Graph ID map cache (UID → Graph message ID) ────────────────────────
@@ -1053,76 +940,19 @@ async fn graph_allocate_uids(
 }
 
 // ── Email header cache ───────────────────────────────────────────────────
+// Bodies live in mailvault_core::header_cache (shared with the daemon's sync
+// engine, Task 2.3).
 
 #[tauri::command]
 fn load_email_cache(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let base_dir = vault::root(&app_handle)?
-        .join("email_cache");
-
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let sidecar_dir = base_dir.join(&base_name);
-    let meta_file = sidecar_dir.join("_meta.json");
-
-    // Try sidecar format first
-    if meta_file.exists() {
-        return load_from_sidecars(&sidecar_dir, &meta_file, None);
-    }
-
-    // Fall back to old monolithic format
-    let old_file = base_dir.join(format!("{}.json", base_name));
-    if old_file.exists() {
-        info!("Loading from old monolithic cache: {:?}", old_file);
-        let data = fs::read_to_string(&old_file)
-            .map_err(|e| format!("Failed to read cache file: {}", e))?;
-        return Ok(Some(data));
-    }
-
-    Ok(None)
+    mailvault_core::header_cache::load(&vault::root(&app_handle)?, &account_id, &mailbox)
 }
 
 /// Load only the N most recent emails from sidecar cache (fast initial display)
 #[tauri::command]
 async fn load_email_cache_partial(app_handle: tauri::AppHandle, account_id: String, mailbox: String, limit: usize) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = vault::root(&app_handle)?
-            .join("email_cache");
-
-        let base_name = cache_base_name(&account_id, &mailbox);
-        let sidecar_dir = base_dir.join(&base_name);
-        let meta_file = sidecar_dir.join("_meta.json");
-
-        // Try sidecar format first
-        if meta_file.exists() {
-            return load_from_sidecars(&sidecar_dir, &meta_file, Some(limit));
-        }
-
-        // Fall back to old monolithic format (parse and truncate in memory)
-        let old_file = base_dir.join(format!("{}.json", base_name));
-        if old_file.exists() {
-            info!("Partial load falling back to monolithic: {:?}", old_file);
-            let data = fs::read_to_string(&old_file)
-                .map_err(|e| format!("Failed to read cache file: {}", e))?;
-            let mut parsed: serde_json::Value = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
-
-            let total_cached = parsed.get("emails")
-                .and_then(|e| e.as_array())
-                .map(|a| a.len())
-                .unwrap_or(0);
-
-            if let Some(emails) = parsed.get_mut("emails").and_then(|e| e.as_array_mut()) {
-                if emails.len() > limit {
-                    emails.truncate(limit);
-                }
-            }
-            parsed.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
-
-            let result = serde_json::to_string(&parsed)
-                .map_err(|e| format!("Failed to serialize: {}", e))?;
-            return Ok(Some(result));
-        }
-
-        Ok(None)
+        mailvault_core::header_cache::load_partial(&vault::root(&app_handle)?, &account_id, &mailbox, limit)
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -1136,31 +966,8 @@ async fn load_email_cache_by_uids(
     uids: Vec<u32>,
 ) -> Result<Vec<serde_json::Value>, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = vault::root(&app_handle)?
-            .join("email_cache");
-
-        let base_name = cache_base_name(&account_id, &mailbox);
-        let sidecar_dir = base_dir.join(&base_name);
-
-        if !sidecar_dir.exists() {
-            info!("load_email_cache_by_uids: sidecar dir does not exist");
-            return Ok(Vec::new());
-        }
-
-        let mut emails: Vec<serde_json::Value> = Vec::with_capacity(uids.len());
-        let mut found = 0usize;
-        for uid in &uids {
-            let file_path = sidecar_dir.join(format!("{}.json", uid));
-            if let Ok(data) = fs::read_to_string(&file_path) {
-                if let Ok(email) = serde_json::from_str(&data) {
-                    emails.push(email);
-                    found += 1;
-                }
-            }
-        }
-
-        info!("load_email_cache_by_uids: found {}/{} UIDs in sidecar cache", found, uids.len());
-        Ok(emails)
+        let root = vault::root(&app_handle)?;
+        Ok(mailvault_core::header_cache::load_by_uids(&root, &account_id, &mailbox, &uids))
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
@@ -1170,8 +977,7 @@ async fn load_email_cache_by_uids(
 /// Readdir only — no file is opened and nothing is parsed, so this costs one
 /// directory scan regardless of mailbox size. That's what lets a caller holding
 /// a stale in-memory header set re-read only the handful of messages that moved
-/// instead of all 15,000 (`load_from_sidecars` is one read + one parse PER
-/// message).
+/// instead of all 15,000 (a full load is one read + one parse PER message).
 #[tauri::command]
 async fn list_cached_uids(
     app_handle: tauri::AppHandle,
@@ -1180,233 +986,15 @@ async fn list_cached_uids(
     since_ms: Option<f64>,
 ) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
-        let base_dir = vault::root(&app_handle)?
-            .join("email_cache");
-
-        let sidecar_dir = base_dir.join(cache_base_name(&account_id, &mailbox));
-        if !sidecar_dir.exists() {
-            return Ok(serde_json::json!({ "uids": [], "changed": [] }));
-        }
-
-        let mut uids: Vec<u64> = Vec::new();
-        let mut changed: Vec<u64> = Vec::new();
-
-        if let Ok(entries) = fs::read_dir(&sidecar_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name == "_meta.json" { continue; }
-                let Some(uid) = name.strip_suffix(".json").and_then(|s| s.parse::<u64>().ok())
-                else { continue };
-                uids.push(uid);
-
-                // `DirEntry::metadata` is a stat the readdir usually already
-                // primed — cheap next to opening the file.
-                if let Some(since) = since_ms {
-                    let mtime_ms = entry
-                        .metadata()
-                        .ok()
-                        .and_then(|m| m.modified().ok())
-                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                        .map(|d| d.as_millis() as f64);
-                    // Unreadable mtime counts as changed — an extra read is
-                    // always safer than serving a header we can't vouch for.
-                    if mtime_ms.map_or(true, |m| m > since) {
-                        changed.push(uid);
-                    }
-                }
-            }
-        }
-
-        info!(
-            "list_cached_uids: {} sidecars, {} changed since {:?}",
-            uids.len(), changed.len(), since_ms
-        );
-        Ok(serde_json::json!({ "uids": uids, "changed": changed }))
+        let root = vault::root(&app_handle)?;
+        Ok(mailvault_core::header_cache::list_uids(&root, &account_id, &mailbox, since_ms))
     }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Read and parse the named sidecars, skipping any that are missing or corrupt.
-fn read_sidecars(sidecar_dir: &Path, uids: &[u64]) -> Vec<serde_json::Value> {
-    let mut emails = Vec::with_capacity(uids.len());
-    for uid in uids {
-        let file_path = sidecar_dir.join(format!("{}.json", uid));
-        if let Ok(data) = fs::read_to_string(&file_path) {
-            if let Ok(email) = serde_json::from_str(&data) {
-                emails.push(email);
-            }
-        }
-    }
-    emails
-}
-
-/// A cached header's received time in epoch milliseconds, or `i64::MIN` when it
-/// carries no date we can parse. Undated rows sort last: a header we can't place
-/// in time must never displace one we can.
-fn header_date_ms(email: &serde_json::Value) -> i64 {
-    ["internalDate", "date"]
-        .iter()
-        .filter_map(|key| email.get(*key).and_then(|v| v.as_str()))
-        .find_map(|s| {
-            chrono::DateTime::parse_from_rfc3339(s)
-                .or_else(|_| chrono::DateTime::parse_from_rfc2822(s))
-                .map(|d| d.timestamp_millis())
-                .ok()
-        })
-        .unwrap_or(i64::MIN)
-}
-
-fn header_uid(email: &serde_json::Value) -> u64 {
-    email.get("uid").and_then(|u| u.as_u64()).unwrap_or(0)
-}
-
-/// Read `limit` sidecars' worth of the newest cached headers, or all of them
-/// when `limit` is None.
-///
-/// "Newest" is the N highest UIDs for IMAP, where the server issues UIDs in
-/// arrival order — the readdir alone picks them, and no file is opened that
-/// isn't returned.
-///
-/// Graph offers no such guarantee, so those mailboxes are ordered by the header
-/// date instead. Its listing is `receivedDateTime desc`, so the seed handed uid
-/// 1 to the NEWEST message and counted upward into the past; messages that
-/// arrive after the seed then take the highest numbers of all. UID order there
-/// runs descending by date and then ascending, which is not an order at all —
-/// sorting by it served up the OLDEST cached messages. `graph_id_map.json` is
-/// the marker: it is written by the same allocator that hands out those uids,
-/// so it exists for exactly the mailboxes whose uids can't be trusted to sort.
-///
-/// ponytail: the date path reads every sidecar, not `limit` of them — one read
-/// per cached message on a Graph mailbox. If that shows up on the startup path,
-/// index uid → date in `_meta.json` on write and sort from that instead.
-fn load_from_sidecars(sidecar_dir: &Path, meta_file: &Path, limit: Option<usize>) -> Result<Option<String>, String> {
-    // Read metadata
-    let meta_data = fs::read_to_string(meta_file)
-        .map_err(|e| format!("Failed to read _meta.json: {}", e))?;
-    let meta: serde_json::Value = serde_json::from_str(&meta_data)
-        .map_err(|e| format!("Failed to parse _meta.json: {}", e))?;
-
-    // List all UID files, parse UIDs as numbers for sorting
-    let mut uids: Vec<u64> = Vec::new();
-    if let Ok(entries) = fs::read_dir(sidecar_dir) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name == "_meta.json" { continue; }
-            if let Some(uid_str) = name.strip_suffix(".json") {
-                if let Ok(uid) = uid_str.parse::<u64>() {
-                    uids.push(uid);
-                }
-            }
-        }
-    }
-
-    let total_cached = uids.len();
-    let uid_tracks_arrival = !sidecar_dir.join(GRAPH_ID_MAP_FILE).exists();
-
-    let emails: Vec<serde_json::Value> = if uid_tracks_arrival {
-        // Highest UIDs are the newest — pick them off the readdir, then read
-        // only those files.
-        uids.sort_unstable_by(|a, b| b.cmp(a));
-        if let Some(limit) = limit {
-            uids.truncate(limit);
-        }
-        read_sidecars(sidecar_dir, &uids)
-    } else {
-        // UID says nothing about age here, so every header has to be read
-        // before the newest can be named. Ties break on UID only to keep the
-        // result stable across filesystems — same-second arrivals have no
-        // meaningful order.
-        let mut all = read_sidecars(sidecar_dir, &uids);
-        all.sort_by(|a, b| {
-            header_date_ms(b)
-                .cmp(&header_date_ms(a))
-                .then_with(|| header_uid(b).cmp(&header_uid(a)))
-        });
-        if let Some(limit) = limit {
-            all.truncate(limit);
-        }
-        all
-    };
-
-    info!(
-        "Sidecar cache loaded: {} of {} emails (limit: {:?}, order: {})",
-        emails.len(), total_cached, limit,
-        if uid_tracks_arrival { "uid" } else { "date" }
-    );
-
-    // Build response in the same format as the old monolithic cache
-    let result = serde_json::json!({
-        "emails": emails,
-        "totalEmails": meta.get("totalEmails"),
-        "totalCached": total_cached,
-        "uidValidity": meta.get("uidValidity"),
-        "uidNext": meta.get("uidNext"),
-        // Was omitted, so getEmailHeadersPartial().highestModseq always read null —
-        // any caller trusting it would silently lose the CONDSTORE fast path.
-        "highestModseq": meta.get("highestModseq"),
-        "lastSynced": meta.get("lastSynced")
-    });
-
-    serde_json::to_string(&result)
-        .map(|s| Some(s))
-        .map_err(|e| format!("Failed to serialize sidecar cache: {}", e))
 }
 
 /// Load only cache metadata (no emails) — fast, for delta-sync parameters
 #[tauri::command]
 fn load_email_cache_meta(app_handle: tauri::AppHandle, account_id: String, mailbox: String) -> Result<Option<String>, String> {
-    let base_dir = vault::root(&app_handle)?
-        .join("email_cache");
-
-    let base_name = cache_base_name(&account_id, &mailbox);
-    let sidecar_dir = base_dir.join(&base_name);
-    let meta_file = sidecar_dir.join("_meta.json");
-
-    // Try sidecar format
-    if meta_file.exists() {
-        let meta_data = fs::read_to_string(&meta_file)
-            .map_err(|e| format!("Failed to read _meta.json: {}", e))?;
-        let mut meta: serde_json::Value = serde_json::from_str(&meta_data)
-            .map_err(|e| format!("Failed to parse _meta.json: {}", e))?;
-
-        // Count message sidecars only. `_meta.json` and `graph_id_map.json` sit
-        // in the same directory and are not messages; counting them reported a
-        // mailbox with nothing cached as holding one.
-        let total_cached = fs::read_dir(&sidecar_dir)
-            .map(|entries| entries.flatten().filter(|e| {
-                let name = e.file_name().to_string_lossy().to_string();
-                name.strip_suffix(".json").is_some_and(|s| s.parse::<u64>().is_ok())
-            }).count())
-            .unwrap_or(0);
-
-        meta.as_object_mut().map(|o| o.insert("totalCached".to_string(), serde_json::json!(total_cached)));
-
-        return serde_json::to_string(&meta)
-            .map(|s| Some(s))
-            .map_err(|e| format!("Failed to serialize: {}", e));
-    }
-
-    // Fall back to old monolithic format — parse only metadata
-    let old_file = base_dir.join(format!("{}.json", base_name));
-    if old_file.exists() {
-        let data = fs::read_to_string(&old_file)
-            .map_err(|e| format!("Failed to read cache file: {}", e))?;
-        let parsed: serde_json::Value = serde_json::from_str(&data)
-            .map_err(|e| format!("Failed to parse cache JSON: {}", e))?;
-        let total_cached = parsed.get("emails").and_then(|e| e.as_array()).map(|a| a.len()).unwrap_or(0);
-        let meta = serde_json::json!({
-            "totalEmails": parsed.get("totalEmails"),
-            "uidValidity": parsed.get("uidValidity"),
-            "uidNext": parsed.get("uidNext"),
-            "highestModseq": parsed.get("highestModseq"),
-            "lastSynced": parsed.get("lastSynced"),
-            "totalCached": total_cached
-        });
-        return serde_json::to_string(&meta)
-            .map(|s| Some(s))
-            .map_err(|e| format!("Failed to serialize: {}", e));
-    }
-
-    Ok(None)
+    mailvault_core::header_cache::load_meta(&vault::root(&app_handle)?, &account_id, &mailbox)
 }
 
 // ── Pending server ops ──────────────────────────────────────────────────────
@@ -1449,50 +1037,7 @@ fn op_journal_read(app_handle: tauri::AppHandle) -> Result<Vec<op_journal::OpEnt
 
 #[tauri::command]
 fn clear_email_cache(app_handle: tauri::AppHandle, account_id: Option<String>, mailbox: Option<String>) -> Result<(), String> {
-    let cache_dir = vault::root(&app_handle)?
-        .join("email_cache");
-
-    if !cache_dir.exists() {
-        return Ok(());
-    }
-
-    // Single mailbox — used when UIDVALIDITY changes and every cached UID in
-    // that mailbox now refers to a different message.
-    if let (Some(account_id), Some(mailbox)) = (account_id.as_ref(), mailbox.as_ref()) {
-        let dir = cache_dir.join(cache_base_name(account_id, mailbox));
-        if dir.exists() {
-            fs::remove_dir_all(&dir)
-                .map_err(|e| format!("Failed to clear mailbox cache: {}", e))?;
-            info!("Cleared cache for {}/{}", account_id, mailbox);
-        }
-        return Ok(());
-    }
-
-    if let Some(account_id) = account_id {
-        // Clear cache for specific account (both sidecar dirs and old monolithic files)
-        let prefix = account_id.replace(|c: char| !c.is_alphanumeric(), "_");
-        if let Ok(entries) = fs::read_dir(&cache_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with(&prefix) {
-                    let path = entry.path();
-                    if path.is_dir() {
-                        let _ = fs::remove_dir_all(&path);
-                    } else {
-                        let _ = fs::remove_file(&path);
-                    }
-                    info!("Removed cache entry: {:?}", path);
-                }
-            }
-        }
-    } else {
-        // Clear all cache, except every Outlook uid ledger: the vault and the
-        // app's memory still use those numbers (see the helper for why).
-        mailvault_core::graph_ledger::clear_cache_keeping_ledgers(&cache_dir);
-        info!("Cleared all email cache (Outlook uid ledgers kept)");
-    }
-
-    Ok(())
+    mailvault_core::header_cache::clear(&vault::root(&app_handle)?, account_id.as_deref(), mailbox.as_deref())
 }
 
 #[tauri::command]
@@ -5566,124 +5111,5 @@ mod verify_copies_tests {
         let map = map.unwrap();
         assert_eq!(map.get(&12).map(String::as_str), Some("<a@host.test>"));
         assert_eq!(map.get(&7).map(String::as_str), Some("b@host.test"));
-    }
-}
-
-#[cfg(test)]
-mod sidecar_order_tests {
-    use super::*;
-
-    fn write_meta(dir: &Path) {
-        fs::write(dir.join("_meta.json"), br#"{"totalEmails":9}"#).unwrap();
-    }
-
-    /// One header sidecar, carrying only the fields the ordering reads.
-    fn write_header(dir: &Path, uid: u64, internal_date: &str) {
-        let body = serde_json::json!({
-            "uid": uid,
-            "subject": format!("msg {}", uid),
-            "internalDate": internal_date,
-        });
-        fs::write(dir.join(format!("{}.json", uid)), body.to_string()).unwrap();
-    }
-
-    fn returned_uids(json: &str) -> Vec<u64> {
-        let parsed: serde_json::Value = serde_json::from_str(json).unwrap();
-        parsed["emails"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|e| e["uid"].as_u64().unwrap())
-            .collect()
-    }
-
-    /// An IMAP mailbox: the server issued the uids in arrival order, so the
-    /// highest are the newest and the cheap readdir sort is right.
-    #[test]
-    fn imap_mailbox_takes_the_highest_uids() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
-        write_meta(dir);
-        write_header(dir, 1, "2026-01-01T00:00:00Z");
-        write_header(dir, 2, "2026-02-01T00:00:00Z");
-        write_header(dir, 3, "2026-03-01T00:00:00Z");
-
-        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(2))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(returned_uids(&out), vec![3, 2]);
-    }
-
-    /// A Graph mailbox: uid 1 is the NEWEST message (the seed walked a
-    /// `receivedDateTime desc` listing) and uid 4 is the oldest, while uid 5
-    /// arrived after the seed and is newer than all of them. Sorting by uid
-    /// returns the oldest cached mail — this is the bug.
-    #[test]
-    fn graph_mailbox_takes_the_newest_dates_not_the_highest_uids() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
-        write_meta(dir);
-        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
-        write_header(dir, 1, "2026-08-01T00:00:00Z"); // newest at seed time
-        write_header(dir, 2, "2026-07-01T00:00:00Z");
-        write_header(dir, 3, "2026-06-01T00:00:00Z");
-        write_header(dir, 4, "2026-05-01T00:00:00Z"); // oldest at seed time
-        write_header(dir, 5, "2026-08-15T00:00:00Z"); // arrived after the seed
-
-        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(3))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(returned_uids(&out), vec![5, 1, 2]);
-    }
-
-    /// `graph_id_map.json` is not a message: it must not be counted, read, or
-    /// returned as one.
-    #[test]
-    fn graph_id_map_is_not_counted_as_a_message() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
-        write_meta(dir);
-        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
-        write_header(dir, 1, "2026-08-01T00:00:00Z");
-
-        let out = load_from_sidecars(dir, &dir.join("_meta.json"), None)
-            .unwrap()
-            .unwrap();
-        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
-
-        assert_eq!(returned_uids(&out), vec![1]);
-        assert_eq!(parsed["totalCached"].as_u64(), Some(1));
-    }
-
-    /// A header with no date can't be placed in time, so it must never take a
-    /// slot from one that can.
-    #[test]
-    fn undated_graph_header_sorts_last() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dir = tmp.path();
-        write_meta(dir);
-        fs::write(dir.join(GRAPH_ID_MAP_FILE), br#"{"1":"AAA"}"#).unwrap();
-        fs::write(dir.join("7.json"), br#"{"uid":7,"subject":"no date"}"#).unwrap();
-        write_header(dir, 1, "2026-08-01T00:00:00Z");
-        write_header(dir, 2, "2026-07-01T00:00:00Z");
-
-        let out = load_from_sidecars(dir, &dir.join("_meta.json"), Some(2))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(returned_uids(&out), vec![1, 2]);
-    }
-
-    /// IMAP headers carry RFC 2822 dates; Graph carries RFC 3339. Both parse.
-    #[test]
-    fn header_date_ms_reads_both_date_formats() {
-        let rfc3339 = serde_json::json!({ "internalDate": "2026-08-01T00:00:00Z" });
-        let rfc2822 = serde_json::json!({ "date": "Sat, 1 Aug 2026 00:00:00 +0000" });
-        let undated = serde_json::json!({ "subject": "x" });
-
-        assert_eq!(header_date_ms(&rfc3339), header_date_ms(&rfc2822));
-        assert_eq!(header_date_ms(&undated), i64::MIN);
     }
 }

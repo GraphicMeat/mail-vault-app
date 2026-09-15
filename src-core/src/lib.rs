@@ -5,6 +5,7 @@
 //! of depending on Tauri's AppHandle.
 
 pub mod fsx;
+pub mod header_cache;
 pub mod maildir;
 pub mod search_index;
 pub mod vault_eml;

@@ -8,6 +8,7 @@ use crate::contacts_index::ContactsState;
 use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
+use mailvault_core::header_cache;
 use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -605,19 +606,24 @@ impl SyncEngine {
         if !can_delta {
             // A UIDVALIDITY change means the server re-issued its UID space:
             // every cached UID now refers to a different message (or none).
-            // Drop the whole generation, or those ghosts outlive the reload.
-            if !uid_validity_ok {
+            // Drop the whole generation, or those ghosts outlive the reload —
+            // and with it any `lastReconcile` timestamp, which described a
+            // reconcile against a UID space that no longer exists.
+            let preserved_reconcile = if uid_validity_ok {
+                cached.as_ref().and_then(|c| c.last_reconcile)
+            } else {
                 warn!(
                     "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
                     account.email, mailbox, sidecar_count
                 );
                 let _ = fs::remove_dir_all(&cache_dir);
-            }
+                None
+            };
             let (headers, _total, _has_more, _skipped) =
                 imap::fetch_emails_page(session, mailbox, 1, 500).await?;
             let new_emails = headers.len();
-            write_cache_meta(&cache_dir, total, uid_validity, server_uid_next, highest_modseq)?;
-            write_headers(&cache_dir, &headers)?;
+            write_cache_meta_full(&self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
+            write_headers(&self.data_dir, &cache_dir, &headers)?;
             self.contacts.observe_headers(account_id, mailbox, &headers);
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
             return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total, session_dirty: false });
@@ -651,7 +657,7 @@ impl SyncEngine {
         match (cached_modseq, highest_modseq) {
             (Some(cached_modseq), Some(server_modseq)) if server_modseq != cached_modseq => {
                 match imap::fetch_changed_flags(session, mailbox, cached_modseq).await {
-                    Ok(changes) => updated_flags = patch_sidecar_flags(&cache_dir, &changes),
+                    Ok(changes) => updated_flags = patch_sidecar_flags(&self.data_dir, &cache_dir, &changes),
                     Err(e) => warn!("[sync] CHANGEDSINCE failed for {}: {}", account.email, e),
                 }
             }
@@ -662,7 +668,7 @@ impl SyncEngine {
                 // recent window instead — one command, ~40 bytes per message.
                 let from_uid = cached_uid_next.saturating_sub(FLAG_REFRESH_WINDOW).max(1);
                 match imap::fetch_flags_from(session, mailbox, from_uid).await {
-                    Ok(flags) => updated_flags = patch_sidecar_flags(&cache_dir, &flags),
+                    Ok(flags) => updated_flags = patch_sidecar_flags(&self.data_dir, &cache_dir, &flags),
                     Err(e) => warn!("[sync] Flag refresh failed for {}: {}", account.email, e),
                 }
             }
@@ -694,7 +700,7 @@ impl SyncEngine {
                     warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
                 }
                 Ok(uids) => {
-                    let pruned = prune_sidecars(&cache_dir, &uids);
+                    let pruned = prune_sidecars(&self.data_dir, &cache_dir, &uids);
                     reconciled_at = Some(now_ms());
                     info!(
                         "[sync] Reconciled {} ({}): {} server UIDs, {} pruned (counts_disagree={}, due={})",
@@ -708,9 +714,9 @@ impl SyncEngine {
             }
         }
 
-        write_cache_meta_full(&cache_dir, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
+        write_cache_meta_full(&self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
         if !new_headers.is_empty() {
-            write_headers(&cache_dir, &new_headers)?;
+            write_headers(&self.data_dir, &cache_dir, &new_headers)?;
             self.contacts.observe_headers(account_id, mailbox, &new_headers);
         }
 
@@ -882,7 +888,7 @@ impl SyncEngine {
                 warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
                 break;
             }
-            write_headers(&cache_dir, &headers)?;
+            write_headers(&self.data_dir, &cache_dir, &headers)?;
             self.contacts.observe_headers(account.id.as_str(), mailbox, &headers);
             written += headers.len();
             info!(
@@ -939,18 +945,12 @@ fn read_transfer_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimi
 }
 
 // ── Tauri-compatible cache format ────────────────────────────────────────────
-// Matches the sidecar format used by save_email_cache / load_email_cache_partial
-// in src-tauri/src/main.rs so the app reads daemon-written cache natively.
-
-fn cache_base_name(account_id: &str, mailbox: &str) -> String {
-    format!("{}_{}",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-        mailbox.replace(|c: char| !c.is_alphanumeric(), "_"),
-    )
-}
+// Matches the sidecar format used by the app's cache commands
+// (`mailvault_core::header_cache`) so the app reads daemon-written cache
+// natively.
 
 fn tauri_cache_dir(data_dir: &Path, account_id: &str, mailbox: &str) -> PathBuf {
-    data_dir.join("email_cache").join(cache_base_name(account_id, mailbox))
+    header_cache::sidecar_dir(data_dir, account_id, mailbox)
 }
 
 /// Sync metadata read back from the sidecar cache's _meta.json.
@@ -1016,11 +1016,13 @@ fn read_tauri_cache_meta(cache_dir: &Path) -> Option<CachedMeta> {
     })
 }
 
+/// Message sidecars only. `_meta.json` and `graph_id_map.json` sit in the same
+/// directory and are not messages; the old `ends_with(".json") && != "_meta.json"`
+/// rule counted the Outlook uid ledger as a cached message (oddity 3).
 fn count_sidecars(cache_dir: &Path) -> usize {
     fs::read_dir(cache_dir).ok()
         .map(|entries| entries.flatten().filter(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            name.ends_with(".json") && name != "_meta.json"
+            header_cache::is_header_file(&e.file_name().to_string_lossy()).is_some()
         }).count())
         .unwrap_or(0)
 }
@@ -1029,24 +1031,33 @@ fn count_sidecars(cache_dir: &Path) -> usize {
 fn cached_uids(cache_dir: &Path) -> HashSet<u32> {
     let Ok(entries) = fs::read_dir(cache_dir) else { return HashSet::new() };
     entries.flatten()
-        .filter_map(|e| {
-            let name = e.file_name().to_string_lossy().to_string();
-            name.strip_suffix(".json").and_then(|u| u.parse::<u32>().ok())
-        })
+        .filter_map(|e| header_cache::is_header_file(&e.file_name().to_string_lossy()))
         .collect()
 }
 
-fn write_cache_meta(
-    cache_dir: &Path,
-    total_emails: u32,
-    uid_validity: Option<u32>,
-    uid_next: Option<u32>,
-    highest_modseq: Option<u64>,
-) -> Result<(), String> {
-    write_cache_meta_full(cache_dir, total_emails, uid_validity, uid_next, highest_modseq, None)
+/// The mailbox-lock key for a write to `cache_dir` — its own last path
+/// segment, which is `header_cache::cache_base_name(account, mailbox)` for
+/// every real caller (this file's own `tauri_cache_dir`).
+fn mailbox_lock_key(cache_dir: &Path) -> String {
+    cache_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+}
+
+/// Take the same tree-read + mailbox lock `header_cache::save`/`patch_flags`
+/// take, so a concurrent `header_cache::clear` can never see a half-written
+/// mailbox. Never held across an `.await` or network I/O — every caller here
+/// is a plain sync fn invoked after the sync engine's own IMAP round trip
+/// (which happens in the `async` caller, not in here) has already completed.
+fn with_mailbox_write_lock<T>(root: &Path, cache_dir: &Path, f: impl FnOnce() -> T) -> T {
+    let base = mailbox_lock_key(cache_dir);
+    let tree = header_cache::lock_tree(root);
+    let _tree_read = tree.read().unwrap_or_else(|e| e.into_inner());
+    let mbox = header_cache::lock_mailbox(root, &base);
+    let _mbox_lock = mbox.lock().unwrap_or_else(|e| e.into_inner());
+    f()
 }
 
 fn write_cache_meta_full(
+    root: &Path,
     cache_dir: &Path,
     total_emails: u32,
     uid_validity: Option<u32>,
@@ -1054,7 +1065,6 @@ fn write_cache_meta_full(
     highest_modseq: Option<u64>,
     last_reconcile: Option<u64>,
 ) -> Result<(), String> {
-    fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
     let meta = serde_json::json!({
         "totalEmails": total_emails,
         "uidValidity": uid_validity,
@@ -1065,57 +1075,68 @@ fn write_cache_meta_full(
         "lastSynced": now_ms(),
     });
     let meta_json = serde_json::to_string(&meta).map_err(|e| format!("Serialize meta: {}", e))?;
-    mailvault_core::fsx::write_atomic(&cache_dir.join("_meta.json"), meta_json.as_bytes())
-        .map_err(|e| format!("Write meta: {}", e))
+    // `create_dir_all` has to be inside the lock: a `header_cache::clear`
+    // between this creating the directory and the write below would remove it
+    // out from under this write (see `header_cache::save`'s own fix).
+    with_mailbox_write_lock(root, cache_dir, || {
+        fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
+        mailvault_core::fsx::write_atomic(&cache_dir.join("_meta.json"), meta_json.as_bytes())
+            .map_err(|e| format!("Write meta: {}", e))
+    })
 }
 
 /// Write per-UID header sidecars, overwriting existing ones — a freshly fetched
 /// header is authoritative, and on servers without CONDSTORE this is the only
 /// thing that refreshes flags on already-cached messages.
-fn write_headers(cache_dir: &Path, headers: &[ImapEmailHeader]) -> Result<(), String> {
-    fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
-    for header in headers {
-        let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
-        mailvault_core::fsx::write_atomic(&cache_dir.join(format!("{}.json", header.uid)), email_json.as_bytes())
-            .map_err(|e| format!("Write email {}: {}", header.uid, e))?;
-    }
-    info!("[sync] Cache written: {} headers", headers.len());
-    Ok(())
+fn write_headers(root: &Path, cache_dir: &Path, headers: &[ImapEmailHeader]) -> Result<(), String> {
+    with_mailbox_write_lock(root, cache_dir, || {
+        fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
+        for header in headers {
+            let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
+            mailvault_core::fsx::write_atomic(&cache_dir.join(format!("{}.json", header.uid)), email_json.as_bytes())
+                .map_err(|e| format!("Write email {}: {}", header.uid, e))?;
+        }
+        info!("[sync] Cache written: {} headers", headers.len());
+        Ok(())
+    })
 }
 
 /// Patch the `flags` field of existing sidecars in place. Returns how many changed.
 /// UIDs without a sidecar are ignored — they arrive via the new-header fetch.
-fn patch_sidecar_flags(cache_dir: &Path, changes: &[(u32, Vec<String>)]) -> usize {
-    let mut patched = 0;
-    for (uid, flags) in changes {
-        let path = cache_dir.join(format!("{}.json", uid));
-        let Ok(data) = fs::read_to_string(&path) else { continue };
-        let Ok(mut email) = serde_json::from_str::<serde_json::Value>(&data) else { continue };
-        let new_flags = serde_json::json!(flags);
-        if email.get("flags") == Some(&new_flags) { continue }
-        let Some(obj) = email.as_object_mut() else { continue };
-        obj.insert("flags".to_string(), new_flags);
-        if let Ok(json) = serde_json::to_string(&email) {
-            if fs::write(&path, json).is_ok() { patched += 1; }
+fn patch_sidecar_flags(root: &Path, cache_dir: &Path, changes: &[(u32, Vec<String>)]) -> usize {
+    with_mailbox_write_lock(root, cache_dir, || {
+        let mut patched = 0;
+        for (uid, flags) in changes {
+            let path = cache_dir.join(format!("{}.json", uid));
+            let Ok(data) = fs::read_to_string(&path) else { continue };
+            let Ok(mut email) = serde_json::from_str::<serde_json::Value>(&data) else { continue };
+            let new_flags = serde_json::json!(flags);
+            if email.get("flags") == Some(&new_flags) { continue }
+            let Some(obj) = email.as_object_mut() else { continue };
+            obj.insert("flags".to_string(), new_flags);
+            if let Ok(json) = serde_json::to_string(&email) {
+                if mailvault_core::fsx::write_atomic(&path, json.as_bytes()).is_ok() { patched += 1; }
+            }
         }
-    }
-    patched
+        patched
+    })
 }
 
 /// Delete sidecars whose UID is no longer on the server. Returns how many.
-fn prune_sidecars(cache_dir: &Path, server_uids: &[u32]) -> usize {
+fn prune_sidecars(root: &Path, cache_dir: &Path, server_uids: &[u32]) -> usize {
+    with_mailbox_write_lock(root, cache_dir, || {
     let live: std::collections::HashSet<u32> = server_uids.iter().copied().collect();
     let Ok(entries) = fs::read_dir(cache_dir) else { return 0 };
     let mut pruned = 0;
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if name == "_meta.json" { continue }
-        let Some(uid) = name.strip_suffix(".json").and_then(|u| u.parse::<u32>().ok()) else { continue };
+        let Some(uid) = header_cache::is_header_file(&name) else { continue };
         if !live.contains(&uid) && fs::remove_file(entry.path()).is_ok() {
             pruned += 1;
         }
     }
     pruned
+    })
 }
 
 #[cfg(test)]
@@ -1152,7 +1173,7 @@ mod tests {
 
         // Meta round-trips, including highestModseq (the daemon used to drop it,
         // which silently disabled the app's CONDSTORE fast path).
-        write_cache_meta(&dir, 42, Some(7), Some(101), Some(999)).unwrap();
+        write_cache_meta_full(&dir, &dir, 42, Some(7), Some(101), Some(999), None).unwrap();
         let meta = read_tauri_cache_meta(&dir).unwrap();
         assert_eq!(meta.total_emails, Some(42));
         assert_eq!(meta.uid_validity, Some(7));
@@ -1161,7 +1182,7 @@ mod tests {
         // Never reconciled → the timed reconcile must fire on the next delta.
         assert_eq!(meta.last_reconcile, None);
 
-        write_cache_meta_full(&dir, 42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
+        write_cache_meta_full(&dir, &dir, 42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
         assert_eq!(read_tauri_cache_meta(&dir).unwrap().last_reconcile, Some(1_700_000_000_000));
 
         // Two sidecars, one seen and one unseen.
@@ -1170,7 +1191,7 @@ mod tests {
         assert_eq!(count_sidecars(&dir), 2);
 
         // Flag patch: uid 11 changes, uid 10 is already correct, uid 99 has no sidecar.
-        let patched = patch_sidecar_flags(&dir, &[
+        let patched = patch_sidecar_flags(&dir, &dir, &[
             (10, vec!["\\Seen".to_string()]),
             (11, vec!["\\Seen".to_string(), "\\Flagged".to_string()]),
             (99, vec!["\\Seen".to_string()]),
@@ -1191,7 +1212,7 @@ mod tests {
         assert_eq!(missing, vec![9, 12]);
 
         // Prune: uid 11 was expunged server-side, _meta.json must survive.
-        assert_eq!(prune_sidecars(&dir, &[10]), 1);
+        assert_eq!(prune_sidecars(&dir, &dir, &[10]), 1);
         assert!(dir.join("10.json").exists());
         assert!(!dir.join("11.json").exists());
         assert!(dir.join("_meta.json").exists());
@@ -1618,6 +1639,35 @@ mod tests {
         fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// Task 2.3: the cold path used to always write `lastReconcile: null`
+    /// (`write_cache_meta`, never `_full`), so a mailbox that fell onto the
+    /// cold path for a reason OTHER than a UIDVALIDITY change (here: a meta
+    /// file with no sidecars, so the delta gate's `sidecar_count > 0` check
+    /// fails) forgot it had ever reconciled and would immediately reconcile
+    /// again on the very next sync.
+    #[tokio::test]
+    async fn cold_sync_preserves_last_reconcile_when_uid_validity_is_unchanged() {
+        let dir = scratch_dir("cold_preserves_reconcile");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
+        let engine = engine_for(&dir);
+        let cache = cache_dir_for(&dir);
+
+        fs::create_dir_all(&cache).unwrap();
+        write_cache_meta_full(&dir, &cache, 0, Some(1), Some(1), None, Some(1_700_000_000_000)).unwrap();
+
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let meta = read_tauri_cache_meta(&cache).expect("meta written");
+        assert_eq!(
+            meta.last_reconcile,
+            Some(1_700_000_000_000),
+            "a cold sync with an unchanged UIDVALIDITY must not drop lastReconcile"
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
     /// A warm cache must fetch only the arrivals — not re-page the mailbox.
     /// Re-paging on every launch is what made restarts slow.
     #[tokio::test]
@@ -1813,7 +1863,7 @@ mod tests {
             )
             .unwrap();
         }
-        write_cache_meta(&cache, 50, Some(1), Some(51), None).unwrap();
+        write_cache_meta_full(&dir, &cache, 50, Some(1), Some(51), None, None).unwrap();
 
         engine.backfill_mailbox(&account, "INBOX").await;
 
