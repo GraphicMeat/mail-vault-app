@@ -67,6 +67,11 @@ vi.mock('../../db', () => ({
   saveMailboxes: vi.fn().mockResolvedValue(undefined),
 }));
 
+// maildir_delete/local_index_remove now route through transport.js (Task
+// 2.1); each test below still supplies its own mockSend implementation.
+const mockSend = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../transport', () => ({ send: (...a) => mockSend(...a) }));
+
 const mockVaultApplyFlags = vi.fn().mockResolvedValue({ renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
 vi.mock('../../api', () => ({
   vaultApplyFlags: (...a) => mockVaultApplyFlags(...a),
@@ -920,11 +925,15 @@ describe('deleteEmailFromServer', () => {
     primeStore(seedThread(), []);
     useMailStore.setState({ emails: [staleLocal, ...seedThread().slice(1)], localEmails: [staleLocal], archivedEmailIds: new Set() });
     const oldTauri = window.__TAURI__;
-    window.__TAURI__ = { core: { invoke: vi.fn().mockResolvedValue({ success: true }) } };
+    // messageMutations.js still gates the local-only delete on the presence
+    // of window.__TAURI__.core.invoke, even though the call itself now goes
+    // through the mocked transport.js send() above.
+    window.__TAURI__ = { core: { invoke: () => {} } };
+    mockSend.mockResolvedValue({ success: true });
 
     await useMailStore.getState().deleteEmailFromServer(1, { skipRefresh: true });
 
-    expect(window.__TAURI__.core.invoke).toHaveBeenCalledWith('maildir_delete', expect.objectContaining({ uid: 1 }));
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', expect.objectContaining({ uid: 1 }));
     expect(useMailStore.getState().deleteTombstones.has('acct1|INBOX|1')).toBe(true);
     expect(useMailStore.getState().sortedEmails.find(row => row.uid === 1)).toBeUndefined();
     window.__TAURI__ = oldTauri;

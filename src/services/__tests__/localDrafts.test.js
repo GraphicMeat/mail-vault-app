@@ -22,6 +22,12 @@ vi.mock('../db', () => ({
   getLocalEmailFull: (...a) => mockGetLocalEmailFull(...a),
 }));
 
+// maildir_store/maildir_delete now route through transport.js (Task 2.1);
+// the window.__TAURI__ stub below stays as the "are we in Tauri" presence
+// check localDrafts.js still gates on.
+const mockSend = vi.fn().mockResolvedValue(undefined);
+vi.mock('../transport', () => ({ send: (...a) => mockSend(...a) }));
+
 let storeState;
 const setState = vi.fn((updater) => {
   storeState = { ...storeState, ...(typeof updater === 'function' ? updater(storeState) : updater) };
@@ -100,7 +106,7 @@ describe('resolveDraftsMailbox', () => {
 describe('saveLocalDraft', () => {
   it('writes the .eml with the flags that make it a visible local draft', async () => {
     await save();
-    expect(invoke).toHaveBeenCalledWith('maildir_store', {
+    expect(mockSend).toHaveBeenCalledWith('maildir_store', {
       accountId: 'acct-1',
       mailbox: 'Drafts',
       uid: 1700000000,
@@ -129,7 +135,7 @@ describe('saveLocalDraft', () => {
     // Half a draft is worse than none: a row that cannot open the user's text
     // reads as "saved" and is not.
     expect(await save()).toBe(null);
-    expect(invoke).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
 
@@ -158,7 +164,7 @@ describe('deleteLocalDraft', () => {
     await save();
     await deleteLocalDraft({ accountId: 'acct-1', mailbox: 'Drafts', uid: 1700000000 });
 
-    expect(invoke).toHaveBeenCalledWith('maildir_delete', {
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', {
       accountId: 'acct-1', mailbox: 'Drafts', uid: 1700000000,
     });
     expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith('acct-1', 'Drafts', 1700000000);
@@ -168,7 +174,7 @@ describe('deleteLocalDraft', () => {
 
   it('does nothing without a draft to delete', async () => {
     await deleteLocalDraft({ accountId: 'acct-1', mailbox: 'Drafts', uid: null });
-    expect(invoke).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
     expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
   });
 
@@ -179,7 +185,7 @@ describe('deleteLocalDraft', () => {
 
     // The file is gone, but a uid is unique only inside one mailbox — dropping
     // it from the visible account's sets would blank an unrelated row.
-    expect(invoke).toHaveBeenCalledWith('maildir_delete', expect.anything());
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', expect.anything());
     expect(storeState.localEmails.length).toBe(1);
   });
 });
@@ -193,7 +199,7 @@ describe('discardDraftFor', () => {
   it('no-ops for a window that never saved one', async () => {
     await discardDraftFor({ _accountId: 'acct-1' });
     await discardDraftFor(null);
-    expect(invoke).not.toHaveBeenCalled();
+    expect(mockSend).not.toHaveBeenCalled();
   });
 });
 

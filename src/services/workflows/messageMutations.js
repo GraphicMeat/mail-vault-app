@@ -2,6 +2,7 @@
 
 import * as db from '../db';
 import * as api from '../api';
+import { send } from '../transport';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
@@ -130,8 +131,7 @@ export async function saveEmailLocally(uid) {
         throw new Error(tr('errors.noRawSource'));
       }
 
-      const invoke = window.__TAURI__?.core?.invoke;
-      await invoke('maildir_store', {
+      await send('maildir_store', {
         accountId: accountId,
         mailbox: mailbox,
         uid: email.uid,
@@ -582,8 +582,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   if (isLocalOnly) {
     if (invoke) {
       try {
-        await invoke('maildir_delete', { accountId, mailbox, uid: realUid });
-        await invoke('local_index_remove', { accountId, mailbox, uid: realUid });
+        await send('maildir_delete', { accountId, mailbox, uid: realUid });
+        await send('local_index_remove', { accountId, mailbox, uid: realUid });
         console.log(`[deleteEmail] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
       } catch (err) {
         console.error(`[deleteEmail] Local-only delete FAILED for UID ${realUid}:`, err);
@@ -1599,8 +1599,8 @@ export async function deleteSelectedFromServer() {
       if (isLocalOnly) {
         if (invoke) {
           try {
-            await invoke('maildir_delete', { accountId, mailbox, uid: realUid });
-            await invoke('local_index_remove', { accountId, mailbox, uid: realUid });
+            await send('maildir_delete', { accountId, mailbox, uid: realUid });
+            await send('local_index_remove', { accountId, mailbox, uid: realUid });
             console.log(`[deleteSelectedFromServer] Local-only delete: UID ${realUid} (${accountId}/${mailbox})`);
           } catch (err) {
             console.warn(`[deleteSelectedFromServer] Local-only delete failed for UID ${realUid}:`, err);

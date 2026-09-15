@@ -23,6 +23,7 @@ import { markAnswered, markForwarded } from '../services/workflows/messageMutati
 import { t, useT  } from '../i18n/index.js';
 import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
+import { send } from '../services/transport';
 import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
 
 // Find the Sent mailbox path for a specific account.
@@ -673,7 +674,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
 
         if (invoke && builtMime?.rawBase64) {
           try {
-            await invoke('maildir_store', {
+            await send('maildir_store', {
               accountId: freshAccount.id,
               mailbox: localMailbox,
               uid: pseudoUid,
@@ -787,12 +788,12 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             // server copy is canonical.
             if (p.ok && invoke) {
               try {
-                await invoke('maildir_delete', {
+                await send('maildir_delete', {
                   accountId: freshAccount.id,
                   mailbox: localMailbox,
                   uid: pseudoUid,
                 });
-                await invoke('local_index_remove', {
+                await send('local_index_remove', {
                   accountId: freshAccount.id,
                   mailbox: localMailbox,
                   uid: pseudoUid,
@@ -916,7 +917,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         // removes the old file for this UID and writes the new one.
         if (invoke && builtMime?.rawBase64) {
           try {
-            await invoke('maildir_store', {
+            await send('maildir_store', {
               accountId: freshAccount.id,
               mailbox: localMailbox,
               uid: pseudoUid,

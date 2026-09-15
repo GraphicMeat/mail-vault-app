@@ -25,6 +25,10 @@ const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockGetLocalIndexEntry = vi.fn().mockResolvedValue(null);
 const mockAppendLocalIndex = vi.fn().mockResolvedValue(undefined);
+// maildir_delete/local_index_remove now route through transport.js (Task
+// 2.1); each test below still supplies its own mockSend implementation.
+const mockSend = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../transport', () => ({ send: (...a) => mockSend(...a) }));
 
 // The connectivity verdict the workflow reads. Offline is not a failure — the
 // journal entry stays and replayOps sends it when the link is back.
@@ -197,14 +201,16 @@ describe('deleting from a unified list', () => {
   it('takes the local path for a staged row named by its composite key', async () => {
     const r = row(7, { _accountId: ACCT_B.id, _mailbox: 'INBOX', _localStaged: true });
     primeUnified([r]);
-    const invoke = vi.fn().mockResolvedValue(undefined);
-    globalThis.window.__TAURI__ = { core: { invoke } };
+    // messageMutations.js still gates the local-only delete on the presence
+    // of window.__TAURI__.core.invoke, even though the call itself now goes
+    // through the mocked transport.js send() above.
+    globalThis.window.__TAURI__ = { core: { invoke: () => {} } };
     try {
       await useMailStore.getState().deleteEmailFromServer(_selKey(r));
     } finally {
       delete globalThis.window.__TAURI__;
     }
-    expect(invoke).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7 });
+    expect(mockSend).toHaveBeenCalledWith('maildir_delete', { accountId: ACCT_B.id, mailbox: 'INBOX', uid: 7 });
     expect(mockDeleteEmail).not.toHaveBeenCalled();
     expect(mockQueueOp).not.toHaveBeenCalled();
   });

@@ -16,6 +16,7 @@ import * as api from './api';
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
 import { _resolveMailboxPath } from '../stores/slices/unifiedHelpers';
+import { send } from './transport';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
 
@@ -73,7 +74,7 @@ export async function saveLocalDraft({ account, accountId, mailbox, uid, fromAdd
   );
   if (!built?.rawBase64) return null;
 
-  await tauri('maildir_store', {
+  await send('maildir_store', {
     accountId,
     mailbox,
     uid,
@@ -110,7 +111,7 @@ export async function deleteLocalDraft({ accountId, mailbox, uid }) {
   if (!accountId || !mailbox || !uid) return;
   const tauri = invoke();
   try {
-    if (tauri) await tauri('maildir_delete', { accountId, mailbox, uid });
+    if (tauri) await send('maildir_delete', { accountId, mailbox, uid });
     await api.removeFromLocalIndex(accountId, mailbox, uid);
   } catch (err) {
     console.warn('[localDrafts] delete failed:', err);

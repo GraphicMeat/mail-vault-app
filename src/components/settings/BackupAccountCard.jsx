@@ -11,6 +11,7 @@ import { formatDateTime } from '../../utils/dateFormat';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
 import BackupVerificationTree from './BackupVerificationTree';
+import { send } from '../../services/transport';
 import {
   Clock,
   CheckCircle2,
@@ -120,7 +121,7 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
   useEffect(() => {
     const invoke = window.__TAURI__?.core?.invoke;
     if (!invoke) return;
-    invoke('maildir_storage_stats', { accountId: account.id })
+    send('maildir_storage_stats', { accountId: account.id })
       .then(stats => setStorageSize(stats?.total_bytes ?? null))
       .catch(() => {});
     invoke('list_mailboxes', { accountJson: JSON.stringify(account) })

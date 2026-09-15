@@ -14,6 +14,12 @@ vi.mock('../../../services/authUtils', () => ({ ensureFreshToken: vi.fn() }));
 vi.mock('../../../hooks/usePremiumPricing.js', () => ({ usePremiumPriceBlurb: () => '' }));
 vi.mock('../../../services/attachmentUtils', () => ({ getRealAttachments: () => [], replaceCidUrls: html => html }));
 vi.mock('../../email/AttachmentBar', () => ({ AttachmentItem: () => null }));
+// db/keychain.js calls transportSend('get_app_data_dir', ..) eagerly at
+// module load, before this file's own top-level statements run (its own
+// import of CleanupSettings is static) — vi.hoisted keeps mockSend from
+// being read out of the temporal dead zone at that point.
+const mockSend = vi.hoisted(() => vi.fn());
+vi.mock('../../../services/transport', () => ({ send: (...a) => Promise.resolve(mockSend(...a)) }));
 vi.mock('@tanstack/react-virtual', () => ({
   useVirtualizer: ({ count }) => ({
     getTotalSize: () => count * 60,
@@ -45,8 +51,10 @@ beforeEach(() => {
   ensureFreshToken.mockResolvedValue({ ...account, accessToken: 'refreshed-token' });
   bulkOperationManager.start.mockResolvedValue(undefined);
   invoke.mockImplementation(async command => {
-    if (command === 'maildir_read_light') return null;
     if (command === 'imap_get_email_light') return { email: { subject: item.subject, textBody: 'Fetched preview body' } };
+  });
+  mockSend.mockImplementation(async command => {
+    if (command === 'maildir_read_light') return null;
   });
   vi.stubGlobal('__TAURI__', { core: { invoke } });
 });
@@ -66,7 +74,7 @@ describe('Cleanup account reads', () => {
     useMailStore.setState({ accounts: [updatedAccount] });
     fireEvent.click(row);
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
-    expect(invoke).toHaveBeenCalledWith('maildir_read_light', { accountId: account.id, mailbox: 'INBOX', uid: 42 });
+    expect(mockSend).toHaveBeenCalledWith('maildir_read_light', { accountId: account.id, mailbox: 'INBOX', uid: 42 });
     expect(invoke).toHaveBeenCalledWith('imap_get_email_light', { account: updatedAccount, accountId: account.id, mailbox: 'INBOX', uid: 42 });
   });
 

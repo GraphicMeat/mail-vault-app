@@ -12,6 +12,7 @@ import { resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getEmailBodyContent } from '../../utils/emailIframeTemplate';
 import { trace } from './exportTrace';
 import { plainTextBodyHtml } from '../../utils/mailto';
+import { send } from '../transport';
 
 // Samples run the real pipeline over fixture data, so they must reach it
 // without a subscription. Everything else meets the gate below.
@@ -30,8 +31,7 @@ export async function fetchAssetViaTauri(url) {
 }
 
 export async function readAttachmentViaTauri({ accountId, mailbox, uid, attachmentIndex }) {
-  const { invoke } = window.__TAURI__.core;
-  return invoke('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex });
+  return send('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex });
 }
 
 // Same normalisation the attachment bar does before it hands bytes to Rust: a

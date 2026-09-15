@@ -16,6 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useT } from '../../i18n/index.js';
+import { send } from '../../services/transport';
 
 function getCleanBase64(content) {
   let base64Content = content;
@@ -59,12 +60,11 @@ function browserDownload(attachment) {
 
 /** Read one attachment's bytes (base64) from the message's cached .eml. */
 async function readAttachment({ accountId, mailbox, uid, attachmentIndex }) {
-  const { invoke } = window.__TAURI__.core;
   const args = { accountId, mailbox, uid, attachmentIndex };
   // The .eml lands a beat after the light fetch answers; give it two more tries.
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      return await invoke('maildir_read_attachment', args);
+      return await send('maildir_read_attachment', args);
     } catch (err) {
       if (attempt < 2 && String(err).includes('not found')) {
         await new Promise(r => setTimeout(r, 500));
@@ -258,7 +258,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   useEffect(() => {
     if (!isTauri) return;
     let cancelled = false;
-    window.__TAURI__.core.invoke('cached_attachment_path', location)
+    send('cached_attachment_path', location)
       .then((path) => { if (!cancelled && path) setDownloadedPath(path); })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -287,7 +287,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     setError(null);
     try {
       if (isTauri) {
-        flashDownloaded(await window.__TAURI__.core.invoke('cache_attachment', location));
+        flashDownloaded(await send('cache_attachment', location));
       } else {
         browserDownload({ ...attachment, content: await ensureContent() });
       }
@@ -381,7 +381,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     setError(null);
     try {
       const { invoke } = window.__TAURI__.core;
-      const path = downloadedPath ?? await invoke('cache_attachment', location);
+      const path = downloadedPath ?? await send('cache_attachment', location);
       setDownloadedPath(path);
       await invoke('open_file', { path });
     } catch (err) {
@@ -548,7 +548,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox })
 
         try {
           if (isTauri) {
-            await window.__TAURI__.core.invoke('cache_attachment', location);
+            await send('cache_attachment', location);
           } else if (attachment.content) {
             browserDownload(attachment);
             if (i < attachments.length - 1) {

@@ -11,7 +11,7 @@
 //
 // Generalised from deletes to flags and moves. See src-tauri/src/op_journal.rs.
 
-const invoke = (cmd, args) => window.__TAURI__?.core?.invoke?.(cmd, args);
+import { send } from '../transport';
 
 /**
  * Record an intent. Resolves to the entry id, or null when journalling failed.
@@ -23,7 +23,7 @@ const invoke = (cmd, args) => window.__TAURI__?.core?.invoke?.(cmd, args);
 export async function queueOp({ op, accountId, mailbox, uids, arg = {} }) {
   if (!op || !accountId || !mailbox || !uids?.length) return null;
   try {
-    return await invoke('op_journal_queue', { entry: { id: 0, op, accountId, mailbox, uids, arg, at: 0 } });
+    return await send('op_journal_queue', { entry: { id: 0, op, accountId, mailbox, uids, arg, at: 0 } });
   } catch (e) {
     console.warn('[db] Could not journal op:', op, e);
     return null;
@@ -42,7 +42,7 @@ export async function queueOp({ op, accountId, mailbox, uids, arg = {} }) {
 export async function clearOps({ op, accountId, mailbox, uids, arg = {} }) {
   if (!op || !accountId || !mailbox || !uids?.length) return;
   try {
-    await invoke('op_journal_clear', { op, accountId, mailbox, uids, arg });
+    await send('op_journal_clear', { op, accountId, mailbox, uids, arg });
   } catch (e) {
     console.warn('[db] Could not clear journal op:', op, e);
   }
@@ -51,7 +51,7 @@ export async function clearOps({ op, accountId, mailbox, uids, arg = {} }) {
 /** Every unfinished op, oldest first. */
 export async function readOps() {
   try {
-    const ops = await invoke('op_journal_read');
+    const ops = await send('op_journal_read');
     return Array.isArray(ops) ? ops : [];
   } catch (e) {
     console.warn('[db] Could not read the op journal:', e);

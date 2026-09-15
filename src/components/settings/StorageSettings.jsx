@@ -8,6 +8,7 @@ import { ToggleSwitch } from './ToggleSwitch';
 import { SearchIndexSettings } from './SearchIndexSettings';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
+import { send } from '../../services/transport';
 import {
   FolderOpen,
   HardDrive,
@@ -327,10 +328,10 @@ export function StorageSettings({ accounts, onUpgrade }) {
                       pipelineManager.destroyAll();
 
                       // Clear .eml files (preserving archived)
-                      const result = await invoke('maildir_clear_cache');
+                      const result = await send('maildir_clear_cache');
 
                       // Clear headers cache files
-                      await invoke('clear_email_cache', { accountId: null });
+                      await send('clear_email_cache', { accountId: null });
 
                       // Clear in-memory cache and reset emails array so coordinator hook re-triggers
                       useMailStore.getState().clearEmailCache();

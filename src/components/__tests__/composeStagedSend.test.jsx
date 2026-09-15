@@ -28,6 +28,10 @@ const { invoke, sendEmail, buildOutgoingMime, appendLocalIndex, listen } = vi.ho
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: (...a) => listen(...a) }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...a) => invoke(...a) }));
+// maildir_store/maildir_delete/local_index_remove now route through
+// transport.js (Task 2.1); delegate to the same `invoke` mock so
+// storedUids() and every existing assertion below still see them.
+vi.mock('../../services/transport', () => ({ send: (...a) => invoke(...a) }));
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return new Proxy({}, {

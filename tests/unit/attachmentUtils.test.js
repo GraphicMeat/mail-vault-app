@@ -1,6 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { getRealAttachments, hasRealAttachments, hydrateInlineImages, replaceCidUrls } from '../../src/services/attachmentUtils';
 
+// hydrateInlineImages now reads maildir_read_attachment through transport.js
+// (Task 2.1). Delegate to whatever the test wired up on window.__TAURI__.core
+// so every fixture above still drives the same fake invoke.
+vi.mock('../../src/services/transport', () => ({
+  send: (...args) => globalThis.window.__TAURI__.core.invoke(...args),
+}));
+
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------

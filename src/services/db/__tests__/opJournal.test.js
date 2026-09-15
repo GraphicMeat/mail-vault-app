@@ -7,21 +7,19 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { queueOp, clearOps, readOps } from '../opJournal.js';
-
-if (!globalThis.window) globalThis.window = {};
 
 let invoke;
+vi.mock('../../transport.js', () => ({ send: (...a) => invoke(...a) }));
+
+const { queueOp, clearOps, readOps } = await import('../opJournal.js');
 
 beforeEach(() => {
   invoke = vi.fn().mockResolvedValue(undefined);
-  window.__TAURI__ = { core: { invoke } };
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  delete window.__TAURI__;
 });
 
 describe('queueOp', () => {

@@ -11,6 +11,7 @@ import { ensureFreshToken } from '../../services/authUtils';
 import { IS_APPSTORE_BUILD } from '../../utils/buildFlags.js';
 import { PremiumFeaturesLink } from '../PremiumFeaturesLink';
 import { usePremiumPriceBlurb } from '../../hooks/usePremiumPricing.js';
+import { send } from '../../services/transport';
 // Lazy-loaded in openPreview to avoid circular import at startup
 let _getRealAttachments = null;
 let _replaceCidUrls = null;
@@ -378,7 +379,7 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
         // Try maildir first (archived/local)
         let email = null;
         try {
-          email = await invoke('maildir_read_light', { accountId: activeAccountId, mailbox: item.mailbox || 'INBOX', uid: item.uid });
+          email = await send('maildir_read_light', { accountId: activeAccountId, mailbox: item.mailbox || 'INBOX', uid: item.uid });
         } catch {}
         // Fall back to IMAP fetch
         if (!email) {

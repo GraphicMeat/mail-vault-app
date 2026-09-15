@@ -14,6 +14,11 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 
 const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 
+// The vault/attachment-cache commands now route through transport.js
+// (Task 2.1); delegate to the same dispatcher so every existing
+// invoke.mockImplementation(...) above still drives their responses.
+vi.mock('../../services/transport', () => ({ send: (...args) => invoke(...args) }));
+
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return new Proxy({}, {

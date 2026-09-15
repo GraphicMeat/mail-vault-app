@@ -6,6 +6,8 @@
  * to its position in the original `attachments` array — needed for on-demand
  * lazy loading via `maildir_read_attachment`.
  */
+import { send } from './transport';
+
 export function getRealAttachments(attachments, html) {
   if (!attachments) return [];
   return attachments
@@ -65,7 +67,7 @@ export async function hydrateInlineImages(email, accountId, mailbox) {
     const cid = att.contentId.replace(/^<|>$/g, '');
     if (!email.html.includes(`cid:${cid}`)) return att;
     try {
-      const content = await invoke('maildir_read_attachment', {
+      const content = await send('maildir_read_attachment', {
         accountId,
         mailbox,
         uid: email.uid,

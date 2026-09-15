@@ -100,6 +100,9 @@ vi.mock('../../../stores/settingsStore', () => ({
 vi.mock('../../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));
+// maildir_store now routes through transport.js (Task 2.1); keep the same
+// mockTauriInvoke backing it so every assertion below is unchanged.
+vi.mock('../../transport', () => ({ send: (...a) => mockTauriInvoke(...a) }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
 const { saveEmailLocally } = await import('../messageMutations.js');
