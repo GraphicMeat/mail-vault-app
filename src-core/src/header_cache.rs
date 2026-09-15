@@ -246,6 +246,9 @@ fn load_from_sidecars(dir: &Path, meta_file: &Path, limit: Option<usize>) -> Res
         }
         read_sidecars(dir, &uids)
     } else {
+        // ponytail: every sidecar in the mailbox is read to sort by date; the
+        // upgrade path is indexing uid -> date in `_meta.json` so this can sort
+        // without opening a file per message.
         let mut all = read_sidecars(dir, &uids);
         all.sort_by(|a, b| {
             header_date_ms(b)
@@ -411,6 +414,7 @@ pub fn load_meta(root: &Path, account_id: &str, mailbox: &str) -> Result<Option<
 pub fn load_by_uids(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) -> Vec<serde_json::Value> {
     let dir = sidecar_dir(root, account_id, mailbox);
     if !dir.exists() {
+        info!("load_email_cache_by_uids: sidecar dir does not exist: {}", dir.display());
         return Vec::new();
     }
 
@@ -423,6 +427,7 @@ pub fn load_by_uids(root: &Path, account_id: &str, mailbox: &str, uids: &[u32]) 
             }
         }
     }
+    info!("load_email_cache_by_uids: found {}/{} UIDs in sidecar cache", emails.len(), uids.len());
     emails
 }
 
@@ -459,6 +464,7 @@ pub fn list_uids(root: &Path, account_id: &str, mailbox: &str, since_ms: Option<
         }
     }
 
+    info!("list_cached_uids: {} sidecars, {} changed since {:?}", uids.len(), changed.len(), since_ms);
     serde_json::json!({ "uids": uids, "changed": changed })
 }
 
@@ -540,9 +546,8 @@ pub fn delete_mailbox_cache(root: &Path, account_id: &str) -> Result<(), String>
 // ── Flag patch ───────────────────────────────────────────────────────────
 
 /// Set `flags` on one cached header. `false` when there is no such sidecar or
-/// it already says this. Ported from the app's (now deleted)
-/// `vault_flags::patch_flags_field` — atomic where that was a plain
-/// `fs::write`; Task 2.4 points the moved `vault_flags` writer at this.
+/// it already says this. Task 2.4 replaces `vault_flags::patch_flags_field` —
+/// a plain, unlocked `fs::write` — with this atomic, locked version.
 pub fn patch_flags(root: &Path, account_id: &str, mailbox: &str, uid: u32, flags: &[String]) -> bool {
     let base_name = cache_base_name(account_id, mailbox);
     let path = sidecar_dir(root, account_id, mailbox).join(format!("{}.json", uid));
@@ -613,6 +618,40 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    /// `save`'s merge only ever touches five named keys (see above); `lastReconcile`
+    /// (set by the daemon's cold path, Task 2.3) and any future key are not among
+    /// them, so they must survive untouched — passes by construction today, which
+    /// is exactly why a later typed-meta refactor could break it unnoticed.
+    #[test]
+    fn save_preserves_last_reconcile_and_unknown_meta_keys_the_caller_never_sends() {
+        let root = scratch("meta_merge_unknown");
+        let dir = sidecar_dir(&root, "acc1", "INBOX");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("_meta.json"),
+            serde_json::json!({
+                "totalEmails": 5,
+                "lastReconcile": 1_700_000_000_000u64,
+                "someFutureKey": "kept",
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        save(&root, "acc1", "INBOX", &serde_json::json!({
+            "emails": [],
+            "totalEmails": 6,
+        }).to_string()).unwrap();
+
+        let meta: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(dir.join("_meta.json")).unwrap()).unwrap();
+        assert_eq!(meta["totalEmails"], 6, "the caller's own key still updates");
+        assert_eq!(meta["lastReconcile"], 1_700_000_000_000u64, "save never touches lastReconcile");
+        assert_eq!(meta["someFutureKey"], "kept", "an unknown key on disk is never dropped");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn clearing_one_account_keeps_a_sibling_whose_id_is_a_prefix() {
         let root = scratch("clear_prefix");
@@ -648,7 +687,16 @@ mod tests {
                 let barrier = barrier.clone();
                 handles.push(std::thread::spawn(move || {
                     barrier.wait();
-                    clear(&root, None, None).unwrap();
+                    if round % 2 == 0 {
+                        clear(&root, None, None).unwrap();
+                    } else {
+                        // The single-mailbox branch's own `remove_dir_all` walk,
+                        // unwrapped: an ENOTEMPTY/ENOENT here would mean a `save`
+                        // slipped in mid-walk, so this actually exercises the
+                        // tree-write lock rather than only the logged-and-ignored
+                        // `(None, None)` path above.
+                        clear(&root, Some("acc1"), Some("INBOX")).unwrap();
+                    }
                 }));
             }
             for h in handles {

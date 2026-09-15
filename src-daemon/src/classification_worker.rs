@@ -159,13 +159,7 @@ fn load_emails_for_classification(
     account_id: &str,
     mailbox: &str,
 ) -> Vec<classification::EmailForClassification> {
-    let cache_dir = data_dir
-        .join("email_cache")
-        .join(format!(
-            "{}_{}",
-            account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-            mailbox.replace(|c: char| !c.is_alphanumeric(), "_"),
-        ));
+    let cache_dir = mailvault_core::header_cache::sidecar_dir(data_dir, account_id, mailbox);
 
     let entries = match std::fs::read_dir(&cache_dir) {
         Ok(e) => e,
@@ -175,7 +169,10 @@ fn load_emails_for_classification(
     let mut emails = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
-        if !name.ends_with(".json") || name == "_meta.json" {
+        // `is_header_file` also excludes `graph_id_map.json` (the old
+        // `ends_with(".json") && != "_meta.json"` rule fed the Outlook uid
+        // ledger to the classifier as a uid-0 message — Task 2.3 review M7).
+        if mailvault_core::header_cache::is_header_file(&name).is_none() {
             continue;
         }
 
@@ -451,6 +448,36 @@ mod tests {
 
     fn no_rules() -> Arc<dyn Fn(&str) -> Vec<classification::LearnedRule> + Send + Sync> {
         Arc::new(|_| Vec::new())
+    }
+
+    /// Task 2.3 review M7: this reader used to filter sidecars with
+    /// `ends_with(".json") && name != "_meta.json"`, which fed the Outlook uid
+    /// ledger to the classifier as a fabricated uid-0 message.
+    /// `header_cache::is_header_file` excludes both `graph_id_map.json` and
+    /// `_meta.json` without a name-literal special case.
+    #[test]
+    fn graph_id_map_and_meta_are_never_fed_to_the_classifier_as_a_message() {
+        let dir = scratch("classifier-graph-ledger");
+        let cache = dir.join("email_cache").join("acc1_INBOX");
+        std::fs::create_dir_all(&cache).unwrap();
+        std::fs::write(
+            cache.join("7.json"),
+            json!({
+                "uid": 7, "subject": "real", "from": {"address": "a@b.test"},
+                "date": "2026-08-01T00:00:00Z", "to": [], "hasAttachments": false,
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(cache.join("graph_id_map.json"), json!({"7": "g-1"}).to_string()).unwrap();
+        std::fs::write(cache.join("_meta.json"), json!({"totalEmails": 1}).to_string()).unwrap();
+
+        let emails = load_emails_for_classification(&dir, "acc1", "INBOX");
+
+        assert_eq!(emails.len(), 1, "only the real sidecar is a message");
+        assert_eq!(emails[0].uid, 7);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Poll the worker's progress for up to 5 s, then hand back whatever it says.

@@ -616,7 +616,12 @@ impl SyncEngine {
                     "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
                     account.email, mailbox, sidecar_count
                 );
-                let _ = fs::remove_dir_all(&cache_dir);
+                // Same tree-read + mailbox lock as `write_headers`/`write_cache_meta_full`
+                // below: an unlocked wipe here could race a concurrent backfill's
+                // writes to this same mailbox (Task 2.3 review I1).
+                with_mailbox_write_lock(&self.data_dir, &cache_dir, || {
+                    let _ = fs::remove_dir_all(&cache_dir);
+                });
                 None
             };
             let (headers, _total, _has_more, _skipped) =
@@ -959,8 +964,8 @@ struct CachedMeta {
     uid_next: Option<u32>,
     highest_modseq: Option<u64>,
     total_emails: Option<u32>,
-    /// Epoch ms of the last UID SEARCH ALL reconcile. None = never (or the
-    /// Tauri-side cache writer overwrote _meta.json, which drops the field).
+    /// Epoch ms of the last UID SEARCH ALL reconcile. None = never reconciled,
+    /// or the generation was dropped on a UIDVALIDITY change.
     last_reconcile: Option<u64>,
 }
 
@@ -1125,17 +1130,17 @@ fn patch_sidecar_flags(root: &Path, cache_dir: &Path, changes: &[(u32, Vec<Strin
 /// Delete sidecars whose UID is no longer on the server. Returns how many.
 fn prune_sidecars(root: &Path, cache_dir: &Path, server_uids: &[u32]) -> usize {
     with_mailbox_write_lock(root, cache_dir, || {
-    let live: std::collections::HashSet<u32> = server_uids.iter().copied().collect();
-    let Ok(entries) = fs::read_dir(cache_dir) else { return 0 };
-    let mut pruned = 0;
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        let Some(uid) = header_cache::is_header_file(&name) else { continue };
-        if !live.contains(&uid) && fs::remove_file(entry.path()).is_ok() {
-            pruned += 1;
+        let live: std::collections::HashSet<u32> = server_uids.iter().copied().collect();
+        let Ok(entries) = fs::read_dir(cache_dir) else { return 0 };
+        let mut pruned = 0;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let Some(uid) = header_cache::is_header_file(&name) else { continue };
+            if !live.contains(&uid) && fs::remove_file(entry.path()).is_ok() {
+                pruned += 1;
+            }
         }
-    }
-    pruned
+        pruned
     })
 }
 
@@ -1218,6 +1223,74 @@ mod tests {
         assert!(dir.join("_meta.json").exists());
 
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn test_header(uid: u32) -> ImapEmailHeader {
+        ImapEmailHeader {
+            uid,
+            seq: uid,
+            display_index: None,
+            message_id: Some(format!("<{}@test>", uid)),
+            in_reply_to: None,
+            references: None,
+            subject: "s".into(),
+            from: imap::EmailAddress { name: None, address: "a@b.test".into() },
+            to: vec![],
+            cc: vec![],
+            bcc: vec![],
+            message_date: None,
+            received_at: None,
+            sent_at: None,
+            date: None,
+            internal_date: None,
+            flags: vec![],
+            size: None,
+            has_attachments: false,
+            source: None,
+            reply_to: None,
+            return_path: None,
+            authentication_results: None,
+            list_unsubscribe: None,
+            list_id: None,
+            precedence: None,
+        }
+    }
+
+    /// Task 2.3 review I1: the cold path's `remove_dir_all` used to run with no
+    /// lock at all, so a concurrent backfill chunk-write to the SAME mailbox
+    /// could have its `write_atomic` fail with ENOENT mid-write (the wipe
+    /// pulled the directory out from under it), or the wipe itself could hit
+    /// ENOTEMPTY and silently leave stale sidecars (the exact ghosts it exists
+    /// to prevent). Barrier-synchronized like `header_cache`'s own
+    /// `a_clear_racing_saves_never_leaves_a_half_written_mailbox`, which caught
+    /// the sibling bug the same way: every `write_headers` call below must
+    /// succeed, never race the wipe.
+    #[test]
+    fn a_cold_wipe_never_races_a_concurrent_mailbox_write() {
+        let dir = scratch_dir("cold_wipe_race");
+        for round in 0..20u32 {
+            write_headers(&dir, &dir, &[test_header(round)]).unwrap();
+
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let (d1, b1) = (dir.clone(), barrier.clone());
+            let writer = std::thread::spawn(move || {
+                b1.wait();
+                for i in 0..20u32 {
+                    write_headers(&d1, &d1, &[test_header(1000 + round * 100 + i)]).unwrap();
+                }
+            });
+            let (d2, b2) = (dir.clone(), barrier.clone());
+            let remover = std::thread::spawn(move || {
+                b2.wait();
+                // The fixed cold-path wipe, exactly as `sync_mailbox` now calls it.
+                with_mailbox_write_lock(&d2, &d2, || {
+                    let _ = fs::remove_dir_all(&d2);
+                });
+            });
+            writer.join().unwrap();
+            remover.join().unwrap();
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A backfill that gave up must NOT keep reporting as in-flight: the app
