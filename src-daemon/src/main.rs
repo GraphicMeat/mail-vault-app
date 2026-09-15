@@ -1,3 +1,4 @@
+mod attachment_extract;
 mod auth;
 mod channel;
 pub mod classification;
@@ -159,8 +160,55 @@ fn acquire_singleton_lock(_data_dir: &PathBuf) -> Option<std::fs::File> {
     Some(std::fs::File::open("/dev/null").ok()?) // No-op on non-unix
 }
 
-#[tokio::main]
-async fn main() {
+/// `mailvault-daemon --extract-pdf`: read PDF bytes from stdin, write extracted text
+/// to stdout. Runs only in its own re-exec'd process (see `attachment_extract.rs`'s
+/// non-macOS `pdf_text_layer`), never in the main daemon or the search-index
+/// worker thread, so a crash here just exits non-zero/gets killed rather than
+/// taking anything else down. The `catch_unwind` below is a real safety net,
+/// not decorative: `src-daemon/Cargo.toml` sets `[profile.release] panic =
+/// "abort"`, but this workspace's root `Cargo.toml` declares no `[profile]`
+/// table, and Cargo only honours profile settings from the workspace root —
+/// a member manifest's own `[profile.*]` is silently ignored (confirmed via
+/// `cargo add`/`cargo fetch` here, which both warn "profiles for the non
+/// root package will be ignored"). So `panic = "abort"` in src-daemon's
+/// Cargo.toml is dead in every build of this binary, debug or release, and
+/// `catch_unwind` actually catches a `pdf-extract` panic today. It's kept
+/// regardless of that: if the workspace root ever grows a `[profile.release]`
+/// table and revives the abort setting, this still degrades gracefully to a
+/// non-zero exit instead of silently going from "caught" to "uncaught".
+#[cfg(not(target_os = "macos"))]
+fn extract_pdf_subprocess_main() -> i32 {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    if std::io::stdin().read_to_end(&mut bytes).is_err() {
+        return 1;
+    }
+    match std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(&bytes)) {
+        Ok(Ok(text)) => {
+            print!("{text}");
+            0
+        }
+        _ => 1,
+    }
+}
+
+fn main() {
+    // Before any runtime or logging exists: this process only extracts one PDF.
+    #[cfg(not(target_os = "macos"))]
+    if std::env::args().nth(1).as_deref() == Some("--extract-pdf") {
+        std::process::exit(extract_pdf_subprocess_main());
+    }
+    let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("mailvault-daemon: cannot start the async runtime: {e}");
+            std::process::exit(1);
+        }
+    };
+    runtime.block_on(daemon_main());
+}
+
+async fn daemon_main() {
     let data_dir = get_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
     let _log_guard = setup_logging(&data_dir);
