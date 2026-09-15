@@ -132,4 +132,25 @@ mod tests {
         let (_t, s) = st();
         assert!(super::route(&s, "sync.now", &json!({}), json!(1)).await.is_none());
     }
+
+    /// Review focus 1.6: "`vault_search` query errors surface as JSON-RPC
+    /// errors". Drops the `messages` table out from under an otherwise
+    /// available, first-pass-done index so `core::query::search`'s own
+    /// `SELECT ... FROM messages` fails — the one way `search_reply` can
+    /// return `Err` once past its `available`/`first_pass_done` guards.
+    #[tokio::test]
+    async fn vault_search_query_errors_surface_as_json_rpc_errors() {
+        let (t, s) = st();
+        {
+            use mailvault_core::search_index::{db, lock};
+            *lock(&s.search_index.db) = Some(db::open(t.path()).unwrap());
+            *s.search_index.root.lock().unwrap() = Some(t.path().to_path_buf());
+            let guard = lock(&s.search_index.db);
+            let conn = guard.as_ref().unwrap();
+            db::meta_set(conn, db::FIRST_PASS_DONE, "1").unwrap();
+            conn.execute_batch("DROP TABLE messages;").unwrap();
+        }
+        let r = call(&s, "vault_search", json!({"request": {"accountId": "a", "query": "x"}})).await;
+        assert_eq!(r.error.expect("a broken index must answer a JSON-RPC error, not a bare {available:false}").code, ipc::INTERNAL_ERROR);
+    }
 }
