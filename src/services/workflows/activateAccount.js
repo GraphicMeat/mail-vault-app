@@ -51,7 +51,12 @@ function shouldUseFreshMailboxCache(entry) {
 }
 
 async function fetchAccountMailboxes(account) {
-  const freshAccount = await ensureFreshToken(account);
+  // Activation hands us the accounts.json copy, which never carries a
+  // password (regression 71779b49): resolve credentials first, the way
+  // loadServerEmails already does, with ensureFreshToken as a fallback for
+  // when resolveServerAccount can't recover them.
+  const resolved = await resolveServerAccount(account.id, account);
+  const freshAccount = resolved.ok ? resolved.account : await ensureFreshToken(account);
   if (isGraphAccount(freshAccount)) {
     const graphFolders = await api.graphListFolders(freshAccount.oauth2AccessToken);
     await adoptGraphFolderKeysFromListing(freshAccount, graphFolders);
@@ -106,10 +111,9 @@ async function loadMailboxes(accountId, account, requestedMailbox, signal, useMa
   const isFresh = !takeForcedMailboxRefetch(accountId) && shouldUseFreshMailboxCache(cachedEntry);
   const serverMailboxesPromise = isFresh
     ? Promise.resolve(null)
-    // One retry: the first fetch of a session races credential loading and
-    // fails with "Password missing". The IMAP pool recovers milliseconds
-    // later, but nothing re-ran this — and the background prefetch skips the
-    // active account — so that account kept the INBOX placeholder all session.
+    // One retry: fetchAccountMailboxes resolves credentials up front, so this
+    // now only guards a transient IMAP failure (network blip, timeout), not
+    // the password race it used to paper over.
     : retryOnce(() => fetchAccountMailboxes(account), { isAborted: () => signal.aborted })
         .then(freshMailboxes => {
           if (!freshMailboxes) return null;

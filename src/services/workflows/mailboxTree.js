@@ -54,10 +54,10 @@ export function pickMailboxList(...candidates) {
 /**
  * Run `fetchFn`, and on failure run it once more.
  *
- * The first folder fetch of a session races credential loading and fails with
- * "Password missing"; the IMAP pool recovers within milliseconds but nothing
- * re-ran the fetch. Returns null instead of retrying if the activation was
- * aborted while we waited.
+ * `fetchFn` resolves its own credentials (see activateAccount's
+ * fetchAccountMailboxes), so this only guards a transient failure — a
+ * network blip or a slow server — not credential loading. Returns null
+ * instead of retrying if the activation was aborted while we waited.
  */
 export async function retryOnce(fetchFn, { delayMs = 1500, isAborted = () => false } = {}) {
   try {
