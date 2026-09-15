@@ -15,6 +15,7 @@ mod learning;
 mod netgate;
 pub mod llm;
 mod server;
+pub mod search_index;
 mod snapshot;
 pub mod sync_engine;
 
