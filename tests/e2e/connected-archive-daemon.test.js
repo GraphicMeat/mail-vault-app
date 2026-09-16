@@ -115,16 +115,18 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   ].join('\r\n'));
 
   /** APPEND `count` fresh messages `${prefix} 1..count` to yoda's INBOX,
-   *  return their real server-assigned uids paired with their subjects. */
-  async function seedBatch(prefix, count) {
-    const now = Date.now();
+   *  return their real server-assigned uids paired with their subjects.
+   *  `anchor` is the newest message's date; the rest step one second older
+   *  each, so within a batch the order is stable and unique. */
+  async function seedBatch(prefix, count, anchor = new Date()) {
+    const base = anchor.getTime();
     return withYoda(async (client) => {
       const lock = await client.getMailboxLock('INBOX');
       try {
         const out = [];
         for (let i = 1; i <= count; i++) {
           const subject = `${prefix} ${i}`;
-          const date = new Date(now - i * 1000); // strictly ordered, all "now"
+          const date = new Date(base - i * 1000);
           await client.append('INBOX', rfc822(subject, date), [], date);
           // Re-queried rather than trusted off APPEND's own return, same as
           // connected-delete-reader-race.test.js's `seed()`.
@@ -137,6 +139,16 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
         lock.release();
       }
     });
+  }
+
+  /** Local noon yesterday - safely inside BulkOperationsModal's "Yesterday"
+   *  preset window ([midnight yesterday, midnight today)) no matter what
+   *  time of day the run starts, unlike a fixed hours-ago offset. */
+  function noonYesterday() {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    d.setHours(12, 0, 0, 0);
+    return d;
   }
 
   /** How many uids `client.search({subject}, {uid:true})` currently finds
@@ -206,17 +218,17 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   const rawEvents = (name) => browser.execute((n) => (window.__ARCHIVE_DAEMON_EVENTS__ || []).filter((e) => e.name === n), name);
 
   // ── The UI ───────────────────────────────────────────────────────────
+  //
+  // The list is virtualized (same mechanism connected-unified-archive-thread
+  // .test.js's `clickThreadRow` works around): with COUNT_A+COUNT_C+COUNT_D
+  // (22) fresh rows plus yoda's 9 existing fixtures, only a handful are ever
+  // mounted in the DOM at once. `sortedEmails` on the store is the reliable
+  // "did it actually load" signal (connected-vault-move-daemon.test.js's
+  // `unarchivedRows()` reads the same field); finding a specific row to
+  // click still has to scroll the list into view first.
 
-  const rows = () => browser.execute((prefixes) => {
-    const out = [];
-    for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
-      const text = row.innerText || '';
-      const prefix = prefixes.find((p) => text.includes(p));
-      if (!prefix) continue;
-      out.push({ subject: text, checked: !!row.querySelector('input[type="checkbox"]')?.checked });
-    }
-    return out;
-  }, [PREFIX_A, PREFIX_C, PREFIX_D]);
+  const storeSubjects = () => browser.execute(() =>
+    (window.__MAIL_STORE__?.getState?.().sortedEmails || []).map((e) => e.subject));
 
   function toggleRow(subject) {
     return browser.execute((needle) => {
@@ -231,9 +243,37 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     }, subject);
   }
 
+  /** The scrollable list container, the same heuristic
+   *  connected-unified-archive-thread.test.js's `clickThreadRow` uses. */
+  function scrollListBy(fraction) {
+    return browser.execute((frac) => {
+      const list = [...document.querySelectorAll('div')]
+        .find((d) => d.scrollHeight > d.clientHeight + 200 && d.clientHeight > 200);
+      if (!list) return null;
+      const max = list.scrollHeight - list.clientHeight;
+      if (frac === 0) { list.scrollTop = 0; return { scrollTop: 0, max }; }
+      if (list.scrollTop >= max) return { scrollTop: list.scrollTop, max, atEnd: true };
+      list.scrollTop = Math.min(list.scrollTop + list.clientHeight * frac, max);
+      return { scrollTop: list.scrollTop, max };
+    }, fraction);
+  }
+
+  /** Scroll from the top of the list until `subject`'s row is found and
+   *  checked, or the list bottoms out. */
+  async function findAndToggleRow(subject) {
+    await scrollListBy(0); // reset to a known starting point
+    for (let step = 0; step < 80; step++) {
+      if (await toggleRow(subject)) return true;
+      const at = await scrollListBy(0.8);
+      if (!at || at.atEnd) return await toggleRow(subject);
+      await browser.pause(150); // let the virtualized window re-render
+    }
+    return false;
+  }
+
   async function selectSubjects(subjects) {
     for (const s of subjects) {
-      await browser.waitUntil(() => toggleRow(s), { timeout: 15_000, interval: 300, timeoutMsg: `could not check the row for "${s}"` });
+      await browser.waitUntil(() => findAndToggleRow(s), { timeout: 30_000, interval: 300, timeoutMsg: `could not find and check the row for "${s}"` });
     }
   }
 
@@ -269,11 +309,18 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     });
   }
 
-  /** `Select messages…` -> Next -> Delete -> confirm -> confirm again.
-   *  Assumes the wanted rows are already checked (selectedCount > 0), so
-   *  step 1's date-range presets are never touched - an exact selection by
-   *  subject, not a range that could also catch yoda's other fixtures. */
-  async function runBulkDeleteOnSelection() {
+  /** `Select messages…` -> pick the "Yesterday" range -> Next -> Delete ->
+   *  confirm -> confirm again.
+   *
+   *  BulkOperationsModal's `selectedCount` (and so its "Next" button) is
+   *  zero until `selectedRange` is set - a plain row checkbox click outside
+   *  the modal is not enough (`const selectedCount = selectedRange ?
+   *  selectedEmailIds.size : 0`). Clicking a range preset is the only way
+   *  in; "Yesterday" is used instead of "All" or hand-picked checkboxes so
+   *  the derived selection is EXACTLY batch D (seeded dated yesterday) and
+   *  never touches yoda's other fixtures or batches A/C, without needing to
+   *  hand-deselect them afterward. */
+  async function runBulkDeleteOnRange(presetLabel, subjects) {
     await browser.waitUntil(() => browser.execute(() => {
       const btn = document.querySelector('.mail-list-toolbar button[aria-label="Select messages…"]');
       if (!btn) return false;
@@ -283,7 +330,15 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     await browser.waitUntil(() => browser.execute(() => document.body.innerText.includes('Bulk Email Operations')), {
       timeout: 15_000, interval: 300, timeoutMsg: 'Bulk modal never opened',
     });
-    await browser.waitUntil(() => clickByText('button', 'Next'), { timeout: 15_000, interval: 300, timeoutMsg: '"Next" never became clickable (selectedCount stayed 0?)' });
+    await browser.waitUntil(() => clickByText('button', presetLabel), { timeout: 15_000, interval: 300, timeoutMsg: `"${presetLabel}" preset never became clickable` });
+    // The range -> selection effect is async (it waits on the modal's own
+    // email pool); confirm it actually landed on exactly this batch before
+    // trusting "Next".
+    await browser.waitUntil(async () => {
+      const n = await browser.execute(() => window.__MAIL_STORE__?.getState?.().selectedEmailIds?.size ?? 0);
+      return n === subjects.length;
+    }, { timeout: 30_000, interval: 300, timeoutMsg: `"${presetLabel}" never resolved to exactly ${subjects.length} selected` });
+    await browser.waitUntil(() => clickByText('button', 'Next'), { timeout: 15_000, interval: 300, timeoutMsg: '"Next" never became clickable' });
     await browser.waitUntil(() => browser.execute(() => document.body.innerText.includes('Choose Action for')), {
       timeout: 15_000, interval: 300, timeoutMsg: 'Modal never advanced to the action step',
     });
@@ -310,13 +365,19 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
 
     batchA = await seedBatch(PREFIX_A, COUNT_A);
     batchC = await seedBatch(PREFIX_C, COUNT_C);
-    batchD = await seedBatch(PREFIX_D, COUNT_D);
+    // Dated yesterday, not "now" like A/C: the bulk modal's date-range
+    // presets are the only way to reach its selection at all (Next is gated
+    // on `selectedRange`, not on a plain row checkbox - see
+    // runBulkDeleteOnSelection), and "Yesterday" is a clean, exact way to
+    // select precisely this batch without also picking up A, C or yoda's
+    // other fixtures (all dated 2026-01-01 + offset, never "yesterday").
+    batchD = await seedBatch(PREFIX_D, COUNT_D, noonYesterday());
 
     await switchToFolder(YODA, 'INBOX');
     await browser.waitUntil(async () => {
-      const r = await rows();
-      return [...batchA, ...batchC, ...batchD].every((m) => r.some((row) => row.subject.includes(m.subject)));
-    }, { timeout: 60_000, interval: 500, timeoutMsg: "yoda's INBOX never rendered all three seeded batches" });
+      const subjects = await storeSubjects();
+      return [...batchA, ...batchC, ...batchD].every((m) => subjects.includes(m.subject));
+    }, { timeout: 60_000, interval: 500, timeoutMsg: "yoda's INBOX never loaded all three seeded batches into the store" });
 
     await installRawCapture();
   });
@@ -427,9 +488,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   });
 
   it('(d): THE KEY REGRESSION TEST - cancel_archive does not stop a concurrent bulk delete (N4, fixed in Task 3.4/3.5)', async function () {
-    await selectSubjects(batchD.map((m) => m.subject));
-    expect(await selectedCount()).toBe(COUNT_D);
-    await runBulkDeleteOnSelection();
+    await runBulkDeleteOnRange('Yesterday', batchD);
 
     // Confirm the delete is genuinely in flight (STORE already landed,
     // EXPUNGE stalling yoda's mock 4s per uid) before touching cancel_archive.
