@@ -212,6 +212,7 @@ async fn remove_existing_false_leaves_a_stale_legacy_file_in_place() {
         None,
         None,
         false, // remove_existing
+        "archive",
     )
     .await
     .expect("run does not error");

@@ -804,6 +804,7 @@ async fn run_imap_backup_inner(
                 backup_path.clone(),
                 Some(account.email.clone()),
                 false,
+                "backup",
             )
             .await?;
 

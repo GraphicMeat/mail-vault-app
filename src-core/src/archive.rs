@@ -27,7 +27,13 @@ use crate::vault_files;
 
 // ── Event payload ─────────────────────────────────────────────────────────────
 
+// Task 3.3 (R3.2): full camelCase, no per-field exceptions - `lastUid` used
+// to be the only explicitly renamed field, which meant every other field
+// stayed snake_case and every consumer had to know which was which. The
+// explicit `#[serde(rename = "lastUid")]` this replaced is redundant under
+// `rename_all` (it already produces "lastUid" for `last_uid`).
 #[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ArchiveProgress {
     pub total: usize,
     pub completed: usize,
@@ -36,7 +42,6 @@ pub struct ArchiveProgress {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(rename = "lastUid")]
     pub last_uid: Option<u32>,
     /// Number of emails where local write succeeded but external copy failed
     #[serde(default)]
@@ -50,6 +55,15 @@ pub struct ArchiveProgress {
     /// which is what tells the UI the drive recovered.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slow_drive_ms: Option<u64>,
+    /// Which kind of run produced this event/reply - "archive" (a manual or
+    /// daemon-route archive), "backup" (backup.rs's own call through
+    /// run_with_backup) or "bulk_delete" (bulk_delete's own reply). Lets a
+    /// listener take only its own stream instead of any archive-progress
+    /// frame that happens to arrive: a scheduled backup running alongside a
+    /// manual bulk-archive used to stomp its progress counts (R3.2 / N3).
+    pub operation: &'static str,
+    pub account_id: String,
+    pub mailbox: String,
 }
 
 // ── Slow-drive pacing ─────────────────────────────────────────────────────────
@@ -135,7 +149,7 @@ pub async fn run(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
 ) -> Result<ArchiveProgress, String> {
-    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true).await
+    run_with_backup(ctx, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive").await
 }
 
 pub async fn run_with_backup(
@@ -152,6 +166,9 @@ pub async fn run_with_backup(
     // one path that can least afford it. The plain archive path passes true:
     // there a uid the user re-archives can well be on disk already.
     remove_existing: bool,
+    // "archive" from a manual/daemon archive run, "backup" from backup.rs's
+    // call (R3.2 / N3 - lets a listener take only its own event stream).
+    operation: &'static str,
 ) -> Result<ArchiveProgress, String> {
     let total = uids.len();
     info!("archive_emails: starting {} UIDs for account {}", total, account_id);
@@ -162,7 +179,7 @@ pub async fn run_with_backup(
 
     emit(&ctx, ArchiveProgress {
         total, completed: 0, errors: 0, active: true, last_error: None, last_uid: None, external_copy_failures: 0, bandwidth_limited: false,
-        slow_drive_ms: None,
+        slow_drive_ms: None, operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
     });
 
     let sem = Arc::new(Semaphore::new(5));
@@ -253,6 +270,7 @@ pub async fn run_with_backup(
                     external_copy_failures: ext_failures.load(Ordering::Relaxed),
                     bandwidth_limited: false,
                     slow_drive_ms: Some(ms),
+                    operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
                 });
                 tokio::time::sleep(std::time::Duration::from_secs(SLOW_DRIVE_PAUSE_SECS)).await;
                 if cancel.load(Ordering::Relaxed) {
@@ -283,6 +301,7 @@ pub async fn run_with_backup(
                         external_copy_failures: ext_failures.load(Ordering::Relaxed),
                         bandwidth_limited: false,
                         slow_drive_ms: None,
+                        operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
                     });
                     Some(index_entry)
                 }
@@ -318,6 +337,7 @@ pub async fn run_with_backup(
                         // so late in-flight failures can't overwrite the friendly message
                         bandwidth_limited: is_bw,
                         slow_drive_ms: None,
+                        operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
                     });
                     None
                 }
@@ -398,6 +418,7 @@ pub async fn run_with_backup(
         external_copy_failures: final_ext_failures,
         bandwidth_limited,
         slow_drive_ms: None,
+        operation, account_id: account_id.clone(), mailbox: mailbox.clone(),
     };
 
     emit(&ctx, result.clone());
@@ -710,6 +731,11 @@ pub async fn bulk_delete(
         external_copy_failures: 0,
         bandwidth_limited: false,
         slow_drive_ms: None,
+        // Its own reply, not the "archive-progress" event stream (it emits
+        // "bulk-operation-progress", decision 6, untouched) - a distinct
+        // label so a future reader can't mistake this reply for an archive
+        // run's. Matches the cancel registry's "bulk_delete" key (Task 3.4).
+        operation: "bulk_delete", account_id: account_id.clone(), mailbox: mailbox.clone(),
     })
 }
 

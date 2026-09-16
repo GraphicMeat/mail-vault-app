@@ -111,8 +111,12 @@ vi.mock('../../safeStorage', () => ({
   safeStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
 }));
 
+// Captured by name so a spec can fire the events Rust would emit mid-run
+// (Task 3.3 / R3.2 keying tests below); existing specs never assert on
+// `listen` itself, so this is a superset of the old behaviour.
+const eventHandlers = {};
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn().mockResolvedValue(() => {}),
+  listen: vi.fn(async (name, cb) => { eventHandlers[name] = cb; return () => {}; }),
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
@@ -133,6 +137,7 @@ const archiveCalls = () => mockTauriInvoke.mock.calls
 
 beforeEach(() => {
   vi.clearAllMocks();
+  for (const k of Object.keys(eventHandlers)) delete eventHandlers[k];
   mockTauriInvoke.mockImplementation(async (cmd, args) => (
     cmd === 'archive_emails'
       ? { total: args.uids.length, completed: args.uids.length, errors: 0, active: false }
@@ -302,5 +307,56 @@ describe("saveEmailsLocally — a single folder's list", () => {
 
     expect(archiveCalls()).toEqual([]);
     expect(useMailStore.getState().bulkSaveProgress).toBeNull();
+  });
+});
+
+// Task 3.3 (R3.2 / N3): `archive-progress` carries no accountId/mailbox today
+// and `_archiveGroup`'s listener paints any event's `lastUid` as long as the
+// group it was called for is the account/mailbox on screen (`paintsIds`) -
+// it never checks which run actually produced the event. A scheduled backup
+// emits the same event stream (`archive::run_with_backup`), so a backup uid
+// for a completely different account can land in the active account's
+// archived-id set. `lastUid` itself is already camelCase at base (explicit
+// `#[serde(rename = "lastUid")]`), so a pure case-reading RED would pass
+// today; this is the genuine RED for this consumer - the missing keying.
+describe('saveEmailsLocally - archive-progress is keyed by operation (R3.2 / N3)', () => {
+  it("does not paint a concurrent backup run's lastUid into this group's archived ids", async () => {
+    // Unified view: `_foldVaultGroup`'s spans branch MERGES the DB read into
+    // the store's archivedEmailIds instead of overwriting it (the single-
+    // folder branch overwrites, which would hide the event-painted state
+    // behind the DB mock regardless of this fix). A merge preserves whatever
+    // the event listener painted, so this is the shape that actually proves
+    // the listener itself did not paint the stray uid.
+    mockGetArchivedEmailIds.mockImplementation(async (accountId, mailbox) => (
+      accountId === LUKE.id && mailbox === 'INBOX' ? new Set([99]) : new Set()
+    ));
+    mockTauriInvoke.mockImplementation(async (cmd, args) => {
+      if (cmd !== 'archive_emails') return undefined;
+      // The events Rust emits mid-run, before the command's own reply
+      // resolves: one legitimately belonging to this group, one stray from
+      // a scheduled backup on an unrelated account.
+      eventHandlers['archive-progress']?.({
+        payload: {
+          total: 1, completed: 1, errors: 0, active: true, lastUid: 99,
+          operation: 'archive', accountId: args.accountId, mailbox: args.mailbox,
+        },
+      });
+      eventHandlers['archive-progress']?.({
+        payload: {
+          total: 1, completed: 1, errors: 0, active: true, lastUid: 555,
+          operation: 'backup', accountId: 'someone-elses-account', mailbox: 'Other',
+        },
+      });
+      return { total: args.uids.length, completed: args.uids.length, errors: 0, active: false };
+    });
+
+    const rows = [row(99, { _accountId: LUKE.id, _mailbox: 'INBOX' })];
+    unified(rows);
+
+    await saveEmailsLocally(rows);
+
+    const { archivedEmailIds } = useMailStore.getState();
+    expect(archivedEmailIds.has(99)).toBe(true);
+    expect(archivedEmailIds.has(555)).toBe(false);
   });
 });

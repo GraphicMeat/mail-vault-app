@@ -158,6 +158,33 @@ describe('BackupAccountCard - the run the store knows about', () => {
     expect(progress()).toBe(null);
     expect(button().disabled).toBe(false);
   });
+
+  // Task 3.3 (R3.2): the card reads `p.slow_drive_ms` today; Rust will emit
+  // a fully camelCase payload (`slowDriveMs`). Written before the rename -
+  // the read is `if`-guarded, so a naive rename drops the notice silently.
+  it('shows the slow-drive notice from a camelCase slowDriveMs field', async () => {
+    useBackupStore.setState({
+      activeBackup: activeRun({ folder: 'INBOX', totalFolders: 5, completedFolders: 1 }),
+    });
+    renderCard();
+    await waitFor(() => expect(typeof eventHandlers['backup-progress']).toBe('function'));
+    await waitFor(() => expect(typeof eventHandlers['archive-progress']).toBe('function'));
+
+    eventHandlers['backup-progress']({
+      payload: {
+        account_id: ACCOUNT.id, active: true, folder: 'INBOX',
+        total_folders: 5, completed_folders: 1, completed_emails: 10,
+      },
+    });
+    eventHandlers['archive-progress']({
+      payload: {
+        total: 20, completed: 5, active: true, slowDriveMs: 4500,
+        operation: 'backup', accountId: ACCOUNT.id, mailbox: 'INBOX',
+      },
+    });
+
+    await waitFor(() => expect(screen.getByText(/Backup drive is slow \(4\.5s per file\)/)).toBeTruthy());
+  });
 });
 
 describe('BackupAccountCard - the stored size on the card', () => {

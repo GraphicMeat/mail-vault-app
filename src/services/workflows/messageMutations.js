@@ -242,6 +242,12 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
       const { listen } = await import('@tauri-apps/api/event');
       unlisten = await listen('archive-progress', (event) => {
         const p = event.payload;
+        // Task 3.3 (R3.2 / N3): archive-progress carries no accountId/mailbox
+        // today, so any event whose group happens to match the account/
+        // mailbox on screen gets painted - including a scheduled backup's
+        // event for a completely different account. Take only this group's
+        // own archive run.
+        if (p.operation !== 'archive' || p.accountId !== accountId || p.mailbox !== mailbox) return;
         const current = get().bulkSaveProgress;
         if (current && !current.active) return;
 

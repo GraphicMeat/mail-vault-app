@@ -131,14 +131,12 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
 
   useEffect(() => {
     let unlistenBackup, unlistenArchive;
-    let isBackupActive = false;
     (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
         unlistenBackup = await listen('backup-progress', (event) => {
           const p = event.payload;
           if (p.account_id === account.id) {
-            isBackupActive = p.active;
             setBackupProgress(p);
             if (!p.active) {
               setArchiveProgress(null);
@@ -148,10 +146,15 @@ const BackupAccountCard = React.forwardRef(function BackupAccountCard({ account,
         });
         unlistenArchive = await listen('archive-progress', (event) => {
           const p = event.payload;
-          if (isBackupActive) {
-            // An event without the field means the drive recovered — clear the notice.
-            setArchiveProgress(p.active ? { total: p.total, completed: p.completed, slowDriveMs: p.slow_drive_ms ?? null } : null);
-          }
+          // Task 3.3 (R3.2): archive-progress now carries operation + accountId,
+          // a strictly more precise gate than the old isBackupActive latch this
+          // replaced (that latch only ever tracked this same account's own
+          // backup-progress stream, indirectly, for an event with no account
+          // of its own). The card's `{live && ...}` render already covers the
+          // "is a run for this account showing" half.
+          if (p.operation !== 'backup' || p.accountId !== account.id) return;
+          // An event without the field means the drive recovered - clear the notice.
+          setArchiveProgress(p.active ? { total: p.total, completed: p.completed, slowDriveMs: p.slowDriveMs ?? null } : null);
         });
       } catch {}
     })();

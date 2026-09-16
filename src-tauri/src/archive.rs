@@ -87,7 +87,7 @@ pub async fn run(
     uids: Vec<u32>,
     cancel: Arc<AtomicBool>,
 ) -> Result<ArchiveProgress, String> {
-    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None, true).await
+    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive").await
 }
 
 pub async fn run_with_backup(
@@ -104,10 +104,13 @@ pub async fn run_with_backup(
     // one path that can least afford it. The plain archive path passes true:
     // there a uid the user re-archives can well be on disk already.
     remove_existing: bool,
+    // "archive" from the still-Tauri archive_emails command (via `run`
+    // above), "backup" from backup.rs's own call (Task 3.3, R3.2).
+    operation: &'static str,
 ) -> Result<ArchiveProgress, String> {
     let ctx = build_ctx(&app_handle)?;
     mailvault_core::archive::run_with_backup(
-        ctx, account_id, account_json, mailbox, uids, cancel, backup_path, account_email, remove_existing,
+        ctx, account_id, account_json, mailbox, uids, cancel, backup_path, account_email, remove_existing, operation,
     ).await
 }
 

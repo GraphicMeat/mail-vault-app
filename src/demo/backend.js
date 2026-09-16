@@ -853,7 +853,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       }
       case 'bulk_delete_emails': {
         const uids = args.uids || []; const rows = uids.map(uid => find({ accountId, mailbox, uid })).filter(Boolean); rows.forEach(row => { row.serverPresent = false; row.serverAbsent = true; row.serverDeleted = true; });
-        emit('bulk-operation-progress', { completed: rows.length, errors: [], phase: 'delete', total: uids.length }); emit('demo:state', { type: 'bulk-delete' });
+        emit('bulk-operation-progress', { completed: rows.length, errors: 0, phase: 'delete', total: uids.length }); emit('demo:state', { type: 'bulk-delete' });
         return { success: true, deleted: rows.length, completed: rows.length, simulated: true };
       }
       case 'local_index_read': return JSON.stringify(local(accountId, mailbox).map(row => ({ ...header(row), uid: row.uid, source: row._origin || 'local', serverDeleted: row.serverDeleted, serverAbsent: row.serverAbsent })));
@@ -892,7 +892,14 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'archive_emails': {
         const rows = (args.uids || []).map(uid => find({ accountId, mailbox, uid })).filter(Boolean);
         rows.forEach(row => { row.vaultPresent = true; row.vaultFlags = [...new Set([...(row.vaultFlags || []), 'archived'])]; row._origin = 'local'; });
-        emit('archive-progress', { completed: rows.length, errors: [], total: rows.length });
+        // Exercises the same painting path a real run does: an operation +
+        // accountId/mailbox that match the caller's own args, and the last
+        // uid this "run" stored (Task 3.3 N8 - the old stub never did either).
+        emit('archive-progress', {
+          completed: rows.length, errors: 0, total: rows.length, active: false,
+          operation: 'archive', accountId, mailbox,
+          lastUid: rows.length ? rows[rows.length - 1].uid : null,
+        });
         return { success: true, simulated: true, completed: rows.length, total: rows.length };
       }
       case 'cancel_archive': return { success: true, simulated: true };
