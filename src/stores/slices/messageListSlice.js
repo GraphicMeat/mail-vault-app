@@ -80,10 +80,19 @@ export function addArchivedGroupUid(accountId, mailbox, uid) {
 // would force a needless re-sort.
 export function deriveArchivedUnion(currentSet, pairs) {
   const union = new Set();
+  let anyKnown = false;
   for (const [accountId, mailbox] of pairs) {
     const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
-    if (ids) for (const uid of ids) union.add(uid);
+    if (ids) { anyKnown = true; for (const uid of ids) union.add(uid); }
   }
+  // None of the groups in view has ever gone through this map (e.g. the ids
+  // in `currentSet` were seeded by a writer outside it, such as
+  // activateAccount.js/loadEmails.js) and this round's own read is also a
+  // miss (its caller called setArchivedGroup with the same result before
+  // this ran, and a failed read skips the write). There is nothing to
+  // narrow FROM, so leave the field alone rather than claiming "nothing is
+  // archived" — that would be the exact bug this map exists to prevent.
+  if (!anyKnown) return currentSet;
   if (union.size === currentSet.size && [...union].every(u => currentSet.has(u))) return currentSet;
   return union;
 }

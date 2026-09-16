@@ -209,6 +209,30 @@ describe('setViewMode: a per-account read failure inside a unified pass (Phase 2
   });
 });
 
+describe('deriveArchivedUnion — a group never seen by the map is not "nothing archived"', () => {
+  it('a failed first read of a group an excluded writer (e.g. activateAccount.js) already populated keeps those ids', async () => {
+    // No unified pass ever ran here, so `_archivedIdsByGroup` has never
+    // heard of A/INBOX — exactly the shape left behind by a writer this
+    // task does not touch (activateAccount.js, loadEmails.js), which sets
+    // archivedEmailIds directly and never goes through the group map.
+    useMailStore.setState({
+      unifiedInbox: false,
+      activeAccountId: A.id,
+      activeMailbox: 'INBOX',
+      archivedEmailIds: new Set([1]),
+    });
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
+    // The map has nothing for this group and this round's own read also
+    // failed — there is no group-level evidence to narrow from, so the
+    // field must not collapse to empty.
+    expect([...useMailStore.getState().archivedEmailIds]).toEqual([1]);
+  });
+});
+
 describe('setViewMode: the Set-identity trap (Step 6)', () => {
   it('N group writes with unchanged contents produce exactly one Set instance and no extra re-sort', async () => {
     // A fresh Set instance every call (as a real db read would return), but
