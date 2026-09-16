@@ -1,7 +1,7 @@
 //! Daemon routes for the three insights methods (Task 3.6), backed by
 //! `crate::insights`, moved whole from `src-tauri/src/insights.rs`. The
 //! app's own copy of that file and its three Tauri commands still exist and
-//! still work — this is an additional, parallel implementation, not a
+//! still work: this is an additional, parallel implementation, not a
 //! cutover: Task 3.7 is what deletes the app's copy and routes the frontend
 //! here instead.
 //!
@@ -12,7 +12,7 @@
 //! `Ok`: success is today's app-command object plus `"ok": true`, and each
 //! known failure code (`invalidAccountScope`, `vaultUnavailable`,
 //! `accountConfigurationUnavailable`, `snapshotUnavailable`,
-//! `snapshotExpired`, `invalidCursor`, `snapshotStale` — the last carrying
+//! `snapshotExpired`, `invalidCursor`, `snapshotStale` (the last carrying
 //! its own `coverage`) becomes `{"ok": false, "error": {...}}`, the same
 //! pattern `search_index_destroy` already uses.
 
@@ -44,7 +44,7 @@ struct AccountsJsonEntry {
 
 /// Same failure mapping as the app's `crate::read_accounts_json`: a missing
 /// file is an empty list (as today), a torn or unparseable one is an `Err`
-/// the caller maps to `accountConfigurationUnavailable` — never silently
+/// the caller maps to `accountConfigurationUnavailable`, never silently
 /// "no accounts".
 fn configured_account_ids(app_dir: &Path) -> Result<Vec<String>, String> {
     let path = app_dir.join("accounts.json");
@@ -79,7 +79,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     Err(_) => return err(insights::error("accountConfigurationUnavailable")),
                 };
                 // Scope validation before any caller-derived file resolution
-                // (same ordering the app's original command used — a
+                // (same ordering the app's original command used, a
                 // redundant pre-check, since `begin_at` repeats it more
                 // thoroughly, but one that must run before `vault_root`).
                 if account_ids.iter().any(|a| !configured.contains(a)) {
@@ -162,7 +162,7 @@ mod tests {
     }
 
     /// The real production write path (`sync_engine` calls the same
-    /// function to write a fetched header), not a hand-rolled `fs::write` —
+    /// function to write a fetched header), not a hand-rolled `fs::write`,
     /// so a test using this genuinely pins "the daemon writes a header
     /// sidecar", not a simulation of it.
     fn seed_account(vault: &Path, account: &str, mailbox: &str, uid: u32) {
@@ -265,7 +265,7 @@ mod tests {
     }
 
     /// A missing `accounts.json` is a documented empty list, never this
-    /// code — the same distinction `configured_account_ids` (and the app's
+    /// code, the same distinction `configured_account_ids` (and the app's
     /// original `read_accounts_json`) draws between "no file" and "a file
     /// that would not parse".
     #[tokio::test]
@@ -319,7 +319,7 @@ mod tests {
 
     /// A snapshot open while the daemon writes a header sidecar under a
     /// watched path is invalidated. Uses `mailvault_core::header_cache::save`
-    /// — the real function `sync_engine` calls to write a fetched header —
+    /// (the real function `sync_engine` calls to write a fetched header),
     /// rather than a raw `fs::write`, so this pins the actual daemon write
     /// path against silently no longer being seen as a real write by
     /// Insights, the way inventory-backup-insights fact 11 warns a WAL

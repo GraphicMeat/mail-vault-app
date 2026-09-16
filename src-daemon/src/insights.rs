@@ -8,7 +8,7 @@
 //!
 //! The app's own copy of this file and its three Tauri commands
 //! (`insights_begin_snapshot`/`insights_read_page`/`insights_release_snapshot`)
-//! still exist and still work — Task 3.7 is the cutover that deletes them.
+//! still exist and still work: Task 3.7 is the cutover that deletes them.
 //! Until then this is an additional, parallel implementation, not a
 //! replacement: `handlers::insights` wires these routes onto the daemon
 //! socket, alongside the still-working app commands.
@@ -34,7 +34,7 @@ pub(crate) fn error(code: &str) -> Value {
 }
 
 /// Vault mailbox paths are sanitized against the filesystem the same way the
-/// app's `main.rs::sanitize_mailbox_name` does — copied here rather than
+/// app's `main.rs::sanitize_mailbox_name` does, copied here rather than
 /// exposed from `mailvault_core` (Task 3.6 stays in scope: this file and its
 /// router, nothing in `src-core`).
 fn sanitize_mailbox_name(mailbox: &str) -> String {
@@ -235,7 +235,7 @@ struct Snapshot {
     updated_at: String,
     /// Task 3.6 Step 4: `custody.db`/`-wal` used to be watched like any other
     /// file (`Watch::File`), which a WAL checkpoint with no real data change
-    /// also touches (inventory-backup-insights fact 11) — a false staleness
+    /// also touches (inventory-backup-insights fact 11), a false staleness
     /// that would restart a 50-RPC LARGE paging sequence for no reason.
     /// In-process in the daemon, `custody::with_conn` bumps a monotonic
     /// counter only when a write actually changed a row
@@ -424,7 +424,7 @@ impl InsightsSnapshots {
     }
     /// 30 s sweeper (Task 3.6 Step 2): spawned once from `daemon_main`, not
     /// per-state. Same `EXPIRY` (300s) and the same `Weak`-reference exit
-    /// condition as the app's version — the task drops itself once nothing
+    /// condition as the app's version: the task drops itself once nothing
     /// else holds this `InsightsSnapshots`'s inner map, rather than outliving
     /// it as a leaked background task.
     pub(crate) fn start_cleanup(&self) {
@@ -638,10 +638,10 @@ fn date_value(value: &Value) -> Option<String> {
 /// daemon reads them in-process via `crate::custody::with_conn` +
 /// `mailvault_core::custody::entries::entries_for_account`, the same
 /// function the daemon's own `custody_entries_for_account` route calls
-/// (`handlers::custody`) — no second SQL implementation, no RPC bridge.
+/// (`handlers::custody`), no second SQL implementation, no RPC bridge.
 /// `insights_tests.rs` passes an in-memory stand-in over its own `SharedConn`.
 /// An `Err` means "could not read", which is what `unreadableLocation`
-/// reports — it is never flattened into "no rows".
+/// reports, it is never flattened into "no rows".
 pub(crate) type CustodyRows<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, Value)>, String>;
 
 fn inventory(
@@ -655,12 +655,12 @@ fn inventory(
     snapshot.watch_directory(&root, "");
     // Task 3.6 Step 4: `custody.db`/`-wal` freshness is tracked by
     // `custody_gen` (captured on `Snapshot` above), not by stamping these two
-    // files as ordinary watched files — see the `Snapshot::custody_gen` doc.
+    // files as ordinary watched files: see the `Snapshot::custody_gen` doc.
     let custody_path = root
         .join(mailvault_core::custody::db::DB_DIR)
         .join(mailvault_core::custody::db::DB_FILE);
     // One short read per account, before any walk: stamp-before-read still
-    // applies conceptually here — `custody_gen` is captured by the caller
+    // applies conceptually here: `custody_gen` is captured by the caller
     // (`begin_at`/`read`) before this call runs, so a write landing between
     // that capture and this read is caught on the next freshness check, the
     // same ordering the file-stamp mechanism uses for every other watched

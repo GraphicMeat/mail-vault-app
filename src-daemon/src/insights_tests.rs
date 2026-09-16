@@ -42,7 +42,7 @@ fn seed(
 /// The in-memory stand-in for the daemon's in-process custody read (Task
 /// 3.6): production reads the store through `crate::custody::with_conn` +
 /// `entries_for_account`, these tests read a `SharedConn` they own directly.
-/// A closed store is an `Err`, never empty rows — that distinction is what
+/// A closed store is an `Err`, never empty rows: that distinction is what
 /// `unreadableLocation` is for.
 fn rows(custody: &mailvault_core::custody::SharedConn) -> impl Fn(&str) -> Result<Vec<(String, Value)>, String> + '_ {
     move |account: &str| {
@@ -303,7 +303,7 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
     eml(dir.path(), "account-b", 3);
     // Custody is the exception: a write for any mailbox of any account bumps
     // the daemon's write counter (Task 3.6 Step 4) instead of touching
-    // custody.db's mtime — simulated here by advancing `gen` the same way
+    // custody.db's mtime, simulated here by advancing `gen` the same way
     // `custody::with_conn` would have for a real write.
     seed(&custody, "account-b", "Archive", vec![header(4)]);
     gen += 1;

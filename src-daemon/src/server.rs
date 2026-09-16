@@ -104,7 +104,7 @@ pub struct DaemonState {
     /// Task 3.6: in-daemon insights snapshots, moved whole from
     /// `src-tauri/src/insights.rs`. The app's own copy and its three Tauri
     /// commands still exist and still work until Task 3.7 cuts the frontend
-    /// over and deletes them — this is a second, parallel copy of the state,
+    /// over and deletes them: this is a second, parallel copy of the state,
     /// not a replacement yet. Its 30s expiry sweeper is spawned once from
     /// `daemon_main` (`insights::InsightsSnapshots::start_cleanup`), not
     /// per-state.

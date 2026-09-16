@@ -35,7 +35,7 @@ pub struct CustodyState {
     switch: SwitchGuard,
     /// Task 3.6 Step 4: monotonic, bumped by `with_conn` only when a write
     /// actually changed a row (`Connection::total_changes()` delta before vs
-    /// after the closure runs) — never by a WAL checkpoint, which touches
+    /// after the closure runs), never by a WAL checkpoint, which touches
     /// `custody.db-wal`'s mtime with no row changed. `insights.rs` captures
     /// this at inventory time instead of stamping `custody.db`/`-wal` as
     /// ordinary files, so a checkpoint-only touch no longer invalidates an
@@ -155,7 +155,7 @@ fn emit(state: &DaemonState) {
 ///
 /// Task 3.6 Step 4: also bumps `gen` when `f` actually changed a row.
 /// `Connection::total_changes()` is SQLite's own monotonic per-connection
-/// counter of rows changed by completed INSERT/UPDATE/DELETE statements — a
+/// counter of rows changed by completed INSERT/UPDATE/DELETE statements: a
 /// plain `SELECT` (every read call site) never moves it, and a bump only
 /// fires on the delta across THIS call, so a read landing after some
 /// earlier write never misreads that write's stale nonzero count as its
@@ -307,7 +307,7 @@ mod tests {
         assert_eq!(generation(&s), 1);
 
         // Deleting a uid that was never there executes a statement that
-        // changes no row: this is the "checkpoint-only touch" case — the
+        // changes no row: this is the "checkpoint-only touch" case, the
         // counter must not move for a no-op write attempt either.
         with_conn(&s, |c| entries::remove(c, "acc", "INBOX", &[999]).map(|_| ())).unwrap();
         assert_eq!(generation(&s), 1, "a no-op delete must not bump the write counter");
