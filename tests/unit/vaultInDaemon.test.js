@@ -146,3 +146,47 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
     expect(forwarders).not.toMatch(/apply_everywhere|rename_dirs|adopt_dirs/);
   });
 });
+
+/**
+ * Task 2.11: the remaining app-side vault writers (spec deviation 2,
+ * task-2.9b Step 0 M3) are a named, closed list — `archive.rs` (custody
+ * upsert path), `backup.rs` (the mirror sync + Graph/IMAP importers),
+ * `commands.rs` (`graph_cache_mime`), `restore.rs`, and `main.rs`
+ * (`maildir_store_raw`, the mbox importer). Everything else in `src-tauri/src`
+ * only reads through `vault_files::`, forwards to the daemon, or does not
+ * touch the vault at all. A file outside this list calling a `vault_files::`
+ * write function would be exactly the "new feature added to src-tauri instead
+ * of the daemon" mistake CLAUDE.md's shell rule forbids — this guard catches
+ * it structurally instead of relying on review.
+ */
+describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
+  const dir = 'src-tauri/src';
+  const files = readdirSync(dir).filter((f) => f.endsWith('.rs') && !f.endsWith('_tests.rs'));
+  const ALLOWED_WRITERS = ['archive.rs', 'backup.rs', 'commands.rs', 'restore.rs', 'main.rs'];
+  // The write-capable half of vault_files:: — everything that creates,
+  // renames or deletes a vault file or the attachment cache. The read family
+  // (read/read_light/list/exists/...) is deliberately not in this list: every
+  // remaining app writer also reads, and that is not the thing being fenced.
+  const WRITE_FNS = [
+    'store', 'delete', 'delete_maildir_files', 'set_flags',
+    'clear_cache', 'migrate_json_to_eml', 'migrate_email_dirs', 'cache_attachment',
+  ];
+  const writePattern = new RegExp(`vault_files::(${WRITE_FNS.join('|')})\\(`);
+
+  it('reads the real app sources', () => {
+    expect(files.length).toBeGreaterThan(10);
+  });
+
+  it('every vault_files:: write call lives in an allowed Phase 3-5 writer file', () => {
+    const offenders = files
+      .filter((f) => !ALLOWED_WRITERS.includes(f))
+      .map((f) => [f, readFileSync(`${dir}/${f}`, 'utf8')])
+      .filter(([, body]) => writePattern.test(body))
+      .map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the allowlist is not vacuous: main.rs really does call a vault_files:: writer today', () => {
+    expect(readFileSync(`${dir}/main.rs`, 'utf8')).toMatch(writePattern);
+  });
+});
