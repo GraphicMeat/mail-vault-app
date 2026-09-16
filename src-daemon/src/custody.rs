@@ -40,6 +40,13 @@ pub struct CustodyState {
     /// this at inventory time instead of stamping `custody.db`/`-wal` as
     /// ordinary files, so a checkpoint-only touch no longer invalidates an
     /// open snapshot mid-page.
+    ///
+    /// Fix F2: also bumped by `open_into` on a successful open and by
+    /// `close`. `import_legacy` and `migrate`'s meta insert write on the raw
+    /// connection before it is installed behind `with_conn`, so those writes
+    /// would otherwise be invisible to the counter; bumping on open/close
+    /// covers them, plus custody.db being replaced wholesale on disk under
+    /// the same vault root.
     pub gen: AtomicU64,
 }
 
@@ -95,6 +102,14 @@ pub fn open_into(state: &DaemonState) -> Result<(), String> {
                 // dropped, and `close` already cleared root/error.
                 return Ok(());
             }
+            // Fix F2: `import_legacy` above and `migrate`'s meta insert
+            // (inside `db::open`) both write to custody.db on the raw
+            // connection, before it is ever installed behind `with_conn`,
+            // and neither bumps the counter on its own. A successful open bumps
+            // it here instead, which also covers custody.db being replaced
+            // wholesale on disk while the vault root stays the same: only a
+            // fresh open can see that, and now it does.
+            st.gen.fetch_add(1, Ordering::Relaxed);
             *g(&st.error) = None;
             Ok(())
         }
@@ -115,6 +130,7 @@ pub fn close(state: &DaemonState) {
     st.switch.begin_switch(&st.db);
     *g(&st.root) = None;
     *g(&st.error) = None; // closed is closed; a stale error belongs to a root no longer current
+    st.gen.fetch_add(1, Ordering::Relaxed); // Fix F2: a closed store is a changed store too
 }
 
 /// After a vault operation, success or not: synchronous, unlike the search
@@ -291,30 +307,55 @@ mod tests {
     }
 
     /// Task 3.6 Step 4: the counter `insights.rs` now compares against
-    /// instead of stamping `custody.db`/`-wal` as ordinary files.
+    /// instead of stamping `custody.db`/`-wal` as ordinary files. Baselined
+    /// right after `open_into` (Fix F2 bumps the counter on a successful
+    /// open, covered separately below), so this test's own assertions stay
+    /// about `with_conn`'s behavior only.
     #[test]
     fn with_conn_bumps_the_generation_only_when_a_write_actually_changes_a_row() {
         let (_vault, _app, s) = state(true);
         let _ = open_into(&s);
-        assert_eq!(generation(&s), 0);
+        let base = generation(&s);
 
         // A read must not bump it.
         let _ = with_conn(&s, |c| entries::read(c, "acc", "INBOX"));
-        assert_eq!(generation(&s), 0, "a read must not bump the write counter");
+        assert_eq!(generation(&s), base, "a read must not bump the write counter");
 
         // A real write bumps it.
         with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 1, "flags": []})]).map(|_| ())).unwrap();
-        assert_eq!(generation(&s), 1);
+        assert_eq!(generation(&s), base + 1);
 
         // Deleting a uid that was never there executes a statement that
         // changes no row: this is the "checkpoint-only touch" case, the
         // counter must not move for a no-op write attempt either.
         with_conn(&s, |c| entries::remove(c, "acc", "INBOX", &[999]).map(|_| ())).unwrap();
-        assert_eq!(generation(&s), 1, "a no-op delete must not bump the write counter");
+        assert_eq!(generation(&s), base + 1, "a no-op delete must not bump the write counter");
 
         // Removing the uid that IS there is a second real write.
         with_conn(&s, |c| entries::remove(c, "acc", "INBOX", &[1]).map(|_| ())).unwrap();
-        assert_eq!(generation(&s), 2);
+        assert_eq!(generation(&s), base + 2);
+    }
+
+    /// Fix F2 (review follow-up on Task 3.6 Step 4): `import_legacy` and
+    /// `migrate`'s meta insert write to custody.db directly on the raw
+    /// connection inside `db::open`, before it is ever installed behind
+    /// `with_conn`, and those writes bump nothing on their own. `open_into` and
+    /// `close` must bump the generation themselves so a fresh open
+    /// (including one that would replace custody.db wholesale on disk) is
+    /// visible to a snapshot that captured the counter beforehand, even with
+    /// no `with_conn` write in between.
+    #[test]
+    fn open_into_bumps_the_generation_even_with_no_with_conn_write() {
+        let (_vault, _app, s) = state(true);
+        assert_eq!(generation(&s), 0);
+        let _ = open_into(&s);
+        assert_eq!(generation(&s), 1, "a successful open must bump the generation");
+
+        close(&s);
+        assert_eq!(generation(&s), 2, "close must bump the generation too");
+
+        let _ = reopen(&s);
+        assert_eq!(generation(&s), 3, "reopen bumps again, on top of close's bump");
     }
 
     #[test]
