@@ -224,7 +224,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
       const account = window.__MAIL_STORE__.getState().accounts.find((a) => a.id === accountId);
       try {
         // Task 3.5: archive_emails moved to the daemon, so it no longer
-        // exists as a native Tauri command — reach it through daemon_rpc.
+        // exists as a native Tauri command, reach it through daemon_rpc.
         await window.__TAURI_INTERNALS__.invoke('daemon_rpc', {
           method: 'archive_emails',
           params: { accountId, accountJson: JSON.stringify(account), mailbox: 'INBOX', uids },

@@ -1386,7 +1386,7 @@ pub fn maildir_store_raw(
 
 // `archive_emails`, `cancel_archive`, `bulk_delete_emails` and
 // `verify_archived_emails` moved to the daemon (Task 3.5,
-// `src-daemon/src/handlers/archive.rs`, Task 3.4) — cancel tokens are now
+// `src-daemon/src/handlers/archive.rs`, Task 3.4): cancel tokens are now
 // per-operation-kind daemon state instead of the app's single shared
 // `ArchiveCancelToken` (inventory-archive-bulk N4, fixed at the same time).
 // `src-tauri/src/archive.rs` keeps only the `run_with_backup` shim
@@ -3227,7 +3227,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         }
 
         // Task 3.5 decision 3: no budget. A 40k-uid archive or a large bulk
-        // delete runs far past every other family's budget in this table —
+        // delete runs far past every other family's budget in this table:
         // the JS awaits the reply directly, and the way out of a long run is
         // the daemon's own cancel_archive/cancel_bulk_delete, not a timeout
         // that turns a slow success into a failure (Phase 2's 2.6 I3

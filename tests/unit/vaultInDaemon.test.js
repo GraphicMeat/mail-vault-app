@@ -36,7 +36,7 @@ const MOVED = [
   // 13, 19, 21; inventory-custody-plumbing §1).
   'local_index_read', 'local_index_append', 'local_index_remove', 'custody_status',
   'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans',
-  // Task 3.5: archive, bulk delete, verify and their cancel routes — cancel
+  // Task 3.5: archive, bulk delete, verify and their cancel routes: cancel
   // tokens are daemon state now (per-operation-kind, fixing inventory N4),
   // so ArchiveCancelToken's managed state is gone along with the commands.
   'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails',
@@ -64,8 +64,8 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
 
   it('no app source calls mailvault_core::vault_files:: for a moved read/attachment-cache method', () => {
     // main.rs still calls vault_files:: for the app-side writers that stay until
-    // Phase 5 (maildir_store_raw, the mbox importer) — verify_archived_emails
-    // moved to the daemon in Task 3.5, so it is no longer a straggler here —
+    // Phase 5 (maildir_store_raw, the mbox importer); verify_archived_emails
+    // moved to the daemon in Task 3.5, so it is no longer a straggler here,
     // and for the repair-input helpers the custody-backed trio uses
     // (sidecar_message_id_map, cached_sync_meta, orphan_mailbox_dirs) — this
     // only checks the moved *method* names are

@@ -142,7 +142,7 @@ export const DAEMON_OWNED = new Set([
   'local_index_read', 'local_index_append', 'local_index_remove', 'custody_status',
   'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans',
   // Task 3.5: archive, bulk delete and verify move to the daemon along with
-  // their cancel routes (cancel_bulk_delete is new — the old app command had
+  // their cancel routes (cancel_bulk_delete is new: the old app command had
   // a single shared cancel token for both operations, N4).
   'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails', 'cancel_bulk_delete',
 ]);

@@ -53,7 +53,7 @@ describe('Email Cleanup account reads', function () {
           window.__CLEANUP_TEST__.calls.push({ command, args });
         }
         // Task 3.5: archive_emails moved to the daemon too, so the real
-        // native call is `daemon_rpc` with the method inside `args` — same
+        // native call is `daemon_rpc` with the method inside `args`, same
         // shape as maildir_read_light above. Recorded normalized (command:
         // 'archive_emails', args: the inner params) so the assertions below
         // that read call.args.accountId/.uids/.mailbox need no change.

@@ -15,7 +15,7 @@ pub use mailvault_core::archive::ArchiveProgress;
 // `verify_archived_emails` moved to the daemon (Task 3.5) along with
 // `ArchiveCancelToken` (cancellation is now per-operation-kind daemon state,
 // `src-daemon/src/handlers/archive.rs`'s `CancelGuard`). This file now keeps
-// only the `run_with_backup` shim `backup.rs:797` still calls — `run` and
+// only the `run_with_backup` shim `backup.rs:797` still calls: `run` and
 // `bulk_delete` (the app-side entry points the deleted commands used) are
 // gone with their only callers.
 

@@ -45,7 +45,7 @@ const PHASE2 = [...MAILDIR_AND_ATTACHMENT, ...VAULT_FLAGS, ...CACHE_JOURNAL_LEDG
 
 // ── Phase 3 Task 3.1 (inventory-archive-bulk §6 + N6): archive, bulk delete
 // and insights. `cancel_bulk_delete` (Task 3.4's new sibling RPC) is a real
-// command by Task 3.5, when BulkOperationManager.cancel() first calls it —
+// command by Task 3.5, when BulkOperationManager.cancel() first calls it:
 // added here so it never ships on a raw invoke undetected (3.1's review
 // follow-up A). archive_emails/cancel_archive/bulk_delete_emails/
 // verify_archived_emails are DAEMON_OWNED as of Task 3.5; the three

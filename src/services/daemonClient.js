@@ -21,7 +21,7 @@ const invokeReady = IS_TAURI
     })
   : Promise.resolve();
 
-// The live global bridge first, the module import only as a fallback — same
+// The live global bridge first, the module import only as a fallback: same
 // fix as transport.js's `resolveInvoke()` (`c85770c1`), and the same reason:
 // `window.__TAURI__.core.invoke` and the `@tauri-apps/api/core` copy imported
 // above are two DIFFERENT function objects (`withGlobalTauri` injects its own
@@ -29,7 +29,7 @@ const invokeReady = IS_TAURI
 // side through `window.__TAURI_INTERNALS__` without ever reading
 // `window.__TAURI__`). An e2e fixture that swaps `window.__TAURI__.core` to
 // observe a call (connected-cleanup.test.js, connected-attachments.test.js)
-// never sees one that went through the frozen ESM import — this was the
+// never sees one that went through the frozen ESM import: this was the
 // identical bug transport.js had, just not yet fixed here.
 function resolveInvoke() {
   return (typeof window !== 'undefined' && window.__TAURI__?.core?.invoke) || invoke;

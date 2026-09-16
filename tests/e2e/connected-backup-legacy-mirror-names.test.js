@@ -151,7 +151,7 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
     expect(vaultNames(cur, 1)).toEqual(['1:2,F.eml']);
 
     // Task 3.5: archive_emails moved to the daemon, no longer a native
-    // Tauri command — reach it through daemon_rpc like every other
+    // Tauri command, reach it through daemon_rpc like every other
     // daemon-owned method. backup_save_external_location/backup_run_account
     // in this file stay native (backup itself is deferred), so the shared
     // `invoke()` wrapper above stays untouched; only this call site changes.
