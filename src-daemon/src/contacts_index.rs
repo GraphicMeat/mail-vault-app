@@ -333,6 +333,24 @@ impl ContactsState {
     }
 }
 
+#[cfg(test)]
+impl ContactsState {
+    /// Seed one dirty entry directly, without building a full `EmailHeader`
+    /// — for tests outside this module (main.rs) that only care whether
+    /// `flush_dirty` is reached, not what it collects.
+    pub(crate) fn seed_dirty_for_test(&self, account_id: &str) {
+        let mut g = self.inner.lock().unwrap();
+        g.per_account.entry(account_id.to_string()).or_default().insert(
+            "someone@example.com".to_string(),
+            ContactEntry {
+                address: "someone@example.com".to_string(),
+                ..Default::default()
+            },
+        );
+        g.dirty.insert(account_id.to_string());
+    }
+}
+
 fn sanitize(s: &str) -> String {
     s.replace(|c: char| !c.is_alphanumeric(), "_")
 }

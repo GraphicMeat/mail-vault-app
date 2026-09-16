@@ -13,7 +13,7 @@ use std::path::Path;
 
 /// Mail-data directories that live in the vault. Everything else under the app
 /// data dir (accounts.json, settings, logs, caches of app state) stays put.
-pub const VAULT_DIRS: [&str; 7] = [
+pub const VAULT_DIRS: [&str; 8] = [
     "Maildir",          // the messages
     "maildir",          // legacy per-mailbox index dirs (now .pre-db files), kept so a move carries them
     "email_cache",      // header sidecars
@@ -21,6 +21,7 @@ pub const VAULT_DIRS: [&str; 7] = [
     "mailboxes",        // per-account folder lists
     "search_index",     // offline search index (derived; rebuilt from Maildir)
     "custody",          // custody records (what each stored message is); never derived, never deleted
+    "contacts_index",   // sender address book (derived; rebuilt from email_cache) — final fix wave I-1
 ];
 
 /// Marker written at the vault root so a re-selected folder can be recognised
@@ -42,9 +43,14 @@ pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
 }
 
 /// True if the folder already holds mail data, marker or not. A search index
-/// alone is derived data, not mail.
+/// or contacts index alone is derived data, not mail — a stray
+/// `contacts_index/` left behind by an old, ungated flush (final fix wave
+/// I-1) must not make an otherwise-empty folder look like a vault.
 pub fn looks_like_vault(dir: &Path) -> bool {
-    VAULT_DIRS.iter().filter(|d| **d != "search_index").any(|d| dir.join(d).exists())
+    VAULT_DIRS
+        .iter()
+        .filter(|d| **d != "search_index" && **d != "contacts_index")
+        .any(|d| dir.join(d).exists())
 }
 
 #[cfg(test)]
@@ -78,6 +84,22 @@ mod tests {
         std::fs::create_dir_all(dir.join("search_index")).unwrap();
         assert!(!looks_like_vault(&dir), "a derived index alone is not mail");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_contacts_index_only_folder_does_not_look_like_a_vault() {
+        // final fix wave I-1: a stray `contacts_index/` left in the old root
+        // by an ungated flush must not make an otherwise-empty folder read
+        // as this app's vault.
+        let dir = scratch("contacts-index-only");
+        std::fs::create_dir_all(dir.join("contacts_index")).unwrap();
+        assert!(!looks_like_vault(&dir), "a derived contacts index alone is not mail");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_move_carries_the_contacts_index_dir() {
+        assert!(VAULT_DIRS.contains(&"contacts_index"), "a vault move must carry the contacts index, not orphan it");
     }
 
     #[test]

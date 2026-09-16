@@ -229,6 +229,16 @@ fn startup_eml_migration(mail_dir: &Path, mail_dir_ok: bool) -> mailvault_core::
     mailvault_core::maildir::migrate_add_eml_extension(mail_dir)
 }
 
+/// Flush the contacts index to disk, refusing while the vault is unreachable
+/// or mid-move (final fix wave I-1). Extracted for testing: the ticker in
+/// `daemon_main` cannot be unit-tested directly.
+fn flush_contacts_if_open(state: &Arc<server::DaemonState>) {
+    let _ = handlers::common::with_vault_write(state, |_root| {
+        state.contacts.flush_dirty();
+        Ok::<(), String>(())
+    });
+}
+
 async fn daemon_main() {
     let data_dir = get_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
@@ -390,15 +400,22 @@ async fn daemon_main() {
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));
 
-    // Debounced flush of the contacts index to disk (every 30s).
+    // Debounced flush of the contacts index to disk (every 30s). Gated like
+    // every other vault write (final fix wave I-1): ungated, dirty entries
+    // accumulated before a `vault_close` used to land in the OLD root mid
+    // vault-move copy, and `contacts_index` was never in `VAULT_DIRS`, so the
+    // leftover was neither carried by the move nor cleaned up.
     {
-        let contacts = Arc::clone(&contacts);
+        let state = Arc::clone(&state);
         tokio::spawn(async move {
             let mut ticker = tokio::time::interval(std::time::Duration::from_secs(30));
             ticker.tick().await;
             loop {
                 ticker.tick().await;
-                contacts.flush_dirty();
+                let state = Arc::clone(&state);
+                // spawn_blocking: `flush_dirty` does disk I/O and must never
+                // run on a tokio worker (global constraint).
+                let _ = tokio::task::spawn_blocking(move || flush_contacts_if_open(&state)).await;
             }
         });
     }
@@ -601,6 +618,36 @@ mod tests {
         let app = scratch("corrupt");
         std::fs::write(app.join("vault-meta.json"), "not json at all").unwrap();
         assert_eq!(resolve_mail_dir(&app), (app.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    /// Final fix wave I-1: `flush_dirty` used to run ungated on a 30 s
+    /// ticker, so dirty entries accumulated before a `vault_close` landed in
+    /// the OLD root mid vault-move copy. RED on the old code (no gate
+    /// existed at all): this would write regardless of `vault_closed`.
+    #[test]
+    fn a_flush_while_vault_closed_writes_nothing() {
+        let mail = scratch("contacts-flush-closed-mail");
+        let app = scratch("contacts-flush-closed-app");
+        let state = server::DaemonState::for_test(mail.clone(), app.clone(), true);
+        state.contacts.seed_dirty_for_test("acc1");
+        state.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        flush_contacts_if_open(&state);
+
+        assert!(
+            !mail.join("contacts_index").join("acc1.json").exists(),
+            "a flush while the vault is closed for a move must not write into the old root"
+        );
+
+        // Control: with the vault open, the same dirty entry does get
+        // written — proves the gate, not something else, is what refused it.
+        state.vault_closed.store(false, std::sync::atomic::Ordering::SeqCst);
+        state.contacts.seed_dirty_for_test("acc1");
+        flush_contacts_if_open(&state);
+        assert!(mail.join("contacts_index").join("acc1.json").exists());
+
+        let _ = std::fs::remove_dir_all(&mail);
         let _ = std::fs::remove_dir_all(&app);
     }
 }
