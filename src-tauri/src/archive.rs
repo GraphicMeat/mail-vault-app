@@ -7,23 +7,17 @@ use mailvault_core::imap::ImapPool;
 
 // The runner itself (`ArchiveProgress`, `DrivePace`, `run`/`run_with_backup`'s
 // body, `fetch_and_store`, `bulk_delete`, `delete_single_email`) moved to
-// `mailvault_core::archive` (Task 3.2). Re-exported so `main.rs`'s command
-// signatures and `backup.rs:797`'s field reads need no changes.
+// `mailvault_core::archive` (Task 3.2). Re-exported so `backup.rs:797`'s field
+// reads need no changes.
 pub use mailvault_core::archive::ArchiveProgress;
 
-// ── Cancellation token (shared app state) ─────────────────────────────────────
-//
-// Stays in the app for now (dies in Task 3.5, when `archive_emails` and
-// `bulk_delete_emails` themselves move to the daemon and cancellation becomes
-// daemon state).
-
-pub struct ArchiveCancelToken(pub std::sync::Mutex<Arc<AtomicBool>>);
-
-impl Default for ArchiveCancelToken {
-    fn default() -> Self {
-        ArchiveCancelToken(std::sync::Mutex::new(Arc::new(AtomicBool::new(false))))
-    }
-}
+// `archive_emails`, `cancel_archive`, `bulk_delete_emails` and
+// `verify_archived_emails` moved to the daemon (Task 3.5) along with
+// `ArchiveCancelToken` (cancellation is now per-operation-kind daemon state,
+// `src-daemon/src/handlers/archive.rs`'s `CancelGuard`). This file now keeps
+// only the `run_with_backup` shim `backup.rs:797` still calls — `run` and
+// `bulk_delete` (the app-side entry points the deleted commands used) are
+// gone with their only callers.
 
 // ── App shim: builds the core runner's context from an AppHandle ─────────────
 
@@ -77,18 +71,7 @@ fn build_ctx(app_handle: &tauri::AppHandle) -> Result<Arc<ArchiveCtx>, String> {
     }))
 }
 
-// ── Entry points backup.rs and the (still-Tauri) commands call ───────────────
-
-pub async fn run(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    mailbox: String,
-    uids: Vec<u32>,
-    cancel: Arc<AtomicBool>,
-) -> Result<ArchiveProgress, String> {
-    run_with_backup(app_handle, account_id, account_json, mailbox, uids, cancel, None, None, true, "archive").await
-}
+// ── Entry point backup.rs calls ───────────────────────────────────────────
 
 pub async fn run_with_backup(
     app_handle: tauri::AppHandle,
@@ -104,24 +87,14 @@ pub async fn run_with_backup(
     // one path that can least afford it. The plain archive path passes true:
     // there a uid the user re-archives can well be on disk already.
     remove_existing: bool,
-    // "archive" from the still-Tauri archive_emails command (via `run`
-    // above), "backup" from backup.rs's own call (Task 3.3, R3.2).
+    // "backup" from backup.rs's own call, the only caller left after Task
+    // 3.5 (Task 3.3, R3.2). The daemon's own archive route (Task 3.4) calls
+    // `mailvault_core::archive::run` directly with `"archive"`, not through
+    // this shim.
     operation: &'static str,
 ) -> Result<ArchiveProgress, String> {
     let ctx = build_ctx(&app_handle)?;
     mailvault_core::archive::run_with_backup(
         ctx, account_id, account_json, mailbox, uids, cancel, backup_path, account_email, remove_existing, operation,
     ).await
-}
-
-pub async fn bulk_delete(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    mailbox: String,
-    uids: Vec<u32>,
-    cancel: Arc<AtomicBool>,
-) -> Result<ArchiveProgress, String> {
-    let ctx = build_ctx(&app_handle)?;
-    mailvault_core::archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await
 }

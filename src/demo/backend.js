@@ -903,6 +903,7 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         return { success: true, simulated: true, completed: rows.length, total: rows.length };
       }
       case 'cancel_archive': return { success: true, simulated: true };
+      case 'cancel_bulk_delete': return { cancelled: 0, simulated: true };
       case 'insights_begin_snapshot': {
         const rows = messages.filter(row => (args.accountIds || ACCOUNT_IDS).includes(row.accountId)); const id = `demo-snapshot-${++snapshotSeq}`; snapshots.set(id, rows); return { snapshotId: id, inventoryCount: rows.length, coverage: { status: 'ready', updatedAt: new Date().toISOString(), folders: [], warnings: { unknownDates: 0, fallbackDates: 0, uncertainIdentity: 0, unreadableFiles: 0 }, errors: [] } };
       }

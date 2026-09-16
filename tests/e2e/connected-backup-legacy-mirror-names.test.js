@@ -150,11 +150,19 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
   it('re-archiving a uid replaces the vault copy that was already there', async function () {
     expect(vaultNames(cur, 1)).toEqual(['1:2,F.eml']);
 
-    const result = await invoke('archive_emails', {
-      accountId: account.id,
-      accountJson: JSON.stringify(account),
-      mailbox: FOLDER,
-      uids: [1],
+    // Task 3.5: archive_emails moved to the daemon, no longer a native
+    // Tauri command — reach it through daemon_rpc like every other
+    // daemon-owned method. backup_save_external_location/backup_run_account
+    // in this file stay native (backup itself is deferred), so the shared
+    // `invoke()` wrapper above stays untouched; only this call site changes.
+    const result = await invoke('daemon_rpc', {
+      method: 'archive_emails',
+      params: {
+        accountId: account.id,
+        accountJson: JSON.stringify(account),
+        mailbox: FOLDER,
+        uids: [1],
+      },
     });
     expect(result?.__error).toBe(undefined);
     expect(result.completed).toBe(1);
@@ -216,15 +224,19 @@ describe('Legacy mirror names — one file per uid on each side of a backup', fu
   });
 
   it('verifies restored and fetched copies by Message-ID, and reports a uid with no file as missing', async function () {
-    const result = await invoke('verify_archived_emails', {
-      accountId: account.id,
-      mailbox: FOLDER,
-      uids: [1, 3, 4, 6, MIRROR_LEGACY, 424_242],
-      expectedIds: {
-        1: `<mock-1-${VADER}>`,
-        3: `<mock-3-${VADER}>`,
-        6: `<mock-6-${VADER}>`,
-        [MIRROR_LEGACY]: '<some-other-message@old-host.test>',
+    // Task 3.5: verify_archived_emails moved to the daemon too.
+    const result = await invoke('daemon_rpc', {
+      method: 'verify_archived_emails',
+      params: {
+        accountId: account.id,
+        mailbox: FOLDER,
+        uids: [1, 3, 4, 6, MIRROR_LEGACY, 424_242],
+        expectedIds: {
+          1: `<mock-1-${VADER}>`,
+          3: `<mock-3-${VADER}>`,
+          6: `<mock-6-${VADER}>`,
+          [MIRROR_LEGACY]: '<some-other-message@old-host.test>',
+        },
       },
     });
     expect(result?.__error).toBe(undefined);

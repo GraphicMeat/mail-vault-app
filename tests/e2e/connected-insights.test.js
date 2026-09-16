@@ -190,7 +190,7 @@ describe('Insights with real native mail data', function () {
 
   it('deduplicates real archived copies and retains a verified vault-only message', async () => {
     const account = browser.mockAccounts[0];
-    const result = await nativeInvoke('archive_emails', { accountId: account.id, accountJson: JSON.stringify(account), mailbox: 'INBOX', uids: [112] });
+    const result = await nativeDaemonInvoke('archive_emails', { accountId: account.id, accountJson: JSON.stringify(account), mailbox: 'INBOX', uids: [112] });
     assert.equal(result.errors || 0, 0);
     await clickReachable('[data-testid="insights-refresh"]'); await waitForInsights();
     await displayedTotal(expected.received);

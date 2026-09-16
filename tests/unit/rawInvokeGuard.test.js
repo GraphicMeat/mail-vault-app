@@ -44,11 +44,14 @@ const CUSTODY = ['local_index_read', 'local_index_append', 'local_index_remove',
 const PHASE2 = [...MAILDIR_AND_ATTACHMENT, ...VAULT_FLAGS, ...CACHE_JOURNAL_LEDGER_PENDING, ...CUSTODY];
 
 // ── Phase 3 Task 3.1 (inventory-archive-bulk §6 + N6): archive, bulk delete
-// and insights. Nothing here is in DAEMON_OWNED yet (that is Task 3.5+), so
-// routing these through `send` is not a behaviour change: `send` still falls
-// through to `tauriInvoke`, exactly like the raw call these sites replace.
+// and insights. `cancel_bulk_delete` (Task 3.4's new sibling RPC) is a real
+// command by Task 3.5, when BulkOperationManager.cancel() first calls it —
+// added here so it never ships on a raw invoke undetected (3.1's review
+// follow-up A). archive_emails/cancel_archive/bulk_delete_emails/
+// verify_archived_emails are DAEMON_OWNED as of Task 3.5; the three
+// insights_* names still are not (Task 3.7).
 const PHASE3 = [
-  'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails',
+  'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails', 'cancel_bulk_delete',
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
 ];
 
@@ -170,9 +173,9 @@ function scanDir(dir, names) {
 }
 
 describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through transport.js', () => {
-  it('the guarded name list is exactly 46 Phase 2 names, 7 Phase 3 names, plus the Phase 1 DAEMON_OWNED set', () => {
+  it('the guarded name list is exactly 46 Phase 2 names, 8 Phase 3 names, plus the Phase 1 DAEMON_OWNED set', () => {
     expect(PHASE2.length).toBe(46);
-    expect(PHASE3.length).toBe(7);
+    expect(PHASE3.length).toBe(8);
     expect(PHASE1_OWNED.length).toBeGreaterThan(0);
   });
 

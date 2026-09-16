@@ -13,12 +13,15 @@ const { t } = await import('../../i18n/index.js');
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
 
-  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7) plus the six simple vault writers (Task 2.8) plus custody and the three custody-backed vault writers (Task 2.9b)', async () => {
+  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7) plus the six simple vault writers (Task 2.8) plus custody and the three custody-backed vault writers (Task 2.9b) plus archive, bulk delete and verify (Task 3.5)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
     const names = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
     expect(names).toEqual([
+      'archive_emails',
+      'bulk_delete_emails',
       'cache_attachment', 'cached_attachment_path',
+      'cancel_archive', 'cancel_bulk_delete',
       'clear_email_cache', 'clear_pending_operation',
       'custody_status',
       'delete_mailbox_cache',
@@ -42,6 +45,7 @@ describe('daemon-owned commands', () => {
       'save_email_cache', 'save_mailbox_cache', 'save_pending_operation',
       'search_index_configure', 'search_index_destroy', 'search_index_rebuild', 'search_index_status',
       'vault_rows', 'vault_search',
+      'verify_archived_emails',
     ]);
   });
 

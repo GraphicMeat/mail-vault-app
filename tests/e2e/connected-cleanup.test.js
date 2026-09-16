@@ -49,8 +49,16 @@ describe('Email Cleanup account reads', function () {
         // maildir_read_light moved to the daemon, so the app now calls it as
         // `daemon_rpc` with the method inside `args`, not as a bare command.
         if (command === 'daemon_rpc' && args?.method === 'maildir_read_light' && args?.params?.accountId === id && args?.params?.uid === 39) return null;
-        if (['imap_get_email_light', 'archive_emails'].includes(command)) {
+        if (['imap_get_email_light'].includes(command)) {
           window.__CLEANUP_TEST__.calls.push({ command, args });
+        }
+        // Task 3.5: archive_emails moved to the daemon too, so the real
+        // native call is `daemon_rpc` with the method inside `args` — same
+        // shape as maildir_read_light above. Recorded normalized (command:
+        // 'archive_emails', args: the inner params) so the assertions below
+        // that read call.args.accountId/.uids/.mailbox need no change.
+        if (command === 'daemon_rpc' && args?.method === 'archive_emails') {
+          window.__CLEANUP_TEST__.calls.push({ command: 'archive_emails', args: args.params });
         }
         return original.core.invoke(command, args);
       };

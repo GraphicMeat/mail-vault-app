@@ -1384,94 +1384,13 @@ pub fn maildir_store_raw(
 // custody.db now opens in the daemon. `maildir_mailbox_path` went with them:
 // the daemon derives the mailbox directory from its own root.
 
-#[tauri::command]
-async fn archive_emails(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, archive::ArchiveCancelToken>,
-    account_id: String,
-    account_json: String,
-    mailbox: String,
-    uids: Vec<u32>,
-) -> Result<archive::ArchiveProgress, String> {
-    // Reset cancellation flag for this run
-    let cancel = {
-        // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
-        let mut guard = state.0.lock().unwrap();
-        let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        *guard = std::sync::Arc::clone(&token);
-        token
-    };
-
-    archive::run(
-        app_handle,
-        account_id,
-        account_json,
-        mailbox,
-        uids,
-        cancel,
-    ).await
-}
-
-#[tauri::command]
-fn cancel_archive(state: tauri::State<'_, archive::ArchiveCancelToken>) -> Result<(), String> {
-    // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
-    state.0.lock().unwrap().store(true, std::sync::atomic::Ordering::Relaxed);
-    info!("cancel_archive: cancellation requested");
-    Ok(())
-}
-
-// ── Bulk delete emails (concurrent) ─────────────────────────────────────────
-
-#[tauri::command]
-async fn bulk_delete_emails(
-    app_handle: tauri::AppHandle,
-    state: tauri::State<'_, archive::ArchiveCancelToken>,
-    account_id: String,
-    account_json: String,
-    mailbox: String,
-    uids: Vec<u32>,
-) -> Result<archive::ArchiveProgress, String> {
-    let cancel = {
-        // Mutex::lock().unwrap() is safe — poison only occurs on panic in critical section
-        let mut guard = state.0.lock().unwrap();
-        let token = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        *guard = std::sync::Arc::clone(&token);
-        token
-    };
-
-    archive::bulk_delete(
-        app_handle, account_id, account_json, mailbox, uids, cancel,
-    ).await
-}
-
-// ── Verify archived emails on disk ──────────────────────────────────────────
-
-#[tauri::command]
-async fn verify_archived_emails(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uids: Vec<u32>,
-    expected_ids: Option<std::collections::HashMap<u32, String>>,
-) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || {
-        let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-
-        let (verified, missing, mismatched) =
-            mailvault_core::maildir::verify_copies(&cur_dir, &uids, expected_ids.as_ref());
-
-        info!(
-            "verify_archived_emails: {}/{} verified, {} missing, {} mismatched",
-            verified.len(), uids.len(), missing.len(), mismatched.len()
-        );
-
-        Ok(serde_json::json!({
-            "verified": verified,
-            "missing": missing,
-            "mismatched": mismatched,
-        }))
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
+// `archive_emails`, `cancel_archive`, `bulk_delete_emails` and
+// `verify_archived_emails` moved to the daemon (Task 3.5,
+// `src-daemon/src/handlers/archive.rs`, Task 3.4) — cancel tokens are now
+// per-operation-kind daemon state instead of the app's single shared
+// `ArchiveCancelToken` (inventory-archive-bulk N4, fixed at the same time).
+// `src-tauri/src/archive.rs` keeps only the `run_with_backup` shim
+// `backup.rs` still calls.
 
 // `maildir_delete` and `maildir_delete_many` both live in the daemon now
 // (Tasks 2.8 and 2.9b).
@@ -3307,6 +3226,24 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
             Some(Duration::from_secs(600))
         }
 
+        // Task 3.5 decision 3: no budget. A 40k-uid archive or a large bulk
+        // delete runs far past every other family's budget in this table —
+        // the JS awaits the reply directly, and the way out of a long run is
+        // the daemon's own cancel_archive/cancel_bulk_delete, not a timeout
+        // that turns a slow success into a failure (Phase 2's 2.6 I3
+        // lesson). Written as an explicit arm rather than left to the
+        // `_ => None` catch-all below, so a later change to that default
+        // cannot silently take the budget away from these two, and so the
+        // test pinning this has something concrete to assert against.
+        "archive_emails" | "bulk_delete_emails" => None,
+
+        // One read_dir plus comparisons, same tier as the other Phase 2
+        // single-pass readers.
+        "verify_archived_emails" => Some(Duration::from_secs(120)),
+
+        // Ungated, no vault access, one atomic store per registered token.
+        "cancel_archive" | "cancel_bulk_delete" => Some(Duration::from_secs(30)),
+
         _ => None,
     }
 }
@@ -3668,7 +3605,6 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
     let builder = builder
-        .manage(archive::ArchiveCancelToken::default())
         .manage(backup::BackupCancelToken::default())
         .manage(migration::MigrationCancelToken::default())
         .manage(migration::MigrationPauseToken::default())
@@ -3735,10 +3671,6 @@ fn main() {
             export_mbox,
             export_mbox_all,
             import_mbox,
-            archive_emails,
-            cancel_archive,
-            bulk_delete_emails,
-            verify_archived_emails,
             commands::imap_test_connection,
             commands::smtp_test_connection,
             commands::imap_ensure_sent_mailbox,
@@ -4389,6 +4321,34 @@ mod tests {
     #[test]
     fn reply_timeout_is_none_for_vault_reopen() {
         assert_eq!(crate::reply_timeout("vault_reopen"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 3.5 (F1 follow-up from 3.4's review): archive_emails, bulk_delete_
+    // emails, verify_archived_emails, cancel_archive, cancel_bulk_delete each
+    // now have an explicit reply_timeout arm.
+    // -----------------------------------------------------------------------
+
+    /// Decision 3: archive_emails and bulk_delete_emails get no budget at
+    /// all. Pinned explicitly (not just "happens to match the `_ => None`
+    /// catch-all") so a later change to that default cannot silently take
+    /// the budget away from these two.
+    #[test]
+    fn reply_timeout_is_none_for_archive_emails_and_bulk_delete_emails() {
+        assert_eq!(crate::reply_timeout("archive_emails"), None);
+        assert_eq!(crate::reply_timeout("bulk_delete_emails"), None);
+    }
+
+    #[test]
+    fn reply_timeout_gives_verify_archived_emails_two_minutes() {
+        assert_eq!(crate::reply_timeout("verify_archived_emails"), Some(std::time::Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn reply_timeout_gives_the_two_cancel_routes_thirty_seconds() {
+        for method in ["cancel_archive", "cancel_bulk_delete"] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
     }
 
     // -----------------------------------------------------------------------

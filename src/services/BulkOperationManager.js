@@ -184,7 +184,13 @@ class BulkOperationManager {
     this._cancelled = true;
 
     if (window.__TAURI__?.core?.invoke) {
+      // Task 3.5 (decision 7): cancel both registries — this manager runs
+      // both archive and bulk-delete phases and cannot know from here alone
+      // which one is in flight. cleanupEngine.js's own archive run is a
+      // second caller of cancel_archive's registry (F5, sanctioned): this
+      // cancel button can also stop a background cleanup archive.
       send('cancel_archive').catch(() => {});
+      send('cancel_bulk_delete').catch(() => {});
     }
 
     if (this._operation) {
