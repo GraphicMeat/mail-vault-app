@@ -100,6 +100,16 @@ export async function _prewarmAccountCaches() {
         }
       }
 
+      // R3.4 / F3: a failed archived-ids read comes back `null` here (db/
+      // emails.js's documented "could not read", never "zero archived"). The
+      // Set() fallback above is fine for the transient localEmails decision
+      // above, but persisting `firstWindowArchivedUids: []` would write a
+      // durable "nothing is archived" that activateAccount.js's restore path
+      // later adopts unconditionally on the next switch to this account, with
+      // no way to tell a real empty apart from a read that never happened.
+      // Skip the whole descriptor this round rather than lie in it.
+      if (rawArchivedEmailIds == null) return;
+
       _saveRestore({
         accountId: account.id,
         mailbox: 'INBOX',
