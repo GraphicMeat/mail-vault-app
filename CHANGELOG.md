@@ -7,6 +7,8 @@
 - **A big index build shows its progress.** The first build, a rebuild, or 500+ new messages open a small window with a progress bar and the index size. Hide shrinks it to a chip in the bottom-right corner. It never opens while you are typing, and it closes when the build finishes. If MailVault quits or its background service stops mid-build, the build picks up where it stopped.
 
 ### Fixed
+- **Opening a big folder no longer freezes the window.** Mail files, cache files and the local search index are now all read and written by MailVault's background service instead of the app window itself, so scrolling, typing and switching folders keep working while a large folder loads or a bulk change is being saved.
+- **Outlook message numbers stay correct when two Macs share one vault folder.** If your vault lives in a folder another Mac also has open, both could assign the same internal number to a new Outlook message at once. Assigning a number now locks across both, so numbers can no longer collide or go missing.
 - **An account's backup card shows its stored size again.** Settings → Backup, each account's card always showed "--" for Storage instead of the size on disk.
 
 ## [2.14.0] - 2026-09-15
