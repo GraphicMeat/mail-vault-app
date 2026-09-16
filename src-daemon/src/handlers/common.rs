@@ -150,11 +150,20 @@ mod tests {
     /// raw path, so two spellings of the same root (e.g. one with a trailing
     /// component resolved differently) would silently give a cache handler
     /// and a sync write two different locks over one directory.
+    ///
+    /// Task 2.8 carry-in (2.7 review I2): the original version of this test
+    /// used `state(true)`, whose helper wires one tempdir as both `mail_dir`
+    /// and `app_dir` — so `vault_root` and `sync_engine.data_dir()` compared
+    /// equal whether `vault_root` correctly returned `data_dir` OR incorrectly
+    /// returned `app_dir`. Two distinct real tempdirs here so the assertion
+    /// can actually fail on that bug.
     #[test]
     fn vault_root_and_sync_engines_root_are_the_same_path() {
-        let st = state(true);
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let st = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
         assert_eq!(vault_root(&st).unwrap(), st.sync_engine.data_dir());
-        let _ = std::fs::remove_dir_all(&st.data_dir);
+        assert_eq!(vault_root(&st).unwrap(), vault.path());
     }
 
     #[test]

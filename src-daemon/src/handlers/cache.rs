@@ -241,9 +241,17 @@ mod tests {
     use super::*;
     use serde_json::json;
 
+    // Task 2.8 carry-in (2.7 review I3): the original `st()` used one tempdir
+    // for both `mail_dir` and `app_dir`, so "nothing written under the
+    // fallback root" could never fail regardless of what the gate did (same
+    // pattern the 2.6 review's I2 fixed in `handlers/vault_files.rs`). The
+    // vault path is still returned as `t` so every existing non-gate test
+    // (which reads `t.path().join("email_cache")` as the vault) is unchanged;
+    // `app_dir` is a second, distinct, leaked tempdir.
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let tmp = tempfile::tempdir().unwrap();
-        let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), mail_dir_ok);
+        let app_dir = tempfile::tempdir().unwrap().keep();
+        let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, mail_dir_ok);
         (tmp, s)
     }
 
@@ -318,22 +326,34 @@ mod tests {
         assert_eq!(call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await.result, Some(Value::Null));
     }
 
+    // Task 2.8 carry-in (2.7 review I3): now that `st()` gives the vault and
+    // app_dir distinct real directories, this actually proves a fallback
+    // write never lands anywhere — before, `s.app_dir == s.data_dir`, so this
+    // could only ever pass.
     #[tokio::test]
-    async fn a_gated_read_route_refuses_and_writes_nothing_under_the_fallback_root() {
+    async fn a_gated_read_route_refuses_and_writes_nothing_under_either_root() {
         let (t, s) = st(false);
         let r = call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await;
         let err = r.error.unwrap();
         assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
         assert!(!s.app_dir.join("email_cache").exists());
-        let _ = t;
+        assert!(!t.path().join("email_cache").exists());
     }
 
     #[tokio::test]
-    async fn a_gated_write_route_refuses_while_the_vault_is_unreachable() {
-        let (_t, s) = st(false);
+    async fn a_gated_write_route_refuses_and_writes_nothing_under_either_root() {
+        let (t, s) = st(false);
         let r = call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": "{}"})).await;
         let err = r.error.unwrap();
         assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
+        assert!(!s.app_dir.join("email_cache").exists());
+        assert!(!t.path().join("email_cache").exists());
+
+        let r = call(&s, "graph_allocate_uids", json!({"accountId": "a", "mailbox": "INBOX", "entries": [["g1", "mid1"]]})).await;
+        let err = r.error.unwrap();
+        assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
+        assert!(!s.app_dir.join("email_cache").exists());
+        assert!(!t.path().join("email_cache").exists());
     }
 
     #[tokio::test]

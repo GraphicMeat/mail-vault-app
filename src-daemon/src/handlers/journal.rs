@@ -67,11 +67,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // Task 2.8 carry-in (2.7 review I1): `op_journal::read` -> `load` ->
+        // `import_legacy` WRITES the converted journal and DELETES the legacy
+        // file when no `pending_ops.json` exists yet — not just a read. A
+        // concurrent `op_journal_queue` racing this on the same missing-file
+        // path can have its own write clobbered by this arm's import, losing
+        // a confirmed server op. Same `state.journal` lock as `queue`/`clear`.
         "op_journal_read" => {
             let state = Arc::clone(state);
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
+                    let _lock = state.journal.lock().unwrap_or_else(|p| p.into_inner());
                     serde_json::to_value(op_journal::read(&state.app_dir)).map_err(|e| e.to_string())
                 })
                 .await
@@ -158,12 +165,14 @@ mod tests {
         assert_eq!(read.as_array().unwrap().len(), 0, "an entry with no uids left must be dropped");
     }
 
-    /// Task 2.7 Step 1: RED without `DaemonState.journal` — 50 concurrent
+    /// Task 2.7 Step 1 (I4, captured for real in Task 2.8's Step 0 — see
+    /// task-2.8-report.md): RED without `DaemonState.journal` — 50 concurrent
     /// `op_journal_queue` calls (one bulk flag change queuing one entry per
-    /// message, `messageMutations.js`) must keep all 50 entries. Run with the
-    /// mutex acquisition inside the route removed (temporarily, on the
-    /// runner copy only) this loses entries to the classic load-modify-write
-    /// race; with it, none are lost.
+    /// message, `messageMutations.js`) must keep all 50 entries. With the
+    /// mutex acquisition inside the route removed (on the runner copy only,
+    /// then restored + md5-verified), this run lost 48 of 50 entries
+    /// (`left: 2, right: 50`) to the classic load-modify-write race; with the
+    /// mutex, none are lost.
     #[tokio::test]
     async fn fifty_concurrent_queues_keep_fifty_entries() {
         let (_t, s) = st();
@@ -180,6 +189,53 @@ mod tests {
         }
         let read = call(&s, "op_journal_read", json!({})).await.result.unwrap();
         assert_eq!(read.as_array().unwrap().len(), 50, "every queued entry must survive concurrent queuing");
+    }
+
+    /// Task 2.8 carry-in (2.7 review I1): a legacy `pending_server_delete.json`
+    /// present and no `pending_ops.json` yet is exactly the state a
+    /// pre-2026-09-05 upgrader's first launch is in. `op_journal_read`
+    /// (`useEmailScheduler.js` replay) and `op_journal_queue` (a bulk flag
+    /// change queuing one entry per message) can both race into `load` ->
+    /// `import_legacy` on that missing file at once; without a lock on the
+    /// read arm, whichever import wins last overwrites the other side's
+    /// queued entry. RED without `op_journal_read`'s `state.journal.lock()`:
+    /// the imported legacy entry survives, but some fraction of the 20
+    /// concurrently-queued entries go missing (captured on the runner with
+    /// the read arm's lock line removed — see task-2.8-report.md Step 0).
+    #[tokio::test]
+    async fn a_legacy_import_race_between_read_and_queue_keeps_every_entry() {
+        let (_t, s) = st();
+        std::fs::write(
+            s.app_dir.join("pending_server_delete.json"),
+            r#"{"legacy-acc|INBOX": [999]}"#,
+        )
+        .unwrap();
+
+        let mut tasks = Vec::new();
+        for uid in 0..20u32 {
+            let sq = Arc::clone(&s);
+            tasks.push(tokio::spawn(async move {
+                call(&sq, "op_journal_queue", json!({"entry": entry(&[uid])})).await
+            }));
+            let sr = Arc::clone(&s);
+            tasks.push(tokio::spawn(async move { call(&sr, "op_journal_read", json!({})).await }));
+        }
+        for t in tasks {
+            let r = t.await.unwrap();
+            assert!(r.error.is_none(), "{:?}", r.error);
+        }
+
+        let read = call(&s, "op_journal_read", json!({})).await.result.unwrap();
+        let ops = read.as_array().unwrap();
+        let legacy_present = ops.iter().any(|e| e["accountId"] == json!("legacy-acc") && e["uids"] == json!([999]));
+        assert!(legacy_present, "the imported legacy entry must survive: {:?}", ops);
+        for uid in 0..20u32 {
+            assert!(
+                ops.iter().any(|e| e["uids"] == json!([uid])),
+                "queued entry for uid {uid} lost to the read arm's unlocked legacy import: {:?}",
+                ops
+            );
+        }
     }
 
     #[tokio::test]
