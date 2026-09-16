@@ -48,9 +48,14 @@ const MOVED = [
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
 // json commands (R2.3) stay registered — they must never be flagged absent.
+// Task 3.9 (plan decision 1) adds `save_attachment_to`: it base64-decodes
+// caller-supplied bytes to a caller-supplied destination and never touches
+// the vault or the attachment cache, so it belongs on the shell allowlist
+// permanently, not as a straggler; pinned here so a later phase does not
+// move it out of habit.
 const STAY_REGISTERED = [
   'vault_apply_flags', 'vault_rename_mailbox', 'vault_adopt_mailbox_dirs',
-  'read_settings_json', 'write_settings_json',
+  'read_settings_json', 'write_settings_json', 'save_attachment_to',
 ];
 
 describe('vault reads and the attachment cache live in the daemon (Task 2.6)', () => {
@@ -170,22 +175,41 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
 });
 
 /**
- * Task 2.11: the remaining app-side vault writers (spec deviation 2,
- * task-2.9b Step 0 M3) are a named, closed list — `archive.rs` (custody
- * upsert path), `backup.rs` (the mirror sync + Graph/IMAP importers),
- * `commands.rs` (`graph_cache_mime`), `restore.rs`, and `main.rs`
- * (`maildir_store_raw`, the mbox importer). Everything else in `src-tauri/src`
- * only reads through `vault_files::`, forwards to the daemon, or does not
- * touch the vault at all. A file outside this list calling a `vault_files::`
- * write function would be exactly the "new feature added to src-tauri instead
- * of the daemon" mistake CLAUDE.md's shell rule forbids — this guard catches
- * it structurally instead of relying on review.
+ * Task 2.11 (corrected by Task 3.9): the remaining app-side vault writers
+ * are a named, closed list: `backup.rs` (the mirror sync + Graph/IMAP
+ * importers), `commands.rs` (`graph_cache_mime`), and `main.rs`
+ * (`maildir_store_raw`, the mbox importer). Everything else in
+ * `src-tauri/src` only reads through `vault_files::`, forwards to the
+ * daemon, or does not touch the vault at all. A file outside this list
+ * calling a `vault_files::` write function, or writing a vault path with a
+ * raw `fs::write`/`fs::copy`, would be exactly the "new feature added to
+ * src-tauri instead of the daemon" mistake CLAUDE.md's shell rule forbids;
+ * this guard catches it structurally instead of relying on review.
+ *
+ * Two names came off this list at Task 3.9, for different reasons:
+ * - `restore.rs` never wrote the vault at all: it reads local `.eml` files
+ *   and re-uploads them over IMAP. It was an ungated *reader* mistakenly on
+ *   a writer allowlist (project memory: this exact failure mode is cited
+ *   twice). Verified by reading `run_restore`; its only vault touch is
+ *   `std::fs::read`.
+ * - `archive.rs` no longer contains a literal vault write of any kind.
+ *   Task 3.2 moved the archive/bulk runner's body, including the real
+ *   `fsx::write_atomic` call, into `mailvault_core::archive` (see
+ *   `src-core/src/archive.rs`). `src-tauri/src/archive.rs` is now only the
+ *   `run_with_backup` shim `backup.rs` calls to build the core runner's
+ *   context (root, pool, sinks, a no-op gate), a real file, but not one
+ *   this file-text guard can honestly call a writer, since this guard reads
+ *   only `src-tauri/src` and archive.rs's text has no write call left to
+ *   see. `architecture.md` still names `archive.rs` in the *conceptual*
+ *   ungated-writer list, because `backup.rs` still drives that core runner
+ *   in-process with the app's no-op gate: the write is still reachable
+ *   from the app, it just no longer lives in this directory's text.
  */
 describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   const dir = 'src-tauri/src';
   const files = readdirSync(dir).filter((f) => f.endsWith('.rs') && !f.endsWith('_tests.rs'));
-  const ALLOWED_WRITERS = ['archive.rs', 'backup.rs', 'commands.rs', 'restore.rs', 'main.rs'];
-  // The write-capable half of vault_files:: — everything that creates,
+  const ALLOWED_WRITERS = ['backup.rs', 'commands.rs', 'main.rs'];
+  // The write-capable half of vault_files::, everything that creates,
   // renames or deletes a vault file or the attachment cache. The read family
   // (read/read_light/list/exists/...) is deliberately not in this list: every
   // remaining app writer also reads, and that is not the thing being fenced.
@@ -195,20 +219,70 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   ];
   const writePattern = new RegExp(`vault_files::(${WRITE_FNS.join('|')})\\(`);
 
+  // Task 3.9: the old `writePattern` alone is blind to a raw `fs::write` /
+  // `fs::copy` straight into a vault path, exactly how the mbox importer
+  // (`main.rs`'s `import_mbox`) and the Graph backup writer (`backup.rs`'s
+  // Graph fetch loop) write today; neither ever called `vault_files::`. The
+  // destination is usually built a line or two above the call (`let dest =
+  // cur_dir.join(&filename); fs::write(&dest, ..)`), not inside the call's
+  // own argument list, so this looks for a vault-path marker in a window
+  // around each raw write/copy call rather than in the call itself.
+  const RAW_WRITE_CALL = /\bfs::(write|copy)\(/g;
+  const VAULT_PATH_MARKER = /\bcur_dir\b|\bcur_path\b|maildir_cur_path/;
+  // Test fixtures (`#[cfg(test)] mod tests { .. }`) write scratch `.eml`
+  // files under a tempdir, not the real vault; `restore.rs` and `backup.rs`
+  // both do this. Only the first real `mod <name> { .. }` test block is cut;
+  // an earlier lone `#[cfg(test)]` on a single non-test-module item (e.g.
+  // `main.rs`'s `find_msg_file_by_uid`) must not truncate real production
+  // code that follows it.
+  const MOD_TESTS_BLOCK = /#\[cfg\(test\)\]\s*\n\s*mod\s+\w+\s*\{/;
+  const withoutTestModules = (body) => {
+    const m = MOD_TESTS_BLOCK.exec(body);
+    MOD_TESTS_BLOCK.lastIndex = 0;
+    return m ? body.slice(0, m.index) : body;
+  };
+  const hasRawVaultWrite = (body) => {
+    const src = withoutTestModules(body);
+    const re = new RegExp(RAW_WRITE_CALL.source, 'g');
+    let m;
+    while ((m = re.exec(src))) {
+      const window = src.slice(Math.max(0, m.index - 400), m.index + 200);
+      if (VAULT_PATH_MARKER.test(window)) return true;
+    }
+    return false;
+  };
+
   it('reads the real app sources', () => {
     expect(files.length).toBeGreaterThan(10);
   });
 
-  it('every vault_files:: write call lives in an allowed Phase 3-5 writer file', () => {
+  it('every vault write (vault_files:: or raw fs::write/fs::copy into a vault path) lives in an allowed writer file', () => {
     const offenders = files
       .filter((f) => !ALLOWED_WRITERS.includes(f))
       .map((f) => [f, readFileSync(`${dir}/${f}`, 'utf8')])
-      .filter(([, body]) => writePattern.test(body))
+      .filter(([, body]) => writePattern.test(body) || hasRawVaultWrite(body))
       .map(([f]) => f);
     expect(offenders).toEqual([]);
   });
 
   it('the allowlist is not vacuous: main.rs really does call a vault_files:: writer today', () => {
     expect(readFileSync(`${dir}/main.rs`, 'utf8')).toMatch(writePattern);
+  });
+
+  it('the raw-write pattern is not vacuous: main.rs (mbox import) and backup.rs (Graph backup) both trip it today', () => {
+    expect(hasRawVaultWrite(readFileSync(`${dir}/main.rs`, 'utf8'))).toBe(true);
+    expect(hasRawVaultWrite(readFileSync(`${dir}/backup.rs`, 'utf8'))).toBe(true);
+  });
+
+  it('restore.rs writes nothing to the vault (an ungated reader, not a writer)', () => {
+    const body = readFileSync(`${dir}/restore.rs`, 'utf8');
+    expect(writePattern.test(body)).toBe(false);
+    expect(hasRawVaultWrite(body)).toBe(false);
+  });
+
+  it('archive.rs contains no literal vault write any more (moved to src-core/src/archive.rs in Task 3.2)', () => {
+    const body = readFileSync(`${dir}/archive.rs`, 'utf8');
+    expect(writePattern.test(body)).toBe(false);
+    expect(hasRawVaultWrite(body)).toBe(false);
   });
 });
