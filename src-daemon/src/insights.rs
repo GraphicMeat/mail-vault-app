@@ -3,15 +3,13 @@
 //! Maildir are the source of truth for the files; custody comes from the
 //! store (`<vault>/custody/custody.db`), read in-process now via
 //! `crate::custody::with_conn` instead of the Task 2.9b RPC bridge
-//! (`custody_entries_for_account`, which Task 3.7 retires once the app's
-//! copy of this module is deleted).
+//! (`custody_entries_for_account`, deleted in Task 3.7 with its last
+//! caller).
 //!
-//! The app's own copy of this file and its three Tauri commands
-//! (`insights_begin_snapshot`/`insights_read_page`/`insights_release_snapshot`)
-//! still exist and still work: Task 3.7 is the cutover that deletes them.
-//! Until then this is an additional, parallel implementation, not a
-//! replacement: `handlers::insights` wires these routes onto the daemon
-//! socket, alongside the still-working app commands.
+//! Task 3.7 also deleted the app's copy of this file and its three Tauri
+//! commands (`insights_begin_snapshot`/`insights_read_page`/
+//! `insights_release_snapshot`), so this is the only implementation left
+//! and `handlers::insights` is the only way in.
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -644,8 +642,9 @@ fn date_value(value: &Value) -> Option<String> {
 /// One account's custody rows, however the caller gets them. Task 3.6: the
 /// daemon reads them in-process via `crate::custody::with_conn` +
 /// `mailvault_core::custody::entries::entries_for_account`, the same
-/// function the daemon's own `custody_entries_for_account` route calls
-/// (`handlers::custody`), no second SQL implementation, no RPC bridge.
+/// function the Task 2.9b `custody_entries_for_account` bridge route used
+/// to call before Task 3.7 deleted it: no second SQL implementation, no
+/// RPC bridge.
 /// `insights_tests.rs` passes an in-memory stand-in over its own `SharedConn`.
 /// An `Err` means "could not read", which is what `unreadableLocation`
 /// reports, it is never flattened into "no rows".

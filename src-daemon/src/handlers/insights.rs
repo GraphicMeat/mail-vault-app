@@ -1,9 +1,8 @@
 //! Daemon routes for the three insights methods (Task 3.6), backed by
-//! `crate::insights`, moved whole from `src-tauri/src/insights.rs`. The
-//! app's own copy of that file and its three Tauri commands still exist and
-//! still work: this is an additional, parallel implementation, not a
-//! cutover: Task 3.7 is what deletes the app's copy and routes the frontend
-//! here instead.
+//! `crate::insights`, moved whole from `src-tauri/src/insights.rs`. Task 3.7
+//! deleted that file, its three Tauri commands and the app's snapshot map,
+//! so these routes are the only implementation and the frontend
+//! (`src/services/insightsApi.js`) reaches them through `daemon_rpc`.
 //!
 //! Wire shape (plan decision 5): `daemon_rpc`'s reply channel is
 //! `Result<Value, String>`, which cannot carry insights' structured

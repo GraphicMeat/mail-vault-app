@@ -2,9 +2,9 @@
 //! (`local_index_read/append/remove`, `custody_status`), plus the three
 //! vault writers that could not move before custody did
 //! (`maildir_delete_many`, `maildir_repair_generation`, `maildir_purge_orphans`
-//! — inventory-maildir §1 rows 13, 19, 21) and one bridge-only method
-//! (`custody_entries_for_account`, for `insights.rs`'s Task 2.9b bridge; no
-//! frontend caller).
+//! see inventory-maildir §1 rows 13, 19, 21). The Task 2.9b bridge method
+//! `custody_entries_for_account` lived here too until Task 3.7 moved
+//! insights into the daemon and left it with no caller at all.
 //!
 //! `local_index_read/append/remove` are gated only by the custody store's own
 //! open/closed state (`crate::custody::with_conn`'s `custody store
@@ -109,22 +109,6 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         "custody_status" => {
             let state = Arc::clone(state);
             done(id, blocking(move || Ok(daemon_custody::status_json(&state))).await.and_then(|r| r))
-        }
-        // Bridge-only (Task 2.9b): `insights.rs`'s `inventory` reaches this
-        // through `daemon_call_blocking` once the app stops holding its own
-        // `SharedConn`. No frontend caller.
-        "custody_entries_for_account" => {
-            let account_id = req!(str_arg(&id, params, "accountId"));
-            let state = Arc::clone(state);
-            done(
-                id,
-                blocking(move || -> Result<Value, String> {
-                    let rows = daemon_custody::with_conn(&state, |c| entries::entries_for_account(c, &account_id))?;
-                    serde_json::to_value(rows).map_err(|e| e.to_string())
-                })
-                .await
-                .and_then(|r| r),
-            )
         }
         "maildir_delete_many" => {
             let account_id = req!(str_arg(&id, params, "accountId"));
@@ -342,13 +326,15 @@ mod tests {
         assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{}", err.message);
     }
 
+    /// Task 3.7: the Task 2.9b bridge route is gone with its only caller.
+    /// `entries_for_account` itself is still live, read in-process by
+    /// `crate::insights`, so this pins the route's absence rather than the
+    /// function's.
     #[tokio::test]
-    async fn custody_entries_for_account_returns_mailbox_and_row_pairs() {
+    async fn the_custody_entries_bridge_route_no_longer_exists() {
         let (_v, s) = st(true);
         let _ = daemon_custody::open_into(&s);
-        daemon_custody::with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 1, "flags": []})])).unwrap();
-        let r = call(&s, "custody_entries_for_account", json!({"accountId": "acc"})).await.result.unwrap();
-        assert_eq!(r, json!([["INBOX", {"uid": 1, "flags": []}]]));
+        assert!(route(&s, "custody_entries_for_account", &json!({"accountId": "acc"}), json!(1)).await.is_none());
     }
 
     #[tokio::test]
