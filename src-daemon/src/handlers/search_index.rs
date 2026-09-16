@@ -38,7 +38,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
         // index. M1: log lines so an e2e run can prove this reached a live
         // daemon (`vault_close: closed` on completion), not just infer it.
         "vault_close" => {
-            info!("vault_close: closing the search index");
+            info!("vault_close: closing the search index and custody store");
             state.vault_closed.store(true, Ordering::SeqCst);
             let gate_state = Arc::clone(state);
             let reply = done(
@@ -46,6 +46,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || {
                     drop(gate_state.vault_gate.write().unwrap_or_else(|p| p.into_inner()));
                     si::close(&st);
+                    // Task 2.9a: custody closes in the same drained window —
+                    // drop = checkpoint, so a copy of custody.db right after
+                    // this is complete (no `-wal` left behind).
+                    crate::custody::close(&gate_state);
                     Value::Null
                 })
                 .await,
@@ -53,19 +57,28 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             info!("vault_close: closed");
             reply
         }
-        // Reverse order: only clear the flag once `si::reopen` has actually
-        // installed its connection... for the search index. M2: this
-        // comment previously overstated what `si::reopen` does — it only
-        // ends the current switch and sends `Signal::Reopen`; the worker
-        // opens the new connection later, so in practice the flag clears
-        // before the index itself is open (harmless for the index, which
-        // answers `available: false` until then). From Task 2.9a, custody's
-        // reopen must be synchronous (installed) before this flag clears, or
-        // a gated custody route could pass the gate and still hit
-        // `custody store unavailable: closed`.
+        // Reverse order: only clear the flag once every store this guards has
+        // actually reopened. M2: for the search index, `si::reopen` only ends
+        // the current switch and sends `Signal::Reopen` — the worker opens
+        // the new connection later, so in practice the flag clears before the
+        // index itself is open (harmless for the index, which answers
+        // `available: false` until then). Task 2.9a: `crate::custody::reopen`
+        // is synchronous (unlike the index's worker-thread reopen) and runs
+        // BEFORE `vault_closed` clears below, so a gated custody route can
+        // never pass the gate and still hit `custody store unavailable:
+        // closed`.
         "vault_reopen" => {
-            info!("vault_reopen: reopening");
-            let reply = done(id, blocking(move || { si::reopen(&st); Value::Null }).await);
+            info!("vault_reopen: reopening the search index and custody store");
+            let reopen_state = Arc::clone(state);
+            let reply = done(
+                id,
+                blocking(move || {
+                    si::reopen(&st);
+                    crate::custody::reopen(&reopen_state);
+                    Value::Null
+                })
+                .await,
+            );
             state.vault_closed.store(false, Ordering::SeqCst);
             info!("vault_reopen: reopened");
             reply

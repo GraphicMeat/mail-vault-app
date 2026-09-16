@@ -70,6 +70,10 @@ pub struct DaemonState {
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
+    /// Task 2.9a: not opened at daemon startup by this task (Task 2.9b wires
+    /// that, once nothing in the app still holds the exclusive lock on
+    /// `custody.db`) — see `crate::custody`.
+    pub custody: crate::custody::CustodyState,
     /// Task 2.6: one attachment-prefetch sweep at a time, process-wide — the
     /// daemon's own copy of the app's `PREFETCH_LOCK` static (main.rs:1898).
     pub prefetch_lock: std::sync::Mutex<()>,
@@ -252,6 +256,14 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::custody::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
+    if let Some(resp) = crate::handlers::vault_flags::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
@@ -369,6 +381,7 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
+            custody: crate::custody::CustodyState::default(),
         })
     }
 }

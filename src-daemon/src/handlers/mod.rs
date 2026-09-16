@@ -18,10 +18,12 @@ use tracing::{error, info};
 
 pub(crate) mod cache;
 pub(crate) mod common;
+pub(crate) mod custody;
 pub(crate) mod daemon;
 pub(crate) mod journal;
 pub(crate) mod search_index;
 pub(crate) mod vault_files;
+pub(crate) mod vault_flags;
 
 pub(crate) fn handle_contacts_index_get(
     contacts: Arc<contacts_index::ContactsState>,

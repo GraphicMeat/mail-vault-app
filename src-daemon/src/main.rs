@@ -4,6 +4,7 @@ mod channel;
 pub mod classification;
 mod classification_worker;
 pub mod contacts_index;
+pub mod custody;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::imap;
 mod events;
@@ -325,7 +326,13 @@ async fn daemon_main() {
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
+        custody: custody::CustodyState::default(),
     });
+
+    // Task 2.9a: state only — NOT opened here. The app still holds the
+    // exclusive lock on custody.db until Task 2.9b's cutover; opening it here
+    // too would make the app's own open fail BUSY (inventory-custody-plumbing
+    // headline 1).
 
     // Start background classification queue worker
     classification_worker::start_classification_worker(Arc::clone(&state));
