@@ -2952,7 +2952,9 @@ pub(crate) fn sweep_index_soon() {
 /// One blocking daemon RPC: ensure the daemon is up, read its token, one
 /// request/response round trip. Used by code that isn't already async — the
 /// vault move handlers' `spawn_blocking` bodies below, and (Task 2.9b) the
-/// app's custody/insights/backup bridge callers.
+/// app's remaining custody and backup bridge callers. Insights was one of
+/// them until Task 3.7 moved it into the daemon, where it reads custody in
+/// process.
 ///
 /// Renamed from `daemon_index_call` (Task 2.5): it now returns the result
 /// instead of always swallowing it, so a bridge caller can act on an error.
@@ -2976,7 +2978,7 @@ pub(crate) fn daemon_call_blocking(
 /// `.map_err(|e| format!("{e:?}"))` handed callers Rust `Debug` text
 /// (`Rpc("E_VAULT_UNAVAILABLE: ...")`, quotes escaped) instead of the
 /// daemon's own message, breaking every `E_*:`/`custody store unavailable:`
-/// text match the 2.9b forwarders and the insights bridge rely on. Same
+/// text match the 2.9b forwarders and the bridge callers rely on. Same
 /// contract as the async path's `map_rpc_error`: a daemon-answered error
 /// passes through verbatim so its prefix survives; anything before a reply
 /// line was even read (unreachable, refused, timed out) becomes the
