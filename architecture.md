@@ -49,8 +49,9 @@ The shell owns:
 - OS integration that must run in the app process.
 - External file access authorization: security-scoped bookmarks on macOS, path validation on Linux (including Snap confinement detection). Long-lived access to user-chosen folders must be managed natively; the frontend renders state but does not own authorization. Filesystem features must degrade explicitly rather than silently dropping writes when access is lost.
 - Daemon lifecycle (spawn, reconnect, shutdown) and forwarding requests and events between the frontend and the daemon.
+- The settings JSON file (read before the daemon can be assumed to exist; a failed read followed by a save must not wipe it) and three narrow forwarders (`vault_apply_flags`, `vault_rename_mailbox`, `vault_adopt_mailbox_dirs`) that resolve the backup mirror's security-scoped bookmark, forward the call to the daemon with the resolved path, and release the bookmark once the daemon replies or the reply budget expires. The daemon cannot resolve a bookmark itself, so this one step of an otherwise daemon-owned operation stays in the shell; every rename, mirror copy and custody update the call triggers still runs in the daemon.
 
-The shell must not do heavy work: no transport, no vault walks, no indexing, no bulk file I/O. A Tauri command is a forwarder to a daemon RPC, not an implementation.
+The shell must not do heavy work: no transport, no vault walks, no indexing, no bulk file I/O. A Tauri command is a forwarder to a daemon RPC, not an implementation. It does not open or write any vault file, cache, journal, ledger or the custody store directly: the settings file and the three bookmark forwarders above are the only carved-out exceptions, recorded here precisely because they are exceptions.
 
 ### Daemon
 
@@ -58,7 +59,7 @@ The daemon owns:
 
 - IMAP, SMTP, and Microsoft Graph operations, including sync and IDLE.
 - OAuth2 token refresh used by transport.
-- Maildir and `.eml` persistence, caches, custody, and the search index.
+- All Maildir and `.eml` persistence: vault files, header and mailbox caches, the operation journal and pending operations, the Outlook uid ledger, custody, and the search index. Each opens and writes in exactly one process, the daemon, under a shared per-root gate that refuses while the vault is unreachable or being moved.
 - MIME parsing and attachment access.
 - Backup, archive, restore, import/export, cleanup, and classification.
 
@@ -92,7 +93,9 @@ Two distinct locations, not one:
 - **Vault (working copy)** — the mail the app reads and writes. Defaults to the app data dir; the user can relocate it to any folder. `src-tauri/src/vault.rs` owns resolution, folder verification and the copy-verify-delete offload; every mail-data path goes through `vault::root()`. Only mail data moves (`Maildir`, `maildir`, `email_cache`, `attachment_cache`, `mailboxes`, `search_index`, `custody`) — accounts, settings, logs, models and daemon bookkeeping stay in the app data dir so the app can boot and report an unreachable vault. When the vault cannot be resolved, mail-data commands fail rather than falling back to the app data dir, which would fork the archive.
 - **External backup (cold storage)** — a second, independent copy written during backups and never read for day-to-day use. Managed by `src-tauri/src/external_location.rs`; both locations persist through the same security-scoped bookmark slot mechanism (`SLOT_VAULT`, `SLOT_EXTERNAL_BACKUP`).
 
-The daemon resolves the vault independently from `<app_data_dir>/vault-meta.json` and keeps its own `app_dir` for logs, lock, models and classification state. A vault adopt/move/reset holds `DAEMON_SUSPENDED` (nothing may spawn a daemon onto a root mid-move), closes the daemon's search index (`search_index_close`), performs the move, then either stops the daemon so the channel respawns it on the new root, or, if the root did not change, reopens the index in place instead.
+The daemon resolves the vault independently from `<app_data_dir>/vault-meta.json` and keeps its own `app_dir` for logs, lock, models and classification state. A vault adopt/move/reset holds `DAEMON_SUSPENDED` (nothing may spawn a daemon onto a root mid-move), closes the daemon's search index and custody store together (`vault_close`), performs the move, then either stops the daemon so the channel respawns it on the new root, or, if the root did not change, reopens both in place (`vault_reopen`) instead. Every vault-rooted RPC route refuses while this gate is held, rather than falling back to reading or writing under the app data dir.
+
+Custody opens once at daemon startup, before the socket is bound, so its startup status event always predates the daemon's first possible subscriber and is dropped by design: not a race, an invariant. The frontend instead re-queries custody status on every `daemon-reconnected` event (fired on the first connection too, and again after any respawn), which is therefore the one channel that actually carries this state, not a patch over a race window.
 
 ### Transfer accounting
 
@@ -115,7 +118,11 @@ This means:
 - Services should encapsulate integration details.
 - The daemon should own protocol and persistence details; the shell only forwards.
 
-Daemon-owned commands (listed as `DAEMON_OWNED` in `src/services/transport.js`) go straight to `daemon_rpc` under their own names instead of the request/response flow above. They never fall back to `invoke`; an unreachable daemon rejects with `errors.daemonUnavailable`.
+Daemon-owned commands (listed as `DAEMON_OWNED` in `src/services/transport.js`) go straight to `daemon_rpc` under their own names instead of the request/response flow above. They never fall back to `invoke`; an unreachable daemon rejects with `errors.daemonUnavailable`. Every vault file read or write, header and mailbox cache access, journal and pending-operation update, Outlook uid allocation, and custody read or write is one of these: the daemon performs the disk work under the per-root gate described above, and the shell never opens the underlying file.
+
+Three vault operations are the deliberate exception: `vault_apply_flags`, `vault_rename_mailbox` and `vault_adopt_mailbox_dirs` stay ordinary Tauri commands (not `DAEMON_OWNED`) because only the shell can resolve the backup mirror's security-scoped bookmark. Each resolves the bookmark, forwards the call to the daemon with the resolved path added as a parameter, and releases the bookmark once the daemon replies or the reply budget expires, on every path including a daemon error. Because they bypass the `DAEMON_OWNED` mapping, a daemon-side failure reaches these three callers as a raw error code rather than a translated message.
+
+Archive, Mail Insights and backup have not moved into the daemon yet, but the data they touch (custody rows, vault read-state renames) now lives only there. Until they move, each reaches it through a daemon RPC call from inside its own background work: archive appends custody entries after a save, Insights reads one account's custody rows per RPC call, and backup's read-state catch-up calls the same flag-rename RPC the frontend's forwarders use. This is a temporary bridge, not a second custody API: when archive, insights and backup themselves move into the daemon, these calls become direct in-process calls and the bridge functions are deleted.
 
 A second, long-lived channel (`src-tauri/src/daemon_channel.rs` ↔ `src-daemon/src/channel.rs`) carries two things outside the request/response flow: daemon bus events (e.g. `search-index-progress`), re-emitted by the shell as Tauri events for the frontend to render; and app → daemon fire-and-forget notifications (`search_index.nudge {accountId, mailbox}` from every vault writer, `search_index.sweep_soon`), dropped while disconnected and recovered by a `sweep_soon` sent on every (re)connect. The daemon starts unconfigured on each spawn, so the frontend re-pushes its effective index config on `daemon-reconnected`.
 
