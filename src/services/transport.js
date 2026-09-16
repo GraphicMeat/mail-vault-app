@@ -156,6 +156,10 @@ export const DAEMON_OWNED = new Set([
   // (decision 2): the daemon route only reads it and returns new-account
   // descriptors for `db/accounts.js` to merge itself.
   'export_backup', 'import_backup',
+  // Task 4.6: mbox export/import. import_mbox now also seeds the archived
+  // flag on write (decision 3) so an imported message survives Clear cached
+  // emails. The dead single-mailbox export variant was deleted, not moved.
+  'export_mbox_all', 'import_mbox',
 ]);
 
 async function sendToDaemon(command, args) {

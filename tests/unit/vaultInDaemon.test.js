@@ -50,9 +50,13 @@ const MOVED = [
   // Task 4.4: backup ZIP export/import. `BackupManifest`/`BackupAccount`/
   // `ExportResult`/`ImportResult`/`AccountsJsonEntry` and
   // `read_accounts_json`/`write_accounts_json` moved out with them; nothing
-  // else in the app referenced those. `sanitize_mailbox_name` stays (Task
-  // 4.6 still needs it for `import_mbox`), so it is not in this list.
+  // else in the app referenced those.
   'export_backup', 'import_backup',
+  // Task 4.6: mbox export/import (archived-flag fix included, decision 3).
+  // `sanitize_mailbox_name`, the escape/unescape/from-line/split helpers and
+  // `MboxExportResult`/`MboxImportResult` moved out with them; the dead
+  // single-mailbox export variant was deleted, not moved.
+  'export_mbox_all', 'import_mbox',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
@@ -81,8 +85,8 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
   });
 
   it('no app source calls mailvault_core::vault_files:: for a moved read/attachment-cache method', () => {
-    // main.rs still calls vault_files:: for the app-side writers that stay until
-    // Phase 5 (maildir_store_raw, the mbox importer); verify_archived_emails
+    // main.rs still calls vault_files:: for the app-side writer that stays
+    // until Phase 5 (maildir_store_raw); verify_archived_emails
     // moved to the daemon in Task 3.5, so it is no longer a straggler here,
     // and for the repair-input helpers the custody-backed trio uses
     // (sidecar_message_id_map, cached_sync_meta, orphan_mailbox_dirs) — this
@@ -187,7 +191,7 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
  * Task 2.11 (corrected by Task 3.9): the remaining app-side vault writers
  * are a named, closed list: `backup.rs` (the mirror sync + Graph/IMAP
  * importers), `commands.rs` (`graph_cache_mime`), and `main.rs`
- * (`maildir_store_raw`, the mbox importer). Everything else in
+ * (`maildir_store_raw`, Phase 5's own auto-cache caller). Everything else in
  * `src-tauri/src` only reads through `vault_files::`, forwards to the
  * daemon, or does not touch the vault at all. A file outside this list
  * calling a `vault_files::` write function, or writing a vault path with a
@@ -229,10 +233,11 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   const writePattern = new RegExp(`vault_files::(${WRITE_FNS.join('|')})\\(`);
 
   // Task 3.9: the old `writePattern` alone is blind to a raw `fs::write` /
-  // `fs::copy` straight into a vault path, exactly how the mbox importer
-  // (`main.rs`'s `import_mbox`) and the Graph backup writer (`backup.rs`'s
-  // Graph fetch loop) write today; neither ever called `vault_files::`. The
-  // destination is usually built a line or two above the call (`let dest =
+  // `fs::copy` straight into a vault path, exactly how the Graph backup
+  // writer (`backup.rs`'s Graph fetch loop) writes today, and how the mbox
+  // importer (`main.rs`'s former `import_mbox`, moved to the daemon in Task
+  // 4.6) used to; neither ever called `vault_files::`. The destination is
+  // usually built a line or two above the call (`let dest =
   // cur_dir.join(&filename); fs::write(&dest, ..)`), not inside the call's
   // own argument list, so this looks for a vault-path marker in a window
   // around each raw write/copy call rather than in the call itself.
@@ -278,8 +283,18 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
     expect(readFileSync(`${dir}/main.rs`, 'utf8')).toMatch(writePattern);
   });
 
-  it('the raw-write pattern is not vacuous: main.rs (mbox import) and backup.rs (Graph backup) both trip it today', () => {
-    expect(hasRawVaultWrite(readFileSync(`${dir}/main.rs`, 'utf8'))).toBe(true);
+  // Task 4.6: main.rs's only raw-vault-write offender was import_mbox (the
+  // mbox importer); it moved to the daemon in this task, so main.rs no
+  // longer trips this pattern (its one remaining vault writer,
+  // maildir_store_raw, goes through vault_files::store, caught by
+  // writePattern above, not this one). Full non-vacuity treatment
+  // (negative control: plant a raw write, watch this go red, revert, watch
+  // it go green) is Task 4.9's job, once migration/restore's own cutover
+  // (Task 4.8) lands too. Until then, backup.rs's Graph backup writer alone
+  // proves the pattern still catches something real, so this assertion is
+  // not vacuous merely because main.rs's side flipped to false.
+  it('the raw-write pattern is not vacuous: backup.rs (Graph backup) still trips it; main.rs no longer does (Task 4.6 moved its last offender, import_mbox, to the daemon)', () => {
+    expect(hasRawVaultWrite(readFileSync(`${dir}/main.rs`, 'utf8'))).toBe(false);
     expect(hasRawVaultWrite(readFileSync(`${dir}/backup.rs`, 'utf8'))).toBe(true);
   });
 

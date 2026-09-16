@@ -1410,349 +1410,15 @@ pub fn maildir_store_raw(
 // `read_accounts_json`/`write_accounts_json` moved with them (the daemon
 // copy owns them now); nothing else in this file referenced them.
 //
-// `sanitize_mailbox_name` below stays: `import_mbox` (not yet moved, Task
-// 4.6) still calls it.
-
-fn sanitize_mailbox_name(mailbox: &str) -> String {
-    mailbox.chars().map(|c| {
-        if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
-    }).collect()
-}
-
-// ── MBOX Export / Import ────────────────────────────────────────────────────
-
-/// Escape "From " at the start of lines in an email body for mbox format.
-fn mbox_escape_from(raw: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(raw.len() + 256);
-    for line in raw.split(|&b| b == b'\n') {
-        if line.starts_with(b"From ") {
-            out.push(b'>');
-        }
-        out.extend_from_slice(line);
-        out.push(b'\n');
-    }
-    // Remove trailing extra newline added by split
-    if raw.last() != Some(&b'\n') && out.last() == Some(&b'\n') {
-        out.pop();
-    }
-    out
-}
-
-/// Unescape ">From " at start of lines back to "From " when importing mbox.
-fn mbox_unescape_from(raw: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(raw.len());
-    for line in raw.split(|&b| b == b'\n') {
-        if line.starts_with(b">From ") {
-            out.extend_from_slice(&line[1..]);
-        } else {
-            out.extend_from_slice(line);
-        }
-        out.push(b'\n');
-    }
-    if raw.last() != Some(&b'\n') && out.last() == Some(&b'\n') {
-        out.pop();
-    }
-    out
-}
-
-/// Extract a usable "From " envelope line from raw .eml bytes.
-/// Falls back to "unknown" sender and current time if headers can't be parsed.
-fn mbox_from_line(raw: &[u8]) -> String {
-    let sender = mailparse::parse_mail(raw)
-        .ok()
-        .and_then(|parsed| {
-            parsed.headers.iter()
-                .find(|h| h.get_key().eq_ignore_ascii_case("from"))
-                .and_then(|h| {
-                    let val = h.get_value();
-                    // Extract bare email from "Name <email>" or plain "email"
-                    if let Some(start) = val.find('<') {
-                        val[start + 1..].split('>').next().map(|s| s.to_string())
-                    } else {
-                        Some(val.trim().to_string())
-                    }
-                })
-        })
-        .unwrap_or_else(|| "unknown@unknown".to_string());
-
-    let date = mailparse::parse_mail(raw)
-        .ok()
-        .and_then(|parsed| {
-            parsed.headers.iter()
-                .find(|h| h.get_key().eq_ignore_ascii_case("date"))
-                .and_then(|h| mailparse::dateparse(&h.get_value()).ok())
-        })
-        .map(|ts| {
-            chrono::DateTime::from_timestamp(ts, 0)
-                .unwrap_or_else(|| chrono::Utc::now())
-                .format("%a %b %e %H:%M:%S %Y")
-                .to_string()
-        })
-        .unwrap_or_else(|| chrono::Utc::now().format("%a %b %e %H:%M:%S %Y").to_string());
-
-    format!("From {} {}", sender, date)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MboxExportResult {
-    #[serde(rename = "emailCount")]
-    email_count: u32,
-    #[serde(rename = "accountCount")]
-    account_count: u32,
-    #[serde(rename = "filePath")]
-    file_path: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct MboxImportResult {
-    #[serde(rename = "emailCount")]
-    email_count: u32,
-    #[serde(rename = "accountId")]
-    account_id: String,
-    #[serde(rename = "mailbox")]
-    mailbox: String,
-}
-
-#[tauri::command]
-async fn export_mbox_all(
-    app_handle: tauri::AppHandle,
-    dest_path: String,
-    archived_only: bool,
-) -> Result<MboxExportResult, String> {
-    use std::io::Write;
-
-    info!("export_mbox_all called: dest={}, archived_only={}", dest_path, archived_only);
-
-    let base = vault::root(&app_handle)?;
-    let maildir_base = base.join("Maildir");
-
-    if !maildir_base.exists() {
-        return Err("No email data found".to_string());
-    }
-
-    let mut file = fs::File::create(&dest_path)
-        .map_err(|e| format!("Failed to create mbox file: {}", e))?;
-
-    let mut email_count: u32 = 0;
-    let mut account_count: u32 = 0;
-
-    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-        "total": 0, "completed": 0, "active": true
-    }));
-
-    if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
-        for account_dir in account_dirs.flatten() {
-            if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
-            let mut account_has_emails = false;
-
-            if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
-                for mailbox_dir in mailbox_dirs.flatten() {
-                    if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
-                    let cur_dir = mailbox_dir.path().join("cur");
-                    if !cur_dir.exists() { continue; }
-
-                    if let Ok(files) = fs::read_dir(&cur_dir) {
-                        for file_entry in files.flatten() {
-                            let fname = file_entry.file_name().to_string_lossy().to_string();
-                            if !fname.contains(":2,") { continue; }
-                            if archived_only {
-                                if !fname.split(":2,").nth(1).map(|f| f.contains('A')).unwrap_or(false) {
-                                    continue;
-                                }
-                            }
-
-                            let raw = match fs::read(file_entry.path()) {
-                                Ok(c) => c,
-                                Err(e) => {
-                                    warn!("Failed to read {}: {}", file_entry.path().display(), e);
-                                    continue;
-                                }
-                            };
-
-                            let from_line = mbox_from_line(&raw);
-                            writeln!(file, "{}", from_line)
-                                .map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-                            let escaped = mbox_escape_from(&raw);
-                            file.write_all(&escaped)
-                                .map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-                            writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-                            email_count += 1;
-                            account_has_emails = true;
-
-                            if email_count % 100 == 0 {
-                                let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-                                    "total": 0, "completed": email_count, "active": true
-                                }));
-                            }
-                        }
-                    }
-                }
-            }
-
-            if account_has_emails { account_count += 1; }
-        }
-    }
-
-    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-        "total": email_count, "completed": email_count, "active": false
-    }));
-
-    info!("MBOX exported: {} emails from {} accounts to {}", email_count, account_count, dest_path);
-
-    Ok(MboxExportResult {
-        email_count,
-        account_count,
-        file_path: dest_path,
-    })
-}
-
-#[tauri::command]
-async fn import_mbox(
-    app_handle: tauri::AppHandle,
-    source_path: String,
-    account_id: String,
-    mailbox: String,
-) -> Result<MboxImportResult, String> {
-    info!("import_mbox called: source={}, account={}, mailbox={}", source_path, account_id, mailbox);
-
-    let data = fs::read(&source_path)
-        .map_err(|e| format!("Failed to read mbox file: {}", e))?;
-
-    let base = vault::root(&app_handle)?;
-
-    let safe_mailbox = sanitize_mailbox_name(&mailbox);
-    let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
-    fs::create_dir_all(&cur_dir)
-        .map_err(|e| format!("Failed to create maildir: {}", e))?;
-
-    // Find the highest existing UID in this mailbox to continue from
-    let mut max_uid: u32 = 0;
-    if let Ok(files) = fs::read_dir(&cur_dir) {
-        for f in files.flatten() {
-            let fname = f.file_name().to_string_lossy().to_string();
-            if let Some(uid_str) = fname.split(':').next() {
-                if let Ok(uid) = uid_str.parse::<u32>() {
-                    if uid > max_uid { max_uid = uid; }
-                }
-            }
-        }
-    }
-
-    // Split mbox into individual messages
-    // Mbox messages start with "From " at the beginning of a line (after a blank line)
-    let messages = split_mbox(&data);
-
-    let total = messages.len() as u32;
-    let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
-        "total": total, "completed": 0, "active": true
-    }));
-
-    let mut email_count: u32 = 0;
-
-    for msg_raw in &messages {
-        let unescaped = mbox_unescape_from(msg_raw);
-
-        max_uid += 1;
-        let filename = build_maildir_filename(max_uid, &[] as &[String]);
-        let dest = cur_dir.join(&filename);
-
-        if dest.exists() {
-            max_uid += 1;
-            let filename2 = build_maildir_filename(max_uid, &[] as &[String]);
-            let dest2 = cur_dir.join(&filename2);
-            fs::write(&dest2, &unescaped)
-                .map_err(|e| format!("Failed to write .eml: {}", e))?;
-        } else {
-            fs::write(&dest, &unescaped)
-                .map_err(|e| format!("Failed to write .eml: {}", e))?;
-        }
-
-        email_count += 1;
-
-        if email_count % 50 == 0 || email_count == total {
-            let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
-                "total": total, "completed": email_count, "active": true
-            }));
-        }
-    }
-
-    let _ = app_handle.emit("mbox-import-progress", serde_json::json!({
-        "total": total, "completed": email_count, "active": false
-    }));
-
-    info!("MBOX imported: {} emails into {}/{}", email_count, account_id, mailbox);
-    if email_count > 0 {
-        sweep_index_soon(); // a whole mailbox of new files: a full pass, not one nudge per message
-    }
-
-    Ok(MboxImportResult {
-        email_count,
-        account_id,
-        mailbox,
-    })
-}
-
-/// Split raw mbox data into individual email messages.
-/// Each message starts with a line matching "From " after a blank line (or at file start).
-fn split_mbox(data: &[u8]) -> Vec<&[u8]> {
-    let mut messages: Vec<&[u8]> = Vec::new();
-    let mut start: Option<usize> = None;
-
-    let mut i = 0;
-    let len = data.len();
-
-    while i < len {
-        // Check for "From " at this position
-        let is_from_line = if i + 5 <= len && &data[i..i + 5] == b"From " {
-            // Valid if at file start or preceded by \n\n or \r\n\r\n
-            i == 0
-                || (i >= 1 && data[i - 1] == b'\n'
-                    && (i >= 2 && data[i - 2] == b'\n'
-                        || (i >= 3 && data[i - 2] == b'\r' && data[i - 3] == b'\n')))
-        } else {
-            false
-        };
-
-        if is_from_line {
-            // Save previous message
-            if let Some(msg_start) = start {
-                let mut end = i;
-                // Trim trailing blank lines between messages
-                while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
-                    end -= 1;
-                }
-                if end > msg_start {
-                    messages.push(&data[msg_start..end]);
-                }
-            }
-
-            // Skip the "From " envelope line to get to the actual email content
-            let line_end = data[i..].iter().position(|&b| b == b'\n')
-                .map(|p| i + p + 1)
-                .unwrap_or(len);
-            start = Some(line_end);
-            i = line_end;
-        } else {
-            i += 1;
-        }
-    }
-
-    // Don't forget the last message
-    if let Some(msg_start) = start {
-        let mut end = len;
-        while end > msg_start && (data[end - 1] == b'\n' || data[end - 1] == b'\r') {
-            end -= 1;
-        }
-        if end > msg_start {
-            messages.push(&data[msg_start..end]);
-        }
-    }
-
-    messages
-}
+// `export_mbox_all`/`import_mbox` moved to the daemon too (Task 4.5/4.6,
+// `src-daemon/src/mbox.rs`, `handlers::mbox`; import_mbox now also seeds the
+// `archived` flag, decision 3). `sanitize_mailbox_name`,
+// `mbox_escape_from`/`mbox_unescape_from`/`mbox_from_line`/`split_mbox` and
+// `MboxExportResult`/`MboxImportResult` moved with them (the daemon copy
+// owns them now, `sanitize_mailbox_name` promoted into
+// `handlers::common` in Task 4.5), grep-confirmed nothing else in this
+// file called any of them. The dead single-mailbox export variant was
+// deleted outright in Task 4.5 (zero callers), not ported.
 
 /// Process-wide guard preventing overlapping update checks.
 struct UpdateCheckGuard(AtomicBool);
@@ -2433,11 +2099,6 @@ pub(crate) fn nudge_index(account_id: &str, mailbox: &str) {
     daemon_channel::notify("search_index.nudge", serde_json::json!({"accountId": account_id, "mailbox": mailbox}));
 }
 
-/// A change wider than one folder: a full pass soon.
-pub(crate) fn sweep_index_soon() {
-    daemon_channel::notify("search_index.sweep_soon", serde_json::json!({}));
-}
-
 /// One blocking daemon RPC: ensure the daemon is up, read its token, one
 /// request/response round trip. Used by code that isn't already async — the
 /// vault move handlers' `spawn_blocking` bodies below, and (Task 2.9b) the
@@ -2755,6 +2416,12 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // later edit to the `_ => None` default cannot silently take or
         // grant a budget here by accident.
         "export_backup" | "import_backup" => None,
+
+        // Task 4.6, same reasoning as export_backup/import_backup above: the
+        // whole mbox read-or-write pass happens within this RPC call and the
+        // JS awaits the return value directly. Its own arm so a later edit
+        // to the `_ => None` default cannot silently take or grant a budget.
+        "export_mbox_all" | "import_mbox" => None,
 
         _ => None,
     }
@@ -3173,8 +2840,6 @@ fn main() {
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            export_mbox_all,
-            import_mbox,
             commands::imap_test_connection,
             commands::smtp_test_connection,
             commands::imap_ensure_sent_mailbox,
@@ -3891,6 +3556,15 @@ mod tests {
     fn reply_timeout_is_none_for_export_backup_and_import_backup() {
         assert_eq!(crate::reply_timeout("export_backup"), None);
         assert_eq!(crate::reply_timeout("import_backup"), None);
+    }
+
+    /// Task 4.6, same reasoning as export_backup/import_backup above: pinned
+    /// by name, not the `_ => None` default, the whole mbox read-or-write
+    /// pass runs inline within the RPC call.
+    #[test]
+    fn reply_timeout_is_none_for_export_mbox_all_and_import_mbox() {
+        assert_eq!(crate::reply_timeout("export_mbox_all"), None);
+        assert_eq!(crate::reply_timeout("import_mbox"), None);
     }
 
     // -----------------------------------------------------------------------
