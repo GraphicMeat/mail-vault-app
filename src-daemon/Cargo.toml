@@ -32,14 +32,14 @@ candle-transformers = "0.8"
 tokenizers = "0.21"
 hf-hub = "0.4"
 uuid = { version = "1", features = ["v4"] }
+# Task 4.2: `export_fetch::fetch_remote_asset` (moved from src-tauri) base64-encodes
+# the fetched bytes for its RPC reply. Was test-only (Task 2.8's maildir_store
+# fixture) until this move made it a real runtime dependency too.
+base64 = "0.22"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"
-# Task 2.8: test-only, to build a `maildir_store` fixture's rawSourceBase64 —
-# the route itself decodes through `mailvault_core::vault_files::decode_raw_source`,
-# so the daemon binary itself never needs this crate.
-base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }

@@ -47,7 +47,6 @@ fn check_declared_len(len: Option<usize>) -> Result<(), String> {
 /// built here without the `cookies` feature, so the client has no cookie store
 /// to disable — the fetch cannot carry the user's session anywhere, which is
 /// the point: the exported file is an archive, not a session.
-#[tauri::command]
 pub async fn fetch_remote_asset(url: String) -> Result<RemoteAsset, String> {
     let parsed = validate_url(&url)?;
 

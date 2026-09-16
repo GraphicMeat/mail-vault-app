@@ -85,7 +85,6 @@ mod commands;
 mod daemon_channel;
 mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
-mod export_fetch;
 mod external_location;
 mod github;
 // graph/imap/oauth2 now live in mailvault_core (shared with src-daemon).
@@ -3254,6 +3253,11 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Drops one snapshot out of a map.
         "insights_release_snapshot" => Some(Duration::from_secs(30)),
 
+        // Task 4.2: its own internal reqwest timeout is 10s plus redirect
+        // overhead (up to 3 hops); 30s is a safety margin around that, not a
+        // new cap this budget could bind against in practice.
+        "fetch_remote_asset" => Some(Duration::from_secs(30)),
+
         _ => None,
     }
 }
@@ -3664,7 +3668,6 @@ fn main() {
             set_badge_count,
             check_running_from_dmg,
             save_attachment_to,
-            export_fetch::fetch_remote_asset,
             show_in_folder,
             open_file,
             open_with_dialog,
@@ -4373,6 +4376,18 @@ mod tests {
     #[test]
     fn reply_timeout_gives_insights_release_snapshot_thirty_seconds() {
         assert_eq!(crate::reply_timeout("insights_release_snapshot"), Some(std::time::Duration::from_secs(30)));
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 4.2: fetch_remote_asset.
+    // -----------------------------------------------------------------------
+
+    /// Pinned by its own name, not the `_ => None` default arm: its own
+    /// internal reqwest timeout is 10s plus redirect overhead, so 30s is a
+    /// safety margin around that budget, not a new cap.
+    #[test]
+    fn reply_timeout_gives_fetch_remote_asset_thirty_seconds() {
+        assert_eq!(crate::reply_timeout("fetch_remote_asset"), Some(std::time::Duration::from_secs(30)));
     }
 
     // -----------------------------------------------------------------------

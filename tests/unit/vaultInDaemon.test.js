@@ -44,6 +44,9 @@ const MOVED = [
   // its 30s sweeper are daemon state now, so `InsightsSnapshots` and its
   // `start_cleanup` call are gone from the app along with the commands.
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
+  // Task 4.2: a pure reqwest fetch, no vault/app_dir/state — moved with no
+  // gate, first of the Phase 4 commands.
+  'fetch_remote_asset',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings

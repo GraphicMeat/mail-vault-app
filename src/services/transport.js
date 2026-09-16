@@ -150,6 +150,8 @@ export const DAEMON_OWNED = new Set([
   // at all. Their failures arrive as `{ok: false, error: {...}}` (decision
   // 5) and `insightsApi.js` re-raises them.
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
+  // Task 4.2: a pure reqwest fetch, no vault/app_dir/state at all.
+  'fetch_remote_asset',
 ]);
 
 async function sendToDaemon(command, args) {

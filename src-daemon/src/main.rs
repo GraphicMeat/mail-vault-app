@@ -8,6 +8,7 @@ pub mod custody;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::imap;
 mod events;
+mod export_fetch;
 mod handlers;
 mod idle_watch;
 mod inference;
