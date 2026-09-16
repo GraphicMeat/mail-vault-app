@@ -27,6 +27,10 @@ const MOVED = [
   'graph_allocate_uids', 'load_graph_id_map',
   'op_journal_queue', 'op_journal_clear', 'op_journal_read',
   'read_pending_operation', 'save_pending_operation', 'clear_pending_operation',
+  // Task 2.8: the six simple vault writers (inventory-maildir.md §1 rows 1,
+  // 12, 14, 16-18).
+  'maildir_store', 'maildir_delete', 'maildir_set_flags', 'maildir_clear_cache',
+  'maildir_migrate_json_to_eml', 'maildir_migrate_email_dirs',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings

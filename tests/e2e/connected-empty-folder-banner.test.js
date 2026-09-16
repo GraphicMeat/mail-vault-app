@@ -98,12 +98,14 @@ describe('empty folder, no cached-data banner', function () {
       'From: seed@example.com\r\nTo: seed@example.com\r\nSubject: empty folder seed\r\n' +
       'Date: Mon, 05 Jan 2026 12:00:00 +0000\r\n\r\nseed body\r\n'
     ).toString('base64');
+    // Task 2.8: maildir_store moved into the daemon (DAEMON_OWNED) — routed
+    // through daemon_rpc.
     const seeded = await browser.executeAsync(async (acct, mailbox, rawB64, done) => {
       try {
         const invoke = window.__TAURI_INTERNALS__?.invoke;
         if (!invoke) return done({ error: 'No Tauri invoke found' });
         for (const uid of [1, 2, 3]) {
-          await invoke('maildir_store', { accountId: acct, mailbox, uid, rawSourceBase64: rawB64, flags: ['seen'] });
+          await invoke('daemon_rpc', { method: 'maildir_store', params: { accountId: acct, mailbox, uid, rawSourceBase64: rawB64, flags: ['seen'] } });
         }
         done({ ok: true });
       } catch (e) {

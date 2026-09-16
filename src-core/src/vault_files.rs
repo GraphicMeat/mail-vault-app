@@ -83,6 +83,17 @@ pub fn delete_maildir_files(cur_dir: &Path, uids: &HashSet<u32>) -> usize {
 /// returned, so a crash-left duplicate from an earlier interrupted store does
 /// not survive the next one (M4). A failed or killed write leaves every
 /// existing copy intact (oddity 1; was remove-then-plain-write).
+/// Decode a `maildir_store` `rawSourceBase64` payload. Lives here (not the
+/// daemon crate, which does not depend on `base64`) so the daemon's
+/// `maildir_store` route can classify a bad payload as `INVALID_PARAMS`
+/// before calling `store`, rather than as a generic write failure.
+pub fn decode_raw_source(raw_source_base64: &str) -> Result<Vec<u8>, String> {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(raw_source_base64)
+        .map_err(|e| format!("Failed to decode base64: {}", e))
+}
+
 pub fn store(
     root: &Path,
     account_id: &str,
@@ -330,10 +341,21 @@ pub struct MaildirClearCacheResult {
 /// Deletes every non-archived vault file. Skips `orphaned/` (messages the
 /// current server does not have — this copy may be the only one). The caller
 /// sweeps the index soon when `deleted_count > 0`.
-pub fn clear_cache(root: &Path) -> MaildirClearCacheResult {
+///
+/// `gate` wraps each file's own delete, the same shape
+/// `prefetch_attachments_in` uses: a vault-wide walk can cover thousands of
+/// messages, so the daemon must never hold `vault_gate`'s read side for the
+/// whole sweep, only for one file's removal at a time (Global constraint:
+/// "per batch/mailbox for the long ones... never around a whole vault walk").
+/// A gate error (vault closed for a move) stops the sweep where it is; files
+/// already removed stay removed.
+pub fn clear_cache(
+    root: &Path,
+    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+) -> Result<MaildirClearCacheResult, String> {
     let base = root.join("Maildir");
     if !base.exists() {
-        return MaildirClearCacheResult { deleted_count: 0, skipped_archived: 0 };
+        return Ok(MaildirClearCacheResult { deleted_count: 0, skipped_archived: 0 });
     }
 
     let mut deleted_count: u32 = 0;
@@ -343,34 +365,47 @@ pub fn clear_cache(root: &Path) -> MaildirClearCacheResult {
         if entry.path().components().any(|c| c.as_os_str() == maildir::ORPHAN_DIR) {
             continue;
         }
-        if entry.file_type().is_file() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            if name.contains(":2,") {
-                let flags = parse_flags_from_filename(&name);
-                if flags.iter().any(|f| f == "archived") {
-                    skipped_archived += 1;
-                } else if let Err(e) = fs::remove_file(entry.path()) {
-                    warn!("Failed to delete cached email {:?}: {}", entry.path(), e);
-                } else {
-                    deleted_count += 1;
-                }
-            }
+        if !entry.file_type().is_file() {
+            continue;
         }
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.contains(":2,") {
+            continue;
+        }
+        let flags = parse_flags_from_filename(&name);
+        if flags.iter().any(|f| f == "archived") {
+            skipped_archived += 1;
+            continue;
+        }
+        gate(&mut || {
+            match fs::remove_file(entry.path()) {
+                Ok(()) => deleted_count += 1,
+                Err(e) => warn!("Failed to delete cached email {:?}: {}", entry.path(), e),
+            }
+            Ok(())
+        })?;
     }
 
     info!("Cleared email cache: deleted {} files, skipped {} archived", deleted_count, skipped_archived);
-    MaildirClearCacheResult { deleted_count, skipped_archived }
+    Ok(MaildirClearCacheResult { deleted_count, skipped_archived })
 }
 
 /// One-time migration of pre-.eml JSON sidecars (`<uid>.json` with a
 /// `rawSource` field) into `<uid>:2,AS.eml` files. Legacy-only path; never
 /// nudges the index (suspected gap, inventory §4 — kept unchanged).
-pub fn migrate_json_to_eml(root: &Path) -> String {
+///
+/// `gate` wraps each file's write (or remove, for a sidecar with no
+/// `rawSource`) — same reasoning as `clear_cache`: a whole-vault walk must not
+/// hold the vault gate for its entire duration.
+pub fn migrate_json_to_eml(
+    root: &Path,
+    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+) -> Result<String, String> {
     use base64::Engine;
     let base = root.join("Maildir");
 
     if !base.exists() {
-        return "No Maildir directory found, nothing to migrate.".to_string();
+        return Ok("No Maildir directory found, nothing to migrate.".to_string());
     }
 
     let mut migrated = 0u32;
@@ -431,21 +466,27 @@ pub fn migrate_json_to_eml(root: &Path) -> String {
             let eml_filename = build_maildir_filename(uid, &["archived".to_string(), "seen".to_string()]);
             let eml_path = cur_dir.join(&eml_filename);
 
-            match write_atomic(&eml_path, &raw_bytes) {
-                Ok(_) => {
-                    let _ = fs::remove_file(&path);
-                    migrated += 1;
-                    info!("Migrated {:?} -> {:?}", path, eml_path);
+            gate(&mut || {
+                match write_atomic(&eml_path, &raw_bytes) {
+                    Ok(_) => {
+                        let _ = fs::remove_file(&path);
+                        migrated += 1;
+                        info!("Migrated {:?} -> {:?}", path, eml_path);
+                    }
+                    Err(e) => {
+                        warn!("Failed to write .eml for {:?}: {}", path, e);
+                        errors += 1;
+                    }
                 }
-                Err(e) => {
-                    warn!("Failed to write .eml for {:?}: {}", path, e);
-                    errors += 1;
-                }
-            }
+                Ok(())
+            })?;
         } else {
-            warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
-            let _ = fs::remove_file(&path);
-            skipped += 1;
+            gate(&mut || {
+                warn!("No rawSource in {:?}, cannot migrate to .eml — removing", path);
+                let _ = fs::remove_file(&path);
+                skipped += 1;
+                Ok(())
+            })?;
         }
     }
 
@@ -454,16 +495,25 @@ pub fn migrate_json_to_eml(root: &Path) -> String {
         migrated, skipped, errors
     );
     info!("{}", result);
-    result
+    Ok(result)
 }
 
 /// Moves account-email-keyed mailbox dirs onto their account-uuid dir.
 /// Returns the number of files moved; the caller sweeps the index soon when
 /// it is non-zero.
-pub fn migrate_email_dirs(root: &Path, account_map: &HashMap<String, String>) -> usize {
+///
+/// `gate` wraps one mailbox's whole move (create dest, rename every file in
+/// it) at a time, and separately wraps the final `remove_dir_all` per
+/// account — "per batch/mailbox for the long ones", never one gate call
+/// around the whole migration.
+pub fn migrate_email_dirs(
+    root: &Path,
+    account_map: &HashMap<String, String>,
+    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+) -> Result<usize, String> {
     let maildir_base = root.join("Maildir");
     if !maildir_base.exists() {
-        return 0;
+        return Ok(0);
     }
 
     let mut migrated = 0usize;
@@ -486,32 +536,37 @@ pub fn migrate_email_dirs(root: &Path, account_map: &HashMap<String, String>) ->
                 if !src_cur.exists() { continue; }
 
                 let dst_cur = uuid_dir.join(&mb_name).join("cur");
-                if let Err(e) = fs::create_dir_all(&dst_cur) {
-                    warn!("Migration: failed to create {:?}: {}", dst_cur, e);
-                    continue;
-                }
-
-                if let Ok(files) = fs::read_dir(&src_cur) {
-                    for file in files.flatten() {
-                        let fname = file.file_name();
-                        let dst_path = dst_cur.join(&fname);
-                        if !dst_path.exists() {
-                            if let Err(e) = fs::rename(file.path(), &dst_path) {
-                                warn!("Migration: failed to move {:?}: {}", fname, e);
-                            } else {
-                                migrated += 1;
+                gate(&mut || {
+                    if let Err(e) = fs::create_dir_all(&dst_cur) {
+                        warn!("Migration: failed to create {:?}: {}", dst_cur, e);
+                        return Ok(());
+                    }
+                    if let Ok(files) = fs::read_dir(&src_cur) {
+                        for file in files.flatten() {
+                            let fname = file.file_name();
+                            let dst_path = dst_cur.join(&fname);
+                            if !dst_path.exists() {
+                                if let Err(e) = fs::rename(file.path(), &dst_path) {
+                                    warn!("Migration: failed to move {:?}: {}", fname, e);
+                                } else {
+                                    migrated += 1;
+                                }
                             }
                         }
                     }
-                }
+                    Ok(())
+                })?;
             }
         }
 
-        let _ = fs::remove_dir_all(&email_dir);
+        gate(&mut || {
+            let _ = fs::remove_dir_all(&email_dir);
+            Ok(())
+        })?;
     }
 
     info!("Maildir migration: moved {} files from email-address dirs to UUID dirs", migrated);
-    migrated
+    Ok(migrated)
 }
 
 // ── Attachment cache ──────────────────────────────────────────────────────────
@@ -1158,5 +1213,122 @@ R0lGODlhAQABAAAAACw=\r\n\
         // The high-water mark is not advanced on error — same contract as
         // before this fix, the next sweep starts from scratch.
         assert!(high_water.lock().unwrap().is_empty());
+    }
+
+    // ── Task 2.8: clear_cache / migrate_json_to_eml / migrate_email_dirs,
+    // each per-file/per-mailbox gated (never one gate call around the whole
+    // walk) ──────────────────────────────────────────────────────────────
+
+    #[test]
+    fn clear_cache_deletes_non_archived_skips_archived_and_orphaned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(cur.join("2:2,AS.eml"), b"b").unwrap(); // archived: kept
+        let orphan_dir = cur.parent().unwrap().join(maildir::ORPHAN_DIR);
+        fs::create_dir_all(&orphan_dir).unwrap();
+        fs::write(orphan_dir.join("3:2,S.eml"), b"c").unwrap(); // orphaned: kept
+
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let result = clear_cache(root, &noop_gate).unwrap();
+        assert_eq!(result.deleted_count, 1);
+        assert_eq!(result.skipped_archived, 1);
+        assert!(!cur.join("1:2,S.eml").exists());
+        assert!(cur.join("2:2,AS.eml").exists());
+        assert!(orphan_dir.join("3:2,S.eml").exists());
+    }
+
+    /// Same order-probe shape as prefetch's I1 test: the gate must wrap each
+    /// file's own delete, not the whole walk, so a vault-close between files
+    /// stops the sweep leaving earlier deletes done and later ones untouched.
+    #[test]
+    fn clear_cache_gate_error_between_files_stops_the_walk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(cur.join("2:2,S.eml"), b"b").unwrap();
+
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
+            if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) > 0 {
+                return Err("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string());
+            }
+            work()
+        };
+        let err = clear_cache(root, &gate).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        let remaining: Vec<String> = fs::read_dir(&cur).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(remaining.len(), 1, "exactly one file must survive the interrupted walk: {:?}", remaining);
+    }
+
+    #[test]
+    fn migrate_json_to_eml_writes_the_eml_and_removes_the_sidecar() {
+        use base64::Engine;
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let cur = cur_path(root, "acct", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        let raw_b64 = base64::engine::general_purpose::STANDARD.encode(b"From: a@b.com\r\n\r\nbody");
+        fs::write(cur.join("7.json"), serde_json::json!({"rawSource": raw_b64}).to_string()).unwrap();
+        // A sidecar with no rawSource is removed, not migrated.
+        fs::write(cur.join("8.json"), serde_json::json!({}).to_string()).unwrap();
+
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let summary = migrate_json_to_eml(root, &noop_gate).unwrap();
+        assert!(summary.contains("Migrated: 1"), "{summary}");
+        assert!(summary.contains("Skipped (no rawSource): 1"), "{summary}");
+        assert!(cur.join("7:2,AS.eml").exists());
+        assert!(!cur.join("7.json").exists());
+        assert!(!cur.join("8.json").exists());
+    }
+
+    #[test]
+    fn migrate_email_dirs_moves_files_onto_the_uuid_dir_and_removes_the_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let src_cur = cur_path(root, "user@example.com", "INBOX");
+        fs::create_dir_all(&src_cur).unwrap();
+        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+
+        let mut map = HashMap::new();
+        map.insert("user@example.com".to_string(), "uuid-123".to_string());
+        let noop_gate = |work: &mut dyn FnMut() -> Result<(), String>| work();
+        let migrated = migrate_email_dirs(root, &map, &noop_gate).unwrap();
+        assert_eq!(migrated, 1);
+        let dst_cur = cur_path(root, "uuid-123", "INBOX");
+        assert!(dst_cur.join("1:2,S.eml").exists());
+        assert!(!root.join("Maildir").join("user@example.com").exists());
+    }
+
+    /// The mailbox move and the final `remove_dir_all` are separate gate
+    /// calls: a vault-close after the mailbox move but before the cleanup
+    /// leaves the files moved and the (now empty) source dir behind, rather
+    /// than losing the move or forcing the whole account through one gate.
+    #[test]
+    fn migrate_email_dirs_gate_error_after_the_move_leaves_the_source_dir_but_not_the_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let src_cur = cur_path(root, "user@example.com", "INBOX");
+        fs::create_dir_all(&src_cur).unwrap();
+        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+
+        let calls = std::sync::atomic::AtomicUsize::new(0);
+        let gate = |work: &mut dyn FnMut() -> Result<(), String>| -> Result<(), String> {
+            if calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) > 0 {
+                return Err("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string());
+            }
+            work()
+        };
+        let mut map = HashMap::new();
+        map.insert("user@example.com".to_string(), "uuid-123".to_string());
+        let err = migrate_email_dirs(root, &map, &gate).unwrap_err();
+        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        let dst_cur = cur_path(root, "uuid-123", "INBOX");
+        assert!(dst_cur.join("1:2,S.eml").exists(), "the mailbox move itself already committed");
+        assert!(root.join("Maildir").join("user@example.com").exists(), "the source dir cleanup never ran");
     }
 }

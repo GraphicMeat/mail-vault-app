@@ -355,9 +355,9 @@ describe('Outlook backup files every message under its ledger uid', function () 
     const cacheDir = join(root, 'email_cache', cacheBase(ACCOUNT_ID, 'INBOX'));
     writeFileSync(join(cacheDir, '_meta.json'), '{}'); // a header cache the clear must still remove
 
-    // The order StorageSettings runs them in. maildir_clear_cache is still
-    // native (Task 2.8); clear_email_cache moved in this task.
-    const bodies = await invoke('maildir_clear_cache', {});
+    // The order StorageSettings runs them in. Both moved into the daemon:
+    // clear_email_cache in Task 2.7, maildir_clear_cache in Task 2.8.
+    const bodies = await invoke('daemon_rpc', { method: 'maildir_clear_cache', params: {} });
     if (bodies?.__error) throw new Error(`maildir_clear_cache: ${bodies.__error}`);
     const headers = await invoke('daemon_rpc', { method: 'clear_email_cache', params: { accountId: null } });
     if (headers?.__error) throw new Error(`clear_email_cache: ${headers.__error}`);

@@ -205,6 +205,134 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // Task 2.8: the six simple vault writers. Single-file writes
+        // (`maildir_store`, `maildir_delete`, `maildir_set_flags`) go through
+        // `with_vault_write` once, same as `cache_attachment`. The
+        // whole-vault walkers (`maildir_clear_cache`,
+        // `maildir_migrate_json_to_eml`, `maildir_migrate_email_dirs`) resolve
+        // `root` once (fixed for the call) and pass a `gate` closure the core
+        // fn calls once per file/mailbox batch — never once around the whole
+        // walk, same reasoning as `prefetch_attachments` above.
+        "maildir_store" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let raw_b64 = req!(str_arg(&id, params, "rawSourceBase64"));
+            let flags = req!(vec_arg::<String>(&id, params, "flags"));
+            let raw = match vault_files::decode_raw_source(&raw_b64) {
+                Ok(r) => r,
+                Err(e) => return Some(RpcResponse::error(id, crate::ipc::INVALID_PARAMS, e)),
+            };
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    // Always overwrites (a differently-named old file for the
+                    // same uid is removed after the new one lands —
+                    // `vault_files::store`, oddity 1); nudges unconditionally
+                    // after a successful write, same as the deleted command.
+                    with_vault_write(&state, |root| vault_files::store(root, &account_id, &mailbox, uid, &raw, &flags, true))?;
+                    crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                    Ok(Value::Null)
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
+        "maildir_delete" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let removed = with_vault_write(&state, |root| vault_files::delete(root, &account_id, &mailbox, uid))?;
+                    if removed {
+                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                    }
+                    Ok(Value::Null)
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
+        "maildir_set_flags" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let flags = req!(vec_arg::<String>(&id, params, "flags"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    // `vault_files::set_flags` answers `E_UID_NOT_IN_MAILDIR:`
+                    // verbatim when the uid has no file — propagated as-is.
+                    let renamed = with_vault_write(&state, |root| vault_files::set_flags(root, &account_id, &mailbox, uid, &flags))?;
+                    if renamed {
+                        crate::search_index::nudge(&state.search_index, &account_id, &mailbox);
+                    }
+                    Ok(Value::Null)
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
+        "maildir_clear_cache" => {
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let root = vault_root(&state)?;
+                    let gate_state = Arc::clone(&state);
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let result = vault_files::clear_cache(&root, &gate)?;
+                    if result.deleted_count > 0 {
+                        crate::search_index::sweep_soon(&state.search_index); // every folder of every account lost files
+                    }
+                    serde_json::to_value(result).map_err(|e| e.to_string())
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
+        "maildir_migrate_json_to_eml" => {
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let root = vault_root(&state)?;
+                    let gate_state = Arc::clone(&state);
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    // Legacy-only path; never nudges the index (inventory §4,
+                    // kept unchanged — writes .eml files with no signal).
+                    vault_files::migrate_json_to_eml(&root, &gate).map(Value::String)
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
+        "maildir_migrate_email_dirs" => {
+            let Some(account_map) = params.get("accountMap").and_then(|v| serde_json::from_value::<std::collections::HashMap<String, String>>(v.clone()).ok()) else {
+                return Some(RpcResponse::error(id, crate::ipc::INVALID_PARAMS, "Missing accountMap"));
+            };
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let root = vault_root(&state)?;
+                    let gate_state = Arc::clone(&state);
+                    let gate = move |work: &mut dyn FnMut() -> Result<(), String>| with_vault_write(&gate_state, |_| work());
+                    let migrated = vault_files::migrate_email_dirs(&root, &account_map, &gate)?;
+                    if migrated > 0 {
+                        crate::search_index::sweep_soon(&state.search_index); // folders moved between account dirs
+                    }
+                    Ok(serde_json::json!({ "migrated": migrated }))
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         // A mailbox sweep can cover thousands of messages: taking
         // `with_vault_write` once for the whole call would hold `vault_gate`'s
         // read side for the sweep's entire duration, which can starve
@@ -262,6 +390,17 @@ mod tests {
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
         route(s, method, &params, json!(1)).await.expect("routed")
+    }
+
+    /// Task 2.8: the test seam Phase 1 added for nudges (`search_index.rs`'s
+    /// own `manual_channel` test helper, same shape) — a manually installed
+    /// `mpsc::Sender` in place of the real worker thread's, so a route's
+    /// `nudge`/`sweep_soon` call can be observed directly instead of inferred
+    /// from a side effect.
+    fn signal_channel(s: &Arc<DaemonState>) -> std::sync::mpsc::Receiver<mailvault_core::search_index::plan::Signal> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        *s.search_index.signals.lock().unwrap() = Some(tx);
+        rx
     }
 
     fn seed_email(root: &std::path::Path, account: &str, mailbox: &str, uid: u32) {
@@ -499,5 +638,196 @@ mod tests {
     async fn another_domains_method_is_not_routed_here() {
         let (_t, s) = st(true);
         assert!(route(&s, "sync.now", &json!({}), json!(1)).await.is_none());
+    }
+
+    // ── Task 2.8: the six simple vault writers ──────────────────────────────
+
+    fn b64(bytes: &[u8]) -> String {
+        use base64::Engine;
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    }
+
+    #[tokio::test]
+    async fn maildir_store_writes_the_new_name_and_always_nudges() {
+        let (t, s) = st(true);
+        let rx = signal_channel(&s);
+        let raw = b64(b"From: a@b.com\r\n\r\nbody");
+        let r = call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": raw, "flags": ["seen"]})).await;
+        assert!(r.error.is_none(), "{:?}", r.error);
+        assert!(vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,S.eml").exists());
+        assert_eq!(
+            rx.try_recv().unwrap(),
+            mailvault_core::search_index::plan::Signal::Nudge { account_id: "acc".into(), vault_dir: "INBOX".into() }
+        );
+    }
+
+    #[tokio::test]
+    async fn maildir_store_overwrites_and_removes_the_old_differently_named_file() {
+        let (t, s) = st(true);
+        call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": b64(b"one"), "flags": ["seen"]})).await;
+        call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": b64(b"two"), "flags": ["flagged", "seen"]})).await;
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        let names: Vec<String> = fs::read_dir(&cur).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        assert_eq!(names, vec!["7:2,FS.eml"]);
+    }
+
+    #[tokio::test]
+    async fn maildir_store_bad_base64_is_invalid_params_and_writes_nothing() {
+        let (t, s) = st(true);
+        let r = call(&s, "maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "rawSourceBase64": "not-base64!!", "flags": []})).await;
+        let err = r.error.unwrap();
+        assert_eq!(err.code, crate::ipc::INVALID_PARAMS);
+        assert!(!vault_files::cur_path(t.path(), "acc", "INBOX").exists());
+    }
+
+    #[tokio::test]
+    async fn maildir_delete_nudges_only_when_a_file_was_removed() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let rx = signal_channel(&s);
+        let r = call(&s, "maildir_delete", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
+        assert!(r.error.is_none());
+        assert!(!vault_files::cur_path(t.path(), "acc", "INBOX").join("7:2,.eml").exists());
+        assert!(rx.try_recv().is_ok(), "a real removal must nudge");
+
+        // A second delete of the same (now absent) uid removes nothing and
+        // must not nudge again.
+        call(&s, "maildir_delete", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7})).await;
+        assert!(rx.try_recv().is_err(), "deleting an already-gone uid must not nudge");
+    }
+
+    #[tokio::test]
+    async fn maildir_set_flags_renames_nudges_and_reports_uid_not_in_maildir() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let rx = signal_channel(&s);
+        let r = call(&s, "maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "flags": ["seen", "flagged"]})).await;
+        assert!(r.error.is_none(), "{:?}", r.error);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        assert!(cur.join("7:2,FS.eml").exists());
+        assert!(rx.try_recv().is_ok(), "a real rename must nudge");
+
+        // Re-applying the same flags is a no-rename no-op: no second nudge.
+        call(&s, "maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 7, "flags": ["seen", "flagged"]})).await;
+        assert!(rx.try_recv().is_err(), "an unchanged filename must not nudge");
+
+        let r = call(&s, "maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 999, "flags": ["seen"]})).await;
+        assert_eq!(r.error.unwrap().message, "E_UID_NOT_IN_MAILDIR: Email UID 999 not found in Maildir");
+    }
+
+    #[tokio::test]
+    async fn maildir_clear_cache_deletes_and_sweeps_when_something_was_deleted() {
+        let (t, s) = st(true);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,S.eml"), b"a").unwrap();
+        fs::write(cur.join("2:2,AS.eml"), b"b").unwrap(); // archived: must survive
+        let rx = signal_channel(&s);
+
+        let r = call(&s, "maildir_clear_cache", json!({})).await;
+        let v = r.result.unwrap();
+        assert_eq!(v["deletedCount"], json!(1));
+        assert_eq!(v["skippedArchived"], json!(1));
+        assert!(!cur.join("1:2,S.eml").exists());
+        assert!(cur.join("2:2,AS.eml").exists());
+        assert_eq!(rx.try_recv().unwrap(), mailvault_core::search_index::plan::Signal::Sweep);
+    }
+
+    #[tokio::test]
+    async fn maildir_clear_cache_no_sweep_when_nothing_was_deleted() {
+        let (t, s) = st(true);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("1:2,AS.eml"), b"a").unwrap(); // archived only
+        let rx = signal_channel(&s);
+
+        call(&s, "maildir_clear_cache", json!({})).await;
+        assert!(rx.try_recv().is_err(), "nothing deleted must not sweep");
+    }
+
+    #[tokio::test]
+    async fn maildir_migrate_json_to_eml_writes_the_eml_and_never_nudges() {
+        let (t, s) = st(true);
+        let cur = vault_files::cur_path(t.path(), "acc", "INBOX");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("7.json"), json!({"rawSource": b64(b"body")}).to_string()).unwrap();
+        let rx = signal_channel(&s);
+
+        let r = call(&s, "maildir_migrate_json_to_eml", json!({})).await;
+        let summary = r.result.unwrap();
+        assert!(summary.as_str().unwrap().contains("Migrated: 1"), "{summary}");
+        assert!(cur.join("7:2,AS.eml").exists());
+        assert!(!cur.join("7.json").exists());
+        assert!(rx.try_recv().is_err(), "inventory §4: this legacy-only path never nudges");
+    }
+
+    #[tokio::test]
+    async fn maildir_migrate_email_dirs_moves_files_and_sweeps_when_migrated() {
+        let (t, s) = st(true);
+        let src_cur = vault_files::cur_path(t.path(), "user@example.com", "INBOX");
+        fs::create_dir_all(&src_cur).unwrap();
+        fs::write(src_cur.join("1:2,S.eml"), b"a").unwrap();
+        let rx = signal_channel(&s);
+
+        let r = call(&s, "maildir_migrate_email_dirs", json!({"accountMap": {"user@example.com": "uuid-123"}})).await;
+        let v = r.result.unwrap();
+        assert_eq!(v["migrated"], json!(1));
+        assert!(vault_files::cur_path(t.path(), "uuid-123", "INBOX").join("1:2,S.eml").exists());
+        assert_eq!(rx.try_recv().unwrap(), mailvault_core::search_index::plan::Signal::Sweep);
+    }
+
+    #[tokio::test]
+    async fn maildir_migrate_email_dirs_no_sweep_when_nothing_migrated() {
+        let (_t, s) = st(true);
+        let rx = signal_channel(&s);
+        let r = call(&s, "maildir_migrate_email_dirs", json!({"accountMap": {}})).await;
+        assert_eq!(r.result.unwrap()["migrated"], json!(0));
+        assert!(rx.try_recv().is_err());
+    }
+
+    #[tokio::test]
+    async fn maildir_migrate_email_dirs_missing_account_map_is_invalid_params() {
+        let (_t, s) = st(true);
+        let r = call(&s, "maildir_migrate_email_dirs", json!({})).await;
+        assert_eq!(r.error.unwrap().code, crate::ipc::INVALID_PARAMS);
+    }
+
+    // Two-tempdir gate proof (2.6/2.7 review I2/I3 pattern): every Task 2.8
+    // writer refuses with `E_VAULT_UNAVAILABLE:` and creates nothing under
+    // EITHER root, both when the folder is unreachable and while the vault
+    // is closed for a move.
+    async fn assert_task_2_8_writers_are_gated(vault: &std::path::Path, app_dir: &std::path::Path, s: &Arc<DaemonState>) {
+        let raw = b64(b"x");
+        for (method, params) in [
+            ("maildir_store", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1, "rawSourceBase64": raw, "flags": []})),
+            ("maildir_delete", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1})),
+            ("maildir_set_flags", json!({"accountId": "acc", "mailbox": "INBOX", "uid": 1, "flags": ["seen"]})),
+            ("maildir_clear_cache", json!({})),
+            ("maildir_migrate_json_to_eml", json!({})),
+            ("maildir_migrate_email_dirs", json!({"accountMap": {}})),
+        ] {
+            let r = call(s, method, params).await;
+            let err = r.error.unwrap_or_else(|| panic!("{method} must refuse while gated"));
+            assert!(err.message.starts_with("E_VAULT_UNAVAILABLE:"), "{method}: {}", err.message);
+        }
+        assert!(!vault.join("Maildir").exists());
+        assert!(!app_dir.join("Maildir").exists());
+    }
+
+    #[tokio::test]
+    async fn every_task_2_8_writer_is_gated_when_the_folder_is_unreachable() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), false);
+        assert_task_2_8_writers_are_gated(vault.path(), app_dir.path(), &s).await;
+    }
+
+    #[tokio::test]
+    async fn every_task_2_8_writer_is_gated_while_the_vault_is_being_moved() {
+        let vault = tempfile::tempdir().unwrap();
+        let app_dir = tempfile::tempdir().unwrap();
+        let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
+        s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
+        assert_task_2_8_writers_are_gated(vault.path(), app_dir.path(), &s).await;
     }
 }

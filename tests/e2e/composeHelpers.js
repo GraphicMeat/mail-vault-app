@@ -727,12 +727,19 @@ export async function snapshotDraft(accountId, subject) {
  * rather than imitating one.
  */
 export async function restoreDraft(accountId, { entry, rawBase64 }) {
-  const stored = await invoke('maildir_store', {
-    accountId,
-    mailbox: 'Drafts',
-    uid: entry.uid,
-    rawSourceBase64: rawBase64,
-    flags: ['archived', 'seen', 'draft'],
+  // Task 2.8: maildir_store moved into the daemon (DAEMON_OWNED) — routed
+  // through daemon_rpc, same as every other moved-command e2e site
+  // (`local_index_read`/`local_index_append` below stay native: custody is
+  // still in the app).
+  const stored = await invoke('daemon_rpc', {
+    method: 'maildir_store',
+    params: {
+      accountId,
+      mailbox: 'Drafts',
+      uid: entry.uid,
+      rawSourceBase64: rawBase64,
+      flags: ['archived', 'seen', 'draft'],
+    },
   });
   if (!stored.ok) throw new Error(`maildir_store failed re-seeding draft ${entry.uid}: ${stored.error}`);
   const indexed = await invoke('local_index_append', {

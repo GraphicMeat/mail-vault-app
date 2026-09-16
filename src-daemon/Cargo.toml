@@ -36,6 +36,10 @@ uuid = { version = "1", features = ["v4"] }
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }
 tempfile = "3"
+# Task 2.8: test-only, to build a `maildir_store` fixture's rawSourceBase64 —
+# the route itself decodes through `mailvault_core::vault_files::decode_raw_source`,
+# so the daemon binary itself never needs this crate.
+base64 = "0.22"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }

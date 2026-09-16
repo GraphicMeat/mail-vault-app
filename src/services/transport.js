@@ -130,6 +130,9 @@ export const DAEMON_OWNED = new Set([
   'graph_allocate_uids', 'load_graph_id_map',
   'op_journal_queue', 'op_journal_clear', 'op_journal_read',
   'read_pending_operation', 'save_pending_operation', 'clear_pending_operation',
+  // Task 2.8: the six simple vault writers.
+  'maildir_store', 'maildir_delete', 'maildir_set_flags', 'maildir_clear_cache',
+  'maildir_migrate_json_to_eml', 'maildir_migrate_email_dirs',
 ]);
 
 async function sendToDaemon(command, args) {

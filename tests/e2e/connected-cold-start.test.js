@@ -163,11 +163,11 @@ describe('Cold Start Benchmark', function () {
         const invoke = window.__TAURI_INTERNALS__?.invoke;
         if (invoke) {
           // Task 2.7: clear_email_cache moved into the daemon (DAEMON_OWNED).
-          // maildir_clear_cache is still native (Task 2.8).
+          // Task 2.8: maildir_clear_cache moved with it.
           await invoke('daemon_rpc', { method: 'clear_email_cache', params: { accountId: null } });
           results.headersCleared = true;
 
-          const maildirResult = await invoke('maildir_clear_cache');
+          const maildirResult = await invoke('daemon_rpc', { method: 'maildir_clear_cache', params: {} });
           results.maildirCleared = true;
           results.maildirDetails = maildirResult;
         } else {

@@ -8,9 +8,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 pub(crate) use mailvault_core::vault_eml::{
     find_file_by_uid, parse_address_str, parse_eml_bytes_light, parse_flags_from_filename,
 };
-pub(crate) use mailvault_core::vault_files::{
-    build_maildir_filename, delete_maildir_files, MaildirClearCacheResult,
-};
+pub(crate) use mailvault_core::vault_files::{build_maildir_filename, delete_maildir_files};
 pub(crate) use mailvault_core::header_cache::cache_base_name;
 
 /// Localize the menu bar without rebuilding it.
@@ -1140,11 +1138,13 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 // maildir_read_light_batch, maildir_read_raw_source, maildir_read_attachment,
 // maildir_exists, maildir_list, maildir_storage_stats, maildir_orphan_stats,
 // cache_attachment, cached_attachment_path, prefetch_attachments) moved to
-// the daemon (Task 2.6, `handlers::vault_files`) — DAEMON_OWNED in
-// transport.js, no Tauri command left. Bodies for what stays here live in
-// mailvault_core::vault_files (Task 2.2); MaildirClearCacheResult is
-// re-exported near the top of this file so maildir_clear_cache keeps the
-// same JSON shape.
+// the daemon (Task 2.6, `handlers::vault_files`), and the six simple writers
+// (maildir_store, maildir_delete, maildir_set_flags, maildir_clear_cache,
+// maildir_migrate_json_to_eml, maildir_migrate_email_dirs) moved with them
+// (Task 2.8) — DAEMON_OWNED in transport.js, no Tauri command left for any of
+// them. What stays here (maildir_store_raw, maildir_delete_many,
+// maildir_repair_generation, maildir_purge_orphans — the custody-backed trio,
+// Task 2.9a) calls mailvault_core::vault_files (Task 2.2) directly.
 // ==========================================
 
 // ── Mail storage location ───────────────────────────────────────────────────
@@ -1326,20 +1326,6 @@ pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox
     Ok(mailvault_core::vault_files::cur_path(&vault::root(app_handle)?, account_id, mailbox))
 }
 
-/// Rename the vault's message files that pre-date the `.eml` suffix.
-///
-/// `migrate_add_eml_extension` is idempotent and guarded by a version marker
-/// inside the vault, so this costs one file read once it has run. `None` is an
-/// external vault that is not mounted: sweeping then would write that marker
-/// into whatever path is standing in and call a vault migrated that nothing
-/// ever looked at.
-fn sweep_vault_eml(root: Option<&Path>) -> mailvault_core::maildir::EmlMigrationStats {
-    match root {
-        Some(root) => mailvault_core::maildir::migrate_add_eml_extension(root),
-        None => Default::default(),
-    }
-}
-
 /// Find a message file for `uid` in a directory that may use either naming
 /// scheme: Maildir (`<uid>:2,<flags>[.eml]`) or the legacy flagless external
 /// backup name (`<uid>.eml`), with one directory rescan per call. Every mirror
@@ -1393,28 +1379,9 @@ pub fn maildir_store_raw(
     Ok(())
 }
 
-#[tauri::command]
-fn maildir_store(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-    raw_source_base64: String,
-    flags: Vec<String>,
-) -> Result<(), String> {
-    use base64::Engine;
-
-    let root = vault::root(&app_handle)?;
-    let raw_bytes = base64::engine::general_purpose::STANDARD
-        .decode(&raw_source_base64)
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
-
-    // Always overwrites (a differently-named old file is removed after the
-    // new one lands — mailvault_core::vault_files::store, oddity 1).
-    mailvault_core::vault_files::store(&root, &account_id, &mailbox, uid, &raw_bytes, &flags, true)?;
-    nudge_index(&account_id, &mailbox);
-    Ok(())
-}
+// `maildir_store` moved to the daemon (Task 2.8, `handlers::vault_files`) —
+// `maildir_store_raw` above stays (Phase 5's auto-cache caller,
+// `commands.rs`'s `imap_get_email_light`).
 
 // ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
 //
@@ -1626,19 +1593,8 @@ async fn verify_archived_emails(
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
-#[tauri::command]
-fn maildir_delete(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<(), String> {
-    let removed = mailvault_core::vault_files::delete(&vault::root(&app_handle)?, &account_id, &mailbox, uid)?;
-    if removed {
-        nudge_index(&account_id, &mailbox);
-    }
-    Ok(())
-}
+// `maildir_delete` moved to the daemon (Task 2.8). `maildir_delete_many`
+// below stays for Task 2.9a (custody-backed).
 
 #[tauri::command]
 fn maildir_delete_many(
@@ -1666,50 +1622,12 @@ fn maildir_delete_many(
     Ok(serde_json::json!({ "removed": removed }))
 }
 
-#[tauri::command]
-fn maildir_set_flags(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-    flags: Vec<String>,
-) -> Result<(), String> {
-    let renamed = mailvault_core::vault_files::set_flags(&vault::root(&app_handle)?, &account_id, &mailbox, uid, &flags)?;
-    if renamed {
-        nudge_index(&account_id, &mailbox);
-    }
-    Ok(())
-}
-
-#[tauri::command]
-fn maildir_clear_cache(
-    app_handle: tauri::AppHandle,
-) -> Result<MaildirClearCacheResult, String> {
-    let result = mailvault_core::vault_files::clear_cache(&vault::root(&app_handle)?);
-    if result.deleted_count > 0 {
-        sweep_index_soon(); // every folder of every account lost files
-    }
-    Ok(result)
-}
-
-#[tauri::command]
-fn maildir_migrate_json_to_eml(
-    app_handle: tauri::AppHandle,
-) -> Result<String, String> {
-    Ok(mailvault_core::vault_files::migrate_json_to_eml(&vault::root(&app_handle)?))
-}
-
-#[tauri::command]
-fn maildir_migrate_email_dirs(
-    app_handle: tauri::AppHandle,
-    account_map: std::collections::HashMap<String, String>,
-) -> Result<serde_json::Value, String> {
-    let migrated = mailvault_core::vault_files::migrate_email_dirs(&vault::root(&app_handle)?, &account_map);
-    if migrated > 0 {
-        sweep_index_soon(); // folders moved between account dirs
-    }
-    Ok(serde_json::json!({ "migrated": migrated }))
-}
+// `maildir_set_flags`, `maildir_clear_cache`, `maildir_migrate_json_to_eml`
+// and `maildir_migrate_email_dirs` all moved to the daemon (Task 2.8,
+// `handlers::vault_files`), each now gated on `common::with_vault_write`
+// (single-file writers) or a per-file/per-mailbox `gate` closure (the three
+// whole-vault walkers), with the in-process nudge/sweep signal replacing
+// `nudge_index`/`sweep_index_soon`.
 
 // ==========================================
 // Backup export/import (ZIP of .eml files)
@@ -3933,16 +3851,10 @@ fn main() {
             open_file,
             open_with_dialog,
             open_email_window,
-            maildir_store,
-            maildir_delete,
             maildir_delete_many,
-            maildir_set_flags,
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            maildir_clear_cache,
-            maildir_migrate_json_to_eml,
-            maildir_migrate_email_dirs,
             export_backup,
             import_backup,
             export_mbox,
@@ -4132,29 +4044,10 @@ fn main() {
             custody::open_into(app.handle());
             daemon_channel::start(app.handle());
 
-            // A vault written before 2.5.0's `.eml` rename, or by any build
-            // between it and the writer fix, still holds extension-less files.
-            // The daemon sweeps too, but the app is the process that always
-            // runs. Off the startup path: the first sweep walks the whole
-            // Maildir, every later one is a single read of the version marker.
-            {
-                let root = vault::root(&app.handle()).ok();
-                std::thread::spawn(move || {
-                    let mig = sweep_vault_eml(root.as_deref());
-                    if mig.renamed > 0 || mig.errors > 0 {
-                        info!(
-                            "Maildir .eml sweep: renamed={} already_ok={} skipped={} errors={}",
-                            mig.renamed, mig.already_ok, mig.skipped_non_message, mig.errors
-                        );
-                    }
-                    // Runs beside the index's first build, which skips a file renamed
-                    // between its listing and its read until the next full pass
-                    // (SWEEP_EVERY). One full pass after the renames picks them up now.
-                    if mig.renamed > 0 {
-                        sweep_index_soon();
-                    }
-                });
-            }
+            // The app's own `.eml` startup sweep is deleted (Task 2.8): the
+            // daemon already runs `migrate_add_eml_extension` at startup
+            // (`src-daemon/src/main.rs`), and the daemon is now the only
+            // process that writes the vault's `cur/` directories.
 
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.
@@ -4524,33 +4417,6 @@ mod tests {
         assert_eq!(update_feed_override(None, "2.12.0"), None);
         // A value from an older or newer catalogue reads as "unset", not as nightly.
         assert_eq!(update_feed_override(Some("beta"), "2.12.0"), None);
-    }
-
-    /// The `.eml` sweep must not depend on the background helper being up.
-    /// Discussion #13: 2.5.0 ran the rename from the daemon only, and the app,
-    /// which is the process that always runs, never swept anything.
-    #[test]
-    fn startup_sweeps_a_vault_that_predates_the_eml_suffix() {
-        let dir = tempfile::tempdir().unwrap();
-        let cur = dir.path().join("Maildir").join("acc").join("INBOX").join("cur");
-        fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("7:2,AS"), b"body").unwrap();
-
-        let stats = sweep_vault_eml(Some(dir.path()));
-
-        assert_eq!(stats.renamed, 1);
-        assert!(cur.join("7:2,AS.eml").exists());
-    }
-
-    /// An external vault that is not mounted resolves to no root at all. The
-    /// sweep must then do nothing — writing a version marker into whatever
-    /// path is standing in would mark a vault it never looked at as migrated.
-    #[test]
-    fn startup_sweeps_nothing_when_the_vault_is_unreachable() {
-        let stats = sweep_vault_eml(None);
-
-        assert_eq!(stats.renamed, 0);
-        assert_eq!(stats.errors, 0);
     }
 
     #[test]
