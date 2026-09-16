@@ -22,6 +22,16 @@ use crate::vault_eml::{
     ParsedEmail,
 };
 
+/// The write gate a whole-vault walker takes around each individual file's
+/// write or delete, so the walk never holds the daemon's vault gate for its
+/// whole duration. The ONLY production implementation is the daemon's
+/// `handlers::common::with_vault_write` (wrapped per file at the call site in
+/// `src-daemon/src/handlers/vault_files.rs`); everything else is a test
+/// closure. Named so that a future caller cannot pass a silent no-op —
+/// `|work| work()` compiles and would quietly un-gate a vault-wide walk
+/// (Task 2.8 review M4).
+pub type VaultGate<'a> = &'a dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>;
+
 // ── Paths and filenames ──────────────────────────────────────────────────────
 
 /// `{root}/Maildir/{account_id}/{vault_dir_name(mailbox)}/cur`.
@@ -74,15 +84,6 @@ pub fn delete_maildir_files(cur_dir: &Path, uids: &HashSet<u32>) -> usize {
 
 // ── Store / read / list / delete / set_flags ─────────────────────────────────
 
-/// Store `raw` under `uid`. `overwrite` selects `maildir_store`'s semantics
-/// (always replace) vs `maildir_store_raw`'s (skip if a file for this uid
-/// already exists). Returns whether a write happened.
-///
-/// The new name is written first with `write_atomic`, then every OTHER file
-/// for the same uid is removed — not just the one `find_by_uid` would have
-/// returned, so a crash-left duplicate from an earlier interrupted store does
-/// not survive the next one (M4). A failed or killed write leaves every
-/// existing copy intact (oddity 1; was remove-then-plain-write).
 /// Decode a `maildir_store` `rawSourceBase64` payload. Lives here (not the
 /// daemon crate, which does not depend on `base64`) so the daemon's
 /// `maildir_store` route can classify a bad payload as `INVALID_PARAMS`
@@ -94,6 +95,15 @@ pub fn decode_raw_source(raw_source_base64: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| format!("Failed to decode base64: {}", e))
 }
 
+/// Store `raw` under `uid`. `overwrite` selects `maildir_store`'s semantics
+/// (always replace) vs `maildir_store_raw`'s (skip if a file for this uid
+/// already exists). Returns whether a write happened.
+///
+/// The new name is written first with `write_atomic`, then every OTHER file
+/// for the same uid is removed — not just the one `find_by_uid` would have
+/// returned, so a crash-left duplicate from an earlier interrupted store does
+/// not survive the next one (M4). A failed or killed write leaves every
+/// existing copy intact (oddity 1; was remove-then-plain-write).
 pub fn store(
     root: &Path,
     account_id: &str,
@@ -351,7 +361,7 @@ pub struct MaildirClearCacheResult {
 /// already removed stay removed.
 pub fn clear_cache(
     root: &Path,
-    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+    gate: VaultGate<'_>,
 ) -> Result<MaildirClearCacheResult, String> {
     let base = root.join("Maildir");
     if !base.exists() {
@@ -399,7 +409,7 @@ pub fn clear_cache(
 /// hold the vault gate for its entire duration.
 pub fn migrate_json_to_eml(
     root: &Path,
-    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+    gate: VaultGate<'_>,
 ) -> Result<String, String> {
     use base64::Engine;
     let base = root.join("Maildir");
@@ -509,7 +519,7 @@ pub fn migrate_json_to_eml(
 pub fn migrate_email_dirs(
     root: &Path,
     account_map: &HashMap<String, String>,
-    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+    gate: VaultGate<'_>,
 ) -> Result<usize, String> {
     let maildir_base = root.join("Maildir");
     if !maildir_base.exists() {
@@ -670,7 +680,7 @@ fn prefetch_attachments_in(
     account_id: &str,
     mailbox: &str,
     above_uid: u32,
-    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+    gate: VaultGate<'_>,
 ) -> Result<(Vec<PathBuf>, u32), String> {
     let entries = fs::read_dir(cur_dir).map_err(|e| format!("Failed to read Maildir: {}", e))?;
     let mut files: Vec<(u32, PathBuf)> = entries.flatten()
@@ -720,7 +730,7 @@ pub fn prefetch_attachments(
     account_id: &str,
     mailbox: &str,
     high_water: &std::sync::Mutex<Vec<(String, u32)>>,
-    gate: &dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String>,
+    gate: VaultGate<'_>,
 ) -> Result<usize, String> {
     let cache_dir = root.join("attachment_cache");
     let cur_dir = cur_path(root, account_id, mailbox);

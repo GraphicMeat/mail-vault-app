@@ -54,11 +54,11 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
   });
 
   it('no app source calls mailvault_core::vault_files:: for a moved read/attachment-cache method', () => {
-    // main.rs still calls vault_files:: for the writers that stay (maildir_store,
-    // maildir_delete, maildir_delete_many, maildir_set_flags, maildir_clear_cache,
-    // maildir_migrate_*) plus the repair-input helpers maildir_repair_generation
-    // and maildir_purge_orphans use (sidecar_message_id_map, cached_sync_meta,
-    // orphan_mailbox_dirs) — this only checks the 12 moved *method* names are
+    // main.rs still calls vault_files:: for the app-side writers that stay until
+    // Phases 3-5 (maildir_store_raw, the mbox importer, verify_archived_emails)
+    // and for the repair-input helpers the custody-backed trio uses
+    // (sidecar_message_id_map, cached_sync_meta, orphan_mailbox_dirs) — this
+    // only checks the moved *method* names are
     // gone as literal command definitions, already covered above; this test
     // documents the boundary rather than re-asserting it structurally.
     for (const name of MOVED) {

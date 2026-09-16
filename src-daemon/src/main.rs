@@ -24,7 +24,7 @@ pub mod sync_engine;
 // tauri::AppHandle for data dirs and event emission. They remain in
 // src-tauri and their commands fall through to Tauri invoke via transport.js.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
@@ -214,6 +214,21 @@ fn main() {
     runtime.block_on(daemon_main());
 }
 
+/// The startup `.eml` sweep, gated (Task 2.8 review M2). `resolve_mail_dir`
+/// falls back to the app data dir when the configured vault is unreachable,
+/// and a sweep over that fallback would rename files in a directory that is
+/// not the user's vault — the app copy this replaced had the same guard.
+///
+/// Known ceiling, unchanged by this fix: the sweep runs only here, so a drive
+/// mounted after the daemon started waits for the next daemon restart.
+fn startup_eml_migration(mail_dir: &Path, mail_dir_ok: bool) -> mailvault_core::maildir::EmlMigrationStats {
+    if !mail_dir_ok {
+        info!("Maildir .eml migration skipped: the mail storage folder is not reachable");
+        return Default::default();
+    }
+    mailvault_core::maildir::migrate_add_eml_extension(mail_dir)
+}
+
 async fn daemon_main() {
     let data_dir = get_data_dir();
     let _ = std::fs::create_dir_all(&data_dir);
@@ -252,7 +267,7 @@ async fn daemon_main() {
 
     // One-time Maildir filename migration: append `.eml` to message files that
     // pre-date the extension change. Idempotent; version-guarded.
-    let mig = mailvault_core::maildir::migrate_add_eml_extension(&mail_dir);
+    let mig = startup_eml_migration(&mail_dir, mail_dir_ok);
     if mig.renamed > 0 || mig.errors > 0 {
         info!(
             "Maildir .eml migration: renamed={} already_ok={} skipped={} errors={}",
@@ -434,6 +449,27 @@ mod tests {
         let p = std::env::temp_dir().join(format!("mv-main-{name}-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&p).unwrap();
         p
+    }
+
+    /// Task 2.8 review M2: `resolve_mail_dir` hands back the app data dir with
+    /// `ok = false` when the configured vault is unreachable. The startup sweep
+    /// must not rename anything in that fallback.
+    #[test]
+    fn the_startup_eml_sweep_renames_nothing_when_the_vault_is_unreachable() {
+        let dir = scratch("eml-sweep");
+        let cur = dir.join("Maildir").join("acct").join("INBOX").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        let legacy = cur.join("7:2,S");
+        std::fs::write(&legacy, b"From: a@b\r\n\r\nx").unwrap();
+
+        let skipped = startup_eml_migration(&dir, false);
+        assert_eq!((skipped.renamed, skipped.already_ok), (0, 0));
+        assert!(legacy.exists(), "the fallback directory must be left alone");
+
+        let ran = startup_eml_migration(&dir, true);
+        assert_eq!(ran.renamed, 1);
+        assert!(cur.join("7:2,S.eml").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

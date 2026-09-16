@@ -4046,8 +4046,12 @@ fn main() {
 
             // The app's own `.eml` startup sweep is deleted (Task 2.8): the
             // daemon already runs `migrate_add_eml_extension` at startup
-            // (`src-daemon/src/main.rs`), and the daemon is now the only
-            // process that writes the vault's `cur/` directories.
+            // (`src-daemon/src/main.rs`), so running it here too would be one
+            // process racing the other over the same renames. The app is NOT
+            // yet out of `cur/` altogether — `maildir_store_raw`,
+            // `commands.rs`'s `graph_cache_mime`, `archive.rs`, `restore.rs`
+            // and the backup/mbox importers still write it until Phases 3-5
+            // move them (Task 2.8 review M3).
 
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.
