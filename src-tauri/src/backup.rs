@@ -866,12 +866,17 @@ async fn run_imap_backup_inner(
                 "mirrorRoot": backup_path,
                 "sidecars": false,
             });
-            let applied: mailvault_core::vault_flags::Applied = tokio::task::spawn_blocking(move || {
-                crate::daemon_call_blocking(&handle, "vault_apply_flags", params, std::time::Duration::from_secs(600))
-                    .and_then(|v| serde_json::from_value(v).map_err(|e| format!("{}/{}: unreadable reply: {}", acct, mbx, e)))
-            })
-                .await
-                .map_err(|e| format!("flag catch-up panicked: {}", e))??;
+            // A daemon-call failure here (unlike a panic in the blocking task
+            // itself) must not abort this account's folder loop — see
+            // `map_flag_catchup_outcome`.
+            let outcome: Result<mailvault_core::vault_flags::Applied, String> =
+                tokio::task::spawn_blocking(move || {
+                    crate::daemon_call_blocking(&handle, "vault_apply_flags", params, std::time::Duration::from_secs(600))
+                        .and_then(|v| serde_json::from_value(v).map_err(|e| format!("{}/{}: unreadable reply: {}", acct, mbx, e)))
+                })
+                    .await
+                    .map_err(|e| format!("flag catch-up panicked: {}", e))?;
+            let applied = map_flag_catchup_outcome(outcome, &account_id, mailbox_path);
             if applied.total() > 0 {
                 info!(
                     "backup: {} — read state caught up on {} vault files, {} mirror files, {} custody entries",
@@ -981,6 +986,27 @@ fn catch_up_changes(
             mailvault_core::vault_flags::FlagChange { uid: *uid, flags }
         })
         .collect()
+}
+
+/// A daemon hiccup on the flag catch-up call (a restart the app itself
+/// triggered, a build-id mismatch, the 600s reply budget) must not fail an
+/// account whose folders otherwise saved everything: before Task 2.9b,
+/// `apply_everywhere` was infallible and swallowed a custody-patch failure on
+/// its own. Warn and fall back to `Applied::default()` — the next run's
+/// `catch_up_changes` recomputes the same set from `local_uids`, so the heal
+/// retries on its own instead of failing the whole account run.
+fn map_flag_catchup_outcome(
+    outcome: Result<mailvault_core::vault_flags::Applied, String>,
+    account_id: &str,
+    mailbox_path: &str,
+) -> mailvault_core::vault_flags::Applied {
+    match outcome {
+        Ok(applied) => applied,
+        Err(e) => {
+            warn!("backup: {}/{} flag catch-up failed: {}", account_id, mailbox_path, e);
+            mailvault_core::vault_flags::Applied::default()
+        }
+    }
 }
 
 /// Sync files between app Maildir and backup location (bidirectional).
@@ -1823,6 +1849,35 @@ mod tests {
         assert!(changes[0].flags.iter().any(|f| f == "\\Seen"), "{:?}", changes[0].flags);
         assert!(changes[0].flags.iter().any(|f| f == "archived"), "{:?}", changes[0].flags);
         assert_eq!(changes[1].flags, vec!["archived".to_string()]);
+    }
+
+    /// I1 (task-2.11 carry-in): before Task 2.9b, `apply_everywhere` was
+    /// infallible — a custody-patch failure was swallowed, never propagated.
+    /// The daemon RPC that replaced it can fail transiently (a restart, a
+    /// timeout), and that failure must not fail the whole account's folder
+    /// loop: the mapping falls back to `Applied::default()` so the caller's
+    /// `?` never fires on this path, and the next run's `catch_up_changes`
+    /// recomputes the same set and retries the heal.
+    #[test]
+    fn a_failed_flag_catchup_call_maps_to_a_default_applied_not_a_propagated_error() {
+        let outcome: Result<mailvault_core::vault_flags::Applied, String> =
+            Err("daemon unavailable".to_string());
+        let applied = super::map_flag_catchup_outcome(outcome, "acct-1", "INBOX");
+        assert_eq!(applied, mailvault_core::vault_flags::Applied::default());
+    }
+
+    /// The success path is untouched: a real `Applied` passes through as-is.
+    #[test]
+    fn a_successful_flag_catchup_call_passes_the_applied_result_through() {
+        let make = || mailvault_core::vault_flags::Applied {
+            renamed: 3,
+            mirrored: 2,
+            index_patched: 3,
+            sidecars_patched: 0,
+        };
+        let outcome: Result<mailvault_core::vault_flags::Applied, String> = Ok(make());
+        let applied = super::map_flag_catchup_outcome(outcome, "acct-1", "INBOX");
+        assert_eq!(applied, make());
     }
 
     /// Not a gate.
