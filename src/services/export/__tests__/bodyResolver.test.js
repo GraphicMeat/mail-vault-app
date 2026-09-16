@@ -65,6 +65,16 @@ describe('resolveMessageBody', () => {
     expect(out.reason).toMatch(/mismatch/i);
   });
 
+  it('accepts the server body when Message-ID folding leaves leading whitespace', async () => {
+    getLocalEmailLight.mockResolvedValue(null);
+    fetchEmailLight.mockResolvedValue({ uid: 42, messageId: ' <right@x>', html: '<p>server</p>' });
+
+    const out = await resolveMessageBody(header, store);
+
+    expect(out.ok).toBe(true);
+    expect(out.email.html).toBe('<p>server</p>');
+  });
+
   it('refuses to guess when the location is unknown', async () => {
     const out = await resolveMessageBody({ ...header, uid: 99 }, store);
     expect(out.ok).toBe(false);

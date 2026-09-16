@@ -1,4 +1,5 @@
 import { t } from '../../i18n/index.js';
+import { normalizeMessageId } from '../../utils/emailParser.js';
 // ── Shared helpers used across multiple mail store slices ──
 
 // ── RestoreDescriptor builder ─────────────────────────────────────────────
@@ -150,8 +151,12 @@ export function emailKey(email) {
 // A body whose Message-ID contradicts the header's is not this message: the
 // lookup landed in the wrong mailbox. Missing on either side → can't tell, allow.
 export function bodyMatchesHeader(header, body) {
-  const headerId = header?.messageId || header?.message_id;
-  const bodyId = body?.messageId || body?.message_id;
+  // IMAP ENVELOPE and a full BODY.PEEK parse the same folded Message-ID
+  // differently: mailparse may retain the continuation line's leading space.
+  // Compare canonical IDs so that whitespace folding does not reject the
+  // server's valid body while still rejecting a different message.
+  const headerId = normalizeMessageId(header?.messageId || header?.message_id);
+  const bodyId = normalizeMessageId(body?.messageId || body?.message_id);
   if (!headerId || !bodyId) return true;
   return headerId === bodyId;
 }

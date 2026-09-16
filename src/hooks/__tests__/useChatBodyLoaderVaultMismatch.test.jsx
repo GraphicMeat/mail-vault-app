@@ -147,4 +147,14 @@ describe('useChatBodyLoader — vault copy under a reissued uid', () => {
     // No retry loop: the server already answered for this uid.
     expect(mockFetchEmailLight).toHaveBeenCalledTimes(1);
   });
+
+  it('loads a server body whose folded Message-ID has leading whitespace', async () => {
+    mockGetLocalEmailLight.mockResolvedValue(null);
+    mockFetchEmailLight.mockResolvedValue({ ...SERVER_COPY, messageId: ` ${SERVER_COPY.messageId}` });
+
+    const { result } = renderHook(() => useChatBodyLoader([ROW]));
+
+    await waitFor(() => expect(entryFor(result)?.status).toBe('loaded'));
+    expect(entryFor(result).email.html).toBe(SERVER_COPY.html);
+  });
 });

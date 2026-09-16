@@ -65,6 +65,10 @@ describe('bodyMatchesHeader', () => {
     expect(bodyMatchesHeader({ messageId: '<a@x>' }, { message_id: '<a@x>' })).toBe(true);
   });
 
+  it('accepts a folded Message-ID with leading whitespace from the body parser', () => {
+    expect(bodyMatchesHeader({ messageId: '<a@x>' }, { messageId: ' <a@x>' })).toBe(true);
+  });
+
   it('allows the pairing when either side has no Message-ID', () => {
     expect(bodyMatchesHeader({ messageId: '<a@x>' }, {})).toBe(true);
     expect(bodyMatchesHeader({}, { messageId: '<a@x>' })).toBe(true);
