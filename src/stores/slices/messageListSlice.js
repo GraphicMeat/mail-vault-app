@@ -91,7 +91,7 @@ export function deriveArchivedUnion(currentSet, pairs) {
   // miss (its caller called setArchivedGroup with the same result before
   // this ran, and a failed read skips the write). There is nothing to
   // narrow FROM, so leave the field alone rather than claiming "nothing is
-  // archived" — that would be the exact bug this map exists to prevent.
+  // archived", which is the exact bug this map exists to prevent.
   if (!anyKnown) return currentSet;
   if (union.size === currentSet.size && [...union].every(u => currentSet.has(u))) return currentSet;
   return union;

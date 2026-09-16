@@ -209,10 +209,10 @@ describe('setViewMode: a per-account read failure inside a unified pass (Phase 2
   });
 });
 
-describe('deriveArchivedUnion — a group never seen by the map is not "nothing archived"', () => {
+describe('deriveArchivedUnion: a group never seen by the map is not "nothing archived"', () => {
   it('a failed first read of a group an excluded writer (e.g. activateAccount.js) already populated keeps those ids', async () => {
     // No unified pass ever ran here, so `_archivedIdsByGroup` has never
-    // heard of A/INBOX — exactly the shape left behind by a writer this
+    // heard of A/INBOX, exactly the shape left behind by a writer this
     // task does not touch (activateAccount.js, loadEmails.js), which sets
     // archivedEmailIds directly and never goes through the group map.
     useMailStore.setState({
@@ -227,7 +227,7 @@ describe('deriveArchivedUnion — a group never seen by the map is not "nothing 
     await flush();
 
     // The map has nothing for this group and this round's own read also
-    // failed — there is no group-level evidence to narrow from, so the
+    // failed, so there is no group-level evidence to narrow from: the
     // field must not collapse to empty.
     expect([...useMailStore.getState().archivedEmailIds]).toEqual([1]);
   });
