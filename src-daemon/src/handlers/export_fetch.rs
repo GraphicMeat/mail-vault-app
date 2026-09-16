@@ -1,7 +1,7 @@
 //! Daemon route for `fetch_remote_asset` (Task 4.2), backed by
 //! `crate::export_fetch`, moved whole from `src-tauri/src/export_fetch.rs`.
 //! No vault gate: the function never touches the vault, `state.app_dir` or
-//! any other daemon state — it is a pure `reqwest` fetch keyed only by the
+//! any other daemon state: it is a pure `reqwest` fetch keyed only by the
 //! caller-supplied url, so there is nothing here for a gate to protect.
 
 use crate::export_fetch;
