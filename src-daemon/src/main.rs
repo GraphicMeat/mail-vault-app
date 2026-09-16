@@ -16,6 +16,7 @@ mod inference;
 mod insights;
 mod ipc;
 mod learning;
+mod mbox;
 mod netgate;
 pub mod llm;
 mod server;

@@ -1936,94 +1936,6 @@ struct MboxImportResult {
 }
 
 #[tauri::command]
-async fn export_mbox(
-    app_handle: tauri::AppHandle,
-    dest_path: String,
-    account_id: String,
-    mailbox: String,
-    archived_only: bool,
-) -> Result<MboxExportResult, String> {
-    use std::io::Write;
-
-    info!("export_mbox called: dest={}, account={}, mailbox={}, archived_only={}",
-        dest_path, account_id, mailbox, archived_only);
-
-    let base = vault::root(&app_handle)?;
-
-    let safe_mailbox = sanitize_mailbox_name(&mailbox);
-    let cur_dir = base.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
-
-    if !cur_dir.exists() {
-        return Err(format!("E_MAILBOX_EMPTY: No emails found for mailbox '{}'", mailbox));
-    }
-
-    let mut file = fs::File::create(&dest_path)
-        .map_err(|e| format!("Failed to create mbox file: {}", e))?;
-
-    let mut email_count: u32 = 0;
-
-    // Count total for progress
-    let entries: Vec<_> = fs::read_dir(&cur_dir)
-        .map_err(|e| format!("Failed to read directory: {}", e))?
-        .flatten()
-        .filter(|e| {
-            let fname = e.file_name().to_string_lossy().to_string();
-            if !fname.contains(":2,") { return false; }
-            if archived_only {
-                fname.split(":2,").nth(1).map(|f| f.contains('A')).unwrap_or(false)
-            } else {
-                true
-            }
-        })
-        .collect();
-
-    let total = entries.len() as u32;
-    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-        "total": total, "completed": 0, "active": true
-    }));
-
-    for entry in &entries {
-        let raw = match fs::read(entry.path()) {
-            Ok(c) => c,
-            Err(e) => {
-                warn!("Failed to read {}: {}", entry.path().display(), e);
-                continue;
-            }
-        };
-
-        // Write mbox "From " envelope line
-        let from_line = mbox_from_line(&raw);
-        writeln!(file, "{}", from_line)
-            .map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-        // Write escaped email content
-        let escaped = mbox_escape_from(&raw);
-        file.write_all(&escaped)
-            .map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-        // Ensure blank line between messages
-        writeln!(file).map_err(|e| format!("Failed to write mbox: {}", e))?;
-
-        email_count += 1;
-        let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-            "total": total, "completed": email_count, "active": true
-        }));
-    }
-
-    let _ = app_handle.emit("mbox-export-progress", serde_json::json!({
-        "total": total, "completed": email_count, "active": false
-    }));
-
-    info!("MBOX exported: {} emails to {}", email_count, dest_path);
-
-    Ok(MboxExportResult {
-        email_count,
-        account_count: 1,
-        file_path: dest_path,
-    })
-}
-
-#[tauri::command]
 async fn export_mbox_all(
     app_handle: tauri::AppHandle,
     dest_path: String,
@@ -3677,7 +3589,6 @@ fn main() {
             vault_flags::vault_adopt_mailbox_dirs,
             export_backup,
             import_backup,
-            export_mbox,
             export_mbox_all,
             import_mbox,
             commands::imap_test_connection,
