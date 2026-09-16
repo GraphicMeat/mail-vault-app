@@ -145,6 +145,11 @@ export const DAEMON_OWNED = new Set([
   // their cancel routes (cancel_bulk_delete is new: the old app command had
   // a single shared cancel token for both operations, N4).
   'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails', 'cancel_bulk_delete',
+  // Task 3.7: the snapshot store, its 300s expiry and its sweeper moved to
+  // the daemon with the three commands, so the app holds no insights state
+  // at all. Their failures arrive as `{ok: false, error: {...}}` (decision
+  // 5) and `insightsApi.js` re-raises them.
+  'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
 ]);
 
 async function sendToDaemon(command, args) {

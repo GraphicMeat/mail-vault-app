@@ -100,7 +100,6 @@ mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
 mod spellcheck;
-mod insights;
 mod vault;
 mod vault_flags;
 
@@ -3244,6 +3243,20 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // Ungated, no vault access, one atomic store per registered token.
         "cancel_archive" | "cancel_bulk_delete" => Some(Duration::from_secs(30)),
 
+        // Task 3.7, same decision 3 reasoning as archive: the inventory walk
+        // behind a begin_snapshot reads every cached header of every account
+        // in scope (50k in the e2e's LARGE mode) before it answers, and the
+        // JS awaits that reply. Written as its own arm rather than left to
+        // the `_ => None` catch-all so a later edit to that default cannot
+        // silently hand this one a budget.
+        "insights_begin_snapshot" => None,
+
+        // One bounded page, same tier as the other single-pass readers.
+        "insights_read_page" => Some(Duration::from_secs(120)),
+
+        // Drops one snapshot out of a map.
+        "insights_release_snapshot" => Some(Duration::from_secs(30)),
+
         _ => None,
     }
 }
@@ -3616,7 +3629,6 @@ fn main() {
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
-        .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default())
         .manage(notification_open::PendingNotificationOpen::default());
 
@@ -3625,9 +3637,6 @@ fn main() {
 
     let app = builder
         .invoke_handler(tauri::generate_handler![
-            insights::insights_begin_snapshot,
-            insights::insights_read_page,
-            insights::insights_release_snapshot,
             apply_menu_labels,
             dropped_files::read_dropped_files,
             take_pending_mailto,
@@ -3747,7 +3756,6 @@ fn main() {
             daemon_channel_notify
         ])
         .setup(|app| {
-            app.state::<insights::InsightsSnapshots>().start_cleanup();
             #[cfg(target_os = "macos")]
             notification_open::mac::install(app.handle());
             // `mailto:` from the OS. The queue is the source of truth and the
@@ -4349,6 +4357,28 @@ mod tests {
         for method in ["cancel_archive", "cancel_bulk_delete"] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 3.7: the three insights methods.
+    // -----------------------------------------------------------------------
+
+    /// Decision 3 again: a begin_snapshot walks every cached header of every
+    /// account in scope before it answers, so it gets no budget at all.
+    /// Pinned explicitly rather than left to the `_ => None` catch-all.
+    #[test]
+    fn reply_timeout_is_none_for_insights_begin_snapshot() {
+        assert_eq!(crate::reply_timeout("insights_begin_snapshot"), None);
+    }
+
+    #[test]
+    fn reply_timeout_gives_insights_read_page_two_minutes() {
+        assert_eq!(crate::reply_timeout("insights_read_page"), Some(std::time::Duration::from_secs(120)));
+    }
+
+    #[test]
+    fn reply_timeout_gives_insights_release_snapshot_thirty_seconds() {
+        assert_eq!(crate::reply_timeout("insights_release_snapshot"), Some(std::time::Duration::from_secs(30)));
     }
 
     // -----------------------------------------------------------------------

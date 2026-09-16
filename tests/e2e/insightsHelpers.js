@@ -153,18 +153,28 @@ export async function cacheScenarioHeaders() {
   console.log('[insights] Real provider header cache:', JSON.stringify(stats));
   return stats;
 }
+/** Task 3.7: the three snapshot commands are daemon methods now. A failure
+ * arrives as an `{ok: false, error: {...}}` reply rather than a rejected
+ * invoke, so `nativeDaemonInvoke`'s own assertion cannot see it and a stale
+ * or unavailable snapshot would otherwise surface as an undefined
+ * `snapshotId` several assertions later. */
+async function insightsInvoke(method, params) {
+  const reply = await nativeDaemonInvoke(method, params);
+  assert.notEqual(reply?.ok, false, `${method} failed: ${JSON.stringify(reply?.error)}`);
+  return reply;
+}
 export async function readNativeSnapshot(accountIds = browser.mockAccounts.map(a => a.id)) {
-  const begin = await nativeInvoke('insights_begin_snapshot', { accountIds });
+  const begin = await insightsInvoke('insights_begin_snapshot', { accountIds });
   const rows = [], pageSizes = [];
   let cursor = null;
   try {
     do {
-      const page = await nativeInvoke('insights_read_page', { snapshotId: begin.snapshotId, cursor });
+      const page = await insightsInvoke('insights_read_page', { snapshotId: begin.snapshotId, cursor });
       assert.ok(page.rows.length <= 1000, 'Native page size stays bounded');
       rows.push(...page.rows); pageSizes.push(page.rows.length); cursor = page.nextCursor;
     } while (cursor);
   } finally {
-    await nativeInvoke('insights_release_snapshot', { snapshotId: begin.snapshotId });
+    await insightsInvoke('insights_release_snapshot', { snapshotId: begin.snapshotId });
   }
   return { ...begin, rows, pageSizes };
 }

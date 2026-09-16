@@ -1,8 +1,22 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
+/**
+ * Task 3.7: the three insights commands are `DAEMON_OWNED` now, so `send`
+ * reaches them through `sendToDaemon`, not `tauriInvoke`. The observer seam
+ * these e2e assertions depend on (`connected-insights.test.js:38` and `:71`
+ * read the names the observer collected; `:313`/`:325` hold one real reply
+ * by name) exists on both paths and passes the logical command name on both,
+ * never the `daemon_rpc` the call actually travels as. This file is what
+ * pins that: it drives the daemon path and the Tauri mock below fails the
+ * run if a call falls back to the old one.
+ */
 const h = vi.hoisted(() => ({ native: vi.fn() }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args) => h.native(...args) }));
-vi.mock('../daemonClient.js', () => ({ daemonCall: async () => ({ alive: false }) }));
+vi.mock('@tauri-apps/api/core', () => ({ invoke: (command) => {
+  throw new Error(`Insights is daemon-owned: ${command} must never reach tauriInvoke`);
+} }));
+vi.mock('../daemonClient.js', () => ({
+  daemonCall: (method, params) => (method === 'daemon.heartbeat' ? Promise.resolve({ alive: false }) : h.native(method, params)),
+}));
 const deferred = () => {
   let resolve, reject;
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });

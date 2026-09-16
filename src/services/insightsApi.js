@@ -1,4 +1,5 @@
 import { send } from './transport.js';
+import { t } from '../i18n';
 
 /**
  * Physical header copy. No body, attachment content, credentials, or disk paths.
@@ -42,10 +43,30 @@ function throwIfAborted(signal) {
   if (signal?.aborted) throw new DOMException('The header scan was cancelled.', 'AbortError');
 }
 
+/**
+ * Task 3.7. The snapshot routes live in the daemon now, and `daemon_rpc`'s
+ * reply channel is `Result<Value, String>`: it cannot carry the structured
+ * `{code, coverage}` failure the deleted Tauri commands returned as an
+ * `Err(Value)`. The routes answer `Ok({ok: false, error: {...}})` instead
+ * (the shape `search_index_destroy` already uses), and this is the one place
+ * that turns it back into the rejection `insightsSession.js` reads: the
+ * `code` decides whether a stale snapshot is retried, the `coverage` is what
+ * the UI finally reports.
+ *
+ * Only an explicit `ok: false` is a failure. `src/demo/backend.js` answers
+ * these three names with today's bare object and no `ok` key at all, so a
+ * falsy-`ok` test would break demo mode instead.
+ */
+function unwrap(reply) {
+  if (reply?.ok !== false) return reply;
+  const { code, coverage } = reply.error || {};
+  throw Object.assign(new Error(t('insights.failed')), { code, coverage });
+}
+
 /** @returns {Promise<{snapshotId:string,inventoryCount:number,coverage:Coverage}>} */
 export async function beginInsightsSnapshot(accountIds, { signal } = {}) {
   throwIfAborted(signal);
-  const snapshot = await send('insights_begin_snapshot', { accountIds });
+  const snapshot = unwrap(await send('insights_begin_snapshot', { accountIds }));
   if (signal?.aborted) {
     // Native inventory may finish after the component has gone away.
     await releaseInsightsSnapshot(snapshot.snapshotId);
@@ -57,11 +78,16 @@ export async function beginInsightsSnapshot(accountIds, { signal } = {}) {
 /** @returns {Promise<{rows:HeaderCopy[],nextCursor:string|null,coverage:Coverage}>} */
 export async function readInsightsPage(snapshotId, cursor = null, { signal } = {}) {
   throwIfAborted(signal);
-  const page = await send('insights_read_page', { snapshotId, cursor });
+  const page = unwrap(await send('insights_read_page', { snapshotId, cursor }));
   throwIfAborted(signal);
   return page;
 }
 
+/**
+ * Deliberately not unwrapped. Its reply is discarded, and the abort path in
+ * `beginInsightsSnapshot` above releases before re-checking the signal: a
+ * throw here would replace that AbortError with a release failure.
+ */
 export async function releaseInsightsSnapshot(snapshotId) {
   if (snapshotId) await send('insights_release_snapshot', { snapshotId });
 }

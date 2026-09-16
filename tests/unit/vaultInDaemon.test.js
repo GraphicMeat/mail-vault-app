@@ -40,6 +40,10 @@ const MOVED = [
   // tokens are daemon state now (per-operation-kind, fixing inventory N4),
   // so ArchiveCancelToken's managed state is gone along with the commands.
   'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails',
+  // Task 3.7: insights moved whole. The snapshot map, its 300s expiry and
+  // its 30s sweeper are daemon state now, so `InsightsSnapshots` and its
+  // `start_cleanup` call are gone from the app along with the commands.
+  'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
@@ -75,6 +79,14 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
       expect(main).not.toMatch(new RegExp(`fn ${name}\\(`));
     }
   });
+
+  // Task 3.7: the snapshot map itself, not just the commands. It carried the
+  // 300s expiry and the 30s sweeper, and a second copy of it in the app
+  // would split the snapshot store across two processes again.
+  it('the app manages no insights snapshot state', () => {
+    expect(main).not.toMatch(/InsightsSnapshots/);
+    expect(existsSync('src-tauri/src/insights.rs')).toBe(false);
+  });
 });
 
 /**
@@ -85,10 +97,11 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
  * So the guard is the absence of the app-side openers and borrowers, not a
  * test of behaviour.
  *
- * Deliberately NOT forbidden: `custody::db::DB_DIR` / `DB_FILE`. `insights.rs`
- * stamps those two paths' mtimes before reading (a file watch works from any
- * process) and `vault.rs` names them when it sets a copy aside during a vault
- * move. Neither opens the store.
+ * Deliberately NOT forbidden: `custody::db::DB_DIR` / `DB_FILE`. `vault.rs`
+ * names them when it sets a copy aside during a vault move, which does not
+ * open the store. (Insights used to name them too, to stamp their mtimes
+ * before reading; Task 3.7 moved it into the daemon, where it reads the
+ * custody write counter instead.)
  */
 describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', () => {
   const dir = 'src-tauri/src';
@@ -100,20 +113,24 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
   // `insights.rs`), not by ending in `_tests.rs`. A future non-test file
   // named `*_tests.rs`, or a `_tests.rs` file no longer reached through such
   // a declaration, must not be silently exempt.
-  const isCfgTestModuleFile = (filename) => {
-    const decl = new RegExp(`#\\[cfg\\(test\\)\\]\\s*#\\[path\\s*=\\s*"${filename}"\\]\\s*mod\\s+\\w+;`);
-    return sources.some(([, body]) => decl.test(body));
-  };
+  const declFor = (filename) => new RegExp(`#\\[cfg\\(test\\)\\]\\s*#\\[path\\s*=\\s*"${filename}"\\]\\s*mod\\s+\\w+;`);
+  const isCfgTestModuleFile = (filename) => sources.some(([, body]) => declFor(filename).test(body));
 
   it('reads the real app sources', () => {
     expect(sources.length).toBeGreaterThan(10);
   });
 
-  it('insights_tests.rs is exempt because it is a real #[cfg(test)] module, not by its filename', () => {
-    expect(isCfgTestModuleFile('insights_tests.rs')).toBe(true);
-    // A plain filename guess must not pass on its own — the declaration
-    // itself has to exist.
-    expect(isCfgTestModuleFile('no_such_tests.rs')).toBe(false);
+  // Task 3.7 deleted `insights.rs` and `insights_tests.rs`, the app's only
+  // pair using this declaration, so nothing in `src-tauri/src` is exempt any
+  // more. The mechanism stays: it is what stops a future `*_tests.rs` from
+  // being exempt by its name alone.
+  it('exemption needs a real #[cfg(test)] module declaration, and no app source claims one now', () => {
+    expect(sources.filter(([f]) => isCfgTestModuleFile(f)).map(([f]) => f)).toEqual([]);
+    // Not vacuous: the matcher still recognises the declaration shape, it
+    // just has nothing left in the app to match against.
+    expect(declFor('planted_tests.rs').test('#[cfg(test)]\n#[path = "planted_tests.rs"]\nmod tests;')).toBe(true);
+    // A bare path declaration without the cfg(test) attribute is not one.
+    expect(declFor('planted_tests.rs').test('#[path = "planted_tests.rs"]\nmod tests;')).toBe(false);
   });
 
   it.each(['src-tauri/src/custody.rs', 'src-tauri/src/custody_tests.rs'])('%s is deleted', (f) => {
@@ -133,9 +150,9 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
   // Borrowing a connection from core is what would actually take the
   // EXCLUSIVE lock, so it is forbidden in everything the shipped binary runs.
   // A file is exempt only when `isCfgTestModuleFile` proves it is loaded
-  // through a `#[cfg(test)]` module declaration (M4): today that is
-  // `insights_tests.rs`, which opens a store of its own in a tempdir to feed
-  // the bridge closure and can never race the daemon's open.
+  // through a `#[cfg(test)]` module declaration (M4). Since Task 3.7 no app
+  // file claims that exemption, so this now covers every source in the
+  // directory.
   it.each([
     ['custody::db::open', /custody::db::open\b/],
     ['custody::entries::', /custody::entries::/],

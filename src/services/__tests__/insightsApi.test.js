@@ -1,15 +1,22 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+/**
+ * Task 3.7 moved the three insights commands into the daemon, so this file
+ * now mocks `daemonCall` where it used to mock the Tauri `invoke`, and the
+ * Tauri mock became the fence: a name that came back to a Tauri command
+ * would fail loudly here instead of quietly working.
+ */
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const h = vi.hoisted(() => ({ alive: false, calls: [], release: [], begin: null }));
-vi.mock('../daemonClient.js', () => ({ daemonCall: async (cmd) => {
-  if (cmd === 'daemon.heartbeat') return { alive: h.alive, version: 'test', uptime_secs: 1 };
-  throw new Error('Insights must use the Tauri inventory');
+const page = { rows: [{ accountId: 'a', mailbox: 'INBOX', uid: 17, source: 'server-cache' }], nextCursor: null, coverage: { status: 'ready', folders: [] } };
+vi.mock('../daemonClient.js', () => ({ daemonCall: async (method, params) => {
+  if (method === 'daemon.heartbeat') return { alive: h.alive, version: 'test', uptime_secs: 1 };
+  h.calls.push([method, params]);
+  if (method === 'insights_begin_snapshot') return h.begin ? h.begin : { ok: true, snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } };
+  if (method === 'insights_read_page') return { ok: true, ...page };
+  if (method === 'insights_release_snapshot') { h.release.push(params.snapshotId); return { ok: true }; }
+  throw new Error(`Unexpected method ${method}`);
 } }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: async (cmd, args) => {
-  h.calls.push([cmd, args]);
-  if (cmd === 'insights_begin_snapshot') return h.begin ? h.begin : { snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } };
-  if (cmd === 'insights_read_page') return { rows: [{ accountId: 'a', mailbox: 'INBOX', uid: 17, source: 'server-cache' }], nextCursor: null, coverage: { status: 'ready', folders: [] } };
-  if (cmd === 'insights_release_snapshot') { h.release.push(args.snapshotId); return null; }
-  throw new Error(`Unexpected command ${cmd}`);
+vi.mock('@tauri-apps/api/core', () => ({ invoke: async (cmd) => {
+  throw new Error(`Insights is daemon-owned: ${cmd} must never reach a Tauri command`);
 } }));
 beforeEach(() => {
   vi.resetModules(); vi.useFakeTimers();
@@ -19,16 +26,15 @@ beforeEach(() => {
 });
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); delete window.__TAURI__; });
 
-it.each([false, true])('reads camelCase native pages when daemon alive=%s', async (alive) => {
+it.each([false, true])('reads camelCase daemon pages without waiting for the heartbeat, alive=%s', async (alive) => {
   h.alive = alive;
   const api = await import('../insightsApi.js');
   const starting = api.beginInsightsSnapshot(['a']);
   await vi.advanceTimersByTimeAsync(100);
   const begin = await starting;
   expect((await import('../transport.js')).getDaemonHealth().alive).toBe(alive);
-  expect(begin).toEqual({ snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } });
-  const page = await api.readInsightsPage(begin.snapshotId, null);
-  expect(page).toEqual({ rows: [{ accountId: 'a', mailbox: 'INBOX', uid: 17, source: 'server-cache' }], nextCursor: null, coverage: { status: 'ready', folders: [] } });
+  expect(begin).toEqual({ ok: true, snapshotId: 's1', inventoryCount: 1, coverage: { status: 'reading', folders: [] } });
+  expect(await api.readInsightsPage(begin.snapshotId, null)).toEqual({ ok: true, ...page });
   await api.releaseInsightsSnapshot(begin.snapshotId);
   expect(h.calls).toEqual([
     ['insights_begin_snapshot', { accountIds: ['a'] }],
@@ -49,7 +55,7 @@ it('releases a snapshot that completes after cancellation', async () => {
   const controller = new AbortController();
   const pending = api.beginInsightsSnapshot(['a'], { signal: controller.signal });
   controller.abort();
-  finish({ snapshotId: 'late', inventoryCount: 0, coverage: { status: 'ready', folders: [] } });
+  finish({ ok: true, snapshotId: 'late', inventoryCount: 0, coverage: { status: 'ready', folders: [] } });
   const cancelled = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   await vi.advanceTimersByTimeAsync(100);
   await cancelled;
