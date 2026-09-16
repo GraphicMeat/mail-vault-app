@@ -8,7 +8,7 @@
 
 ### Fixed
 - **Opening a big folder no longer freezes the window.** Mail files, cache files and the local search index are now all read and written by MailVault's background service instead of the app window itself, so scrolling, typing and switching folders keep working while a large folder loads or a bulk change is being saved.
-- **Outlook message numbers stay correct when two Macs share one vault folder.** If your vault lives in a folder another Mac also has open, both could assign the same internal number to a new Outlook message at once. Assigning a number now locks across both, so numbers can no longer collide or go missing.
+- **Outlook message numbers can no longer collide.** MailVault's background service and its backup could assign the same internal number to a new Outlook message at the same moment. Assigning a number now takes a lock both share.
 - **An account's backup card shows its stored size again.** Settings → Backup, each account's card always showed "--" for Storage instead of the size on disk.
 
 ## [2.14.0] - 2026-09-15
