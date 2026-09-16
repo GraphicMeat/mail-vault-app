@@ -8,14 +8,19 @@
  *
  *  (a) archiving a batch through the UI emits `archive-progress` on the real
  *      Tauri event channel with `operation: "archive"` and camelCase keys;
- *  (b) the archived `.eml` files really exist on disk and custody rows were
- *      appended BY THE DAEMON (read back through `daemon_rpc`'s
- *      `local_index_read`, the same route `custody.rs` backs with
- *      `mailvault_core::custody::entries` - Task 3.4's in-process append);
+ *  (b) the archived `.eml` files really exist on disk and custody rows for
+ *      them are readable back through `daemon_rpc`'s `local_index_read`
+ *      (the same route `custody.rs` backs with `mailvault_core::custody::entries`),
+ *      not re-derived from disk. This alone doesn't discriminate which code
+ *      path authored the rows: the old app-side write and the new
+ *      daemon-side write (Task 3.4's in-process append) land in the same
+ *      custody store and would read back the same way here. That
+ *      discrimination is what the cutover itself (Tasks 3.4/3.5, already
+ *      landed and reviewed) accomplishes;
  *  (c) `cancel_archive`, triggered through the UI's own Cancel button,
  *      genuinely stops an in-flight archive;
- *  (d) THE KEY REGRESSION TEST (N4): `cancel_archive` does NOT stop a
- *      concurrent `bulk_delete_emails` run. Before Task 3.4/3.5, both
+ *  (d) THE KEY REGRESSION TEST (N4): `cancel_archive` does NOT stop an
+ *      in-flight `bulk_delete_emails` run. Before Task 3.4/3.5, both
  *      commands replaced the SAME `ArchiveCancelToken` slot on entry
  *      (`main.rs:3671` at the pre-cutover commits) - `cancel_archive` reads
  *      whatever token currently sits in that slot, so calling it while only
@@ -227,7 +232,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
   //
   // The list is virtualized (same mechanism connected-unified-archive-thread
   // .test.js's `clickThreadRow` works around): with COUNT_A+COUNT_C+COUNT_D
-  // (22) fresh rows plus yoda's 9 existing fixtures, only a handful are ever
+  // (42) fresh rows plus yoda's 9 existing fixtures, only a handful are ever
   // mounted in the DOM at once. `sortedEmails` on the store is the reliable
   // "did it actually load" signal (connected-vault-move-daemon.test.js's
   // `unarchivedRows()` reads the same field); finding a specific row to
@@ -434,8 +439,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
       timeout: 30_000, interval: 300, timeoutMsg: `not every batch-A uid reached ${curDir()}`,
     });
 
-    // ...and custody rows exist for them, appended by the DAEMON's own
-    // in-process custody write (Task 3.4), read back through the same
+    // ...and custody rows exist for them, read back through the same
     // `local_index_read` route `custody.rs` backs with
     // `mailvault_core::custody::entries` - not re-derived from disk here.
     const idx = await daemonRpc('local_index_read', { accountId: yodaId, mailbox: 'INBOX' });
@@ -457,7 +461,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
 
     // Fires the instant the first real completion (or error) for THIS run
     // reaches the page - inside the browser's own event loop, no WebDriver
-    // round trip on the critical path. With COUNT_C (10) > the daemon's
+    // round trip on the critical path. With COUNT_C (30) > the daemon's
     // 5-permit semaphore, several uids are still queued on a permit at that
     // instant, which is exactly what a naive un-cancellable run would race
     // past and this cancel must catch.
@@ -493,7 +497,7 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
     expect(finalFrame.payload.completed + finalFrame.payload.errors).toBeLessThan(COUNT_C);
   });
 
-  it('(d): THE KEY REGRESSION TEST - cancel_archive does not stop a concurrent bulk delete (N4, fixed in Task 3.4/3.5)', async function () {
+  it('(d): THE KEY REGRESSION TEST - cancel_archive does not stop an in-flight bulk delete (N4, fixed in Task 3.4/3.5)', async function () {
     await runBulkDeleteOnRange('Yesterday', batchD);
 
     // Confirm the delete is genuinely in flight (STORE already landed,
