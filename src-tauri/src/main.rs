@@ -1400,445 +1400,23 @@ pub fn maildir_store_raw(
 // whole-vault walkers), with the in-process nudge/sweep signal replacing
 // `nudge_index`/`sweep_index_soon`.
 
-// ==========================================
-// Backup export/import (ZIP of .eml files)
-// ==========================================
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BackupManifest {
-    version: u32,
-    #[serde(rename = "exportedAt")]
-    exported_at: String,
-    accounts: Vec<BackupAccount>,
-    settings: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct BackupAccount {
-    email: String,
-    #[serde(rename = "imapServer")]
-    imap_server: Option<String>,
-    #[serde(rename = "smtpServer")]
-    smtp_server: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ExportResult {
-    #[serde(rename = "emailCount")]
-    email_count: u32,
-    #[serde(rename = "accountCount")]
-    account_count: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ImportResult {
-    #[serde(rename = "emailCount")]
-    email_count: u32,
-    #[serde(rename = "accountCount")]
-    account_count: u32,
-    #[serde(rename = "newAccounts")]
-    new_accounts: Vec<String>,
-    #[serde(rename = "settingsJson")]
-    settings_json: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct AccountsJsonEntry {
-    id: String,
-    email: Option<String>,
-    #[serde(rename = "imapServer")]
-    imap_server: Option<String>,
-    #[serde(rename = "smtpServer")]
-    smtp_server: Option<String>,
-    #[serde(rename = "createdAt")]
-    created_at: Option<String>,
-}
-
-fn read_accounts_json(app_handle: &tauri::AppHandle) -> Result<Vec<AccountsJsonEntry>, String> {
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
-    let accounts_path = base.join("accounts.json");
-    if !accounts_path.exists() {
-        return Ok(Vec::new());
-    }
-    let data = fs::read_to_string(&accounts_path)
-        .map_err(|e| format!("Failed to read accounts.json: {}", e))?;
-    serde_json::from_str(&data)
-        .map_err(|e| format!("Failed to parse accounts.json: {}", e))
-}
-
-fn write_accounts_json(app_handle: &tauri::AppHandle, accounts: &[AccountsJsonEntry]) -> Result<(), String> {
-    let base = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))?;
-    let accounts_path = base.join("accounts.json");
-    let data = serde_json::to_string_pretty(accounts)
-        .map_err(|e| format!("Failed to serialize accounts: {}", e))?;
-    fs::write(&accounts_path, data)
-        .map_err(|e| format!("Failed to write accounts.json: {}", e))
-}
+// `export_backup` and `import_backup` moved to the daemon (Task 4.3/4.4,
+// `src-daemon/src/backup_zip.rs`, `handlers::backup_zip`). `accounts.json`
+// stays app-only (decision 2): the daemon route only reads it and hands
+// back new-account descriptors; the app merges them itself via
+// `src/services/db/accounts.js`'s `ensureAccountsInFile`, the same helper
+// `init()` already calls for this file. `BackupManifest`/`BackupAccount`/
+// `ExportResult`/`ImportResult`/`AccountsJsonEntry` and
+// `read_accounts_json`/`write_accounts_json` moved with them (the daemon
+// copy owns them now); nothing else in this file referenced them.
+//
+// `sanitize_mailbox_name` below stays: `import_mbox` (not yet moved, Task
+// 4.6) still calls it.
 
 fn sanitize_mailbox_name(mailbox: &str) -> String {
     mailbox.chars().map(|c| {
         if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }
     }).collect()
-}
-
-#[tauri::command]
-async fn export_backup(
-    app_handle: tauri::AppHandle,
-    dest_path: String,
-    archived_only: bool,
-    settings_json: String,
-    accounts_json: String,
-) -> Result<ExportResult, String> {
-    use std::io::Write;
-    use zip::write::SimpleFileOptions;
-
-    info!("export_backup called: dest={}, archived_only={}", dest_path, archived_only);
-
-    let accounts: Vec<BackupAccount> = serde_json::from_str(&accounts_json)
-        .map_err(|e| format!("Failed to parse accounts: {}", e))?;
-
-    let settings: Option<serde_json::Value> = if settings_json.is_empty() {
-        None
-    } else {
-        serde_json::from_str(&settings_json).ok()
-    };
-
-    // Read accounts.json to get accountId -> email mapping
-    let accounts_entries = read_accounts_json(&app_handle)?;
-    let mut id_to_email: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for entry in &accounts_entries {
-        if let Some(ref email) = entry.email {
-            id_to_email.insert(entry.id.clone(), email.clone());
-        }
-    }
-
-    let base = vault::root(&app_handle)?;
-    let maildir_base = base.join("Maildir");
-
-    let file = fs::File::create(&dest_path)
-        .map_err(|e| format!("Failed to create ZIP file: {}", e))?;
-    let mut zip = zip::ZipWriter::new(file);
-    let options = SimpleFileOptions::default()
-        .compression_method(zip::CompressionMethod::Deflated);
-
-    let mut email_count: u32 = 0;
-    let mut account_count: u32 = 0;
-
-    // Count total files first for progress tracking
-    let mut total_files: u32 = 0;
-    if maildir_base.exists() {
-        if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
-            for account_dir in account_dirs.flatten() {
-                if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
-                let acct_id = account_dir.file_name().to_string_lossy().to_string();
-                if !id_to_email.contains_key(&acct_id) { continue; }
-                if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
-                    for mailbox_dir in mailbox_dirs.flatten() {
-                        if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) { continue; }
-                        let cur_dir = mailbox_dir.path().join("cur");
-                        if !cur_dir.exists() { continue; }
-                        if let Ok(files) = fs::read_dir(&cur_dir) {
-                            for file_entry in files.flatten() {
-                                let fname = file_entry.file_name().to_string_lossy().to_string();
-                                if !fname.contains(":2,") { continue; }
-                                if archived_only {
-                                    if let Some(flags_part) = fname.split(":2,").nth(1) {
-                                        if !flags_part.contains('A') { continue; }
-                                    } else { continue; }
-                                }
-                                total_files += 1;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let _ = app_handle.emit("export-progress", serde_json::json!({
-        "total": total_files, "completed": 0, "active": true
-    }));
-
-    if maildir_base.exists() {
-        // Walk each account directory
-        if let Ok(account_dirs) = fs::read_dir(&maildir_base) {
-            for account_dir in account_dirs.flatten() {
-                if !account_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    continue;
-                }
-                let account_id = account_dir.file_name().to_string_lossy().to_string();
-                let email_addr = match id_to_email.get(&account_id) {
-                    Some(e) => e.clone(),
-                    None => {
-                        warn!("No email found for account {}, skipping", account_id);
-                        continue;
-                    }
-                };
-
-                let mut account_has_emails = false;
-
-                // Walk each mailbox directory
-                if let Ok(mailbox_dirs) = fs::read_dir(account_dir.path()) {
-                    for mailbox_dir in mailbox_dirs.flatten() {
-                        if !mailbox_dir.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                            continue;
-                        }
-                        let mailbox_name = mailbox_dir.file_name().to_string_lossy().to_string();
-                        let cur_dir = mailbox_dir.path().join("cur");
-                        if !cur_dir.exists() {
-                            continue;
-                        }
-
-                        if let Ok(files) = fs::read_dir(&cur_dir) {
-                            for file_entry in files.flatten() {
-                                let filename = file_entry.file_name().to_string_lossy().to_string();
-                                if !filename.contains(":2,") {
-                                    continue;
-                                }
-
-                                // If archived_only, check for 'A' flag
-                                if archived_only {
-                                    if let Some(flags_part) = filename.split(":2,").nth(1) {
-                                        if !flags_part.contains('A') {
-                                            continue;
-                                        }
-                                    } else {
-                                        continue;
-                                    }
-                                }
-
-                                let zip_path = format!(
-                                    "mailvault-backup/emails/{}/{}/{}",
-                                    email_addr, mailbox_name, filename
-                                );
-
-                                let content = match fs::read(file_entry.path()) {
-                                    Ok(c) => c,
-                                    Err(e) => {
-                                        warn!("Failed to read {}: {}", file_entry.path().display(), e);
-                                        continue;
-                                    }
-                                };
-
-                                zip.start_file(&zip_path, options)
-                                    .map_err(|e| format!("Failed to add file to ZIP: {}", e))?;
-                                zip.write_all(&content)
-                                    .map_err(|e| format!("Failed to write to ZIP: {}", e))?;
-
-                                email_count += 1;
-                                account_has_emails = true;
-
-                                let _ = app_handle.emit("export-progress", serde_json::json!({
-                                    "total": total_files, "completed": email_count, "active": true
-                                }));
-                            }
-                        }
-                    }
-                }
-
-                if account_has_emails {
-                    account_count += 1;
-                }
-            }
-        }
-    }
-
-    // Write manifest.json
-    let manifest = BackupManifest {
-        version: 2,
-        exported_at: chrono::Utc::now().to_rfc3339(),
-        accounts,
-        settings,
-    };
-    let manifest_json = serde_json::to_string_pretty(&manifest)
-        .map_err(|e| format!("Failed to serialize manifest: {}", e))?;
-    zip.start_file("mailvault-backup/manifest.json", options)
-        .map_err(|e| format!("Failed to add manifest to ZIP: {}", e))?;
-    zip.write_all(manifest_json.as_bytes())
-        .map_err(|e| format!("Failed to write manifest: {}", e))?;
-
-    zip.finish()
-        .map_err(|e| format!("Failed to finalize ZIP: {}", e))?;
-
-    let _ = app_handle.emit("export-progress", serde_json::json!({
-        "total": total_files, "completed": email_count, "active": false
-    }));
-
-    info!("Backup exported: {} emails from {} accounts to {}", email_count, account_count, dest_path);
-
-    Ok(ExportResult {
-        email_count,
-        account_count,
-    })
-}
-
-#[tauri::command]
-async fn import_backup(
-    app_handle: tauri::AppHandle,
-    source_path: String,
-) -> Result<ImportResult, String> {
-    use std::io::Read;
-
-    info!("import_backup called: source={}", source_path);
-
-    let file = fs::File::open(&source_path)
-        .map_err(|e| format!("Failed to open ZIP file: {}", e))?;
-    let mut archive = zip::ZipArchive::new(file)
-        .map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
-
-    // Read manifest.json
-    let manifest: BackupManifest = {
-        let mut manifest_file = archive.by_name("mailvault-backup/manifest.json")
-            .map_err(|e| format!("No manifest.json found in backup: {}", e))?;
-        let mut manifest_str = String::new();
-        manifest_file.read_to_string(&mut manifest_str)
-            .map_err(|e| format!("Failed to read manifest: {}", e))?;
-        serde_json::from_str(&manifest_str)
-            .map_err(|e| format!("Failed to parse manifest: {}", e))?
-    };
-
-    info!("Backup manifest: version={}, accounts={}, exported_at={}",
-        manifest.version, manifest.accounts.len(), manifest.exported_at);
-
-    // Read existing accounts to match by email
-    let mut existing_accounts = read_accounts_json(&app_handle)?;
-    let mut email_to_id: std::collections::HashMap<String, String> = std::collections::HashMap::new();
-    for entry in &existing_accounts {
-        if let Some(ref email) = entry.email {
-            email_to_id.insert(email.clone(), entry.id.clone());
-        }
-    }
-
-    // Map manifest emails to account IDs (existing or new)
-    let mut new_accounts: Vec<String> = Vec::new();
-    for manifest_acct in &manifest.accounts {
-        if !email_to_id.contains_key(&manifest_acct.email) {
-            let new_id = uuid::Uuid::new_v4().to_string();
-            info!("Creating new account for {}: {}", manifest_acct.email, new_id);
-            email_to_id.insert(manifest_acct.email.clone(), new_id.clone());
-
-            existing_accounts.push(AccountsJsonEntry {
-                id: new_id,
-                email: Some(manifest_acct.email.clone()),
-                imap_server: manifest_acct.imap_server.clone(),
-                smtp_server: manifest_acct.smtp_server.clone(),
-                created_at: Some(chrono::Utc::now().to_rfc3339()),
-            });
-
-            new_accounts.push(manifest_acct.email.clone());
-        }
-    }
-
-    // Save updated accounts.json
-    write_accounts_json(&app_handle, &existing_accounts)?;
-
-    let base = vault::root(&app_handle)?;
-    let maildir_base = base.join("Maildir");
-
-    // Extract .eml files
-    let mut email_count: u32 = 0;
-    let email_prefix = "mailvault-backup/emails/";
-
-    // Count total email entries for progress
-    let total_entries: u32 = (0..archive.len())
-        .filter(|&i| {
-            if let Ok(entry) = archive.by_index(i) {
-                let name = entry.name().to_string();
-                name.starts_with(email_prefix) && !entry.is_dir() && name.contains(":2,")
-            } else {
-                false
-            }
-        })
-        .count() as u32;
-
-    let _ = app_handle.emit("import-progress", serde_json::json!({
-        "total": total_entries, "completed": 0, "active": true
-    }));
-
-    for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
-            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
-        let entry_name = entry.name().to_string();
-
-        if !entry_name.starts_with(email_prefix) || entry.is_dir() {
-            continue;
-        }
-
-        // Parse path: emails/{email}/{mailbox}/{filename}
-        let relative = &entry_name[email_prefix.len()..];
-        let parts: Vec<&str> = relative.splitn(3, '/').collect();
-        if parts.len() != 3 {
-            warn!("Skipping malformed path: {}", entry_name);
-            continue;
-        }
-
-        let email_addr = parts[0];
-        let mailbox = parts[1];
-        let filename = parts[2];
-
-        if filename.is_empty() || !filename.contains(":2,") {
-            continue;
-        }
-
-        let account_id = match email_to_id.get(email_addr) {
-            Some(id) => id.clone(),
-            None => {
-                warn!("No account ID for email {}, skipping", email_addr);
-                continue;
-            }
-        };
-
-        let safe_mailbox = sanitize_mailbox_name(mailbox);
-        let cur_dir = maildir_base.join(&account_id).join(&safe_mailbox).join("cur");
-        fs::create_dir_all(&cur_dir)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
-
-        let dest_path = cur_dir.join(filename);
-
-        // Skip if file already exists (idempotent)
-        if dest_path.exists() {
-            info!("Skipping existing file: {:?}", dest_path);
-            continue;
-        }
-
-        let mut content = Vec::new();
-        entry.read_to_end(&mut content)
-            .map_err(|e| format!("Failed to read .eml from ZIP: {}", e))?;
-
-        fs::write(&dest_path, &content)
-            .map_err(|e| format!("Failed to write .eml file: {}", e))?;
-
-        email_count += 1;
-
-        let _ = app_handle.emit("import-progress", serde_json::json!({
-            "total": total_entries, "completed": email_count, "active": true
-        }));
-    }
-
-    let _ = app_handle.emit("import-progress", serde_json::json!({
-        "total": total_entries, "completed": email_count, "active": false
-    }));
-
-    let settings_json = manifest.settings
-        .map(|s| serde_json::to_string(&s).unwrap_or_default());
-
-    info!("Backup imported: {} emails, {} new accounts", email_count, new_accounts.len());
-    if email_count > 0 {
-        sweep_index_soon(); // files landed in any number of accounts and folders
-    }
-
-    Ok(ImportResult {
-        email_count,
-        account_count: manifest.accounts.len() as u32,
-        new_accounts,
-        settings_json,
-    })
 }
 
 // ── MBOX Export / Import ────────────────────────────────────────────────────
@@ -3170,6 +2748,14 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // new cap this budget could bind against in practice.
         "fetch_remote_asset" => Some(Duration::from_secs(30)),
 
+        // Task 4.4 / decision 8: inline-blocking, same reasoning as
+        // archive_emails/bulk_delete_emails above, the whole ZIP
+        // read-or-write pass happens within this RPC call and the JS
+        // awaits the return value directly. Written as its own arm so a
+        // later edit to the `_ => None` default cannot silently take or
+        // grant a budget here by accident.
+        "export_backup" | "import_backup" => None,
+
         _ => None,
     }
 }
@@ -3587,8 +3173,6 @@ fn main() {
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            export_backup,
-            import_backup,
             export_mbox_all,
             import_mbox,
             commands::imap_test_connection,
@@ -4299,6 +3883,14 @@ mod tests {
     #[test]
     fn reply_timeout_gives_fetch_remote_asset_thirty_seconds() {
         assert_eq!(crate::reply_timeout("fetch_remote_asset"), Some(std::time::Duration::from_secs(30)));
+    }
+
+    /// Task 4.4, decision 8: pinned by name, not the `_ => None` default,
+    /// the whole ZIP read-or-write pass runs inline within the RPC call.
+    #[test]
+    fn reply_timeout_is_none_for_export_backup_and_import_backup() {
+        assert_eq!(crate::reply_timeout("export_backup"), None);
+        assert_eq!(crate::reply_timeout("import_backup"), None);
     }
 
     // -----------------------------------------------------------------------

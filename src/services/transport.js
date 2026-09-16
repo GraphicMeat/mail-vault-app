@@ -152,6 +152,10 @@ export const DAEMON_OWNED = new Set([
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
   // Task 4.2: a pure reqwest fetch, no vault/app_dir/state at all.
   'fetch_remote_asset',
+  // Task 4.4: backup ZIP export/import. accounts.json stays app-only
+  // (decision 2): the daemon route only reads it and returns new-account
+  // descriptors for `db/accounts.js` to merge itself.
+  'export_backup', 'import_backup',
 ]);
 
 async function sendToDaemon(command, args) {

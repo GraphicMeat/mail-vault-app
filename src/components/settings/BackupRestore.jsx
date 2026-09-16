@@ -131,6 +131,16 @@ export default function BackupRestore() {
         unlisten();
       }
 
+      // Decision 2: the daemon route never writes accounts.json (a
+      // cross-process race against this file's own JS writer otherwise);
+      // it only returns the new-account descriptors it discovered. The app
+      // merges them itself, before reload, reusing the same batch
+      // read-merge-write helper `init()` already calls for this file.
+      if (result.newAccounts.length > 0) {
+        const db = await import('../../services/db');
+        await db.ensureAccountsInFile(result.newAccounts);
+      }
+
       if (result.settingsJson) {
         try {
           const settings = JSON.parse(result.settingsJson);
@@ -147,7 +157,7 @@ export default function BackupRestore() {
         useMailStore.getState().dismissExportProgress();
         let msg = `Backup restored. ${result.emailCount} email(s) from ${result.accountCount} account(s) are now in your vault.`;
         if (result.newAccounts.length > 0) {
-          msg += `\n\nThese accounts were recreated and still need their passwords, under Settings \u203a Accounts:\n\u2022 ${result.newAccounts.join('\n\u2022 ')}`;
+          msg += `\n\nThese accounts were recreated and still need their passwords, under Settings \u203a Accounts:\n\u2022 ${result.newAccounts.map(a => a.email).join('\n\u2022 ')}`;
         }
         if (isDemo) {
           alert(msg + '\n\nThis browser demo keeps the sample in this session; no native file was read.');

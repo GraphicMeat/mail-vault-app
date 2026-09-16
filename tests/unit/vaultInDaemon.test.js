@@ -47,6 +47,12 @@ const MOVED = [
   // Task 4.2: a pure reqwest fetch, no vault/app_dir/state, moved with no
   // gate, first of the Phase 4 commands.
   'fetch_remote_asset',
+  // Task 4.4: backup ZIP export/import. `BackupManifest`/`BackupAccount`/
+  // `ExportResult`/`ImportResult`/`AccountsJsonEntry` and
+  // `read_accounts_json`/`write_accounts_json` moved out with them; nothing
+  // else in the app referenced those. `sanitize_mailbox_name` stays (Task
+  // 4.6 still needs it for `import_mbox`), so it is not in this list.
+  'export_backup', 'import_backup',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
