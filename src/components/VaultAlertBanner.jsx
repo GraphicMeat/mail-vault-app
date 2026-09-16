@@ -38,8 +38,6 @@ export function VaultAlertBanner() {
     let unlistenCustody;
     let unlistenReconnect;
     const askCustody = () => api.custodyStatus().then(setCustody).catch(() => {});
-    api.vaultGetStatus().then(setVaultStatus).catch(() => {});
-    askCustody();
     (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
@@ -47,6 +45,14 @@ export function VaultAlertBanner() {
         unlistenCustody = await listen('custody-status', e => setCustody(e.payload));
         unlistenReconnect = await listen('daemon-reconnected', askCustody);
       } catch { /* web dev mode — no Tauri events */ }
+      // M-6 (final fix wave): ask only after `daemon-reconnected` is wired
+      // up. Asking first left a window — both steps are async — where a
+      // reconnect between the first ask and the listener attaching would
+      // fire and be dropped (the bus drops an event with no subscriber),
+      // and the banner would never learn a custody store failed to open on
+      // the new root.
+      api.vaultGetStatus().then(setVaultStatus).catch(() => {});
+      askCustody();
     })();
     return () => {
       if (unlisten) unlisten();

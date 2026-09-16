@@ -63,13 +63,6 @@ pub(crate) fn with_vault_write<T>(state: &Arc<DaemonState>, f: impl FnOnce(&std:
     f(&root)
 }
 
-/// An `E_VAULT_UNAVAILABLE:` reply as an `RpcResponse`. `INTERNAL_ERROR` so
-/// `RpcOutcome::Direct` (`src-tauri/src/main.rs` `map_rpc_error`) passes the
-/// message to JS unchanged instead of treating it as a transport failure.
-pub(crate) fn gate_err(id: Value, msg: String) -> RpcResponse {
-    RpcResponse::error(id, ipc::INTERNAL_ERROR, msg)
-}
-
 /// A required string param. `Err` names the missing key, as `INVALID_PARAMS`.
 pub(crate) fn str_arg(id: &Value, params: &Value, key: &str) -> Result<String, RpcResponse> {
     params
@@ -164,15 +157,6 @@ mod tests {
         let st = DaemonState::for_test(vault.path().to_path_buf(), app_dir.path().to_path_buf(), true);
         assert_eq!(vault_root(&st).unwrap(), st.sync_engine.data_dir());
         assert_eq!(vault_root(&st).unwrap(), vault.path());
-    }
-
-    #[test]
-    fn gate_err_carries_the_message_verbatim_as_internal_error() {
-        let msg = "E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the folder is not reachable".to_string();
-        let resp = gate_err(json!(1), msg.clone());
-        let err = resp.error.expect("gate_err must answer an error");
-        assert_eq!(err.code, ipc::INTERNAL_ERROR);
-        assert_eq!(err.message, msg);
     }
 
     #[test]

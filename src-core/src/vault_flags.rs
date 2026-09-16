@@ -302,6 +302,18 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
         do_move(&a, &b, &mut moved, &mut failed);
     }
 
+    // M-3 (final fix wave): the sidecar dir MOVE also needs the header-cache
+    // tree lock, not just the ledger lock — a concurrent `header_cache::save`
+    // for the OLD mailbox name takes only the tree(read)+mailbox lock, so
+    // without this both it and `rename_dirs` are `vault_gate(read)` holders
+    // that run in parallel, and `save`'s own `create_dir_all` can recreate
+    // the just-moved-away directory. Tree lock taken WRITE and OUTSIDE
+    // (before) the ledger lock, keeping the same `L3a < L5a` order every read
+    // path already uses (`with_ledger_lock` inside `lock_tree`, never the
+    // reverse — that ordering is what keeps the whole lock graph acyclic).
+    let tree = header_cache::lock_tree(&from.root);
+    let _tree_write = tree.write().unwrap_or_else(|e| e.into_inner());
+
     // The sidecar dir carries `graph_id_map.json`: hold the vault-wide ledger
     // lock across this one move so an in-flight `allocate` for the OLD name
     // (Task 2.9a: from another process) can never persist the ledger back
@@ -406,8 +418,13 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
                 }
                 // The sidecar dir carries `graph_id_map.json`: hold the
                 // vault-wide ledger lock across this one move, same as
-                // `rename_dirs` (2.4 review forward constraint F2).
+                // `rename_dirs` (2.4 review forward constraint F2). M-3
+                // (final fix wave): the header-cache tree lock too, taken
+                // WRITE and OUTSIDE the ledger lock — same reasoning and
+                // same `L3a < L5a` order as `rename_dirs` above.
                 if *src == from.sidecar_dir {
+                    let tree = header_cache::lock_tree(&from.root);
+                    let _tree_write = tree.write().unwrap_or_else(|e| e.into_inner());
                     match from.sidecar_dir.parent() {
                         Some(email_cache_dir) => {
                             let (mut m, mut f) = (0, Vec::new());
@@ -843,6 +860,64 @@ mod tests {
 
         assert!(to.sidecar_dir.join("graph_id_map.json").exists());
         assert!(!from.sidecar_dir.exists(), "the ledger must not be left behind in the old dir");
+    }
+
+    /// M-3 (final fix wave): `rename_dirs` must also not move the sidecar dir
+    /// while a concurrent `header_cache::save`/`clear`/`patch_flags` for this
+    /// root — which takes the tree lock's READ side — is still using it (the
+    /// whole-branch review's finding: the rename path was the one writer of
+    /// this tree outside the lock registry Task 2.3 created, so `save` could
+    /// recreate the just-moved-away directory via its own `create_dir_all`).
+    /// Same ordering-probe shape as the ledger-holder test above: `state`
+    /// only reaches 2 once the reader's guard has dropped, and the assertion
+    /// runs from inside the thread that made the (now write-locked) call, so
+    /// it fails on the pre-fix code (which never touched this lock at all)
+    /// rather than merely usually passing.
+    #[test]
+    fn rename_dirs_waits_for_an_in_flight_tree_reader_before_moving_the_sidecar() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = tmp.path();
+        let from = rename_fixture(base, "Projects", "a_Projects");
+        let to = rename_fixture(base, "Work", "a_Work");
+        fs::create_dir_all(&from.cur).unwrap();
+        fs::create_dir_all(&from.sidecar_dir).unwrap();
+        fs::write(from.sidecar_dir.join("1.json"), b"{}").unwrap();
+
+        let state = std::sync::atomic::AtomicU8::new(0);
+        let state = &state;
+        std::thread::scope(|scope| {
+            // Simulates an in-flight `header_cache::save` for this root
+            // (takes the tree lock's read side): held for a while.
+            scope.spawn(|| {
+                let tree = header_cache::lock_tree(&from.root);
+                let _read = tree.read().unwrap_or_else(|e| e.into_inner());
+                state.store(1, std::sync::atomic::Ordering::SeqCst);
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                state.store(2, std::sync::atomic::Ordering::SeqCst);
+            });
+
+            // Wait until the "save" is provably holding the read lock before
+            // even calling rename_dirs.
+            let poll_start = std::time::Instant::now();
+            while state.load(std::sync::atomic::Ordering::SeqCst) == 0 {
+                assert!(poll_start.elapsed() < std::time::Duration::from_secs(10), "reader never took the lock");
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+
+            scope.spawn(|| {
+                let (moved, failed) = rename_dirs(&from, &to);
+                assert_eq!(failed, Vec::<String>::new(), "{failed:?}");
+                assert!(moved >= 1);
+                assert_eq!(
+                    state.load(std::sync::atomic::Ordering::SeqCst),
+                    2,
+                    "the sidecar move must not run until the tree reader released it"
+                );
+            });
+        });
+
+        assert!(to.sidecar_dir.join("1.json").exists());
+        assert!(!from.sidecar_dir.exists(), "the sidecar dir must not be left behind (or recreated) at the old path");
     }
 
     /// A source that WOULD NOT move is not the same answer as a source that was

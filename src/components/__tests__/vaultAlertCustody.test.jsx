@@ -118,4 +118,29 @@ describe('VaultAlertBanner: the daemon owns custody', () => {
     unmount();
     await waitFor(() => expect(listeners.has('daemon-reconnected')).toBe(false));
   });
+
+  // M-6 (final fix wave): the first `askCustody()` used to run BEFORE
+  // `listen('daemon-reconnected', ...)` was even awaited — both steps are
+  // async, so a reconnect landing in that window was dropped (the bus drops
+  // an event with no subscriber) and the banner never learned a custody
+  // store failed to open on the new root. RED on the old ordering: this
+  // asserts the listener is wired up before the first ask fires, not after.
+  it('wires up the daemon-reconnected listener before asking custody_status the first time', async () => {
+    const order = [];
+    listen.mockImplementation(async (name, cb) => {
+      if (name === 'daemon-reconnected') order.push('listen:daemon-reconnected');
+      listeners.set(name, cb);
+      return () => listeners.delete(name);
+    });
+    api.custodyStatus.mockImplementation(() => {
+      order.push('custodyStatus');
+      return Promise.resolve({ available: true, error: null, path: '/v/custody/custody.db' });
+    });
+
+    render(<VaultAlertBanner />);
+    await waitFor(() => expect(order).toContain('custodyStatus'));
+
+    expect(order.indexOf('listen:daemon-reconnected')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('listen:daemon-reconnected')).toBeLessThan(order.indexOf('custodyStatus'));
+  });
 });
