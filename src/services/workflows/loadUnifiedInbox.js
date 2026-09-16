@@ -266,7 +266,11 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   const allLocalEmails = [];
   const allSavedIds = new Set();
-  const allArchivedIds = new Set();
+  // I-5: seeded from the current value, not empty — a per-account read
+  // failure below (`archived === null`) then just leaves that account's
+  // ids as they already were instead of the whole unified set dropping to
+  // only the accounts that happened to answer this pass.
+  const allArchivedIds = new Set(get().archivedEmailIds);
   const localPromises = accounts
     .filter(a => !hiddenAccounts[a.id])
     .map(async (account) => {
@@ -279,7 +283,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         let locals = await db.readLocalEmailIndex(account.id, localFolder);
         if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
         for (const uid of saved) allSavedIds.add(uid);
-        for (const uid of archived) allArchivedIds.add(uid);
+        for (const uid of (archived ?? [])) allArchivedIds.add(uid);
         for (const e of locals) {
           allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
         }

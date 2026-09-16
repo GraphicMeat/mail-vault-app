@@ -411,10 +411,13 @@ export class AccountPipeline {
     const { activeAccountId, activeMailbox } = useMailStore.getState();
     if (this.accountId === activeAccountId) {
       try {
-        const [newSavedIds, newArchivedIds] = await Promise.all([
+        const [newSavedIds, rawArchivedIds] = await Promise.all([
           db.getSavedEmailIds(activeAccountId, activeMailbox),
           db.getArchivedEmailIds(activeAccountId, activeMailbox),
         ]);
+        // I-5: keep the store's current value on a failed read instead of
+        // adopting "nothing is archived".
+        const newArchivedIds = rawArchivedIds ?? useMailStore.getState().archivedEmailIds;
         useMailStore.setState({
           savedEmailIds: newSavedIds,
           archivedEmailIds: newArchivedIds,

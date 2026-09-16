@@ -172,6 +172,10 @@ export async function loadEmails() {
         db.getArchivedEmailIds(activeAccountId, activeMailbox),
         db.getEmailHeadersMeta(activeAccountId, activeMailbox),
       ]);
+      // I-5: `null` means "could not read" — keep the store's current value
+      // rather than adopting "nothing is archived" (this disarms the
+      // empty-server guard and re-downloads the whole mailbox further down).
+      archivedEmailIds = archivedEmailIds ?? get().archivedEmailIds;
     }
     if (isStale()) return;
     loadTrace.mark('cache-meta-ready', {
@@ -802,11 +806,14 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   await _restoreGraphIdMap(activeAccountId, activeMailbox);
   if (isStale()) return;
 
-  const [savedEmailIds, archivedEmailIds] = await Promise.all([
+  const [savedEmailIds, rawArchivedEmailIds] = await Promise.all([
     db.getSavedEmailIds(activeAccountId, activeMailbox),
     db.getArchivedEmailIds(activeAccountId, activeMailbox),
   ]);
   if (isStale()) return;
+  // I-5: keep the store's current value on a failed read instead of
+  // adopting "nothing is archived".
+  const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
   useMailStore.setState({ savedEmailIds, archivedEmailIds });
 
   if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {

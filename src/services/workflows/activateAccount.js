@@ -600,12 +600,16 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // which is why the list restarted at "500 of 15,065" and climbed each
       // time. `_meta.json` is read either way and doubles as the staleness
       // check, so a hit costs nothing extra and a miss costs nothing either.
-      const [memoMeta, archivedEmailIds, savedEmailIds] = await Promise.all([
+      const [memoMeta, rawArchivedEmailIds, savedEmailIds] = await Promise.all([
         db.getEmailHeadersMeta(accountId, effectiveMailbox),
         db.getArchivedEmailIds(accountId, effectiveMailbox),
         db.getSavedEmailIds(accountId, effectiveMailbox),
       ]);
       if (signal.aborted) return;
+      // I-5: `null` means "could not read" — fall back to this account's
+      // last known set (already painted from the restore descriptor above)
+      // rather than adopting "nothing is archived".
+      const archivedEmailIds = rawArchivedEmailIds ?? restored?.archivedEmailIds ?? new Set();
 
       // On a stamp mismatch this re-reads only the sidecars that moved (readdir
       // + mtime, then one read per changed UID) instead of discarding the set —

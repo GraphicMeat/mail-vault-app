@@ -98,7 +98,11 @@ export const createUiSlice = (set, get) => ({
         const { hiddenAccounts } = useSettingsStore.getState();
         const allLocalEmails = [];
         const allSavedIds = new Set();
-        const allArchivedIds = new Set();
+        // I-5: seeded from the current value — a per-account read failure
+        // (`archived === null`) below then leaves that account's ids as they
+        // already were instead of the whole unified set dropping to only the
+        // accounts that happened to answer this pass.
+        const allArchivedIds = new Set(get().archivedEmailIds);
         Promise.all(
           accounts.filter(a => !hiddenAccounts[a.id]).map(async (account) => {
             try {
@@ -113,7 +117,7 @@ export const createUiSlice = (set, get) => ({
               let locals = await db.readLocalEmailIndex(account.id, localFolder);
               if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
               for (const uid of saved) allSavedIds.add(uid);
-              for (const uid of archived) allArchivedIds.add(uid);
+              for (const uid of (archived ?? [])) allArchivedIds.add(uid);
               for (const e of locals) {
                 allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
               }
@@ -127,12 +131,15 @@ export const createUiSlice = (set, get) => ({
         const { activeAccountId, activeMailbox } = get();
         if (activeAccountId && activeMailbox) {
           (async () => {
-            const [savedEmailIds, archivedEmailIds] = await Promise.all([
+            const [savedEmailIds, rawArchivedEmailIds] = await Promise.all([
               db.getSavedEmailIds(activeAccountId, activeMailbox),
               db.getArchivedEmailIds(activeAccountId, activeMailbox),
             ]);
             let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
             if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
+            // I-5: keep the store's current value on a failed read instead
+            // of adopting "nothing is archived".
+            const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
             set({ savedEmailIds, archivedEmailIds, localEmails });
             get().updateSortedEmails();
           })();

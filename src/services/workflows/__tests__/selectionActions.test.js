@@ -1424,3 +1424,31 @@ describe('a finished mutation does not close a message opened while it ran', () 
     stillOnSecond();
   });
 });
+
+// Final fix wave I-5: `db.getArchivedEmailIds` returns `null`, not an empty
+// Set, when the read fails (the daemon not up yet on cold start, or mid
+// vault-move) — a caller that adopted the empty Set anyway used to wipe the
+// store's `archivedEmailIds`, and `stampVaultEntry` reads exactly that Set to
+// decide whether a message may carry the durable serverDeleted/serverAbsent
+// stamp. `removeLocalEmail` is one of the callers that refreshes it.
+describe('removeLocalEmail keeps the known archived set on a failed read (I-5)', () => {
+  it('RED on the old code: a null read must not wipe archivedEmailIds to empty', async () => {
+    primeStore(seedThread(), []);
+    useMailStore.setState({ archivedEmailIds: new Set([1, 2]) });
+    mockGetArchivedEmailIds.mockResolvedValueOnce(null);
+
+    await useMailStore.getState().removeLocalEmail(1);
+
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([1, 2]));
+  });
+
+  it('control: a successful read still replaces the set', async () => {
+    primeStore(seedThread(), []);
+    useMailStore.setState({ archivedEmailIds: new Set([1, 2]) });
+    mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([9]));
+
+    await useMailStore.getState().removeLocalEmail(1);
+
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+  });
+});

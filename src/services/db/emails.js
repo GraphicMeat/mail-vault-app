@@ -539,6 +539,15 @@ export async function getSavedEmailIds(accountId, mailbox) {
   }
 }
 
+// Final fix wave I-5: a failed read returns `null`, never an empty Set.
+// `stampVaultEntry` (messageMutations.js) and every other caller that
+// persists this into the store treats "empty" as durable fact — a message
+// really has no archived copy — so a swallowed daemon error (guaranteed on
+// every cold start and every vault move, not just a disk error) used to be
+// indistinguishable from that, and silently dropped the serverDeleted/
+// serverAbsent stamp for good (memory: an unlistable directory is not an
+// empty one). Every caller below is expected to treat `null` as "unknown,
+// keep whatever was already known" rather than adopting it.
 export async function getArchivedEmailIds(accountId, mailbox) {
   await initBasic();
   if (!invoke) return new Set();
@@ -548,7 +557,7 @@ export async function getArchivedEmailIds(accountId, mailbox) {
     return new Set(summaries.map(s => s.uid));
   } catch (e) {
     console.warn('[db] getArchivedEmailIds failed:', e);
-    return new Set();
+    return null;
   }
 }
 

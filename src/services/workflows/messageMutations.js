@@ -151,7 +151,9 @@ export async function saveEmailLocally(uid) {
 
     if (!isUnified) {
       const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
-      const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
+      // I-5: `null` means "could not read" — keep whatever the store already
+      // had rather than adopting "nothing is archived".
+      const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox) ?? get().archivedEmailIds;
       const localEmails = await db.getLocalEmails(accountId, mailbox);
       useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
     }
@@ -330,7 +332,9 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   if (!locals) locals = await db.getLocalEmails(accountId, mailbox);
 
   if (!spans) {
-    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds: archived, localEmails: locals });
+    // I-5: `archived === null` means "could not read" — keep the store's
+    // current value rather than adopting "nothing is archived".
+    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds: archived ?? state.archivedEmailIds, localEmails: locals });
     get().updateSortedEmails();
     return;
   }
@@ -339,7 +343,9 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
   useMailStore.setState({
     savedEmailIds: new Set([...s.savedEmailIds, ...saved]),
-    archivedEmailIds: new Set([...s.archivedEmailIds, ...archived]),
+    // I-5: an unreadable `archived` merges nothing new rather than crashing
+    // on `...null` or wiping the union down to just the other groups.
+    archivedEmailIds: new Set([...s.archivedEmailIds, ...(archived ?? [])]),
     localEmails: [
       ...(s.localEmails || []).filter(e => !own(e)),
       ...locals.map(e => ({ ...e, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
@@ -399,7 +405,9 @@ export async function removeLocalEmail(uid) {
   }
 
   const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
-  const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
+  // I-5: keep the store's current value on a failed read instead of
+  // adopting "nothing is archived".
+  const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox) ?? get().archivedEmailIds;
   const localEmails = await db.getLocalEmails(accountId, mailbox);
 
   if (selectionStillNames(get, { uid: unified?.uid ?? uid, accountId, mailbox })) {
@@ -862,6 +870,10 @@ export async function applyServerRemoval(uid, {
   if (deletedByUs) {
     try {
       const archivedIds = await db.getArchivedEmailIds(accountId, mailbox);
+      // I-5: `null` means "could not read" — the exact case this fail-closed
+      // guard exists for. Route it through the same catch as a thrown error
+      // instead of letting `.has` on `null` throw by accident.
+      if (archivedIds == null) throw new Error('could not read the archive index');
       archivedLocally = archivedIds.has(uid) || archivedIds.has(Number(uid));
     } catch (error) {
       // A failed durability read cannot prove that the vault survived. Keep
@@ -1982,7 +1994,9 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
       db.getArchivedEmailIds(activeGroup.accountId, activeGroup.mailbox),
       db.getLocalEmails(activeGroup.accountId, activeGroup.mailbox),
     ]);
-    useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
+    // I-5: keep the store's current value on a failed read instead of
+    // adopting "nothing is archived".
+    useMailStore.setState({ savedEmailIds, archivedEmailIds: archivedEmailIds ?? get().archivedEmailIds, localEmails });
   }
   get().updateSortedEmails();
 

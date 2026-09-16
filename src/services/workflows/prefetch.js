@@ -75,13 +75,18 @@ export async function _prewarmAccountCaches() {
     if (_getRestore(account.id, 'INBOX', 'all')) return;
 
     try {
-      const [cachedHeaders, archivedEmailIds, savedEmailIds, cachedMailboxEntry] = await Promise.all([
+      const [cachedHeaders, rawArchivedEmailIds, savedEmailIds, cachedMailboxEntry] = await Promise.all([
         db.getEmailHeadersPartial(account.id, 'INBOX', 500),
         db.getArchivedEmailIds(account.id, 'INBOX'),
         db.getSavedEmailIds(account.id, 'INBOX'),
         db.getCachedMailboxEntry(account.id).catch(() => null),
       ]);
       if (!cachedHeaders || !cachedHeaders.emails || cachedHeaders.emails.length === 0) return;
+
+      // I-5: this is a background account with nothing in the store to fall
+      // back to — treat "could not read" as "skip prefetching archived
+      // emails this round" rather than crashing on `.size`/`.has`.
+      const archivedEmailIds = rawArchivedEmailIds ?? new Set();
 
       const cachedMailboxes = cachedMailboxEntry?.mailboxes || null;
 
