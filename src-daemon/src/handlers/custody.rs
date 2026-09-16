@@ -14,11 +14,15 @@
 //! unreachable, same as `search_index_status`.
 //!
 //! `maildir_delete_many`/`repair_generation`/`purge_orphans` touch BOTH a
-//! vault file and custody: the file half goes through
-//! `common::with_vault_write` (never held across the custody call — the two
-//! locks are never nested here, only `handlers::vault_flags`'s
-//! `apply_everywhere` nests custody inside `WRITER`), the custody half
-//! through `crate::custody::with_conn` on its own, right after.
+//! vault file and custody. `maildir_delete_many` takes the two sequentially
+//! (file half under `common::with_vault_write`, then the custody prune on its
+//! own). `maildir_repair_generation` DOES nest — its `local_uids`/`remap`
+//! calls run inside the `with_vault_write` closure, because the repair has to
+//! read what is composed-here and rewrite those rows against the same vault
+//! state it just renamed files in. That nesting order (vault gate outer,
+//! custody inner) is the same one `handlers::vault_flags`'s `apply_everywhere`
+//! uses, and no route anywhere takes custody first and the vault gate second,
+//! which is what would deadlock (2.9a review M2).
 //! `maildir_purge_orphans` can be a whole-vault walk when `accountId` is
 //! omitted, so — like Task 2.8's `maildir_clear_cache` — it re-checks the
 //! gate once per mailbox directory rather than once for the whole call.
@@ -144,6 +148,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     if let Err(e) = daemon_custody::with_conn(&state, |c| entries::remove(c, &account_id, &mailbox, &all_uids)) {
                         warn!("maildir_delete_many: custody prune failed: {}", e);
                     }
+                    info!("maildir_delete_many: removed {} files from {}/{}", removed, account_id, mailbox);
                     Ok(serde_json::json!({ "removed": removed }))
                 })
                 .await
@@ -172,6 +177,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         let (id_to_uid, sidecars) = vault_files::sidecar_message_id_map(root, &account_id, &mailbox);
                         let total = cached_total.unwrap_or(0);
                         if total == 0 || sidecars < total {
+                            info!(
+                                "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
+                                account_id, mailbox, sidecars, total,
+                            );
                             return Ok(maildir::GenerationRepair::default());
                         }
                         let protected = match daemon_custody::with_conn(&state, |c| entries::local_uids(c, &account_id, &mailbox)) {
@@ -251,7 +260,7 @@ mod tests {
     #[tokio::test]
     async fn local_index_read_append_remove_round_trip() {
         let (_v, s) = st(true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         assert_eq!(call(&s, "local_index_read", json!({"accountId": "acc", "mailbox": "INBOX"})).await.result, Some(Value::Null));
 
         let entries_json = serde_json::to_string(&[json!({"uid": 7, "flags": ["draft"]})]).unwrap();
@@ -271,7 +280,7 @@ mod tests {
     #[tokio::test]
     async fn local_index_append_a_bad_json_string_is_a_parse_error_before_touching_custody() {
         let (_v, s) = st(true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         let r = call(&s, "local_index_append", json!({"accountId": "acc", "mailbox": "INBOX", "entriesJson": "not json"})).await;
         let err = r.error.unwrap();
         assert!(err.message.starts_with("Failed to parse entries:"), "{}", err.message);
@@ -291,7 +300,7 @@ mod tests {
         assert_eq!(r, json!({"available": false, "error": null, "path": null}));
 
         let (v2, s2) = st(true);
-        daemon_custody::open_into(&s2);
+        let _ = daemon_custody::open_into(&s2);
         let r = call(&s2, "custody_status", json!({})).await.result.unwrap();
         assert_eq!(r["available"], true);
         assert_eq!(r["path"], mailvault_core::custody::db::db_path(v2.path()).display().to_string());
@@ -306,7 +315,7 @@ mod tests {
     #[tokio::test]
     async fn maildir_delete_many_removes_files_and_prunes_every_requested_uid_from_custody() {
         let (v, s) = st(true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         seed_file(v.path(), "acc", "INBOX", 1);
         // uid 2 has a custody row but no file: `entries::remove` for ALL
         // requested uids (inventory-maildir row 13) must prune it too.
@@ -326,7 +335,7 @@ mod tests {
     #[tokio::test]
     async fn maildir_delete_many_is_gated_while_the_vault_is_being_moved() {
         let (_v, s) = st(true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         s.vault_closed.store(true, std::sync::atomic::Ordering::SeqCst);
         let r = call(&s, "maildir_delete_many", json!({"accountId": "acc", "mailbox": "INBOX", "uids": [1]})).await;
         let err = r.error.unwrap();
@@ -336,7 +345,7 @@ mod tests {
     #[tokio::test]
     async fn custody_entries_for_account_returns_mailbox_and_row_pairs() {
         let (_v, s) = st(true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         daemon_custody::with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 1, "flags": []})])).unwrap();
         let r = call(&s, "custody_entries_for_account", json!({"accountId": "acc"})).await.result.unwrap();
         assert_eq!(r, json!([["INBOX", {"uid": 1, "flags": []}]]));

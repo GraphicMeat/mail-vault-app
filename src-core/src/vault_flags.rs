@@ -31,13 +31,13 @@ use tracing::warn;
 
 /// One message's flags as the server names them: `\Seen`, `\Flagged`,
 /// `\Answered`. The full list, not a delta — what the message has now.
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlagChange {
     pub uid: u32,
     pub flags: Vec<String>,
 }
 
-#[derive(Debug, Default, Serialize, PartialEq)]
+#[derive(Debug, Default, Serialize, Deserialize, PartialEq)]
 pub struct Applied {
     pub renamed: usize,
     pub mirrored: usize,
@@ -252,7 +252,7 @@ fn rename_for(path: &Path, uid: u32, imap: &[String]) -> Result<Option<String>, 
 /// One mailbox path change. The JS sends one pair per renamed folder AND one
 /// per descendant, because a server's RENAME moves the whole subtree in a
 /// single command while the vault keeps a directory per full mailbox path.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RenamePair {
     pub from: String,
     pub to: String,
@@ -453,7 +453,7 @@ pub fn adopt_dirs(from: &Dirs, to: &Dirs) -> Adopted {
     out
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct AdoptReport {
     pub adopted: Vec<String>,
     pub skipped_both_exist: Vec<String>,

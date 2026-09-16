@@ -13,11 +13,10 @@
 //! - `status_json`/`emit` take the `EventBus` on `DaemonState` instead of
 //!   `AppHandle::emit`.
 //!
-//! **Not opened at daemon startup by this task.** The app still holds the
-//! exclusive lock on `custody.db` until Task 2.9b's cutover; until then every
-//! route here just sees whatever `state.custody` currently holds — closed,
-//! reporting `custody store unavailable: closed`, unless a test (or, from
-//! 2.9b, the real startup wiring) calls `open_into` itself.
+//! Opened once at daemon startup, before `server::run` binds the socket
+//! (Task 2.9b), and again by `vault_reopen` after a vault switch. Nothing in
+//! the app opens `custody.db` any more: the file is EXCLUSIVE, so a second
+//! opener would only ever fail BUSY.
 
 use crate::server::DaemonState;
 use mailvault_core::custody::{db, import, lock, Connection, SharedConn};
@@ -50,19 +49,24 @@ fn g<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 /// races the import. Gated on `mail_dir_ok` only (never `state.app_dir`: an
 /// ungated open there would create a second, divergent custody store —
 /// inventory-custody-plumbing headline 4).
-pub fn open_into(state: &DaemonState) {
+pub fn open_into(state: &DaemonState) -> Result<(), String> {
     let st = &state.custody;
     if !state.mail_dir_ok {
         *lock(&st.db) = None;
         *g(&st.root) = None;
-        *g(&st.error) = Some("no vault root: the folder is not reachable".to_string());
+        let why = "no vault root: the folder is not reachable".to_string();
+        *g(&st.error) = Some(why.clone());
         emit(state);
-        return;
+        return Err(why);
     }
     let root = state.data_dir.clone();
     let gen = st.switch.current();
     *lock(&st.db) = None; // one connection per file: a stale one would make this open BUSY
-    match db::open(&root) {
+    // Root BEFORE the open, as the app's own `open_into` did (2.9a review C1):
+    // the banner and `connected-custody-corrupt` both name the file that would
+    // not open, and a store that failed to open still has a path.
+    *g(&st.root) = Some(root.clone());
+    let outcome = match db::open(&root) {
         Ok(conn) => {
             let report = import::import_legacy(&conn, &root);
             if report.files > 0 || report.renamed_caches > 0 || !report.errors.is_empty() {
@@ -72,18 +76,21 @@ pub fn open_into(state: &DaemonState) {
                 warn!("custody import: {} left in place: {why}", path.display());
             }
             if !install_if_current(&st.db, &st.switch, gen, conn) {
-                return; // a close() started while this opened: the connection is dropped
+                // A close() started while this opened: the connection is
+                // dropped, and `close` already cleared root/error.
+                return Ok(());
             }
-            *g(&st.root) = Some(root);
             *g(&st.error) = None;
+            Ok(())
         }
         Err(e) => {
             error!("custody store unavailable at {}: {e}", db::db_path(&root).display());
-            *g(&st.root) = None;
             *g(&st.error) = Some(e.to_string());
+            Err(e.to_string())
         }
-    }
+    };
     emit(state);
+    outcome
 }
 
 /// Before a vault operation: release the file. Drop = checkpoint, so the
@@ -99,9 +106,14 @@ pub fn close(state: &DaemonState) {
 /// index's `reopen` — `handlers::search_index::vault_reopen` must have
 /// custody actually reopened before it clears `vault_closed`, or a gated
 /// route could pass the gate and still hit `custody store unavailable: closed`.
-pub fn reopen(state: &DaemonState) {
+///
+/// Returns the open failure (2.9a review I1) so `vault_reopen` can answer
+/// `Err`: a custody store that will not reopen is otherwise permanent for the
+/// daemon's life, and the app's own lifecycle error path — stop the daemon so
+/// the channel respawns it against whatever root is current — never fires.
+pub fn reopen(state: &DaemonState) -> Result<(), String> {
     state.custody.switch.end_switch();
-    open_into(state);
+    open_into(state)
 }
 
 /// Identical shape to `src-tauri/src/custody.rs:82-86`.
@@ -145,7 +157,7 @@ mod tests {
     #[test]
     fn open_into_opens_and_reports_available_when_the_folder_is_ok() {
         let (vault, _app, s) = state(true);
-        open_into(&s);
+        let _ = open_into(&s);
         let status = status_json(&s);
         assert_eq!(status["available"], true);
         assert_eq!(status["path"], db::db_path(vault.path()).display().to_string());
@@ -156,7 +168,7 @@ mod tests {
     #[test]
     fn open_into_refuses_and_touches_nothing_under_app_dir_when_the_folder_is_not_ok() {
         let (_vault, app, s) = state(false);
-        open_into(&s);
+        let _ = open_into(&s);
         let status = status_json(&s);
         assert_eq!(status["available"], false);
         assert_eq!(status["error"], "no vault root: the folder is not reachable");
@@ -164,10 +176,29 @@ mod tests {
         assert!(!app.path().join("custody").exists(), "no custody dir must appear under app_dir");
     }
 
+    /// 2.9a review C1: the banner (`VaultAlertBanner.jsx`) and
+    /// `connected-custody-corrupt.test.js` both name the file that would not
+    /// open, so a failed open still reports its path — only "no vault root"
+    /// has nothing to name. `open_into` returns the failure (I1) as well.
+    #[test]
+    fn a_store_that_will_not_open_still_reports_the_file_it_could_not_open() {
+        let (vault, _app, s) = state(true);
+        let file = db::db_path(vault.path());
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, b"this is not a database").unwrap();
+
+        let err = open_into(&s).unwrap_err();
+        assert!(!err.is_empty());
+        let status = status_json(&s);
+        assert_eq!(status["available"], false);
+        assert_eq!(status["path"], file.display().to_string(), "the banner names the file");
+        assert!(!status["error"].is_null());
+    }
+
     #[test]
     fn closed_store_with_conn_reports_the_open_error_text() {
         let (_vault, _app, s) = state(false);
-        open_into(&s); // fails: mail_dir_ok is false
+        let _ = open_into(&s); // fails: mail_dir_ok is false
         let err = with_conn(&s, |c| entries::read(c, "acct", "INBOX")).unwrap_err();
         assert_eq!(err, "custody store unavailable: no vault root: the folder is not reachable");
     }
@@ -194,7 +225,7 @@ mod tests {
         )
         .unwrap();
 
-        open_into(&s);
+        let _ = open_into(&s);
 
         let text = with_conn(&s, |c| entries::read(c, "acct", "INBOX")).unwrap().expect("imported row");
         let parsed: Value = serde_json::from_str(&text).unwrap();
@@ -205,7 +236,7 @@ mod tests {
     #[test]
     fn append_read_remove_round_trip() {
         let (_vault, _app, s) = state(true);
-        open_into(&s);
+        let _ = open_into(&s);
         let entry = json!({"uid": 3, "source": "local_sent", "flags": ["seen"]});
         with_conn(&s, |c| entries::upsert(c, "acct", "Sent", &[entry.clone()]).map(|_| ())).unwrap();
         let text = with_conn(&s, |c| entries::read(c, "acct", "Sent")).unwrap().unwrap();
@@ -217,12 +248,12 @@ mod tests {
     #[test]
     fn close_then_reopen_reinstalls_a_working_connection() {
         let (_vault, _app, s) = state(true);
-        open_into(&s);
+        let _ = open_into(&s);
         assert_eq!(status_json(&s)["available"], true);
         close(&s);
         let status = status_json(&s);
         assert_eq!((status["available"].as_bool(), status["error"].is_null(), status["path"].is_null()), (Some(false), true, true));
-        reopen(&s);
+        let _ = reopen(&s);
         assert_eq!(status_json(&s)["available"], true);
     }
 }

@@ -72,12 +72,28 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let reopen_state = Arc::clone(state);
             let reply = done(
                 id,
-                blocking(move || {
+                blocking(move || -> Result<Value, String> {
                     si::reopen(&st);
-                    crate::custody::reopen(&reopen_state);
-                    Value::Null
+                    // 2.9a review I1: a custody store that will not reopen is
+                    // answered as a failed `vault_reopen`, so the app's own
+                    // lifecycle error path stops the daemon and the channel
+                    // respawns it against whatever root is current. Silently
+                    // answering success left it closed for the daemon's life.
+                    //
+                    // The one Err that is not a failure: there is no root to
+                    // open at all. A restart cannot conjure an unplugged drive,
+                    // `custody_status` already reports it, and `vault_close` /
+                    // `vault_reopen` are called whether or not the vault is
+                    // reachable — they must not be refused for being called
+                    // then.
+                    match crate::custody::reopen(&reopen_state) {
+                        Ok(()) => Ok(Value::Null),
+                        Err(_) if !reopen_state.mail_dir_ok => Ok(Value::Null),
+                        Err(e) => Err(format!("custody reopen failed: {e}")),
+                    }
                 })
-                .await,
+                .await
+                .and_then(|r| r),
             );
             state.vault_closed.store(false, Ordering::SeqCst);
             info!("vault_reopen: reopened");

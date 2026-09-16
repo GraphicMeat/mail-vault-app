@@ -688,7 +688,7 @@ export const readDrafts = (accountId) =>
 
 /** The Drafts index entries for a mailbox, read from the app's custody store (the metadata the Drafts list renders from). */
 export async function localIndex(accountId, mailbox) {
-  const r = await invoke('local_index_read', { accountId, mailbox });
+  const r = await invoke('daemon_rpc', { method: 'local_index_read', params: { accountId, mailbox } });
   // A store that is closed or would not open answers with an error. Swallowing
   // it would turn every `.not.toContain` assertion green against nothing.
   if (!r.ok) throw new Error(`local_index_read failed for ${accountId}/${mailbox}: ${r.error}`);
@@ -727,10 +727,8 @@ export async function snapshotDraft(accountId, subject) {
  * rather than imitating one.
  */
 export async function restoreDraft(accountId, { entry, rawBase64 }) {
-  // Task 2.8: maildir_store moved into the daemon (DAEMON_OWNED) — routed
-  // through daemon_rpc, same as every other moved-command e2e site
-  // (`local_index_read`/`local_index_append` below stay native: custody is
-  // still in the app).
+  // Task 2.8 (maildir_store) and Task 2.9b (local_index_append): both live in
+  // the daemon now, so both go through daemon_rpc under their own name.
   const stored = await invoke('daemon_rpc', {
     method: 'maildir_store',
     params: {
@@ -742,10 +740,9 @@ export async function restoreDraft(accountId, { entry, rawBase64 }) {
     },
   });
   if (!stored.ok) throw new Error(`maildir_store failed re-seeding draft ${entry.uid}: ${stored.error}`);
-  const indexed = await invoke('local_index_append', {
-    accountId,
-    mailbox: 'Drafts',
-    entriesJson: JSON.stringify([entry]),
+  const indexed = await invoke('daemon_rpc', {
+    method: 'local_index_append',
+    params: { accountId, mailbox: 'Drafts', entriesJson: JSON.stringify([entry]) },
   });
   if (!indexed.ok) throw new Error(`local_index_append failed re-seeding draft ${entry.uid}: ${indexed.error}`);
 }

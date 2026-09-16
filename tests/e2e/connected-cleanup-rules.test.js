@@ -344,7 +344,7 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
           out.vault = await invoke('daemon_rpc', { method: 'maildir_read_light', params: { accountId, mailbox: 'INBOX', uid } });
         } catch (e) { out.vaultError = String(e); }
         try {
-          const raw = await invoke('local_index_read', { accountId, mailbox: 'INBOX' });
+          const raw = await invoke('daemon_rpc', { method: 'local_index_read', params: { accountId, mailbox: 'INBOX' } });
           out.entry = (JSON.parse(raw || '[]') || []).find((e) => e.uid === uid) || null;
         } catch (e) { out.indexError = String(e); }
         done(out);
@@ -419,8 +419,8 @@ describe('An auto-cleanup rule deletes only what the vault can prove', function 
     let repair = null;
     await browser.waitUntil(async () => {
       rmSync(stamp, { force: true });
-      repair = (await invokeApp('maildir_repair_generation', {
-        accountId: yodaId, mailbox: 'INBOX',
+      repair = (await invokeApp('daemon_rpc', {
+        method: 'maildir_repair_generation', params: { accountId: yodaId, mailbox: 'INBOX' },
       }))?.value ?? null;
       return repair?.ran === true;
     }, {

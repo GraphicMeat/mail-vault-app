@@ -539,7 +539,7 @@ describe('Bulk delete everywhere', function () {
         Promise.all([
           maildirList(null).catch(e => ({ __error: String(e) })),
           maildirList('archived').catch(e => ({ __error: String(e) })),
-          inv('local_index_read', { accountId, mailbox }).catch(e => ({ __error: String(e) })),
+          inv('daemon_rpc', { method: 'local_index_read', params: { accountId, mailbox } }).catch(e => ({ __error: String(e) })),
         ]).then(([all, archived, index]) => done({ all, archived, index })).catch(e => done({ __error: String(e) }));
       }, vaderId, 'Archive');
       // All the inputs can be right and the row still absent, if the

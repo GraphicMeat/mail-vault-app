@@ -849,21 +849,29 @@ async fn run_imap_backup_inner(
         // an auto-cached `<uid>:2,.eml` once a backup vouches for it.
         let changes = catch_up_changes(&server_flags, &local_uids);
         if !changes.is_empty() {
-            let root = crate::vault::root(&app_handle)?;
-            let dirs = mailvault_core::vault_flags::dirs_for(
-                &root, &account_id, mailbox_path, Some(&account.email), backup_path.as_deref(),
-            );
+            // R2.1 bridge (Task 2.9b): the renames, the mirror and the custody
+            // patch all happen in the daemon, under the same `WRITER` the
+            // frontend's own `vault_apply_flags` takes — one writer for both
+            // callers, which is the point. `sidecars: false` keeps this path's
+            // original behaviour (a backup catch-up never rewrote the header
+            // cache). `backup_path` is already resolved here, so it is passed
+            // as `mirrorRoot` and this caller does not release anything the
+            // surrounding backup run still needs.
             let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox_path.to_string());
-            // Renames every stale file in both locations — disk work, and it
-            // takes a process-wide writer lock while it does it.
-            let applied = tokio::task::spawn_blocking(move || {
-                mailvault_core::vault_flags::apply_everywhere(&dirs, &changes, false, |patch| {
-                    crate::custody::with_conn(&handle, |c| mailvault_core::custody::entries::patch_flags_many(c, &acct, &mbx, patch))
-                        .map_err(|e| format!("{}/{}: {}", acct, mbx, e))
-                })
+            let params = serde_json::json!({
+                "accountId": account_id,
+                "mailbox": mailbox_path,
+                "accountEmail": account.email,
+                "changes": changes,
+                "mirrorRoot": backup_path,
+                "sidecars": false,
+            });
+            let applied: mailvault_core::vault_flags::Applied = tokio::task::spawn_blocking(move || {
+                crate::daemon_call_blocking(&handle, "vault_apply_flags", params, std::time::Duration::from_secs(600))
+                    .and_then(|v| serde_json::from_value(v).map_err(|e| format!("{}/{}: unreadable reply: {}", acct, mbx, e)))
             })
                 .await
-                .map_err(|e| format!("flag catch-up panicked: {}", e))?;
+                .map_err(|e| format!("flag catch-up panicked: {}", e))??;
             if applied.total() > 0 {
                 info!(
                     "backup: {} — read state caught up on {} vault files, {} mirror files, {} custody entries",

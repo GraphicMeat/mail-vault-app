@@ -9,7 +9,7 @@
  * `tests/unit/searchIndexInDaemon.test.js` (Phase 1).
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
 const main = readFileSync('src-tauri/src/main.rs', 'utf8');
 const handlerList = main.slice(main.indexOf('generate_handler!['), main.indexOf(']', main.indexOf('generate_handler![')));
@@ -31,6 +31,11 @@ const MOVED = [
   // 12, 14, 16-18).
   'maildir_store', 'maildir_delete', 'maildir_set_flags', 'maildir_clear_cache',
   'maildir_migrate_json_to_eml', 'maildir_migrate_email_dirs',
+  // Task 2.9b: the custody cutover — the four custody commands and the three
+  // vault writers that read or rewrite custody rows (inventory-maildir §1 rows
+  // 13, 19, 21; inventory-custody-plumbing §1).
+  'local_index_read', 'local_index_append', 'local_index_remove', 'custody_status',
+  'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
@@ -64,5 +69,61 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
     for (const name of MOVED) {
       expect(main).not.toMatch(new RegExp(`fn ${name}\\(`));
     }
+  });
+});
+
+/**
+ * Task 2.9b: `custody.db` opens EXCLUSIVE, so exactly one process may hold it.
+ * The daemon opens it at startup; a single line of app code that opens or
+ * borrows a connection makes that open fail BUSY — for the daemon or for the
+ * app, whichever loses the race — and the failure is a banner, not a crash.
+ * So the guard is the absence of the app-side openers and borrowers, not a
+ * test of behaviour.
+ *
+ * Deliberately NOT forbidden: `custody::db::DB_DIR` / `DB_FILE`. `insights.rs`
+ * stamps those two paths' mtimes before reading (a file watch works from any
+ * process) and `vault.rs` names them when it sets a copy aside during a vault
+ * move. Neither opens the store.
+ */
+describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', () => {
+  const dir = 'src-tauri/src';
+  const sources = readdirSync(dir).filter((f) => f.endsWith('.rs')).map((f) => [f, readFileSync(`${dir}/${f}`, 'utf8')]);
+
+  it('reads the real app sources', () => {
+    expect(sources.length).toBeGreaterThan(10);
+  });
+
+  it.each(['src-tauri/src/custody.rs', 'src-tauri/src/custody_tests.rs'])('%s is deleted', (f) => {
+    expect(existsSync(f)).toBe(false);
+  });
+
+  // The app's own custody module and its managed state are gone outright:
+  // no file, test or not, may name them.
+  it.each([
+    ['crate::custody', /crate::custody\b/],
+    ['CustodyState', /\bCustodyState\b/],
+  ])('no app source mentions %s', (_name, pattern) => {
+    const offenders = sources.filter(([, body]) => pattern.test(body)).map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  // Borrowing a connection from core is what would actually take the
+  // EXCLUSIVE lock, so it is forbidden in everything the shipped binary runs.
+  // `*_tests.rs` is exempt: `insights_tests.rs` opens a store of its own in a
+  // tempdir to feed the bridge closure, which is `#[cfg(test)]` and can never
+  // race the daemon's open.
+  it.each([
+    ['custody::db::open', /custody::db::open\b/],
+    ['custody::entries::', /custody::entries::/],
+    ['custody::lock(', /custody::lock\(/],
+  ])('no shipped app source calls %s', (_name, pattern) => {
+    const offenders = sources.filter(([f, body]) => !f.endsWith('_tests.rs') && pattern.test(body)).map(([f]) => f);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the three mirror-broker forwarders reach the daemon, not a local writer', () => {
+    const forwarders = readFileSync(`${dir}/vault_flags.rs`, 'utf8');
+    expect(forwarders).toMatch(/daemon_call_blocking/);
+    expect(forwarders).not.toMatch(/apply_everywhere|rename_dirs|adopt_dirs/);
   });
 });

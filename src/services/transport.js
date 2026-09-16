@@ -133,6 +133,14 @@ export const DAEMON_OWNED = new Set([
   // Task 2.8: the six simple vault writers.
   'maildir_store', 'maildir_delete', 'maildir_set_flags', 'maildir_clear_cache',
   'maildir_migrate_json_to_eml', 'maildir_migrate_email_dirs',
+  // Task 2.9b: the custody store itself now opens in the daemon, so its four
+  // commands and the three vault writers that read or rewrite custody rows go
+  // with it. The three `vault_*` flag commands are deliberately NOT here —
+  // they stay Tauri commands because only the app can resolve the backup
+  // mirror's security-scoped bookmark (spec deviation 1), and forward from
+  // there.
+  'local_index_read', 'local_index_append', 'local_index_remove', 'custody_status',
+  'maildir_delete_many', 'maildir_repair_generation', 'maildir_purge_orphans',
 ]);
 
 async function sendToDaemon(command, args) {

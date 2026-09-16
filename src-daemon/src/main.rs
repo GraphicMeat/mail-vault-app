@@ -344,10 +344,28 @@ async fn daemon_main() {
         custody: custody::CustodyState::default(),
     });
 
-    // Task 2.9a: state only — NOT opened here. The app still holds the
-    // exclusive lock on custody.db until Task 2.9b's cutover; opening it here
-    // too would make the app's own open fail BUSY (inventory-custody-plumbing
-    // headline 1).
+    // Custody, before the socket exists (Task 2.9b Step 1): the legacy JSON
+    // import runs inside `open_into`, so a route that reads an entry can never
+    // be served before the import that would have produced it. The app no
+    // longer opens this file at all — `custody.db` is EXCLUSIVE, and two
+    // openers would simply make the second one fail BUSY.
+    //
+    // On a blocking thread and awaited: the import walks the vault's legacy
+    // per-mailbox record files, which is disk work that must not sit on a
+    // tokio worker, and `server::run` below must not start accepting until it
+    // has finished. The app waits 3 s for the socket to appear, so an import
+    // slower than 2 s is worth a warn.
+    {
+        let custody_state = Arc::clone(&state);
+        let started = std::time::Instant::now();
+        let _ = tokio::task::spawn_blocking(move || custody::open_into(&custody_state)).await;
+        let took = started.elapsed();
+        if took > std::time::Duration::from_secs(2) {
+            warn!("custody store: open took {:?} — the app only waits 3s for the daemon socket", took);
+        } else {
+            info!("custody store: opened in {:?}", took);
+        }
+    }
 
     // Start background classification queue worker
     classification_worker::start_classification_worker(Arc::clone(&state));

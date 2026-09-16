@@ -76,7 +76,7 @@ function jsonFlags(path, uid) {
  */
 async function indexFlags(accountId, mailbox, uid) {
   const r = await browser.executeAsync((a, m, done) => {
-    window.__TAURI_INTERNALS__.invoke('local_index_read', { accountId: a, mailbox: m })
+    window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: 'local_index_read', params: { accountId: a, mailbox: m } })
       .then((raw) => done({ ok: true, raw }), (e) => done({ ok: false, reason: String((e && e.message) || e) }));
   }, accountId, mailbox);
   if (!r.ok) throw new Error(`local_index_read failed for ${accountId}/${mailbox}: ${r.reason}`);

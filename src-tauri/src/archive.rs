@@ -294,22 +294,36 @@ pub async fn run_with_backup(
         }
     }
 
-    // Record custody for every message this run stored.
+    // Record custody for every message this run stored. R2.1 bridge (Task
+    // 2.9b): custody.db is the daemon's file now, so this goes over RPC until
+    // Phase 3 moves `archive_emails` itself. `local_index_append` is the same
+    // method the frontend uses; the daemon does the upsert and logs the
+    // uid-less entries it skipped, so only the count is reported here.
     if !index_entries.is_empty() {
         let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox.clone());
-        match tokio::task::spawn_blocking(move || {
-            crate::custody::with_conn(&handle, |c| mailvault_core::custody::entries::upsert(c, &acct, &mbx, &index_entries))
-        })
-        .await
-        {
-            Ok(Ok((written, skipped))) => {
-                info!("archive_emails: recorded {} custody entries", written);
-                if skipped > 0 {
-                    warn!("archive_emails: {} entries without a uid skipped", skipped);
-                }
+        let written = index_entries.len();
+        let entries_json = match serde_json::to_string(&index_entries) {
+            Ok(j) => j,
+            Err(e) => {
+                warn!("archive_emails: custody write failed: {}", e);
+                String::new()
             }
-            Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
-            Err(e) => warn!("archive_emails: custody write panicked: {}", e),
+        };
+        if !entries_json.is_empty() {
+            match tokio::task::spawn_blocking(move || {
+                crate::daemon_call_blocking(
+                    &handle,
+                    "local_index_append",
+                    serde_json::json!({"accountId": acct, "mailbox": mbx, "entriesJson": entries_json}),
+                    std::time::Duration::from_secs(30),
+                )
+            })
+            .await
+            {
+                Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", written),
+                Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
+                Err(e) => warn!("archive_emails: custody write panicked: {}", e),
+            }
         }
     }
 

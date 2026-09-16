@@ -405,7 +405,7 @@ impl InsightsSnapshots {
     fn begin_at(
         &self,
         root: &Path,
-        custody: &mailvault_core::custody::SharedConn,
+        custody_rows: CustodyRows<'_>,
         configured: &[String],
         account_ids: &[String],
     ) -> ResultValue {
@@ -426,7 +426,7 @@ impl InsightsSnapshots {
         let mut accounts = account_ids.to_vec();
         accounts.sort();
         accounts.dedup();
-        let mut snapshot = inventory(root, custody, configured, accounts)?;
+        let mut snapshot = inventory(root, custody_rows, configured, accounts)?;
         if !snapshot.unchanged() {
             return Err(
                 json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))}),
@@ -594,9 +594,17 @@ fn date_value(value: &Value) -> Option<String> {
     }
     value.as_str().and_then(normalize_date)
 }
+/// One account's custody rows, however the caller gets them. R2.1 bridge
+/// (Task 2.9b): custody.db belongs to the daemon now, so production passes a
+/// closure over `daemon_call_blocking("custody_entries_for_account")` instead
+/// of a `SharedConn`; `insights_tests.rs` passes an in-memory one. An `Err`
+/// means "could not read", which is what `unreadableLocation` reports — it is
+/// never flattened into "no rows".
+pub(crate) type CustodyRows<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, Value)>, String>;
+
 fn inventory(
     root: PathBuf,
-    custody: &mailvault_core::custody::SharedConn,
+    custody_rows_for: CustodyRows<'_>,
     configured: &[String],
     accounts: Vec<String>,
 ) -> Result<Snapshot, Value> {
@@ -612,20 +620,15 @@ fn inventory(
         .join(mailvault_core::custody::db::DB_FILE);
     snapshot.watch(&custody_path, "");
     snapshot.watch(&custody_path.with_extension("db-wal"), "");
-    // One short read under the store's lock; the walks below must not hold it.
+    // One short read per account, before any walk: over the bridge this is an
+    // RPC, and the daemon holds its own connection lock for exactly that call.
     let mut custody_rows: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
-    {
-        let guard = mailvault_core::custody::lock(custody);
-        for account in &accounts {
-            match guard
-                .as_ref()
-                .map(|conn| mailvault_core::custody::entries::entries_for_account(conn, account))
-            {
-                Some(Ok(rows)) => {
-                    custody_rows.insert(account.clone(), rows);
-                }
-                _ => snapshot.problem("unreadableLocation", account, None),
+    for account in &accounts {
+        match custody_rows_for(account) {
+            Ok(rows) => {
+                custody_rows.insert(account.clone(), rows);
             }
+            Err(_) => snapshot.problem("unreadableLocation", account, None),
         }
     }
     let cache_paths = snapshot.children(&root.join("email_cache"), "");
@@ -1093,8 +1096,17 @@ pub async fn insights_begin_snapshot(
             return Err(error("invalidAccountScope"));
         }
         let root = crate::vault::root(&app_handle).map_err(|_| error("vaultUnavailable"))?;
-        let custody = tauri::Manager::state::<crate::custody::CustodyState>(&app_handle);
-        state.begin_at(&root, &custody.db, &configured, &account_ids)
+        // Already inside `spawn_blocking`, which is where a blocking RPC belongs.
+        let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
+            let v = crate::daemon_call_blocking(
+                &app_handle,
+                "custody_entries_for_account",
+                json!({"accountId": account}),
+                std::time::Duration::from_secs(30),
+            )?;
+            serde_json::from_value(v).map_err(|e| e.to_string())
+        };
+        state.begin_at(&root, &rows, &configured, &account_ids)
     })
     .await
     .map_err(|_| error("snapshotUnavailable"))?

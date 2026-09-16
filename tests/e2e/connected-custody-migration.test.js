@@ -27,7 +27,7 @@ const invoke = (command, args) => browser.executeAsync((c, a, done) => {
 }, command, args);
 
 const readIndex = async (accountId, mailbox) => {
-  const got = await invoke('local_index_read', { accountId, mailbox });
+  const got = await invoke('daemon_rpc', { method: 'local_index_read', params: { accountId, mailbox } });
   return got.failed ? got : { entries: got.ok ? JSON.parse(got.ok) : null };
 };
 
@@ -107,7 +107,7 @@ describe('Custody store: migration', function () {
     expect(byUid(got.entries).find((e) => e.uid === LEGACY_CUSTODY_UID)).toEqual(LEGACY_CUSTODY_ENTRY);
     const nestedRead = await readIndex(luke.id, 'Projects/2026');
     expect(nestedRead.entries).toEqual([LEGACY_NESTED_ENTRY]);
-    const status = await invoke('custody_status', {});
+    const status = await invoke('daemon_rpc', { method: 'custody_status', params: {} });
     expect(status.ok.available).toBe(true);
   });
 
@@ -144,7 +144,7 @@ describe('Custody store: migration', function () {
     // command is driven directly so the case does not depend on a menu path.
     const entry = ((await readIndex(vader.id, 'INBOX')).entries || []).find((e) => e.subject === vaderSubject);
     expect(entry).toBeTruthy();
-    const r = await invoke('maildir_delete_many', { accountId: vader.id, mailbox: 'INBOX', uids: [entry.uid] });
+    const r = await invoke('daemon_rpc', { method: 'maildir_delete_many', params: { accountId: vader.id, mailbox: 'INBOX', uids: [entry.uid] } });
     expect(r.failed).toBeUndefined();
     expect(r.ok.removed).toBe(1);
     const after = (await readIndex(vader.id, 'INBOX')).entries || [];

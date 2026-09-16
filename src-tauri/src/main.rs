@@ -8,7 +8,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 pub(crate) use mailvault_core::vault_eml::{
     find_file_by_uid, parse_address_str, parse_eml_bytes_light, parse_flags_from_filename,
 };
-pub(crate) use mailvault_core::vault_files::{build_maildir_filename, delete_maildir_files};
+pub(crate) use mailvault_core::vault_files::build_maildir_filename;
 pub(crate) use mailvault_core::header_cache::cache_base_name;
 
 /// Localize the menu bar without rebuilding it.
@@ -82,7 +82,6 @@ use tracing_appender::rolling::{RollingFileAppender, Rotation};
 mod archive;
 mod backup;
 mod commands;
-mod custody;
 mod daemon_channel;
 mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
@@ -1142,9 +1141,12 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 // (maildir_store, maildir_delete, maildir_set_flags, maildir_clear_cache,
 // maildir_migrate_json_to_eml, maildir_migrate_email_dirs) moved with them
 // (Task 2.8) — DAEMON_OWNED in transport.js, no Tauri command left for any of
-// them. What stays here (maildir_store_raw, maildir_delete_many,
-// maildir_repair_generation, maildir_purge_orphans — the custody-backed trio,
-// Task 2.9a) calls mailvault_core::vault_files (Task 2.2) directly.
+// them. The custody-backed trio (maildir_delete_many,
+// maildir_repair_generation, maildir_purge_orphans) followed in Task 2.9b,
+// once custody.db itself opened in the daemon. What is left here is
+// maildir_store_raw, an internal writer commands.rs still calls (Phase 5),
+// plus the three vault_flags forwarders in `vault_flags.rs`, which exist only
+// to resolve the backup mirror's security-scoped bookmark for the daemon.
 // ==========================================
 
 // ── Mail storage location ───────────────────────────────────────────────────
@@ -1168,9 +1170,7 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
         daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
-        custody::close(&app_handle);
         let result = vault::adopt(&app_handle, &path);
-        custody::reopen(&app_handle);
         let status = match result {
             Ok(s) => s,
             Err(e) => {
@@ -1220,12 +1220,10 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
         daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
-        custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to(&handle, &path, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
         });
-        custody::reopen(&handle); // success or not: whatever root is current now
         let follow_up = if result.is_err() {
             after_failed_move(root_before, vault::root(&handle).ok())
         } else {
@@ -1263,12 +1261,10 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
         daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
-        custody::close(&handle);
         let emitter = handle.clone();
         let result = vault::move_to_default(&handle, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
         });
-        custody::reopen(&handle); // success or not: whatever root is current now
         let follow_up = if result.is_err() {
             after_failed_move(root_before, vault::root(&handle).ok())
         } else {
@@ -1299,9 +1295,7 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
         daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
-        custody::close(&app_handle);
         let result = vault::reset(&app_handle);
-        custody::reopen(&app_handle);
         let status = match result {
             Ok(s) => s,
             Err(e) => {
@@ -1385,124 +1379,10 @@ pub fn maildir_store_raw(
 
 // ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
 //
-// See `mailvault_core::maildir`'s generation section for what this repairs and
-// why nothing here deletes mail.
-
-/// The mailbox directory — parent of `cur/`, and where `.uidvalidity` and
-/// `orphaned/` live. Uses the same sanitized name `maildir_cur_path` does, so
-/// the stamp always sits beside the files it describes.
-fn maildir_mailbox_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    let cur = maildir_cur_path(app_handle, account_id, mailbox)?;
-    cur.parent().map(|p| p.to_path_buf())
-        .ok_or_else(|| "Maildir path has no parent".to_string())
-}
-
-/// Bring a mailbox's vault files onto the server's current UID generation.
-///
-/// Cheap when there is nothing to do: two small file reads, and the sidecar
-/// scan below only runs when they disagree. Safe to call on every mailbox open,
-/// which is the point — a reissue has to be caught before anything asks "is uid
-/// N archived?", not after the answer has already been believed.
-///
-/// The generation comes from `_meta.json` rather than an argument so that every
-/// caller gets the same answer from the same place; a caller that had to fetch
-/// and pass it is a caller that can pass a stale one.
-#[tauri::command]
-async fn maildir_repair_generation(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-) -> Result<mailvault_core::maildir::GenerationRepair, String> {
-    tokio::task::spawn_blocking(move || {
-        let root = vault::root(&app_handle)?;
-        let (cached_uv, cached_total) = mailvault_core::vault_files::cached_sync_meta(&root, &account_id, &mailbox);
-        let uid_validity = match cached_uv {
-            Some(uv) => uv,
-            // Nothing to compare against. Stamping the vault with a generation
-            // we did not verify would be worse than leaving it unstamped: the
-            // next repair would trust it.
-            None => return Ok(mailvault_core::maildir::GenerationRepair::default()),
-        };
-        let mailbox_dir = maildir_mailbox_path(&app_handle, &account_id, &mailbox)?;
-
-        // Same check `repair_generation` makes, made again here so the hot path
-        // never builds the Message-ID map — that is a read of every sidecar in
-        // the mailbox, and this runs on every open.
-        if mailvault_core::maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
-            return Ok(mailvault_core::maildir::GenerationRepair {
-                generation: uid_validity,
-                ..Default::default()
-            });
-        }
-
-        // Moving a file aside says "the server does not have this message". The
-        // sidecars are the evidence for that, and a partial cache is not
-        // evidence of anything — during a cold start it is empty, and every
-        // message in the vault would read as gone. Nothing runs until the cache
-        // covers the mailbox; until then the vault stays as it is, which is no
-        // worse than before, and `_readVerifiedLocal` still guards what opens.
-        let (id_to_uid, sidecars) = mailvault_core::vault_files::sidecar_message_id_map(&root, &account_id, &mailbox);
-        let total = cached_total.unwrap_or(0);
-        if total == 0 || sidecars < total {
-            info!(
-                "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
-                account_id, mailbox, sidecars, total,
-            );
-            return Ok(mailvault_core::maildir::GenerationRepair::default());
-        }
-
-        // A repair that cannot see which files were composed here would move
-        // the user's own sent mail and drafts aside as "not on the server".
-        let protected = match custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::local_uids(c, &account_id, &mailbox)) {
-            Ok(uids) => uids,
-            Err(e) => {
-                warn!("maildir_repair_generation: {}/{} skipped, {}", account_id, mailbox, e);
-                return Ok(mailvault_core::maildir::GenerationRepair::default());
-            }
-        };
-
-        let report = mailvault_core::maildir::repair_generation(
-            &mailbox_dir, uid_validity, &id_to_uid, &protected,
-        );
-
-        if !report.rebound.is_empty() || !report.orphaned.is_empty() {
-            if let Err(e) = custody::with_conn(&app_handle, |c| {
-                mailvault_core::custody::entries::remap(c, &account_id, &mailbox, &report.rebound, &report.orphaned)
-            }) {
-                warn!("maildir_repair_generation: custody remap failed: {}", e);
-            }
-        }
-        // Files changed uid in `cur/`: the index still maps the old uids to them.
-        if !report.rebound.is_empty() || !report.orphaned.is_empty() || !report.recovered.is_empty() {
-            nudge_index(&account_id, &mailbox);
-        }
-        Ok(report)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
-
-/// Delete every orphan folder for one account, or the whole vault.
-///
-/// These are messages the current server does not have, so this is the one
-/// place in the vault where deleting can lose the last copy. Only ever reached
-/// from an explicit user action.
-#[tauri::command]
-async fn maildir_purge_orphans(
-    app_handle: tauri::AppHandle,
-    account_id: Option<String>,
-) -> Result<u64, String> {
-    tokio::task::spawn_blocking(move || {
-        let base = vault::root(&app_handle)?.join("Maildir");
-        let mut removed = 0u64;
-        for mailbox_dir in mailvault_core::vault_files::orphan_mailbox_dirs(&base, account_id.as_deref()) {
-            match mailvault_core::maildir::purge_orphans(&mailbox_dir) {
-                Ok(n) => removed += n,
-                Err(e) => warn!("maildir_purge_orphans: {}", e),
-            }
-        }
-        info!("maildir_purge_orphans: removed {} files", removed);
-        Ok(removed)
-    }).await.map_err(|e| format!("Task join error: {}", e))?
-}
+// `maildir_repair_generation` and `maildir_purge_orphans` moved to the daemon
+// (Task 2.9b, `handlers::custody`) — they read and rewrite custody rows, and
+// custody.db now opens in the daemon. `maildir_mailbox_path` went with them:
+// the daemon derives the mailbox directory from its own root.
 
 #[tauri::command]
 async fn archive_emails(
@@ -1593,34 +1473,8 @@ async fn verify_archived_emails(
     }).await.map_err(|e| format!("Task join error: {}", e))?
 }
 
-// `maildir_delete` moved to the daemon (Task 2.8). `maildir_delete_many`
-// below stays for Task 2.9a (custody-backed).
-
-#[tauri::command]
-fn maildir_delete_many(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    mailbox: String,
-    uids: Vec<u32>,
-) -> Result<serde_json::Value, String> {
-    let uid_set: std::collections::HashSet<u32> = uids.into_iter().collect();
-    let cur_dir = maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    let removed = delete_maildir_files(&cur_dir, &uid_set);
-    if removed > 0 {
-        nudge_index(&account_id, &mailbox);
-    }
-
-    let uids: Vec<u32> = uid_set.iter().copied().collect();
-    if let Err(e) = custody::with_conn(&app_handle, |c| mailvault_core::custody::entries::remove(c, &account_id, &mailbox, &uids)) {
-        warn!("maildir_delete_many: custody prune failed: {}", e);
-    }
-
-    info!(
-        "maildir_delete_many: removed {} files from {}/{}",
-        removed, account_id, mailbox
-    );
-    Ok(serde_json::json!({ "removed": removed }))
-}
+// `maildir_delete` and `maildir_delete_many` both live in the daemon now
+// (Tasks 2.8 and 2.9b).
 
 // `maildir_set_flags`, `maildir_clear_cache`, `maildir_migrate_json_to_eml`
 // and `maildir_migrate_email_dirs` all moved to the daemon (Task 2.8,
@@ -3803,7 +3657,6 @@ fn main() {
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
-        .manage(custody::CustodyState::default())
         .manage(insights::InsightsSnapshots::default())
         .manage(mailto::PendingMailto::default())
         .manage(notification_open::PendingNotificationOpen::default());
@@ -3851,7 +3704,6 @@ fn main() {
             open_file,
             open_with_dialog,
             open_email_window,
-            maildir_delete_many,
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
@@ -3860,12 +3712,6 @@ fn main() {
             export_mbox,
             export_mbox_all,
             import_mbox,
-            custody::local_index_read,
-            custody::local_index_append,
-            custody::local_index_remove,
-            custody::custody_status,
-            maildir_repair_generation,
-            maildir_purge_orphans,
             archive_emails,
             cancel_archive,
             bulk_delete_emails,
@@ -4038,10 +3884,9 @@ fn main() {
                 if vault_status.display_path.is_empty() { "app data dir" } else { &vault_status.display_path },
                 vault_status.status
             );
-            // Custody first and synchronously: the legacy JSON import runs here,
-            // before any command can read or write an entry. The index worker
-            // reads none of this, so it starts right after.
-            custody::open_into(app.handle());
+            // The custody store opens in the DAEMON now (Task 2.9b), before
+            // its socket exists: `custody.db` is EXCLUSIVE, so exactly one
+            // process may hold it, and the legacy JSON import runs there.
             daemon_channel::start(app.handle());
 
             // The app's own `.eml` startup sweep is deleted (Task 2.8): the
@@ -4332,10 +4177,6 @@ fn main() {
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────
-
-#[cfg(test)]
-#[path = "custody_tests.rs"]
-mod custody_tests;
 
 #[cfg(test)]
 mod tests {

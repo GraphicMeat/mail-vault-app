@@ -238,7 +238,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(vault.path().to_path_buf(), app_dir, true);
-        daemon_custody::open_into(&s);
+        let _ = daemon_custody::open_into(&s);
         (vault, s)
     }
 

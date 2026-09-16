@@ -39,12 +39,26 @@ fn seed(
     mailvault_core::custody::entries::upsert(guard.as_ref().unwrap(), account, mailbox, &rows)
         .unwrap();
 }
+/// The in-memory stand-in for the daemon's `custody_entries_for_account` RPC
+/// (Task 2.9b): production reads the store over the bridge, these tests read
+/// a `SharedConn` they own. A closed store is an `Err`, never empty rows —
+/// that distinction is what `unreadableLocation` is for.
+fn rows(custody: &mailvault_core::custody::SharedConn) -> impl Fn(&str) -> Result<Vec<(String, Value)>, String> + '_ {
+    move |account: &str| {
+        let guard = mailvault_core::custody::lock(custody);
+        match guard.as_ref() {
+            Some(conn) => mailvault_core::custody::entries::entries_for_account(conn, account)
+                .map_err(|e| e.to_string()),
+            None => Err("custody store unavailable: closed".to_string()),
+        }
+    }
+}
 fn begin(
     state: &InsightsSnapshots,
     root: &Path,
     custody: &mailvault_core::custody::SharedConn,
 ) -> Value {
-    state.begin_at(root, custody, &account(), &account()).unwrap()
+    state.begin_at(root, &rows(custody), &account(), &account()).unwrap()
 }
 fn page(state: &InsightsSnapshots, start: &Value) -> Value {
     state
@@ -182,13 +196,13 @@ fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
     let state = InsightsSnapshots::default();
     assert_eq!(
         state
-            .begin_at(&dir.path().join("missing"), &custody, &account(), &account())
+            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account())
             .unwrap_err()["code"],
         "vaultUnavailable"
     );
     assert_eq!(
         state
-            .begin_at(dir.path(), &custody, &account(), &["../../outside".into()])
+            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()])
             .unwrap_err()["code"],
         "invalidAccountScope"
     );

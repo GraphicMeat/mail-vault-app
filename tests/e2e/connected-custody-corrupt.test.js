@@ -14,9 +14,12 @@ import { appDataDir, CORRUPT_CUSTODY_BYTES } from './mockImap.js';
  * result object with a truthy `error` key is read back as a WebDriver failure
  * and the assertion never runs. Every case here is about a truthy error.
  */
-const invoke = (command, args) => browser.executeAsync((c, a, done) => {
-  window.__TAURI_INTERNALS__.invoke(c, a).then((ok) => done({ ok }), (e) => done({ failed: String(e) }));
-}, command, args);
+// Task 2.9b: custody lives in the daemon, so these are `daemon_rpc` calls
+// under the command's own name, not native Tauri commands (the Tauri commands
+// are deleted). The daemon's own error text passes through unchanged.
+const invoke = (method, params) => browser.executeAsync((m, p, done) => {
+  window.__TAURI_INTERNALS__.invoke('daemon_rpc', { method: m, params: p }).then((ok) => done({ ok }), (e) => done({ failed: String(e) }));
+}, method, params);
 
 describe('Custody store: unreadable', function () {
   this.timeout(120_000);
