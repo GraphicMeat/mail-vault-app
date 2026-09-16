@@ -26,19 +26,33 @@ export function VaultAlertBanner() {
   // The custody store's startup emit lands before this webview exists, so the
   // command is the only way to learn the current state; the event covers the
   // later re-opens after a vault switch.
+  //
+  // Since Task 2.9b the store opens in the DAEMON, which emits `custody-status`
+  // as it starts — before the app's event channel has reconnected to it, and
+  // the bus drops an event nobody is subscribed to. A vault switch restarts the
+  // daemon, so that first emit is exactly the one that would report a store
+  // that will not open on the new root. `daemon-reconnected` is the signal that
+  // the channel is back; re-ask then (spec deviation 9).
   useEffect(() => {
     let unlisten;
     let unlistenCustody;
+    let unlistenReconnect;
+    const askCustody = () => api.custodyStatus().then(setCustody).catch(() => {});
     api.vaultGetStatus().then(setVaultStatus).catch(() => {});
-    api.custodyStatus().then(setCustody).catch(() => {});
+    askCustody();
     (async () => {
       try {
         const { listen } = await import('@tauri-apps/api/event');
         unlisten = await listen('vault-status', e => setVaultStatus(e.payload));
         unlistenCustody = await listen('custody-status', e => setCustody(e.payload));
+        unlistenReconnect = await listen('daemon-reconnected', askCustody);
       } catch { /* web dev mode — no Tauri events */ }
     })();
-    return () => { if (unlisten) unlisten(); if (unlistenCustody) unlistenCustody(); };
+    return () => {
+      if (unlisten) unlisten();
+      if (unlistenCustody) unlistenCustody();
+      if (unlistenReconnect) unlistenReconnect();
+    };
   }, [setVaultStatus]);
 
   const missing = !!vaultStatus && vaultStatus.status === 'missing';
