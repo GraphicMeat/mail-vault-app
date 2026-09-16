@@ -89,10 +89,11 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     Ok(r) => r,
                     Err(_) => return err(insights::error("vaultUnavailable")),
                 };
+                let gen = custody::generation(&state);
                 let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
                     custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
                 };
-                match state.insights.begin_at(&root, &rows, &configured, &account_ids) {
+                match state.insights.begin_at(&root, &rows, &configured, &account_ids, gen) {
                     Ok(v) => ok(v),
                     Err(e) => err(e),
                 }
@@ -118,7 +119,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     state.insights.release(&snapshot_id);
                     return err(e);
                 }
-                match state.insights.read(&snapshot_id, cursor.as_deref()) {
+                let gen = custody::generation(&state);
+                match state.insights.read(&snapshot_id, cursor.as_deref(), gen) {
                     Ok(v) => ok(v),
                     Err(e) => err(e),
                 }

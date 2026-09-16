@@ -233,9 +233,19 @@ struct Snapshot {
     finished: bool,
     last_access: Instant,
     updated_at: String,
+    /// Task 3.6 Step 4: `custody.db`/`-wal` used to be watched like any other
+    /// file (`Watch::File`), which a WAL checkpoint with no real data change
+    /// also touches (inventory-backup-insights fact 11) — a false staleness
+    /// that would restart a 50-RPC LARGE paging sequence for no reason.
+    /// In-process in the daemon, `custody::with_conn` bumps a monotonic
+    /// counter only when a write actually changed a row
+    /// (`Connection::total_changes()` delta); this captures that counter at
+    /// inventory time, and `unchanged()` compares it against the live value
+    /// on every check.
+    custody_gen: u64,
 }
 impl Snapshot {
-    fn new(root: PathBuf, accounts: Vec<String>) -> Self {
+    fn new(root: PathBuf, accounts: Vec<String>, custody_gen: u64) -> Self {
         Self {
             root,
             accounts,
@@ -249,6 +259,7 @@ impl Snapshot {
             finished: false,
             last_access: Instant::now(),
             updated_at: Utc::now().to_rfc3339(),
+            custody_gen,
         }
     }
     fn problem(&mut self, code: &str, account: &str, mailbox: Option<&str>) {
@@ -392,10 +403,12 @@ impl Snapshot {
             "updatedAt":self.updated_at,"folders":folders,"errors":self.errors,
             "warnings":{"unknownDates":self.warnings[0],"fallbackDates":self.warnings[1],"uncertainIdentity":self.warnings[2],"unreadableFiles":self.warnings[3]}})
     }
-    fn unchanged(&self) -> bool {
-        self.stamps
-            .iter()
-            .all(|(p, expected)| stamp(p).is_ok_and(|current| expected.unchanged(current)))
+    fn unchanged(&self, custody_gen: u64) -> bool {
+        self.custody_gen == custody_gen
+            && self
+                .stamps
+                .iter()
+                .all(|(p, expected)| stamp(p).is_ok_and(|current| expected.unchanged(current)))
     }
 }
 
@@ -434,6 +447,7 @@ impl InsightsSnapshots {
         custody_rows: CustodyRows<'_>,
         configured: &[String],
         account_ids: &[String],
+        custody_gen: u64,
     ) -> ResultValue {
         self.expire(Instant::now());
         if account_ids.iter().any(|a| {
@@ -452,8 +466,8 @@ impl InsightsSnapshots {
         let mut accounts = account_ids.to_vec();
         accounts.sort();
         accounts.dedup();
-        let mut snapshot = inventory(root, custody_rows, configured, accounts)?;
-        if !snapshot.unchanged() {
+        let mut snapshot = inventory(root, custody_rows, configured, accounts, custody_gen)?;
+        if !snapshot.unchanged(custody_gen) {
             return Err(
                 json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))}),
             );
@@ -469,7 +483,7 @@ impl InsightsSnapshots {
             .insert(id, snapshot);
         Ok(result)
     }
-    pub(crate) fn read(&self, id: &str, cursor: Option<&str>) -> ResultValue {
+    pub(crate) fn read(&self, id: &str, cursor: Option<&str>, custody_gen: u64) -> ResultValue {
         self.expire(Instant::now());
         let mut snapshots = self
             .inner
@@ -481,7 +495,7 @@ impl InsightsSnapshots {
         if snapshot.finished || snapshot.cursor.as_deref() != cursor {
             return Err(error("invalidCursor"));
         }
-        if !snapshot.unchanged() {
+        if !snapshot.unchanged(custody_gen) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
             snapshots.remove(id);
             return Err(e);
@@ -529,7 +543,7 @@ impl InsightsSnapshots {
         }
         // Check after reads as well: don't return a mixed page if a writer
         // replaces a file while it is being parsed.
-        if !snapshot.unchanged() {
+        if !snapshot.unchanged(custody_gen) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
             snapshots.remove(id);
             return Err(e);
@@ -635,22 +649,22 @@ fn inventory(
     custody_rows_for: CustodyRows<'_>,
     configured: &[String],
     accounts: Vec<String>,
+    custody_gen: u64,
 ) -> Result<Snapshot, Value> {
-    let mut snapshot = Snapshot::new(root.clone(), accounts.clone());
+    let mut snapshot = Snapshot::new(root.clone(), accounts.clone(), custody_gen);
     snapshot.watch_directory(&root, "");
-    // The store is one file (plus its write-ahead log): a write changes one of
-    // them, and the snapshot is stale. Stamp BEFORE reading, never after: a
-    // write landing between the two is then a write after the stamp, which is
-    // caught, and its rows are included. Stamping after the read would compare
-    // a post-write stamp against itself and serve those rows as fresh forever.
+    // Task 3.6 Step 4: `custody.db`/`-wal` freshness is tracked by
+    // `custody_gen` (captured on `Snapshot` above), not by stamping these two
+    // files as ordinary watched files — see the `Snapshot::custody_gen` doc.
     let custody_path = root
         .join(mailvault_core::custody::db::DB_DIR)
         .join(mailvault_core::custody::db::DB_FILE);
-    snapshot.watch(&custody_path, "");
-    snapshot.watch(&custody_path.with_extension("db-wal"), "");
-    // One short read per account, before any walk: in-process now
-    // (`crate::custody::with_conn`), one connection-lock hold for exactly
-    // that call, the same shape the Task 2.9b RPC bridge had.
+    // One short read per account, before any walk: stamp-before-read still
+    // applies conceptually here — `custody_gen` is captured by the caller
+    // (`begin_at`/`read`) before this call runs, so a write landing between
+    // that capture and this read is caught on the next freshness check, the
+    // same ordering the file-stamp mechanism uses for every other watched
+    // path.
     let mut custody_rows: BTreeMap<String, Vec<(String, Value)>> = BTreeMap::new();
     for account in &accounts {
         match custody_rows_for(account) {

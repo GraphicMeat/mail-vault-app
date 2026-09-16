@@ -54,16 +54,24 @@ fn rows(custody: &mailvault_core::custody::SharedConn) -> impl Fn(&str) -> Resul
         }
     }
 }
+/// `gen` stands in for the daemon's live custody write counter (Task 3.6
+/// Step 4, `crate::custody::generation`): production reads it fresh at
+/// every `begin`/`read` call, so these tests pass it explicitly instead of
+/// going through a `DaemonState` these pure-function tests don't have. Most
+/// tests never see a custody write between `begin` and `read`, so they pass
+/// the same value throughout; the two that seed custody mid-test advance it
+/// exactly where a real write would have bumped it.
 fn begin(
     state: &InsightsSnapshots,
     root: &Path,
     custody: &mailvault_core::custody::SharedConn,
+    gen: u64,
 ) -> Value {
-    state.begin_at(root, &rows(custody), &account(), &account()).unwrap()
+    state.begin_at(root, &rows(custody), &account(), &account(), gen).unwrap()
 }
-fn page(state: &InsightsSnapshots, start: &Value) -> Value {
+fn page(state: &InsightsSnapshots, start: &Value, gen: u64) -> Value {
     state
-        .read(start["snapshotId"].as_str().unwrap(), None)
+        .read(start["snapshotId"].as_str().unwrap(), None, gen)
         .unwrap()
 }
 #[test]
@@ -84,14 +92,15 @@ fn insights_pages_cover_headers_beyond_the_mailbox_window() {
     assert_eq!(tail.len(), 201);
     assert_eq!(tail.last().unwrap()["uid"], 1201);
     let state = InsightsSnapshots::default();
-    let start = begin(&state, dir.path(), &custody);
+    let start = begin(&state, dir.path(), &custody, 0);
     assert_eq!(start["inventoryCount"], 1201);
-    let first = page(&state, &start);
+    let first = page(&state, &start, 0);
     assert_eq!(first["rows"].as_array().unwrap().len(), 1000);
     let last = state
         .read(
             start["snapshotId"].as_str().unwrap(),
             first["nextCursor"].as_str(),
+            0,
         )
         .unwrap();
     assert_eq!(last["rows"].as_array().unwrap().len(), 201);
@@ -133,7 +142,7 @@ fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
     fs::create_dir_all(saved.parent().unwrap()).unwrap();
     fs::write(saved,"From: ana@example.test\r\nMessage-ID: <older-than-reused-uid@test>\r\nSubject: old\r\n\r\nbody").unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     let rows = p["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 3);
     let sent = rows.iter().find(|r| r["uid"] == 9).unwrap();
@@ -159,7 +168,7 @@ fn insights_corrupt_or_missing_metadata_stays_partial_and_unknown() {
     fs::write(cache.join("_meta.json"), "broken").unwrap();
     fs::write(cache.join("2.json"), "broken").unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"].as_array().unwrap().len(), 1);
     assert_eq!(p["coverage"]["status"], "partial");
     assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
@@ -171,7 +180,7 @@ fn insights_corrupt_or_missing_metadata_stays_partial_and_unknown() {
     );
     assert!(!p["coverage"]["errors"].as_array().unwrap().is_empty());
     fs::remove_file(cache.join("_meta.json")).unwrap();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
 }
 #[test]
@@ -182,7 +191,7 @@ fn insights_a_mailbox_cache_holding_only_its_uid_ledger_is_not_a_problem() {
     fs::remove_file(cache.join("_meta.json")).unwrap();
     fs::write(cache.join("graph_id_map.json"), r#"{"1":"g-a"}"#).unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(
         p["coverage"]["errors"].as_array().unwrap().iter().all(|e| e["code"] != "unreadableLocation"),
         "{}",
@@ -197,13 +206,13 @@ fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
     let state = InsightsSnapshots::default();
     assert_eq!(
         state
-            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account())
+            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account(), 0)
             .unwrap_err()["code"],
         "vaultUnavailable"
     );
     assert_eq!(
         state
-            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()])
+            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()], 0)
             .unwrap_err()["code"],
         "invalidAccountScope"
     );
@@ -217,19 +226,19 @@ fn insights_release_invalidates_snapshot_and_cursor_cannot_cross_snapshots() {
         write(&cache, &format!("{uid}.json"), header(uid));
     }
     let state = InsightsSnapshots::default();
-    let a = begin(&state, dir.path(), &custody);
-    let p = page(&state, &a);
-    let b = begin(&state, dir.path(), &custody);
+    let a = begin(&state, dir.path(), &custody, 0);
+    let p = page(&state, &a, 0);
+    let b = begin(&state, dir.path(), &custody, 0);
     assert_eq!(
         state
-            .read(b["snapshotId"].as_str().unwrap(), p["nextCursor"].as_str())
+            .read(b["snapshotId"].as_str().unwrap(), p["nextCursor"].as_str(), 0)
             .unwrap_err()["code"],
         "invalidCursor"
     );
     state.release(a["snapshotId"].as_str().unwrap());
     assert_eq!(
         state
-            .read(a["snapshotId"].as_str().unwrap(), None)
+            .read(a["snapshotId"].as_str().unwrap(), None, 0)
             .unwrap_err()["code"],
         "snapshotExpired"
     );
@@ -242,7 +251,7 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
         let cache = folder(dir.path());
         let path = write(&cache, "1.json", header(1));
         let state = InsightsSnapshots::default();
-        let a = begin(&state, dir.path(), &custody);
+        let a = begin(&state, dir.path(), &custody, 0);
         match change {
             "mutate" => {
                 write(&cache, "1.json", header(9));
@@ -253,7 +262,7 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
                 fs::rename(replacement, path).unwrap();
             }
         }
-        let result = state.read(a["snapshotId"].as_str().unwrap(), None);
+        let result = state.read(a["snapshotId"].as_str().unwrap(), None, 0);
         assert_eq!(result.unwrap_err()["code"], "snapshotStale", "{change}");
     }
 }
@@ -281,9 +290,10 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
     }
     eml(dir.path(), "account-a", 1);
     let state = InsightsSnapshots::default();
-    let start = begin(&state, dir.path(), &custody);
+    let mut gen = 0u64;
+    let start = begin(&state, dir.path(), &custody, gen);
     assert_eq!(start["inventoryCount"], 1002);
-    let first = page(&state, &start);
+    let first = page(&state, &start, gen);
     assert_eq!(first["rows"].as_array().unwrap().len(), 1000);
 
     // A normal light body fetch adds only a new cur/ file. New sidecars and
@@ -291,20 +301,23 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
     eml(dir.path(), "account-a", 2);
     write(&cache, "1002.json", header(1002));
     eml(dir.path(), "account-b", 3);
-    // Custody is the exception: it is one file, so a write for any mailbox of
-    // any account lands in it and the captured headers are no longer a
-    // snapshot of it.
+    // Custody is the exception: a write for any mailbox of any account bumps
+    // the daemon's write counter (Task 3.6 Step 4) instead of touching
+    // custody.db's mtime — simulated here by advancing `gen` the same way
+    // `custody::with_conn` would have for a real write.
     seed(&custody, "account-b", "Archive", vec![header(4)]);
+    gen += 1;
     assert_eq!(
         state
             .read(
                 start["snapshotId"].as_str().unwrap(),
                 first["nextCursor"].as_str(),
+                gen,
             )
             .unwrap_err()["code"],
         "snapshotStale"
     );
-    assert_eq!(begin(&state, dir.path(), &custody)["inventoryCount"], 1006);
+    assert_eq!(begin(&state, dir.path(), &custody, gen)["inventoryCount"], 1006);
 }
 
 #[test]
@@ -321,10 +334,10 @@ fn insights_ignored_temporary_files_do_not_invalidate_included_headers() {
         json!("old"),
     );
     let state = InsightsSnapshots::default();
-    let start = begin(&state, dir.path(), &custody);
+    let start = begin(&state, dir.path(), &custody, 0);
     fs::write(cache_temp, "a changed temporary file").unwrap();
     fs::remove_file(vault_temp).unwrap();
-    let result = page(&state, &start);
+    let result = page(&state, &start, 0);
     assert_eq!(result["rows"].as_array().unwrap().len(), 2);
 }
 
@@ -356,7 +369,8 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
             fs::write(&generation, "4").unwrap();
         }
         let state = InsightsSnapshots::default();
-        let start = begin(&state, dir.path(), &custody);
+        let mut gen = 0u64;
+        let start = begin(&state, dir.path(), &custody, gen);
         match change {
             "metadata" | "missing-metadata" => {
                 write(
@@ -365,12 +379,17 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
                     json!({"totalEmails":1500,"uidValidity":5}),
                 );
             }
-            "index" => seed(&custody, "account-a", "INBOX", vec![header(1), header(2)]),
+            "index" => {
+                // A real custody write after `begin` (Task 3.6 Step 4: this
+                // is what bumps the daemon's write counter in production).
+                seed(&custody, "account-a", "INBOX", vec![header(1), header(2)]);
+                gen += 1;
+            }
             _ => fs::write(generation, "5").unwrap(),
         }
         assert_eq!(
             state
-                .read(start["snapshotId"].as_str().unwrap(), None)
+                .read(start["snapshotId"].as_str().unwrap(), None, gen)
                 .unwrap_err()["code"],
             "snapshotStale",
             "{change}",
@@ -391,7 +410,7 @@ fn insights_inventory_directory_removal_replacement_and_symlinks_still_make_snap
         let empty = dir.path().join("Maildir/account-a/INBOX/cur");
         fs::create_dir_all(&empty).unwrap();
         let state = InsightsSnapshots::default();
-        let start = begin(&state, dir.path(), &custody);
+        let start = begin(&state, dir.path(), &custody, 0);
         fs::rename(&empty, empty.with_file_name("old-cur")).unwrap();
         match change {
             "replace" => fs::create_dir(&empty).unwrap(),
@@ -402,7 +421,7 @@ fn insights_inventory_directory_removal_replacement_and_symlinks_still_make_snap
         }
         assert_eq!(
             state
-                .read(start["snapshotId"].as_str().unwrap(), None)
+                .read(start["snapshotId"].as_str().unwrap(), None, 0)
                 .unwrap_err()["code"],
             "snapshotStale",
             "{change}",
@@ -429,7 +448,7 @@ fn insights_legacy_cache_and_unresolved_vault_folder_are_readable_without_guessi
     fs::create_dir_all(eml.parent().unwrap()).unwrap();
     fs::write(eml,"From: Ana <ana@example.test>\r\nTo: me@example.test\r\nDate: Tue, 08 Sep 2026 23:00:00 +0000\r\nList-Id: <list.example.test>\r\n\r\nprivate body").unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     let rows = p["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 2);
     assert!(rows.iter().any(|r| r["mailbox"] == "A/B"));
@@ -463,7 +482,7 @@ fn insights_skips_symlink_escapes() {
     write(outside.path(), "1.json", header(1));
     std::os::unix::fs::symlink(outside.path().join("1.json"), cache.join("1.json")).unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(p["rows"].as_array().unwrap().is_empty());
     assert_eq!(p["coverage"]["status"], "partial");
 }
@@ -472,11 +491,11 @@ fn insights_abandoned_snapshots_expire_after_five_minutes() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
     let state = InsightsSnapshots::default();
-    let start = begin(&state, dir.path(), &custody);
+    let start = begin(&state, dir.path(), &custody, 0);
     state.expire(std::time::Instant::now() + std::time::Duration::from_secs(301));
     assert_eq!(
         state
-            .read(start["snapshotId"].as_str().unwrap(), None)
+            .read(start["snapshotId"].as_str().unwrap(), None, 0)
             .unwrap_err()["code"],
         "snapshotExpired"
     );
@@ -492,7 +511,7 @@ fn insights_only_returns_header_fields_and_never_uses_file_dates() {
         json!({"uid":4,"messageId":"<private@test>","date":"not-a-date","from":{"address":"ana@example.test","password":"secret"},"html":"secret html","text":"secret body","attachments":[{"content":"secret attachment"}],"password":"secret password","credentials":{"accessToken":"secret token"}}),
     );
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     let row = &p["rows"][0];
     assert_eq!(row["uid"], 4);
     assert!(row["receivedAt"].is_null());
@@ -515,7 +534,7 @@ fn insights_unmapped_cache_headers_remain_visible_with_location_limit() {
         header(8),
     );
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"].as_array().unwrap().len(), 1);
     assert_eq!(
         p["rows"][0]["locationLimitation"],
@@ -538,7 +557,7 @@ fn insights_legacy_index_only_header_keeps_snake_case_identity_and_custody() {
         ],
     );
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"][0]["messageId"], "<vault-only@test>");
     assert_eq!(p["rows"][0]["origin"], "local_sent");
     assert_eq!(p["rows"][0]["locationLimitation"], "vault-file-missing");
@@ -565,7 +584,7 @@ fn insights_vault_uses_index_original_date_when_raw_header_has_none() {
     )
     .unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"][0]["messageDate"], "2026-09-08T23:00:00Z");
     assert_eq!(p["rows"][0]["dateEvidence"]["sent"], "rfc-date");
 }
@@ -595,7 +614,7 @@ fn insights_does_not_read_symlinked_metadata_or_generation() {
     )
     .unwrap();
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
     assert!(p["rows"]
         .as_array()
@@ -616,7 +635,7 @@ fn insights_recognizes_graph_date_provenance_after_javascript_mapping() {
         "receivedAt":"2026-09-09T00:30:00Z","sentAt":"2026-09-08T23:30:00Z"}),
     );
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &custody));
+    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(
         p["rows"][0]["dateEvidence"],
         json!({"received":"graph-received","sent":"graph-sent"})
@@ -667,7 +686,7 @@ fn insights_rejects_conflicting_index_identity_even_when_message_id_matches() {
         fs::create_dir_all(eml.parent().unwrap()).unwrap();
         fs::write(eml, "From: current@example.test\r\nMessage-ID: <shared@test>\r\nSubject: Current subject\r\nDate: Wed, 09 Sep 2026 12:00:00 +0000\r\n\r\nbody").unwrap();
         let state = InsightsSnapshots::default();
-        let p = page(&state, &begin(&state, dir.path(), &custody));
+        let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
         let row = &p["rows"][0];
         assert!(
             row["origin"].is_null(),
@@ -686,7 +705,7 @@ fn a_closed_custody_store_is_an_unreadable_location_not_an_empty_one() {
     write(&cache, "1.json", header(1));
     let closed: mailvault_core::custody::SharedConn = std::sync::Mutex::new(None);
     let state = InsightsSnapshots::default();
-    let p = page(&state, &begin(&state, dir.path(), &closed));
+    let p = page(&state, &begin(&state, dir.path(), &closed, 0), 0);
     assert_eq!(
         p["rows"].as_array().unwrap().len(),
         1,

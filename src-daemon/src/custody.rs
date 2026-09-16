@@ -23,6 +23,7 @@ use mailvault_core::custody::{db, import, lock, Connection, SharedConn};
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use tracing::{error, info, warn};
 
@@ -32,11 +33,25 @@ pub struct CustodyState {
     /// Why the store is closed, when an open failed. Cleared by a successful open.
     pub error: Mutex<Option<String>>,
     switch: SwitchGuard,
+    /// Task 3.6 Step 4: monotonic, bumped by `with_conn` only when a write
+    /// actually changed a row (`Connection::total_changes()` delta before vs
+    /// after the closure runs) — never by a WAL checkpoint, which touches
+    /// `custody.db-wal`'s mtime with no row changed. `insights.rs` captures
+    /// this at inventory time instead of stamping `custody.db`/`-wal` as
+    /// ordinary files, so a checkpoint-only touch no longer invalidates an
+    /// open snapshot mid-page.
+    pub gen: AtomicU64,
 }
 
 impl Default for CustodyState {
     fn default() -> Self {
-        Self { db: Mutex::new(None), root: Mutex::new(None), error: Mutex::new(None), switch: SwitchGuard::default() }
+        Self {
+            db: Mutex::new(None),
+            root: Mutex::new(None),
+            error: Mutex::new(None),
+            switch: SwitchGuard::default(),
+            gen: AtomicU64::new(0),
+        }
     }
 }
 
@@ -137,13 +152,36 @@ fn emit(state: &DaemonState) {
 
 /// Run `f` on the open store. `Err` with the open failure while it is closed:
 /// a caller never mistakes a store it could not read for "no entries".
+///
+/// Task 3.6 Step 4: also bumps `gen` when `f` actually changed a row.
+/// `Connection::total_changes()` is SQLite's own monotonic per-connection
+/// counter of rows changed by completed INSERT/UPDATE/DELETE statements — a
+/// plain `SELECT` (every read call site) never moves it, and a bump only
+/// fires on the delta across THIS call, so a read landing after some
+/// earlier write never misreads that write's stale nonzero count as its
+/// own. This is the one chokepoint every custody write already goes
+/// through (`handlers::archive`, `handlers::custody`, `handlers::vault_flags`
+/// all call `with_conn`), so the counter needs no changes anywhere else.
 pub fn with_conn<T>(state: &DaemonState, f: impl FnOnce(&Connection) -> Result<T, String>) -> Result<T, String> {
     let st = &state.custody;
     let guard = lock(&st.db);
     match guard.as_ref() {
-        Some(conn) => f(conn),
+        Some(conn) => {
+            let before = conn.total_changes();
+            let result = f(conn);
+            if conn.total_changes() != before {
+                st.gen.fetch_add(1, Ordering::Relaxed);
+            }
+            result
+        }
         None => Err(format!("custody store unavailable: {}", g(&st.error).clone().unwrap_or_else(|| "closed".into()))),
     }
+}
+
+/// The live write counter (Task 3.6 Step 4). `insights.rs` reads this fresh
+/// at `begin`/`read` time instead of stamping `custody.db`/`-wal` as files.
+pub fn generation(state: &DaemonState) -> u64 {
+    state.custody.gen.load(Ordering::Relaxed)
 }
 
 #[cfg(test)]
@@ -250,6 +288,33 @@ mod tests {
         assert_eq!(serde_json::from_str::<Vec<Value>>(&text).unwrap(), vec![entry]);
         with_conn(&s, |c| entries::remove(c, "acct", "Sent", &[3]).map(|_| ())).unwrap();
         assert_eq!(with_conn(&s, |c| entries::read(c, "acct", "Sent")).unwrap(), None);
+    }
+
+    /// Task 3.6 Step 4: the counter `insights.rs` now compares against
+    /// instead of stamping `custody.db`/`-wal` as ordinary files.
+    #[test]
+    fn with_conn_bumps_the_generation_only_when_a_write_actually_changes_a_row() {
+        let (_vault, _app, s) = state(true);
+        let _ = open_into(&s);
+        assert_eq!(generation(&s), 0);
+
+        // A read must not bump it.
+        let _ = with_conn(&s, |c| entries::read(c, "acc", "INBOX"));
+        assert_eq!(generation(&s), 0, "a read must not bump the write counter");
+
+        // A real write bumps it.
+        with_conn(&s, |c| entries::upsert(c, "acc", "INBOX", &[json!({"uid": 1, "flags": []})]).map(|_| ())).unwrap();
+        assert_eq!(generation(&s), 1);
+
+        // Deleting a uid that was never there executes a statement that
+        // changes no row: this is the "checkpoint-only touch" case — the
+        // counter must not move for a no-op write attempt either.
+        with_conn(&s, |c| entries::remove(c, "acc", "INBOX", &[999]).map(|_| ())).unwrap();
+        assert_eq!(generation(&s), 1, "a no-op delete must not bump the write counter");
+
+        // Removing the uid that IS there is a second real write.
+        with_conn(&s, |c| entries::remove(c, "acc", "INBOX", &[1]).map(|_| ())).unwrap();
+        assert_eq!(generation(&s), 2);
     }
 
     #[test]
