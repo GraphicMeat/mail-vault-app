@@ -67,11 +67,11 @@ fn begin(
     custody: &mailvault_core::custody::SharedConn,
     gen: u64,
 ) -> Value {
-    state.begin_at(root, &rows(custody), &account(), &account(), gen).unwrap()
+    state.begin_at(root, &rows(custody), &account(), &account(), &|| gen).unwrap()
 }
 fn page(state: &InsightsSnapshots, start: &Value, gen: u64) -> Value {
     state
-        .read(start["snapshotId"].as_str().unwrap(), None, gen)
+        .read(start["snapshotId"].as_str().unwrap(), None, &|| gen)
         .unwrap()
 }
 #[test]
@@ -100,7 +100,7 @@ fn insights_pages_cover_headers_beyond_the_mailbox_window() {
         .read(
             start["snapshotId"].as_str().unwrap(),
             first["nextCursor"].as_str(),
-            0,
+            &|| 0,
         )
         .unwrap();
     assert_eq!(last["rows"].as_array().unwrap().len(), 201);
@@ -206,13 +206,13 @@ fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
     let state = InsightsSnapshots::default();
     assert_eq!(
         state
-            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account(), 0)
+            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account(), &|| 0)
             .unwrap_err()["code"],
         "vaultUnavailable"
     );
     assert_eq!(
         state
-            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()], 0)
+            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()], &|| 0)
             .unwrap_err()["code"],
         "invalidAccountScope"
     );
@@ -231,14 +231,14 @@ fn insights_release_invalidates_snapshot_and_cursor_cannot_cross_snapshots() {
     let b = begin(&state, dir.path(), &custody, 0);
     assert_eq!(
         state
-            .read(b["snapshotId"].as_str().unwrap(), p["nextCursor"].as_str(), 0)
+            .read(b["snapshotId"].as_str().unwrap(), p["nextCursor"].as_str(), &|| 0)
             .unwrap_err()["code"],
         "invalidCursor"
     );
     state.release(a["snapshotId"].as_str().unwrap());
     assert_eq!(
         state
-            .read(a["snapshotId"].as_str().unwrap(), None, 0)
+            .read(a["snapshotId"].as_str().unwrap(), None, &|| 0)
             .unwrap_err()["code"],
         "snapshotExpired"
     );
@@ -262,7 +262,7 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
                 fs::rename(replacement, path).unwrap();
             }
         }
-        let result = state.read(a["snapshotId"].as_str().unwrap(), None, 0);
+        let result = state.read(a["snapshotId"].as_str().unwrap(), None, &|| 0);
         assert_eq!(result.unwrap_err()["code"], "snapshotStale", "{change}");
     }
 }
@@ -312,7 +312,7 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
             .read(
                 start["snapshotId"].as_str().unwrap(),
                 first["nextCursor"].as_str(),
-                gen,
+                &|| gen,
             )
             .unwrap_err()["code"],
         "snapshotStale"
@@ -389,7 +389,7 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
         }
         assert_eq!(
             state
-                .read(start["snapshotId"].as_str().unwrap(), None, gen)
+                .read(start["snapshotId"].as_str().unwrap(), None, &|| gen)
                 .unwrap_err()["code"],
             "snapshotStale",
             "{change}",
@@ -421,7 +421,7 @@ fn insights_inventory_directory_removal_replacement_and_symlinks_still_make_snap
         }
         assert_eq!(
             state
-                .read(start["snapshotId"].as_str().unwrap(), None, 0)
+                .read(start["snapshotId"].as_str().unwrap(), None, &|| 0)
                 .unwrap_err()["code"],
             "snapshotStale",
             "{change}",
@@ -495,7 +495,7 @@ fn insights_abandoned_snapshots_expire_after_five_minutes() {
     state.expire(std::time::Instant::now() + std::time::Duration::from_secs(301));
     assert_eq!(
         state
-            .read(start["snapshotId"].as_str().unwrap(), None, 0)
+            .read(start["snapshotId"].as_str().unwrap(), None, &|| 0)
             .unwrap_err()["code"],
         "snapshotExpired"
     );
@@ -720,4 +720,60 @@ fn a_closed_custody_store_is_an_unreadable_location_not_an_empty_one() {
         "{}",
         p["coverage"]
     );
+}
+
+/// Fix F1 (review follow-up on Task 3.6 Step 4): `begin_at` must capture the
+/// custody generation before the inventory walk and compare it against a
+/// FRESH read taken after the walk finishes, not the same value it already
+/// captured: comparing a value against itself is always true, so a write
+/// landing mid-walk would otherwise never be seen. `custody_gen` here fakes
+/// that drift: it returns a different value on its second call (the
+/// post-walk freshness check) than on its first (the pre-walk capture), the
+/// same shape a real write racing the walk would produce.
+#[test]
+fn insights_begin_detects_a_custody_write_landing_during_the_inventory_walk() {
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    let calls = std::cell::Cell::new(0u64);
+    let gen_fn = || {
+        let n = calls.get();
+        calls.set(n + 1);
+        n
+    };
+    let state = InsightsSnapshots::default();
+    let err = state
+        .begin_at(dir.path(), &rows(&custody), &account(), &account(), &gen_fn)
+        .unwrap_err();
+    assert_eq!(err["code"], "snapshotStale", "{err}");
+}
+
+/// Fix F1, second call site: `read`'s post-parse freshness check (after
+/// paging rows) must also read a FRESH generation value, not the one
+/// captured at the top of `read` reused a second time: a write landing
+/// while headers are being parsed must not slip through as still-fresh.
+/// `gen_fn` returns the value the snapshot was built with on its first call
+/// (so `read`'s initial check passes) and a different value on its second
+/// (simulating a write that happened during the page's parse loop).
+#[test]
+fn insights_read_detects_a_custody_write_landing_during_the_page_parse() {
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    let cache = folder(dir.path());
+    write(&cache, "1.json", header(1));
+    let state = InsightsSnapshots::default();
+    let start = begin(&state, dir.path(), &custody, 0);
+    let calls = std::cell::Cell::new(0u64);
+    let gen_fn = move || {
+        let n = calls.get();
+        calls.set(n + 1);
+        if n == 0 {
+            0
+        } else {
+            1
+        }
+    };
+    let err = state
+        .read(start["snapshotId"].as_str().unwrap(), None, &gen_fn)
+        .unwrap_err();
+    assert_eq!(err["code"], "snapshotStale", "{err}");
 }

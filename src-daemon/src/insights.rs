@@ -447,7 +447,7 @@ impl InsightsSnapshots {
         custody_rows: CustodyRows<'_>,
         configured: &[String],
         account_ids: &[String],
-        custody_gen: u64,
+        custody_gen: CustodyGen<'_>,
     ) -> ResultValue {
         self.expire(Instant::now());
         if account_ids.iter().any(|a| {
@@ -466,8 +466,13 @@ impl InsightsSnapshots {
         let mut accounts = account_ids.to_vec();
         accounts.sort();
         accounts.dedup();
-        let mut snapshot = inventory(root, custody_rows, configured, accounts, custody_gen)?;
-        if !snapshot.unchanged(custody_gen) {
+        // Captured before the walk starts; compared against a FRESH read
+        // after it finishes. Reusing the same captured value for both would
+        // make this comparison vacuous (it would always equal itself) and
+        // miss a write landing mid-walk.
+        let before = custody_gen();
+        let mut snapshot = inventory(root, custody_rows, configured, accounts, before)?;
+        if !snapshot.unchanged(custody_gen()) {
             return Err(
                 json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))}),
             );
@@ -483,7 +488,7 @@ impl InsightsSnapshots {
             .insert(id, snapshot);
         Ok(result)
     }
-    pub(crate) fn read(&self, id: &str, cursor: Option<&str>, custody_gen: u64) -> ResultValue {
+    pub(crate) fn read(&self, id: &str, cursor: Option<&str>, custody_gen: CustodyGen<'_>) -> ResultValue {
         self.expire(Instant::now());
         let mut snapshots = self
             .inner
@@ -495,7 +500,7 @@ impl InsightsSnapshots {
         if snapshot.finished || snapshot.cursor.as_deref() != cursor {
             return Err(error("invalidCursor"));
         }
-        if !snapshot.unchanged(custody_gen) {
+        if !snapshot.unchanged(custody_gen()) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
             snapshots.remove(id);
             return Err(e);
@@ -541,9 +546,11 @@ impl InsightsSnapshots {
                 }
             }
         }
-        // Check after reads as well: don't return a mixed page if a writer
-        // replaces a file while it is being parsed.
-        if !snapshot.unchanged(custody_gen) {
+        // Check after reads as well, against a FRESH generation read (not the
+        // value captured above): don't return a mixed page if a writer
+        // replaces a file, or lands a custody write, while it is being
+        // parsed.
+        if !snapshot.unchanged(custody_gen()) {
             let e = json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))});
             snapshots.remove(id);
             return Err(e);
@@ -643,6 +650,15 @@ fn date_value(value: &Value) -> Option<String> {
 /// An `Err` means "could not read", which is what `unreadableLocation`
 /// reports, it is never flattened into "no rows".
 pub(crate) type CustodyRows<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, Value)>, String>;
+
+/// The daemon's live custody write counter (`crate::custody::generation`),
+/// threaded the same way `CustodyRows` is so this file never touches
+/// `DaemonState` directly. Called fresh at each freshness checkpoint rather
+/// than handed a single frozen value: `begin_at` and `read` each call this
+/// twice (before/after a walk or a parse), and a write landing between those
+/// two calls must show up as a changed return value, not the same value
+/// compared against itself.
+pub(crate) type CustodyGen<'a> = &'a dyn Fn() -> u64;
 
 fn inventory(
     root: PathBuf,
