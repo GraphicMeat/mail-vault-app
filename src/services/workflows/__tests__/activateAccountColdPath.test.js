@@ -660,3 +660,42 @@ describe('activateAccount: a forced refetch bypasses a fresh mailbox cache', () 
   });
 });
 
+// Final fix wave, fix round 1 (F1): `restored` is forced to `null` on every
+// background-refresh call (line ~430 above — `!isBackgroundRefresh ? _getRestore(...) : null`),
+// so `restored?.archivedEmailIds` was never anything but `undefined` on this
+// path — the single path most likely to hit a failed read, since a
+// background refresh is exactly the query that follows a cache-hit restore
+// paint. The fallback must instead read the store's OWN current
+// `archivedEmailIds`, which by this point already holds this account's ids
+// (set synchronously by the restore paint, or by the fresh-activation reset —
+// never the outgoing account's). `stampVaultEntry`
+// (messageMutations.js:774) gates the durable serverDeleted/serverAbsent
+// stamp on exactly this Set, so wiping it here silently drops that stamp.
+describe('activateAccount keeps the known archived ids when the read fails on activation (I-5 fix round 1, F1)', () => {
+  it('RED on the old code: a null read on background refresh must not wipe archivedEmailIds to empty', async () => {
+    primeActiveForBackgroundRefresh();
+    useMailStore.setState({ archivedEmailIds: new Set([5, 6]) });
+    mockGetEmailHeadersMeta.mockResolvedValue(null); // no cached sync -> IMAP-fallback branch
+    mockGetArchivedEmailIds.mockResolvedValueOnce(null); // the failed read
+    mockFetchEmails.mockResolvedValue({ total: 500, emails: [mkHeader(1), mkHeader(2)] });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 501, highestModseq: null });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([5, 6]));
+  });
+
+  it('control: a successful read still replaces the set', async () => {
+    primeActiveForBackgroundRefresh();
+    useMailStore.setState({ archivedEmailIds: new Set([5, 6]) });
+    mockGetEmailHeadersMeta.mockResolvedValue(null);
+    mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([9]));
+    mockFetchEmails.mockResolvedValue({ total: 500, emails: [mkHeader(1), mkHeader(2)] });
+    mockCheckMailboxStatus.mockResolvedValue({ uidValidity: 1, uidNext: 501, highestModseq: null });
+
+    await useMailStore.getState().activateAccount(ACCOUNT.id, 'INBOX', { _backgroundRefresh: true });
+
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+  });
+});
+

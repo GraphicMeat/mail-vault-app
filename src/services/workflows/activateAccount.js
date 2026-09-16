@@ -606,10 +606,15 @@ export async function activateAccount(accountId, mailbox, options = {}) {
         db.getSavedEmailIds(accountId, effectiveMailbox),
       ]);
       if (signal.aborted) return;
-      // I-5: `null` means "could not read" — fall back to this account's
-      // last known set (already painted from the restore descriptor above)
-      // rather than adopting "nothing is archived".
-      const archivedEmailIds = rawArchivedEmailIds ?? restored?.archivedEmailIds ?? new Set();
+      // I-5: `null` means "could not read" — fall back to the store's current
+      // archivedEmailIds rather than adopting "nothing is archived". By the
+      // time this resolves the store already holds THIS account's ids (set
+      // above: restoredArchivedIds on the restore path, or an empty Set on
+      // the fresh path) — never the outgoing account's. Do not fall back to
+      // `restored?.archivedEmailIds`: no restore descriptor has that key (both
+      // builders emit `firstWindowArchivedUids`, capped at ~50 uids), so that
+      // fallback silently collapsed to `new Set()` on every failed read.
+      const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds ?? new Set();
 
       // On a stamp mismatch this re-reads only the sidecars that moved (readdir
       // + mtime, then one read per changed UID) instead of discarding the set —
