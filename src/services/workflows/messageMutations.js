@@ -2011,6 +2011,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
     ]);
     // I-5: keep the store's current value on a failed read instead of
     // adopting "nothing is archived".
+    setArchivedGroup(activeGroup.accountId, activeGroup.mailbox, archivedEmailIds);
     useMailStore.setState({ savedEmailIds, archivedEmailIds: archivedEmailIds ?? get().archivedEmailIds, localEmails });
   }
   get().updateSortedEmails();

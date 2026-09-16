@@ -31,6 +31,7 @@ const mockReadLocalEmailIndex = vi.fn().mockResolvedValue(null);
 const mockGetArchivedEmails = vi.fn().mockResolvedValue([]);
 const mockGetCachedMailboxes = vi.fn().mockResolvedValue([]);
 const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
+const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../services/db', () => ({
   getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
@@ -47,6 +48,7 @@ vi.mock('../../services/db', () => ({
   getArchivedEmails: (...args) => mockGetArchivedEmails(...args),
   getCachedMailboxes: (...args) => mockGetCachedMailboxes(...args),
   getLocalEmails: (...args) => mockGetLocalEmails(...args),
+  saveEmailHeaders: (...args) => mockSaveEmailHeaders(...args),
 }));
 const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
 const mockBackupScanUids = vi.fn().mockResolvedValue(null);
@@ -105,7 +107,8 @@ vi.mock('../../services/cacheManager', () => ({
 
 const { useMailStore } = await import('../mailStore');
 const { serverUids } = await import('../slices/serverUids');
-const { _resetArchivedGroupsForTest } = await import('../slices/messageListSlice');
+const { _resetArchivedGroupsForTest, setArchivedGroup } = await import('../slices/messageListSlice');
+const { AccountPipeline } = await import('../../services/AccountPipeline');
 
 const A = { id: 'acct-a', email: 'a@example.com' };
 const B = { id: 'acct-b', email: 'b@example.com' };
@@ -258,5 +261,43 @@ describe('setViewMode: the Set-identity trap (Step 6)', () => {
     // "changed" input on every write and re-sorts for nothing.
     expect(useMailStore.getState().archivedEmailIds).toBe(firstIds);
     expect(useMailStore.getState().sortedEmails).toBe(firstSorted);
+  });
+});
+
+describe('review fix: a bypassing writer\'s successful read must feed the group map too', () => {
+  it('AccountPipeline._finish keeping the map in sync stops a later failed read from shrinking archivedEmailIds', async () => {
+    // An earlier pass (e.g. a unified read) went through the map and left a
+    // stale, smaller entry for this group.
+    setArchivedGroup(A.id, 'INBOX', new Set([1]));
+
+    useMailStore.setState({
+      unifiedInbox: false,
+      activeAccountId: A.id,
+      activeMailbox: 'INBOX',
+      archivedEmailIds: new Set([1]),
+    });
+
+    // AccountPipeline._finish() is one of the three sites that write
+    // `archivedEmailIds` straight to the store on a successful read. Before
+    // the fix it never told the map about that fresher value, so the map
+    // above stayed on the STALE {1} while the store moved on to {1,2,3}.
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+    const pipeline = new AccountPipeline(A, { concurrency: 1 });
+    await pipeline._finish('INBOX');
+    await flush();
+
+    // Sanity check: the write site itself was actually reached.
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+
+    // Now a later read for the SAME group fails, the mechanism F2 already
+    // uses for this elsewhere (see the "excluded writer" spec above).
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
+    // The ids _finish just wrote must survive: the map is no longer staler
+    // than the store, so the failed read has nothing to narrow down to.
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
   });
 });

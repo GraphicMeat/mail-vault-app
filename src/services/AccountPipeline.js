@@ -8,6 +8,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { isGraphAccount, storageKeyOf } from './graphConfig';
 import { listGraphMessages } from './cacheManager';
 import { adoptGraphFolderKeysFromListing } from './workflows/adoptGraphFolderKeys';
+import { setArchivedGroup } from '../stores/slices/messageListSlice';
 
 export { hasValidCredentials };
 
@@ -418,6 +419,7 @@ export class AccountPipeline {
         // I-5: keep the store's current value on a failed read instead of
         // adopting "nothing is archived".
         const newArchivedIds = rawArchivedIds ?? useMailStore.getState().archivedEmailIds;
+        setArchivedGroup(activeAccountId, activeMailbox, rawArchivedIds);
         useMailStore.setState({
           savedEmailIds: newSavedIds,
           archivedEmailIds: newArchivedIds,

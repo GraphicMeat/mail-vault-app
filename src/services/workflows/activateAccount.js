@@ -30,6 +30,7 @@ import {
   getLoadAbortController, setLoadAbortController,
   getLoadMoreTimer, setLoadMoreTimer,
   setLoadEmailsRetried, invalidateChatAndThreadCaches, bumpFlagChangeCounter,
+  setArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { t } from '../../i18n/index.js';
 
@@ -647,6 +648,7 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       // How much of the mailbox the sidecar cache holds. The progress indicator
       // reads this instead of the store window, which is a view onto the cache
       // and can legitimately shrink.
+      setArchivedGroup(accountId, effectiveMailbox, rawArchivedEmailIds);
       useMailStore.setState({
         savedEmailIds,
         archivedEmailIds,
