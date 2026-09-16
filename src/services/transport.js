@@ -160,6 +160,14 @@ export const DAEMON_OWNED = new Set([
   // flag on write (decision 3) so an imported message survives Clear cached
   // emails. The dead single-mailbox export variant was deleted, not moved.
   'export_mbox_all', 'import_mbox',
+  // Task 4.8: the eight migration commands, get_folder_mappings, and the
+  // three restore commands, all now daemon-owned (decision 7's run_tokens
+  // registry replaces the old per-command Tauri-managed cancel/pause
+  // tokens). api.js's 11 exports already route through tauriInvoke -> this
+  // module's send(), so no JS call-site change was needed beyond this set.
+  'start_migration', 'cancel_migration', 'pause_migration', 'resume_migration',
+  'get_migration_state', 'clear_migration_state_cmd', 'count_migration_folders',
+  'get_folder_mappings', 'start_restore', 'cancel_restore', 'count_local_folder',
 ]);
 
 async function sendToDaemon(command, args) {

@@ -92,10 +92,8 @@ pub use mailvault_core::graph;
 mod iap;
 mod mailto;
 pub use mailvault_core::imap;
-mod migration;
 mod notification_open;
 mod notification_sound;
-mod restore;
 pub use mailvault_core::oauth2;
 mod smtp;
 mod spellcheck;
@@ -2423,6 +2421,21 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // to the `_ => None` default cannot silently take or grant a budget.
         "export_mbox_all" | "import_mbox" => None,
 
+        // Task 4.8 / decision 8: each of these ten either kicks off a
+        // tokio::spawn and returns almost immediately (progress flows over
+        // channel.open, not this reply) or is a fast local read/flag flip.
+        // Written as its own arm, not left to the `_ => None` catch-all, so
+        // a later edit to that default cannot silently take a budget these
+        // never had a reason to lose.
+        "start_migration" | "resume_migration" | "count_migration_folders" | "start_restore"
+        | "cancel_migration" | "pause_migration" | "cancel_restore" | "clear_migration_state_cmd"
+        | "get_migration_state" | "count_local_folder" => Some(Duration::from_secs(30)),
+
+        // Task 4.8 / decision 8: a live IMAP LIST plus, when either side is
+        // Graph, an HTTP list_folders call, bounded but genuinely
+        // network-bound, matching Phase 2's precedent for similar calls.
+        "get_folder_mappings" => Some(Duration::from_secs(120)),
+
         _ => None,
     }
 }
@@ -2785,11 +2798,7 @@ fn main() {
 
     let builder = builder
         .manage(backup::BackupCancelToken::default())
-        .manage(migration::MigrationCancelToken::default())
-        .manage(migration::MigrationPauseToken::default())
-        .manage(migration::MigrationNotify::default())
         .manage(dropped_files::DroppedPaths::default())
-        .manage(restore::RestoreCancelToken::default())
         .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
         .manage(iap::IapState::new())
@@ -2896,18 +2905,7 @@ fn main() {
             commands::backup_migrate_legacy_path,
             backup::backup_purge_uids,
             backup::backup_scan_uids,
-            commands::start_migration,
-            commands::cancel_migration,
-            commands::pause_migration,
-            commands::resume_migration,
-            commands::get_migration_state,
-            commands::clear_migration_state_cmd,
-            commands::count_migration_folders,
-            commands::get_folder_mappings,
-            commands::start_restore,
-            commands::cancel_restore,
             commands::get_transfer_stats,
-            commands::count_local_folder,
             github::github_device_start,
             github::github_device_poll,
             github::github_check_star,
@@ -3565,6 +3563,31 @@ mod tests {
     fn reply_timeout_is_none_for_export_mbox_all_and_import_mbox() {
         assert_eq!(crate::reply_timeout("export_mbox_all"), None);
         assert_eq!(crate::reply_timeout("import_mbox"), None);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 4.8: migration and restore.
+    // -----------------------------------------------------------------------
+
+    /// Pinned by name, not the `_ => None` default: each of these either
+    /// spawns and returns almost immediately (progress arrives over
+    /// channel.open, not this reply) or is a fast local read/flag flip.
+    #[test]
+    fn reply_timeout_gives_the_ten_migration_and_restore_kickoff_routes_thirty_seconds() {
+        for method in [
+            "start_migration", "resume_migration", "count_migration_folders", "start_restore",
+            "cancel_migration", "pause_migration", "cancel_restore", "clear_migration_state_cmd",
+            "get_migration_state", "count_local_folder",
+        ] {
+            assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
+        }
+    }
+
+    /// Pinned by name: a live IMAP LIST plus, when either side is Graph, an
+    /// HTTP list_folders call, bounded but genuinely network-bound.
+    #[test]
+    fn reply_timeout_gives_get_folder_mappings_two_minutes() {
+        assert_eq!(crate::reply_timeout("get_folder_mappings"), Some(std::time::Duration::from_secs(120)));
     }
 
     // -----------------------------------------------------------------------

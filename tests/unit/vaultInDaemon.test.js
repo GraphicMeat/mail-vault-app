@@ -57,6 +57,15 @@ const MOVED = [
   // `MboxExportResult`/`MboxImportResult` moved out with them; the dead
   // single-mailbox export variant was deleted, not moved.
   'export_mbox_all', 'import_mbox',
+  // Task 4.8: migration and restore, the last of Phase 4's three cutovers.
+  // `MigrationCancelToken`/`MigrationPauseToken`/`MigrationNotify`/
+  // `RestoreCancelToken` and their four `.manage(...)` calls are gone from
+  // the app along with the commands; `src-tauri/src/migration.rs` and
+  // `restore.rs` (kept as byte-identical copies through Task 4.7's
+  // no-cutover phase) are deleted outright, not just emptied.
+  'start_migration', 'cancel_migration', 'pause_migration', 'resume_migration',
+  'get_migration_state', 'clear_migration_state_cmd', 'count_migration_folders',
+  'get_folder_mappings', 'start_restore', 'cancel_restore', 'count_local_folder',
 ];
 
 // The three mirror-broker forwarders (spec deviation 1) and the two settings
@@ -104,6 +113,15 @@ describe('vault reads and the attachment cache live in the daemon (Task 2.6)', (
   it('the app manages no insights snapshot state', () => {
     expect(main).not.toMatch(/InsightsSnapshots/);
     expect(existsSync('src-tauri/src/insights.rs')).toBe(false);
+  });
+
+  // Task 4.8: migration.rs/restore.rs left src-tauri for good. Task 4.7 kept
+  // byte-identical copies alive through its own no-cutover phase (main.rs
+  // still needed the old token types until this task); this cutover deletes
+  // both files outright, not just their command registrations.
+  it('migration.rs and restore.rs are deleted from the app crate', () => {
+    expect(existsSync('src-tauri/src/migration.rs')).toBe(false);
+    expect(existsSync('src-tauri/src/restore.rs')).toBe(false);
   });
 });
 
@@ -200,11 +218,14 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
  * this guard catches it structurally instead of relying on review.
  *
  * Two names came off this list at Task 3.9, for different reasons:
- * - `restore.rs` never wrote the vault at all: it reads local `.eml` files
- *   and re-uploads them over IMAP. It was an ungated *reader* mistakenly on
+ * - `restore.rs` never wrote the vault at all: it read local `.eml` files
+ *   and re-uploaded them over IMAP. It was an ungated *reader* mistakenly on
  *   a writer allowlist (project memory: this exact failure mode is cited
- *   twice). Verified by reading `run_restore`; its only vault touch is
- *   `std::fs::read`.
+ *   twice). Verified by reading `run_restore`; its only vault touch was
+ *   `std::fs::read`. The file itself left the app crate entirely in Task
+ *   4.8 (moved to the daemon in Task 4.7); its own writer-allowlist test is
+ *   gone with it, not converted, since the claim it made has no subject any
+ *   more (see the "migration.rs and restore.rs are deleted" test above).
  * - `archive.rs` no longer contains a literal vault write of any kind.
  *   Task 3.2 moved the archive/bulk runner's body, including the real
  *   `fsx::write_atomic` call, into `mailvault_core::archive` (see
@@ -296,12 +317,6 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   it('the raw-write pattern is not vacuous: backup.rs (Graph backup) still trips it; main.rs no longer does (Task 4.6 moved its last offender, import_mbox, to the daemon)', () => {
     expect(hasRawVaultWrite(readFileSync(`${dir}/main.rs`, 'utf8'))).toBe(false);
     expect(hasRawVaultWrite(readFileSync(`${dir}/backup.rs`, 'utf8'))).toBe(true);
-  });
-
-  it('restore.rs writes nothing to the vault (an ungated reader, not a writer)', () => {
-    const body = readFileSync(`${dir}/restore.rs`, 'utf8');
-    expect(writePattern.test(body)).toBe(false);
-    expect(hasRawVaultWrite(body)).toBe(false);
   });
 
   it('archive.rs contains no literal vault write any more (moved to src-core/src/archive.rs in Task 3.2)', () => {
