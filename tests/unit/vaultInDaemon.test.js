@@ -89,8 +89,26 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
   const dir = 'src-tauri/src';
   const sources = readdirSync(dir).filter((f) => f.endsWith('.rs')).map((f) => [f, readFileSync(`${dir}/${f}`, 'utf8')]);
 
+  // task-2.11 carry-in M4: a file earns the test exemption below by actually
+  // being loaded as a `#[cfg(test)]` module (e.g.
+  // `#[cfg(test)] #[path = "insights_tests.rs"] mod tests;` in
+  // `insights.rs`), not by ending in `_tests.rs`. A future non-test file
+  // named `*_tests.rs`, or a `_tests.rs` file no longer reached through such
+  // a declaration, must not be silently exempt.
+  const isCfgTestModuleFile = (filename) => {
+    const decl = new RegExp(`#\\[cfg\\(test\\)\\]\\s*#\\[path\\s*=\\s*"${filename}"\\]\\s*mod\\s+\\w+;`);
+    return sources.some(([, body]) => decl.test(body));
+  };
+
   it('reads the real app sources', () => {
     expect(sources.length).toBeGreaterThan(10);
+  });
+
+  it('insights_tests.rs is exempt because it is a real #[cfg(test)] module, not by its filename', () => {
+    expect(isCfgTestModuleFile('insights_tests.rs')).toBe(true);
+    // A plain filename guess must not pass on its own — the declaration
+    // itself has to exist.
+    expect(isCfgTestModuleFile('no_such_tests.rs')).toBe(false);
   });
 
   it.each(['src-tauri/src/custody.rs', 'src-tauri/src/custody_tests.rs'])('%s is deleted', (f) => {
@@ -109,15 +127,16 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
 
   // Borrowing a connection from core is what would actually take the
   // EXCLUSIVE lock, so it is forbidden in everything the shipped binary runs.
-  // `*_tests.rs` is exempt: `insights_tests.rs` opens a store of its own in a
-  // tempdir to feed the bridge closure, which is `#[cfg(test)]` and can never
-  // race the daemon's open.
+  // A file is exempt only when `isCfgTestModuleFile` proves it is loaded
+  // through a `#[cfg(test)]` module declaration (M4): today that is
+  // `insights_tests.rs`, which opens a store of its own in a tempdir to feed
+  // the bridge closure and can never race the daemon's open.
   it.each([
     ['custody::db::open', /custody::db::open\b/],
     ['custody::entries::', /custody::entries::/],
     ['custody::lock(', /custody::lock\(/],
   ])('no shipped app source calls %s', (_name, pattern) => {
-    const offenders = sources.filter(([f, body]) => !f.endsWith('_tests.rs') && pattern.test(body)).map(([f]) => f);
+    const offenders = sources.filter(([f, body]) => !isCfgTestModuleFile(f) && pattern.test(body)).map(([f]) => f);
     expect(offenders).toEqual([]);
   });
 

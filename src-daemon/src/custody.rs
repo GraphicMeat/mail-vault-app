@@ -103,14 +103,21 @@ pub fn close(state: &DaemonState) {
 }
 
 /// After a vault operation, success or not: synchronous, unlike the search
-/// index's `reopen` — `handlers::search_index::vault_reopen` must have
-/// custody actually reopened before it clears `vault_closed`, or a gated
-/// route could pass the gate and still hit `custody store unavailable: closed`.
+/// index's `reopen`.
 ///
 /// Returns the open failure (2.9a review I1) so `vault_reopen` can answer
 /// `Err`: a custody store that will not reopen is otherwise permanent for the
 /// daemon's life, and the app's own lifecycle error path — stop the daemon so
 /// the channel respawns it against whatever root is current — never fires.
+///
+/// `handlers::search_index::vault_reopen` clears `vault_closed`
+/// unconditionally once this call returns, `Err` included (task-2.9b review
+/// M2): on the `Err` path the gate opens deliberately with custody still
+/// closed, rather than leaving every route stuck on "the vault is being
+/// moved" for callers that never learn of the failure. The app's own
+/// lifecycle handler treats that same `Err` as fatal and stops the daemon
+/// (`main.rs`'s `daemon_vault_lifecycle_call`), so the respawn — not this
+/// gate — is what recovers a custody store that would not reopen.
 pub fn reopen(state: &DaemonState) -> Result<(), String> {
     state.custody.switch.end_switch();
     open_into(state)

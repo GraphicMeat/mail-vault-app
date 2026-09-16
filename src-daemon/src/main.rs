@@ -358,12 +358,29 @@ async fn daemon_main() {
     {
         let custody_state = Arc::clone(&state);
         let started = std::time::Instant::now();
-        let _ = tokio::task::spawn_blocking(move || custody::open_into(&custody_state)).await;
+        let outcome = tokio::task::spawn_blocking(move || custody::open_into(&custody_state)).await;
         let took = started.elapsed();
-        if took > std::time::Duration::from_secs(2) {
-            warn!("custody store: open took {:?} — the app only waits 3s for the daemon socket", took);
-        } else {
-            info!("custody store: opened in {:?}", took);
+        match outcome {
+            Ok(Ok(())) => {
+                if took > std::time::Duration::from_secs(2) {
+                    warn!("custody store: open took {:?} — the app only waits 3s for the daemon socket", took);
+                } else {
+                    info!("custody store: opened in {:?}", took);
+                }
+            }
+            // `open_into` already logged the reason; this line is only about
+            // timing, so it must not repeat "opened in" over a failure.
+            Ok(Err(e)) => warn!("custody store: failed to open in {:?}: {e}", took),
+            // A panic here would otherwise leave `custody.error` at `None`
+            // (task-2.11 carry-in M3): `VaultAlertBanner` renders nothing for
+            // a `None` error while every custody route still answers `custody
+            // store unavailable: closed`. Record it so the banner has
+            // something to show.
+            Err(join_err) => {
+                let msg = format!("custody store: startup open panicked: {join_err}");
+                error!("{msg}");
+                *state.custody.error.lock().unwrap_or_else(|p| p.into_inner()) = Some(msg);
+            }
         }
     }
 

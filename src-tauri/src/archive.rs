@@ -301,29 +301,34 @@ pub async fn run_with_backup(
     // uid-less entries it skipped, so only the count is reported here.
     if !index_entries.is_empty() {
         let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox.clone());
+        // `written` counts entries handed to the RPC, not entries actually
+        // upserted: the daemon can skip uid-less ones (and logs the skips),
+        // so this over-reports by that count. The plan authorised keeping it
+        // this way (task-2.11 carry-in M7a) — only the request/reply shapes
+        // are contract, not the log line's exact number.
         let written = index_entries.len();
-        let entries_json = match serde_json::to_string(&index_entries) {
-            Ok(j) => j,
-            Err(e) => {
-                warn!("archive_emails: custody write failed: {}", e);
-                String::new()
+        // An `else` on the match (task-2.11 carry-in M7b), not a
+        // `String::new()` sentinel: a serialize failure and an empty entries
+        // list must stay distinguishable even if the outer `is_empty` guard
+        // above ever moves.
+        match serde_json::to_string(&index_entries) {
+            Ok(entries_json) => {
+                match tokio::task::spawn_blocking(move || {
+                    crate::daemon_call_blocking(
+                        &handle,
+                        "local_index_append",
+                        serde_json::json!({"accountId": acct, "mailbox": mbx, "entriesJson": entries_json}),
+                        std::time::Duration::from_secs(30),
+                    )
+                })
+                .await
+                {
+                    Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", written),
+                    Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
+                    Err(e) => warn!("archive_emails: custody write panicked: {}", e),
+                }
             }
-        };
-        if !entries_json.is_empty() {
-            match tokio::task::spawn_blocking(move || {
-                crate::daemon_call_blocking(
-                    &handle,
-                    "local_index_append",
-                    serde_json::json!({"accountId": acct, "mailbox": mbx, "entriesJson": entries_json}),
-                    std::time::Duration::from_secs(30),
-                )
-            })
-            .await
-            {
-                Ok(Ok(_)) => info!("archive_emails: recorded {} custody entries", written),
-                Ok(Err(e)) => warn!("archive_emails: custody write failed: {}", e),
-                Err(e) => warn!("archive_emails: custody write panicked: {}", e),
-            }
+            Err(e) => warn!("archive_emails: custody write failed: could not serialize {} entries: {}", written, e),
         }
     }
 

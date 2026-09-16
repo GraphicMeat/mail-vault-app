@@ -47,9 +47,15 @@ fn forward<T: DeserializeOwned>(app: &tauri::AppHandle, method: &str, mut params
         Ok(v) => v,
         Err(e) => {
             if needs_release {
+                // task-2.11 carry-in M6: this fires on every error with a
+                // mirror in play, not only a timeout — the daemon may never
+                // have touched the mirror at all (unreachable, outdated).
+                // Say "if", not "a call that timed out", so an unrelated
+                // failure does not read as proof the mirror was mid-rename.
                 warn!(
-                    "{method}: failed ({e}) — the backup mirror's access has been released, so a call that \
-                     timed out mid-rename may leave the mirror partly renamed; the next backup catch-up heals it"
+                    "{method}: failed ({e}) — the backup mirror's access has been released; \
+                     if this call timed out mid-rename, the mirror may be left partly renamed, \
+                     which the next backup catch-up heals"
                 );
             }
             return Err(e);
