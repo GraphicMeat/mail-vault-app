@@ -13,8 +13,8 @@
 - **Mail Insights is now as consistent as the rest of your mail data.** It reads through MailVault's background service too, the same way mail files and search do.
 - **Outlook message numbers can no longer collide.** MailVault's background service and its backup could assign the same internal number to a new Outlook message at the same moment. Assigning a number now takes a lock both share.
 - **An account's backup card shows its stored size again.** Settings → Backup, each account's card always showed "--" for Storage instead of the size on disk.
-- **A message imported from an mbox file stays in the list and survives Clear cached emails.** A message brought in through Import mbox file was saved without MailVault's archived marker, so a later Clear cached emails run could remove it, the same gap the backup-mirror restore had before 2.14.0. Imported messages are now marked archived, so they stay in your vault the way anything else you've explicitly saved does.
-- **Import, export, account migration and restoring from local mail are now as consistent as the rest of your mail data.** They all run in MailVault's background service too, the same way mail files, search, archiving, backup and Insights already do.
+- **A message imported through Import MBOX stays in the list and survives Clear cached emails.** A message brought in through Import MBOX was saved without MailVault's archived marker, so a later Clear cached emails run could remove it, the same gap the backup-mirror restore had before 2.14.0. Imported messages are now marked archived, so they stay in your vault the way anything else you've explicitly saved does.
+- **Import, export, mailbox migration and restoring emails to the server are now as consistent as the rest of your mail data.** They all run in MailVault's background service too, the same way mail files, search, archiving and Insights already do.
 
 ## [2.14.0] - 2026-09-15
 
