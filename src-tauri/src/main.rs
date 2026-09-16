@@ -1169,7 +1169,7 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
+        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(300));
         let result = vault::adopt(&app_handle, &path);
         let status = match result {
             Ok(s) => s,
@@ -1219,7 +1219,7 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
     let result = tokio::task::spawn_blocking(move || {
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
+        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(300));
         let emitter = handle.clone();
         let result = vault::move_to(&handle, &path, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
@@ -1260,7 +1260,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
     let result = tokio::task::spawn_blocking(move || {
         let root_before = vault::root(&handle).ok();
         let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(120));
+        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(300));
         let emitter = handle.clone();
         let result = vault::move_to_default(&handle, move |p| {
             let _ = emitter.emit("vault-move-progress", p);
@@ -1294,7 +1294,7 @@ async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::Mo
 async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(120));
+        daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(300));
         let result = vault::reset(&app_handle);
         let status = match result {
             Ok(s) => s,
@@ -3114,12 +3114,19 @@ fn should_stop_after_lifecycle_call(result: &Result<serde_json::Value, String>) 
 /// move's own copy step. The channel respawns a fresh daemon against
 /// whichever root is current once the guard drops.
 fn daemon_vault_lifecycle_call(app: &tauri::AppHandle, method: &str, timeout: std::time::Duration) {
+    let started = std::time::Instant::now();
     let result = daemon_call_blocking(app, method, serde_json::json!({}), timeout);
+    let took = started.elapsed();
+    // I-2: `vault_close` can legitimately take a while (a search-index
+    // batch/compaction in flight) — log how long every call actually took so
+    // a slow close shows up in the log before it ever gets near the budget
+    // above, not only once it times out.
+    info!("{method} took {:?} (budget {:?})", took, timeout);
     if let Err(e) = &result {
         if is_stale_daemon_method(e) {
             warn!("{method}: daemon does not know this method yet (stale build); continuing as if unreachable");
         } else {
-            warn!("{method} failed ({e}); stopping the daemon so nothing holds the vault");
+            warn!("{method} failed ({e}) after {:?}; stopping the daemon so nothing holds the vault", took);
         }
     }
     if should_stop_after_lifecycle_call(&result) {
@@ -3274,10 +3281,21 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         // 200). The old Tauri commands they replace had no budget at all, so
         // 30s (bounding what used to be unbounded) can time out a large
         // archive on a slow drive that used to just run slow and succeed.
-        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache" | "vault_close"
+        "load_email_cache" | "graph_allocate_uids" | "maildir_storage_stats" | "clear_email_cache"
         | "maildir_read_light_batch" | "maildir_list" => {
             Some(Duration::from_secs(120))
         }
+
+        // Final fix wave I-2: a `vault_close` can outlast 120s when the
+        // search index worker is mid-batch/compaction — the app's budget
+        // must be strictly larger than the daemon's own wait
+        // (`si::close`/`custody::close` inside `handlers/search_index.rs`),
+        // or the app SIGTERMs the daemon mid-write just before the vault
+        // move starts copying. Not consulted by `daemon_vault_lifecycle_call`
+        // (it passes its own explicit `Duration`, same as `vault_reopen`
+        // below) — kept here so the budget is documented in one table and
+        // pinned by a test, matching every call site.
+        "vault_close" => Some(Duration::from_secs(300)),
 
         "maildir_clear_cache" | "maildir_migrate_json_to_eml" | "maildir_migrate_email_dirs" | "maildir_purge_orphans"
         | "prefetch_attachments" | "vault_apply_flags" | "vault_rename_mailbox" | "vault_adopt_mailbox_dirs" => {
@@ -4331,11 +4349,19 @@ mod tests {
         // moved here from the 30s tier — they can cover a whole mailbox's
         // uids in one unchunked call, a full MIME parse per file.
         for method in [
-            "load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache", "vault_close",
+            "load_email_cache", "graph_allocate_uids", "maildir_storage_stats", "clear_email_cache",
             "maildir_read_light_batch", "maildir_list",
         ] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(120)), "method={method}");
         }
+    }
+
+    /// Final fix wave I-2: raised from 120s so the app's budget is strictly
+    /// larger than the daemon's own close wait. RED on the pre-fix code
+    /// (120s).
+    #[test]
+    fn reply_timeout_gives_vault_close_a_five_minute_budget() {
+        assert_eq!(crate::reply_timeout("vault_close"), Some(std::time::Duration::from_secs(300)));
     }
 
     #[test]
