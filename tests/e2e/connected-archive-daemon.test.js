@@ -73,7 +73,13 @@ const PREFIX_C = 'Archive daemon cancel'; // (c): cancelled mid-flight
 const PREFIX_D = 'Bulk delete daemon';    // (d): the N4 regression
 
 const COUNT_A = 6;
-const COUNT_C = 10; // > the 5-permit semaphore, so cancel always has a queued tail
+// > the 5-permit semaphore, so cancel always has a queued tail. 10 was not
+// enough in practice: two rounds of fast loopback FETCH+disk-write finish
+// well inside the RPC round trip cancel_archive itself needs, so the whole
+// batch completed before the flag ever landed (a GREEN run measured 10/10
+// completed - the cancel had no queued tail left to catch). 30 gives 6
+// rounds through the semaphore, a comfortable margin over that round trip.
+const COUNT_C = 30;
 const COUNT_D = 6;
 
 describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
