@@ -8,6 +8,9 @@
 
 ### Fixed
 - **Opening a big folder no longer freezes the window.** Mail files, cache files and the local search index are now all read and written by MailVault's background service instead of the app window itself, so scrolling, typing and switching folders keep working while a large folder loads or a bulk change is being saved.
+- **Archiving and bulk deleting no longer freeze the window either.** Both now run in MailVault's background service too, so scrolling, typing and switching folders keep working while a large archive or bulk delete is in progress.
+- **Cancelling an archive no longer stops an unrelated bulk delete.** If an automatic archive and a manual bulk delete happened to be running at the same time, cancelling one could silently stop the other. Each now has its own cancel.
+- **Mail Insights reads are now handled by MailVault's background service too**, keeping it consistent with mail files and search.
 - **Outlook message numbers can no longer collide.** MailVault's background service and its backup could assign the same internal number to a new Outlook message at the same moment. Assigning a number now takes a lock both share.
 - **An account's backup card shows its stored size again.** Settings → Backup, each account's card always showed "--" for Storage instead of the size on disk.
 
