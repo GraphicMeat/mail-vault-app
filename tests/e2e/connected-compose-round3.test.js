@@ -168,7 +168,8 @@ describe('Connected Compose Round 3', function () {
     if (formError) throw new Error(`Send was rejected by the compose form: "${formError}"`);
 
     const raw = flatten(await readStagedEml(luke.id, before, subject));
-    expect(headerLine(raw, 'From')).toContain(`<${ALIAS}>`);
+    // Bare address: the mock account has no display name to put in front of it.
+    expect(headerLine(raw, 'From')).toBe(`From: ${ALIAS}`);
     await waitForOutboxError(subject);
   });
 

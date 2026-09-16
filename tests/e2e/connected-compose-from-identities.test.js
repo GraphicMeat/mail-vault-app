@@ -171,7 +171,9 @@ describe('Connected Compose From Identities', function () {
     const subject = 'Identity default';
     const raw = await sendAndStage({ account: luke, subject });
 
-    expect(headerLine(raw, 'From')).toContain(`<${ALIAS}>`);
+    // Bare address: the mock account has no display name, and one equal to the
+    // address is dropped rather than encoded (Purelymail refuses that header).
+    expect(headerLine(raw, 'From')).toBe(`From: ${ALIAS}`);
     // The whole point of the override is that the login never reaches the
     // recipient — not in From, not anywhere else in the header block.
     expect(raw.slice(0, raw.indexOf('\r\n\r\n') + 1).toLowerCase()).not.toContain(luke.email);
@@ -191,7 +193,7 @@ describe('Connected Compose From Identities', function () {
     // relabel the row: `sendAsEmail` is derived from the pick, so a From row
     // that reads "login" while SMTP is handed the alias is the failure this
     // case exists for.
-    expect(headerLine(raw, 'From')).toContain(`<${luke.email}>`);
+    expect(headerLine(raw, 'From')).toBe(`From: ${luke.email}`);
     expect(raw.toLowerCase()).not.toContain(ALIAS.toLowerCase());
     // Message-ID follows the From domain, so it moves back with it.
     expect(headerLine(raw, 'Message-ID')).toContain(`@${luke.email.split('@')[1]}>`);
@@ -209,7 +211,7 @@ describe('Connected Compose From Identities', function () {
       subject,
     });
 
-    expect(headerLine(raw, 'From')).toContain(`<${vader.email}>`);
+    expect(headerLine(raw, 'From')).toBe(`From: ${vader.email}`);
     // readStagedEml only ever looked in vader's Maildir, so the file being there
     // is half the proof; luke's Sent staying untouched is the other half.
     expect(listSent(luke.id).length).toBe(lukeSentBefore);

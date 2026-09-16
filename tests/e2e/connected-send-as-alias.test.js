@@ -125,7 +125,10 @@ describe('Connected Send-As Alias', function () {
       const { headers } = await buildHeaders(account, { fromEmail: ALIAS });
 
       const from = headerLine(headers, 'From');
-      expect(from).toContain(`<${ALIAS}>`);
+      // Mock accounts carry no display name (name === address), so From is the bare
+      // address: a name that is just the address is RFC 2047-encoded and Purelymail
+      // refuses the header (501 5.1.7).
+      expect(from).toBe(`From: ${ALIAS}`);
       // The login address must not leak into any header — the whole point is
       // that the recipient never sees it.
       expect(headers.toLowerCase()).not.toContain(account.email.toLowerCase());
@@ -136,12 +139,12 @@ describe('Connected Send-As Alias', function () {
 
     it('falls back to the login address when no override is set', async function () {
       const { headers } = await buildHeaders(account);
-      expect(headerLine(headers, 'From')).toContain(`<${account.email}>`);
+      expect(headerLine(headers, 'From')).toBe(`From: ${account.email}`);
     });
 
     it('treats a blank override as no override', async function () {
       const { headers } = await buildHeaders(account, { fromEmail: '   ' });
-      expect(headerLine(headers, 'From')).toContain(`<${account.email}>`);
+      expect(headerLine(headers, 'From')).toBe(`From: ${account.email}`);
     });
 
     it('follows the From domain for Message-ID', async function () {
