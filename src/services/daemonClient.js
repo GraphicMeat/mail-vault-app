@@ -21,6 +21,20 @@ const invokeReady = IS_TAURI
     })
   : Promise.resolve();
 
+// The live global bridge first, the module import only as a fallback — same
+// fix as transport.js's `resolveInvoke()` (`c85770c1`), and the same reason:
+// `window.__TAURI__.core.invoke` and the `@tauri-apps/api/core` copy imported
+// above are two DIFFERENT function objects (`withGlobalTauri` injects its own
+// bundled api before any app JS runs; the imported one reaches the native
+// side through `window.__TAURI_INTERNALS__` without ever reading
+// `window.__TAURI__`). An e2e fixture that swaps `window.__TAURI__.core` to
+// observe a call (connected-cleanup.test.js, connected-attachments.test.js)
+// never sees one that went through the frozen ESM import — this was the
+// identical bug transport.js had, just not yet fixed here.
+function resolveInvoke() {
+  return (typeof window !== 'undefined' && window.__TAURI__?.core?.invoke) || invoke;
+}
+
 /**
  * Send a JSON-RPC request to the daemon via Tauri proxy.
  *
@@ -31,7 +45,8 @@ const invokeReady = IS_TAURI
  */
 export async function daemonCall(method, params = {}) {
   await invokeReady;
-  if (!invoke) throw new DaemonError('Tauri invoke not available', 'NO_TAURI');
+  const inv = resolveInvoke();
+  if (!inv) throw new DaemonError('Tauri invoke not available', 'NO_TAURI');
 
   try {
     // Pass daemonMode so the Rust proxy knows whether to auto-spawn
@@ -42,7 +57,7 @@ export async function daemonCall(method, params = {}) {
     } catch { /* settings unavailable — use default */ }
 
     // The Tauri command handles socket connection, auth, and JSON-RPC framing
-    const result = await invoke('daemon_rpc', { method, params, daemonMode });
+    const result = await inv('daemon_rpc', { method, params, daemonMode });
     return result;
   } catch (error) {
     const message = typeof error === 'string' ? error : error.message || 'Unknown daemon error';
