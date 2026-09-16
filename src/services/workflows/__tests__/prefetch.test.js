@@ -3,7 +3,7 @@
 // src/services/db/emails.js:542-560), not "zero archived messages". Before
 // this fix the prewarm path substituted `new Set()` for the transient
 // localEmails decision (fine, in-memory only) but ALSO persisted
-// `firstWindowArchivedUids: []` into the restore descriptor — a durable lie
+// `firstWindowArchivedUids: []` into the restore descriptor, a durable lie
 // that activateAccount.js's restore path (~:471, `new Set(restored.
 // firstWindowArchivedUids || [])`) adopts unconditionally on the next switch
 // back to this account, with no way to tell "really empty" from "we never
@@ -24,7 +24,7 @@ vi.mock('../../db', () => ({
   getCachedMailboxEntry: (...a) => mockGetCachedMailboxEntry(...a),
   readLocalEmailIndex: (...a) => mockReadLocalEmailIndex(...a),
   getArchivedEmails: (...a) => mockGetArchivedEmails(...a),
-  // _prefetchAllMailboxes's own dep, unused by the prewarm tests below —
+  // _prefetchAllMailboxes's own dep, unused by the prewarm tests below;
   // stubbed only so the module's static `import * as db` resolves.
   saveMailboxes: vi.fn(),
 }));
@@ -46,7 +46,7 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
 }));
 
-// Leaf deps of the sibling _prefetchAllMailboxes export — unused by the
+// Leaf deps of the sibling _prefetchAllMailboxes export, unused by the
 // prewarm path this file exercises, stubbed only so prefetch.js's static
 // import from './activateAccount' resolves.
 vi.mock('../activateAccount', () => ({
