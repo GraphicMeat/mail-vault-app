@@ -348,10 +348,16 @@ fn verify_listed(
             .and_then(|m| m.get(uid))
             .map(|id| normalize_message_id(id))
             .filter(|id| !id.is_empty());
+        // Only parse the header when there is something to compare it
+        // against: a caller with no expected ids (verify-by-presence) never
+        // needs the message read at all.
         // read_message_id already returns the id normalized the same way.
-        match (expected, read_message_id(&path)) {
-            (Some(want), Some(got)) if want != got => mismatched.push(*uid),
-            _ => verified.push(*uid),
+        match expected {
+            Some(want) => match read_message_id(&path) {
+                Some(got) if got != want => mismatched.push(*uid),
+                _ => verified.push(*uid),
+            },
+            None => verified.push(*uid),
         }
     }
 
@@ -370,6 +376,18 @@ fn header_section(bytes: &[u8]) -> &[u8] {
     &bytes[..end]
 }
 
+/// Call counter for `read_message_id`, test-only: lets `verify_copies` prove
+/// it skips the header parse entirely when there is nothing to compare it
+/// against, rather than asserting on behavior that would look the same
+/// either way. Thread-local, not a shared global: cargo runs `#[test]`
+/// functions on separate threads in parallel, and none of the tests here
+/// spawn further threads, so each test's own count stays isolated from every
+/// other test's calls.
+#[cfg(test)]
+thread_local! {
+    pub(crate) static READ_MESSAGE_ID_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Read just the Message-ID of an `.eml`, without parsing the message.
 ///
 /// Reads at most 128 KiB: this runs once per vault file during a repair, and a
@@ -377,6 +395,8 @@ fn header_section(bytes: &[u8]) -> &[u8] {
 /// walk) over a 14k-message mailbox is minutes of work to answer one
 /// question.
 pub fn read_message_id(path: &Path) -> Option<String> {
+    #[cfg(test)]
+    READ_MESSAGE_ID_CALLS.with(|c| c.set(c.get() + 1));
     let mut buf = Vec::new();
     fs::File::open(path).ok()?.take(128 * 1024).read_to_end(&mut buf).ok()?;
     let text = String::from_utf8_lossy(header_section(&buf));
@@ -1428,6 +1448,30 @@ mod tests {
         assert_eq!(verified, vec![12, 13]);
         assert!(missing.is_empty());
         assert!(mismatched.is_empty());
+    }
+
+    #[test]
+    fn no_expected_ids_never_reads_a_single_header() {
+        // BulkOperationManager's verify-only call (no expectedIds) has
+        // nothing to compare a Message-ID against, so the header parse must
+        // not run at all, not just be ignored once it does.
+        let tmp = tempfile::tempdir().unwrap();
+        write_vault_msg(tmp.path(), "12:2,S", Some("<a@host.test>"));
+        write_vault_msg(tmp.path(), "13:2,S", Some("<b@host.test>"));
+
+        READ_MESSAGE_ID_CALLS.with(|c| c.set(0));
+        let (verified, missing, mismatched) = verify_copies(tmp.path(), &[12, 13], None);
+        assert_eq!(verified, vec![12, 13]);
+        assert!(missing.is_empty());
+        assert!(mismatched.is_empty());
+        assert_eq!(READ_MESSAGE_ID_CALLS.with(|c| c.get()), 0, "expected=None must skip read_message_id entirely");
+
+        // Sanity: the counter itself does track calls, so the zero above is
+        // proof of a skip, not a counter that never increments.
+        let mut expected = HashMap::new();
+        expected.insert(12u32, "a@host.test".to_string());
+        let _ = verify_copies(tmp.path(), &[12, 13], Some(&expected));
+        assert!(READ_MESSAGE_ID_CALLS.with(|c| c.get()) > 0, "the counter must increment when expected ids are present");
     }
 
     #[test]
