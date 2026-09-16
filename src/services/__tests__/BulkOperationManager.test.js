@@ -85,3 +85,55 @@ describe('BulkOperationManager delete_everywhere progress relay', () => {
     }
   });
 });
+
+describe('BulkOperationManager archive-progress account/mailbox filter', () => {
+  beforeEach(() => {
+    mockSavePendingOperation.mockClear();
+    mockClearPendingOperation.mockClear();
+  });
+
+  it('ignores archive-progress events for the right operation but the wrong accountId or mailbox', async () => {
+    const { listen } = await import('@tauri-apps/api/event');
+    let archiveProgressHandler;
+    listen.mockImplementation((eventName, handler) => {
+      if (eventName === 'archive-progress') archiveProgressHandler = handler;
+      return Promise.resolve(() => {});
+    });
+
+    const { bulkOperationManager } = await import('../BulkOperationManager.js');
+    await bulkOperationManager.start({
+      type: 'archive',
+      accountId: 'acc1',
+      account: { id: 'acc1', email: 'me@test.com' },
+      mailbox: 'INBOX',
+      uids: [1, 2, 3],
+      onProgress: () => {},
+    });
+
+    expect(typeof archiveProgressHandler).toBe('function');
+    expect(bulkOperationManager.operation.completed).toBe(0);
+    expect(bulkOperationManager.operation.errors).toBe(0);
+
+    // Right operation, wrong accountId: e.g. a scheduled backup or a
+    // cleanup-rule archive for a different account running concurrently.
+    archiveProgressHandler({
+      payload: { operation: 'archive', accountId: 'other-acc', mailbox: 'INBOX', completed: 5, errors: 2 },
+    });
+    expect(bulkOperationManager.operation.completed).toBe(0);
+    expect(bulkOperationManager.operation.errors).toBe(0);
+
+    // Right operation, right accountId, wrong mailbox.
+    archiveProgressHandler({
+      payload: { operation: 'archive', accountId: 'acc1', mailbox: 'Archive', completed: 7, errors: 3 },
+    });
+    expect(bulkOperationManager.operation.completed).toBe(0);
+    expect(bulkOperationManager.operation.errors).toBe(0);
+
+    // Sanity: a matching accountId and mailbox does update state.
+    archiveProgressHandler({
+      payload: { operation: 'archive', accountId: 'acc1', mailbox: 'INBOX', completed: 2, errors: 1 },
+    });
+    expect(bulkOperationManager.operation.completed).toBe(2);
+    expect(bulkOperationManager.operation.errors).toBe(1);
+  });
+});

@@ -26,7 +26,7 @@ beforeEach(async () => {
   // this (node-environment) test file, and none of that machinery is what
   // is under test here. Drive the listener directly, as production code
   // does once a run is under way.
-  bulkOperationManager._operation = { completed: 0, errors: 0, status: 'archiving' };
+  bulkOperationManager._operation = { completed: 0, errors: 0, status: 'archiving', accountId: 'acc1', mailbox: 'INBOX' };
   await bulkOperationManager._setupEventListener();
 });
 

@@ -219,10 +219,11 @@ class BulkOperationManager {
         if (!this._operation) return;
         const p = event.payload;
         // Task 3.3 (R3.2): archive-progress is shared with backup.rs's own
-        // run_with_backup call - take only this manager's own archive runs,
-        // or a scheduled backup running alongside a manual bulk archive
-        // stomps this operation's counts (N3).
-        if (p.operation !== 'archive') return;
+        // run_with_backup call - take only this manager's own archive run's
+        // account/mailbox, or a scheduled backup (or a cleanup-rule archive)
+        // running alongside a manual bulk archive stomps this operation's
+        // counts (N3).
+        if (p.operation !== 'archive' || p.accountId !== this._operation.accountId || p.mailbox !== this._operation.mailbox) return;
         this._operation.completed = p.completed;
         this._operation.errors = p.errors;
         // Only surface the provider bandwidth-limit stop — per-email errors stay a count
