@@ -11,6 +11,7 @@ mod events;
 mod handlers;
 mod idle_watch;
 mod inference;
+mod insights;
 mod ipc;
 mod learning;
 mod netgate;
@@ -353,6 +354,7 @@ async fn daemon_main() {
         journal: std::sync::Mutex::new(()),
         custody: custody::CustodyState::default(),
         cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
+        insights: insights::InsightsSnapshots::default(),
     });
 
     // Custody, before the socket exists (Task 2.9b Step 1): the legacy JSON
@@ -400,6 +402,10 @@ async fn daemon_main() {
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));
+
+    // Insights' 300s snapshot expiry sweeper (Task 3.6), same 30s loop and
+    // Weak-reference exit condition as the app's version.
+    state.insights.start_cleanup();
 
     // Debounced flush of the contacts index to disk (every 30s). Gated like
     // every other vault write (final fix wave I-1): ungated, dirty entries
