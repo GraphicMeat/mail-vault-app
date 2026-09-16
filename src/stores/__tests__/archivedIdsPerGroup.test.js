@@ -1,12 +1,12 @@
 /**
- * Task 3.8 F2 (R3.3) — `archivedEmailIds` is a per-(account,mailbox) union,
+ * Task 3.8 F2 (R3.3): `archivedEmailIds` is a per-(account,mailbox) union,
  * not one flat set that never forgets a group once it has been seen.
  *
  * Before this fix, a failed re-read of one mailbox's archived ids fell back
  * to the store's WHOLE prior value (`rawArchivedEmailIds ?? get().archivedEmailIds`
  * in uiSlice.js, and the equivalent seeded-Set pattern in loadUnifiedInbox.js).
  * That kept every account ever seen in the union forever, including ones no
- * longer in view — see messageListSlice.js's `_archivedIdsByGroup`.
+ * longer in view. See messageListSlice.js's `_archivedIdsByGroup`.
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -149,9 +149,9 @@ beforeEach(() => {
   });
 });
 
-describe('setViewMode — narrowing out of unified inbox drops groups no longer in view (R3.3)', () => {
+describe('setViewMode: narrowing out of unified inbox drops groups no longer in view (R3.3)', () => {
   it('a failed re-read of A/INBOX does not leave B\'s archived ids behind', async () => {
-    // Unified pass over A and B, both reads succeed — seeds the per-group
+    // Unified pass over A and B, both reads succeed: seeds the per-group
     // cache for both.
     mockGetArchivedEmailIds.mockImplementation(async (accountId, mailbox) => {
       if (accountId === A.id && mailbox === 'INBOX') return new Set([1]);
@@ -180,7 +180,7 @@ describe('setViewMode — narrowing out of unified inbox drops groups no longer 
   });
 });
 
-describe('setViewMode — a per-account read failure inside a unified pass (Phase 2 I-5 regression fence)', () => {
+describe('setViewMode: a per-account read failure inside a unified pass (Phase 2 I-5 regression fence)', () => {
   it('keeps that account\'s previously-known ids and drops nothing from the others', async () => {
     mockGetArchivedEmailIds.mockImplementation(async (accountId, mailbox) => {
       if (accountId === A.id && mailbox === 'INBOX') return new Set([1]);
@@ -202,14 +202,14 @@ describe('setViewMode — a per-account read failure inside a unified pass (Phas
     await flush();
 
     const { archivedEmailIds } = useMailStore.getState();
-    // A's ids must still be there — nothing dropped by the failed read.
+    // A's ids must still be there: nothing dropped by the failed read.
     expect(archivedEmailIds.has(1)).toBe(true);
     // B's fresh read landed too.
     expect([...archivedEmailIds].sort()).toEqual([1, 2, 3]);
   });
 });
 
-describe('setViewMode — the Set-identity trap (Step 6)', () => {
+describe('setViewMode: the Set-identity trap (Step 6)', () => {
   it('N group writes with unchanged contents produce exactly one Set instance and no extra re-sort', async () => {
     // A fresh Set instance every call (as a real db read would return), but
     // the same contents each time.

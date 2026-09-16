@@ -256,8 +256,8 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
         paint(p.completed, p.errors);
 
         if (p.lastUid && paintsIds) {
-          // Keep this group's own cache in sync too — see messageListSlice's
-          // _archivedIdsByGroup — so a later narrow to exactly this
+          // Keep this group's own cache in sync too (see messageListSlice's
+          // _archivedIdsByGroup), so a later narrow to exactly this
           // account/mailbox still has this uid even if its own re-read fails.
           addArchivedGroupUid(accountId, mailbox, p.lastUid);
           const { archivedEmailIds } = get();
@@ -342,8 +342,8 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   let locals = await db.readLocalEmailIndex(accountId, mailbox);
   if (!locals) locals = await db.getLocalEmails(accountId, mailbox);
 
-  // I-5: `archived === null` means "could not read" — keep this group's own
-  // last-known ids (setArchivedGroup skips a null write) rather than
+  // I-5: `archived === null` means "could not read", so keep this group's
+  // own last-known ids (setArchivedGroup skips a null write) rather than
   // adopting "nothing is archived".
   setArchivedGroup(accountId, mailbox, archived);
 
@@ -358,7 +358,7 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
   useMailStore.setState({
     savedEmailIds: new Set([...s.savedEmailIds, ...saved]),
-    // A spanning view only grows as groups come into it — merge this
+    // A spanning view only grows as groups come into it, so merge this
     // group's cached ids (never the whole map) into the existing union.
     archivedEmailIds: mergeArchivedGroup(s.archivedEmailIds, accountId, mailbox),
     localEmails: [

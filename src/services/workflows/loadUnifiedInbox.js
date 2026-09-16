@@ -267,7 +267,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   const allLocalEmails = [];
   const allSavedIds = new Set();
   // Every viewed account contributes one pair, resolved the same way
-  // resolvedPathsByAccount already was above — a pair with no cached group
+  // resolvedPathsByAccount already was above. A pair with no cached group
   // entry just contributes nothing to the derived union (see
   // messageListSlice's deriveArchivedUnion).
   const viewPairs = accounts.filter(a => !hiddenAccounts[a.id])
@@ -284,7 +284,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         let locals = await db.readLocalEmailIndex(account.id, localFolder);
         if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
         for (const uid of saved) allSavedIds.add(uid);
-        // I-5: `archived === null` means "could not read" — keep this
+        // I-5: `archived === null` means "could not read", so keep this
         // group's own last-known ids (setArchivedGroup skips a null write)
         // instead of the whole unified pass losing this one account.
         setArchivedGroup(account.id, localFolder, archived);

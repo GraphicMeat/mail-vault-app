@@ -101,7 +101,7 @@ export const createUiSlice = (set, get) => ({
         const allSavedIds = new Set();
         const viewedAccounts = accounts.filter(a => !hiddenAccounts[a.id]);
         // Every viewed account contributes one pair even if its own read
-        // throws — see messageListSlice's deriveArchivedUnion: a pair with no
+        // throws (see messageListSlice's deriveArchivedUnion): a pair with no
         // cached entry just contributes nothing, which is the same as today.
         const viewPairs = [];
         Promise.all(
@@ -122,9 +122,9 @@ export const createUiSlice = (set, get) => ({
               let locals = await db.readLocalEmailIndex(account.id, localFolder);
               if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
               for (const uid of saved) allSavedIds.add(uid);
-              // I-5: `archived === null` means "could not read" — keep this
-              // group's own last-known ids (setArchivedGroup skips a null
-              // write) instead of the whole pass losing this one account.
+              // I-5: `archived === null` means "could not read", so keep
+              // this group's own last-known ids (setArchivedGroup skips a
+              // null write) instead of the whole pass losing this account.
               setArchivedGroup(account.id, localFolder, archived);
               for (const e of locals) {
                 allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
@@ -147,7 +147,7 @@ export const createUiSlice = (set, get) => ({
             let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
             if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
             // I-5: a failed read (`null`) keeps this group's own last-known
-            // ids rather than adopting "nothing is archived" — and
+            // ids rather than adopting "nothing is archived", and
             // archivedEmailIds becomes the union of exactly this one group,
             // so narrowing out of unified inbox drops every other account's
             // ids instead of leaving the whole stale union in place.
