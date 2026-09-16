@@ -312,12 +312,33 @@ export function getDaemonHealth() {
   };
 }
 
+// The live global bridge first, the module import only as a fallback.
+//
+// `window.__TAURI__.core.invoke` and the `@tauri-apps/api/core` copy imported
+// above are two DIFFERENT function objects: `withGlobalTauri` injects its own
+// bundled api before any app JS runs, and the imported one reaches the native
+// side through `window.__TAURI_INTERNALS__` without ever reading
+// `window.__TAURI__`. Every other invoke site in the app (App.jsx, the settings
+// panels, AttachmentBar, the hooks) reads the global live at call time, so a
+// command that moves onto `send()` silently changes which of the two objects it
+// travels through. That is invisible in production, where both end at the same
+// bridge, but an e2e fixture that swaps the `window.__TAURI__.core` object to
+// watch a command (connected-cleanup.test.js, connected-attachments.test.js)
+// stops seeing the call the moment it is rerouted here. Reading the global live
+// keeps a migrated call site observable exactly as the raw call it replaced,
+// and it is the only bridge demo mode (src/demo/runtime.js) ever defines.
+function resolveInvoke() {
+  return (typeof window !== 'undefined' && window.__TAURI__?.core?.invoke) || invoke;
+}
+
 async function tauriInvoke(command, args) {
-  if (!invoke) {
+  let inv = resolveInvoke();
+  if (!inv) {
     await new Promise(r => setTimeout(r, 100));
-    if (!invoke) throw new Error(t('errors.tauriUnavailable'));
+    inv = resolveInvoke();
+    if (!inv) throw new Error(t('errors.tauriUnavailable'));
   }
-  const realPromise = invoke(command, args);
+  const realPromise = inv(command, args);
   // Native WebKit defines its invoke hook as non-writable. E2E diagnostics
   // observe the actual call here and may hold delivery of its real response.
   // Normal builds remove this branch; the hook cannot replace native data.
