@@ -36,6 +36,10 @@ uuid = { version = "1", features = ["v4"] }
 # the fetched bytes for its RPC reply. Was test-only (Task 2.8's maildir_store
 # fixture) until this move made it a real runtime dependency too.
 base64 = "0.22"
+# Task 4.3: `backup_zip::export`/`import` (moved from src-tauri) read/write
+# backup ZIP archives directly. Same pin as src-core/Cargo.toml and
+# src-tauri/Cargo.toml.
+zip = "2"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }

@@ -1,5 +1,6 @@
 mod attachment_extract;
 mod auth;
+mod backup_zip;
 mod channel;
 pub mod classification;
 mod classification_worker;

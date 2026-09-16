@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 pub(crate) mod archive;
+pub(crate) mod backup_zip;
 pub(crate) mod cache;
 pub(crate) mod common;
 pub(crate) mod custody;
