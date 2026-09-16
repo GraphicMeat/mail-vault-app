@@ -352,6 +352,7 @@ async fn daemon_main() {
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
         custody: custody::CustodyState::default(),
+        cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
     });
 
     // Custody, before the socket exists (Task 2.9b Step 1): the legacy JSON

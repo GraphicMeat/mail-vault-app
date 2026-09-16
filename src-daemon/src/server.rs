@@ -92,6 +92,15 @@ pub struct DaemonState {
     /// write already goes through `fsx::write_atomic`, so a concurrent reader
     /// only ever sees a complete journal, old or new, never a torn one.
     pub journal: std::sync::Mutex<()>,
+    /// Task 3.4: per-operation-kind cancel tokens ("archive", "bulk_delete").
+    /// Replaces the app's single global `ArchiveCancelToken`
+    /// (inventory-archive-bulk N4): keyed by kind so `cancel_archive` never
+    /// stops a bulk delete, and `Vec`-valued per kind so two concurrent runs
+    /// of the same kind are each still individually cancellable.
+    /// `handlers::archive::CancelGuard` is the only writer; every exit path
+    /// (success, error, cancellation, panic) removes its own token via
+    /// `Drop`, keyed by pointer identity so it never removes a sibling run's.
+    pub cancels: std::sync::Mutex<std::collections::HashMap<&'static str, Vec<Arc<AtomicBool>>>>,
 }
 
 /// Start the daemon socket server.
@@ -248,6 +257,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::archive::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::cache::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -382,6 +395,7 @@ impl DaemonState {
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
             custody: crate::custody::CustodyState::default(),
+            cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
         })
     }
 }
