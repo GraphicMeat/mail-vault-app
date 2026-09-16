@@ -257,15 +257,21 @@ pub fn create_snapshot_from_maildir(
                 let fname = email_entry.file_name().to_string_lossy().to_string();
                 let size = email_entry.metadata().map(|m| m.len()).unwrap_or(0);
 
-                // Parse filename: {uid}:{flags}:{timestamp} or just {uid}
-                let parts: Vec<&str> = fname.splitn(3, ':').collect();
-                let uid = parts.first()
-                    .and_then(|s| s.parse::<u64>().ok())
-                    .unwrap_or(0);
-
-                let flags: Vec<String> = parts.get(1)
-                    .map(|f| f.split(',').filter(|s| !s.is_empty()).map(String::from).collect())
-                    .unwrap_or_default();
+                // M-5 (final fix wave): the vault's only filename shape is
+                // `<uid>:2,<flags>.eml`. The old `splitn(3, ':').collect()`
+                // here read everything after the ONE colon as a comma list —
+                // for `7:2,AS.eml` that is `["2", "AS.eml"]`, not real flags
+                // — and accepted non-canonical uids (`07:`, `+7:`) that no
+                // other reader treats as a vault row. `vault_filename_uid`
+                // (global constraint: never `split(':').next().parse()`) and
+                // `parse_flags_from_filename` are the same parse every other
+                // reader uses; a name that fails to parse is not a vault
+                // message, so it is skipped here rather than recorded as
+                // uid 0 with garbage flags.
+                let Some(uid) = mailvault_core::maildir::vault_filename_uid(&fname).map(u64::from) else {
+                    continue;
+                };
+                let flags = mailvault_core::vault_eml::parse_flags_from_filename(&fname);
 
                 // We store minimal info — subject/from/date require parsing .eml
                 // For v1, store what we can extract from filename + metadata
@@ -433,6 +439,38 @@ mod tests {
 
         let sent = &manifest.mailboxes["Sent"];
         assert_eq!(sent.emails[0].uid, 100);
+
+        cleanup(&dir);
+    }
+
+    /// M-5 (final fix wave): a Maildir-scanned snapshot reads the real
+    /// `<uid>:2,<flags>.eml` filename shape. RED on the old
+    /// `splitn(3, ':')` body: it read the literal text after the one colon
+    /// as a comma list, so `7:2,AS.eml` produced flags `["2", "AS.eml"]`
+    /// instead of `["archived", "seen", "\\Seen"]`, and a non-canonical name
+    /// like `07:2,S.eml` parsed as uid 7 instead of being ignored.
+    #[test]
+    fn create_snapshot_from_maildir_reads_the_real_filename_shape() {
+        let dir = std::env::temp_dir().join(format!("mailvault-test-snap-maildir-{}", uuid::Uuid::new_v4()));
+        cleanup(&dir);
+        let cur = dir.join("Maildir").join("acc1").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        fs::write(cur.join("7:2,AS.eml"), b"From: a@b\r\n\r\nx").unwrap();
+        fs::write(cur.join("9:2,.eml"), b"From: a@b\r\n\r\ny").unwrap();
+        // Non-canonical: no other reader binds this to uid 7 either
+        // (`vault_filename_uid`/`find_by_uid`) — the snapshot must not.
+        fs::write(cur.join("07:2,S.eml"), b"From: a@b\r\n\r\nz").unwrap();
+
+        let info = create_snapshot_from_maildir(&dir, "acc1", "user@test.com").unwrap();
+        let manifest = load_snapshot(&dir, "acc1", &info.filename).unwrap();
+        let mut emails = manifest.mailboxes["INBOX"].emails.clone();
+        emails.sort_by_key(|e| e.uid);
+
+        assert_eq!(emails.len(), 2, "the non-canonical name must be skipped, not bound to uid 7");
+        assert_eq!(emails[0].uid, 7);
+        assert_eq!(emails[0].flags, vec!["archived", "seen", "\\Seen"]);
+        assert_eq!(emails[1].uid, 9);
+        assert!(emails[1].flags.is_empty());
 
         cleanup(&dir);
     }

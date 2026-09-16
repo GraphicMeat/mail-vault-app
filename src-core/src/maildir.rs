@@ -540,9 +540,12 @@ pub fn repair_generation(
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        // Same heuristic the `.eml` migration uses: a message filename starts
-        // with `{uid}:`. Anything else in here is not ours to move.
-        let old_uid: u32 = match name.split(':').next().and_then(|s| s.parse().ok()) {
+        // Item 9 (final fix wave): `vault_filename_uid` is the one uid parse
+        // every other reader uses — it rejects a non-canonical name
+        // (`07:`/`+7:`) that `split(':').next().parse()` would happily bind
+        // to a real uid, letting a repair rebind or orphan a file no other
+        // reader would ever recognise as that message.
+        let old_uid: u32 = match vault_filename_uid(&name) {
             Some(u) => u,
             None => continue,
         };
@@ -579,7 +582,8 @@ pub fn repair_generation(
                 continue;
             }
             let name = strip_orphan_suffix(&entry.file_name().to_string_lossy());
-            if name.split(':').next().and_then(|s| s.parse::<u32>().ok()).is_none() {
+            // Item 9 (final fix wave): same canonical-uid rule as above.
+            if vault_filename_uid(&name).is_none() {
                 continue;
             }
             if let Some(nu) = read_message_id(&entry.path())
@@ -877,6 +881,38 @@ mod tests {
 
         assert_eq!(purge_orphans(&mailbox).unwrap(), 2);
         assert_eq!(orphan_stats(&mailbox).count, 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_repair_generation_ignores_non_canonical_uid_names() {
+        // Item 9 (final fix wave): `07:`/`+7:` are not canonical vault uids —
+        // `vault_filename_uid` rejects them, and `repair_generation` must
+        // agree (it used to parse them via `split(':').next().parse()`,
+        // which happily bound both to uid 7).
+        let dir = std::env::temp_dir().join(format!("mailvault-test-repair-noncanon-{}", uuid::Uuid::new_v4()));
+        let _ = fs::remove_dir_all(&dir);
+        let mailbox = dir.join("Maildir").join("acc1").join("INBOX");
+        let cur = mailbox.join("cur");
+        fs::create_dir_all(&cur).unwrap();
+
+        fs::write(cur.join("07:2,S.eml"), eml("zero-pad@host.test", "a")).unwrap();
+        fs::write(cur.join("+7:2,S.eml"), eml("plus@host.test", "b")).unwrap();
+        write_generation(&mailbox, 1).unwrap();
+
+        let id_to_uid: HashMap<String, u32> = [
+            ("zero-pad@host.test".to_string(), 7u32),
+            ("plus@host.test".to_string(), 7u32),
+        ].into_iter().collect();
+
+        let r = repair_generation(&mailbox, 2, &id_to_uid, &HashSet::new());
+        assert!(r.ran);
+        assert_eq!(r.errors, 0);
+        assert!(r.rebound.is_empty(), "a non-canonical name must never be rebound: {:?}", r.rebound);
+        assert!(r.orphaned.is_empty(), "a non-canonical name must never be orphaned either: {:?}", r.orphaned);
+        assert!(cur.join("07:2,S.eml").exists());
+        assert!(cur.join("+7:2,S.eml").exists());
 
         let _ = fs::remove_dir_all(&dir);
     }
