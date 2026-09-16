@@ -12,6 +12,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { send } from '../../services/transport';
 
 export default function BackupRestore() {
   const t = useT();
@@ -81,7 +82,7 @@ export default function BackupRestore() {
       });
 
       try {
-        await invoke('export_backup', {
+        await send('export_backup', {
           destPath,
           archivedOnly,
           settingsJson: JSON.stringify(settingsData),
@@ -125,7 +126,7 @@ export default function BackupRestore() {
 
       let result;
       try {
-        result = await invoke('import_backup', { sourcePath });
+        result = await send('import_backup', { sourcePath });
       } finally {
         unlisten();
       }
@@ -190,7 +191,7 @@ export default function BackupRestore() {
 
       let result;
       try {
-        result = await invoke('export_mbox_all', { destPath, archivedOnly: false });
+        result = await send('export_mbox_all', { destPath, archivedOnly: false });
       } finally {
         unlisten();
       }
@@ -239,7 +240,7 @@ export default function BackupRestore() {
 
       let result;
       try {
-        result = await invoke('import_mbox', {
+        result = await send('import_mbox', {
           sourcePath,
           accountId: targetAccount.id,
           mailbox: targetMailbox,

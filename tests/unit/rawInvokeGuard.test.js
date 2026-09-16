@@ -55,6 +55,18 @@ const PHASE3 = [
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
 ];
 
+// ── Phase 4 Task 4.1 (import/export): none of these are DAEMON_OWNED yet —
+// this task only reroutes their raw-invoke call sites onto transport.js's
+// `send`, which still falls through to tauriInvoke for an unowned name (no
+// behaviour change). `BackupRestore.jsx` reads `window.__TAURI__?.core?.invoke`
+// into a module-scoped const once and calls it from 4 sites — a shape the
+// existing `directRaw` pattern already matches (it already tolerates `?.`
+// optional chaining via the `DOT` alternation), proven by the negative
+// control below rather than assumed. `exportService.js`'s `fetchAssetViaTauri`
+// used a same-line destructure (`const { invoke } = window.__TAURI__.core;`),
+// already covered by `destructureRaw`.
+const PHASE4 = ['export_backup', 'import_backup', 'export_mbox_all', 'import_mbox', 'fetch_remote_asset'];
+
 // Phase 1's own DAEMON_OWNED set, read from transport.js rather than
 // hardcoded, so this guard never drifts from it.
 const transportSrc = readFileSync(new URL('../../src/services/transport.js', import.meta.url), 'utf8');
@@ -64,7 +76,7 @@ const ownedBlock = transportSrc.slice(
 );
 const PHASE1_OWNED = [...ownedBlock.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 
-const GUARDED_NAMES = [...PHASE2, ...PHASE1_OWNED, ...PHASE3];
+const GUARDED_NAMES = [...PHASE2, ...PHASE1_OWNED, ...PHASE3, ...PHASE4];
 
 // ── The scanner ──
 //
@@ -173,9 +185,10 @@ function scanDir(dir, names) {
 }
 
 describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through transport.js', () => {
-  it('the guarded name list is exactly 46 Phase 2 names, 8 Phase 3 names, plus the Phase 1 DAEMON_OWNED set', () => {
+  it('the guarded name list is exactly 46 Phase 2 names, 8 Phase 3 names, 5 Phase 4 names, plus the Phase 1 DAEMON_OWNED set', () => {
     expect(PHASE2.length).toBe(46);
     expect(PHASE3.length).toBe(8);
+    expect(PHASE4.length).toBe(5);
     expect(PHASE1_OWNED.length).toBeGreaterThan(0);
   });
 
@@ -207,7 +220,32 @@ describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through t
     expect(routed).toHaveLength(0);
   });
 
-  it('no non-test src file raw-invokes a Phase 1, Phase 2 or Phase 3 daemon-owned command', () => {
+  // Step 1 non-vacuity: `BackupRestore.jsx`'s module-scoped const-then-call
+  // shape (`const invoke = window.__TAURI__?.core?.invoke;` ... `invoke('x')`
+  // elsewhere in the function) is a third raw-invoke idiom in this codebase,
+  // distinct from a direct call and from the dynamic-import destructure. The
+  // existing `directRaw` pattern already tolerates the `?.` optional chaining
+  // this file uses, so no new pattern was needed here — proven, not assumed,
+  // with the same catch/ignore pair the other two idioms use above.
+  it('negative control: catches the optional-chaining const-then-call raw shape, ignores the routed replacement', () => {
+    const raw = scanText(
+      "const invoke = window.__TAURI__?.core?.invoke;\nasync function go() { await invoke('export_backup', {}); }",
+      ['export_backup'],
+    );
+    expect(raw).toHaveLength(1);
+    expect(raw[0].name).toBe('export_backup');
+
+    // What Step 2 replaces it with: a direct call through the imported `send`,
+    // with the same-named local `invoke` const left in place as a pure
+    // presence probe (`if (!invoke) ...`) rather than a call site.
+    const routed = scanText(
+      "const invoke = window.__TAURI__?.core?.invoke;\nasync function go() { if (!invoke) return; await send('export_backup', {}); }",
+      ['export_backup'],
+    );
+    expect(routed).toHaveLength(0);
+  });
+
+  it('no non-test src file raw-invokes a Phase 1, Phase 2, Phase 3 or Phase 4 daemon-owned command', () => {
     const hits = scanDir('src', GUARDED_NAMES);
     expect(hits.map((h) => `${h.file}:${h.line}: ${h.name}`)).toEqual([]);
   });

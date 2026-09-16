@@ -26,8 +26,7 @@ const E2E = Boolean(import.meta.env?.VITE_E2E);
 const forcedFailure = () => (E2E ? (globalThis.window?.__MV_FORCE_EXPORT_FAILURE__ ?? null) : null);
 
 export async function fetchAssetViaTauri(url) {
-  const { invoke } = window.__TAURI__.core;
-  return invoke('fetch_remote_asset', { url });
+  return send('fetch_remote_asset', { url });
 }
 
 export async function readAttachmentViaTauri({ accountId, mailbox, uid, attachmentIndex }) {
