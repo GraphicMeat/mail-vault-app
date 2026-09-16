@@ -348,4 +348,49 @@ mod tests {
         assert_eq!(page["ok"], false);
         assert_eq!(page["error"]["code"], "snapshotStale");
     }
+
+    // ── Fix F3: a route-level test that drives a REAL open custody store ──
+
+    /// The generation-counter tests elsewhere are unit-level (a mocked
+    /// `SharedConn`, or `custody.rs`'s own tests), and none of them drive an
+    /// insights route through an actually OPEN custody store:
+    /// `DaemonState::for_test` defaults custody to closed. This proves Fix
+    /// F1's before/after freshness window works end to end: open custody for
+    /// real, begin through the real route, write through the real
+    /// `with_conn` chokepoint after `begin` succeeds, and confirm
+    /// `insights_read_page` reports `snapshotStale` rather than silently
+    /// paging stale rows.
+    #[tokio::test]
+    async fn a_route_level_custody_write_after_begin_is_seen_as_stale_through_the_real_store() {
+        let (vault, app_dir, s) = st(true);
+        set_accounts(&app_dir, &["acc"]);
+        seed_account(vault.path(), "acc", "INBOX", 1);
+        custody::open_into(&s).expect("custody opens for a real mail_dir_ok vault");
+        custody::with_conn(&s, |c| {
+            mailvault_core::custody::entries::upsert(c, "acc", "Archive", &[json!({"uid": 9, "flags": []})]).map(|_| ())
+        })
+        .unwrap();
+
+        let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
+        assert_eq!(begin["ok"], true, "{begin}");
+        assert!(
+            begin["coverage"]["errors"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|e| e["code"] != "unreadableLocation"),
+            "an open custody store must read cleanly: {begin}"
+        );
+        let id = begin["snapshotId"].as_str().unwrap().to_string();
+
+        // A real write through the real chokepoint, after `begin` succeeded.
+        custody::with_conn(&s, |c| {
+            mailvault_core::custody::entries::upsert(c, "acc", "Archive", &[json!({"uid": 10, "flags": []})]).map(|_| ())
+        })
+        .unwrap();
+
+        let page = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
+        assert_eq!(page["ok"], false, "{page}");
+        assert_eq!(page["error"]["code"], "snapshotStale");
+    }
 }
