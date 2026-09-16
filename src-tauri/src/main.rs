@@ -2905,6 +2905,9 @@ fn main() {
             logs_submenu.append(&export_logs)?;
             let website_item = MenuItem::with_id(app, "open_website", "MailVault Website", true, None::<&str>)?;
             let more_apps_item = MenuItem::with_id(app, "open_more_apps", "More Apps by GraphicMeat", true, None::<&str>)?;
+            // PROBE (not for merge): "Probe: Backup Bookmark Scope (automatic)".
+            #[cfg(target_os = "macos")]
+            let probe_backup_scope_item = MenuItem::with_id(app, "probe_backup_scope", "Probe: Backup Bookmark Scope (automatic)", true, None::<&str>)?;
 
             #[cfg(target_os = "macos")]
             {
@@ -2944,6 +2947,7 @@ fn main() {
                                 let _ = sub.append(&website_item);
                                 let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
+                                let _ = sub.append(&probe_backup_scope_item);
                                 break;
                             }
                         }
@@ -3009,6 +3013,12 @@ fn main() {
                     let _ = app_handle_for_menu.shell().open("https://graphicmeat.com", None::<tauri_plugin_shell::open::Program>);
                 } else if event.id().as_ref() == "open_shortcuts" {
                     let _ = app_handle_for_menu.emit("open-shortcuts", ());
+                } else if event.id().as_ref() == "probe_backup_scope" {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let h = app_handle_for_menu.clone();
+                        std::thread::spawn(move || probe_backup_scope(h));
+                    }
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
                     std::process::exit(0);
@@ -3164,6 +3174,99 @@ fn main() {
                 _ => {}
             }
         });
+}
+
+/// PROBE (not for merge): does `resolve_external_location`'s `start_access`
+/// (which rebuilds a plain `fileURLWithPath:` from the resolved bookmark's
+/// path string — see the comment in `external_location::macos::open_in_finder_inner`)
+/// actually grant write access to the configured backup folder, or is it a
+/// silent no-op? Three writes: cold (no start_access at all), warm (right
+/// after `resolve_external_location`), post-release (after `release_external_access`).
+///
+/// Precondition: an external backup location must already be configured in
+/// Settings > Backup Scope & Storage, saved in a PRIOR app launch. Quit and
+/// relaunch this signed build before running the probe, so no NSOpenPanel
+/// session grant from picking the folder is still live — only the persisted
+/// bookmark is being tested.
+#[cfg(target_os = "macos")]
+fn probe_backup_scope(h: tauri::AppHandle) {
+    use serde_json::json;
+    use tauri_plugin_dialog::DialogExt;
+
+    fn write_probe(dir: &Path) -> Result<(), String> {
+        let f = dir.join(".mailvault-probe-scope.txt");
+        std::fs::write(&f, b"probe\n").map_err(|e| format!("write: {e} (errno {:?})", e.raw_os_error()))?;
+        let readback = std::fs::read(&f).map_err(|e| format!("readback: {e} (errno {:?})", e.raw_os_error()))?;
+        let _ = std::fs::remove_file(&f);
+        if readback != b"probe\n" {
+            return Err("readback mismatch".to_string());
+        }
+        Ok(())
+    }
+
+    let data_dir = match h.path().app_data_dir() {
+        Ok(d) => d,
+        Err(e) => {
+            h.dialog().message(format!("app_data_dir: {e}")).title("Probe: Backup Scope — FAIL").blocking_show();
+            return;
+        }
+    };
+
+    let meta_path = data_dir.join(format!("{}-meta.json", external_location::SLOT_EXTERNAL_BACKUP));
+    let display_path = fs::read_to_string(&meta_path).ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v.get("displayPath").and_then(|s| s.as_str()).map(str::to_string));
+
+    let Some(display_path) = display_path else {
+        h.dialog()
+            .message("No external backup location configured. Set one in Settings > Backup Scope & Storage, quit, relaunch, then run this probe again.")
+            .title("Probe: Backup Scope — SKIPPED")
+            .blocking_show();
+        return;
+    };
+
+    // Step A: cold write, before resolve_external_location is ever called this session.
+    let cold_err: Option<String> = write_probe(&PathBuf::from(&display_path)).err();
+    info!("[probe-backup-scope] cold (no start_access) error: {:?}", cold_err);
+
+    // Step B: production resolve_external_location — resolves the bookmark, calls start_access.
+    let resolved = external_location::resolve_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP);
+    let resolve_err: Option<String> = resolved.as_ref().err().cloned();
+    let resolved_path: Option<String> = resolved.ok().map(|(path, _loc)| path);
+    let warm_err: Option<String> = match &resolved_path {
+        Some(p) => write_probe(&PathBuf::from(p)).err(),
+        None => None,
+    };
+    info!("[probe-backup-scope] resolve_external_location error: {:?}; warm write error: {:?}", resolve_err, warm_err);
+
+    // Step C: release, then a control write — if this still succeeds, the
+    // sandbox is not enforcing scope-loss on release either, which is its own finding.
+    if let Some(p) = &resolved_path {
+        external_location::release_external_access(p);
+    }
+    let post_release_err: Option<String> = resolved_path.as_ref().and_then(|p| write_probe(&PathBuf::from(p)).err());
+    info!("[probe-backup-scope] post-release write error: {:?}", post_release_err);
+
+    let verdict = match (&cold_err, &resolved_path.is_some(), &warm_err) {
+        (None, _, _) => "INCONCLUSIVE: the cold write (before start_access was ever called) already succeeded. Either this folder never required scope, or a prior session's picker grant is still live — quit, relaunch, and rerun.",
+        (Some(_), false, _) => "INCONCLUSIVE: resolve_external_location itself failed (see log) before start_access could be tested.",
+        (Some(_), true, None) => "PASS: cold write was refused, the warm write (after resolve_external_location/start_access) succeeded. start_access genuinely grants access. The broker-vs-daemon-restart architectural fork is real — decide it on its own merits.",
+        (Some(_), true, Some(_)) => "FAIL — BUG CONFIRMED: cold write refused AND the warm write after start_access was ALSO refused. resolve_external_location's start_access does not carry the security-scope extension (it rebuilds a plain fileURLWithPath: from the resolved path string — same defect the open_in_finder_inner fix in c393c14c worked around for Finder, but this call site was never fixed). Backups to this external folder are broken today after any relaunch, independent of the daemon migration. Fix: start scope on the NSURL object resolve_bookmark_inner already returns, never round-trip it through a path string. This is a Phase 3 prerequisite, not a broker-vs-restart tiebreaker.",
+    };
+
+    let summary = json!({
+        "displayPath": display_path,
+        "cold_write_error": cold_err,
+        "resolve_external_location_error": resolve_err,
+        "warm_write_error": warm_err,
+        "post_release_write_error": post_release_err,
+        "verdict": verdict,
+    });
+    info!("[probe-backup-scope] SUMMARY: {}", summary);
+    h.dialog()
+        .message(format!("{verdict}\n\nFull JSON in the log (search \"probe-backup-scope\")."))
+        .title("Probe: Backup Bookmark Scope")
+        .blocking_show();
 }
 
 // ── Unit tests ──────────────────────────────────────────────────────────────
