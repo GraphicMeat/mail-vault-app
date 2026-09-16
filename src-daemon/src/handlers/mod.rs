@@ -26,6 +26,8 @@ pub(crate) mod export_fetch;
 pub(crate) mod insights;
 pub(crate) mod journal;
 pub(crate) mod mbox;
+pub(crate) mod migration;
+pub(crate) mod restore;
 pub(crate) mod search_index;
 pub(crate) mod vault_files;
 pub(crate) mod vault_flags;

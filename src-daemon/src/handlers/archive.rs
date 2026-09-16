@@ -7,14 +7,16 @@
 //! `common::vault_root` / `common::with_vault_write` like every other Phase 2
 //! vault route.
 //!
-//! Cancel tokens are per-operation-kind daemon state (`DaemonState.cancels`).
-//! This fixes a pre-existing bug (inventory-archive-bulk N4): the app's
-//! single global `ArchiveCancelToken` was shared by `archive_emails` and
+//! Cancel tokens are per-operation-kind daemon state (`DaemonState.run_tokens`,
+//! Task 4.7). This fixes a pre-existing bug (inventory-archive-bulk N4): the
+//! app's single global `ArchiveCancelToken` was shared by `archive_emails` and
 //! `bulk_delete_emails`, each replacing the same `Arc` on entry, so
 //! `cancel_archive` could stop a bulk delete, and starting a second run
-//! orphaned the first uncancellably. `CancelGuard` below registers one fresh
-//! token per run under its kind and removes it again through `Drop` on every
-//! exit path: success, error, cancellation, or a panic inside the run.
+//! orphaned the first uncancellably. `common::RunGuard` (Task 4.7 generalized
+//! this module's own `CancelGuard` into that shared registry so migration and
+//! restore reuse it instead of running a second, parallel one) registers one
+//! fresh token per run under its kind and removes it again through `Drop` on
+//! every exit path: success, error, cancellation, or a panic inside the run.
 //!
 //! ponytail: two live `ImapPool`s per account until Phase 5 unifies IMAP
 //! connection handling: a migrated archive uses this daemon's pool
@@ -22,13 +24,12 @@
 //! interactive IMAP. Documented, accepted ceiling (plan decision 6), not
 //! something to fix here.
 
-use crate::handlers::common::{self, blocking, done, str_arg, vec_arg, with_vault_write};
+use crate::handlers::common::{self, blocking, cancel_kind, done, str_arg, vec_arg, with_vault_write, RunGuard};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use mailvault_core::archive::{self, ArchiveCtx, ArchiveGate, ArchiveSinks};
 use mailvault_core::custody::entries;
 use serde_json::Value;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tracing::warn;
 
@@ -39,69 +40,6 @@ macro_rules! req {
             Err(resp) => return Some(resp),
         }
     };
-}
-
-// ── Cancel registry (Step 2: fixes inventory N4) ────────────────────────────
-
-/// Registers one fresh cancel token under `kind` ("archive" | "bulk_delete")
-/// for the run's whole lifetime and removes exactly that token, by pointer
-/// identity, never by value, so a sibling run's token of the same kind is
-/// never touched, on drop. Construct it before the run starts and let it
-/// fall out of scope (or be dropped explicitly) on every exit path; a `Vec`
-/// per kind (not one slot) is what lets two concurrent runs of the same kind
-/// each stay individually cancellable.
-pub(crate) struct CancelGuard {
-    state: Arc<DaemonState>,
-    kind: &'static str,
-    token: Arc<AtomicBool>,
-}
-
-impl CancelGuard {
-    pub(crate) fn register(state: &Arc<DaemonState>, kind: &'static str) -> Self {
-        let token = Arc::new(AtomicBool::new(false));
-        state
-            .cancels
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .entry(kind)
-            .or_default()
-            .push(Arc::clone(&token));
-        Self { state: Arc::clone(state), kind, token }
-    }
-
-    pub(crate) fn token(&self) -> Arc<AtomicBool> {
-        Arc::clone(&self.token)
-    }
-}
-
-impl Drop for CancelGuard {
-    fn drop(&mut self) {
-        let mut map = self.state.cancels.lock().unwrap_or_else(|p| p.into_inner());
-        if let Some(tokens) = map.get_mut(self.kind) {
-            tokens.retain(|t| !Arc::ptr_eq(t, &self.token));
-            if tokens.is_empty() {
-                // A present-but-empty Vec is still a leak an "is the map
-                // empty" test would miss: drop the whole entry.
-                map.remove(self.kind);
-            }
-        }
-    }
-}
-
-/// Sets every currently-registered token under `kind` and returns how many.
-/// `cancel_archive` calls this with `"archive"`, the new `cancel_bulk_delete`
-/// with `"bulk_delete"`; each reaches only its own kind's runs.
-fn cancel_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize {
-    let map = state.cancels.lock().unwrap_or_else(|p| p.into_inner());
-    match map.get(kind) {
-        Some(tokens) => {
-            for t in tokens {
-                t.store(true, Ordering::Relaxed);
-            }
-            tokens.len()
-        }
-        None => 0,
-    }
 }
 
 // ── Context builder ──────────────────────────────────────────────────────
@@ -178,8 +116,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 Err(e) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, e)),
             };
             let ctx = archive_ctx(&state, root);
-            let guard = CancelGuard::register(&state, "archive");
-            let cancel = guard.token();
+            let guard = RunGuard::register(&state, "archive");
+            let cancel = guard.cancel();
             let result = archive::run(ctx, account_id, account_json, mailbox, uids, cancel).await;
             drop(guard);
             progress_reply(id, result)
@@ -196,8 +134,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let uids = req!(vec_arg::<u32>(&id, params, "uids"));
             let state = Arc::clone(state);
             let ctx = archive_ctx(&state, std::path::PathBuf::new());
-            let guard = CancelGuard::register(&state, "bulk_delete");
-            let cancel = guard.token();
+            let guard = RunGuard::register(&state, "bulk_delete");
+            let cancel = guard.cancel();
             let result = archive::bulk_delete(ctx, account_id, account_json, mailbox, uids, cancel).await;
             drop(guard);
             progress_reply(id, result)
@@ -248,6 +186,7 @@ mod tests {
     use crate::server::handle_request_for_test;
     use mailvault_core::daemon_ipc::parse_event;
     use serde_json::json;
+    use std::sync::atomic::Ordering;
 
     fn st(mail_dir_ok: bool) -> (tempfile::TempDir, Arc<DaemonState>) {
         let vault = tempfile::tempdir().unwrap();
@@ -261,7 +200,7 @@ mod tests {
     }
 
     fn cancels_snapshot(s: &Arc<DaemonState>) -> std::collections::HashMap<&'static str, usize> {
-        s.cancels
+        s.run_tokens
             .lock()
             .unwrap()
             .iter()
@@ -274,19 +213,19 @@ mod tests {
     #[tokio::test]
     async fn cancel_archive_does_not_touch_a_live_bulk_delete_token() {
         let (_v, s) = st(true);
-        let bulk_guard = CancelGuard::register(&s, "bulk_delete");
+        let bulk_guard = RunGuard::register(&s, "bulk_delete");
         let n = cancel_kind(&s, "archive");
         assert_eq!(n, 0, "no archive token is registered");
-        assert!(!bulk_guard.token().load(Ordering::Relaxed), "cancel_archive must not cancel a live bulk delete");
+        assert!(!bulk_guard.cancel().load(Ordering::Relaxed), "cancel_archive must not cancel a live bulk delete");
     }
 
     #[tokio::test]
     async fn cancel_bulk_delete_does_not_touch_a_live_archive_token() {
         let (_v, s) = st(true);
-        let archive_guard = CancelGuard::register(&s, "archive");
+        let archive_guard = RunGuard::register(&s, "archive");
         let n = cancel_kind(&s, "bulk_delete");
         assert_eq!(n, 0);
-        assert!(!archive_guard.token().load(Ordering::Relaxed), "cancel_bulk_delete must not cancel a live archive");
+        assert!(!archive_guard.cancel().load(Ordering::Relaxed), "cancel_bulk_delete must not cancel a live archive");
     }
 
     #[tokio::test]
@@ -294,9 +233,9 @@ mod tests {
         // The other half of N4: today's single-slot design replaces the Arc
         // on the second run, silently orphaning the first (uncancellable).
         let (_v, s) = st(true);
-        let g1 = CancelGuard::register(&s, "archive");
-        let t1 = g1.token();
-        let _g2 = CancelGuard::register(&s, "archive");
+        let g1 = RunGuard::register(&s, "archive");
+        let t1 = g1.cancel();
+        let _g2 = RunGuard::register(&s, "archive");
         let n = cancel_kind(&s, "archive");
         assert_eq!(n, 2, "both concurrent archive runs are individually tracked");
         assert!(t1.load(Ordering::Relaxed), "the first run must still be cancellable after a second one starts");
@@ -308,7 +247,7 @@ mod tests {
     async fn guard_drops_on_normal_completion() {
         let (_v, s) = st(true);
         {
-            let _guard = CancelGuard::register(&s, "archive");
+            let _guard = RunGuard::register(&s, "archive");
             assert_eq!(cancels_snapshot(&s).get("archive"), Some(&1));
         }
         assert_eq!(cancels_snapshot(&s).get("archive"), None, "the map must not keep a present-but-empty entry");
@@ -318,7 +257,7 @@ mod tests {
     async fn guard_drops_when_the_run_returns_an_error() {
         let (_v, s) = st(true);
         async fn run_that_fails(state: &Arc<DaemonState>) -> Result<(), String> {
-            let _guard = CancelGuard::register(state, "archive");
+            let _guard = RunGuard::register(state, "archive");
             Err("boom".to_string())
         }
         let _ = run_that_fails(&s).await;
@@ -329,8 +268,8 @@ mod tests {
     async fn guard_drops_when_the_run_is_cancelled() {
         let (_v, s) = st(true);
         {
-            let guard = CancelGuard::register(&s, "archive");
-            guard.token().store(true, Ordering::Relaxed);
+            let guard = RunGuard::register(&s, "archive");
+            guard.cancel().store(true, Ordering::Relaxed);
             // the run notices cancellation and returns early here; the guard
             // still drops on the way out, same as any other exit.
         }
@@ -342,7 +281,7 @@ mod tests {
         let (_v, s) = st(true);
         let s2 = Arc::clone(&s);
         let handle = tokio::spawn(async move {
-            let _guard = CancelGuard::register(&s2, "archive");
+            let _guard = RunGuard::register(&s2, "archive");
             panic!("deliberate registry-holder panic");
         });
         let joined = handle.await;
@@ -350,7 +289,7 @@ mod tests {
         assert_eq!(cancels_snapshot(&s).get("archive"), None, "a panicking run must not leak its cancel token");
     }
 
-    /// The panic path through the real sink, not just a bare `CancelGuard`:
+    /// The panic path through the real sink, not just a bare `RunGuard`:
     /// `archive::run`'s very first act is `(sinks.emit)(...)`: a sink that
     /// panics there must still leave the registry clean once the panic
     /// unwinds through the guard's `Drop`. `panic = "abort"` in this crate's
@@ -373,8 +312,8 @@ mod tests {
         });
         let s2 = Arc::clone(&s);
         let handle = tokio::spawn(async move {
-            let guard = CancelGuard::register(&s2, "archive");
-            let cancel = guard.token();
+            let guard = RunGuard::register(&s2, "archive");
+            let cancel = guard.cancel();
             let _ = archive::run(ctx, "acct".into(), "{\"email\":\"a\",\"imapHost\":\"h\"}".into(), "INBOX".into(), vec![1], cancel).await;
         });
         let joined = handle.await;

@@ -2,11 +2,18 @@
 //! `custody`, `vault_flags`, Tasks 2.6-2.9a): the blocking-task helper (moved
 //! here from `handlers/search_index.rs`, which now imports it back), the
 //! vault-unavailable gate, and small arg extractors.
+//!
+//! Task 4.7 adds the run-token registry (`RunGuard`, `cancel_kind`,
+//! `pause_kind`), generalized from Task 3.4's archive/bulk_delete-only
+//! `CancelGuard` (`handlers::archive`, which now delegates here too) so
+//! migration and restore share the same registry rather than running a
+//! second, parallel one (decision 7).
 
 use crate::ipc::{self, RpcResponse};
-use crate::server::DaemonState;
+use crate::server::{DaemonState, RunTokens};
 use serde_json::Value;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 /// Run `f` on a blocking-pool thread. Every Phase 2 handler touches disk, or a
@@ -106,6 +113,129 @@ pub(crate) fn vec_arg<T: serde::de::DeserializeOwned>(id: &Value, params: &Value
 /// instead so `mbox` reuses it rather than duplicating it a third time.
 pub(crate) fn sanitize_mailbox_name(mailbox: &str) -> String {
     mailbox.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
+}
+
+// ── Run-token registry (Task 3.4, generalized by Task 4.7 decision 7) ───────
+
+/// RAII registration: pushes a fresh `RunTokens` under `kind` into
+/// `DaemonState.run_tokens` and removes exactly that entry (by pointer
+/// identity, never by value, so a sibling run's token of the same kind is
+/// never touched) on every exit path -- success, error, cancellation, or a
+/// panic inside the run. A `Vec` per kind (not one slot) is what lets two
+/// concurrent runs of the same kind each stay individually cancellable
+/// (Task 3.4's N4 fix). Construct it before the run starts and let it fall
+/// out of scope (or be dropped explicitly) on every exit path.
+pub(crate) struct RunGuard {
+    state: Arc<DaemonState>,
+    kind: &'static str,
+    tokens: Arc<RunTokens>,
+}
+
+impl RunGuard {
+    /// Cancel-only registration: archive, bulk_delete, restore.
+    pub(crate) fn register(state: &Arc<DaemonState>, kind: &'static str) -> Self {
+        Self::register_tokens(state, kind, None, None)
+    }
+
+    /// Cancel + pause + notify registration: migration.
+    pub(crate) fn register_with_pause(state: &Arc<DaemonState>, kind: &'static str) -> Self {
+        Self::register_tokens(
+            state,
+            kind,
+            Some(Arc::new(AtomicBool::new(false))),
+            Some(Arc::new(tokio::sync::Notify::new())),
+        )
+    }
+
+    fn register_tokens(
+        state: &Arc<DaemonState>,
+        kind: &'static str,
+        pause: Option<Arc<AtomicBool>>,
+        notify: Option<Arc<tokio::sync::Notify>>,
+    ) -> Self {
+        let tokens = Arc::new(RunTokens { cancel: Arc::new(AtomicBool::new(false)), pause, notify });
+        state
+            .run_tokens
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .entry(kind)
+            .or_default()
+            .push(Arc::clone(&tokens));
+        Self { state: Arc::clone(state), kind, tokens }
+    }
+
+    pub(crate) fn cancel(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.tokens.cancel)
+    }
+
+    /// Panics if this guard was registered cancel-only -- a programming
+    /// error (a route asking for a pause token a kind was never given),
+    /// never a runtime condition.
+    pub(crate) fn pause(&self) -> Arc<AtomicBool> {
+        self.tokens.pause.clone().expect("pause token requested on a cancel-only RunGuard")
+    }
+
+    pub(crate) fn notify(&self) -> Arc<tokio::sync::Notify> {
+        self.tokens.notify.clone().expect("notify requested on a cancel-only RunGuard")
+    }
+}
+
+impl Drop for RunGuard {
+    fn drop(&mut self) {
+        let mut map = self.state.run_tokens.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(tokens) = map.get_mut(self.kind) {
+            tokens.retain(|t| !Arc::ptr_eq(t, &self.tokens));
+            if tokens.is_empty() {
+                // A present-but-empty Vec is still a leak an "is the map
+                // empty" test would miss: drop the whole entry.
+                map.remove(self.kind);
+            }
+        }
+    }
+}
+
+/// Sets the cancel flag on every currently-registered token under `kind` and
+/// wakes any waiter (migration's pause loop blocks on `notify`; a kind with
+/// no notify token simply has nothing to wake). Returns how many runs were
+/// hit.
+pub(crate) fn cancel_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize {
+    let map = state.run_tokens.lock().unwrap_or_else(|p| p.into_inner());
+    match map.get(kind) {
+        Some(tokens) => {
+            for t in tokens {
+                t.cancel.store(true, Ordering::Relaxed);
+                if let Some(n) = &t.notify {
+                    n.notify_waiters();
+                }
+            }
+            tokens.len()
+        }
+        None => 0,
+    }
+}
+
+/// Sets the pause flag on every currently-registered token under `kind` that
+/// has one, and wakes any waiter. Only "migration" is ever registered with a
+/// pause token; a kind without one (archive, bulk_delete, restore) simply has
+/// nothing to set. Returns how many runs actually had a pause token flipped.
+pub(crate) fn pause_kind(state: &Arc<DaemonState>, kind: &'static str) -> usize {
+    let map = state.run_tokens.lock().unwrap_or_else(|p| p.into_inner());
+    match map.get(kind) {
+        Some(tokens) => {
+            let mut hit = 0;
+            for t in tokens {
+                if let Some(p) = &t.pause {
+                    p.store(true, Ordering::Relaxed);
+                    hit += 1;
+                }
+                if let Some(n) = &t.notify {
+                    n.notify_waiters();
+                }
+            }
+            hit
+        }
+        None => 0,
+    }
 }
 
 #[cfg(test)]
@@ -261,6 +391,102 @@ mod tests {
         writer.join().unwrap().unwrap();
         drainer.join().unwrap();
         assert_eq!(*order.lock().unwrap(), vec!["writer-in", "writer-out", "drain-acquired"]);
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    // -----------------------------------------------------------------------
+    // Task 4.7: the run-token registry (generalized from Task 3.4's
+    // archive/bulk_delete-only CancelGuard, decision 7)
+    // -----------------------------------------------------------------------
+
+    fn run_tokens_snapshot(s: &Arc<DaemonState>) -> std::collections::HashMap<&'static str, usize> {
+        s.run_tokens.lock().unwrap().iter().map(|(k, v)| (*k, v.len())).collect()
+    }
+
+    #[test]
+    fn register_adds_one_entry_under_its_kind_and_drop_removes_it() {
+        let st = state(true);
+        {
+            let _guard = RunGuard::register(&st, "restore");
+            assert_eq!(run_tokens_snapshot(&st).get("restore"), Some(&1));
+        }
+        assert_eq!(run_tokens_snapshot(&st).get("restore"), None, "the map must not keep a present-but-empty entry");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// The N4 regression this registry exists to prevent: today's design
+    /// (before Task 3.4) shared one `Arc` per kind, so starting a second run
+    /// silently replaced the first's token, orphaning it uncancellably.
+    /// Mirrors Task 3.4's own Step 1 test, now proven for a kind ("migration")
+    /// that also carries pause/notify companions.
+    #[test]
+    fn a_second_run_of_the_same_kind_does_not_orphan_the_first() {
+        let st = state(true);
+        let g1 = RunGuard::register_with_pause(&st, "migration");
+        let t1 = g1.cancel();
+        let _g2 = RunGuard::register_with_pause(&st, "migration");
+        let hit = cancel_kind(&st, "migration");
+        assert_eq!(hit, 2, "both concurrent migration runs are individually tracked");
+        assert!(t1.load(Ordering::Relaxed), "the first run must still be cancellable after a second one starts");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    #[test]
+    fn cancel_kind_never_touches_a_different_kinds_tokens() {
+        let st = state(true);
+        let restore_guard = RunGuard::register(&st, "restore");
+        let hit = cancel_kind(&st, "migration");
+        assert_eq!(hit, 0, "no migration token is registered");
+        assert!(!restore_guard.cancel().load(Ordering::Relaxed), "cancel_migration-equivalent must not cancel a live restore");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    #[test]
+    fn cancel_only_registration_has_no_pause_or_notify_token() {
+        let st = state(true);
+        let guard = RunGuard::register(&st, "restore");
+        assert!(guard.tokens.pause.is_none());
+        assert!(guard.tokens.notify.is_none());
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// `notify_waiters()` only wakes a task already parked on `.notified()`
+    /// at the moment it is called -- a bare `.notified().await` issued
+    /// afterward would hang forever. Parks a waiter first, then proves
+    /// `pause_kind` both flips the flag and actually wakes it.
+    #[tokio::test]
+    async fn pause_kind_sets_the_flag_and_wakes_a_waiting_notified() {
+        let st = state(true);
+        let guard = RunGuard::register_with_pause(&st, "migration");
+        let pause = guard.pause();
+        let notify = guard.notify();
+        assert!(!pause.load(Ordering::Relaxed));
+
+        let waiter = tokio::spawn(async move {
+            tokio::time::timeout(std::time::Duration::from_secs(5), notify.notified())
+                .await
+                .expect("pause_kind must wake a task already parked on notified()")
+        });
+        // Give the spawned task a chance to actually park on notified()
+        // before pause_kind fires the wake.
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+
+        let hit = pause_kind(&st, "migration");
+        assert_eq!(hit, 1);
+        assert!(pause.load(Ordering::Relaxed));
+
+        waiter.await.expect("waiter task panicked");
+        let _ = std::fs::remove_dir_all(&st.data_dir);
+    }
+
+    /// A kind registered cancel-only (restore) has nothing for `pause_kind`
+    /// to set: it must be a safe no-op, not a panic.
+    #[test]
+    fn pause_kind_on_a_cancel_only_kind_is_a_harmless_no_op() {
+        let st = state(true);
+        let _guard = RunGuard::register(&st, "restore");
+        let hit = pause_kind(&st, "restore");
+        assert_eq!(hit, 0);
         let _ = std::fs::remove_dir_all(&st.data_dir);
     }
 }

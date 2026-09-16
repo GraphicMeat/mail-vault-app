@@ -7,6 +7,7 @@ mod classification_worker;
 pub mod contacts_index;
 pub mod custody;
 // imap now lives in mailvault_core (shared with src-tauri).
+pub use mailvault_core::graph;
 pub use mailvault_core::imap;
 mod events;
 mod export_fetch;
@@ -17,16 +18,22 @@ mod insights;
 mod ipc;
 mod learning;
 mod mbox;
+mod migration;
 mod netgate;
 pub mod llm;
+mod restore;
 mod server;
 pub mod search_index;
 mod snapshot;
 pub mod sync_engine;
 
-// Note: backup, migration, archive, external_location modules require
-// tauri::AppHandle for data dirs and event emission. They remain in
-// src-tauri and their commands fall through to Tauri invoke via transport.js.
+// Note: backup, external_location modules require tauri::AppHandle for data
+// dirs and event emission (backup is Phase 3's still-open remainder, blocked
+// on the bookmark-scope probe; external_location is shell-permanent). They
+// remain in src-tauri and their commands fall through to Tauri invoke via
+// transport.js. archive moved in Phase 3; migration and restore moved here in
+// Task 4.7 (no cutover yet -- the Tauri commands in src-tauri still exist too
+// and still serve the frontend until Task 4.8).
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -356,7 +363,7 @@ async fn daemon_main() {
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
         custody: custody::CustodyState::default(),
-        cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
+        run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
     });
 

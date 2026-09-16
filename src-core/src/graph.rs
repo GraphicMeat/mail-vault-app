@@ -415,7 +415,7 @@ fn retry_after_secs(headers: &reqwest::header::HeaderMap) -> u64 {
 }
 
 pub struct GraphClient {
-    // pub (not pub(crate)) so src-tauri's migration.rs can issue custom
+    // pub (not pub(crate)) so the daemon's migration.rs can issue custom
     // authenticated Graph requests not covered by GraphClient's own methods.
     pub client: Client,
     pub access_token: String,

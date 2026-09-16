@@ -17,6 +17,20 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixListener;
 use tracing::{error, info, warn};
 
+/// One run's cancel/pause/notify trio, registered under an operation kind
+/// ("archive", "bulk_delete", "migration", "restore") in
+/// `DaemonState.run_tokens`. Task 4.7 decision 7: generalizes Task 3.4's
+/// archive/bulk-delete-only `cancels: HashMap<&str, Vec<Arc<AtomicBool>>>`
+/// into one registry every cancellable long-running route shares. Archive and
+/// bulk delete only ever need `cancel`; migration additionally needs
+/// `pause`+`notify` for its pause/resume flow; restore needs only `cancel`,
+/// like archive. `handlers::common::RunGuard` is the only writer.
+pub struct RunTokens {
+    pub cancel: Arc<AtomicBool>,
+    pub pause: Option<Arc<AtomicBool>>,
+    pub notify: Option<Arc<tokio::sync::Notify>>,
+}
+
 /// Daemon server state shared across connections.
 pub struct DaemonState {
     pub token: String,
@@ -92,15 +106,18 @@ pub struct DaemonState {
     /// write already goes through `fsx::write_atomic`, so a concurrent reader
     /// only ever sees a complete journal, old or new, never a torn one.
     pub journal: std::sync::Mutex<()>,
-    /// Task 3.4: per-operation-kind cancel tokens ("archive", "bulk_delete").
-    /// Replaces the app's single global `ArchiveCancelToken`
-    /// (inventory-archive-bulk N4): keyed by kind so `cancel_archive` never
-    /// stops a bulk delete, and `Vec`-valued per kind so two concurrent runs
-    /// of the same kind are each still individually cancellable.
-    /// `handlers::archive::CancelGuard` is the only writer; every exit path
-    /// (success, error, cancellation, panic) removes its own token via
-    /// `Drop`, keyed by pointer identity so it never removes a sibling run's.
-    pub cancels: std::sync::Mutex<std::collections::HashMap<&'static str, Vec<Arc<AtomicBool>>>>,
+    /// Task 3.4, generalized by Task 4.7 (decision 7): per-operation-kind run
+    /// tokens ("archive", "bulk_delete", "migration", "restore"). Replaces
+    /// the app's single global `ArchiveCancelToken`/`MigrationCancelToken`/
+    /// `MigrationPauseToken`/`MigrationNotify`/`RestoreCancelToken`
+    /// (inventory-archive-bulk N4 and its migration-side sibling): keyed by
+    /// kind so `cancel_archive` never stops a bulk delete, and `Vec`-valued
+    /// per kind so two concurrent runs of the same kind are each still
+    /// individually cancellable. `handlers::common::RunGuard` is the only
+    /// writer; every exit path (success, error, cancellation, panic) removes
+    /// its own entry via `Drop`, keyed by pointer identity so it never
+    /// removes a sibling run's.
+    pub run_tokens: std::sync::Mutex<std::collections::HashMap<&'static str, Vec<Arc<RunTokens>>>>,
     /// Task 3.6: in-daemon insights snapshots, moved whole from
     /// `src-tauri/src/insights.rs`. The app's own copy and its three Tauri
     /// commands still exist and still work until Task 3.7 cuts the frontend
@@ -285,6 +302,14 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::migration::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
+    if let Some(resp) = crate::handlers::restore::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::cache::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -419,7 +444,7 @@ impl DaemonState {
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
             custody: crate::custody::CustodyState::default(),
-            cancels: std::sync::Mutex::new(std::collections::HashMap::new()),
+            run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
         })
     }
