@@ -7,7 +7,7 @@ import { _buildRestoreDescriptor, _resolveMailboxPath } from '../../stores/slice
 import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
 import {
-  getLoadAbortController, setLoadAbortController,
+  getLoadAbortController, setLoadAbortController, setArchivedGroup, deriveArchivedUnion,
 } from '../../stores/slices/messageListSlice';
 import { _unifiedFolderCache } from './activateAccount';
 
@@ -266,11 +266,12 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
 
   const allLocalEmails = [];
   const allSavedIds = new Set();
-  // I-5: seeded from the current value, not empty — a per-account read
-  // failure below (`archived === null`) then just leaves that account's
-  // ids as they already were instead of the whole unified set dropping to
-  // only the accounts that happened to answer this pass.
-  const allArchivedIds = new Set(get().archivedEmailIds);
+  // Every viewed account contributes one pair, resolved the same way
+  // resolvedPathsByAccount already was above — a pair with no cached group
+  // entry just contributes nothing to the derived union (see
+  // messageListSlice's deriveArchivedUnion).
+  const viewPairs = accounts.filter(a => !hiddenAccounts[a.id])
+    .map(a => [a.id, resolvedPathsByAccount.get(a.id) || targetFolder]);
   const localPromises = accounts
     .filter(a => !hiddenAccounts[a.id])
     .map(async (account) => {
@@ -283,7 +284,10 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
         let locals = await db.readLocalEmailIndex(account.id, localFolder);
         if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
         for (const uid of saved) allSavedIds.add(uid);
-        for (const uid of (archived ?? [])) allArchivedIds.add(uid);
+        // I-5: `archived === null` means "could not read" — keep this
+        // group's own last-known ids (setArchivedGroup skips a null write)
+        // instead of the whole unified pass losing this one account.
+        setArchivedGroup(account.id, localFolder, archived);
         for (const e of locals) {
           allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
         }
@@ -292,10 +296,11 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   await Promise.all(localPromises);
 
   if (signal.aborted) return;
+  const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, viewPairs);
   useMailStore.setState({
     localEmails: allLocalEmails,
     savedEmailIds: allSavedIds,
-    archivedEmailIds: allArchivedIds,
+    archivedEmailIds,
   });
   get().updateSortedEmails();
 }

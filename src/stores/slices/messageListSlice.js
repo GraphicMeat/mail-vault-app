@@ -37,6 +37,77 @@ let _threadsFingerprint = '';
 // let through.
 let _sortedInputs = null;
 
+// ── Per-(account,mailbox) archived-id cache ──
+//
+// `archivedEmailIds` used to be one flat union built by hand at each write
+// site, seeded from its own current value so a failed re-read kept whatever
+// the store already had. That fallback was the bug: on a failed read it kept
+// the WHOLE prior union, including accounts/mailboxes no longer in view — a
+// switch out of unified inbox into a single mailbox whose own re-read failed
+// left every other account's archived ids sitting in the narrowed view. This
+// map is the real source of truth, one entry per (accountId, mailbox);
+// `archivedEmailIds` is always re-derived from it, so the ~40 existing
+// readers of that field never change.
+let _archivedIdsByGroup = new Map();
+const _groupKey = (accountId, mailbox) => `${accountId} ${mailbox}`;
+
+// A failed read (`ids == null`) keeps the group's existing entry rather than
+// wiping it — the same I-5 rule the old per-call-site fallbacks encoded, now
+// enforced once, here.
+export function setArchivedGroup(accountId, mailbox, ids) {
+  if (ids != null) _archivedIdsByGroup.set(_groupKey(accountId, mailbox), ids);
+}
+
+export function getArchivedGroup(accountId, mailbox) {
+  return _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+}
+
+// Add one uid to a group without a full re-read (the archive-progress painter).
+export function addArchivedGroupUid(accountId, mailbox, uid) {
+  const key = _groupKey(accountId, mailbox);
+  const existing = _archivedIdsByGroup.get(key);
+  if (existing?.has(uid)) return;
+  const updated = existing ? new Set(existing) : new Set();
+  updated.add(uid);
+  _archivedIdsByGroup.set(key, updated);
+}
+
+// The union of exactly these (accountId, mailbox) pairs — never every group
+// the session has ever read, so a group that left the view stops
+// contributing to it. Returns the SAME Set instance passed in as `currentSet`
+// when nothing actually changed: the re-sort guard below short-circuits on
+// Set identity, and handing it a fresh-but-equal Set on every group write
+// would force a needless re-sort.
+export function deriveArchivedUnion(currentSet, pairs) {
+  const union = new Set();
+  for (const [accountId, mailbox] of pairs) {
+    const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+    if (ids) for (const uid of ids) union.add(uid);
+  }
+  if (union.size === currentSet.size && [...union].every(u => currentSet.has(u))) return currentSet;
+  return union;
+}
+
+// A spanning view (unified inbox, a folder subtree) only ever GROWS as
+// accounts/mailboxes come into it — narrowing is handled by whichever writer
+// takes the view out of span. So this merges one group's cached ids into the
+// existing union rather than re-deriving the whole thing, with the same
+// identity discipline as deriveArchivedUnion.
+export function mergeArchivedGroup(currentSet, accountId, mailbox) {
+  const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
+  if (!ids) return currentSet;
+  for (const uid of ids) {
+    if (currentSet.has(uid)) continue;
+    const merged = new Set(currentSet);
+    for (const u of ids) merged.add(u);
+    return merged;
+  }
+  return currentSet;
+}
+
+// Test-only — module-level state must not leak between specs.
+export function _resetArchivedGroupsForTest() { _archivedIdsByGroup = new Map(); }
+
 // Module-level loadMore dedup timer
 let _loadMoreTimer = null;
 

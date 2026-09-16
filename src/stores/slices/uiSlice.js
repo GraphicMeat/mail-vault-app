@@ -4,6 +4,7 @@ import * as db from '../../services/db';
 import { useSettingsStore } from '../settingsStore';
 import { getAccountCacheMailboxes as _getAccountMailboxes } from '../../services/cacheManager';
 import { _resolveMailboxPath } from './unifiedHelpers';
+import { setArchivedGroup, deriveArchivedUnion } from './messageListSlice';
 
 export const createUiSlice = (set, get) => ({
   // View mode: 'all' | 'server' | 'local'
@@ -98,18 +99,22 @@ export const createUiSlice = (set, get) => ({
         const { hiddenAccounts } = useSettingsStore.getState();
         const allLocalEmails = [];
         const allSavedIds = new Set();
-        // I-5: seeded from the current value — a per-account read failure
-        // (`archived === null`) below then leaves that account's ids as they
-        // already were instead of the whole unified set dropping to only the
-        // accounts that happened to answer this pass.
-        const allArchivedIds = new Set(get().archivedEmailIds);
+        const viewedAccounts = accounts.filter(a => !hiddenAccounts[a.id]);
+        // Every viewed account contributes one pair even if its own read
+        // throws — see messageListSlice's deriveArchivedUnion: a pair with no
+        // cached entry just contributes nothing, which is the same as today.
+        const viewPairs = [];
         Promise.all(
-          accounts.filter(a => !hiddenAccounts[a.id]).map(async (account) => {
+          viewedAccounts.map(async (account) => {
+            let localFolder = targetFolder;
             try {
               // Resolve provider-specific folder path (e.g. "[Gmail]/Sent Mail" for "Sent")
               let mailboxes = _getAccountMailboxes(account.id);
               if (!mailboxes?.length) mailboxes = await db.getCachedMailboxes(account.id);
-              const localFolder = _resolveMailboxPath(mailboxes || [], targetFolder);
+              localFolder = _resolveMailboxPath(mailboxes || [], targetFolder);
+            } catch {}
+            viewPairs.push([account.id, localFolder]);
+            try {
               const [saved, archived] = await Promise.all([
                 db.getSavedEmailIds(account.id, localFolder),
                 db.getArchivedEmailIds(account.id, localFolder),
@@ -117,14 +122,18 @@ export const createUiSlice = (set, get) => ({
               let locals = await db.readLocalEmailIndex(account.id, localFolder);
               if (!locals) locals = await db.getLocalEmails(account.id, localFolder);
               for (const uid of saved) allSavedIds.add(uid);
-              for (const uid of (archived ?? [])) allArchivedIds.add(uid);
+              // I-5: `archived === null` means "could not read" — keep this
+              // group's own last-known ids (setArchivedGroup skips a null
+              // write) instead of the whole pass losing this one account.
+              setArchivedGroup(account.id, localFolder, archived);
               for (const e of locals) {
                 allLocalEmails.push({ ...e, _accountEmail: account.email, _accountId: account.id, _mailbox: localFolder });
               }
             } catch {}
           })
         ).then(() => {
-          set({ savedEmailIds: allSavedIds, archivedEmailIds: allArchivedIds, localEmails: allLocalEmails });
+          const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, viewPairs);
+          set({ savedEmailIds: allSavedIds, archivedEmailIds, localEmails: allLocalEmails });
           get().updateSortedEmails();
         });
       } else {
@@ -137,9 +146,13 @@ export const createUiSlice = (set, get) => ({
             ]);
             let localEmails = await db.readLocalEmailIndex(activeAccountId, activeMailbox);
             if (!localEmails) localEmails = await db.getLocalEmails(activeAccountId, activeMailbox);
-            // I-5: keep the store's current value on a failed read instead
-            // of adopting "nothing is archived".
-            const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
+            // I-5: a failed read (`null`) keeps this group's own last-known
+            // ids rather than adopting "nothing is archived" — and
+            // archivedEmailIds becomes the union of exactly this one group,
+            // so narrowing out of unified inbox drops every other account's
+            // ids instead of leaving the whole stale union in place.
+            setArchivedGroup(activeAccountId, activeMailbox, rawArchivedEmailIds);
+            const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, [[activeAccountId, activeMailbox]]);
             set({ savedEmailIds, archivedEmailIds, localEmails });
             get().updateSortedEmails();
           })();

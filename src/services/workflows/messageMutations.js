@@ -9,7 +9,9 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
-import { bumpFlagChangeCounter } from '../../stores/slices/messageListSlice';
+import {
+  bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
+} from '../../stores/slices/messageListSlice';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 import { withoutUids } from '../../stores/slices/serverUids';
 import { mailboxLabel } from '../../utils/imapUtf7';
@@ -254,6 +256,10 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
         paint(p.completed, p.errors);
 
         if (p.lastUid && paintsIds) {
+          // Keep this group's own cache in sync too — see messageListSlice's
+          // _archivedIdsByGroup — so a later narrow to exactly this
+          // account/mailbox still has this uid even if its own re-read fails.
+          addArchivedGroupUid(accountId, mailbox, p.lastUid);
           const { archivedEmailIds } = get();
           if (!archivedEmailIds.has(p.lastUid)) {
             const updated = new Set(archivedEmailIds);
@@ -336,10 +342,14 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   let locals = await db.readLocalEmailIndex(accountId, mailbox);
   if (!locals) locals = await db.getLocalEmails(accountId, mailbox);
 
+  // I-5: `archived === null` means "could not read" — keep this group's own
+  // last-known ids (setArchivedGroup skips a null write) rather than
+  // adopting "nothing is archived".
+  setArchivedGroup(accountId, mailbox, archived);
+
   if (!spans) {
-    // I-5: `archived === null` means "could not read" — keep the store's
-    // current value rather than adopting "nothing is archived".
-    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds: archived ?? state.archivedEmailIds, localEmails: locals });
+    const archivedEmailIds = deriveArchivedUnion(get().archivedEmailIds, [[accountId, mailbox]]);
+    useMailStore.setState({ savedEmailIds: saved, archivedEmailIds, localEmails: locals });
     get().updateSortedEmails();
     return;
   }
@@ -348,9 +358,9 @@ async function _foldVaultGroup(useMailStore, { accountId, mailbox, account }) {
   const own = (e) => (e._accountId || s.activeAccountId) === accountId && (e._mailbox || 'INBOX') === mailbox;
   useMailStore.setState({
     savedEmailIds: new Set([...s.savedEmailIds, ...saved]),
-    // I-5: an unreadable `archived` merges nothing new rather than crashing
-    // on `...null` or wiping the union down to just the other groups.
-    archivedEmailIds: new Set([...s.archivedEmailIds, ...(archived ?? [])]),
+    // A spanning view only grows as groups come into it — merge this
+    // group's cached ids (never the whole map) into the existing union.
+    archivedEmailIds: mergeArchivedGroup(s.archivedEmailIds, accountId, mailbox),
     localEmails: [
       ...(s.localEmails || []).filter(e => !own(e)),
       ...locals.map(e => ({ ...e, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
