@@ -43,6 +43,7 @@ const {
   resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, discardDraftFor, newDraftUid,
   setComposeOpener, openLocalDraft, draftToInitialData,
 } = await import('../localDrafts');
+const { _resetArchivedGroupsForTest, getArchivedGroup } = await import('../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct-1', email: 'me@example.com' };
 const invoke = vi.fn().mockResolvedValue(undefined);
@@ -54,6 +55,7 @@ const draftsTree = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _resetArchivedGroupsForTest();
   mockBuildDraftMime.mockResolvedValue({ rawBase64: 'Ym9keQ==', messageId: '<id@example.com>', rawSize: 4 });
   mockGetCachedMailboxes.mockResolvedValue(null);
   storeState = {
@@ -352,5 +354,18 @@ describe('newDraftUid', () => {
     const ordered = [...uids];
     expect(ordered[1]).toBeGreaterThan(ordered[0]);
     expect(ordered[2]).toBeGreaterThan(ordered[1]);
+  });
+});
+
+describe('saveLocalDraft: the optimistic row also feeds the per-group archived-ids map', () => {
+  it('adds the new uid to _archivedIdsByGroup, not just the store field', async () => {
+    // saveLocalDraft's _showInList writes archivedEmailIds straight to the
+    // store for the optimistic row. Before this fix that bypassed
+    // `_archivedIdsByGroup` the same way the other writer sites did, so a
+    // later failed read for this group would not know about this uid.
+    await save();
+
+    const group = getArchivedGroup('acct-1', 'Drafts');
+    expect(group?.has(1700000000)).toBe(true);
   });
 });

@@ -20,7 +20,7 @@ import {
   getLoadMoreTimer, setLoadMoreTimer,
   getLoadEmailsGeneration, bumpLoadEmailsGeneration,
   getLoadEmailsRetried, setLoadEmailsRetried,
-  bumpFlagChangeCounter, invalidateChatAndThreadCaches,
+  bumpFlagChangeCounter, invalidateChatAndThreadCaches, setArchivedGroup,
 } from '../../stores/slices/messageListSlice';
 import { t } from '../../i18n/index.js';
 
@@ -167,7 +167,8 @@ export async function loadEmails() {
       archivedEmailIds = get().archivedEmailIds;
       cachedHeaders = await db.getEmailHeadersMeta(activeAccountId, activeMailbox);
     } else {
-      [savedEmailIds, archivedEmailIds, cachedHeaders] = await Promise.all([
+      let rawArchivedEmailIds;
+      [savedEmailIds, rawArchivedEmailIds, cachedHeaders] = await Promise.all([
         db.getSavedEmailIds(activeAccountId, activeMailbox),
         db.getArchivedEmailIds(activeAccountId, activeMailbox),
         db.getEmailHeadersMeta(activeAccountId, activeMailbox),
@@ -175,7 +176,8 @@ export async function loadEmails() {
       // I-5: `null` means "could not read" — keep the store's current value
       // rather than adopting "nothing is archived" (this disarms the
       // empty-server guard and re-downloads the whole mailbox further down).
-      archivedEmailIds = archivedEmailIds ?? get().archivedEmailIds;
+      archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
+      setArchivedGroup(activeAccountId, activeMailbox, rawArchivedEmailIds);
     }
     if (isStale()) return;
     loadTrace.mark('cache-meta-ready', {
@@ -814,6 +816,7 @@ export async function _loadEmailsViaGraph(account, activeAccountId, activeMailbo
   // I-5: keep the store's current value on a failed read instead of
   // adopting "nothing is archived".
   const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
+  setArchivedGroup(activeAccountId, activeMailbox, rawArchivedEmailIds);
   useMailStore.setState({ savedEmailIds, archivedEmailIds });
 
   if (archivedEmailIds.size > 0 && (get().localEmails || []).length === 0) {

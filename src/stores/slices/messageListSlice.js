@@ -85,13 +85,12 @@ export function deriveArchivedUnion(currentSet, pairs) {
     const ids = _archivedIdsByGroup.get(_groupKey(accountId, mailbox));
     if (ids) { anyKnown = true; for (const uid of ids) union.add(uid); }
   }
-  // None of the groups in view has ever gone through this map (e.g. the ids
-  // in `currentSet` were seeded by a writer outside it, such as
-  // activateAccount.js/loadEmails.js) and this round's own read is also a
-  // miss (its caller called setArchivedGroup with the same result before
-  // this ran, and a failed read skips the write). There is nothing to
-  // narrow FROM, so leave the field alone rather than claiming "nothing is
-  // archived", which is the exact bug this map exists to prevent.
+  // None of the groups in view has ever gone through this map (e.g. this
+  // round's own read is a miss, and a failed read skips the write) and
+  // `currentSet` was seeded before this group was ever known to the map.
+  // There is nothing to narrow FROM, so leave the field alone rather than
+  // claiming "nothing is archived", which is the exact bug this map exists
+  // to prevent.
   if (!anyKnown) return currentSet;
   if (union.size === currentSet.size && [...union].every(u => currentSet.has(u))) return currentSet;
   return union;

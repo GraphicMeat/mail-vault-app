@@ -16,6 +16,7 @@ import * as api from './api';
 import * as db from './db';
 import { useMailStore } from '../stores/mailStore';
 import { _resolveMailboxPath } from '../stores/slices/unifiedHelpers';
+import { addArchivedGroupUid } from '../stores/slices/messageListSlice';
 import { send } from './transport';
 
 const invoke = () => window.__TAURI__?.core?.invoke;
@@ -226,6 +227,7 @@ function _showInList(accountId, mailbox, entry) {
   // optimistic row and the reloaded one disagree about whether this message
   // ever had a server copy (it never did).
   const row = { ...entry, _origin: entry.source, source: 'local', isLocal: true, isArchived: true, _accountId: accountId };
+  addArchivedGroupUid(accountId, mailbox, entry.uid);
   useMailStore.setState(st => ({
     localEmails: [row, ...(st.localEmails || []).filter(e => e.uid !== entry.uid)],
     // A local row is only rendered when its uid is in this set — a new Set
@@ -241,6 +243,10 @@ function _hideFromList(accountId, uid) {
   // mailbox only, so dropping it from another account's sets would blank an
   // unrelated row.
   if (useMailStore.getState().activeAccountId !== accountId) return;
+  // No `removeArchivedGroupUid` exists on `_archivedIdsByGroup` (only the
+  // additive `addArchivedGroupUid`), so this uid removal does not go through
+  // the group map. Left as a bypass: a later failed read for this group can
+  // still resurrect this uid via the stale map entry.
   useMailStore.setState(st => {
     const archived = new Set(st.archivedEmailIds || []);
     const saved = new Set(st.savedEmailIds || []);

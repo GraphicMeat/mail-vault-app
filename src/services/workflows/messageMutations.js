@@ -153,10 +153,12 @@ export async function saveEmailLocally(uid) {
 
     if (!isUnified) {
       const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
+      const rawArchivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
       // I-5: `null` means "could not read" — keep whatever the store already
       // had rather than adopting "nothing is archived".
-      const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox) ?? get().archivedEmailIds;
+      const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
       const localEmails = await db.getLocalEmails(accountId, mailbox);
+      setArchivedGroup(accountId, mailbox, rawArchivedEmailIds);
       useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
     }
     get().updateSortedEmails();
@@ -420,10 +422,12 @@ export async function removeLocalEmail(uid) {
   }
 
   const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
+  const rawArchivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
   // I-5: keep the store's current value on a failed read instead of
   // adopting "nothing is archived".
-  const archivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox) ?? get().archivedEmailIds;
+  const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
   const localEmails = await db.getLocalEmails(accountId, mailbox);
+  setArchivedGroup(accountId, mailbox, rawArchivedEmailIds);
 
   if (selectionStillNames(get, { uid: unified?.uid ?? uid, accountId, mailbox })) {
     useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null });

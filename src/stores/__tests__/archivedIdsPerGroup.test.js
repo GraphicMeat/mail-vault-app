@@ -32,6 +32,9 @@ const mockGetArchivedEmails = vi.fn().mockResolvedValue([]);
 const mockGetCachedMailboxes = vi.fn().mockResolvedValue([]);
 const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
+const mockIsEmailSaved = vi.fn().mockResolvedValue(true);
+const mockArchiveEmail = vi.fn().mockResolvedValue(undefined);
+const mockDeleteLocalEmail = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../services/db', () => ({
   getLocalEmailLight: (...args) => mockGetLocalEmailLight(...args),
@@ -49,14 +52,19 @@ vi.mock('../../services/db', () => ({
   getCachedMailboxes: (...args) => mockGetCachedMailboxes(...args),
   getLocalEmails: (...args) => mockGetLocalEmails(...args),
   saveEmailHeaders: (...args) => mockSaveEmailHeaders(...args),
+  isEmailSaved: (...args) => mockIsEmailSaved(...args),
+  archiveEmail: (...args) => mockArchiveEmail(...args),
+  deleteLocalEmail: (...args) => mockDeleteLocalEmail(...args),
 }));
 const mockFetchEmailLight = vi.fn().mockResolvedValue(null);
 const mockBackupScanUids = vi.fn().mockResolvedValue(null);
 const mockBackupGetExternalLocation = vi.fn().mockResolvedValue({ status: 'ready' });
+const mockRemoveFromLocalIndex = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../services/api', () => ({
   fetchEmailLight: (...args) => mockFetchEmailLight(...args),
   backupScanUids: (...args) => mockBackupScanUids(...args),
   backupGetExternalLocation: (...args) => mockBackupGetExternalLocation(...args),
+  removeFromLocalIndex: (...args) => mockRemoveFromLocalIndex(...args),
 }));
 vi.mock('../../services/authUtils', () => ({
   hasValidCredentials: () => true,
@@ -103,12 +111,15 @@ vi.mock('../../services/cacheManager', () => ({
   getGraphMessageId: () => null,
   resolveGraphMessageId: async () => null,
   clearGraphIdMap: () => {},
+  restoreGraphIdMap: vi.fn().mockResolvedValue(undefined),
 }));
 
 const { useMailStore } = await import('../mailStore');
 const { serverUids } = await import('../slices/serverUids');
-const { _resetArchivedGroupsForTest, setArchivedGroup } = await import('../slices/messageListSlice');
+const { _resetArchivedGroupsForTest, setArchivedGroup, getLoadEmailsGeneration } = await import('../slices/messageListSlice');
 const { AccountPipeline } = await import('../../services/AccountPipeline');
+const { saveEmailLocally, removeLocalEmail } = await import('../../services/workflows/messageMutations');
+const { _loadEmailsViaGraph } = await import('../../services/workflows/loadEmails');
 
 const A = { id: 'acct-a', email: 'a@example.com' };
 const B = { id: 'acct-b', email: 'b@example.com' };
@@ -213,11 +224,10 @@ describe('setViewMode: a per-account read failure inside a unified pass (Phase 2
 });
 
 describe('deriveArchivedUnion: a group never seen by the map is not "nothing archived"', () => {
-  it('a failed first read of a group an excluded writer (e.g. activateAccount.js) already populated keeps those ids', async () => {
+  it('a failed first read of a group the map has never heard of keeps those ids', async () => {
     // No unified pass ever ran here, so `_archivedIdsByGroup` has never
-    // heard of A/INBOX, exactly the shape left behind by a writer this
-    // task does not touch (activateAccount.js, loadEmails.js), which sets
-    // archivedEmailIds directly and never goes through the group map.
+    // heard of A/INBOX — the same shape as the moment right after app
+    // start, before any writer has told the map about this group yet.
     useMailStore.setState({
       unifiedInbox: false,
       activeAccountId: A.id,
@@ -298,6 +308,72 @@ describe('review fix: a bypassing writer\'s successful read must feed the group 
 
     // The ids _finish just wrote must survive: the map is no longer staler
     // than the store, so the failed read has nothing to narrow down to.
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+  });
+});
+
+describe('review follow-up: 4 more bypassing writers must feed the group map too', () => {
+  beforeEach(() => {
+    useMailStore.setState({
+      unifiedInbox: false,
+      activeAccountId: A.id,
+      activeMailbox: 'INBOX',
+      archivedEmailIds: new Set([1]),
+    });
+    setArchivedGroup(A.id, 'INBOX', new Set([1]));
+    mockGetSavedEmailIds.mockResolvedValue(new Set());
+  });
+
+  it('saveEmailLocally keeps the map in sync on a successful read', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
+    await saveEmailLocally(42);
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+  });
+
+  it('removeLocalEmail keeps the map in sync on a successful read', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
+    await removeLocalEmail(99);
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+  });
+
+  it('loadEmails (main list load) keeps the map in sync on a successful read', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
+    await useMailStore.getState().loadEmails();
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+  });
+
+  it('_loadEmailsViaGraph keeps the map in sync on a successful read', async () => {
+    mockGetArchivedEmailIds.mockResolvedValue(new Set([1, 2, 3]));
+    const generation = getLoadEmailsGeneration();
+    await _loadEmailsViaGraph(A, A.id, 'INBOX', generation);
+
+    expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
+
+    mockGetArchivedEmailIds.mockResolvedValue(null);
+    useMailStore.getState().setViewMode('all');
+    await flush();
+
     expect([...useMailStore.getState().archivedEmailIds].sort()).toEqual([1, 2, 3]);
   });
 });
