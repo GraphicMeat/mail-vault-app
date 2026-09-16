@@ -234,8 +234,7 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
   const s0 = get();
   const paintsIds = spansMailboxes(s0) || (accountId === s0.activeAccountId && mailbox === s0.activeMailbox);
 
-  const invoke = window.__TAURI__?.core?.invoke;
-  if (invoke) {
+  if (window.__TAURI__?.core?.invoke) {
     console.log('[saveEmailsLocally] Starting Tauri archive for', uids.length, 'UIDs in', accountId, mailbox);
 
     let unlisten;
@@ -263,7 +262,7 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
     }
 
     try {
-      const result = await invoke('archive_emails', {
+      const result = await send('archive_emails', {
         accountId,
         accountJson: JSON.stringify(account),
         mailbox,

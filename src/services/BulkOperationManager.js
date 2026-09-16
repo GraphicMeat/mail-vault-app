@@ -1,4 +1,5 @@
 import * as api from './api';
+import { send } from './transport.js';
 import { ensureFreshToken } from './authUtils';
 import { t } from '../i18n/index.js';
 
@@ -69,9 +70,8 @@ class BulkOperationManager {
         this._operation.status = 'archiving';
         this._emitProgress();
 
-        const invoke = window.__TAURI__?.core?.invoke;
-        if (invoke) {
-          await invoke('archive_emails', {
+        if (window.__TAURI__?.core?.invoke) {
+          await send('archive_emails', {
             accountId,
             accountJson: JSON.stringify(freshAccount),
             mailbox,
@@ -183,9 +183,8 @@ class BulkOperationManager {
   async cancel() {
     this._cancelled = true;
 
-    const invoke = window.__TAURI__?.core?.invoke;
-    if (invoke) {
-      invoke('cancel_archive').catch(() => {});
+    if (window.__TAURI__?.core?.invoke) {
+      send('cancel_archive').catch(() => {});
     }
 
     if (this._operation) {

@@ -60,6 +60,11 @@ vi.mock('../../src/services/authUtils', () => ({
 
 const invoke = vi.fn().mockResolvedValue(undefined);
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
+// Task 3.1: cleanupEngine.js now calls transport.js's `send` instead of a raw
+// dynamic-imported `invoke` - same mock fn, so every existing assertion below
+// (`invoke.toHaveBeenCalledWith(...)`, `invoke.mock.calls`, `invoke.mockRejectedValueOnce`)
+// still reads the archive_emails call unchanged.
+vi.mock('../../src/services/transport.js', () => ({ send: invoke }));
 
 const { useSettingsStore, migrateSettings } = await import('../../src/stores/settingsStore');
 const { runCleanupRules, shouldRunCleanup } = await import('../../src/services/cleanupEngine');

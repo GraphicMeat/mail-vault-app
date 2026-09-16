@@ -43,6 +43,15 @@ const CUSTODY = ['local_index_read', 'local_index_append', 'local_index_remove',
 
 const PHASE2 = [...MAILDIR_AND_ATTACHMENT, ...VAULT_FLAGS, ...CACHE_JOURNAL_LEDGER_PENDING, ...CUSTODY];
 
+// ── Phase 3 Task 3.1 (inventory-archive-bulk §6 + N6) — archive, bulk delete
+// and insights. Nothing here is in DAEMON_OWNED yet (that is Task 3.5+), so
+// routing these through `send` is not a behaviour change: `send` still falls
+// through to `tauriInvoke`, exactly like the raw call these sites replace.
+const PHASE3 = [
+  'archive_emails', 'cancel_archive', 'bulk_delete_emails', 'verify_archived_emails',
+  'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
+];
+
 // Phase 1's own DAEMON_OWNED set, read from transport.js rather than
 // hardcoded, so this guard never drifts from it.
 const transportSrc = readFileSync(new URL('../../src/services/transport.js', import.meta.url), 'utf8');
@@ -52,7 +61,7 @@ const ownedBlock = transportSrc.slice(
 );
 const PHASE1_OWNED = [...ownedBlock.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
 
-const GUARDED_NAMES = [...PHASE2, ...PHASE1_OWNED];
+const GUARDED_NAMES = [...PHASE2, ...PHASE1_OWNED, ...PHASE3];
 
 // ── The scanner ──
 //
@@ -86,6 +95,10 @@ function scanText(text, names) {
     directRaw: new RegExp(String.raw`(?:const|let|var)\s+(\w+)\s*=\s*${TAURI}\s*;`),
     // const { invoke } = window.__TAURI__.core;
     destructureRaw: new RegExp(String.raw`(?:const|let|var)\s*\{\s*invoke\s*\}\s*=\s*window\.__TAURI__${DOT}core\b`),
+    // const { invoke } = await import('@tauri-apps/api/core') — cleanupEngine.js's
+    // shape (:109). No `window.__TAURI__` reference on this line at all, so
+    // none of the window-based patterns above ever see it.
+    dynamicImportRaw: /(?:const|let|var)\s*\{\s*invoke\s*\}\s*=\s*(?:await\s+)?import\s*\(\s*['"]@tauri-apps\/api\/core['"]\s*\)/,
     // const Y = X();  — resolves Y when X is a known raw factory.
     twoHop: /(?:const|let|var)\s+(\w+)\s*=\s*(\w+)\s*\(\s*\)\s*;/,
     safeWrapper: /(?:const|let|var)\s+(\w+)\s*=\s*\([^)]*\)\s*=>\s*(?:transportSend|send)\s*\(/,
@@ -108,6 +121,7 @@ function scanText(text, names) {
     else if ((m = RE.factoryRaw.exec(line))) state.set(m[1], 'raw-factory');
     else if ((m = RE.directRaw.exec(line))) state.set(m[1], 'raw');
     if ((m = RE.destructureRaw.exec(line))) state.set('invoke', 'raw');
+    if ((m = RE.dynamicImportRaw.exec(line))) state.set('invoke', 'raw');
     if ((m = RE.safeWrapper.exec(line))) state.set(m[1], 'safe');
     else if ((m = RE.safeDirect.exec(line))) state.set(m[1], 'safe');
     if ((m = RE.twoHop.exec(line))) {
@@ -155,9 +169,10 @@ function scanDir(dir, names) {
   return out;
 }
 
-describe('raw invoke guard: every Phase 1+2 daemon-owned name routes through transport.js', () => {
-  it('the guarded name list is exactly 46 Phase 2 names plus the Phase 1 DAEMON_OWNED set', () => {
+describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through transport.js', () => {
+  it('the guarded name list is exactly 46 Phase 2 names, 7 Phase 3 names, plus the Phase 1 DAEMON_OWNED set', () => {
     expect(PHASE2.length).toBe(46);
+    expect(PHASE3.length).toBe(7);
     expect(PHASE1_OWNED.length).toBeGreaterThan(0);
   });
 
@@ -173,7 +188,23 @@ describe('raw invoke guard: every Phase 1+2 daemon-owned name routes through tra
     expect(routed).toHaveLength(0);
   });
 
-  it('no non-test src file raw-invokes a Phase 1 or Phase 2 daemon-owned command', () => {
+  // Step 2: the dynamic-import shape cleanupEngine.js:109 uses is a different
+  // syntax from every other raw-invoke idiom in this file (no `window.__TAURI__`
+  // on the line at all) and needs its own pattern, proven here the same way.
+  it('negative control: catches the dynamic-import raw shape, ignores the routed replacement', () => {
+    const raw = scanText(
+      "const { invoke } = await import('@tauri-apps/api/core'); await invoke('archive_emails', {})",
+      ['archive_emails'],
+    );
+    expect(raw).toHaveLength(1);
+    expect(raw[0].name).toBe('archive_emails');
+
+    // What Step 3 replaces it with: a direct call through the imported `send`.
+    const routed = scanText("await send('archive_emails', {})", ['archive_emails']);
+    expect(routed).toHaveLength(0);
+  });
+
+  it('no non-test src file raw-invokes a Phase 1, Phase 2 or Phase 3 daemon-owned command', () => {
     const hits = scanDir('src', GUARDED_NAMES);
     expect(hits.map((h) => `${h.file}:${h.line}: ${h.name}`)).toEqual([]);
   });

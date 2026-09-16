@@ -8,6 +8,7 @@ import {
   setActiveAccount as _setActiveAccount,
 } from '../../services/workflows/activateAccount';
 import { loadSubtree as _loadSubtree } from '../../services/workflows/loadSubtree';
+import { send } from '../../services/transport.js';
 import { _prefetchAllMailboxes, _prewarmAccountCaches } from '../../services/workflows/prefetch';
 import { addAccount as _addAccount } from '../../services/workflows/addAccount';
 import { updateAccount as _updateAccount } from '../../services/workflows/updateAccount';
@@ -147,8 +148,7 @@ export const createAccountSlice = (set, get) => ({
   saveEmailsLocally: (rows) => _saveEmailsLocally(rows),
 
   cancelArchive: () => {
-    const invoke = window.__TAURI__?.core?.invoke;
-    if (invoke) invoke('cancel_archive').catch(() => {});
+    if (window.__TAURI__?.core?.invoke) send('cancel_archive').catch(() => {});
     set({ bulkSaveProgress: null });
   },
 

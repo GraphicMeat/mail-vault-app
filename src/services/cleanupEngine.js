@@ -12,6 +12,7 @@
 import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
 import { ensureFreshToken } from './authUtils';
+import { send } from './transport.js';
 import * as api from './api';
 import * as db from './db';
 import { PROTECTED_FOLDERS, resolveCleanupFolders, isTrashFolder } from '../utils/cleanupFolders';
@@ -106,10 +107,9 @@ async function cleanFolder(rule, account, freshAccount, box, stale) {
 
   if (rule.action === 'archive-then-delete' && window.__TAURI__) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       // `account_json: String` is what the command declares (main.rs). Passing
       // the object under `account` was rejected before the archiver ever ran.
-      await invoke('archive_emails', {
+      await send('archive_emails', {
         accountId: account.id,
         accountJson: JSON.stringify(freshAccount),
         uids,

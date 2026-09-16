@@ -24,6 +24,22 @@ const mockGetSavedEmailIds = vi.fn();
 const mockGetArchivedEmailIds = vi.fn();
 const mockReadLocalEmailIndex = vi.fn();
 
+// Task 3.1: messageMutations.js now archives through transport.js's `send`
+// instead of a raw `window.__TAURI__.core.invoke`. `archive_emails` is not
+// DAEMON_OWNED yet, so the real `send` would fall through to its own
+// `tauriInvoke`, whose lazily-populated module-level `invoke` never gets set
+// in this jsdom module graph (transport.js loads before `window.__TAURI__` is
+// set below) - reroute only `archive_emails` to the same mock the rest of this
+// file already asserts against; every other command (`maildir_store` etc.,
+// already DAEMON_OWNED) keeps going through the real `send`.
+vi.mock('../../transport.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    send: (cmd, args) => (cmd === 'archive_emails' ? mockTauriInvoke(cmd, args) : actual.send(cmd, args)),
+  };
+});
+
 vi.mock('../../db', () => ({
   isEmailSaved: vi.fn().mockResolvedValue(false),
   archiveEmail: vi.fn().mockResolvedValue(undefined),
