@@ -29,7 +29,7 @@ impl Default for ArchiveCancelToken {
 
 /// The app's vault gate: a named no-op, not `|work| work()` inline. The app
 /// cannot take the daemon's `vault_gate` `RwLock` across the process boundary
-/// (attachments-bridge B.5) — this is the sanctioned, deliberate absence of
+/// (attachments-bridge B.5): this is the sanctioned, deliberate absence of
 /// gating for the app-side path, not an oversight. `archive.rs` stays on the
 /// Phase 2 "ungated app writer" list for exactly this reason (inventory N7;
 /// Task 3.9 records it in `architecture.md`).
@@ -53,7 +53,7 @@ fn build_ctx(app_handle: &tauri::AppHandle) -> Result<Arc<ArchiveCtx>, String> {
             // Same bridge Task 2.9b already put here: custody.db is the
             // daemon's file, so this goes over RPC until the daemon has its
             // own archive route (Task 3.4) with an in-process append. The
-            // reply's count is not read — the caller logs how many entries
+            // reply's count is not read: the caller logs how many entries
             // it handed over, not how many the daemon actually upserted
             // (task-2.11 carry-in M7a), so `Ok(0)` here changes nothing a
             // caller reads.

@@ -1,5 +1,5 @@
 //! Task 3.2 Step 4: core-only tests for `mailvault_core::archive`. The app
-//! crate never had these — it never called the gate at all (inventory N7:
+//! crate never had these: it never called the gate at all (inventory N7:
 //! `archive.rs` was one of the five ungated app writers), and a synthetic
 //! custody-sink failure needed a live daemon round trip to reproduce. Now
 //! that both are injected, the runner itself can be driven directly against
@@ -21,7 +21,7 @@ fn inbox_with_one(uid: u32) -> Mailbox {
 }
 
 /// `config_for` returns an `ImapConfig` (`Deserialize` only, no `Serialize`
-/// impl — nothing else needed one), so the account JSON `run`/`bulk_delete`
+/// impl, nothing else needed one), so the account JSON `run`/`bulk_delete`
 /// want is rebuilt from its public fields rather than round-tripped through
 /// the struct itself. Same shape `common::config_for` builds.
 fn account_json(server: &MockImap) -> String {
@@ -70,8 +70,8 @@ async fn a_custody_append_failure_does_not_fail_the_run() {
     let root = tempfile::tempdir().expect("tempdir");
 
     let mut sinks = noop_sinks();
-    // The daemon's real sink can fail (custody.db locked, disk full, …); the
-    // run must still report the write as completed — a failed custody append
+    // The daemon's real sink can fail (custody.db locked, disk full, etc.); the
+    // run must still report the write as completed: a failed custody append
     // is logged and swallowed, not propagated (same continue-on-failure arms
     // `daemon_call_blocking`'s three-way match had before the move).
     sinks.custody_append = Arc::new(|_account, _mailbox, _entries_json| {
@@ -138,7 +138,7 @@ async fn the_gate_wraps_the_write_entry_and_exit_bracket_it() {
     .expect("run does not error");
 
     assert_eq!(result.completed, 1);
-    // The write is the closure `work()` itself — by the time `gate-exit` is
+    // The write is the closure `work()` itself: by the time `gate-exit` is
     // recorded, `work()` (and therefore the write) has already returned, so
     // the file was necessarily created while the gate was held, not before
     // or after it.
@@ -172,7 +172,7 @@ async fn a_gate_that_refuses_leaves_no_file_on_disk() {
         Arc::new(AtomicBool::new(false)),
     )
     .await
-    .expect("run does not error — the per-uid task reports the gate's refusal as a normal fetch error");
+    .expect("run does not error: the per-uid task reports the gate's refusal as a normal fetch error");
 
     assert_eq!(result.completed, 0);
     assert_eq!(result.errors, 1);

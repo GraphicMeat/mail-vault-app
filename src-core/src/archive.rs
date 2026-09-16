@@ -100,14 +100,14 @@ impl DrivePace {
 /// `'static`, which a borrowed `&dyn Fn` cannot satisfy. `vault_files::VaultGate`
 /// itself is written for the daemon's synchronous whole-vault walkers, called
 /// once inside `handlers::common::blocking`, not for a function fanning out
-/// many concurrent tokio tasks — reusing it as specified by the plan's Step 1
-/// does not compile; this is the minimal change that keeps its call shape.
+/// many concurrent tokio tasks; reusing it as specified by the plan's Step 1
+/// does not compile, so this is the minimal change that keeps its call shape.
 pub type ArchiveGate = Arc<dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> Result<(), String> + Send + Sync>;
 
 /// The three points where the app and the daemon differ: how a progress event
 /// reaches the UI, how a custody row gets recorded, and how the search index
 /// is told something changed. `Arc`-wrapped for the same `'static` reason as
-/// `ArchiveGate` — cloned once per spawned task, not re-taken by reference.
+/// `ArchiveGate`, cloned once per spawned task rather than re-taken by reference.
 pub struct ArchiveSinks {
     pub emit: Arc<dyn Fn(&str, serde_json::Value) + Send + Sync>,
     pub custody_append: Arc<dyn Fn(&str, &str, String) -> Result<usize, String> + Send + Sync>,
@@ -116,7 +116,7 @@ pub struct ArchiveSinks {
 
 /// Everything the runner needs beyond the call's own arguments. `root` is
 /// resolved once by the caller (the app's `vault::root(&app)` or the
-/// daemon's `handlers::common::vault_root`) — the runner itself never
+/// daemon's `handlers::common::vault_root`); the runner itself never
 /// resolves or falls back on a root.
 pub struct ArchiveCtx {
     pub root: PathBuf,
@@ -177,7 +177,7 @@ pub async fn run_with_backup(
     let pace = Arc::new(DrivePace::default());
     let mut set: JoinSet<Option<serde_json::Value>> = JoinSet::new();
 
-    // The IMAP pool lives on ctx (injected — the app's managed state or the
+    // The IMAP pool lives on ctx (injected: the app's managed state or the
     // daemon's own pool, per caller).
 
     // One listing of the vault folder and one of its mirror for the whole run.
@@ -354,7 +354,7 @@ pub async fn run_with_backup(
         match serde_json::to_string(&index_entries) {
             Ok(entries_json) => {
                 // The sink itself does the blocking work (an RPC round trip in
-                // the app, an in-process SQLite write in the daemon) — never on
+                // the app, an in-process SQLite write in the daemon), never on
                 // a tokio worker.
                 match tokio::task::spawn_blocking(move || (ctx2.sinks.custody_append)(&acct, &mbx, entries_json))
                     .await
@@ -407,8 +407,8 @@ pub async fn run_with_backup(
 /// `(sinks.emit)("archive-progress", ...)`, serializing the payload once
 /// here instead of at every call site. A serialize failure (never observed
 /// for this struct's field types) drops the event exactly as the original
-/// `let _ = app_handle.emit(...)` silently dropped a Tauri emit failure — a
-/// dropped progress frame does not fail the run.
+/// `let _ = app_handle.emit(...)` silently dropped a Tauri emit failure:
+/// a dropped progress frame does not fail the run.
 fn emit(ctx: &ArchiveCtx, payload: ArchiveProgress) {
     if let Ok(value) = serde_json::to_value(&payload) {
         (ctx.sinks.emit)("archive-progress", value);
@@ -491,7 +491,7 @@ async fn fetch_and_store(
             use std::fs;
 
             // The per-file write, held across `create_dir_all` through both
-            // writes (app and mirror) — not merely checked before them (Phase
+            // writes (app and mirror), not merely checked before them (Phase
             // 2 Task 2.6 review I1). `gate`'s inner `FnMut` returns
             // `Result<(), String>`, so this closure reports its findings by
             // writing into the three pre-declared variables below instead of
