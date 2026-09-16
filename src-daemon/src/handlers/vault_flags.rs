@@ -276,6 +276,48 @@ mod tests {
         assert_eq!(rows[0]["flags"], serde_json::json!(["\\Seen"]));
     }
 
+    /// 2.9a review focus: the daemon must finish (or abandon) every mirror
+    /// rename before it replies — a route that returned after only SOME of a
+    /// batch's mirror files were renamed would let the app's forwarder
+    /// (Task 2.9b) release the backup's security-scoped bookmark while a
+    /// rename was still in flight. `apply_flags` never spawns the mirror work
+    /// away: it is one synchronous call into `apply_everywhere`, which loops
+    /// every change before returning. A mirror holding N stale files (all N
+    /// disagreeing with the server's flags) must show `mirrored == N` in the
+    /// one reply, not a partial count.
+    #[test]
+    fn apply_flags_finishes_every_mirror_rename_before_replying() {
+        let (vault, s) = st();
+        let cur = vault_files::cur_path(vault.path(), "acc", "INBOX");
+        let mirror_cur = vault.path().join("mirror").join("me@mock.test").join("INBOX").join("cur");
+        fs::create_dir_all(&cur).unwrap();
+        fs::create_dir_all(&mirror_cur).unwrap();
+        const N: u32 = 12;
+        let mut changes = Vec::new();
+        for uid in 0..N {
+            fs::write(cur.join(vault_files::build_maildir_filename(uid, &[])), b"body").unwrap();
+            fs::write(mirror_cur.join(vault_files::build_maildir_filename(uid, &[])), b"body").unwrap();
+            changes.push(change(uid, &["\\Seen"]));
+        }
+
+        let applied = apply_flags(
+            &s,
+            "acc",
+            "INBOX",
+            Some("me@mock.test"),
+            Some(vault.path().join("mirror").to_str().unwrap()),
+            &changes,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(applied.renamed, N as usize, "every vault-side stale copy must be renamed by the time the call returns");
+        assert_eq!(applied.mirrored, N as usize, "every mirror-side stale copy must be renamed by the time the call returns");
+        for uid in 0..N {
+            assert!(mirror_cur.join(vault_files::build_maildir_filename(uid, &["seen".to_string()])).exists(), "uid {uid} mirror copy not renamed");
+        }
+    }
+
     #[test]
     fn apply_flags_refuses_while_the_vault_is_being_moved() {
         let (_vault, s) = st();
