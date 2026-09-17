@@ -458,13 +458,21 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // mutation safe to re-send. Capabilities are cached when a
             // session is CREATED, so read them inside the closure, after
             // checkout — exactly like imap_move_emails below.
+            //
+            // `pool_ref`/`acct` bound outside the closure (not `state`
+            // itself) to match `commands.rs`'s original capture set
+            // byte-for-byte: `run_uid_delete` wants `Fn`, not `FnOnce` (the
+            // dead-socket retry can call it twice), and `&ImapPool`/
+            // `&ImapConfig` are the exact `Copy` references the original
+            // shipped, not a structural guess.
+            let pool_ref: &ImapPool = &state.imap_pool;
             let acct = &account;
             let result = state
                 .imap_pool
                 .run_uid_delete(&account, true, |mut session| {
                     let mailbox = mailbox.clone();
                     async move {
-                        let has_uidplus = state.imap_pool.has_capability(acct, "UIDPLUS").await;
+                        let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
                         let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus)
                             .await
                             .map_err(|e| format!("Failed to delete email: {}", e))?;
@@ -589,10 +597,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // inside the closure, after checkout — a read before it sees an
             // empty map on the first call of a process and takes the slow
             // COPY path.
+            //
+            // Same `pool_ref`/`acct` binding as imap_delete_email above —
+            // `with_priority` is `FnOnce` here so it's not load-bearing for
+            // compilation, but kept for the identical capture shape.
+            let pool_ref: &ImapPool = &state.imap_pool;
             let acct = &account;
             let result = with_priority(&state.imap_pool, &account, |mut session| async move {
-                let has_move = state.imap_pool.has_capability(acct, "MOVE").await;
-                let has_uidplus = state.imap_pool.has_capability(acct, "UIDPLUS").await;
+                let has_move = pool_ref.has_capability(acct, "MOVE").await;
+                let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
                 let result = imap::move_uids(&mut session, &source_mailbox, &target_mailbox, &uids, has_move, has_uidplus).await?;
                 Ok((result, session, Some(source_mailbox)))
             })
