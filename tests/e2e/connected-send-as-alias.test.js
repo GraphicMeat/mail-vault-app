@@ -65,7 +65,8 @@ describe('Connected Send-As Alias', function () {
    * raw `window.__TAURI__.core.invoke('save_email_cache', ...)` this file's
    * own `invoke` helper does no longer reaches a registered Tauri command,
    * so this one call site routes through `daemon_rpc` instead. `invoke`
-   * itself stays unchanged: `smtp_build_mime` below is still native.
+   * itself stays unchanged. `smtp_build_mime` below (`buildHeaders`) needed
+   * the same treatment once Task 5.5 moved it too.
    */
   const seedSentCache = () => invoke('daemon_rpc', { method: 'save_email_cache', params: {
     accountId: account.id,
@@ -88,16 +89,22 @@ describe('Connected Send-As Alias', function () {
     }),
   } });
 
-  /** Decode the staged MIME and pull out its header block. */
+  /**
+   * Decode the staged MIME and pull out its header block.
+   *
+   * Task 5.5: `smtp_build_mime` moved into the daemon (`DAEMON_OWNED`) — same
+   * treatment as `seedSentCache`'s `save_email_cache` above, routed through
+   * `daemon_rpc` instead of a raw Tauri command that no longer exists.
+   */
   async function buildHeaders(account, extra = {}) {
-    const res = await invoke('smtp_build_mime', {
+    const res = await invoke('daemon_rpc', { method: 'smtp_build_mime', params: {
       account: { ...account, ...extra },
       email: {
         to: 'someone@example.com',
         subject: 'Send-as check',
         text: 'body',
       },
-    });
+    } });
     if (!res.ok) throw new Error(`smtp_build_mime failed: ${res.error}`);
     const raw = await browser.execute((b64) => atob(b64), res.value.rawBase64);
     const end = raw.indexOf('\r\n\r\n') >= 0 ? raw.indexOf('\r\n\r\n') : raw.indexOf('\n\n');
