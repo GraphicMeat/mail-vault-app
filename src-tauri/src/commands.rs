@@ -1,22 +1,16 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use serde::Deserialize;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tracing::info;
 
-use crate::imap::{self, ImapConfig};
 use crate::oauth2::OAuth2Manager;
-use crate::smtp;
 use crate::backup;
 
 // `with_background`, `with_priority` and `conn_lost_message` moved to the
 // daemon (Task 5.4a's `imap_get_email`/`imap_get_email_light`, Task 5.4b's
 // remaining eight `imap_*` write/lifecycle commands — `src-daemon/src/
 // handlers/imap.rs`), their only callers in this file. `PooledSessionGuard`/
-// `ImapPool`/`ImapSession` are no longer imported here for the same reason —
-// `smtp_send_email` below is this file's last IMAP caller, and it only opens
-// a dedicated session (`imap::create_imap_session_no_compress`), never the
-// pool.
+// `ImapPool`/`ImapSession` are no longer imported here for the same reason.
 
 // ── Test connection ─────────────────────────────────────────────────────────
 //
@@ -24,30 +18,19 @@ use crate::backup;
 // `src-daemon/src/handlers/imap.rs`), same request/response JSON, same 20s
 // timeout and timeout message text.
 
-#[tauri::command]
-pub async fn smtp_test_connection(account: ImapConfig) -> Result<serde_json::Value, String> {
-    info!(
-        "[test-connection] Testing SMTP {} → {}:{}",
-        account.email,
-        account.smtp_host.as_deref().unwrap_or("<none>"),
-        account.smtp_port.unwrap_or(587)
-    );
-
-    // Whole probe capped at 15s — the transport's own io_timeout is also 15s,
-    // this guards against a stall before/around the handshake.
-    tokio::time::timeout(
-        std::time::Duration::from_secs(15),
-        smtp::test_connection(&account),
-    )
-    .await
-    .map_err(|_| format!("SMTP connection test timed out for {}", account.email))?
-    ?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "message": "SMTP connection successful"
-    }))
-}
+// `smtp_test_connection`, `smtp_build_mime`, `smtp_build_draft_mime` and
+// `smtp_send_email` all moved to the daemon (Task 5.5, `src-daemon/src/
+// handlers/smtp.rs`), same request/response JSON, routed via `transport.js`'s
+// `DAEMON_OWNED` under their existing flat names — this was this file's last
+// IMAP caller (`smtp_send_email`'s background Sent-folder APPEND used a
+// dedicated `imap::create_imap_session_no_compress` session, never the app's
+// pool) and last SMTP caller, so `use crate::imap::{self, ImapConfig}` and
+// `use crate::smtp` are both gone from this file along with them.
+// `smtp_send_email`'s `send-server-append-complete` event now goes through
+// the daemon's own `EventBus` (`state.events.emit(...)`) instead of
+// `app_handle.emit(...)` — `src-tauri/src/daemon_channel.rs` already
+// re-emits any named daemon event to the frontend unchanged, so `Emitter` is
+// no longer imported here either.
 
 // ── List mailboxes ──────────────────────────────────────────────────────────
 
@@ -66,256 +49,6 @@ pub async fn smtp_test_connection(account: ImapConfig) -> Result<serde_json::Val
 // request/response JSON, routed via `transport.js`'s `DAEMON_OWNED` under
 // their existing names. `imap_ensure_sent_mailbox` still returns a bare
 // string, not an object — matches its old `Result<String, String>`.
-
-/// Build the RFC2822 MIME bytes for an outgoing email WITHOUT sending.
-/// Used by the JS compose flow so it can write the raw .eml to the local
-/// Maildir archive BEFORE SMTP submission (and replace the on-disk copy with
-/// a sent-state version after SMTP succeeds).
-#[tauri::command]
-pub async fn smtp_build_mime(
-    account: ImapConfig,
-    email: smtp::OutgoingEmail,
-) -> Result<serde_json::Value, String> {
-    built_mime_json(smtp::build_mime(&account, &email)?, &account)
-}
-
-/// Same, for the compose autosave: a draft is allowed to have no recipient yet.
-/// See `smtp::build_draft_mime`.
-#[tauri::command]
-pub async fn smtp_build_draft_mime(
-    account: ImapConfig,
-    email: smtp::OutgoingEmail,
-) -> Result<serde_json::Value, String> {
-    built_mime_json(smtp::build_draft_mime(&account, &email)?, &account)
-}
-
-fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Result<serde_json::Value, String> {
-    use base64::Engine;
-    let raw_base64 = base64::engine::general_purpose::STANDARD.encode(&built.raw_rfc2822);
-
-    // Extract the Message-ID header from raw bytes for later server-side dedupe.
-    // Returned with its angle brackets intact: the compose flow compares this
-    // against `messageId` on rows that came back through `parse_header`, which
-    // keeps `<...>`. Stripping here makes the optimistic Sent entry unmatchable.
-    let message_id = {
-        let text = String::from_utf8_lossy(&built.raw_rfc2822);
-        text.lines()
-            .take_while(|line| !line.is_empty())
-            .find(|line| line.to_lowercase().starts_with("message-id:"))
-            .map(|line| line.splitn(2, ':').nth(1).unwrap_or("").trim().to_string())
-            .filter(|s| !s.is_empty())
-    };
-
-    tracing::info!(
-        "[send:build_mime] account={} bytes={} messageId={:?}",
-        account.email, built.raw_rfc2822.len(), message_id
-    );
-
-    Ok(serde_json::json!({
-        "rawBase64": raw_base64,
-        "messageId": message_id,
-        "rawSize": built.raw_rfc2822.len(),
-    }))
-}
-
-// ── Send email ──────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn smtp_send_email(
-    app_handle: tauri::AppHandle,
-    account: ImapConfig,
-    email: smtp::OutgoingEmail,
-    #[allow(unused)] sent_mailbox: Option<String>,
-) -> Result<serde_json::Value, String> {
-    // Flow: local Maildir archive is handled by the JS side BEFORE and AFTER
-    // this call (see ComposeModal.sendFn). This command only submits via SMTP
-    // and best-effort appends to the server Sent folder in the background.
-    //
-    // Structured logging uses `[send]` prefix so step-by-step grep is trivial.
-    //
-    // Task 5.4b removed the `pool: tauri::State<'_, ImapPool>` param this
-    // command used to take (the app's managed `ImapPool` is gone — the
-    // interactive commands that used it all moved to the daemon). It was
-    // dead weight even before that: the background APPEND below has always
-    // used a dedicated `create_imap_session_no_compress` connection, never
-    // the pool — `pool_clone`/`pool_for_log` were captured and cloned only
-    // to be silenced (`let _ = (pool_clone, pool_for_log, ...)`), never
-    // actually read. This command's own move to the daemon is Task 5.5, out
-    // of scope here.
-
-    let account_id_for_log = account.email.clone();
-    tracing::info!("[send:smtp_start] account={} recipient={}", account_id_for_log, email.to);
-
-    let result = smtp::send_email(&account, &email).await
-        .map_err(|e| {
-            tracing::error!("[send:smtp_fail] account={} error={}", account_id_for_log, e);
-            e
-        })?;
-
-    tracing::info!(
-        "[send:smtp_ok] account={} messageId={} raw_bytes={}",
-        account_id_for_log, result.message_id, result.raw_rfc2822.len()
-    );
-
-    // Dump the first 800 bytes of the raw MIME so we can see what headers
-    // lettre produced — specifically whether Message-ID is present.
-    let header_preview = {
-        let text = String::from_utf8_lossy(&result.raw_rfc2822);
-        let end = text.find("\r\n\r\n").or_else(|| text.find("\n\n")).unwrap_or(text.len());
-        let headers_only = &text[..end.min(800)];
-        headers_only.to_string()
-    };
-    tracing::info!("[send:raw_headers]\n{}", header_preview);
-
-    let message_id_for_response = result.message_id.clone();
-
-    // Extract the Message-ID header from the RFC2822 raw bytes — used by the
-    // post-APPEND UID SEARCH so we can prove the server indexed the message.
-    // Handle both LF and CRLF line endings, folded header continuations, and
-    // optional whitespace around the `:`.
-    // Brackets are stripped here on purpose, unlike in `smtp_build_mime`:
-    // `SEARCH HEADER` matches a substring of the field value, so the bare id
-    // hits `<id>` on servers that store the brackets and on those that don't.
-    let message_id_header: Option<String> = {
-        let text = String::from_utf8_lossy(&result.raw_rfc2822);
-        let header_block = match text.find("\r\n\r\n") {
-            Some(idx) => &text[..idx],
-            None => match text.find("\n\n") {
-                Some(idx) => &text[..idx],
-                None => &text,
-            },
-        };
-        header_block
-            .lines()
-            .find(|line| line.to_lowercase().starts_with("message-id"))
-            .and_then(|line| {
-                let after_colon = line.splitn(2, ':').nth(1)?;
-                let trimmed = after_colon.trim();
-                let stripped: String = trimmed
-                    .trim_start_matches('<')
-                    .trim_end_matches('>')
-                    .to_string();
-                if stripped.is_empty() { None } else { Some(stripped) }
-            })
-    };
-
-    tracing::info!(
-        "[send:messageid_header] account={} extracted={:?}",
-        account_id_for_log, message_id_header
-    );
-
-    // Background: APPEND to server Sent folder. Never blocks the UI response.
-    if let Some(ref mailbox) = sent_mailbox {
-        if !mailbox.is_empty() {
-            let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
-            let account_clone = account.clone();
-            let mailbox_clone = mailbox.clone();
-            let app_handle_clone = app_handle.clone();
-            let account_id_bg = account_id_for_log.clone();
-            let message_id_bg = result.message_id.clone();
-            let message_id_header_bg = message_id_header.clone();
-            tauri::async_runtime::spawn(async move {
-                let mailbox_for_log = mailbox_clone.clone();
-                tracing::info!(
-                    "[send:server_append_start] account={} mailbox={} bytes={} messageId_header={:?}",
-                    account_id_bg, mailbox_for_log, raw_bytes.len(), message_id_header_bg
-                );
-                let mid_for_closure = message_id_header_bg.clone();
-                let mailbox_for_closure = mailbox_clone.clone();
-                let account_for_log = account_clone.clone();
-                let account_id_inner = account_id_bg.clone();
-                tracing::info!("[send:dedicated_session_start] account={} mailbox={} — using fresh no-compress session to avoid Hostinger APPEND hang", account_id_inner, mailbox_for_log);
-                let verified_result: Result<Result<(u32, u32, Option<u32>), String>, tokio::time::error::Elapsed> = tokio::time::timeout(
-                    std::time::Duration::from_secs(60),
-                    async {
-                        let mut session = imap::create_imap_session_no_compress(&account_for_log).await
-                            .map_err(|e| format!("dedicated session create failed: {}", e))?;
-                        tracing::info!("[send:dedicated_session_ok] account={} — calling append_email_verified", account_id_inner);
-                        let res = imap::append_email_verified(
-                            &mut session,
-                            &mailbox_for_closure,
-                            &raw_bytes,
-                            "\\Seen",
-                            mid_for_closure.as_deref(),
-                            // The Sent copy was written this instant — "now" is its real date.
-                            None,
-                        ).await;
-                        // Best-effort logout regardless of result
-                        let _ = session.logout().await;
-                        tracing::info!("[send:dedicated_session_logout] account={}", account_id_inner);
-                        res
-                    },
-                ).await;
-                let _ = (account_clone, mailbox_clone);
-                let (ok, verify_payload) = match verified_result {
-                    Ok(Ok((before, after, found_uid))) => {
-                        let _ = (before, after, found_uid); // silence unused if refactored
-                        let delta = after as i64 - before as i64;
-                        tracing::info!(
-                            "[send:server_append_ok] account={} mailbox={} messageId={} messageId_header={:?} exists_before={} exists_after={} delta={} searched_uid={:?}",
-                            account_id_bg, mailbox_for_log, message_id_bg, message_id_header_bg,
-                            before, after, delta, found_uid
-                        );
-                        if delta <= 0 {
-                            tracing::warn!(
-                                "[send:server_append_no_delta] account={} mailbox={} server reports no change in EXISTS — APPEND may have been silently rejected or routed elsewhere",
-                                account_id_bg, mailbox_for_log
-                            );
-                        }
-                        if found_uid.is_none() && message_id_header_bg.is_some() {
-                            tracing::warn!(
-                                "[send:server_append_search_miss] account={} mailbox={} Message-ID {:?} not found via UID SEARCH HEADER — server may not index Message-ID or email is in a different folder",
-                                account_id_bg, mailbox_for_log, message_id_header_bg
-                            );
-                        }
-                        (true, serde_json::json!({
-                            "existsBefore": before,
-                            "existsAfter": after,
-                            "delta": delta,
-                            "foundUid": found_uid,
-                        }))
-                    }
-                    Ok(Err(e)) => {
-                        tracing::warn!(
-                            "[send:server_append_fail] account={} mailbox={} error={}",
-                            account_id_bg, mailbox_for_log, e
-                        );
-                        (false, serde_json::json!({ "error": e }))
-                    }
-                    Err(_) => {
-                        tracing::warn!(
-                            "[send:server_append_timeout] account={} mailbox={} timeout=60s",
-                            account_id_bg, mailbox_for_log
-                        );
-                        (false, serde_json::json!({ "error": "timeout" }))
-                    }
-                };
-                // Emit UI event so the frontend can refresh the Sent view.
-                let payload = serde_json::json!({
-                    "accountId": account_id_bg,
-                    "mailbox": mailbox_for_log,
-                    "messageId": message_id_bg,
-                    "messageIdHeader": message_id_header_bg,
-                    "ok": ok,
-                    "verify": verify_payload,
-                });
-                tracing::info!("[send:server_append_event_emit] payload={}", payload);
-                if let Err(e) = app_handle_clone.emit("send-server-append-complete", payload) {
-                    tracing::warn!("[send:event_emit_fail] error={}", e);
-                }
-            });
-        } else {
-            tracing::warn!("[send:server_append_skip] account={} reason=empty_sent_mailbox", account_id_for_log);
-        }
-    } else {
-        tracing::warn!("[send:server_append_skip] account={} reason=no_sent_mailbox_passed", account_id_for_log);
-    }
-
-    Ok(serde_json::json!({
-        "success": true,
-        "messageId": message_id_for_response,
-    }))
-}
 
 // `imap_search_emails` + its local `SearchFilters` moved to the daemon (Task
 // 5.4a, `src-daemon/src/handlers/imap.rs`), same request/response JSON.

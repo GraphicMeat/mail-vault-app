@@ -31,6 +31,7 @@ pub(crate) mod mbox;
 pub(crate) mod migration;
 pub(crate) mod restore;
 pub(crate) mod search_index;
+pub(crate) mod smtp;
 pub(crate) mod vault_files;
 pub(crate) mod vault_flags;
 

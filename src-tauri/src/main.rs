@@ -2763,10 +2763,10 @@ fn main() {
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            commands::smtp_test_connection,
-            commands::smtp_build_mime,
-            commands::smtp_build_draft_mime,
-            commands::smtp_send_email,
+            // smtp_test_connection, smtp_build_mime, smtp_build_draft_mime and
+            // smtp_send_email moved to the daemon (Task 5.5,
+            // src-daemon/src/handlers/smtp.rs) — routed via transport.js's
+            // DAEMON_OWNED, no Tauri command left to register.
             commands::oauth2_auth_url,
             commands::oauth2_exchange,
             commands::oauth2_refresh,

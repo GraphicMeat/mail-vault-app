@@ -191,6 +191,17 @@ export const DAEMON_OWNED = new Set([
   'imap_set_flags', 'imap_delete_email', 'imap_ensure_sent_mailbox', 'imap_create_mailbox',
   'imap_rename_mailbox', 'imap_delete_mailbox', 'imap_find_message_id', 'imap_disconnect',
   'imap_move_emails', 'imap_test_connection',
+  // Task 5.5: SMTP (test connection, build MIME for local archive, build
+  // draft MIME, send). Their Tauri twins are deleted in this same task, so
+  // same reasoning as 5.4a/5.4b above — flat names, no rename layer, no
+  // Tauri fallback. api.js needed zero changes: every one of these four
+  // already went through tauriInvoke() -> this module's send(). The one
+  // pre-existing event in this domain (`send-server-append-complete`,
+  // smtp_send_email's background Sent-folder APPEND) now comes from the
+  // daemon's own EventBus instead of a Tauri app_handle.emit() -- reaches
+  // ComposeModal.jsx's listener unchanged, since daemon_channel.rs already
+  // re-emits any named daemon event to the frontend.
+  'smtp_test_connection', 'smtp_build_mime', 'smtp_build_draft_mime', 'smtp_send_email',
 ]);
 
 async function sendToDaemon(command, args) {

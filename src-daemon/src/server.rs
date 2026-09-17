@@ -330,6 +330,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::smtp::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
         "net.status" => RpcResponse::success(id, state.net.status()),
@@ -526,6 +530,12 @@ mod tests {
             // Task 5.4b: same reasoning, write-path family. Bogus host/port
             // so this fails fast on a connection error too, never a success.
             ("imap_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
+            // Task 5.5: SMTP is its own flat family, same reasoning — a live
+            // SMTP probe has nothing to do with the vault gate. `imapHost` is
+            // a required `ImapConfig` field even though this command never
+            // dials IMAP, so it must be present for this to fail on the bogus
+            // SMTP connection rather than on param deserialization.
+            ("smtp_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1, "smtpHost": "127.0.0.1", "smtpPort": 1}})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");
