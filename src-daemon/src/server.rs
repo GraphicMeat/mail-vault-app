@@ -518,6 +518,11 @@ mod tests {
             ("daemon.heartbeat", json!({})),
             ("learning.load", json!({"accountId": "a"})),
             ("classification.summary", json!({"accountId": "a"})),
+            // Task 5.4a: flat `imap_*` names have no `.`, so they never match
+            // this gate's prefix check — a live IMAP read has nothing to do
+            // with the vault. Bogus host/port so this fails fast on a
+            // connection error, never on the gate text this test checks for.
+            ("imap_get_mailboxes", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");

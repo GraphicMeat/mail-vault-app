@@ -276,6 +276,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // whole message bodies. Same reasoning as commands.rs.
             let use_background = params.get("background").and_then(Value::as_bool).unwrap_or(false);
             let mb_clone = mailbox.clone();
+            let started = std::time::Instant::now();
 
             let fetch = state.imap_pool.run_read(&account, !use_background, |mut session| {
                 let mb = mailbox.clone();
@@ -289,7 +290,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 
             let email = match tokio::time::timeout(BODY_FETCH_TIMEOUT, fetch).await {
                 Ok(Ok(email)) => email,
-                Ok(Err(e)) => return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, conn_lost_message(&e, &account, uid))),
+                Ok(Err(e)) => {
+                    tracing::info!(
+                        "[CMD] imap_get_email_light: FAILED uid={} mailbox={} background={} after {}ms: {}",
+                        uid, mb_clone, use_background, started.elapsed().as_millis(), e
+                    );
+                    return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, conn_lost_message(&e, &account, uid)));
+                }
                 Err(_) => {
                     let msg = format!(
                         "Timed out after {}s fetching message UID {} from {}",
@@ -297,9 +304,15 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         uid,
                         mb_clone
                     );
+                    tracing::info!("[CMD] imap_get_email_light: {}", msg);
                     return Some(RpcResponse::error(id, ipc::INTERNAL_ERROR, msg));
                 }
             };
+
+            tracing::info!(
+                "[CMD] imap_get_email_light: uid={} mailbox={} background={} found={} in {}ms",
+                uid, mb_clone, use_background, email.is_some(), started.elapsed().as_millis()
+            );
 
             match email {
                 Some(e) => {
@@ -315,6 +328,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // Non-fatal by design, matching the app: a cache failure
                     // (including "vault unavailable") must not fail the fetch
                     // the user is staring at, only warn.
+                    // `e.uid` (the server's answer), not the request's `uid` —
+                    // matches `maildir_store_raw`'s original call, which
+                    // stored under the fetched email's own uid.
+                    let store_uid = e.uid;
                     let aid = account_id.clone().unwrap_or_else(|| account.email.clone());
                     let mb = mb_clone.clone();
                     let raw = e.raw_source_bytes.clone();
@@ -322,14 +339,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     let aid2 = aid.clone();
                     let mb2 = mb.clone();
                     let cache_result = blocking(move || -> Result<bool, String> {
-                        with_vault_write(&state2, |root| vault_files::store(root, &aid2, &mb2, uid, &raw, &[], false))
+                        with_vault_write(&state2, |root| vault_files::store(root, &aid2, &mb2, store_uid, &raw, &[], false))
                     })
                     .await;
                     match cache_result {
                         Ok(Ok(true)) => crate::search_index::nudge(&state.search_index, &aid, &mb),
                         Ok(Ok(false)) => {} // already cached — no nudge, matching maildir_store_raw
-                        Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", uid, err),
-                        Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", uid, join_err),
+                        Ok(Err(err)) => warn!("Failed to auto-cache .eml for UID {}: {}", store_uid, err),
+                        Err(join_err) => warn!("Failed to auto-cache .eml for UID {}: task join error: {}", store_uid, join_err),
                     }
                     RpcResponse::success(id, json!({"success": true, "email": e}))
                 }
@@ -570,9 +587,16 @@ mod tests {
         let result = resp.result.expect("success");
         assert_eq!(result["success"], json!(true));
         assert_eq!(result["email"]["uid"], json!(1));
-        // `rawSource`/`raw_source_bytes` is `#[serde(skip)]` on LightFullEmail
-        // — the light payload itself must not carry it.
-        assert!(result["email"].get("rawSource").is_none());
+        // `raw_source_bytes` is `#[serde(skip)]` on `LightFullEmail` — the
+        // light payload must not carry it under any key. `email` itself must
+        // still be an object with real fields, so this isn't vacuously true
+        // of e.g. a null/missing `email`.
+        assert!(result["email"].is_object() && !result["email"].as_object().unwrap().is_empty());
+        let keys: Vec<&String> = result["email"].as_object().unwrap().keys().collect();
+        assert!(
+            keys.iter().all(|k| !k.to_lowercase().contains("raw")),
+            "no raw-source key of any name may appear: {keys:?}"
+        );
 
         let cur = tmp.join("Maildir").join("acc1").join("INBOX").join("cur");
         let files: Vec<_> = std::fs::read_dir(&cur).unwrap().collect();
