@@ -333,6 +333,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::smtp::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::graph::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -536,6 +539,21 @@ mod tests {
             // dials IMAP, so it must be present for this to fail on the bogus
             // SMTP connection rather than on param deserialization.
             ("smtp_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1, "smtpHost": "127.0.0.1", "smtpPort": 1}})),
+            // Task 5.6: Graph is its own flat family too, same reasoning — a
+            // live Graph HTTP call has nothing to do with the vault gate.
+            // Unlike IMAP/SMTP, `GraphClient` takes no host/port in its
+            // params — its base URL is `MAILVAULT_GRAPH_BASE` (read once into
+            // a process-wide `OnceLock` on first use), so this points it at a
+            // closed local port instead. If `handlers::graph`'s own tests
+            // already initialized that `OnceLock` to their mock server
+            // earlier in this process, this `set_var` is a no-op and the
+            // call reaches that mock instead — either way the response is an
+            // error that never contains "Mail storage folder", which is all
+            // this assertion checks.
+            ("graph_set_read", {
+                std::env::set_var("MAILVAULT_GRAPH_BASE", "http://127.0.0.1:1");
+                json!({"accessToken": "x", "messageId": "m1", "isRead": true})
+            }),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");

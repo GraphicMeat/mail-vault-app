@@ -2770,19 +2770,15 @@ fn main() {
             commands::oauth2_auth_url,
             commands::oauth2_exchange,
             commands::oauth2_refresh,
-            commands::graph_list_folders,
-            commands::graph_list_messages,
-            commands::graph_get_message,
-            commands::graph_get_mime,
-            commands::graph_cache_mime,
-            commands::graph_set_read,
-            commands::graph_set_flagged,
-            commands::graph_delete_message,
-            commands::graph_move_emails,
-            commands::graph_create_folder,
-            commands::graph_rename_folder,
-            commands::graph_move_folder,
-            commands::graph_delete_folder,
+            // graph_list_folders, graph_list_messages, graph_get_message,
+            // graph_cache_mime, graph_set_read, graph_set_flagged,
+            // graph_delete_message, graph_move_emails, graph_create_folder,
+            // graph_rename_folder, graph_move_folder and graph_delete_folder
+            // moved to the daemon (Task 5.6, src-daemon/src/handlers/
+            // graph.rs) — routed via transport.js's DAEMON_OWNED, no Tauri
+            // command left to register. graph_get_mime is not among them: it
+            // had 0 callers (confirmed by grep) and was deleted outright,
+            // not ported.
             commands::resolve_email_settings,
             commands::dns_mail_health,
             commands::backup_run_account,

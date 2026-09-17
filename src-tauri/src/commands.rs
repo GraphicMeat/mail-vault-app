@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
-use tracing::info;
 
 use crate::oauth2::OAuth2Manager;
 use crate::backup;
@@ -113,202 +112,23 @@ pub async fn oauth2_refresh(
     }))
 }
 
-// ── Graph API: List folders ─────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_list_folders(access_token: String) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let folders = client.list_folders().await?;
-    serde_json::to_value(&folders).map_err(|e| e.to_string())
-}
-
-// ── Graph API: List messages (paginated) ────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_list_messages(
-    access_token: String,
-    folder_id: String,
-    top: u32,
-    skip: u32,
-) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let (messages, next_link) = client.list_messages(&folder_id, top, skip).await?;
-    // The uid here is provisional — the message's position in a
-    // `receivedDateTime desc` listing, which moves every time mail arrives or
-    // leaves. It is not an identifier and nothing may persist by it.
-    // cacheManager.listGraphMessages replaces it with an allocated uid before
-    // any caller sees these rows, and is the only supported way to read this
-    // command; the pairing with `graphMessageIds` below is what makes that
-    // possible, so the two arrays must stay the same length and order.
-    let headers: Vec<_> = messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| m.to_email_header((skip + i as u32 + 1) as u32))
-        .collect();
-    // Also return Graph message IDs so frontend can map UIDs to Graph IDs for body fetches
-    let graph_ids: Vec<String> = messages.iter().map(|m| m.id.clone()).collect();
-    Ok(serde_json::json!({
-        "headers": headers,
-        "nextLink": next_link,
-        "graphMessageIds": graph_ids,
-    }))
-}
-
-// ── Graph API: Get single message ───────────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_get_message(
-    access_token: String,
-    message_id: String,
-) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let msg = client.get_message(&message_id).await?;
-    serde_json::to_value(&msg).map_err(|e| e.to_string())
-}
-
-// ── Graph API: Get MIME content (.eml) ──────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_get_mime(
-    access_token: String,
-    message_id: String,
-) -> Result<Vec<u8>, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.get_mime_content(&message_id).await
-}
-
-// ── Graph API: Fetch MIME, cache to Maildir, return light email ─────────────
-
-#[tauri::command]
-pub async fn graph_cache_mime(
-    app_handle: tauri::AppHandle,
-    access_token: String,
-    message_id: String,
-    account_id: String,
-    mailbox: String,
-    uid: u32,
-) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let raw_bytes = client.get_mime_content(&message_id).await?;
-
-    // Save to Maildir
-    let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox)?;
-    std::fs::create_dir_all(&cur_dir)
-        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
-
-    if crate::find_file_by_uid(&cur_dir, uid).is_none() {
-        let filename = crate::build_maildir_filename(uid, &[] as &[String]);
-        let file_path = cur_dir.join(&filename);
-        std::fs::write(&file_path, &raw_bytes)
-            .map_err(|e| format!("Failed to write .eml file: {}", e))?;
-        info!("Graph: cached UID {} to {:?} ({} bytes)", uid, file_path, raw_bytes.len());
-        crate::nudge_index(&account_id, &mailbox);
-    }
-
-    // Parse the .eml to return light email data
-    let email = crate::parse_eml_bytes_light(&raw_bytes, uid, vec![])?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "email": email
-    }))
-}
-
-// ── Graph API: Set read status ──────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_set_read(
-    access_token: String,
-    message_id: String,
-    is_read: bool,
-) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.set_read_status(&message_id, is_read).await
-}
-
-// ── Graph API: Set the flag (our star) ──────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_set_flagged(
-    access_token: String,
-    message_id: String,
-    flagged: bool,
-) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.set_flag_status(&message_id, flagged).await
-}
-
-#[tauri::command]
-pub async fn graph_delete_message(
-    access_token: String,
-    message_id: String,
-) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.delete_message(&message_id).await
-}
-
-// ── Graph API: Move emails to folder ─────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_move_emails(
-    access_token: String,
-    message_ids: Vec<String>,
-    target_folder_id: String,
-) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let mut moved = 0u32;
-
-    for msg_id in &message_ids {
-        client.move_message(msg_id, &target_folder_id).await?;
-        moved += 1;
-    }
-
-    Ok(serde_json::json!({
-        "success": true,
-        "moved": moved
-    }))
-}
-
-// ── Graph API: Folder management ─────────────────────────────────────────
-
-#[tauri::command]
-pub async fn graph_create_folder(
-    access_token: String,
-    display_name: String,
-    parent_folder_id: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    let folder = client
-        .create_folder(&display_name, parent_folder_id.as_deref())
-        .await?;
-    serde_json::to_value(&folder).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub async fn graph_rename_folder(
-    access_token: String,
-    folder_id: String,
-    display_name: String,
-) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.rename_folder(&folder_id, &display_name).await
-}
-
-#[tauri::command]
-pub async fn graph_move_folder(
-    access_token: String,
-    folder_id: String,
-    destination_id: String,
-) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.move_folder(&folder_id, &destination_id).await
-}
-
-#[tauri::command]
-pub async fn graph_delete_folder(access_token: String, folder_id: String) -> Result<(), String> {
-    let client = crate::graph::GraphClient::new(&access_token);
-    client.delete_folder(&folder_id).await
-}
+// `graph_list_folders`, `graph_list_messages`, `graph_get_message`,
+// `graph_cache_mime`, `graph_set_read`, `graph_set_flagged`,
+// `graph_delete_message`, `graph_move_emails`, `graph_create_folder`,
+// `graph_rename_folder`, `graph_move_folder` and `graph_delete_folder` all
+// moved to the daemon (Task 5.6, `src-daemon/src/handlers/graph.rs`), same
+// request/response JSON, routed via `transport.js`'s `DAEMON_OWNED` under
+// their existing flat names — `mailvault_core::graph::GraphClient` was
+// already daemon-reachable (`backup.rs`, `src-daemon/src/migration.rs` both
+// already construct it in-process), so this is the same stateless
+// `GraphClient::new(&access_token)`-per-call pattern, just which process
+// runs it. `graph_cache_mime`'s raw `std::fs::write` to the maildir `cur`
+// path (bypassing `mailvault_core::vault_files::store`) moved with it
+// unchanged — still the documented exception in architecture.md.
+//
+// `graph_get_mime` was NOT ported: 0 callers anywhere in `src/` (confirmed by
+// grep before deleting), so it and its `generate_handler!` entry are deleted
+// outright.
 
 // `imap_move_emails` moved to the daemon (Task 5.4b,
 // `src-daemon/src/handlers/imap.rs`), same request/response JSON.

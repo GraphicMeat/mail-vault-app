@@ -24,6 +24,7 @@ pub(crate) mod common;
 pub(crate) mod custody;
 pub(crate) mod daemon;
 pub(crate) mod export_fetch;
+pub(crate) mod graph;
 pub(crate) mod imap;
 pub(crate) mod insights;
 pub(crate) mod journal;

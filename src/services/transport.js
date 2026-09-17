@@ -202,6 +202,16 @@ export const DAEMON_OWNED = new Set([
   // ComposeModal.jsx's listener unchanged, since daemon_channel.rs already
   // re-emits any named daemon event to the frontend.
   'smtp_test_connection', 'smtp_build_mime', 'smtp_build_draft_mime', 'smtp_send_email',
+  // Task 5.6: Graph (list/get/cache messages, read/flag/delete, move, folder
+  // management). Their Tauri twins are deleted in this same task — flat
+  // names, no rename layer, no Tauri fallback, same reasoning as 5.4a/5.4b/
+  // 5.5. api.js needed zero changes: all twelve already went through
+  // tauriInvoke() -> this module's send(). `graph_get_mime` is deliberately
+  // absent — it had 0 callers and was deleted outright, not moved.
+  // `graph_allocate_uids` above (Task 2.7) is unrelated and already here.
+  'graph_list_folders', 'graph_list_messages', 'graph_get_message', 'graph_cache_mime',
+  'graph_set_read', 'graph_set_flagged', 'graph_delete_message', 'graph_move_emails',
+  'graph_create_folder', 'graph_rename_folder', 'graph_move_folder', 'graph_delete_folder',
 ]);
 
 async function sendToDaemon(command, args) {
