@@ -92,8 +92,11 @@ use crate::backup;
 // `mail_dns_health` (was `crate::dns::mail_dns_health`, only in src-tauri)
 // moved into `mailvault_core::dns` with it — `src-tauri/src/dns.rs` had
 // nothing app-local left afterward, so it's deleted outright rather than
-// kept as a thin re-export (unlike `smtp.rs`, which Task 5.3 kept because
-// this same file still called into it at the time).
+// kept as a thin re-export. `src-tauri/src/smtp.rs` was kept as a re-export
+// past Task 5.3/5.5 for the same reason dns.rs briefly was here (this file
+// still called into it at the time) — once Task 5.5 removed that last
+// caller it became equally dead weight, and Task 5.9's cleanup pass deleted
+// it outright.
 
 // ── Backup: Run account backup ───────────────────────────────────────────
 
