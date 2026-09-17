@@ -5,6 +5,7 @@ mod channel;
 pub mod classification;
 mod classification_worker;
 pub mod contacts_index;
+pub mod credentials;
 pub mod custody;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::graph;

@@ -9,8 +9,13 @@
          To sandbox the daemon independently it must first be packaged as
          an app bundle with Info.plist, then registered via SMAppService. -->
 
-    <!-- Network access for IMAP/SMTP sync -->
+    <!-- Network access for IMAP/SMTP sync. network.server is required for the
+         OAuth2 callback loopback listener on 127.0.0.1:19876 once it moves
+         into the daemon (Task 5.7) — unverified under sandbox, see progress
+         ledger. -->
     <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
     <true/>
 
     <!-- Keychain access (shared with main app) -->

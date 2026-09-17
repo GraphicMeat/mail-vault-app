@@ -54,9 +54,15 @@ objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-pdf-kit = "0.3"
 objc2-vision = "0.3"
+# Task 5.1: resolve_account_credentials reads the same keychain entry the app
+# writes. Mirrors src-tauri/Cargo.toml's keyring entry exactly.
+keyring = { version = "3", features = ["apple-native"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 pdf-extract = "0.12"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3", features = ["sync-secret-service"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

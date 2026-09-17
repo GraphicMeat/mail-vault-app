@@ -589,62 +589,6 @@ fn store_password(account_id: String, password: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_password(account_id: String) -> Result<String, String> {
-    info!("=== GET PASSWORD START ===");
-    info!("get_password called for account: {}", account_id);
-    info!("Service name: {}", KEYRING_SERVICE);
-
-    let entry = Entry::new(KEYRING_SERVICE, &account_id);
-    info!("Entry::new result: {:?}", entry.is_ok());
-    if let Err(ref e) = entry {
-        error!("Entry::new error details: {:?}", e);
-    }
-
-    let entry = entry.map_err(|e| {
-        error!("Failed to create keyring entry: {} - {:?}", e, e);
-        format!("Failed to create keyring entry: {}", e)
-    })?;
-
-    info!("Attempting to get password from keyring...");
-    let result = entry.get_password();
-    match &result {
-        Ok(pwd) => info!("Password retrieved successfully for account: {} (length: {} chars)", account_id, pwd.len()),
-        Err(e) => {
-            error!("Failed to retrieve password for account {}: {} - {:?}", account_id, e, e);
-            // Try to list what's available (debug)
-            info!("This could mean: 1) Password was never stored, 2) Stored with different service name, 3) Keychain access denied");
-        }
-    }
-    info!("=== GET PASSWORD END ===");
-
-    result.map_err(|e| format!("Failed to retrieve password: {}", e))
-}
-
-#[tauri::command]
-fn delete_password(account_id: String) -> Result<(), String> {
-    info!("=== DELETE PASSWORD START ===");
-    info!("delete_password called for account: {}", account_id);
-    info!("Service name: {}", KEYRING_SERVICE);
-
-    let entry = Entry::new(KEYRING_SERVICE, &account_id);
-    info!("Entry::new result: {:?}", entry.is_ok());
-
-    let entry = entry.map_err(|e| {
-        error!("Failed to create keyring entry: {} - {:?}", e, e);
-        format!("Failed to create keyring entry: {}", e)
-    })?;
-
-    let result = entry.delete_credential();
-    match &result {
-        Ok(_) => info!("Password deleted successfully for account: {}", account_id),
-        Err(e) => error!("Failed to delete password for account {}: {} - {:?}", account_id, e, e),
-    }
-    info!("=== DELETE PASSWORD END ===");
-
-    result.map_err(|e| format!("Failed to delete password: {}", e))
-}
-
-#[tauri::command]
 fn get_log_path(app_handle: tauri::AppHandle) -> Result<String, String> {
     let log_dir = get_log_dir(&app_handle);
     info!("get_log_path called, returning: {:?}", log_dir);
@@ -2830,8 +2774,6 @@ fn main() {
             store_credentials,
             get_credentials,
             store_password,
-            get_password,
-            delete_password,
             get_log_path,
             read_logs,
             clear_logs,
