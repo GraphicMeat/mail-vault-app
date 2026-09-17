@@ -94,6 +94,9 @@ pub struct AccountBackupStatus {
 /// are only accepted on Linux as a temporary override; on macOS they are ignored
 /// (raw paths lose sandbox access after restart).
 /// Returns (resolved_path, needs_release) — caller must call release_backup_path if needs_release is true.
+// `caller_path` is read only in the Linux-fallback arms below; a macOS
+// build compiles them away. Pre-existing (2516915d), not a 5.4b regression.
+#[cfg_attr(target_os = "macos", allow(unused_variables))]
 pub(crate) fn resolve_backup_path(
     app_handle: &tauri::AppHandle,
     caller_path: Option<String>,
