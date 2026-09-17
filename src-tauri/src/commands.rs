@@ -86,22 +86,14 @@ use crate::backup;
 // `imap_move_emails` moved to the daemon (Task 5.4b,
 // `src-daemon/src/handlers/imap.rs`), same request/response JSON.
 
-// ── DNS: Resolve email server settings ───────────────────────────────────
-
-#[tauri::command]
-pub async fn resolve_email_settings(domain: String) -> Result<serde_json::Value, String> {
-    let settings = crate::dns::resolve_email_settings(&domain).await?;
-    serde_json::to_value(settings).map_err(|e| format!("Serialization error: {}", e))
-}
-
-#[tauri::command]
-pub async fn dns_mail_health(
-    domain: String,
-    new_imap_host: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let health = crate::dns::mail_dns_health(&domain, new_imap_host.as_deref()).await?;
-    serde_json::to_value(health).map_err(|e| format!("Serialization error: {}", e))
-}
+// `resolve_email_settings` and `dns_mail_health` moved to the daemon (Task
+// 5.8, `src-daemon/src/handlers/dns.rs`), same request/response JSON, routed
+// via `transport.js`'s `DAEMON_OWNED` under their existing flat names.
+// `mail_dns_health` (was `crate::dns::mail_dns_health`, only in src-tauri)
+// moved into `mailvault_core::dns` with it — `src-tauri/src/dns.rs` had
+// nothing app-local left afterward, so it's deleted outright rather than
+// kept as a thin re-export (unlike `smtp.rs`, which Task 5.3 kept because
+// this same file still called into it at the time).
 
 // ── Backup: Run account backup ───────────────────────────────────────────
 

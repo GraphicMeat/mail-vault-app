@@ -84,7 +84,11 @@ mod backup;
 mod commands;
 mod daemon_channel;
 mod dropped_files;
-mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
+// dns.rs is gone (Task 5.8): resolve_email_settings and mail_dns_health both
+// moved into mailvault_core::dns and route as daemon RPCs
+// (src-daemon/src/handlers/dns.rs) -- nothing in src-tauri calls into the
+// dns module anymore, unlike smtp.rs/graph, which Phase 5's earlier tasks
+// left as unreferenced-but-kept files (5.9's cleanup, not this task's).
 mod external_location;
 mod github;
 // graph/imap now live in mailvault_core (shared with src-daemon). oauth2 also
@@ -2781,8 +2785,9 @@ fn main() {
             // command left to register. graph_get_mime is not among them: it
             // had 0 callers (confirmed by grep) and was deleted outright,
             // not ported.
-            commands::resolve_email_settings,
-            commands::dns_mail_health,
+            // resolve_email_settings and dns_mail_health moved to the daemon
+            // (Task 5.8, src-daemon/src/handlers/dns.rs) — routed via
+            // transport.js's DAEMON_OWNED, no Tauri command left to register.
             commands::backup_run_account,
             commands::backup_status,
             commands::backup_cancel,

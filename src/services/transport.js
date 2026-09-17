@@ -223,6 +223,15 @@ export const DAEMON_OWNED = new Set([
   // from inside the daemon process, not the app's -- see the ledger for the
   // unverified sandboxed-bind assumption this creates.
   'oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh',
+  // Task 5.8: DNS (autodiscover email server settings, post-server-change
+  // health probe). Tauri twins deleted in this same task — flat names, no
+  // rename layer, no Tauri fallback, same reasoning as every other Phase 5
+  // family above. api.js needed no change to how it reaches the daemon --
+  // resolveEmailSettings/dnsMailHealth already went through tauriInvoke ->
+  // this module's send() (their `if (IS_TAURI)` guard is just the
+  // web-build fallback, unrelated to daemon routing), so AccountModal.jsx
+  // and ChangeServerModal.jsx reroute automatically.
+  'resolve_email_settings', 'dns_mail_health',
 ]);
 
 async function sendToDaemon(command, args) {
