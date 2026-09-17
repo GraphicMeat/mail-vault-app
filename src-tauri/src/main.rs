@@ -1083,9 +1083,12 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 // (Task 2.8) — DAEMON_OWNED in transport.js, no Tauri command left for any of
 // them. The custody-backed trio (maildir_delete_many,
 // maildir_repair_generation, maildir_purge_orphans) followed in Task 2.9b,
-// once custody.db itself opened in the daemon. What is left here is
-// maildir_store_raw, an internal writer commands.rs still calls (Phase 5),
-// plus the three vault_flags forwarders in `vault_flags.rs`, which exist only
+// once custody.db itself opened in the daemon. `maildir_store_raw` (its only
+// caller, `commands.rs`'s `imap_get_email_light`) moved to the daemon in
+// Task 5.4a too — `handlers::imap` writes the already-in-memory bytes
+// directly via `mailvault_core::vault_files::store(..., overwrite: false)`,
+// no base64 round trip, no app-side function left to call. What is left here
+// is the three vault_flags forwarders in `vault_flags.rs`, which exist only
 // to resolve the backup mirror's security-scoped bookmark for the daemon.
 // ==========================================
 
@@ -1276,46 +1279,11 @@ pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
-/// Store an .eml file to Maildir — callable from commands.rs.
-/// Only writes if the file doesn't already exist for this UID. The existence
-/// check (and so whether the base64 decode even runs) stays here so a badly
-/// encoded payload for an already-cached uid still no-ops instead of erroring;
-/// the write itself is `mailvault_core::vault_files::store` with `overwrite: false`.
-pub fn maildir_store_raw(
-    app_handle: &tauri::AppHandle,
-    account_id: &str,
-    mailbox: &str,
-    uid: u32,
-    raw_source_base64: &str,
-    flags: &[String],
-) -> Result<(), String> {
-    use base64::Engine;
-
-    let root = vault::root(app_handle)?;
-    let cur_dir = mailvault_core::vault_files::cur_path(&root, account_id, mailbox);
-    fs::create_dir_all(&cur_dir)
-        .map_err(|e| format!("Failed to create Maildir directory: {}", e))?;
-
-    // Skip if already cached on disk
-    if find_file_by_uid(&cur_dir, uid).is_some() {
-        return Ok(());
-    }
-
-    let raw_bytes = base64::engine::general_purpose::STANDARD
-        .decode(raw_source_base64)
-        .map_err(|e| format!("Failed to decode base64: {}", e))?;
-
-    let written = mailvault_core::vault_files::store(&root, account_id, mailbox, uid, &raw_bytes, flags, false)?;
-    // Here, not at the caller: the already-cached return above must not wake the index.
-    if written {
-        nudge_index(account_id, mailbox);
-    }
-    Ok(())
-}
-
-// `maildir_store` moved to the daemon (Task 2.8, `handlers::vault_files`) —
-// `maildir_store_raw` above stays (Phase 5's auto-cache caller,
-// `commands.rs`'s `imap_get_email_light`).
+// `maildir_store` moved to the daemon (Task 2.8, `handlers::vault_files`).
+// `maildir_store_raw` (this file's own single-UID, non-overwriting writer,
+// `imap_get_email_light`'s auto-cache side effect) moved to the daemon too in
+// Task 5.4a (`src-daemon/src/handlers/imap.rs`) — its only caller went with
+// it, so nothing here calls `mailvault_core::vault_files::store` anymore.
 
 // ── Vault generation (UIDVALIDITY) ──────────────────────────────────────────
 //
@@ -2799,19 +2767,9 @@ fn main() {
             commands::imap_delete_mailbox,
             commands::smtp_build_mime,
             commands::smtp_build_draft_mime,
-            commands::imap_get_mailboxes,
-            commands::imap_get_emails,
-            commands::imap_check_mailbox_status,
-            commands::imap_folder_status,
-            commands::imap_fetch_changed_flags,
-            commands::imap_search_all_uids,
-            commands::imap_fetch_headers_by_uids,
-            commands::imap_get_email,
-            commands::imap_get_email_light,
             commands::imap_set_flags,
             commands::imap_delete_email,
             commands::smtp_send_email,
-            commands::imap_search_emails,
             commands::imap_find_message_id,
             commands::imap_disconnect,
             commands::oauth2_auth_url,
@@ -2956,10 +2914,10 @@ fn main() {
             // daemon already runs `migrate_add_eml_extension` at startup
             // (`src-daemon/src/main.rs`), so running it here too would be one
             // process racing the other over the same renames. The app is NOT
-            // yet out of `cur/` altogether — `maildir_store_raw`,
-            // `commands.rs`'s `graph_cache_mime`, `archive.rs`, `restore.rs`
-            // and the backup/mbox importers still write it until Phases 3-5
-            // move them (Task 2.8 review M3).
+            // yet out of `cur/` altogether — `commands.rs`'s
+            // `graph_cache_mime`, `archive.rs`, `restore.rs` and the
+            // backup/mbox importers still write it until later Phase 5/6
+            // tasks move them (Task 2.8 review M3).
 
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.

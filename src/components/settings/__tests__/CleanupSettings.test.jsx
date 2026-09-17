@@ -50,11 +50,11 @@ beforeEach(() => {
   classification.getStatus.mockResolvedValue({ status: 'Idle' });
   ensureFreshToken.mockResolvedValue({ ...account, accessToken: 'refreshed-token' });
   bulkOperationManager.start.mockResolvedValue(undefined);
-  invoke.mockImplementation(async command => {
-    if (command === 'imap_get_email_light') return { email: { subject: item.subject, textBody: 'Fetched preview body' } };
-  });
   mockSend.mockImplementation(async command => {
     if (command === 'maildir_read_light') return null;
+    // Task 5.4a: imap_get_email_light now routes through send() (daemon RPC,
+    // its Tauri twin is deleted), not a raw invoke() call.
+    if (command === 'imap_get_email_light') return { email: { subject: item.subject, textBody: 'Fetched preview body' } };
   });
   vi.stubGlobal('__TAURI__', { core: { invoke } });
 });
@@ -75,7 +75,7 @@ describe('Cleanup account reads', () => {
     fireEvent.click(row);
     expect(await screen.findByText('Fetched preview body')).toBeTruthy();
     expect(mockSend).toHaveBeenCalledWith('maildir_read_light', { accountId: account.id, mailbox: 'INBOX', uid: 42 });
-    expect(invoke).toHaveBeenCalledWith('imap_get_email_light', { account: updatedAccount, accountId: account.id, mailbox: 'INBOX', uid: 42 });
+    expect(mockSend).toHaveBeenCalledWith('imap_get_email_light', { account: updatedAccount, accountId: account.id, mailbox: 'INBOX', uid: 42 });
   });
 
 

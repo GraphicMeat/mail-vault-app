@@ -168,6 +168,21 @@ export const DAEMON_OWNED = new Set([
   'start_migration', 'cancel_migration', 'pause_migration', 'resume_migration',
   'get_migration_state', 'clear_migration_state_cmd', 'count_migration_folders',
   'get_folder_mappings', 'start_restore', 'cancel_restore', 'count_local_folder',
+  // Task 5.4a: the IMAP read-path (list mailboxes, page/search/status, fetch
+  // headers/body). Six of these ten also run inside sync_engine.rs today
+  // (list_mailboxes, fetch_emails_page, check_mailbox_status, search_all_uids,
+  // fetch_headers_by_uids, fetch_changed_flags) — this is a second, one-shot
+  // caller of the SAME mailvault_core::imap functions through the daemon's
+  // OWN ImapPool, not a duplicate implementation, and not routed through the
+  // sync loop. Same request/response JSON as the deleted Tauri commands (RPC
+  // method name == old Tauri command name, unlike sync.*/llm.* above: those
+  // are DAEMON_COMMANDS entries with a rename + a live Tauri fallback this
+  // family cannot have, since its Tauri twin is gone). Credentials still
+  // travel in the payload (`account`) — only sync.now/sync.watch (Task 5.2)
+  // resolve them in the daemon.
+  'imap_get_mailboxes', 'imap_get_emails', 'imap_check_mailbox_status', 'imap_folder_status',
+  'imap_search_all_uids', 'imap_fetch_headers_by_uids', 'imap_fetch_changed_flags',
+  'imap_get_email', 'imap_get_email_light', 'imap_search_emails',
 ]);
 
 async function sendToDaemon(command, args) {

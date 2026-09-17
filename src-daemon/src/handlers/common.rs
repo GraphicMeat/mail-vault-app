@@ -99,6 +99,21 @@ pub(crate) fn u32_arg(id: &Value, params: &Value, key: &str) -> Result<u32, RpcR
         .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, format!("Missing {key}")))
 }
 
+/// An optional u32 param (`imap_get_emails`'s `page`/`limit`) — absent or
+/// non-numeric both read as `None`, same shape as `opt_f64_arg`.
+pub(crate) fn opt_u32_arg(params: &Value, key: &str) -> Option<u32> {
+    params.get(key).and_then(Value::as_u64).and_then(|v| u32::try_from(v).ok())
+}
+
+/// A required u64 param (`imap_fetch_changed_flags`'s `sinceModseq`, which can
+/// exceed u32 on a long-lived mailbox).
+pub(crate) fn u64_arg(id: &Value, params: &Value, key: &str) -> Result<u64, RpcResponse> {
+    params
+        .get(key)
+        .and_then(Value::as_u64)
+        .ok_or_else(|| RpcResponse::error(id.clone(), ipc::INVALID_PARAMS, format!("Missing {key}")))
+}
+
 /// A required array param, deserialized element-wise (uid lists, change lists).
 pub(crate) fn vec_arg<T: serde::de::DeserializeOwned>(id: &Value, params: &Value, key: &str) -> Result<Vec<T>, RpcResponse> {
     params
@@ -323,6 +338,21 @@ mod tests {
         assert_eq!(error.code, ipc::INVALID_PARAMS);
         assert!(error.message.contains("uid"), "{}", error.message);
         assert_eq!(u32_arg(&json!(1), &json!({"uid": 7}), "uid").unwrap(), 7);
+    }
+
+    #[test]
+    fn opt_u32_arg_is_none_when_absent() {
+        assert_eq!(opt_u32_arg(&json!({}), "page"), None);
+        assert_eq!(opt_u32_arg(&json!({"page": 3}), "page"), Some(3));
+    }
+
+    #[test]
+    fn u64_arg_names_the_missing_key() {
+        let err = u64_arg(&json!(1), &json!({}), "sinceModseq").unwrap_err();
+        let error = err.error.unwrap();
+        assert_eq!(error.code, ipc::INVALID_PARAMS);
+        assert!(error.message.contains("sinceModseq"), "{}", error.message);
+        assert_eq!(u64_arg(&json!(1), &json!({"sinceModseq": 40}), "sinceModseq").unwrap(), 40);
     }
 
     #[test]

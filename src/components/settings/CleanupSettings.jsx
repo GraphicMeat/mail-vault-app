@@ -387,7 +387,10 @@ export function CleanupView({ accountId, onDetailChange, onUpgrade, active = tru
           const account = accounts.find(a => a.id === activeAccountId);
           if (account) {
             try {
-              const data = await invoke('imap_get_email_light', { account, uid: item.uid, mailbox: item.mailbox || 'INBOX', accountId: activeAccountId });
+              // Task 5.4a: routed through send()/DAEMON_OWNED (daemon RPC,
+              // Tauri twin deleted), not a raw invoke() — the command no
+              // longer exists on the Tauri side.
+              const data = await send('imap_get_email_light', { account, uid: item.uid, mailbox: item.mailbox || 'INBOX', accountId: activeAccountId });
               email = data?.email;
             } catch {}
           }
