@@ -178,6 +178,8 @@ pub fn reconcile_mailbox(
     progress: &mut dyn FnMut(usize),
 ) -> Result<ReconcileStats, String> {
     let mut stats = ReconcileStats::default();
+    // account_id is NOT sanitized: a legacy, pre-migration account directory
+    // is keyed by the raw email address (see vault_files::cur_path's doc).
     let cur = maildir_root.join(account_id).join(vault_dir).join("cur");
     // Missing or unreadable folder: touch nothing.
     let Some((files, unstatted)) = list_cur(&cur) else { return Ok(stats) };

@@ -40,6 +40,9 @@ base64 = "0.22"
 # backup ZIP archives directly. Same pin as src-core/Cargo.toml and
 # src-tauri/Cargo.toml.
 zip = "2"
+# export_fetch's SSRF guard inspects url::Host directly (reqwest re-exports
+# only Url, not Host). Pinned to the version reqwest 0.12 already vendors.
+url = "2.5"
 
 [dev-dependencies]
 mock-imap = { path = "../src-mock-imap" }

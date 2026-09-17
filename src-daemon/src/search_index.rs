@@ -158,6 +158,8 @@ pub(crate) fn read_attachment_part(
     _filename: &str,
     part_index: usize,
 ) -> Option<(mailvault_core::search_index::attachments::AttachmentInput, IndexDoc)> {
+    // account_id is NOT sanitized: a legacy, pre-migration account directory
+    // is keyed by the raw email address (see vault_files::cur_path's doc).
     let cur = maildir_root.join(account_id).join(vault_dir).join("cur");
     let path = find_file_by_uid(&cur, uid)?;
     let raw = std::fs::read(&path).ok()?;

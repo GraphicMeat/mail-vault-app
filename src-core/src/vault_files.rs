@@ -35,6 +35,15 @@ pub type VaultGate<'a> = &'a dyn Fn(&mut dyn FnMut() -> Result<(), String>) -> R
 // ── Paths and filenames ──────────────────────────────────────────────────────
 
 /// `{root}/Maildir/{account_id}/{vault_dir_name(mailbox)}/cur`.
+///
+/// `account_id` is NOT sanitized here (unlike `mailbox`): a legacy,
+/// pre-migration account directory is keyed by the raw email address
+/// (`migrate_email_dirs` reads `maildir_base.join(email)` literally, `@` and
+/// all), so sanitizing it in this shared builder would silently point reads
+/// and writes at the wrong directory for any account not yet migrated to its
+/// UUID dir. Callers that accept `account_id` from an untrusted surface must
+/// sanitize it themselves before calling in (see `backup_zip::import` and
+/// `mbox::import_mbox`).
 pub fn cur_path(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
     let safe_mailbox = crate::search_index::text::vault_dir_name(mailbox);
     root.join("Maildir").join(account_id).join(&safe_mailbox).join("cur")

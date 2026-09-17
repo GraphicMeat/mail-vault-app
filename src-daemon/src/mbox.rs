@@ -276,8 +276,12 @@ pub fn import_mbox(
     // mailbox's current max uid; the actual per-message write is gated
     // below, inside the loop.
     let root = common::vault_root(state)?;
+    // account_id joins a filesystem path same as mailbox does, so it needs
+    // the same sanitizer: an unsanitized id (this is an internal RPC
+    // surface, not assumed-trusted) could otherwise escape the Maildir tree.
+    let safe_account_id = common::sanitize_mailbox_name(&account_id);
     let safe_mailbox = common::sanitize_mailbox_name(&mailbox);
-    let cur_dir = root.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
+    let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
     std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
     let mut max_uid: u32 = 0;
@@ -309,7 +313,7 @@ pub fn import_mbox(
         // instead of propagating as a hard error, matching
         // backup_zip::import's "resilient over noisy" precedent.
         let write_result = common::with_vault_write(state, |root| -> Result<(), String> {
-            let cur_dir = root.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
+            let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create maildir: {}", e))?;
 
             max_uid += 1;
@@ -480,6 +484,32 @@ mod tests {
         let names: Vec<String> = std::fs::read_dir(&cur).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
         assert_eq!(names.len(), 1);
         assert!(names[0].contains(":2,") && names[0].split(":2,").nth(1).unwrap().starts_with('A'), "{:?}", names);
+    }
+
+    /// account_id joins a filesystem path the same way mailbox does; a
+    /// crafted id must not be able to escape the vault root.
+    #[test]
+    fn import_mbox_sanitizes_a_path_traversal_account_id() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let mbox_path = write_mbox(dir.path(), "in.mbox", &["Subject: hi\r\n\r\nbody"]);
+
+        let result = import_mbox(&s, mbox_path, "../../../../../../tmp/evil".to_string(), "INBOX".to_string(), |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1);
+        assert!(!std::path::Path::new("/tmp/evil").exists(), "must not escape the vault root via account_id");
+
+        // The sanitizer keeps '.', so the escaped-looking id becomes one
+        // dot-and-underscore-laden component, not a clean name -- check
+        // containment (single component, still under the vault root), not
+        // the absence of ".." as a substring.
+        let maildir = v.path().join("Maildir");
+        let entries: Vec<_> = std::fs::read_dir(&maildir).unwrap().map(|e| e.unwrap()).collect();
+        assert_eq!(entries.len(), 1, "exactly one sanitized account dir, not a tree of '..' components");
+        let account_dir = entries[0].path();
+        assert_eq!(account_dir.components().count(), maildir.components().count() + 1, "must be a single path component under Maildir/, not a multi-level escape");
+        let canonical_root = v.path().canonicalize().unwrap();
+        let canonical_written = account_dir.canonicalize().unwrap();
+        assert!(canonical_written.starts_with(&canonical_root), "escaped the vault root: {:?} not under {:?}", canonical_written, canonical_root);
     }
 
     /// Decision 3, part 2: the actual regression test for the data-loss bug.

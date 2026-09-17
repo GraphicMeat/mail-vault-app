@@ -393,7 +393,17 @@ pub fn import(
         let mailbox = parts[1];
         let filename = parts[2];
 
-        if filename.is_empty() || !filename.contains(":2,") {
+        // A maildir filename is a single path component by definition; a
+        // crafted ZIP entry with `../../..` (or an absolute-looking path) in
+        // this position must not be allowed to escape the account/mailbox
+        // directory it's about to be joined under.
+        if filename.is_empty()
+            || !filename.contains(":2,")
+            || filename.contains('/')
+            || filename.contains('\\')
+            || filename.contains("..")
+        {
+            warn!("Skipping unsafe filename in backup entry: {}", entry_name);
             continue;
         }
 
@@ -408,6 +418,9 @@ pub fn import(
         let mut content = Vec::new();
         entry.read_to_end(&mut content).map_err(|e| format!("Failed to read .eml from ZIP: {}", e))?;
 
+        // account_id joins the same filesystem path as mailbox; sanitize it
+        // the same way rather than trusting the accounts-map value verbatim.
+        let safe_account_id = sanitize_mailbox_name(&account_id);
         let safe_mailbox = sanitize_mailbox_name(mailbox);
         let filename_owned = filename.to_string();
 
@@ -418,7 +431,7 @@ pub fn import(
         // before the refusal is still a valid partial result, matching this
         // repo's "resilient over noisy" rule.
         let wrote = match common::with_vault_write(state, |root| -> Result<bool, String> {
-            let cur_dir = root.join("Maildir").join(&account_id).join(&safe_mailbox).join("cur");
+            let cur_dir = root.join("Maildir").join(&safe_account_id).join(&safe_mailbox).join("cur");
             std::fs::create_dir_all(&cur_dir).map_err(|e| format!("Failed to create directory: {}", e))?;
             let dest_path = cur_dir.join(&filename_owned);
             if dest_path.exists() {
@@ -660,6 +673,58 @@ mod tests {
         let archive = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "Archive");
         assert_eq!(inbox, 1, "the file that landed before the refusal must still be on disk");
         assert!(!archive.exists() || std::fs::read_dir(&archive).unwrap().count() == 0, "the refused file must not have landed");
+    }
+
+    #[test]
+    fn import_rejects_a_path_traversal_filename() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[("mailvault-backup/emails/known@test.com/INBOX/../../../../../../tmp/evil:2,A.eml", b"payload")],
+            &manifest_for(vec![BackupAccount { email: "known@test.com".into(), imap_server: None, smtp_server: None }]),
+        );
+        let existing = vec![AccountsJsonEntry { id: "acct-known".into(), email: Some("known@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+
+        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 0, "a path-traversal filename must be skipped, not written");
+        assert!(!std::path::Path::new("/tmp/evil").exists(), "nothing may land outside the vault's Maildir tree");
+        let inbox = mailvault_core::vault_files::cur_path(v.path(), "acct-known", "INBOX");
+        assert!(!inbox.exists() || std::fs::read_dir(&inbox).unwrap().count() == 0);
+    }
+
+    #[test]
+    fn import_sanitizes_a_path_traversal_account_id() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[("mailvault-backup/emails/evil@test.com/INBOX/1:2,A.eml", b"body")],
+            &manifest_for(vec![BackupAccount { email: "evil@test.com".into(), imap_server: None, smtp_server: None }]),
+        );
+        let existing =
+            vec![AccountsJsonEntry { id: "../../../../../../tmp/evil".into(), email: Some("evil@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+
+        let result = import(&s, zip_path, existing, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1);
+        // The write must land under the sanitized id INSIDE the vault, not escape it.
+        let escaped = std::path::Path::new("/tmp/evil/INBOX/cur/1:2,A.eml");
+        assert!(!escaped.exists(), "must not escape the vault root via account_id");
+
+        // The sanitizer keeps '.', so the escaped-looking id becomes one
+        // dot-and-underscore-laden component, not a clean name -- check
+        // containment (single component, still under the vault root), not
+        // the absence of ".." as a substring.
+        let maildir = v.path().join("Maildir");
+        let entries: Vec<_> = std::fs::read_dir(&maildir).unwrap().map(|e| e.unwrap()).collect();
+        assert_eq!(entries.len(), 1, "exactly one sanitized account dir, not a tree of '..' components");
+        let account_dir = entries[0].path();
+        assert_eq!(account_dir.components().count(), maildir.components().count() + 1, "must be a single path component under Maildir/, not a multi-level escape");
+        let canonical_root = v.path().canonicalize().unwrap();
+        let canonical_written = account_dir.canonicalize().unwrap();
+        assert!(canonical_written.starts_with(&canonical_root), "escaped the vault root: {:?} not under {:?}", canonical_written, canonical_root);
     }
 
     #[test]

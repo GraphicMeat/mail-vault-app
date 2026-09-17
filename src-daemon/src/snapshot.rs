@@ -227,6 +227,8 @@ pub fn create_snapshot_from_maildir(
     account_id: &str,
     account_email: &str,
 ) -> Result<SnapshotInfo, String> {
+    // account_id is NOT sanitized: a legacy, pre-migration account directory
+    // is keyed by the raw email address (see vault_files::cur_path's doc).
     let maildir_root = data_dir.join("Maildir").join(account_id);
     if !maildir_root.exists() {
         return Err(format!("No Maildir found for account {}", account_id));
