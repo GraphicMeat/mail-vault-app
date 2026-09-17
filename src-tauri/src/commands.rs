@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::Manager;
 
-use crate::oauth2::OAuth2Manager;
 use crate::backup;
 
 // `with_background`, `with_priority` and `conn_lost_message` moved to the
@@ -57,60 +56,14 @@ use crate::backup;
 // `imap_find_message_id`'s reply is still the bare serialized probe struct,
 // not wrapped in an object.
 
-// ── OAuth2: Generate auth URL ───────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn oauth2_auth_url(
-    oauth: tauri::State<'_, OAuth2Manager>,
-    email: Option<String>,
-    provider: Option<String>,
-    custom_client_id: Option<String>,
-    tenant_id: Option<String>,
-    use_graph: Option<bool>,
-) -> Result<serde_json::Value, String> {
-    let result = oauth.generate_auth_url(email, provider, custom_client_id, tenant_id, use_graph.unwrap_or(false)).await?;
-    Ok(serde_json::json!({
-        "success": true,
-        "authUrl": result.auth_url,
-        "state": result.state
-    }))
-}
-
-// ── OAuth2: Exchange code for tokens ────────────────────────────────────────
-
-#[tauri::command]
-pub async fn oauth2_exchange(
-    oauth: tauri::State<'_, OAuth2Manager>,
-    state: String,
-) -> Result<serde_json::Value, String> {
-    let result = oauth.exchange_code(&state).await?;
-    Ok(serde_json::json!({
-        "success": true,
-        "accessToken": result.access_token,
-        "refreshToken": result.refresh_token,
-        "expiresAt": result.expires_at
-    }))
-}
-
-// ── OAuth2: Refresh token ───────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn oauth2_refresh(
-    oauth: tauri::State<'_, OAuth2Manager>,
-    refresh_token: String,
-    provider: Option<String>,
-    custom_client_id: Option<String>,
-    tenant_id: Option<String>,
-    use_graph: Option<bool>,
-) -> Result<serde_json::Value, String> {
-    let result = oauth.refresh_token(&refresh_token, provider, custom_client_id, tenant_id, use_graph.unwrap_or(false)).await?;
-    Ok(serde_json::json!({
-        "success": true,
-        "accessToken": result.access_token,
-        "refreshToken": result.refresh_token,
-        "expiresAt": result.expires_at
-    }))
-}
+// `oauth2_auth_url`, `oauth2_exchange` and `oauth2_refresh` moved to the
+// daemon (Task 5.7, `src-daemon/src/handlers/oauth2.rs`), same request/
+// response JSON, routed via `transport.js`'s `DAEMON_OWNED` under their
+// existing flat names. `OAuth2Manager` now lives ONCE in `DaemonState`
+// (`state.oauth2`) instead of the app's `.manage(OAuth2Manager::new())` —
+// its loopback callback listener (`127.0.0.1:19876`) now binds from inside
+// the daemon process, not the app's (see the ledger for the unverified
+// sandboxed-bind assumption this creates).
 
 // `graph_list_folders`, `graph_list_messages`, `graph_get_message`,
 // `graph_cache_mime`, `graph_set_read`, `graph_set_flagged`,

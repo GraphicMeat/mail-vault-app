@@ -70,6 +70,14 @@ pub struct DaemonState {
     pub inference: Arc<inference::InferenceEngine>,
     pub classification: classification::ClassificationState,
     pub imap_pool: Arc<imap::ImapPool>,
+    /// Task 5.7: the ONE `OAuth2Manager` instance for the process — its
+    /// `pending`/`senders` maps must survive between an `oauth2_auth_url`
+    /// call and the later `oauth2_exchange` that redeems the same `state`
+    /// token, and its loopback callback server (`127.0.0.1:19876`) must only
+    /// ever be bound once. Moved from the app's `.manage(OAuth2Manager::new())`
+    /// (main.rs) — no extra `Arc` needed, its own internals are already
+    /// `Arc<Mutex<_>>`-backed and `DaemonState` itself is always behind one.
+    pub oauth2: mailvault_core::oauth2::OAuth2Manager,
     pub sync_engine: Arc<sync_engine::SyncEngine>,
     /// One IDLE watcher per registered account. The app registers them
     /// (`sync.watch`) — the daemon holds no account list of its own.
@@ -336,6 +344,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::graph::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::oauth2::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -446,6 +457,7 @@ impl DaemonState {
             inference: Arc::new(inference::InferenceEngine::new()),
             classification: classification::ClassificationState::new(app_dir),
             imap_pool,
+            oauth2: mailvault_core::oauth2::OAuth2Manager::new(),
             sync_engine,
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
@@ -554,6 +566,12 @@ mod tests {
                 std::env::set_var("MAILVAULT_GRAPH_BASE", "http://127.0.0.1:1");
                 json!({"accessToken": "x", "messageId": "m1", "isRead": true})
             }),
+            // Task 5.7: OAuth2 is its own flat family too — a token exchange
+            // has nothing to do with the vault gate. An unknown `state`
+            // fails immediately in-process (no pending flow to await, no
+            // network call), which keeps this assertion fast and
+            // deterministic without touching the loopback callback port.
+            ("oauth2_exchange", json!({"state": "no-such-pending-flow"})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");

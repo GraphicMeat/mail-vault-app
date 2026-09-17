@@ -10,6 +10,10 @@ pub mod custody;
 // imap now lives in mailvault_core (shared with src-tauri).
 pub use mailvault_core::graph;
 pub use mailvault_core::imap;
+// oauth2 now lives in mailvault_core too (Task 5.7) — the daemon holds the
+// ONE OAuth2Manager instance in DaemonState (see server.rs), src-tauri no
+// longer references this module at all.
+pub use mailvault_core::oauth2;
 mod events;
 mod export_fetch;
 mod handlers;
@@ -353,6 +357,7 @@ async fn daemon_main() {
         inference: inference_engine,
         classification: classification::ClassificationState::new(data_dir.clone()),
         imap_pool,
+        oauth2: oauth2::OAuth2Manager::new(),
         sync_engine: sync_eng,
         idle,
         contacts: Arc::clone(&contacts),

@@ -212,6 +212,17 @@ export const DAEMON_OWNED = new Set([
   'graph_list_folders', 'graph_list_messages', 'graph_get_message', 'graph_cache_mime',
   'graph_set_read', 'graph_set_flagged', 'graph_delete_message', 'graph_move_emails',
   'graph_create_folder', 'graph_rename_folder', 'graph_move_folder', 'graph_delete_folder',
+  // Task 5.7: OAuth2 (auth URL, code exchange, token refresh). Their Tauri
+  // twins are deleted in this same task — flat names, no rename layer, no
+  // Tauri fallback, same reasoning as 5.4a/5.4b/5.5/5.6. api.js needed zero
+  // changes: all three already went through tauriInvoke() -> this module's
+  // send(), so AccountModal.jsx, AccountSettings.jsx and authUtils.js
+  // reroute automatically. The daemon now holds the ONE OAuth2Manager
+  // instance (its pending-flow map must survive between auth_url and
+  // exchange) and its loopback callback listener (127.0.0.1:19876) binds
+  // from inside the daemon process, not the app's -- see the ledger for the
+  // unverified sandboxed-bind assumption this creates.
+  'oauth2_auth_url', 'oauth2_exchange', 'oauth2_refresh',
 ]);
 
 async function sendToDaemon(command, args) {

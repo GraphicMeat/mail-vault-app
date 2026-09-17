@@ -87,14 +87,16 @@ mod dropped_files;
 mod dns; // keeps the DNS-health-probe layer; resolver core comes from mailvault_core
 mod external_location;
 mod github;
-// graph/imap/oauth2 now live in mailvault_core (shared with src-daemon).
+// graph/imap now live in mailvault_core (shared with src-daemon). oauth2 also
+// moved there (Task 5.7) but src-tauri no longer references it at all --
+// OAuth2Manager is constructed once in the daemon's DaemonState instead of
+// here, so this file carries no re-export for it any more.
 pub use mailvault_core::graph;
 mod iap;
 mod mailto;
 pub use mailvault_core::imap;
 mod notification_open;
 mod notification_sound;
-pub use mailvault_core::oauth2;
 mod smtp;
 mod spellcheck;
 mod vault;
@@ -2716,7 +2718,6 @@ fn main() {
     let builder = builder
         .manage(backup::BackupCancelToken::default())
         .manage(dropped_files::DroppedPaths::default())
-        .manage(oauth2::OAuth2Manager::new())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
         .manage(vault::VaultState::default())
@@ -2767,9 +2768,10 @@ fn main() {
             // smtp_send_email moved to the daemon (Task 5.5,
             // src-daemon/src/handlers/smtp.rs) — routed via transport.js's
             // DAEMON_OWNED, no Tauri command left to register.
-            commands::oauth2_auth_url,
-            commands::oauth2_exchange,
-            commands::oauth2_refresh,
+            // oauth2_auth_url, oauth2_exchange and oauth2_refresh moved to
+            // the daemon (Task 5.7, src-daemon/src/handlers/oauth2.rs) —
+            // routed via transport.js's DAEMON_OWNED, no Tauri command left
+            // to register.
             // graph_list_folders, graph_list_messages, graph_get_message,
             // graph_cache_mime, graph_set_read, graph_set_flagged,
             // graph_delete_message, graph_move_emails, graph_create_folder,

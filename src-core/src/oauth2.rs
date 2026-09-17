@@ -36,6 +36,48 @@ struct ProviderConfig {
     extra_auth_params: Vec<(&'static str, String)>,
 }
 
+/// Test-only token-endpoint override, same shape and safety rule as
+/// `mailvault_core::graph`'s `MAILVAULT_GRAPH_BASE` (Task 5.6 precedent): a
+/// bearer-token exchange must never go anywhere but the real provider or a
+/// loopback address on this machine, so the override is honoured only for a
+/// plain-http loopback URL, and only in debug builds — a shipped binary
+/// ignores it. Added for Task 5.7's daemon RPC tests, which must hit a fake
+/// provider response, never live Microsoft/Google.
+#[cfg(debug_assertions)]
+fn token_endpoint_override(env_var: &str) -> Option<String> {
+    std::env::var(env_var).ok()
+}
+
+#[cfg(not(debug_assertions))]
+fn token_endpoint_override(_env_var: &str) -> Option<String> {
+    None
+}
+
+fn resolve_token_endpoint(default: &str, env_var: &str) -> String {
+    let raw = token_endpoint_override(env_var);
+    let Some(raw) = raw.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+        return default.to_string();
+    };
+    let loopback = reqwest::Url::parse(raw).ok().is_some_and(|url| {
+        url.scheme() == "http"
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.host_str().is_some_and(|host| {
+                host.eq_ignore_ascii_case("localhost")
+                    || host
+                        .trim_start_matches('[')
+                        .trim_end_matches(']')
+                        .parse::<std::net::IpAddr>()
+                        .is_ok_and(|ip| ip.is_loopback())
+            })
+    });
+    if loopback {
+        raw.to_string()
+    } else {
+        default.to_string()
+    }
+}
+
 fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
     match provider {
         "microsoft" => {
@@ -49,7 +91,7 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
 
             Ok(ProviderConfig {
                 auth_endpoint: MS_AUTH_ENDPOINT.to_string(),
-                token_endpoint: MS_TOKEN_ENDPOINT.to_string(),
+                token_endpoint: resolve_token_endpoint(MS_TOKEN_ENDPOINT, "MAILVAULT_MS_TOKEN_ENDPOINT"),
                 client_id,
                 client_secret,
                 scopes: [
@@ -74,7 +116,7 @@ fn get_provider_config(provider: &str) -> Result<ProviderConfig, String> {
 
             Ok(ProviderConfig {
                 auth_endpoint: GOOGLE_AUTH_ENDPOINT.to_string(),
-                token_endpoint: GOOGLE_TOKEN_ENDPOINT.to_string(),
+                token_endpoint: resolve_token_endpoint(GOOGLE_TOKEN_ENDPOINT, "MAILVAULT_GOOGLE_TOKEN_ENDPOINT"),
                 client_id,
                 client_secret,
                 scopes: "https://mail.google.com/".to_string(),
