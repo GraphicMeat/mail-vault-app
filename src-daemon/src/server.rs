@@ -523,6 +523,9 @@ mod tests {
             // with the vault. Bogus host/port so this fails fast on a
             // connection error, never on the gate text this test checks for.
             ("imap_get_mailboxes", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
+            // Task 5.4b: same reasoning, write-path family. Bogus host/port
+            // so this fails fast on a connection error too, never a success.
+            ("imap_test_connection", json!({"account": {"email": "a@b.co", "imapHost": "127.0.0.1", "imapPort": 1}})),
         ] {
             let msg = err_message(handle_request(&state, req(method, params)).await);
             assert!(!msg.contains("Mail storage folder"), "{method} must not be gated, got: {msg:?}");

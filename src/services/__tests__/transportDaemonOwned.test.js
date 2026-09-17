@@ -13,7 +13,7 @@ const { t } = await import('../../i18n/index.js');
 describe('daemon-owned commands', () => {
   beforeEach(() => { daemonCall.mockReset(); DAEMON_OWNED.clear(); });
 
-  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7) plus the six simple vault writers (Task 2.8) plus custody and the three custody-backed vault writers (Task 2.9b) plus archive, bulk delete and verify (Task 3.5) plus the three insights snapshot commands (Task 3.7) plus fetch_remote_asset (Task 4.2) plus backup ZIP export/import (Task 4.4) plus mbox export/import (Task 4.6) plus migration and restore (Task 4.8)', async () => {
+  it('owns exactly the search index commands (phase 1) plus the vault read family and attachment cache (Task 2.6) plus the caches, ledger and journal (Task 2.7) plus the six simple vault writers (Task 2.8) plus custody and the three custody-backed vault writers (Task 2.9b) plus archive, bulk delete and verify (Task 3.5) plus the three insights snapshot commands (Task 3.7) plus fetch_remote_asset (Task 4.2) plus backup ZIP export/import (Task 4.4) plus mbox export/import (Task 4.6) plus migration and restore (Task 4.8) plus the IMAP read-path (Task 5.4a) plus the IMAP write-path and lifecycle (Task 5.4b)', async () => {
     const src = (await import('node:fs')).readFileSync(new URL('../transport.js', import.meta.url), 'utf8');
     const block = src.slice(src.indexOf('export const DAEMON_OWNED'), src.indexOf(']);', src.indexOf('export const DAEMON_OWNED')));
     const names = [...block.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
@@ -31,6 +31,11 @@ describe('daemon-owned commands', () => {
       'fetch_remote_asset',
       'get_folder_mappings', 'get_migration_state',
       'graph_allocate_uids',
+      'imap_check_mailbox_status', 'imap_create_mailbox', 'imap_delete_email', 'imap_delete_mailbox',
+      'imap_disconnect', 'imap_ensure_sent_mailbox', 'imap_fetch_changed_flags', 'imap_fetch_headers_by_uids',
+      'imap_find_message_id', 'imap_folder_status', 'imap_get_email', 'imap_get_email_light', 'imap_get_emails',
+      'imap_get_mailboxes', 'imap_move_emails', 'imap_rename_mailbox', 'imap_search_all_uids', 'imap_search_emails',
+      'imap_set_flags', 'imap_test_connection',
       'import_backup',
       'import_mbox',
       'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',

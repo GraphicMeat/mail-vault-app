@@ -183,6 +183,14 @@ export const DAEMON_OWNED = new Set([
   'imap_get_mailboxes', 'imap_get_emails', 'imap_check_mailbox_status', 'imap_folder_status',
   'imap_search_all_uids', 'imap_fetch_headers_by_uids', 'imap_fetch_changed_flags',
   'imap_get_email', 'imap_get_email_light', 'imap_search_emails',
+  // Task 5.4b: the IMAP write-path + lifecycle (flags, delete, folder
+  // management, Message-ID sweep, disconnect, move, test-connection). Same
+  // reasoning as Task 5.4a above — their Tauri twins are deleted in the same
+  // task, so this is the only fit, under their existing flat names.
+  // Credentials still travel in the payload (`account`), unchanged.
+  'imap_set_flags', 'imap_delete_email', 'imap_ensure_sent_mailbox', 'imap_create_mailbox',
+  'imap_rename_mailbox', 'imap_delete_mailbox', 'imap_find_message_id', 'imap_disconnect',
+  'imap_move_emails', 'imap_test_connection',
 ]);
 
 async function sendToDaemon(command, args) {

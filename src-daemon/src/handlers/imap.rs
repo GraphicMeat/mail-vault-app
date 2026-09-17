@@ -1,5 +1,6 @@
-//! Daemon RPC routes for interactive, one-shot IMAP reads (Task 5.4a, plan
-//! `docs/superpowers/plans/2026-09-17-daemon-shell-phase5-network.md`).
+//! Daemon RPC routes for interactive, one-shot IMAP reads (Task 5.4a) and
+//! writes + lifecycle (Task 5.4b), plan
+//! `docs/superpowers/plans/2026-09-17-daemon-shell-phase5-network.md`.
 //!
 //! Naming deviation from the plan text (ledgered in
 //! `docs/superpowers/ledgers/2026-09-17-daemon-shell-phase5/progress.md`):
@@ -28,7 +29,7 @@
 //! and `run_read` adds a dead-socket retry `with_background` never had.
 //! `imap_get_email`/`imap_get_email_light` already used `run_read` as Tauri
 //! commands (`commands.rs`), so they keep doing so here, unchanged.
-use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, u32_arg, u64_arg, vec_arg, with_vault_write};
+use crate::handlers::common::{blocking, opt_str_arg, opt_u32_arg, str_arg, u32_arg, u64_arg, vec_arg, with_vault_write};
 use crate::imap::{self, pool::ImapPool, ImapConfig};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
@@ -66,6 +67,24 @@ where
         Ok((result, session, selected_mailbox)) => {
             let return_guard = imap::pool::PooledSessionGuard { session, last_selected: selected_mailbox, _permit };
             pool.return_background(account, return_guard).await;
+            Ok(result)
+        }
+        Err(e) => Err(e), // _permit dropped here — semaphore released
+    }
+}
+
+/// Same helper as `commands.rs`'s `with_priority` (Task 5.4b) — priority pool
+/// instead of background, otherwise identical to `with_background` above.
+async fn with_priority<F, Fut, T>(pool: &ImapPool, account: &ImapConfig, f: F) -> Result<T, String>
+where
+    F: FnOnce(imap::pool::ImapSession) -> Fut,
+    Fut: std::future::Future<Output = Result<(T, imap::pool::ImapSession, Option<String>), String>>,
+{
+    let imap::pool::PooledSessionGuard { session, last_selected: _, _permit } = pool.get_priority(account).await?;
+    match f(session).await {
+        Ok((result, session, selected_mailbox)) => {
+            let return_guard = imap::pool::PooledSessionGuard { session, last_selected: selected_mailbox, _permit };
+            pool.return_priority(account, return_guard).await;
             Ok(result)
         }
         Err(e) => Err(e), // _permit dropped here — semaphore released
@@ -384,6 +403,212 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             }
         }
 
+        // ── Task 5.4b: write-path + lifecycle ───────────────────────────
+
+        "imap_test_connection" => {
+            let account = req!(account_arg(&id, params));
+            tracing::info!(
+                "[test-connection] Testing {} → {}:{}",
+                account.email, account.host, account.effective_port()
+            );
+            // Wrap the whole test in a 20s timeout — auth/TLS steps have no
+            // individual timeout of their own. Verbatim from commands.rs; the
+            // RPC layer's own ceiling is already ≥45s (imap_get_email_light's
+            // BODY_FETCH_TIMEOUT), so this stays well inside it.
+            let outcome = tokio::time::timeout(std::time::Duration::from_secs(20), imap::test_connection(&account)).await;
+            match outcome {
+                Ok(Ok(())) => RpcResponse::success(id, json!({"success": true, "message": "Connection successful"})),
+                Ok(Err(e)) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+                Err(_) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Connection test timed out for {}", account.email)),
+            }
+        }
+
+        "imap_set_flags" => {
+            let account = req!(account_arg(&id, params));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
+            let flags = req!(vec_arg::<String>(&id, params, "flags"));
+            let action = opt_str_arg(params, "action").unwrap_or_else(|| "add".to_string());
+            // `written` is what PERMANENTFLAGS let through — empty is a
+            // success the caller has to see, not an error: the server simply
+            // cannot keep the flag.
+            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+                let written = imap::set_flags(&mut session, &mailbox, uid, &flags, &action)
+                    .await
+                    .map_err(|e| format!("Failed to update flags: {}", e))?;
+                Ok((written, session, Some(mailbox)))
+            })
+            .await;
+            match result {
+                Ok(written) => RpcResponse::success(id, json!({"success": true, "written": written})),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        "imap_delete_email" => {
+            let account = req!(account_arg(&id, params));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let mailbox = opt_str_arg(params, "mailbox").unwrap_or_else(|| "INBOX".to_string());
+            let permanent = params.get("permanent").and_then(Value::as_bool).unwrap_or(false);
+            // `run_uid_delete`, not `with_priority`: a pooled socket the peer
+            // closed while it sat idle fails this before the SELECT lands,
+            // and the frontend restores the row it had already taken out — a
+            // delete that reads as a message coming back from the dead. See
+            // the pool's own doc for why a uid-addressed delete is the one
+            // mutation safe to re-send. Capabilities are cached when a
+            // session is CREATED, so read them inside the closure, after
+            // checkout — exactly like imap_move_emails below.
+            let acct = &account;
+            let result = state
+                .imap_pool
+                .run_uid_delete(&account, true, |mut session| {
+                    let mailbox = mailbox.clone();
+                    async move {
+                        let has_uidplus = state.imap_pool.has_capability(acct, "UIDPLUS").await;
+                        let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus)
+                            .await
+                            .map_err(|e| format!("Failed to delete email: {}", e))?;
+                        Ok((outcome, session, Some(mailbox)))
+                    }
+                })
+                .await;
+            match result {
+                // Where the message went, so the caller can offer an undo
+                // instead of a search: both null for a permanent delete.
+                Ok(outcome) => RpcResponse::success(
+                    id,
+                    json!({"success": true, "trash": outcome.trash, "trashUid": outcome.trash_uid}),
+                ),
+                Err(e) => {
+                    tracing::error!("[delete_email] uid={} failed: {}", uid, e);
+                    RpcResponse::error(id, ipc::INTERNAL_ERROR, e)
+                }
+            }
+        }
+
+        "imap_ensure_sent_mailbox" => {
+            let account = req!(account_arg(&id, params));
+            let result = with_background(&state.imap_pool, &account, |mut session| async move {
+                let path = imap::ensure_sent_mailbox(&mut session).await?;
+                Ok((path, session, None))
+            })
+            .await;
+            match result {
+                // Bare string, matching the deleted Tauri command's
+                // `Result<String, String>` — api.js uses the reply directly
+                // as the resolved mailbox path, not a `{path: ...}` wrapper.
+                Ok(path) => RpcResponse::success(id, json!(path)),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        // All three folder-management routes report `None` as the pooled
+        // session's last-selected mailbox: CREATE changes the hierarchy
+        // under it, and RENAME/DELETE send CLOSE, so whatever the socket had
+        // selected before is no longer selected.
+        "imap_create_mailbox" => {
+            let account = req!(account_arg(&id, params));
+            let path = req!(str_arg(&id, params, "path"));
+            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+                imap::create_mailbox(&mut session, &path).await?;
+                Ok(((), session, None))
+            })
+            .await;
+            match result {
+                Ok(()) => RpcResponse::success(id, json!({"success": true})),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        "imap_rename_mailbox" => {
+            let account = req!(account_arg(&id, params));
+            let from = req!(str_arg(&id, params, "from"));
+            let to = req!(str_arg(&id, params, "to"));
+            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+                imap::rename_mailbox(&mut session, &from, &to).await?;
+                Ok(((), session, None))
+            })
+            .await;
+            match result {
+                Ok(()) => RpcResponse::success(id, json!({"success": true})),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        "imap_delete_mailbox" => {
+            let account = req!(account_arg(&id, params));
+            let paths = req!(vec_arg::<String>(&id, params, "paths"));
+            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+                let n = imap::delete_mailbox(&mut session, &paths).await?;
+                Ok((n, session, None))
+            })
+            .await;
+            match result {
+                Ok(deleted) => RpcResponse::success(id, json!({"success": true, "deleted": deleted})),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        "imap_find_message_id" => {
+            let account = req!(account_arg(&id, params));
+            let message_id = req!(str_arg(&id, params, "messageId"));
+            let stop_on_first = params.get("stopOnFirst").and_then(Value::as_bool).unwrap_or(true);
+            let result = with_background(&state.imap_pool, &account, |mut session| async move {
+                let result = imap::find_message_id(&mut session, &message_id, stop_on_first).await?;
+                // A sweep SELECTs many folders and can end on one whose
+                // SELECT was refused, so it has no single answer for the
+                // pool's bookkeeping — None says so rather than naming a
+                // folder that may not be selected.
+                Ok((result, session, None))
+            })
+            .await;
+            match result {
+                // Bare serialized probe struct
+                // ({messageId, found, searched, failed, complete}) — api.js
+                // returns this straight through, no wrapper.
+                Ok(probe) => match serde_json::to_value(&probe) {
+                    Ok(v) => RpcResponse::success(id, v),
+                    Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, format!("Serialize probe: {}", e)),
+                },
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
+        "imap_disconnect" => {
+            let account = req!(account_arg(&id, params));
+            state.imap_pool.disconnect(&account).await;
+            RpcResponse::success(id, json!({"success": true}))
+        }
+
+        "imap_move_emails" => {
+            let account = req!(account_arg(&id, params));
+            let uids = req!(vec_arg::<u32>(&id, params, "uids"));
+            let source_mailbox = req!(str_arg(&id, params, "sourceMailbox"));
+            let target_mailbox = req!(str_arg(&id, params, "targetMailbox"));
+            // Capabilities are cached when a session is CREATED, so read them
+            // inside the closure, after checkout — a read before it sees an
+            // empty map on the first call of a process and takes the slow
+            // COPY path.
+            let acct = &account;
+            let result = with_priority(&state.imap_pool, &account, |mut session| async move {
+                let has_move = state.imap_pool.has_capability(acct, "MOVE").await;
+                let has_uidplus = state.imap_pool.has_capability(acct, "UIDPLUS").await;
+                let result = imap::move_uids(&mut session, &source_mailbox, &target_mailbox, &uids, has_move, has_uidplus).await?;
+                Ok((result, session, Some(source_mailbox)))
+            })
+            .await;
+            match result {
+                // `newUids` is null on a server without UIDPLUS: it reported
+                // no COPYUID, and a guessed destination uid addresses the
+                // wrong message.
+                Ok(outcome) => RpcResponse::success(
+                    id,
+                    json!({"success": true, "moved": outcome.moved, "newUids": outcome.new_uids}),
+                ),
+                Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+            }
+        }
+
         _ => return None,
     })
 }
@@ -647,6 +872,155 @@ mod tests {
         assert_eq!(result["success"], json!(true));
         assert_eq!(result["total"], json!(0));
         assert_eq!(result["emails"], json!([]));
+    }
+
+    // ── Task 5.4b: write-path + lifecycle ───────────────────────────────────
+
+    #[tokio::test]
+    async fn test_connection_succeeds_against_a_reachable_server() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+
+        let resp = call(&s, "imap_test_connection", json!({"account": account_json(&server)})).await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn set_flags_adds_a_flag_and_reports_what_was_written() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let s = st(true);
+
+        let resp = call(
+            &s,
+            "imap_set_flags",
+            json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX", "flags": ["\\Seen"]}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["written"], json!(["\\Seen"]));
+    }
+
+    #[tokio::test]
+    async fn delete_email_permanent_reports_null_trash() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)));
+        let s = st(true);
+
+        let resp = call(
+            &s,
+            "imap_delete_email",
+            json!({"account": account_json(&server), "uid": 1, "mailbox": "INBOX", "permanent": true}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["trash"], json!(null), "permanent delete addresses nothing to undo to");
+        assert_eq!(result["trashUid"], json!(null));
+    }
+
+    #[tokio::test]
+    async fn ensure_sent_mailbox_returns_a_bare_string_not_an_object() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("Sent").with_attrs(&["\\Sent"])));
+        let s = st(true);
+
+        let resp = call(&s, "imap_ensure_sent_mailbox", json!({"account": account_json(&server)})).await;
+        let result = resp.result.expect("success");
+        assert_eq!(result, json!("Sent"), "the Tauri twin returned Result<String, _> bare, not {{path: ...}}");
+    }
+
+    #[tokio::test]
+    async fn create_mailbox_makes_the_folder_on_the_server() {
+        plaintext();
+        let server = MockImap::start(Scenario::new());
+        let s = st(true);
+
+        let resp = call(&s, "imap_create_mailbox", json!({"account": account_json(&server), "path": "Projects/Alpha"})).await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert!(server.state().find("Projects/Alpha").is_some());
+    }
+
+    #[tokio::test]
+    async fn rename_mailbox_renames_on_the_server() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("Projects")));
+        let s = st(true);
+
+        let resp = call(&s, "imap_rename_mailbox", json!({"account": account_json(&server), "from": "Projects", "to": "Work"})).await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert!(server.state().find("Work").is_some() && server.state().find("Projects").is_none());
+    }
+
+    #[tokio::test]
+    async fn delete_mailbox_deletes_and_reports_the_count() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("Old")));
+        let s = st(true);
+
+        let resp = call(&s, "imap_delete_mailbox", json!({"account": account_json(&server), "paths": ["Old"]})).await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["deleted"], json!(1));
+        assert!(server.state().find("Old").is_none());
+    }
+
+    #[tokio::test]
+    async fn find_message_id_returns_the_bare_probe_shape_not_wrapped() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")).mailbox(Mailbox::new("Archive")));
+        let s = st(true);
+
+        let resp = call(
+            &s,
+            "imap_find_message_id",
+            json!({"account": account_json(&server), "messageId": "<gone@example.com>", "stopOnFirst": false}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        // Bare MessageIdProbe fields, no `success`/`result` wrapper key —
+        // api.js's findMessageId returns this straight through.
+        assert_eq!(result["messageId"], json!("<gone@example.com>"));
+        assert_eq!(result["found"], json!([]));
+        assert_eq!(result["searched"].as_array().unwrap().len(), 2);
+        assert!(result["failed"].as_array().unwrap().is_empty());
+        assert_eq!(result["complete"], json!(true), "two folders, both answered, neither had it");
+    }
+
+    #[tokio::test]
+    async fn disconnect_is_a_success_no_op_when_nothing_is_pooled() {
+        let s = st(true);
+        let resp = call(
+            &s,
+            "imap_disconnect",
+            json!({"account": {"email": "user@example.com", "password": "x", "imapHost": "127.0.0.1", "imapPort": 1}}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+    }
+
+    #[tokio::test]
+    async fn move_emails_moves_the_uid_and_reports_how_many() {
+        plaintext();
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 2)).mailbox(Mailbox::new("Archive")));
+        let s = st(true);
+
+        let resp = call(
+            &s,
+            "imap_move_emails",
+            json!({"account": account_json(&server), "uids": [1], "sourceMailbox": "INBOX", "targetMailbox": "Archive"}),
+        )
+        .await;
+        let result = resp.result.expect("success");
+        assert_eq!(result["success"], json!(true));
+        assert_eq!(result["moved"], json!(1));
+        assert!(server.state().find("Archive").unwrap().by_uid(1).is_some(), "message must have actually landed in Archive");
     }
 
     #[tokio::test]
