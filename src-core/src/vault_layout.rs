@@ -42,6 +42,26 @@ pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
     serde_json::from_str::<VaultMarker>(&raw).ok().filter(|m| m.app == "mailvault")
 }
 
+/// Phase 6: markers are now written by both processes (the app for its own
+/// data-dir copy, the daemon for `adopt`/`move` destinations), so the writer
+/// moved here next to the reader it must stay compatible with.
+pub fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
+    let data = serde_json::to_string_pretty(marker).map_err(|e| e.to_string())?;
+    std::fs::write(dir.join(MARKER_FILE), data).map_err(|e| format!("Cannot write vault marker: {}", e))
+}
+
+pub fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// Enough entropy to tell two vaults apart; not a security boundary.
+pub fn new_vault_id() -> String {
+    format!("{:x}-{:x}", now_millis(), std::process::id())
+}
+
 /// True if the folder already holds mail data, marker or not. A search index
 /// or contacts index alone is derived data, not mail — a stray
 /// `contacts_index/` left behind by an old, ungated flush (final fix wave
@@ -108,6 +128,20 @@ mod tests {
         std::fs::write(dir.join(MARKER_FILE), br#"{"app":"other","vaultId":"x","createdAt":1}"#).unwrap();
         assert!(read_marker(&dir).is_none());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_marker_round_trips_through_read_marker() {
+        let dir = scratch("write-marker");
+        write_marker(&dir, &VaultMarker { app: "mailvault".into(), vault_id: "abc".into(), created_at: 1 }).unwrap();
+        assert_eq!(read_marker(&dir).unwrap().vault_id, "abc");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn new_vault_id_is_not_empty_and_varies() {
+        let a = new_vault_id();
+        assert!(!a.is_empty());
     }
 
     #[test]

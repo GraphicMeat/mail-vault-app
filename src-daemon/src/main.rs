@@ -66,17 +66,46 @@ fn get_data_dir() -> PathBuf {
 /// Returns (mail_dir, ok). `ok` is false when a custom folder is configured but
 /// unreachable — the daemon then refuses every mail operation instead of
 /// syncing into the app data dir and forking the archive.
-fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
+/// Phase 6: `vault_get_status` needs more than `resolve_mail_dir`'s
+/// `(dir, ok)` — the configured *display* path (kept even when `dir` falls
+/// back to `app_dir`) and whether a custom folder is configured at all.
+///
+/// Message-fidelity trade-off, decided (not a gap): the app's own
+/// `vault::resolve()` distinguishes "the bookmark itself won't resolve"
+/// (a real OS/bookmark error, drive genuinely gone) from "the path resolves
+/// but doesn't look like our vault" (marker missing) because it can see the
+/// bookmark's own error text. The daemon only ever reads the plain
+/// `displayPath` string — it has no bookmark API (spec §3.4: only the app
+/// resolves bookmarks) — so both cases collapse into the one message below.
+/// `status`/`isCustom`/`displayPath` stay accurate either way; only
+/// `lastError`'s wording is less specific in the "drive truly unplugged"
+/// sub-case.
+pub(crate) struct VaultLocationInfo {
+    pub dir: PathBuf,
+    pub ok: bool,
+    pub display_path: String,
+    pub is_custom: bool,
+    pub last_error: Option<String>,
+}
+
+fn resolve_vault_location(app_dir: &PathBuf) -> VaultLocationInfo {
+    let default = || VaultLocationInfo {
+        dir: app_dir.clone(),
+        ok: true,
+        display_path: app_dir.to_string_lossy().into_owned(),
+        is_custom: false,
+        last_error: None,
+    };
     let meta = match std::fs::read_to_string(app_dir.join("vault-meta.json")) {
         Ok(m) => m,
-        Err(_) => return (app_dir.clone(), true),
+        Err(_) => return default(),
     };
     let path = match serde_json::from_str::<serde_json::Value>(&meta) {
         Ok(v) => v["displayPath"].as_str().unwrap_or("").to_string(),
-        Err(_) => return (app_dir.clone(), true),
+        Err(_) => return default(),
     };
     if path.is_empty() {
-        return (app_dir.clone(), true);
+        return default();
     }
     let dir = PathBuf::from(&path);
     // Task 2.5 (deviation 6): the same "does this look like a vault" rule the
@@ -84,10 +113,20 @@ fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
     // e.g. only `custody/` — with custody opening here (Task 2.9a/b), that
     // divergence used to decide where a second, orphaned store could open.
     if mailvault_core::vault_layout::read_marker(&dir).is_some() || mailvault_core::vault_layout::looks_like_vault(&dir) {
-        return (dir, true);
+        return VaultLocationInfo { dir, ok: true, display_path: path, is_custom: true, last_error: None };
     }
     warn!("Configured mail storage {} is not reachable — mail operations disabled until it is back", path);
-    (app_dir.clone(), false)
+    let last_error = "The folder is reachable but does not contain your mail. If the drive was remounted elsewhere, choose the folder again.".to_string();
+    VaultLocationInfo { dir: app_dir.clone(), ok: false, display_path: path, is_custom: true, last_error: Some(last_error) }
+}
+
+// Phase 6: production code calls `resolve_vault_location` directly now (it
+// needs the richer fields); this tuple-shaped wrapper survives only for the
+// tests below, which pin the (dir, ok) contract on its own.
+#[cfg(test)]
+fn resolve_mail_dir(app_dir: &PathBuf) -> (PathBuf, bool) {
+    let info = resolve_vault_location(app_dir);
+    (info.dir, info.ok)
 }
 
 /// IPC directory for socket and token.
@@ -260,7 +299,8 @@ async fn daemon_main() {
     let _ = std::fs::create_dir_all(&data_dir);
     let _log_guard = setup_logging(&data_dir);
     // Mail may live outside the app data dir; bookkeeping never does.
-    let (mail_dir, mail_dir_ok) = resolve_mail_dir(&data_dir);
+    let vault_location = resolve_vault_location(&data_dir);
+    let (mail_dir, mail_dir_ok) = (vault_location.dir.clone(), vault_location.ok);
 
     info!(
         "mailvault-daemon v{} starting (pid: {})",
@@ -350,6 +390,10 @@ async fn daemon_main() {
         data_dir: mail_dir.clone(),
         app_dir: data_dir.clone(),
         mail_dir_ok,
+        vault_display_path: std::sync::Mutex::new(vault_location.display_path),
+        vault_is_custom: std::sync::Mutex::new(vault_location.is_custom),
+        vault_last_error: std::sync::Mutex::new(vault_location.last_error),
+        pending_move: std::sync::Mutex::new(None),
         vault_closed,
         vault_gate,
         started_at: std::time::Instant::now(),
@@ -641,6 +685,57 @@ mod tests {
         let app = scratch("corrupt");
         std::fs::write(app.join("vault-meta.json"), "not json at all").unwrap();
         assert_eq!(resolve_mail_dir(&app), (app.clone(), true));
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    /// Phase 6: `vault_get_status` needs the configured display path even
+    /// when unreachable (`dir` falls back to `app_dir`, but the user should
+    /// still see WHICH folder is missing) and whether a custom folder is
+    /// configured at all.
+    #[test]
+    fn resolve_vault_location_reports_default_with_no_vault_meta() {
+        let app = scratch("loc-default");
+        let info = resolve_vault_location(&app);
+        assert!(info.ok);
+        assert!(!info.is_custom);
+        assert_eq!(info.display_path, app.to_string_lossy());
+        assert!(info.last_error.is_none());
+        let _ = std::fs::remove_dir_all(&app);
+    }
+
+    #[test]
+    fn resolve_vault_location_reports_custom_and_ready_for_a_marked_vault() {
+        let app = scratch("loc-ready-app");
+        let vault = scratch("loc-ready-vault");
+        std::fs::write(
+            vault.join(".mailvault-vault.json"),
+            serde_json::json!({"app": "mailvault", "vaultId": "abc", "createdAt": 1}).to_string(),
+        )
+        .unwrap();
+        std::fs::write(app.join("vault-meta.json"), serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string()).unwrap();
+
+        let info = resolve_vault_location(&app);
+        assert!(info.ok);
+        assert!(info.is_custom);
+        assert_eq!(info.display_path, vault.to_string_lossy());
+        assert!(info.last_error.is_none());
+        let _ = std::fs::remove_dir_all(&app);
+        let _ = std::fs::remove_dir_all(&vault);
+    }
+
+    #[test]
+    fn resolve_vault_location_keeps_the_configured_display_path_when_unreachable() {
+        let app = scratch("loc-missing-app");
+        let vault = scratch("loc-missing-vault");
+        std::fs::write(app.join("vault-meta.json"), serde_json::json!({"displayPath": vault.to_string_lossy()}).to_string()).unwrap();
+        std::fs::remove_dir_all(&vault).unwrap();
+
+        let info = resolve_vault_location(&app);
+        assert!(!info.ok);
+        assert!(info.is_custom);
+        assert_eq!(info.dir, app, "the daemon's own working root falls back to app_dir");
+        assert_eq!(info.display_path, vault.to_string_lossy(), "the user must still see which folder is missing");
+        assert!(info.last_error.is_some());
         let _ = std::fs::remove_dir_all(&app);
     }
 

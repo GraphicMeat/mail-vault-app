@@ -1,4 +1,5 @@
-//! Mail storage location ("the vault").
+//! Mail storage location ("the vault") — the app's own bookmark broker and
+//! local status cache.
 //!
 //! By default the working copy of the mail lives in the app data dir. The user
 //! can move it to any folder on any drive; from then on every mail-data read
@@ -11,21 +12,38 @@
 //! macOS keeps access alive through a security-scoped bookmark resolved once at
 //! startup and held for the process lifetime — a raw path loses sandbox access
 //! across restarts.
+//!
+//! Phase 6: the real work behind `vault_get_status`/`vault_adopt`/
+//! `vault_move_to`/`vault_move_to_default` (folder classification, copy,
+//! verify, marker writes) moved to the daemon (`mailvault_core::vault_ops`,
+//! `src-daemon/src/handlers/vault.rs`) — those commands' bodies now live in
+//! `main.rs` as thin forwarders. What's left here is the app-only bookmark
+//! resolution (`external_location`) and the local `VaultState` cache that
+//! `archive.rs`'s `build_ctx` and `main.rs`'s `graph_ledger_path` still read
+//! synchronously (both feed `backup.rs`'s still-unmoved Graph backup path,
+//! a documented Known Gap, out of this phase's scope) — plus `reset()`
+//! (clearing a bookmark is the entire operation; there is no file work to
+//! move) and `inspect_folder()` (a one-shot pick preview using access the
+//! app already holds from the picker; decided to stay, same category as
+//! `save_attachment_to`).
 
-use serde::Serialize;
-use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Manager;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::external_location::{self, SLOT_VAULT};
-use mailvault_core::custody::db::{DB_DIR as CUSTODY_DIR, DB_FILE as CUSTODY_FILE};
 // Task 2.5 (spec deviation 6): the vault-is-ready rule is shared with the
-// daemon's `resolve_mail_dir` so the two processes never disagree about
-// whether a folder holds mail.
+// daemon's `resolve_vault_location` so the two processes never disagree
+// about whether a folder holds mail.
 pub use mailvault_core::vault_layout::{looks_like_vault, read_marker, VaultMarker, MARKER_FILE, VAULT_DIRS};
+pub use mailvault_core::vault_ops::FolderInspection;
 
-#[derive(Debug, Clone, Serialize)]
+// Deserialize: `vault_get_status` (main.rs) now parses this back out of the
+// daemon's JSON reply, the same shape `vault_status_json` in
+// `handlers/vault.rs` serializes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultStatus {
     /// "default" (app data dir) | "ready" (custom folder in use) | "missing"
     /// (configured but not reachable) | "wrong_folder" (a folder was picked
@@ -50,23 +68,6 @@ struct Resolved {
     root: PathBuf,
     display_path: String,
     error: Option<String>,
-}
-
-fn now_millis() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
-fn new_vault_id() -> String {
-    // Enough entropy to tell two vaults apart; not a security boundary.
-    format!("{:x}-{:x}", now_millis(), std::process::id())
-}
-
-fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
-    let data = serde_json::to_string_pretty(marker).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(MARKER_FILE), data).map_err(|e| format!("Cannot write vault marker: {}", e))
 }
 
 /// Resolve the configured vault (if any) and start security-scoped access.
@@ -104,7 +105,7 @@ pub fn resolve(app_handle: &tauri::AppHandle) -> VaultStatus {
             // on it — a stale mount point resolves to an empty directory.
             if read_marker(&root).is_none() && !looks_like_vault(&root) {
                 let err = "The folder is reachable but does not contain your mail. If the drive was remounted elsewhere, choose the folder again.".to_string();
-                warn!("[vault] marker missing at {}", root.display());
+                tracing::warn!("[vault] marker missing at {}", root.display());
                 set_state(app_handle, Some(Resolved { root: root.clone(), display_path: display.clone(), error: Some(err.clone()) }));
                 return VaultStatus { status: "missing".into(), display_path: display, is_custom: true, last_error: Some(err) };
             }
@@ -117,7 +118,7 @@ pub fn resolve(app_handle: &tauri::AppHandle) -> VaultStatus {
                 .ok()
                 .and_then(|l| l.last_error)
                 .unwrap_or(json_or_msg);
-            warn!("[vault] configured mail storage unavailable: {}", err);
+            tracing::warn!("[vault] configured mail storage unavailable: {}", err);
             set_state(app_handle, Some(Resolved {
                 root: data_dir,
                 display_path: display.clone(),
@@ -178,407 +179,28 @@ pub fn status(app_handle: &tauri::AppHandle) -> VaultStatus {
     resolve(app_handle)
 }
 
-/// Outcome of inspecting a folder the user just picked.
-#[derive(Debug, Serialize)]
-pub struct FolderInspection {
-    /// "our_vault" | "other_vault" | "unmarked_mail" | "empty" | "occupied"
-    pub kind: String,
-    #[serde(rename = "vaultId", skip_serializing_if = "Option::is_none")]
-    pub vault_id: Option<String>,
-    pub writable: bool,
-    #[serde(rename = "emailCount")]
-    pub email_count: usize,
-}
-
-fn count_messages(dir: &Path) -> usize {
-    fn walk(dir: &Path, count: &mut usize) {
-        let entries = match std::fs::read_dir(dir) { Ok(e) => e, Err(_) => return };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                walk(&path, count);
-            } else if entry.file_name().to_string_lossy().contains(":2,") {
-                *count += 1;
-            }
-        }
-    }
-    let mut count = 0;
-    walk(&dir.join("Maildir"), &mut count);
-    count
-}
-
 /// Classify a user-picked folder before doing anything destructive with it.
+/// A one-shot pick preview (spec §3.4 case b territory — fd-passing, not
+/// built this phase): the app's own in-process access from the native
+/// picker is what makes this read possible before any bookmark exists.
 pub fn inspect_folder(app_handle: &tauri::AppHandle, path: &str) -> Result<FolderInspection, String> {
     let dir = PathBuf::from(path);
-    if !dir.is_dir() {
-        return Err("That path is not a folder".to_string());
-    }
-
-    let probe = dir.join(".mailvault-write-test");
-    let writable = std::fs::write(&probe, b"test").is_ok();
-    let _ = std::fs::remove_file(&probe);
-
     let expected_id = app_handle
         .path()
         .app_data_dir()
         .ok()
         .and_then(|d| read_marker(&d))
         .map(|m| m.vault_id);
-
-    let marker = read_marker(&dir);
-    let kind = match (&marker, looks_like_vault(&dir)) {
-        (Some(m), _) => {
-            if expected_id.as_deref() == Some(m.vault_id.as_str()) { "our_vault" } else { "other_vault" }
-        }
-        (None, true) => "unmarked_mail",
-        (None, false) => {
-            let empty = std::fs::read_dir(&dir).map(|mut e| e.next().is_none()).unwrap_or(false);
-            if empty { "empty" } else { "occupied" }
-        }
-    };
-
-    Ok(FolderInspection {
-        kind: kind.to_string(),
-        vault_id: marker.map(|m| m.vault_id),
-        writable,
-        email_count: count_messages(&dir),
-    })
-}
-
-/// Point the app at an existing vault folder (drive reconnected, or moved by
-/// hand). Does not copy anything — the folder must already hold the mail.
-pub fn adopt(app_handle: &tauri::AppHandle, path: &str) -> Result<VaultStatus, String> {
-    let dir = PathBuf::from(path);
-    let inspection = inspect_folder(app_handle, path)?;
-    if !inspection.writable {
-        return Err("MailVault cannot write to that folder. Check the drive is not read-only.".to_string());
-    }
-    if inspection.kind == "empty" || inspection.kind == "occupied" {
-        return Err("That folder does not contain a MailVault store. Pick the folder your mail was moved to, or use \"Move mail here\" to set up a new one.".to_string());
-    }
-
-    if read_marker(&dir).is_none() {
-        // Mail is there but the marker was lost (copied by hand, or written by
-        // an older build) — stamp it so later re-selections verify cleanly.
-        write_marker(&dir, &VaultMarker { app: "mailvault".into(), vault_id: new_vault_id(), created_at: now_millis() })?;
-    }
-
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    external_location::save_external_location(&data_dir, SLOT_VAULT, path)?;
-    if let Some(marker) = read_marker(&dir) {
-        let _ = write_marker(&data_dir, &marker); // remember which vault is ours
-    }
-    Ok(resolve(app_handle))
+    mailvault_core::vault_ops::classify_folder(&dir, expected_id.as_deref())
 }
 
 /// Stop using a custom folder. Leaves the mail where it is — the app falls back
-/// to whatever is in the app data dir.
+/// to whatever is in the app data dir. The entire operation is a bookmark
+/// clear (app-only, spec §3.4) — there is no file work to move to the daemon.
 pub fn reset(app_handle: &tauri::AppHandle) -> Result<VaultStatus, String> {
     let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
     external_location::clear_external_location(&data_dir, SLOT_VAULT)?;
     Ok(resolve(app_handle))
-}
-
-// ── Offload ─────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize)]
-pub struct MoveProgress {
-    pub phase: String, // "copying" | "verifying" | "cleaning" | "done"
-    pub copied: usize,
-    pub total: usize,
-    #[serde(rename = "currentDir")]
-    pub current_dir: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct MoveResult {
-    #[serde(rename = "filesCopied")]
-    pub files_copied: usize,
-    #[serde(rename = "bytesCopied")]
-    pub bytes_copied: u64,
-    #[serde(rename = "sourceRemoved")]
-    pub source_removed: bool,
-    #[serde(rename = "displayPath")]
-    pub display_path: String,
-}
-
-fn count_files(dir: &Path) -> usize {
-    let entries = match std::fs::read_dir(dir) { Ok(e) => e, Err(_) => return 0 };
-    entries.flatten().map(|e| {
-        let p = e.path();
-        if p.is_dir() { count_files(&p) } else { 1 }
-    }).sum()
-}
-
-/// Copy `src` into `dst` recursively. Returns (files, bytes) actually written.
-/// Existing destination files with the same size are left alone so an
-/// interrupted offload can be resumed by running it again.
-fn copy_tree(src: &Path, dst: &Path, copied: &mut usize, bytes: &mut u64) -> Result<(), String> {
-    std::fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {}", dst.display(), e))?;
-    let entries = std::fs::read_dir(src).map_err(|e| format!("read {}: {}", src.display(), e))?;
-    for entry in entries.flatten() {
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if from.is_dir() {
-            copy_tree(&from, &to, copied, bytes)?;
-            continue;
-        }
-        let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        if to.metadata().map(|m| m.len()) .ok() == Some(src_len) {
-            *copied += 1;
-            *bytes += src_len;
-            continue;
-        }
-        std::fs::copy(&from, &to).map_err(|e| format!("copy {}: {}", from.display(), e))?;
-        *copied += 1;
-        *bytes += src_len;
-    }
-    Ok(())
-}
-
-/// Verify every file in `src` exists in `dst` with the same size.
-/// Returns the first mismatch found.
-fn verify_tree(src: &Path, dst: &Path) -> Result<(), String> {
-    let entries = std::fs::read_dir(src).map_err(|e| format!("read {}: {}", src.display(), e))?;
-    for entry in entries.flatten() {
-        let from = entry.path();
-        let to = dst.join(entry.file_name());
-        if from.is_dir() {
-            verify_tree(&from, &to)?;
-            continue;
-        }
-        let src_len = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        match to.metadata() {
-            Ok(m) if m.len() == src_len => {}
-            Ok(m) => return Err(format!("{} copied as {} bytes, expected {}", to.display(), m.len(), src_len)),
-            Err(e) => return Err(format!("{} is missing from the new location: {}", to.display(), e)),
-        }
-    }
-    Ok(())
-}
-
-/// A free `<name>.pre-move-<stamp>` beside `path`, `-<n>` while taken.
-fn set_aside_name(path: &Path, stamp: u64) -> Result<PathBuf, String> {
-    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    for n in 0..100 {
-        let suffix = if n == 0 { String::new() } else { format!("-{n}") };
-        let candidate = path.with_file_name(format!("{name}.pre-move-{stamp}{suffix}"));
-        if candidate.symlink_metadata().is_err() {
-            return Ok(candidate);
-        }
-    }
-    Err(format!("Cannot set aside {}: every .pre-move name is taken", path.display()))
-}
-
-/// Move the destination's custody files out of the way so `copy_tree` copies
-/// the source's unconditionally.
-///
-/// The index gets deleted here for the same reason (`copy_tree`'s size-equal
-/// resume skip would keep a stale file), but custody is never derived and never
-/// deleted, so it is renamed aside instead. `custody.db` is rewritten in place
-/// — `json_set` on a row, then a checkpoint back into the same pages — so a
-/// stale copy at the destination is the same length as the live one far more
-/// often than not, and "same size" means nothing about its content.
-///
-/// ponytail: repeated interrupted retries leave one `.pre-move-*` set per
-/// attempt. Bounded by the number of retries, and never deleting them is the point.
-fn set_aside_custody(src_root: &Path, dst_root: &Path) -> Result<(), String> {
-    // Only when the source brings its own: otherwise the destination would be
-    // left with no live store at all, for nothing.
-    if !src_root.join(CUSTODY_DIR).exists() {
-        return Ok(());
-    }
-    let stamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        let path = dst_root.join(CUSTODY_DIR).join(format!("{CUSTODY_FILE}{suffix}"));
-        if path.symlink_metadata().is_err() {
-            continue;
-        }
-        let aside = set_aside_name(&path, stamp)?;
-        std::fs::rename(&path, &aside)
-            .map_err(|e| format!("Cannot set aside the old custody store at {}: {}", path.display(), e))?;
-    }
-    Ok(())
-}
-
-/// The custody store arrived byte for byte. `verify_tree` compares sizes, which
-/// is the right proof for an immutable `.eml`; custody is the vault's only
-/// mutated-in-place, non-derivable file, so it gets the stronger check before
-/// anything is removed from the source.
-///
-/// ponytail: reads both files whole. One small file; switch to a streaming
-/// compare if a vault ever carries a custody store worth chunking.
-fn verify_custody(src_root: &Path, dst_root: &Path) -> Result<(), String> {
-    let src = src_root.join(CUSTODY_DIR).join(CUSTODY_FILE);
-    if src.symlink_metadata().is_err() {
-        return Ok(());
-    }
-    let dst = dst_root.join(CUSTODY_DIR).join(CUSTODY_FILE);
-    let from = std::fs::read(&src).map_err(|e| format!("read {}: {}", src.display(), e))?;
-    let to = std::fs::read(&dst)
-        .map_err(|e| format!("{} is missing from the new location: {}", dst.display(), e))?;
-    if from != to {
-        return Err(format!(
-            "The custody records did not arrive intact at {}. Nothing has been removed.",
-            dst.display()
-        ));
-    }
-    Ok(())
-}
-
-/// Copy every vault dir present in `src_root` into `dst_root` and check it all
-/// arrived. Nothing is deleted from the source here — the caller switches over
-/// first. Only the derived index files at the destination are cleared.
-/// Returns (dirs copied, files copied, bytes copied).
-fn copy_and_verify<F: Fn(MoveProgress)>(
-    src_root: &Path,
-    dst_root: &Path,
-    on_progress: &F,
-) -> Result<(Vec<&'static str>, usize, u64), String> {
-    // A leftover index at the destination is derived data. Left in place, copy_tree's
-    // size-equal skip could keep its file, or pair a fresh index with a stale -wal.
-    // Only our file names: the folder is the user's pick, and anything else in a
-    // `search_index` directory there is not ours to delete.
-    use mailvault_core::search_index::db::{DB_DIR, DB_FILE};
-    for suffix in ["", "-wal", "-shm", "-journal"] {
-        let path = dst_root.join(DB_DIR).join(format!("{DB_FILE}{suffix}"));
-        match std::fs::remove_file(&path) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
-                return Err(format!("Cannot clear the old search index at {}: {}", path.display(), e));
-            }
-            _ => {}
-        }
-    }
-    set_aside_custody(src_root, dst_root)?;
-    let present: Vec<&'static str> = VAULT_DIRS.iter().copied().filter(|d| src_root.join(d).exists()).collect();
-    let total: usize = present.iter().map(|d| count_files(&src_root.join(d))).sum();
-
-    let mut copied = 0usize;
-    let mut bytes = 0u64;
-    for dir in &present {
-        on_progress(MoveProgress { phase: "copying".into(), copied, total, current_dir: dir.to_string() });
-        copy_tree(&src_root.join(dir), &dst_root.join(dir), &mut copied, &mut bytes)?;
-    }
-
-    on_progress(MoveProgress { phase: "verifying".into(), copied, total, current_dir: String::new() });
-    for dir in &present {
-        verify_tree(&src_root.join(dir), &dst_root.join(dir))?;
-    }
-    verify_custody(src_root, dst_root)?;
-
-    Ok((present, copied, bytes))
-}
-
-/// Delete the copied-from dirs. Only ever called once the destination is live.
-fn remove_sources(src_root: &Path, present: &[&str]) -> bool {
-    let mut removed = true;
-    for dir in present {
-        if let Err(e) = std::fs::remove_dir_all(src_root.join(dir)) {
-            warn!("[vault] could not remove {} after offload: {}", dir, e);
-            removed = false;
-        }
-    }
-    removed
-}
-
-/// Move the mail data to `path`: copy everything, verify it byte-count for
-/// byte-count, only then delete the originals, and finally switch over.
-/// A failure at any point before the switch leaves the current store intact.
-pub fn move_to<F: Fn(MoveProgress)>(
-    app_handle: &tauri::AppHandle,
-    path: &str,
-    on_progress: F,
-) -> Result<MoveResult, String> {
-    let dst_root = PathBuf::from(path);
-    let src_root = root(app_handle)?;
-    if dst_root == src_root {
-        return Err("Mail is already stored in that folder".to_string());
-    }
-    if dst_root.starts_with(&src_root) {
-        return Err("Choose a folder outside the current mail storage folder".to_string());
-    }
-
-    let inspection = inspect_folder(app_handle, path)?;
-    if !inspection.writable {
-        return Err("MailVault cannot write to that folder. Check the drive is not read-only.".to_string());
-    }
-    if inspection.kind == "other_vault" {
-        return Err("That folder already holds a different MailVault store. Pick an empty folder, or select it as your existing storage instead.".to_string());
-    }
-
-    let (present, copied, bytes) = copy_and_verify(&src_root, &dst_root, &on_progress)?;
-
-    // Everything is safely on the other side — stamp, switch, then clean up.
-    let marker = read_marker(&dst_root).unwrap_or(VaultMarker {
-        app: "mailvault".into(),
-        vault_id: new_vault_id(),
-        created_at: now_millis(),
-    });
-    write_marker(&dst_root, &marker)?;
-
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    external_location::save_external_location(&data_dir, SLOT_VAULT, path)?;
-    let _ = write_marker(&data_dir, &marker);
-    let new_status = resolve(app_handle);
-    if new_status.status != "ready" {
-        // Do not delete the source while the destination is not actually usable.
-        let _ = external_location::clear_external_location(&data_dir, SLOT_VAULT);
-        resolve(app_handle);
-        return Err(new_status.last_error.unwrap_or_else(|| "New mail storage folder could not be opened".into()));
-    }
-
-    on_progress(MoveProgress { phase: "cleaning".into(), copied, total: copied, current_dir: String::new() });
-    let source_removed = remove_sources(&src_root, &present);
-
-    on_progress(MoveProgress { phase: "done".into(), copied, total: copied, current_dir: String::new() });
-    info!("[vault] offloaded {} files ({} bytes) to {}", copied, bytes, path);
-
-    Ok(MoveResult {
-        files_copied: copied,
-        bytes_copied: bytes,
-        source_removed,
-        display_path: path.to_string(),
-    })
-}
-
-/// Bring the mail back into the app data dir and stop using the custom folder.
-/// Same ordering as [`move_to`]: copy, verify, switch, only then delete.
-pub fn move_to_default<F: Fn(MoveProgress)>(
-    app_handle: &tauri::AppHandle,
-    on_progress: F,
-) -> Result<MoveResult, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    // Errors when the custom folder is unreachable — there is nothing to move
-    // back and clearing the setting is the other button's job.
-    let src_root = root(app_handle)?;
-    if src_root == data_dir {
-        return Err("Mail is already stored in the default location".to_string());
-    }
-
-    let (present, copied, bytes) = copy_and_verify(&src_root, &data_dir, &on_progress)?;
-
-    external_location::clear_external_location(&data_dir, SLOT_VAULT)?;
-    let new_status = resolve(app_handle);
-    if new_status.status != "default" {
-        // Leave the source alone while the app is not actually reading the default dir.
-        return Err(new_status.last_error.unwrap_or_else(|| "Could not switch back to the default location".into()));
-    }
-
-    on_progress(MoveProgress { phase: "cleaning".into(), copied, total: copied, current_dir: String::new() });
-    let source_removed = remove_sources(&src_root, &present);
-
-    on_progress(MoveProgress { phase: "done".into(), copied, total: copied, current_dir: String::new() });
-    info!("[vault] moved {} files ({} bytes) back to the default location", copied, bytes);
-
-    Ok(MoveResult {
-        files_copied: copied,
-        bytes_copied: bytes,
-        source_removed,
-        display_path: data_dir.to_string_lossy().into(),
-    })
 }
 
 #[cfg(test)]
@@ -594,153 +216,11 @@ mod tests {
     }
 
     #[test]
-    fn copy_then_verify_detects_a_truncated_file() {
-        let base = tmp("mv-vault-verify");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(src.join("Maildir/acc/INBOX/cur")).unwrap();
-        fs::write(src.join("Maildir/acc/INBOX/cur/1:2,S.eml"), b"hello world").unwrap();
-
-        let (mut n, mut b) = (0usize, 0u64);
-        copy_tree(&src, &dst, &mut n, &mut b).unwrap();
-        assert_eq!(n, 1);
-        assert_eq!(b, 11);
-        verify_tree(&src, &dst).unwrap();
-
-        // A short write on the destination must be caught before any delete.
-        fs::write(dst.join("Maildir/acc/INBOX/cur/1:2,S.eml"), b"hel").unwrap();
-        assert!(verify_tree(&src, &dst).is_err());
-
-        // Missing entirely is caught too.
-        fs::remove_file(dst.join("Maildir/acc/INBOX/cur/1:2,S.eml")).unwrap();
-        assert!(verify_tree(&src, &dst).is_err());
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn a_move_clears_only_the_index_files_at_the_destination() {
-        let base = tmp("mv-vault-dest-index");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(&src).unwrap();
-        fs::create_dir_all(dst.join("search_index")).unwrap();
-        fs::write(dst.join("search_index/index.db"), b"stale").unwrap();
-        fs::write(dst.join("search_index/index.db-wal"), b"stale wal").unwrap();
-        fs::write(dst.join("search_index/keep.txt"), b"another app's file").unwrap();
-
-        copy_and_verify(&src, &dst, &|_| {}).unwrap();
-
-        assert!(!dst.join("search_index/index.db").exists());
-        assert!(!dst.join("search_index/index.db-wal").exists());
-        assert_eq!(fs::read(dst.join("search_index/keep.txt")).unwrap(), b"another app's file");
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn a_move_carries_the_custody_store_byte_for_byte() {
-        let base = tmp("mv-vault-custody");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(src.join("custody")).unwrap();
-        fs::write(src.join("custody/custody.db"), b"custody rows the user cannot get back").unwrap();
-
-        copy_and_verify(&src, &dst, &|_| {}).unwrap();
-
-        assert_eq!(fs::read(dst.join("custody/custody.db")).unwrap(), b"custody rows the user cannot get back");
-        assert!(VAULT_DIRS.contains(&"custody"));
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn a_resumed_move_replaces_a_same_size_stale_custody_store() {
-        // An interrupted move leaves a custody.db at the destination. The app
-        // keeps running on the source and rewrites its rows in place, so the
-        // file changes content without changing length. copy_tree's size-equal
-        // resume skip would keep the stale one, verify_tree would pass on the
-        // size, and remove_sources would then delete the only good copy.
-        let base = tmp("mv-vault-custody-resume");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(src.join("custody")).unwrap();
-        fs::create_dir_all(dst.join("custody")).unwrap();
-        let fresh = b"custody rows written after the interrupted move";
-        let stale = b"custody rows from the interrupted move.........";
-        assert_eq!(fresh.len(), stale.len(), "the test is only meaningful at equal length");
-        fs::write(src.join("custody/custody.db"), fresh).unwrap();
-        fs::write(dst.join("custody/custody.db"), stale).unwrap();
-
-        copy_and_verify(&src, &dst, &|_| {}).unwrap();
-
-        assert_eq!(fs::read(dst.join("custody/custody.db")).unwrap(), fresh);
-        // Custody is never deleted: the stale bytes are set aside, not removed.
-        let aside: Vec<String> = fs::read_dir(dst.join("custody"))
-            .unwrap()
-            .flatten()
-            .map(|e| e.file_name().to_string_lossy().to_string())
-            .filter(|n| n.starts_with("custody.db.pre-move-"))
-            .collect();
-        assert_eq!(aside.len(), 1, "expected one set-aside copy, found {:?}", aside);
-        assert_eq!(fs::read(dst.join("custody").join(&aside[0])).unwrap(), stale);
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn a_move_fails_before_removal_when_the_custody_copy_differs() {
-        let base = tmp("mv-vault-custody-verify");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(src.join("custody")).unwrap();
-        fs::write(src.join("custody/custody.db"), b"the records the user cannot rebuild").unwrap();
-
-        copy_and_verify(&src, &dst, &|_| {}).unwrap();
-        verify_custody(&src, &dst).unwrap();
-
-        // Same length, different content: a bad write, a half-flushed page, a
-        // stale file a resume did not replace.
-        fs::write(dst.join("custody/custody.db"), b"THE RECORDS THE USER CANNOT REBUILD").unwrap();
-        assert!(verify_custody(&src, &dst).is_err(), "a differing custody copy must stop the move");
-        // Size-only verification cannot see it, which is why the byte check exists.
-        verify_tree(&src, &dst).unwrap();
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn copy_tree_resumes_without_recopying() {
-        let base = tmp("mv-vault-resume");
-        let src = base.join("src");
-        let dst = base.join("dst");
-        fs::create_dir_all(&src).unwrap();
-        fs::write(src.join("a.eml"), b"aaaa").unwrap();
-        fs::write(src.join("b.eml"), b"bb").unwrap();
-
-        let (mut n, mut b) = (0usize, 0u64);
-        copy_tree(&src, &dst, &mut n, &mut b).unwrap();
-        assert_eq!((n, b), (2, 6));
-
-        // Truncate one file: the resume pass must rewrite it, then verify clean.
-        fs::write(dst.join("a.eml"), b"x").unwrap();
-        let (mut n2, mut b2) = (0usize, 0u64);
-        copy_tree(&src, &dst, &mut n2, &mut b2).unwrap();
-        assert_eq!((n2, b2), (2, 6));
-        verify_tree(&src, &dst).unwrap();
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    #[test]
-    fn marker_round_trips_and_rejects_foreign_files() {
-        let base = tmp("mv-vault-marker");
-        assert!(read_marker(&base).is_none());
-        write_marker(&base, &VaultMarker { app: "mailvault".into(), vault_id: "abc".into(), created_at: 1 }).unwrap();
-        assert_eq!(read_marker(&base).unwrap().vault_id, "abc");
-
-        fs::write(base.join(MARKER_FILE), br#"{"app":"other","vaultId":"x","createdAt":1}"#).unwrap();
-        assert!(read_marker(&base).is_none(), "a marker from another app must not be accepted");
-
-        let _ = fs::remove_dir_all(&base);
+    fn inspect_folder_classifies_unmarked_mail() {
+        let dir = tmp("mv-vault-inspect-unmarked");
+        fs::create_dir_all(dir.join("Maildir")).unwrap();
+        let result = mailvault_core::vault_ops::classify_folder(&dir, None).unwrap();
+        assert_eq!(result.kind, "unmarked_mail");
+        let _ = fs::remove_dir_all(&dir);
     }
 }

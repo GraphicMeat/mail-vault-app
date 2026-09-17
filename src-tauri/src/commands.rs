@@ -199,20 +199,6 @@ pub async fn iap_restore() -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn backup_resolve_external_location(
-    app_handle: tauri::AppHandle,
-) -> Result<serde_json::Value, String> {
-    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
-    match crate::external_location::resolve_external_location(&data_dir, crate::external_location::SLOT_EXTERNAL_BACKUP) {
-        Ok((resolved_path, loc)) => Ok(serde_json::json!({
-            "resolvedPath": resolved_path,
-            "location": loc,
-        })),
-        Err(e) => Err(e),
-    }
-}
-
-#[tauri::command]
 pub async fn backup_migrate_legacy_path(
     app_handle: tauri::AppHandle,
     legacy_path: String,

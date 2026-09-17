@@ -40,6 +40,24 @@ pub struct DaemonState {
     pub app_dir: PathBuf,
     /// False when a custom mail folder is configured but unreachable.
     pub mail_dir_ok: bool,
+    /// Phase 6: the configured vault's human-readable path — kept even when
+    /// `data_dir` has fallen back to `app_dir` because it's unreachable, so
+    /// `vault_get_status` can still tell the user *which* folder it's
+    /// looking for. Set once at startup (`resolve_vault_location`), like
+    /// `data_dir`/`mail_dir_ok` themselves — a location switch always
+    /// restarts the daemon (spec §3.4a), never mutates these live.
+    pub vault_display_path: std::sync::Mutex<String>,
+    /// Whether a custom (non-default) folder is configured at all —
+    /// `data_dir == app_dir` alone can't tell "using the default" apart from
+    /// "custom folder that happens to fail all the way back to app_dir".
+    pub vault_is_custom: std::sync::Mutex<bool>,
+    /// User-facing reason the configured folder isn't usable, if any.
+    pub vault_last_error: std::sync::Mutex<Option<String>>,
+    /// Task 6.3: set by `vault_move_to`/`vault_move_to_default` between the
+    /// copy and `vault_move_finalize`, keyed by `move_id` so a stale or
+    /// mismatched finalize call can never commit (delete source files for) a
+    /// move it wasn't answering.
+    pub pending_move: std::sync::Mutex<Option<crate::handlers::vault::PendingMove>>,
     /// Set between `vault_close` and `vault_reopen` (Task 2.5, spec deviation
     /// 8): every vault-rooted Phase 2 route refuses through
     /// `handlers::common::vault_root` while this is set, so nothing writes
@@ -290,6 +308,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::vault::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::archive::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -453,6 +475,10 @@ impl DaemonState {
             data_dir: mail_dir.clone(),
             app_dir: app_dir.clone(),
             mail_dir_ok,
+            vault_display_path: std::sync::Mutex::new(mail_dir.to_string_lossy().into_owned()),
+            vault_is_custom: std::sync::Mutex::new(false),
+            vault_last_error: std::sync::Mutex::new(None),
+            pending_move: std::sync::Mutex::new(None),
             vault_closed,
             vault_gate,
             started_at: std::time::Instant::now(),

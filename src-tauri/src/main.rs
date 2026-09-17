@@ -595,13 +595,6 @@ fn store_password(account_id: String, password: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn get_log_path(app_handle: tauri::AppHandle) -> Result<String, String> {
-    let log_dir = get_log_dir(&app_handle);
-    info!("get_log_path called, returning: {:?}", log_dir);
-    Ok(log_dir.to_string_lossy().to_string())
-}
-
-#[tauri::command]
 fn read_logs(app_handle: tauri::AppHandle, lines: Option<usize>) -> Result<String, String> {
     let log_dir = get_log_dir(&app_handle);
     let lines_to_read = lines.unwrap_or(500);
@@ -727,23 +720,6 @@ fn clear_logs(app_handle: tauri::AppHandle) -> Result<String, String> {
 
     info!("{}", result_msg);
     Ok(result_msg)
-}
-
-#[tauri::command]
-fn request_notification_permission(app_handle: tauri::AppHandle) -> Result<bool, String> {
-    info!("request_notification_permission called");
-
-    use tauri_plugin_notification::NotificationExt;
-    match app_handle.notification().request_permission() {
-        Ok(perm) => {
-            info!("Notification permission result: {:?}", perm);
-            Ok(perm == tauri_plugin_notification::PermissionState::Granted)
-        }
-        Err(e) => {
-            error!("Failed to request notification permission: {}", e);
-            Err(format!("Failed to request notification permission: {}", e))
-        }
-    }
 }
 
 #[tauri::command]
@@ -1100,9 +1076,22 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 
 // ── Mail storage location ───────────────────────────────────────────────────
 
+/// Phase 6: the disk check (does the configured path still look like our
+/// vault) now runs in the daemon (`handlers::vault::route`'s
+/// `vault_get_status`, backed by fields the daemon computed once at its own
+/// startup). This is a forward, not a cache read any more — see the phase 6
+/// plan doc's accepted staleness trade-off (a poll racing an adopt/move's
+/// restart window can be briefly stale; the `vault-status` event, emitted
+/// straight after that restart, is what the frontend actually reconciles
+/// against — `VaultAlertBanner.jsx` already swallows this call's rejection).
 #[tauri::command]
-fn vault_get_status(app_handle: tauri::AppHandle) -> vault::VaultStatus {
-    vault::status(&app_handle)
+async fn vault_get_status(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus, String> {
+    tokio::task::spawn_blocking(move || {
+        let value = daemon_call_blocking(&app_handle, "vault_get_status", serde_json::json!({}), std::time::Duration::from_secs(30))?;
+        serde_json::from_value(value).map_err(|e| format!("vault_get_status: unreadable reply: {e}"))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -1111,7 +1100,10 @@ fn vault_inspect_folder(app_handle: tauri::AppHandle, path: String) -> Result<va
 }
 
 /// Point the app at a folder that already holds the mail (drive reconnected at
-/// a new path, or the folder was moved by hand).
+/// a new path, or the folder was moved by hand). The classification and
+/// marker work now run in the daemon (`handlers::vault::route`'s
+/// `vault_adopt`); this command still owns the bookmark (spec §3.4) and the
+/// close/restart choreography around it.
 ///
 /// Async + blocking thread: closing the search index waits on its mutex.
 #[tauri::command]
@@ -1119,7 +1111,12 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
     tokio::task::spawn_blocking(move || {
         let suspended = suspend_daemon();
         daemon_vault_lifecycle_call(&app_handle, "vault_close", std::time::Duration::from_secs(300));
-        let result = vault::adopt(&app_handle, &path);
+        let result = daemon_call_blocking(&app_handle, "vault_adopt", serde_json::json!({"path": path.clone()}), std::time::Duration::from_secs(600))
+            .and_then(|_| {
+                let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string())?;
+                external_location::save_external_location(&data_dir, external_location::SLOT_VAULT, &path)
+            })
+            .map(|_| vault::resolve(&app_handle));
         let status = match result {
             Ok(s) => s,
             Err(e) => {
@@ -1139,59 +1136,17 @@ async fn vault_adopt(app_handle: tauri::AppHandle, path: String) -> Result<vault
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// What a *failed* `vault_move_to`/`vault_move_to_default` does next (addendum
-/// D.4 amended, review I1): `vault::move_to` can already have changed the root
-/// before it returns `Err` (it falls back to the app data dir when `resolve`
-/// doesn't report `ready`), so `result.is_err()` alone can't decide whether the
-/// daemon — still reading whatever root it had before the call — needs
-/// restarting. Pure: takes the root just before and just after the op.
-#[derive(Debug, PartialEq, Eq)]
-enum MoveFollowUp {
-    /// The root the daemon last saw is still current: just reopen the index there.
-    ReopenIndex,
-    /// The root changed (or the move succeeded): restart the daemon onto it.
-    RestartDaemon,
-}
-
-fn after_failed_move(root_before: Option<PathBuf>, root_after: Option<PathBuf>) -> MoveFollowUp {
-    if root_before == root_after {
-        MoveFollowUp::ReopenIndex
-    } else {
-        MoveFollowUp::RestartDaemon
-    }
-}
-
-/// Copy the mail data to `path`, verify it, delete the originals, switch over.
+/// Copy the mail data to `path` (daemon `vault_move_to`), then either commit
+/// (bookmark saved and it resolves as ready: delete the originals, switch
+/// over) or abort (leave the source and the stray destination copy in
+/// place) via `vault_move_finalize` — see the phase 6 plan doc's
+/// "Restart-ordering fix" for why the delete can't happen in the same round
+/// trip as the copy.
 #[tauri::command]
-async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vault::MoveResult, String> {
+async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<serde_json::Value, String> {
     let handle = app_handle.clone();
     let result = tokio::task::spawn_blocking(move || {
-        let root_before = vault::root(&handle).ok();
-        let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(300));
-        let emitter = handle.clone();
-        let result = vault::move_to(&handle, &path, move |p| {
-            let _ = emitter.emit("vault-move-progress", p);
-        });
-        let follow_up = if result.is_err() {
-            after_failed_move(root_before, vault::root(&handle).ok())
-        } else {
-            MoveFollowUp::RestartDaemon
-        };
-        match follow_up {
-            MoveFollowUp::ReopenIndex => {
-                drop(suspended);
-                daemon_vault_lifecycle_call(&handle, "vault_reopen", std::time::Duration::from_secs(60));
-            }
-            // The root moved (success, or a failure that fell back to a
-            // different root): the channel respawns the daemon on it only
-            // once `suspended` clears below.
-            MoveFollowUp::RestartDaemon => {
-                stop_daemon();
-                drop(suspended);
-            }
-        }
-        result
+        vault_move_finish(&handle, "vault_move_to", serde_json::json!({"path": path.clone()}), Some(&path))
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?;
@@ -1204,37 +1159,97 @@ async fn vault_move_to(app_handle: tauri::AppHandle, path: String) -> Result<vau
 
 /// Bring the mail back into the app data dir, then stop using the custom folder.
 #[tauri::command]
-async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<vault::MoveResult, String> {
+async fn vault_move_to_default(app_handle: tauri::AppHandle) -> Result<serde_json::Value, String> {
     let handle = app_handle.clone();
-    let result = tokio::task::spawn_blocking(move || {
-        let root_before = vault::root(&handle).ok();
-        let suspended = suspend_daemon();
-        daemon_vault_lifecycle_call(&handle, "vault_close", std::time::Duration::from_secs(300));
-        let emitter = handle.clone();
-        let result = vault::move_to_default(&handle, move |p| {
-            let _ = emitter.emit("vault-move-progress", p);
-        });
-        let follow_up = if result.is_err() {
-            after_failed_move(root_before, vault::root(&handle).ok())
-        } else {
-            MoveFollowUp::RestartDaemon
-        };
-        match follow_up {
-            MoveFollowUp::ReopenIndex => {
-                drop(suspended);
-                daemon_vault_lifecycle_call(&handle, "vault_reopen", std::time::Duration::from_secs(60));
-            }
-            MoveFollowUp::RestartDaemon => {
-                stop_daemon();
-                drop(suspended);
-            }
-        }
-        result
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    let result = tokio::task::spawn_blocking(move || vault_move_finish(&handle, "vault_move_to_default", serde_json::json!({}), None))
+        .await
+        .map_err(|e| format!("Task join error: {}", e))?;
     let _ = app_handle.emit("vault-status", vault::status(&app_handle));
     result
+}
+
+/// Shared body for `vault_move_to`/`vault_move_to_default`: run the daemon's
+/// copy step, then the app-only bookmark step, then finalize (commit or
+/// abort) based on whether the new bookmark actually resolves. `new_path` is
+/// `Some` for `vault_move_to` (save a bookmark to it), `None` for
+/// `vault_move_to_default` (clear the bookmark instead).
+fn vault_move_finish(
+    app_handle: &tauri::AppHandle,
+    method: &str,
+    params: serde_json::Value,
+    new_path: Option<&str>,
+) -> Result<serde_json::Value, String> {
+    let suspended = suspend_daemon();
+    daemon_vault_lifecycle_call(app_handle, "vault_close", std::time::Duration::from_secs(300));
+
+    // Unlike `reply_timeout`'s `None` (consulted only by the generic async
+    // `daemon_rpc` passthrough), `daemon_call_blocking` always needs a finite
+    // socket timeout. A vault can be very large on a slow external drive —
+    // generous rather than unbounded, same reasoning `vault_close`'s 300s
+    // already uses one call up.
+    let copy_reply = daemon_call_blocking(app_handle, method, params, std::time::Duration::from_secs(6 * 3600));
+    let copy_reply = match copy_reply {
+        Ok(v) => v,
+        Err(e) => {
+            drop(suspended);
+            daemon_vault_lifecycle_call(app_handle, "vault_reopen", std::time::Duration::from_secs(60));
+            return Err(e);
+        }
+    };
+    let move_id = copy_reply.get("moveId").and_then(|v| v.as_str()).unwrap_or_default().to_string();
+
+    let data_dir = app_handle.path().app_data_dir().map_err(|e| e.to_string());
+    let bookmark_result = data_dir.and_then(|data_dir| match new_path {
+        Some(p) => external_location::save_external_location(&data_dir, external_location::SLOT_VAULT, p).map(|_| ()),
+        None => external_location::clear_external_location(&data_dir, external_location::SLOT_VAULT),
+    });
+    // Precise per-mode, not "ready or default": a `vault_move_to` whose
+    // bookmark save silently no-opped must never read as success just
+    // because `resolve()` still reports "default" — that would commit
+    // (delete the source) while the app keeps reading the OLD root, losing
+    // the just-copied data's only live copy.
+    let expected_status = if new_path.is_some() { "ready" } else { "default" };
+    let new_status = bookmark_result.map(|_| vault::resolve(app_handle));
+    let commit = matches!(&new_status, Ok(s) if s.status == expected_status);
+
+    let finalize_reply = daemon_call_blocking(
+        app_handle,
+        "vault_move_finalize",
+        serde_json::json!({"moveId": move_id, "commit": commit}),
+        std::time::Duration::from_secs(120),
+    );
+
+    if commit {
+        // The data move itself already succeeded and verified (the daemon
+        // reply we're merging into is the proof) and the bookmark already
+        // points at the new location — a failed finalize here only means the
+        // old copy wasn't cleaned up, not that mail was lost. Report it as
+        // `sourceRemoved: false` rather than failing the whole move: telling
+        // the user the move failed when their mail is safely at the new
+        // location would be worse than a stray leftover copy.
+        let mut merged = copy_reply;
+        match &finalize_reply {
+            Ok(reply) => {
+                if let Some(removed) = reply.get("sourceRemoved") {
+                    merged["sourceRemoved"] = removed.clone();
+                }
+            }
+            Err(e) => {
+                tracing::warn!("vault_move_finalize failed after a successful copy+switch: {e}");
+                merged["sourceRemoved"] = serde_json::json!(false);
+            }
+        }
+        stop_daemon();
+        drop(suspended);
+        Ok(merged)
+    } else {
+        drop(suspended);
+        daemon_vault_lifecycle_call(app_handle, "vault_reopen", std::time::Duration::from_secs(60));
+        match new_status {
+            Err(e) => Err(e),
+            Ok(s) => Err(s.last_error.unwrap_or_else(|| "New mail storage folder could not be opened".into())),
+        }
+    }
 }
 
 /// Go back to storing mail in the app data dir. Does not move anything.
@@ -2751,10 +2766,8 @@ fn main() {
             store_credentials,
             get_credentials,
             store_password,
-            get_log_path,
             read_logs,
             clear_logs,
-            request_notification_permission,
             check_network_connectivity,
             send_notification,
             notification_sound::preview_notification_sound,
@@ -2798,7 +2811,6 @@ fn main() {
             commands::iap_is_entitled,
             commands::iap_purchase,
             commands::iap_restore,
-            commands::backup_resolve_external_location,
             commands::backup_migrate_legacy_path,
             backup::backup_purge_uids,
             backup::backup_scan_uids,
@@ -3758,36 +3770,15 @@ mod tests {
         assert!(may_spawn_daemon(), "a panic must not leave the daemon permanently suspended");
     }
 
-    // -----------------------------------------------------------------------
-    // Task 1.7 fix round 1 (review I1 / addendum D.4 amended): a failed move
-    // that already changed the root must restart the daemon, not reopen the
-    // index on the root it no longer has.
-    // -----------------------------------------------------------------------
-    #[test]
-    fn a_failed_move_that_left_the_root_unchanged_just_reopens_the_index() {
-        let a = Some(PathBuf::from("/vault/A"));
-        assert_eq!(after_failed_move(a.clone(), a), MoveFollowUp::ReopenIndex);
-    }
-
-    #[test]
-    fn a_failed_move_that_already_changed_the_root_restarts_the_daemon() {
-        let a = Some(PathBuf::from("/vault/A"));
-        let app_data_dir = Some(PathBuf::from("/app/data"));
-        assert_eq!(after_failed_move(a, app_data_dir), MoveFollowUp::RestartDaemon);
-    }
-
-    #[test]
-    fn an_unreachable_root_before_and_after_still_counts_as_unchanged() {
-        // vault::root(..).ok() is None whenever the vault is unreachable; two
-        // Nones must not read as "the root changed".
-        assert_eq!(after_failed_move(None, None), MoveFollowUp::ReopenIndex);
-    }
-
-    #[test]
-    fn losing_the_root_entirely_counts_as_a_change() {
-        let a = Some(PathBuf::from("/vault/A"));
-        assert_eq!(after_failed_move(a, None), MoveFollowUp::RestartDaemon);
-    }
+    // Task 1.7's MoveFollowUp/after_failed_move (the root-before/root-after
+    // guess) is gone as of Phase 6: the two-phase daemon move protocol
+    // (vault_move_to/vault_move_to_default copy-and-verify, then
+    // vault_move_finalize commits or aborts based on whether the bookmark
+    // the app just saved actually resolves) makes the guess unnecessary —
+    // the app never touches the bookmark until the daemon has already
+    // confirmed the copy, so a failure never leaves it wondering which root
+    // is current. See src-daemon/src/handlers/vault.rs and the phase 6 plan
+    // doc's "Restart-ordering fix".
 }
 
 #[cfg(test)]
