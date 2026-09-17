@@ -2708,10 +2708,14 @@ fn main() {
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
+    // No `.manage(imap::ImapPool::new())` — Task 5.4b moved the last
+    // interactive-command consumer of the app's managed `ImapPool` to the
+    // daemon (its own, separate pool). `archive.rs`/`backup.rs` (the
+    // still-unmoved Phase 3 backup remainder) keep their own pool access via
+    // `backup::pool()`, a process-global instance, not this managed one.
     let builder = builder
         .manage(backup::BackupCancelToken::default())
         .manage(dropped_files::DroppedPaths::default())
-        .manage(imap::ImapPool::new())
         .manage(oauth2::OAuth2Manager::new())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
@@ -2759,19 +2763,10 @@ fn main() {
             vault_flags::vault_apply_flags,
             vault_flags::vault_rename_mailbox,
             vault_flags::vault_adopt_mailbox_dirs,
-            commands::imap_test_connection,
             commands::smtp_test_connection,
-            commands::imap_ensure_sent_mailbox,
-            commands::imap_create_mailbox,
-            commands::imap_rename_mailbox,
-            commands::imap_delete_mailbox,
             commands::smtp_build_mime,
             commands::smtp_build_draft_mime,
-            commands::imap_set_flags,
-            commands::imap_delete_email,
             commands::smtp_send_email,
-            commands::imap_find_message_id,
-            commands::imap_disconnect,
             commands::oauth2_auth_url,
             commands::oauth2_exchange,
             commands::oauth2_refresh,
@@ -2788,7 +2783,6 @@ fn main() {
             commands::graph_rename_folder,
             commands::graph_move_folder,
             commands::graph_delete_folder,
-            commands::imap_move_emails,
             commands::resolve_email_settings,
             commands::dns_mail_health,
             commands::backup_run_account,
@@ -3170,13 +3164,20 @@ fn main() {
                     if let Ok(dir) = app_handle.path().app_data_dir() {
                         mailvault_core::transfer_stats::global().flush(&dir, "app");
                     }
-                    let pool = app_handle.state::<imap::ImapPool>().inner().clone();
-                    tauri::async_runtime::block_on(async move {
-                        let _ = tokio::time::timeout(
-                            std::time::Duration::from_secs(2),
-                            pool.shutdown(),
-                        ).await;
-                    });
+                    // Task 5.4b: no app-managed `ImapPool` left to pull from
+                    // `app_handle.state()` — `backup::pool_if_started()`
+                    // reads the process-global pool `archive.rs`/`backup.rs`
+                    // share WITHOUT constructing one, so quitting an app that
+                    // never ran a backup does not spin up a pool just to
+                    // shut down nothing.
+                    if let Some(pool) = backup::pool_if_started() {
+                        tauri::async_runtime::block_on(async move {
+                            let _ = tokio::time::timeout(
+                                std::time::Duration::from_secs(2),
+                                pool.shutdown(),
+                            ).await;
+                        });
+                    }
                     daemon_channel::stop();
                     shutdown_daemon_child();
                 }

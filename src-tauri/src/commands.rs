@@ -4,94 +4,25 @@ use serde::Deserialize;
 use tauri::{Emitter, Manager};
 use tracing::info;
 
-use crate::imap::pool::PooledSessionGuard;
-use crate::imap::{self, ImapConfig, ImapPool, ImapSession};
+use crate::imap::{self, ImapConfig};
 use crate::oauth2::OAuth2Manager;
 use crate::smtp;
 use crate::backup;
 
-// Helper: run an IMAP operation with a session from the pool.
-// On success, the session is returned to the pool with its last-selected mailbox.
-// On error, the session guard is dropped (semaphore permit released, pool creates new next time).
-async fn with_background<F, Fut, T>(
-    pool: &ImapPool,
-    account: &ImapConfig,
-    f: F,
-) -> Result<T, String>
-where
-    F: FnOnce(ImapSession) -> Fut,
-    Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
-{
-    let PooledSessionGuard { session, last_selected: _, _permit } =
-        pool.get_background(account).await?;
-    match f(session).await {
-        Ok((result, session, selected_mailbox)) => {
-            let return_guard = PooledSessionGuard {
-                session,
-                last_selected: selected_mailbox,
-                _permit,
-            };
-            pool.return_background(account, return_guard).await;
-            Ok(result)
-        }
-        Err(e) => Err(e), // _permit dropped here — semaphore released
-    }
-}
-
-async fn with_priority<F, Fut, T>(
-    pool: &ImapPool,
-    account: &ImapConfig,
-    f: F,
-) -> Result<T, String>
-where
-    F: FnOnce(ImapSession) -> Fut,
-    Fut: std::future::Future<Output = Result<(T, ImapSession, Option<String>), String>>,
-{
-    let PooledSessionGuard { session, last_selected: _, _permit } =
-        pool.get_priority(account).await?;
-    match f(session).await {
-        Ok((result, session, selected_mailbox)) => {
-            let return_guard = PooledSessionGuard {
-                session,
-                last_selected: selected_mailbox,
-                _permit,
-            };
-            pool.return_priority(account, return_guard).await;
-            Ok(result)
-        }
-        Err(e) => Err(e),
-    }
-}
-
-// `conn_lost_message` moved to the daemon (Task 5.4a,
-// `src-daemon/src/handlers/imap.rs`) along with `imap_get_email`/
-// `imap_get_email_light`, its only two callers here.
+// `with_background`, `with_priority` and `conn_lost_message` moved to the
+// daemon (Task 5.4a's `imap_get_email`/`imap_get_email_light`, Task 5.4b's
+// remaining eight `imap_*` write/lifecycle commands — `src-daemon/src/
+// handlers/imap.rs`), their only callers in this file. `PooledSessionGuard`/
+// `ImapPool`/`ImapSession` are no longer imported here for the same reason —
+// `smtp_send_email` below is this file's last IMAP caller, and it only opens
+// a dedicated session (`imap::create_imap_session_no_compress`), never the
+// pool.
 
 // ── Test connection ─────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_test_connection(account: ImapConfig) -> Result<serde_json::Value, String> {
-    info!(
-        "[test-connection] Testing {} → {}:{}",
-        account.email,
-        account.host,
-        account.effective_port()
-    );
-
-    // Wrap entire test in a 20s timeout — auth/TLS steps have no individual timeout
-    tokio::time::timeout(
-        std::time::Duration::from_secs(20),
-        imap::test_connection(&account),
-    )
-    .await
-    .map_err(|_| format!("Connection test timed out for {}", account.email))?
-    ?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "message": "Connection successful"
-    }))
-}
+//
+// `imap_test_connection` moved to the daemon (Task 5.4b,
+// `src-daemon/src/handlers/imap.rs`), same request/response JSON, same 20s
+// timeout and timeout message text.
 
 #[tauri::command]
 pub async fn smtp_test_connection(account: ImapConfig) -> Result<serde_json::Value, String> {
@@ -129,141 +60,12 @@ pub async fn smtp_test_connection(account: ImapConfig) -> Result<serde_json::Val
 // effect moved with it (now writing the already-in-memory bytes directly,
 // no base64 round trip). `BODY_FETCH_TIMEOUT` moved with it too.
 
-// ── Set flags ───────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_set_flags(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    uid: u32,
-    mailbox: Option<String>,
-    flags: Vec<String>,
-    action: Option<String>,
-) -> Result<serde_json::Value, String> {
-    let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-    let action = action.unwrap_or_else(|| "add".to_string());
-
-    // `written` is what PERMANENTFLAGS let through — empty is a success the
-    // caller has to see, not an error: the server simply cannot keep the flag.
-    let written = with_priority(&pool, &account, |mut session| async move {
-        let written = imap::set_flags(&mut session, &mailbox, uid, &flags, &action).await
-            .map_err(|e| format!("Failed to update flags: {}", e))?;
-        Ok((written, session, Some(mailbox)))
-    }).await?;
-
-    Ok(serde_json::json!({ "success": true, "written": written }))
-}
-
-// ── Delete email ────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_delete_email(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    uid: u32,
-    mailbox: Option<String>,
-    permanent: Option<bool>,
-) -> Result<serde_json::Value, String> {
-    let mailbox = mailbox.unwrap_or_else(|| "INBOX".to_string());
-    let permanent = permanent.unwrap_or(false);
-
-    // `run_uid_delete`, not `with_priority`: a pooled socket the peer closed
-    // while it sat idle fails this before the SELECT lands, and the frontend
-    // restores the row it had already taken out — a delete that reads as a
-    // message coming back from the dead. See the pool's own doc for why a
-    // uid-addressed delete is the one mutation safe to re-send.
-    // Capabilities are cached when a session is CREATED, so read them inside
-    // the closure, after checkout — exactly like imap_move_emails.
-    let pool_ref: &ImapPool = &pool;
-    let acct = &account;
-    let outcome = pool.run_uid_delete(&account, true, |mut session| {
-        let mailbox = mailbox.clone();
-        async move {
-            let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-            let outcome = imap::delete_email(&mut session, &mailbox, uid, permanent, has_uidplus).await
-                .map_err(|e| format!("Failed to delete email: {}", e))?;
-            Ok((outcome, session, Some(mailbox)))
-        }
-    }).await.map_err(|e| {
-        tracing::error!("[delete_email] uid={} failed: {}", uid, e);
-        e
-    })?;
-
-    // Where the message went, so the caller can offer an undo instead of a
-    // search: both null for a permanent delete.
-    Ok(serde_json::json!({
-        "success": true,
-        "trash": outcome.trash,
-        "trashUid": outcome.trash_uid,
-    }))
-}
-
-// ── Ensure Sent mailbox (auto-create if missing) ──────────────────────────
-//
-// Tiered Sent-folder resolution for IMAP accounts whose server does not
-// advertise SPECIAL-USE and whose Sent folder name doesn't match our
-// heuristics. Falls back to CREATE "Sent" (Thunderbird-style lazy creation)
-// so the user never has to configure it manually for generic IMAP.
-
-#[tauri::command]
-pub async fn imap_ensure_sent_mailbox(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-) -> Result<String, String> {
-    with_background(&pool, &account, |mut session| async move {
-        let path = imap::ensure_sent_mailbox(&mut session).await?;
-        Ok((path, session, None))
-    }).await
-}
-
-// ── Folder management: CREATE / RENAME / DELETE ──────────────────────────
-//
-// All three report `None` as the pooled session's last-selected mailbox:
-// CREATE changes the hierarchy under it, and RENAME/DELETE send CLOSE, so
-// whatever the socket had selected before is no longer selected.
-
-#[tauri::command]
-pub async fn imap_create_mailbox(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    path: String,
-) -> Result<serde_json::Value, String> {
-    with_priority(&pool, &account, |mut session| async move {
-        imap::create_mailbox(&mut session, &path).await?;
-        Ok(((), session, None))
-    })
-    .await?;
-    Ok(serde_json::json!({ "success": true }))
-}
-
-#[tauri::command]
-pub async fn imap_rename_mailbox(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    from: String,
-    to: String,
-) -> Result<serde_json::Value, String> {
-    with_priority(&pool, &account, |mut session| async move {
-        imap::rename_mailbox(&mut session, &from, &to).await?;
-        Ok(((), session, None))
-    })
-    .await?;
-    Ok(serde_json::json!({ "success": true }))
-}
-
-#[tauri::command]
-pub async fn imap_delete_mailbox(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    paths: Vec<String>,
-) -> Result<serde_json::Value, String> {
-    let deleted = with_priority(&pool, &account, |mut session| async move {
-        let n = imap::delete_mailbox(&mut session, &paths).await?;
-        Ok((n, session, None))
-    })
-    .await?;
-    Ok(serde_json::json!({ "success": true, "deleted": deleted }))
-}
+// `imap_set_flags`, `imap_delete_email`, `imap_ensure_sent_mailbox`,
+// `imap_create_mailbox`, `imap_rename_mailbox` and `imap_delete_mailbox` all
+// moved to the daemon (Task 5.4b, `src-daemon/src/handlers/imap.rs`), same
+// request/response JSON, routed via `transport.js`'s `DAEMON_OWNED` under
+// their existing names. `imap_ensure_sent_mailbox` still returns a bare
+// string, not an object — matches its old `Result<String, String>`.
 
 /// Build the RFC2822 MIME bytes for an outgoing email WITHOUT sending.
 /// Used by the JS compose flow so it can write the raw .eml to the local
@@ -321,7 +123,6 @@ fn built_mime_json(built: smtp::BuiltMime, account: &ImapConfig) -> Result<serde
 #[tauri::command]
 pub async fn smtp_send_email(
     app_handle: tauri::AppHandle,
-    pool: tauri::State<'_, ImapPool>,
     account: ImapConfig,
     email: smtp::OutgoingEmail,
     #[allow(unused)] sent_mailbox: Option<String>,
@@ -331,6 +132,16 @@ pub async fn smtp_send_email(
     // and best-effort appends to the server Sent folder in the background.
     //
     // Structured logging uses `[send]` prefix so step-by-step grep is trivial.
+    //
+    // Task 5.4b removed the `pool: tauri::State<'_, ImapPool>` param this
+    // command used to take (the app's managed `ImapPool` is gone — the
+    // interactive commands that used it all moved to the daemon). It was
+    // dead weight even before that: the background APPEND below has always
+    // used a dedicated `create_imap_session_no_compress` connection, never
+    // the pool — `pool_clone`/`pool_for_log` were captured and cloned only
+    // to be silenced (`let _ = (pool_clone, pool_for_log, ...)`), never
+    // actually read. This command's own move to the daemon is Task 5.5, out
+    // of scope here.
 
     let account_id_for_log = account.email.clone();
     tracing::info!("[send:smtp_start] account={} recipient={}", account_id_for_log, email.to);
@@ -399,7 +210,6 @@ pub async fn smtp_send_email(
             let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
             let account_clone = account.clone();
             let mailbox_clone = mailbox.clone();
-            let pool_clone: ImapPool = (*pool).clone();
             let app_handle_clone = app_handle.clone();
             let account_id_bg = account_id_for_log.clone();
             let message_id_bg = result.message_id.clone();
@@ -412,7 +222,6 @@ pub async fn smtp_send_email(
                 );
                 let mid_for_closure = message_id_header_bg.clone();
                 let mailbox_for_closure = mailbox_clone.clone();
-                let pool_for_log = pool_clone.clone();
                 let account_for_log = account_clone.clone();
                 let account_id_inner = account_id_bg.clone();
                 tracing::info!("[send:dedicated_session_start] account={} mailbox={} — using fresh no-compress session to avoid Hostinger APPEND hang", account_id_inner, mailbox_for_log);
@@ -437,7 +246,7 @@ pub async fn smtp_send_email(
                         res
                     },
                 ).await;
-                let _ = (pool_clone, pool_for_log, account_clone, mailbox_clone);
+                let _ = (account_clone, mailbox_clone);
                 let (ok, verify_payload) = match verified_result {
                     Ok(Ok((before, after, found_uid))) => {
                         let _ = (before, after, found_uid); // silence unused if refactored
@@ -511,43 +320,10 @@ pub async fn smtp_send_email(
 // `imap_search_emails` + its local `SearchFilters` moved to the daemon (Task
 // 5.4a, `src-daemon/src/handlers/imap.rs`), same request/response JSON.
 
-// ── Message-ID probe ────────────────────────────────────────────────────────
-
-/// "Is this Message-ID anywhere on the server?" — asked of every folder.
-///
-/// The one question the gold "your only copy" claim rests on. Absence from the
-/// mailbox a message was archived from is not absence from the server, so this
-/// sweeps them all; `complete` reports whether it managed to.
-#[tauri::command]
-pub async fn imap_find_message_id(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    message_id: String,
-    stop_on_first: Option<bool>,
-) -> Result<serde_json::Value, String> {
-    let stop_on_first = stop_on_first.unwrap_or(true);
-
-    let probe = with_background(&pool, &account, |mut session| async move {
-        let result = imap::find_message_id(&mut session, &message_id, stop_on_first).await?;
-        // A sweep SELECTs many folders and can end on one whose SELECT was
-        // refused, so it has no single answer for the pool's bookkeeping —
-        // None says so rather than naming a folder that may not be selected.
-        Ok((result, session, None))
-    }).await?;
-
-    serde_json::to_value(&probe).map_err(|e| format!("Serialize probe: {}", e))
-}
-
-// ── Disconnect ──────────────────────────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_disconnect(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-) -> Result<serde_json::Value, String> {
-    pool.disconnect(&account).await;
-    Ok(serde_json::json!({ "success": true }))
-}
+// `imap_find_message_id` and `imap_disconnect` moved to the daemon (Task
+// 5.4b, `src-daemon/src/handlers/imap.rs`), same request/response JSON —
+// `imap_find_message_id`'s reply is still the bare serialized probe struct,
+// not wrapped in an object.
 
 // ── OAuth2: Generate auth URL ───────────────────────────────────────────────
 
@@ -801,44 +577,8 @@ pub async fn graph_delete_folder(access_token: String, folder_id: String) -> Res
     client.delete_folder(&folder_id).await
 }
 
-// ── Move emails between folders ──────────────────────────────────────────
-
-#[tauri::command]
-pub async fn imap_move_emails(
-    pool: tauri::State<'_, ImapPool>,
-    account: ImapConfig,
-    uids: Vec<u32>,
-    source_mailbox: String,
-    target_mailbox: String,
-) -> Result<serde_json::Value, String> {
-    // Capabilities are cached when a session is CREATED (pool.rs:415), so read
-    // them inside the closure, after checkout — a read before it sees an empty
-    // map on the first call of a process and takes the slow COPY path.
-    let pool_ref: &ImapPool = &pool;
-    let acct = &account;
-    let outcome = with_priority(&pool, &account, |mut session| async move {
-        let has_move = pool_ref.has_capability(acct, "MOVE").await;
-        let has_uidplus = pool_ref.has_capability(acct, "UIDPLUS").await;
-        let result = imap::move_uids(
-            &mut session,
-            &source_mailbox,
-            &target_mailbox,
-            &uids,
-            has_move,
-            has_uidplus,
-        )
-        .await?;
-        Ok((result, session, Some(source_mailbox)))
-    })
-    .await?;
-    // `newUids` is null on a server without UIDPLUS: it reported no COPYUID, and
-    // a guessed destination uid addresses the wrong message.
-    Ok(serde_json::json!({
-        "success": true,
-        "moved": outcome.moved,
-        "newUids": outcome.new_uids,
-    }))
-}
+// `imap_move_emails` moved to the daemon (Task 5.4b,
+// `src-daemon/src/handlers/imap.rs`), same request/response JSON.
 
 // ── DNS: Resolve email server settings ───────────────────────────────────
 

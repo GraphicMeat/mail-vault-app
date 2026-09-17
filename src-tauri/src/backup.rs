@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use serde::Serialize;
 use tauri::{Emitter, Manager};
@@ -8,6 +8,35 @@ use tracing::{info, warn};
 
 use crate::external_location;
 use crate::imap::{self, ImapConfig, ImapPool};
+
+// ── Shared IMAP pool (Task 5.4b) ─────────────────────────────────────────────
+//
+// The app no longer manages one process-wide `ImapPool` (`main.rs`'s
+// `.manage(imap::ImapPool::new())` is gone — the interactive-command
+// consumers in `commands.rs` all moved to the daemon's own pool). This file's
+// two IMAP status/backup helpers below and `archive.rs`'s `run_with_backup`
+// shim (`backup.rs:797`'s only caller of it) are the last app-side IMAP
+// callers left (Known Gaps in architecture.md: backup itself hasn't moved to
+// the daemon yet) — they share ONE process-global pool here rather than each
+// constructing its own `ImapPool::new()`. `ImapPool` is `Clone` over `Arc`s
+// (cheap, shares state), same pattern as `daemon_channel.rs`'s `OnceLock`
+// singleton. A private pool per call site would double the effective
+// concurrent-connection ceiling: `run_with_backup` runs DURING a backup run
+// against the very account `run_imap_backup_inner` is mid-fetch on, and the
+// pool's per-account semaphore (3 background + 3 priority sessions) is the
+// only thing bounding that today.
+static SHARED_IMAP_POOL: OnceLock<ImapPool> = OnceLock::new();
+
+pub(crate) fn pool() -> ImapPool {
+    SHARED_IMAP_POOL.get_or_init(ImapPool::new).clone()
+}
+
+/// Same pool, without creating it — `main.rs`'s app-exit handler must not
+/// construct a fresh, empty pool just to immediately shut it down when no
+/// backup ever ran this session.
+pub(crate) fn pool_if_started() -> Option<ImapPool> {
+    SHARED_IMAP_POOL.get().cloned()
+}
 
 // ── Event payload ────────────────────────────────────────────────────────────
 
@@ -337,7 +366,7 @@ async fn get_imap_backup_status(
     account: ImapConfig,
     backup_path: Option<String>,
 ) -> Result<AccountBackupStatus, String> {
-    let pool = app_handle.state::<ImapPool>();
+    let pool = pool();
 
     let mailboxes = {
         let mut guard = pool.get_background(&account).await?;
@@ -655,7 +684,7 @@ async fn run_imap_backup_inner(
 
     // ── IMAP path ────────────────────────────────────────────────────────────
 
-    let pool = app_handle.state::<ImapPool>();
+    let pool = pool();
 
     // List all mailboxes
     let mailboxes = {

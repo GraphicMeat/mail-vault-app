@@ -1,9 +1,8 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 
 use mailvault_core::archive::{ArchiveCtx, ArchiveSinks};
-use mailvault_core::imap::ImapPool;
 
 // The runner itself (`ArchiveProgress`, `DrivePace`, `run`/`run_with_backup`'s
 // body, `fetch_and_store`, `bulk_delete`, `delete_single_email`) moved to
@@ -33,7 +32,12 @@ fn app_has_no_vault_gate(work: &mut dyn FnMut() -> Result<(), String>) -> Result
 
 fn build_ctx(app_handle: &tauri::AppHandle) -> Result<Arc<ArchiveCtx>, String> {
     let root = crate::vault::root(app_handle)?;
-    let pool = Arc::new(app_handle.state::<ImapPool>().inner().clone());
+    // Task 5.4b: no more app-managed `ImapPool` to pull from `app_handle`
+    // (the interactive-command consumers moved to the daemon's own pool) —
+    // `crate::backup::pool()` is the process-global instance this shim now
+    // shares with `backup.rs`'s own two IMAP callers instead (see its doc
+    // comment for why one shared pool, not a private one per call site).
+    let pool = Arc::new(crate::backup::pool());
 
     let emit_handle = app_handle.clone();
     let emit: Arc<dyn Fn(&str, serde_json::Value) + Send + Sync> =
