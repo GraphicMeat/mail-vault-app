@@ -64,6 +64,19 @@ pub fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, Strin
         .map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
 }
 
+/// Guards every test (in this module or elsewhere in the crate, e.g.
+/// `server.rs`'s RPC-level sync.now test) that sets the process-global
+/// `MAILVAULT_TEST_CREDENTIALS` env var. Cargo runs a crate's tests on
+/// parallel threads by default; two tests setting this var to two different
+/// paths at once would race (one test's `resolve_account_credentials` could
+/// read the other's file). Take this lock for the env var's entire
+/// set-use-remove span.
+#[cfg(test)]
+pub(crate) fn test_env_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,13 +101,17 @@ mod tests {
         .to_string()
     }
 
-    /// Both cases share one test (rather than one `#[test]` each) because
-    /// `MAILVAULT_TEST_CREDENTIALS` is a process-global env var and cargo runs
-    /// tests in parallel threads within a crate — two tests setting it to two
-    /// different temp paths would race. A single test avoids that without a
-    /// lock.
+    /// Both cases share one test (rather than one `#[test]` each) — simpler
+    /// than taking `test_env_lock()` twice for two tiny cases. The lock itself
+    /// (see `test_env_lock` above) exists because `MAILVAULT_TEST_CREDENTIALS`
+    /// is a process-global env var and cargo runs a crate's tests on parallel
+    /// threads: without it, this test and `server.rs`'s RPC-level
+    /// `sync_now_authenticates_via_resolved_credentials_not_the_payload` test
+    /// (Task 5.2) — which also sets this var, to a different path — could race.
     #[test]
     fn resolve_account_credentials_uses_the_test_file_bypass() {
+        let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+
         let mut blob = HashMap::new();
         blob.insert("acct-1".to_string(), sample_account_json());
 

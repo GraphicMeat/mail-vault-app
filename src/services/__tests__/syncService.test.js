@@ -41,18 +41,23 @@ describe('syncService', () => {
 });
 
 // The daemon's SyncAccount/ImapConfig deserialize is by field name — a rename
-// here and the account silently stops being watchable. The thirteen names are
+// here and the account silently stops being watchable. The eleven names are
 // pinned so `toSyncAccount` and the daemon struct can never drift apart, and
 // so the UI-only keys a store account carries never reach the socket.
+//
+// Task 5.2: `password`/`oauth2AccessToken` are deliberately NOT in this list
+// any more — the daemon resolves both itself, via
+// `credentials::resolve_account_credentials`, instead of trusting the RPC
+// payload (sync.now/sync.watch). This is a permanent shape change, documented
+// in architecture.md, not a transitional one.
 describe('toSyncAccount', () => {
   // `imapSecurity` is the one the account form actually stores and the one
   // ImapConfig::effective_security reads first; `imapSecure` beside it is
   // hardcoded true and is only the fallback. Leaving it out dialled every
   // STARTTLS and plaintext account as implicit TLS.
   const IMAP_FIELDS = [
-    'email', 'password', 'imapHost', 'imapPort', 'imapSecure', 'imapSecurity', 'authType',
-    'oauth2AccessToken', 'smtpHost', 'smtpPort', 'smtpSecure', 'name',
-    'oauth2Transport',
+    'email', 'imapHost', 'imapPort', 'imapSecure', 'imapSecurity', 'authType',
+    'smtpHost', 'smtpPort', 'smtpSecure', 'name', 'oauth2Transport',
   ];
 
   const storeAccount = {
@@ -64,7 +69,7 @@ describe('toSyncAccount', () => {
     color: '#fff', unreadCount: 3, previousImapHost: 'old.b.co', _dirty: true,
   };
 
-  it('maps the thirteen IMAP fields and drops everything else', () => {
+  it('maps the eleven IMAP fields and drops everything else', () => {
     const sync = toSyncAccount(storeAccount);
 
     expect(sync.id).toBe('acc-1');
@@ -72,11 +77,21 @@ describe('toSyncAccount', () => {
     expect(Object.keys(sync).sort()).toEqual(['email', 'id', 'imapConfig']);
     expect(Object.keys(sync.imapConfig).sort()).toEqual([...IMAP_FIELDS].sort());
     expect(sync.imapConfig).toEqual({
-      email: 'a@b.co', password: 'pw',
+      email: 'a@b.co',
       imapHost: 'imap.b.co', imapPort: 993, imapSecure: true, imapSecurity: 'starttls', authType: 'password',
-      oauth2AccessToken: 'tok', smtpHost: 'smtp.b.co', smtpPort: 465, smtpSecure: true,
+      smtpHost: 'smtp.b.co', smtpPort: 465, smtpSecure: true,
       name: 'A B', oauth2Transport: null,
     });
+  });
+
+  // The store account carries both — other flows (add-account, settings) still
+  // need them for store_credentials/get_credentials, which stay app-side. Only
+  // the sync/IDLE payload must never carry them.
+  it('never puts password or oauth2AccessToken on the wire, even though the store account carries both', () => {
+    const sync = toSyncAccount(storeAccount);
+
+    expect(sync.imapConfig).not.toHaveProperty('password');
+    expect(sync.imapConfig).not.toHaveProperty('oauth2AccessToken');
   });
 
   // activateAccount knows the account id before the store row does.

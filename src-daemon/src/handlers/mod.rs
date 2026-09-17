@@ -3,6 +3,7 @@
 use crate::classification;
 use crate::classification_worker::{enqueue_for_classification, reclassify_all};
 use crate::contacts_index;
+use crate::credentials;
 use crate::inference;
 use crate::ipc::{self, RpcResponse};
 use crate::learning;
@@ -54,10 +55,20 @@ pub(crate) fn handle_contacts_index_get(
 // ── Sync handlers (Phase 3) ─────────────────────────────────────────────────
 
 pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
-    let account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+    let mut account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
         Some(a) => a,
         None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing account"),
     };
+    // Task 5.2: the payload no longer carries `password`/`oauth2AccessToken`
+    // (toSyncAccount stopped sending them) — resolve them ourselves instead
+    // of trusting whatever the JS side put in `imapConfig`.
+    match credentials::resolve_account_credentials(&account.id) {
+        Ok(resolved) => {
+            account.imap_config.password = resolved.password;
+            account.imap_config.access_token = resolved.access_token;
+        }
+        Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+    }
     let mailbox = params.get("mailbox").and_then(|v| v.as_str()).unwrap_or("INBOX");
     let auto_classify = params.get("autoClassify").and_then(|v| v.as_bool()).unwrap_or(false);
 
@@ -129,10 +140,22 @@ pub(crate) async fn handle_sync_status(engine: &sync_engine::SyncEngine, params:
 /// Register an account for IDLE. The app calls this for every account it has,
 /// on every reconnect; an unchanged account is a no-op inside `watch`.
 pub(crate) async fn handle_sync_watch(state: Arc<DaemonState>, params: Value, id: Value) -> RpcResponse {
-    let account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
+    let mut account: sync_engine::SyncAccount = match params.get("account").and_then(|v| serde_json::from_value(v.clone()).ok()) {
         Some(a) => a,
         None => return RpcResponse::error(id, ipc::INVALID_PARAMS, "Missing account"),
     };
+    // Task 5.2: same as sync.now — resolve credentials ourselves rather than
+    // trusting the payload. This account is captured wholesale by the IDLE
+    // watcher for the life of its task (idle_watch.rs `run`), including every
+    // reconnect, so it must carry the real password/token before it gets
+    // there — the watcher itself never re-resolves per-connection.
+    match credentials::resolve_account_credentials(&account.id) {
+        Ok(resolved) => {
+            account.imap_config.password = resolved.password;
+            account.imap_config.access_token = resolved.access_token;
+        }
+        Err(e) => return RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+    }
     // 29 minutes: RFC 2177 tells clients to re-issue IDLE at least that often
     // or the server may log them off.
     state.idle.watch(account, std::time::Duration::from_secs(29 * 60)).await;

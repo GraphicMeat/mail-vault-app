@@ -594,6 +594,86 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Task 5.2: `sync.now`'s payload no longer carries a password —
+    /// `toSyncAccount` (src/services/syncService.js) stops sending it. The
+    /// handler must resolve it itself via `credentials::resolve_account_credentials`
+    /// (the `MAILVAULT_TEST_CREDENTIALS` file bypass here, standing in for the
+    /// keychain) rather than trusting whatever the payload's `imapConfig` says.
+    /// The mock server's `expect_login` only accepts the REAL password
+    /// ("hunter2"), which never appears in the RPC payload below — so this
+    /// only goes green if resolution actually happened.
+    #[tokio::test]
+    async fn sync_now_authenticates_via_resolved_credentials_not_the_payload() {
+        use mock_imap::state::synthetic_mailbox;
+
+        // `MAILVAULT_TEST_CREDENTIALS` is a process-global env var; hold the
+        // crate-shared lock (see `credentials::test_env_lock`) for its whole
+        // set-use-remove span so this doesn't race credentials.rs's own test.
+        let _env_guard = crate::credentials::test_env_lock()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+
+        let dir = scratch("syncnow-creds");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+
+        std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+
+        let mut scenario = mock_imap::Scenario::new().mailbox(synthetic_mailbox("INBOX", 1));
+        scenario.state.expect_login = Some(("user@example.com".to_string(), "hunter2".to_string()));
+        let server = mock_imap::MockImap::start(scenario);
+
+        // The test-credentials bypass file: same shape as the real keychain
+        // blob (`{ accountId: JSON-string-of-account }`), same shape
+        // `resolve_account_credentials`'s own unit test uses.
+        let creds_path = dir.join("credentials.json");
+        let account_json = json!({
+            "id": "acc1",
+            "email": "user@example.com",
+            "password": "hunter2",
+            "imapHost": server.host(),
+            "imapPort": server.port(),
+        })
+        .to_string();
+        let mut blob = std::collections::HashMap::new();
+        blob.insert("acc1".to_string(), account_json);
+        std::fs::write(&creds_path, serde_json::to_string(&blob).unwrap()).unwrap();
+        std::env::set_var("MAILVAULT_TEST_CREDENTIALS", &creds_path);
+
+        // No `password`/`oauth2AccessToken` anywhere in this payload — the
+        // post-5.2 shape `toSyncAccount` sends.
+        let payload = json!({
+            "account": {
+                "id": "acc1",
+                "email": "user@example.com",
+                "imapConfig": {
+                    "email": "user@example.com",
+                    "imapHost": server.host(),
+                    "imapPort": server.port(),
+                }
+            },
+            "mailbox": "INBOX",
+        });
+
+        let resp = handle_request(&state, req("sync.now", payload)).await;
+        let result = resp.result.expect("sync.now must accept a payload with no password");
+        let ticket = result["ticket"].as_u64().expect("ticket");
+
+        let wait = handle_request(
+            &state,
+            req("sync.wait", json!({"ticket": ticket, "timeoutMs": 5000})),
+        )
+        .await;
+        let sync_result = wait.result.expect("sync.wait must succeed");
+        assert_eq!(
+            sync_result["success"],
+            json!(true),
+            "sync must authenticate using credentials resolved in the daemon, not the payload: {sync_result:?}"
+        );
+
+        std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     /// The long-poll answers with the current generation even when nothing has
     /// happened — the app needs a number to come back with.
     #[tokio::test]

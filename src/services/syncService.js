@@ -16,7 +16,8 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore.js';
  *
  * The `ticket` names this sync and nothing else; pass it to `waitForSync`.
  *
- * @param {object} account - { id, email, imapConfig: { email, password, imapHost, imapPort, ... } }
+ * @param {object} account - { id, email, imapConfig: { email, imapHost, imapPort, ... } } (no
+ *   password/oauth2AccessToken — the daemon resolves credentials itself)
  * @param {string} [mailbox='INBOX']
  * @returns {Promise<{ started: boolean, accountId: string, mailbox: string, ticket: number }>}
  */
@@ -59,8 +60,13 @@ export async function getSyncStatus(accountId) {
 
 /**
  * The account shape the daemon's sync RPCs take: id, email and the IMAP half
- * of the config. The daemon deserializes these twelve names — a store account
+ * of the config. The daemon deserializes these eleven names — a store account
  * carries a pile of UI-only keys besides, and none of them belong on a socket.
+ *
+ * `password`/`oauth2AccessToken` are deliberately not here (permanent, not
+ * transitional — see architecture.md): the daemon resolves both itself, from
+ * the same keychain entry the app writes, via `resolve_account_credentials`.
+ * Sync/IDLE credentials no longer travel over the RPC socket at all.
  *
  * @param {object} account - a store account row
  * @param {string} [id=account.id] - explicit id, for callers that know it first
@@ -69,7 +75,7 @@ export function toSyncAccount(account, id = account.id) {
   return {
     id, email: account.email,
     imapConfig: {
-      email: account.email, password: account.password,
+      email: account.email,
       imapHost: account.imapHost, imapPort: account.imapPort,
       // Both: `imapSecurity` ('ssl' | 'starttls' | 'none') is what the account
       // form actually stores and what ImapConfig::effective_security reads
@@ -79,7 +85,6 @@ export function toSyncAccount(account, id = account.id) {
       // for the life of the process.
       imapSecure: account.imapSecure, imapSecurity: account.imapSecurity,
       authType: account.authType,
-      oauth2AccessToken: account.oauth2AccessToken,
       smtpHost: account.smtpHost, smtpPort: account.smtpPort,
       smtpSecure: account.smtpSecure, name: account.name,
       oauth2Transport: account.oauth2Transport,
