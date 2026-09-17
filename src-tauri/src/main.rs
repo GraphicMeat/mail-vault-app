@@ -1092,7 +1092,7 @@ async fn open_email_window(app: tauri::AppHandle, html: String, title: String) -
 // once custody.db itself opened in the daemon. `maildir_store_raw` (its only
 // caller, `commands.rs`'s `imap_get_email_light`) moved to the daemon in
 // Task 5.4a too — `handlers::imap` writes the already-in-memory bytes
-// directly via `mailvault_core::vault_files::store(..., overwrite: false)`,
+// directly via `vault_files`'s store fn (called with overwrite: false),
 // no base64 round trip, no app-side function left to call. What is left here
 // is the three vault_flags forwarders in `vault_flags.rs`, which exist only
 // to resolve the backup mirror's security-scoped bookmark for the daemon.
