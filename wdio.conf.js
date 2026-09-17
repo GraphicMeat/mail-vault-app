@@ -33,6 +33,14 @@ const appBinary = process.env.TAURI_APP_BINARY || resolve(
   'target/debug/mailvault'
 );
 
+// tauri-wd's port, one source of truth. A parallel clone of this repo (the
+// mac mini's mv-* runners, used for physical isolation because wdio needs a
+// fixed unique port) used to need this literal sed'd in three separate spots
+// here — miss one and two clones silently share a port (mv-bugs4 inherited
+// mv-recov's 4498 this way until someone noticed). Set E2E_TAURI_WD_PORT once
+// per clone instead.
+const TAURI_WD_PORT = Number(process.env.E2E_TAURI_WD_PORT) || 4444;
+
 // Isolated HOME for the app under test. Everything the app and its daemon touch
 // — app_data_dir(), the Maildir, ~/.mailvault/mv.sock — hangs off HOME, so
 // overriding it here is what actually keeps a run away from real app state.
@@ -223,6 +231,37 @@ function seedOnboardingComplete(home) {
   }));
 }
 
+/**
+ * WDIO's automatic `DELETE /session` between spec files is the only thing
+ * that ends the previous spec's `mailvault` process (there is no per-spec
+ * `afterEach`/`afterSession` hook in this file) — and tauri-wd answers that
+ * DELETE before the app has actually exited, the same "replies before it's
+ * true" shape already documented for `reload()` in tests/e2e/helpers.js:84.
+ * Left unchecked, the next spec's fresh session launches on top of a still-
+ * dying previous instance; each survivor then slows the next one's own
+ * shutdown too, so a run's orphan count accelerates rather than staying flat
+ * (observed: 9 orphans at ~4min, 49 at ~19min on one connected-ci run).
+ * `beforeSession` is the one guaranteed boundary between specs, so poll here
+ * and force it dead before the next app launches on the same data dir/socket.
+ */
+async function waitForStrayAppToDie(timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      execFileSync('pgrep', ['-x', 'mailvault'], { stdio: 'ignore' });
+    } catch {
+      return; // pgrep exits non-zero when nothing matches: fully dead
+    }
+    if (Date.now() > deadline) {
+      console.warn('[wdio] mailvault still alive after 5s — force-killing before the next session');
+      try { execFileSync('pkill', ['-9', '-x', 'mailvault']); } catch { /* already gone */ }
+      return;
+    }
+    try { execFileSync('pkill', ['-x', 'mailvault']); } catch { /* none running, or already exiting */ }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+}
+
 export const config = {
   runner: 'local',
   specs: ['./tests/e2e/**/*.test.js'],
@@ -309,10 +348,11 @@ export const config = {
       }
     }
 
-    // A tauri-wd left behind by an aborted run still owns port 4444, and every
-    // session then fails with "App did not report plugin port in time". Mock
-    // servers from an aborted run just squat on memory. Both names are ours alone.
-    for (const name of ['tauri-wd', 'mock-imap-server']) {
+    // A tauri-wd (or the app it launched) left behind by an aborted run still
+    // owns the port / the daemon socket, and every session then fails with
+    // "App did not report plugin port in time". Mock servers from an aborted
+    // run just squat on memory. All three names are ours alone.
+    for (const name of ['tauri-wd', 'mailvault', 'mock-imap-server']) {
       try { execFileSync('pkill', ['-x', name]); } catch { /* none running */ }
     }
 
@@ -369,7 +409,7 @@ export const config = {
       // Trace level in CI: tauri-wd relays the app's stdout lines at
       // debug/trace, which is the only place frontend/daemon boot output
       // is visible on a headless runner.
-      tauriWd = spawn('tauri-wd', ['--port', '4444', ...(process.env.CI ? ['--log-level', 'trace'] : [])], {
+      tauriWd = spawn('tauri-wd', ['--port', String(TAURI_WD_PORT), ...(process.env.CI ? ['--log-level', 'trace'] : [])], {
         stdio: ['ignore', 'pipe', 'pipe'],
         // Own process group: killing it takes the app (and its daemon) with it.
         detached: true,
@@ -399,7 +439,7 @@ export const config = {
       function checkOutput(data) {
         const output = data.toString();
         console.log(`[tauri-wd]`, output.trim());
-        if (!started && (output.includes('listening') || output.includes('4444'))) {
+        if (!started && (output.includes('listening') || output.includes(String(TAURI_WD_PORT)))) {
           started = true;
           resolve();
         }
@@ -432,7 +472,10 @@ export const config = {
   },
 
   // Each spec file gets a fresh app state — see resetAppState().
-  beforeSession: function (_config, _capabilities, specs) {
+  beforeSession: async function (_config, _capabilities, specs) {
+    // Must come before resetAppState: a still-dying previous instance can
+    // still be writing to the data dir resetAppState is about to wipe.
+    await waitForStrayAppToDie();
     const accounts = JSON.parse(process.env.E2E_MOCK_ACCOUNTS || '[]');
     if (accounts.length) {
       resetAppState(testDataDir, accounts);
@@ -479,5 +522,5 @@ export const config = {
     browser.testDataDir = testDataDir;
   },
 
-  port: 4444,
+  port: TAURI_WD_PORT,
 };
