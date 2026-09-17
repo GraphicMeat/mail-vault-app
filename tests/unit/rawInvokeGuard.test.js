@@ -55,11 +55,11 @@ const PHASE3 = [
   'insights_begin_snapshot', 'insights_read_page', 'insights_release_snapshot',
 ];
 
-// ── Phase 4 Task 4.1 (import/export): none of these are DAEMON_OWNED yet —
+// -- Phase 4 Task 4.1 (import/export): none of these are DAEMON_OWNED yet,
 // this task only reroutes their raw-invoke call sites onto transport.js's
 // `send`, which still falls through to tauriInvoke for an unowned name (no
 // behaviour change). `BackupRestore.jsx` reads `window.__TAURI__?.core?.invoke`
-// into a module-scoped const once and calls it from 4 sites — a shape the
+// into a module-scoped const once and calls it from 4 sites, a shape the
 // existing `directRaw` pattern already matches (it already tolerates `?.`
 // optional chaining via the `DOT` alternation), proven by the negative
 // control below rather than assumed. `exportService.js`'s `fetchAssetViaTauri`
@@ -225,7 +225,7 @@ describe('raw invoke guard: every Phase 1+2+3 daemon-owned name routes through t
   // elsewhere in the function) is a third raw-invoke idiom in this codebase,
   // distinct from a direct call and from the dynamic-import destructure. The
   // existing `directRaw` pattern already tolerates the `?.` optional chaining
-  // this file uses, so no new pattern was needed here — proven, not assumed,
+  // this file uses, so no new pattern was needed here, proven, not assumed,
   // with the same catch/ignore pair the other two idioms use above.
   it('negative control: catches the optional-chaining const-then-call raw shape, ignores the routed replacement', () => {
     const raw = scanText(
