@@ -190,6 +190,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             // blocks the RPC response. Uses a dedicated no-compress session,
             // never the daemon's pooled ImapPool — same reasoning
             // `commands.rs` documented (Hostinger APPEND hang).
+            //
+            // Two distinct skip reasons, kept apart (not collapsed into one
+            // `filter`) so the `[send:server_append_skip]` log line still
+            // says which one happened — verbatim from `commands.rs`, which
+            // this repo has needed exact `[send:...]` log shapes to diagnose
+            // before.
+            let sent_mailbox_present = sent_mailbox.is_some();
             if let Some(mailbox) = sent_mailbox.filter(|m| !m.is_empty()) {
                 let raw_bytes: Vec<u8> = result.raw_rfc2822.clone();
                 let account_clone = account.clone();
@@ -268,6 +275,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     info!("[send:server_append_event_emit] payload={}", payload);
                     state_clone.events.emit("send-server-append-complete", payload);
                 });
+            } else if sent_mailbox_present {
+                tracing::warn!("[send:server_append_skip] account={} reason=empty_sent_mailbox", account_id_for_log);
             } else {
                 tracing::warn!("[send:server_append_skip] account={} reason=no_sent_mailbox_passed", account_id_for_log);
             }
@@ -328,6 +337,12 @@ mod tests {
         let result = resp.result.expect("success");
         assert!(result["rawBase64"].as_str().unwrap().len() > 0);
         assert!(result["rawSize"].as_u64().unwrap() > 0);
+        // Brackets intact (unlike smtp_send_email's SEARCH-HEADER copy) — the
+        // compose flow matches this against parse_header's rows, which also
+        // keep `<...>`; stripping here would make the optimistic Sent row
+        // unmatchable. lettre always sets a Message-ID when none is given.
+        let message_id = result["messageId"].as_str().expect("messageId must be present");
+        assert!(message_id.starts_with('<') && message_id.ends_with('>'), "{message_id}");
     }
 
     #[tokio::test]
@@ -377,9 +392,12 @@ mod tests {
         )
         .await;
         assert_eq!(resp.result.expect("success")["success"], json!(true));
-        // No sentMailbox param at all — background APPEND must not run.
-        // (Nothing to assert on the mock IMAP side beyond "did not hang";
-        // the real assertion is send_email_appends_to_the_sent_mailbox_and_emits_the_event below.)
+        // No sentMailbox param at all — the background APPEND path must
+        // never even open an IMAP connection (`if let Some(mailbox) = ...`
+        // is skipped whole), so nothing IMAP-side ever runs. Give the
+        // background task a moment to have run if it (wrongly) did.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(server.count_commands("APPEND"), 0, "commands: {:?}", server.commands());
     }
 
     #[tokio::test]
