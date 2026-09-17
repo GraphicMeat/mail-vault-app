@@ -21,6 +21,7 @@ pub mod graph;
 pub mod graph_ledger;
 pub mod oauth2;
 pub mod dns;
+pub mod smtp;
 pub mod spellcheck;
 pub mod transfer_stats;
 pub mod net;
