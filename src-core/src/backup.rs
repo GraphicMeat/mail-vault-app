@@ -12,9 +12,13 @@
 //! What did NOT move here: `AccountBackupStatus`/`FolderBackupStatus` (the
 //! compare-with-server status view), `resolve_backup_path`/`release_backup_path`
 //! (bookmark resolution — a Rust/platform-integration concern that stays with
-//! `external_location.rs`), `backup_purge_uids`, and the Graph/Outlook backup
-//! path (`run_graph_backup`, `backup.rs:1131-1404`). All out of scope for this
-//! task; `run_imap_account`'s name says which provider this covers.
+//! `external_location.rs`), and `backup_purge_uids`. All out of scope for this
+//! task; `run_imap_account`'s name says which provider it covers.
+//!
+//! The Graph/Outlook backup path (`run_graph_account`, ported from
+//! `run_graph_backup`, `src-tauri/src/backup.rs:1131-1404`) followed in Task 2,
+//! reusing this file's shared uid-scanning helpers below. Its own header
+//! comment (above `run_graph_account`) covers what that port changed.
 //!
 //! The read-state catch-up this run does once per folder
 //! (`backup.rs:850-886`'s `vault_apply_flags` daemon-RPC bridge) is now an
@@ -409,6 +413,341 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         },
         external_copy_failed_count: total_ext_failures,
     })
+}
+
+// ── Graph (Outlook) backup runner ────────────────────────────────────────────
+//
+// Ported from `src-tauri/src/backup.rs:1131-1404`'s `run_graph_backup`,
+// reusing the same shared uid-scanning helpers below (`vault_uids_after_presync`
+// and friends) the IMAP runner above already needs. Two differences from
+// Task 1's port, beyond the same closure/pool substitutions: `graph_ledger::
+// plan_fetch` mints each message's uid (Graph gives none of its own) instead
+// of reading one off the wire, and the per-message vault+mirror write
+// happens here directly — there is no `archive::run_with_backup` step to
+// delegate to, since fetching a Graph message's MIME bytes is not IMAP fetch.
+//
+// Both the ledger write and the per-message write now run under
+// `ctx.archive_ctx.gate`. The app-side original held neither behind any
+// vault-move gate — the app has no such concept. Running as the daemon's own
+// caller is what makes routing them through the gate possible, and Phase 2's
+// "every vault-rooted write goes through `with_vault_write`" rule is what
+// makes doing so mandatory here, not optional, matching how
+// `handlers::cache::graph_allocate_uids` already gates its own call into the
+// same ledger. This is also the fix for the ledger's app-side bypass (Phase 3
+// inventory, "non-obvious fact 9" / the Graph-ledger table row): the ledger
+// was already daemon-owned in spirit — its cross-process lock exists
+// precisely because the app and daemon could both reach for it — but was
+// only ever written by the app process directly. Moving the caller into the
+// daemon closes that by construction: there is no more app-side writer left.
+pub async fn run_graph_account(ctx: BackupRunContext) -> Result<BackupResult, String> {
+    let start = std::time::Instant::now();
+
+    if let Some(ref root) = ctx.mirror_root {
+        info!("backup(graph): using external path: {:?}", root);
+        // Same ordering rule as the IMAP runner: drain BEFORE any mirroring
+        // work touches the files the queue is about to delete.
+        drain_purge_queue(&ctx.app_dir, Path::new(root));
+    }
+
+    run_graph_backup_inner(ctx, start).await
+}
+
+async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant) -> Result<BackupResult, String> {
+    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+
+    let account = &ctx.account;
+    let account_id = &ctx.account_id;
+
+    let access_token = account
+        .access_token
+        .as_deref()
+        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
+    let client = crate::graph::GraphClient::new(access_token);
+
+    // List folders
+    let folders = client.list_folders().await?;
+    let total_folders = folders.len();
+    let mut completed_folders = 0usize;
+    let mut total_backed_up = 0usize;
+    let mut total_errors = 0usize;
+    let mut total_ext_failures = 0usize;
+    // The server's words for the last message that could not be fetched. A
+    // count alone leaves the user with "something failed" and nowhere to look.
+    let mut last_message_error: Option<String> = None;
+    // The first folder the uid ledger refused, and why. It stored nothing: a
+    // resumed run skips folders by position, so its checkpoint must not pass
+    // this one, and these are the words the user needs to read.
+    let mut refused: Option<(usize, String)> = None;
+
+    info!(
+        "backup(graph): starting for {} ({} folders, skipping first {})",
+        account.email, total_folders, ctx.skip_folders
+    );
+
+    let mut cancelled = false;
+
+    for (folder_idx, folder) in folders.iter().enumerate() {
+        if ctx.cancel.load(Ordering::Relaxed) {
+            warn!("backup(graph): cancelled for {} at folder {}/{}", account.email, completed_folders, total_folders);
+            cancelled = true;
+            break;
+        }
+
+        // Skip folders already completed in a previous run (resume support)
+        if folder_idx < ctx.skip_folders {
+            completed_folders += 1;
+            continue;
+        }
+
+        let folder_name = &folder.display_name;
+        // The locale-independent key `list_folders` computed; everything that
+        // files a Graph message (vault, sidecars, ledger, mirror) is keyed by
+        // this string, never `display_name`.
+        let mailbox_path = folder.storage_key.clone();
+
+        let mirror_dir = ctx
+            .mirror_root
+            .as_ref()
+            .map(|root| PathBuf::from(root).join(&account.email).join(&mailbox_path).join("cur"));
+
+        // List the whole folder before numbering any of it — see
+        // `graph_ledger`'s own doc comment for why filing by listing position
+        // is the bug this ledger replaces.
+        let mut listed: Vec<crate::graph::GraphMessage> = Vec::new();
+        let mut skip = 0u32;
+        let page_size = 100u32;
+        loop {
+            if ctx.cancel.load(Ordering::Relaxed) {
+                break;
+            }
+            let (messages, next_link) = client.list_messages(&folder.id, page_size, skip).await?;
+            let page_len = messages.len();
+            listed.extend(messages);
+            if page_len == 0 || next_link.is_none() || page_len < page_size as usize {
+                break;
+            }
+            skip += page_size;
+        }
+
+        // Get local UIDs, after the pre-sync with the mirror, as the IMAP
+        // runner does: a message restored here is not downloaded only to be
+        // skipped. Off the runtime workers for the same reason too.
+        let local_uids = {
+            let vault_cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mirror_dir = mirror_dir.clone();
+            tokio::task::spawn_blocking(move || vault_uids_after_presync(&vault_cur_dir, mirror_dir.as_deref()))
+                .await
+                .map_err(|e| format!("pre-sync panicked: {}", e))??
+        };
+
+        // One listing per side for the whole folder, after the pre-sync so
+        // what it restored or mirrored counts.
+        // ponytail: a copy another writer lands mid-folder is not in this
+        // listing, and this run writes its own beside it — the rescan this
+        // replaced had that race too, only narrower.
+        let (mut in_vault, mut in_mirror) = {
+            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let mirror_dir = mirror_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
+                let in_mirror: Option<HashSet<u32>> = mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
+                (in_vault, in_mirror)
+            })
+            .await
+            .map_err(|e| format!("folder listing panicked: {}", e))?
+        };
+
+        if !listed.is_empty() && !ctx.cancel.load(Ordering::Relaxed) {
+            let entries: Vec<(String, Option<String>)> =
+                listed.iter().map(|m| (m.id.clone(), m.internet_message_id.clone())).collect();
+            let ledger_path = ctx
+                .archive_ctx
+                .root
+                .join("email_cache")
+                .join(crate::header_cache::cache_base_name(account_id, &mailbox_path))
+                .join(crate::graph_ledger::LEDGER_FILE);
+            let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+            let local = local_uids.clone();
+            // Directory scan, header reads and a file write, on whatever
+            // drive the vault is on — and, in-process now, under the same
+            // write gate every other vault-rooted route goes through (the
+            // app-side original held this behind no gate at all).
+            let gate = Arc::clone(&ctx.archive_ctx.gate);
+            let plan: Result<Vec<(usize, u32)>, String> = tokio::task::spawn_blocking(move || {
+                let mut planned: Result<Vec<(usize, u32)>, String> = Ok(Vec::new());
+                let gated = gate(&mut || {
+                    planned = crate::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local);
+                    Ok(())
+                });
+                match gated {
+                    Ok(()) => planned,
+                    Err(e) => Err(e),
+                }
+            })
+            .await
+            .map_err(|e| format!("graph ledger panicked: {}", e))?;
+
+            match plan {
+                // No ledger, no numbers: filing by position instead is the
+                // bug this replaces. The folder is reported and the run
+                // moves on.
+                Err(e) => {
+                    warn!("backup(graph): {} not backed up: {}", mailbox_path, e);
+                    total_errors += 1;
+                    refused.get_or_insert((folder_idx, format!("{} was not backed up: {}", mailbox_path, e)));
+                }
+                Ok(plan) => {
+                    for (idx, uid) in plan {
+                        if ctx.cancel.load(Ordering::Relaxed) {
+                            break;
+                        }
+                        let msg = &listed[idx];
+
+                        // Fetch MIME content and store to vault + external backup dir
+                        match client.get_mime_content(&msg.id).await {
+                            Ok(raw_bytes) => {
+                                let mirror_to = match copies_to_write(uid, &in_vault, in_mirror.as_ref()) {
+                                    CopiesToWrite::Nothing => continue,
+                                    CopiesToWrite::Vault => None,
+                                    CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
+                                };
+                                let cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, &mailbox_path);
+                                let filename = crate::vault_files::build_maildir_filename(uid, &["archived".to_string()]);
+                                // Both writes held across the same gate the
+                                // per-file archive write uses: a stalled
+                                // external drive would hold every task it
+                                // polls if this ran on a runtime worker, and a
+                                // vault move started mid-run must see this
+                                // write finish or refuse it outright, not
+                                // race it. A failed vault write ends the run;
+                                // a failed mirror write is counted.
+                                let gate = Arc::clone(&ctx.archive_ctx.gate);
+                                let mirror_write: Option<Result<(), String>> = tokio::task::spawn_blocking(
+                                    move || -> Result<Option<Result<(), String>>, String> {
+                                        let mut mirror_result: Option<Result<(), String>> = None;
+                                        gate(&mut || {
+                                            std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
+                                            std::fs::write(cur_dir.join(&filename), &raw_bytes)
+                                                .map_err(|e| format!("write .eml: {}", e))?;
+                                            mirror_result = mirror_to.clone().map(|dir| {
+                                                std::fs::create_dir_all(&dir)
+                                                    .map_err(|e| format!("external mkdir failed: {}", e))
+                                                    .and_then(|()| {
+                                                        std::fs::write(dir.join(&filename), &raw_bytes)
+                                                            .map_err(|e| format!("external write failed: {}", e))
+                                                    })
+                                            });
+                                            Ok(())
+                                        })?;
+                                        Ok(mirror_result)
+                                    },
+                                )
+                                .await
+                                .map_err(|e| format!("message write panicked: {}", e))??;
+                                in_vault.insert(uid);
+                                match mirror_write {
+                                    Some(Ok(())) => {
+                                        if let Some(mirrored) = in_mirror.as_mut() {
+                                            mirrored.insert(uid);
+                                        }
+                                    }
+                                    Some(Err(e)) => {
+                                        warn!("backup(graph): {}", e);
+                                        total_ext_failures += 1;
+                                    }
+                                    None => {}
+                                }
+
+                                total_backed_up += 1;
+                            }
+                            Err(e) => {
+                                warn!("backup(graph): failed to fetch message {} in {}: {}", msg.id, folder_name, e);
+                                total_errors += 1;
+                                last_message_error = Some(e.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Same shape as the IMAP loop: the page loop breaks on cancel, and
+        // counting the folder anyway would have the next run skip past the
+        // pages it never fetched.
+        if ctx.cancel.load(Ordering::Relaxed) {
+            warn!(
+                "backup(graph): cancelled for {} inside {} ({}/{} folders done)",
+                account.email, mailbox_path, completed_folders, total_folders
+            );
+            cancelled = true;
+            break;
+        }
+
+        completed_folders += 1;
+
+        (ctx.on_progress)(BackupProgress {
+            account_id: account_id.clone(),
+            folder: mailbox_path,
+            total_folders,
+            completed_folders,
+            total_emails: total_backed_up + total_errors,
+            completed_emails: total_backed_up,
+            errors: total_errors,
+            active: completed_folders < total_folders,
+            last_error: None,
+            missing_in_folder: 0,
+        });
+    }
+
+    let duration = start.elapsed().as_secs_f64();
+    info!(
+        "backup(graph): {} for {} — {} emails backed up, {} errors, {:.1}s (folders: {}/{})",
+        if cancelled { "cancelled" } else { "completed" },
+        account.email,
+        total_backed_up,
+        total_errors,
+        duration,
+        completed_folders,
+        total_folders
+    );
+
+    Ok(BackupResult {
+        emails_backed_up: total_backed_up,
+        errors: total_errors,
+        duration_secs: duration,
+        success: !cancelled,
+        error_message: refused
+            .as_ref()
+            .map(|(_, why)| why.clone())
+            .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())),
+        cancelled,
+        // What the scheduler resumes from after a cancel. A folder the
+        // ledger refused stored nothing, and a resumed run would skip it.
+        completed_folders: graph_completed_folders_checkpoint(completed_folders, refused.as_ref(), cancelled),
+        external_copy_ok: total_ext_failures == 0,
+        external_copy_error: if total_ext_failures > 0 {
+            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
+        } else {
+            None
+        },
+        external_copy_failed_count: total_ext_failures,
+    })
+}
+
+/// The resume checkpoint a Graph run reports: `completed_folders`, clamped to
+/// the first folder the uid ledger refused when the run was cancelled at or
+/// after that point. Extracted out of `run_graph_backup_inner`'s final
+/// `BackupResult` so it's testable without a live `GraphClient` — a refused
+/// folder stored nothing, and a resumed run reading a checkpoint that passed
+/// it would skip a folder it never actually backed up. An uncancelled run
+/// that reached the end of its folder loop already moved past the refused
+/// folder on its own (`completed_folders` counts it like any other), so only
+/// a cancelled run needs clamping.
+fn graph_completed_folders_checkpoint(completed_folders: usize, refused: Option<&(usize, String)>, cancelled: bool) -> usize {
+    match refused {
+        Some((idx, _)) if cancelled => completed_folders.min(*idx),
+        _ => completed_folders,
+    }
 }
 
 // ── Local/mirror uid scanning ────────────────────────────────────────────────
@@ -845,5 +1184,44 @@ mod tests {
         let leftover = read_purge_queue(app_dir.path());
         assert!(leftover.contains_key("me@example.com|Archive"), "the unreachable folder stays queued");
         assert!(!leftover.contains_key("me@example.com|INBOX"), "the applied entry is dropped from the queue");
+    }
+
+    // ── Graph resume checkpoint ──────────────────────────────────────────────
+    //
+    // The task brief's illustrative test called `run_graph_account(ctx)`
+    // directly and read a `result.folder_checkpoints` map off `BackupResult`.
+    // Neither exists in the real code: `run_graph_account` needs a live
+    // `GraphClient` (network calls, no injected trait seam — matching how
+    // `handlers/graph.rs`'s own routes construct one per call rather than
+    // through a mockable interface), and `BackupResult.completed_folders` is
+    // a single resume-position `usize` from Task 1, not a per-folder map.
+    // These tests exercise the actual clamp logic
+    // (`graph_completed_folders_checkpoint`, extracted from
+    // `run_graph_backup_inner`'s final `BackupResult` build) that implements
+    // the brief's real intent: a folder the ledger refused must not be
+    // skipped by a resumed run, matching `backup.rs:1394-1397`'s behavior
+    // today.
+
+    #[test]
+    fn graph_completed_folders_checkpoint_stops_at_the_refused_folder_when_cancelled() {
+        let refused = (2usize, "Refused Folder was not backed up: ledger busy".to_string());
+        let checkpoint = graph_completed_folders_checkpoint(5, Some(&refused), true);
+        assert_eq!(checkpoint, 2, "a resumed run must re-scan the refused folder, not skip past it");
+    }
+
+    #[test]
+    fn graph_completed_folders_checkpoint_is_unclamped_when_the_run_was_not_cancelled() {
+        // A run that reached the end of its folder loop already moved past
+        // the refused folder on its own — `completed_folders` counts it like
+        // any other and nothing here should claw it back.
+        let refused = (2usize, "Refused Folder was not backed up: ledger busy".to_string());
+        let checkpoint = graph_completed_folders_checkpoint(5, Some(&refused), false);
+        assert_eq!(checkpoint, 5);
+    }
+
+    #[test]
+    fn graph_completed_folders_checkpoint_passes_through_with_no_refused_folder() {
+        assert_eq!(graph_completed_folders_checkpoint(5, None, true), 5);
+        assert_eq!(graph_completed_folders_checkpoint(5, None, false), 5);
     }
 }

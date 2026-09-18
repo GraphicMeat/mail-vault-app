@@ -19,6 +19,15 @@
 //! Cancellation is `DaemonState.backup_runs`, keyed by `account_id` (see its
 //! doc comment in `server.rs` for why this is not another `run_tokens`
 //! kind) — no `cancel_backup` route in this task.
+//!
+//! Task 2 adds the Graph dispatch below (`is_graph` check, same test
+//! `src-tauri/src/backup.rs`'s `run_account_backup` makes at ~line 618-621):
+//! `backup_run_account` builds one `BackupRunContext` and hands it to
+//! whichever runner the account's `oauth2_transport` calls for. The Graph
+//! runner reuses the same `archive_ctx` (root, pool, gate) and the same
+//! `on_progress`/`apply_flags` closures — it just never calls `apply_flags`,
+//! matching `run_graph_backup`'s own behavior today (no read-state catch-up
+//! on the Graph path).
 
 use crate::handlers::common;
 use crate::handlers::vault_flags as vault_flags_handler;
@@ -86,11 +95,16 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         apply_flags,
     };
 
+    // Same dispatch `src-tauri/src/backup.rs`'s `run_account_backup`
+    // (~line 618-621) does today, checked before the context is moved into
+    // whichever runner gets it.
+    let is_graph = ctx.account.oauth2_transport.as_deref() == Some("graph");
+
     let state2 = Arc::clone(state);
     let run_account_id = account_id.clone();
     let run_cancel = Arc::clone(&cancel);
     tokio::spawn(async move {
-        let result = backup::run_imap_account(ctx).await;
+        let result = if is_graph { backup::run_graph_account(ctx).await } else { backup::run_imap_account(ctx).await };
 
         // Remove this run's own token — never a newer run's for the same
         // account (ptr_eq, not by key alone): a fresh run for this account
