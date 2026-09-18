@@ -115,9 +115,8 @@ fn held(app: &tauri::AppHandle) -> Option<tauri::State<'_, HeldBackupPaths>> {
 
 /// Remember that `account_id`'s run needs `path` kept alive. A path already
 /// parked for this account belonged to a run that never reported a terminal
-/// frame (a cancelled Graph run does not emit one — a known gap in
-/// `architecture.md`) or is a second start over the top of a live run:
-/// release it here rather than leak it for the process's life.
+/// frame or is a second start over the top of a live run: release it here
+/// rather than leak it for the process's life.
 fn hold_backup_path(app: &tauri::AppHandle, account_id: &str, path: &str) {
     let Some(held) = held(app) else {
         // Unreachable while the app runs (registered in `main.rs`'s
