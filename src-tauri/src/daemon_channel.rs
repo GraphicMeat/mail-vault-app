@@ -190,8 +190,18 @@ async fn pump(app: &tauri::AppHandle, mut lines: Lines<BufReader<OwnedReadHalf>>
             line = lines.next_line() => match line {
                 Ok(Some(l)) => {
                     if let Some((name, payload)) = parse_event(&l) {
+                        // A backup run is fire-and-forget (Task 5): its Tauri
+                        // command returned as soon as the daemon ACKed the
+                        // start, still holding the mirror's security-scoped
+                        // access, and the run's terminal frame is the only
+                        // thing that says it can be let go. Cloned only for
+                        // this one event name; the frontend is served first.
+                        let finished_backup = (name == "backup-progress").then(|| payload.clone());
                         if app.emit(&name, payload).is_err() {
                             debug!("daemon channel: failed to emit {name} to the frontend");
+                        }
+                        if let Some(progress) = finished_backup {
+                            crate::backup::release_after_terminal_progress(app, &progress);
                         }
                     }
                 }

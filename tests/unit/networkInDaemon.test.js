@@ -120,11 +120,14 @@ describe('Phase 5: IMAP/SMTP/Graph/OAuth2/DNS live in the daemon, keychain inter
     expect(transportSrc).toMatch(new RegExp(`'${name}'`));
   });
 
-  // `ImapPool`/`OAuth2Manager` app-side consumers: Task 5.4b left exactly one
-  // shared, process-global `ImapPool` behind (`backup.rs`'s `OnceLock`,
-  // serving `archive.rs` and `backup.rs` — a documented, deliberate
-  // exception, not a leftover), and `OAuth2Manager` has zero remaining
-  // src-tauri consumers (it now lives once in the daemon's `DaemonState`).
+  // `ImapPool`/`OAuth2Manager` app-side consumers: both are now zero. Task
+  // 5.4b left one shared, process-global `ImapPool` behind (`backup.rs`'s
+  // `OnceLock`, serving `archive.rs` and `backup.rs` — a documented,
+  // deliberate exception), and the Phase 3 remainder's Task 5 closed it when
+  // the backup runners moved to the daemon: `archive.rs` is deleted and
+  // `backup.rs` is a bookmark forwarder, so the app process constructs no
+  // pool at all. `OAuth2Manager` has had zero src-tauri consumers since Task
+  // 5.7 (it lives once in the daemon's `DaemonState`).
   // Both checks strip `//`-only comment lines first — several files
   // deliberately document the old pattern in a comment (e.g. "No
   // `.manage(imap::ImapPool::new())` — Task 5.4b moved..."), which would
@@ -140,6 +143,12 @@ describe('Phase 5: IMAP/SMTP/Graph/OAuth2/DNS live in the daemon, keychain inter
       .filter(([, body]) => /tauri::State<'?_?,?\s*ImapPool>|\.manage\(\s*imap::ImapPool::new\(\)\s*\)|\.state::<ImapPool>\(\)/.test(body))
       .map(([f]) => f);
     expect(offenders).toEqual([]);
+  });
+
+  it('src-tauri constructs no ImapPool at all any more (Phase 3 remainder, Task 5)', () => {
+    const offenders = rsFiles.filter(([, body]) => /ImapPool::new\(\)/.test(body)).map(([f]) => f);
+    expect(offenders).toEqual([]);
+    expect(existsSync('src-tauri/src/archive.rs')).toBe(false);
   });
 
   it('no OAuth2Manager construction or .manage() call remains in src-tauri', () => {

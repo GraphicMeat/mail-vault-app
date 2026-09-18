@@ -1,93 +1,46 @@
-use std::collections::HashSet;
-use std::path::Path;
-use std::sync::{Arc, OnceLock};
-use std::sync::atomic::{AtomicBool, Ordering};
-use serde::Serialize;
-use tauri::{Emitter, Manager};
+//! Backup, as **bookmark forwarders only** (Phase 3 remainder, Task 5). The
+//! whole algorithm — the IMAP and Graph runners, the mirror pre-sync, the
+//! purge queue, the status comparison, the flag catch-up — now lives in
+//! `mailvault_core::backup` and runs in the daemon
+//! (`src-daemon/src/handlers/backup.rs`, Tasks 1-4). What could not move is
+//! the one thing this file still does: resolving the backup mirror's
+//! security-scoped bookmark. A daemon cannot resolve a bookmark the app was
+//! granted (spec §3.4), so the app resolves it, passes the resolved path as
+//! `mirrorRoot`, and releases it once the daemon is done with it.
+//!
+//! Release discipline, two shapes:
+//!
+//! - `backup_status`/`backup_purge_uids`/`backup_scan_uids` are bounded calls
+//!   that finish before they reply, so `forward` releases on EVERY path —
+//!   success, daemon error, budget expiry — exactly like
+//!   `vault_flags.rs`'s own forwarder. A release skipped on an error path
+//!   leaks the scoped access for the process's life.
+//! - `backup_run_account` is fire-and-forget: the daemon ACKs the start and
+//!   the run keeps going for minutes afterwards, still needing the mirror
+//!   path live. Its forwarder therefore parks the resolved path in
+//!   [`HeldBackupPaths`] and the release happens when that run's terminal
+//!   `backup-progress` frame (`active: false`) comes back up the channel —
+//!   see [`release_after_terminal_progress`], called from
+//!   `daemon_channel.rs`'s re-emit path.
+
+use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use tauri::Manager;
 use tracing::{info, warn};
 
 use crate::external_location;
-use crate::imap::{self, ImapConfig, ImapPool};
 
-// ── Shared IMAP pool (Task 5.4b) ─────────────────────────────────────────────
-//
-// The app no longer manages one process-wide `ImapPool` (`main.rs`'s
-// `.manage(imap::ImapPool::new())` is gone — the interactive-command
-// consumers in `commands.rs` all moved to the daemon's own pool). This file's
-// two IMAP status/backup helpers below and `archive.rs`'s `run_with_backup`
-// shim (`backup.rs:797`'s only caller of it) are the last app-side IMAP
-// callers left (Known Gaps in architecture.md: backup itself hasn't moved to
-// the daemon yet) — they share ONE process-global pool here rather than each
-// constructing its own `ImapPool::new()`. `ImapPool` is `Clone` over `Arc`s
-// (cheap, shares state), same pattern as `daemon_channel.rs`'s `OnceLock`
-// singleton. A private pool per call site would double the effective
-// concurrent-connection ceiling: `run_with_backup` runs DURING a backup run
-// against the very account `run_imap_backup_inner` is mid-fetch on, and the
-// pool's per-account semaphore (3 background + 3 priority sessions) is the
-// only thing bounding that today.
-static SHARED_IMAP_POOL: OnceLock<ImapPool> = OnceLock::new();
+/// Every mirror-touching daemon call shares this budget, same value and same
+/// reasoning as `vault_flags.rs`'s (`reply_timeout`'s 600 s family): a
+/// whole-account status comparison lists every folder over IMAP, and a purge
+/// walks mirror directories on what can be a slow external drive.
+const MIRROR_BUDGET: std::time::Duration = std::time::Duration::from_secs(600);
 
-pub(crate) fn pool() -> ImapPool {
-    SHARED_IMAP_POOL.get_or_init(ImapPool::new).clone()
-}
-
-/// Same pool, without creating it — `main.rs`'s app-exit handler must not
-/// construct a fresh, empty pool just to immediately shut it down when no
-/// backup ever ran this session.
-pub(crate) fn pool_if_started() -> Option<ImapPool> {
-    SHARED_IMAP_POOL.get().cloned()
-}
-
-// ── Event payload ────────────────────────────────────────────────────────────
-
-#[derive(Clone, Serialize)]
-pub struct BackupProgress {
-    pub account_id: String,
-    pub folder: String,
-    pub total_folders: usize,
-    pub completed_folders: usize,
-    pub total_emails: usize,
-    pub completed_emails: usize,
-    pub errors: usize,
-    pub active: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub last_error: Option<String>,
-    #[serde(default)]
-    pub missing_in_folder: usize,
-}
-
-// ── Backup status comparison ─────────────────────────────────────────────────
-
-#[derive(Serialize, Clone)]
-pub struct FolderBackupStatus {
-    pub path: String,
-    pub name: String,
-    pub server_count: usize,
-    pub app_count: usize,
-    pub external_count: usize,
-    pub children: Vec<FolderBackupStatus>,
-    // Legacy aliases for frontend compat
-    #[serde(rename = "folder")]
-    pub folder_alias: String,
-    #[serde(rename = "local_count")]
-    pub local_count_alias: usize,
-}
-
-#[derive(Serialize)]
-pub struct AccountBackupStatus {
-    pub folders: Vec<FolderBackupStatus>,
-    pub total_server: usize,
-    pub total_local: usize,
-    pub total_app: usize,
-    pub total_external: usize,
-    pub external_available: bool,
-    /// Status of the external location: "ready", "needs_reauth", "unavailable", "invalid", "not_configured"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub external_status: Option<String>,
-    /// Error detail for external location
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub external_error: Option<String>,
-}
+/// The daemon replies to `backup_run_account` as soon as it has spawned the
+/// run, so this only has to cover the handshake and the spawn — not the run.
+const RUN_ACK_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Resolve the effective external backup path.
 /// Always prefers the native bookmark/stored location. Caller-supplied raw paths
@@ -139,444 +92,10 @@ pub(crate) fn release_backup_path(path: &str) {
     external_location::release_external_access(path);
 }
 
-/// Scan UIDs from an external backup directory.
-fn scan_external_uids(
-    backup_path: &str,
-    email: &str,
-    mailbox: &str,
-) -> HashSet<u32> {
-    let cur_dir = std::path::PathBuf::from(backup_path)
-        .join(email)
-        .join(mailbox)
-        .join("cur");
-    mailvault_core::maildir::mirror_file_map(&cur_dir).into_keys().collect()
-}
-
-/// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
-/// in `uids`. Returns how many files were removed.
-pub fn purge_backup_files(
-    root: &Path,
-    email: &str,
-    mailbox: &str,
-    uids: &HashSet<u32>,
-) -> usize {
-    let cur = root.join(email).join(mailbox).join("cur");
-    if !cur.exists() {
-        return 0;
-    }
-    let mut removed = 0usize;
-    if let Ok(entries) = std::fs::read_dir(&cur) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            match mailvault_core::maildir::mirror_filename_uid(&name) {
-                Some(uid) if uids.contains(&uid) => {}
-                _ => continue,
-            }
-            match std::fs::remove_file(entry.path()) {
-                Ok(()) => removed += 1,
-                Err(e) => warn!("backup purge: failed to remove {:?}: {}", entry.path(), e),
-            }
-        }
-    }
-    removed
-}
-
-// ── Pending backup purge queue ──────────────────────────────────────────────
-//
-// The external backup volume is routinely absent (unplugged drive, unmounted
-// network share). "Delete everywhere" must still complete, so uids whose mirror
-// copy could not be reached are parked here and applied on the next backup run.
-
-pub fn purge_queue_path(data_dir: &Path) -> std::path::PathBuf {
-    data_dir.join("pending_backup_purge.json")
-}
-
-pub fn read_purge_queue(
-    data_dir: &Path,
-) -> std::collections::BTreeMap<String, Vec<u32>> {
-    let path = purge_queue_path(data_dir);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Default::default();
-    };
-    // A corrupt queue must not brick delete-everywhere; start over rather than error.
-    serde_json::from_str(&content).unwrap_or_default()
-}
-
-pub fn write_purge_queue(
-    data_dir: &Path,
-    q: &std::collections::BTreeMap<String, Vec<u32>>,
-) -> Result<(), String> {
-    let data = serde_json::to_string(q).map_err(|e| format!("serialize purge queue: {}", e))?;
-    std::fs::write(purge_queue_path(data_dir), data)
-        .map_err(|e| format!("write purge queue: {}", e))
-}
-
-pub fn queue_purge(
-    data_dir: &Path,
-    email: &str,
-    mailbox: &str,
-    uids: &[u32],
-) -> Result<(), String> {
-    let mut q = read_purge_queue(data_dir);
-    let entry = q.entry(format!("{}|{}", email, mailbox)).or_default();
-    entry.extend_from_slice(uids);
-    entry.sort_unstable();
-    entry.dedup();
-    write_purge_queue(data_dir, &q)
-}
-
-/// Apply every queued purge against a now-reachable backup root.
-/// Entries are dropped as they are applied; anything left in the map stays
-/// queued for the next run.
-pub fn drain_purge_queue(data_dir: &std::path::Path, root: &std::path::Path) -> usize {
-    let q = read_purge_queue(data_dir);
-    if q.is_empty() {
-        return 0;
-    }
-    let mut removed_total = 0usize;
-    let mut leftover: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
-
-    for (key, uids) in q {
-        let Some((email, mailbox)) = key.split_once('|') else {
-            continue; // malformed key — drop it, nothing can act on it
-        };
-        let uid_set: HashSet<u32> = uids.iter().copied().collect();
-        let mirror = root.join(email).join(mailbox).join("cur");
-        if !mirror.exists() {
-            // Folder not mirrored (yet). Keep the entry rather than declare success.
-            leftover.insert(key.clone(), uids);
-            continue;
-        }
-        removed_total += purge_backup_files(root, email, mailbox, &uid_set);
-    }
-
-    if let Err(e) = write_purge_queue(data_dir, &leftover) {
-        warn!("drain_purge_queue: failed to rewrite queue: {}", e);
-    }
-    if removed_total > 0 {
-        info!("drain_purge_queue: removed {} queued mirror files", removed_total);
-    }
-    removed_total
-}
-
-/// Build a FolderBackupStatus for one folder.
-///
-/// Both counts are `read_dir`s — one on the app dir, one on the backup drive.
-/// On a drive another process is hammering they stall for seconds, and on a
-/// runtime worker that stall is paid by every IMAP socket the runtime is meant
-/// to be polling, so they run on the blocking pool.
-async fn build_folder_status(
-    path: &str,
-    name: &str,
-    server_count: usize,
-    app_handle: &tauri::AppHandle,
-    account_id: &str,
-    backup_path: Option<&str>,
-    email: &str,
-    children: Vec<FolderBackupStatus>,
-) -> FolderBackupStatus {
-    let (app_count, external_count) = {
-        let app = app_handle.clone();
-        let acct = account_id.to_string();
-        let mbox = path.to_string();
-        let bp = backup_path.map(|s| s.to_string());
-        let email = email.to_string();
-        tokio::task::spawn_blocking(move || {
-            let app_count = scan_local_uids(&app, &acct, &mbox).unwrap_or_default().len();
-            let external_count = match bp {
-                Some(bp) => scan_external_uids(&bp, &email, &mbox).len(),
-                None => 0,
-            };
-            (app_count, external_count)
-        })
-        .await
-        .unwrap_or_else(|e| {
-            warn!("build_folder_status: folder scan panicked: {}", e);
-            (0, 0)
-        })
-    };
-    FolderBackupStatus {
-        path: path.to_string(),
-        name: name.to_string(),
-        server_count,
-        app_count,
-        external_count,
-        children,
-        folder_alias: path.to_string(),
-        local_count_alias: app_count,
-    }
-}
-
-/// Compare server email counts vs local backup counts for each folder.
-pub async fn get_backup_status(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    backup_path: Option<String>,
-) -> Result<AccountBackupStatus, String> {
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
-
-    // Resolve external path via bookmark if needed
-    let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
-
-    // Capture external location status for the response
-    let (ext_status, ext_error) = if resolved_path.is_some() {
-        ("ready".to_string(), None)
-    } else {
-        // Check if there's a configured but unresolvable external location
-        let data_dir = app_handle.path().app_data_dir().ok();
-        if let Some(ref dd) = data_dir {
-            let loc = external_location::get_external_location(dd, external_location::SLOT_EXTERNAL_BACKUP);
-            if loc.status == "not_configured" {
-                ("not_configured".to_string(), None)
-            } else {
-                // There IS a configured location but it failed to resolve
-                let err = external_location::validate_external_location(dd, external_location::SLOT_EXTERNAL_BACKUP)
-                    .map(|l| l.last_error)
-                    .unwrap_or(None);
-                ("needs_reauth".to_string(), err)
-            }
-        } else {
-            ("not_configured".to_string(), None)
-        }
-    };
-
-    let mut result = if account.oauth2_transport.as_deref() == Some("graph") {
-        get_graph_backup_status(app_handle.clone(), account_id, account_json, resolved_path.clone()).await
-    } else {
-        get_imap_backup_status(app_handle.clone(), account_id, account, resolved_path.clone()).await
-    };
-
-    // Enrich with external location status
-    if let Ok(ref mut status) = result {
-        status.external_status = Some(ext_status);
-        status.external_error = ext_error;
-    }
-
-    // Release bookmark access
-    if needs_release {
-        if let Some(ref p) = resolved_path { release_backup_path(p); }
-    }
-
-    result
-}
-
-/// IMAP backup status with folder hierarchy.
-async fn get_imap_backup_status(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account: ImapConfig,
-    backup_path: Option<String>,
-) -> Result<AccountBackupStatus, String> {
-    let pool = pool();
-
-    let mailboxes = {
-        let mut guard = pool.get_background(&account).await?;
-        let result = imap::list_mailboxes(&mut guard.session).await?;
-        pool.return_background(&account, guard).await;
-        result
-    };
-
-    let mut total_server = 0usize;
-    let mut total_app = 0usize;
-    let mut total_external = 0usize;
-
-    // Build tree recursively, getting server counts via IMAP
-    async fn build_tree(
-        pool: &ImapPool,
-        account: &ImapConfig,
-        app_handle: &tauri::AppHandle,
-        account_id: &str,
-        mailboxes: &[imap::MailboxInfo],
-        backup_path: Option<&str>,
-        total_server: &mut usize,
-        total_app: &mut usize,
-        total_external: &mut usize,
-    ) -> Vec<FolderBackupStatus> {
-        let mut result = Vec::new();
-        for mbox in mailboxes {
-            // Recurse into children first
-            let children = Box::pin(build_tree(
-                pool, account, app_handle, account_id,
-                &mbox.children, backup_path,
-                total_server, total_app, total_external,
-            )).await;
-
-            if mbox.noselect {
-                // Non-selectable folder: include only if it has children with data
-                if !children.is_empty() {
-                    result.push(FolderBackupStatus {
-                        path: mbox.path.clone(),
-                        name: mbox.name.clone(),
-                        server_count: 0,
-                        app_count: 0,
-                        external_count: 0,
-                        children,
-                        folder_alias: mbox.path.clone(),
-                        local_count_alias: 0,
-                    });
-                }
-                continue;
-            }
-
-            let server_uids = {
-                let mut guard = pool.get_background(account).await.unwrap_or_else(|_| panic!("pool"));
-                let r = imap::search_all_uids(&mut guard.session, &mbox.path, false).await;
-                // A failed command can leave unread bytes on the session — never re-pool it.
-                match &r {
-                    Ok(_) => pool.return_background(account, guard).await,
-                    Err(_) => pool.discard(account, guard).await,
-                }
-                r.unwrap_or_default()
-            };
-            let sc = server_uids.len();
-
-            let status = build_folder_status(
-                &mbox.path, &mbox.name, sc,
-                app_handle, account_id, backup_path, &account.email,
-                children,
-            ).await;
-
-            *total_server += sc;
-            *total_app += status.app_count;
-            *total_external += status.external_count;
-
-            if sc > 0 || status.app_count > 0 || status.external_count > 0 || !status.children.is_empty() {
-                result.push(status);
-            }
-        }
-        result
-    }
-
-    let folders = build_tree(
-        &pool, &account, &app_handle, &account_id,
-        &mailboxes, backup_path.as_deref(),
-        &mut total_server, &mut total_app, &mut total_external,
-    ).await;
-
-    let external_available = backup_path.is_some();
-
-    Ok(AccountBackupStatus {
-        folders,
-        total_server,
-        total_local: total_app,
-        total_app,
-        total_external,
-        external_available,
-        external_status: None, // set by caller from resolve result
-        external_error: None,
-    })
-}
-
-/// Graph/Outlook backup status — uses total_item_count from folder metadata.
-async fn get_graph_backup_status(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    backup_path: Option<String>,
-) -> Result<AccountBackupStatus, String> {
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
-    let access_token = account
-        .access_token
-        .as_deref()
-        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
-    let email = account.email.as_str();
-
-    let client = crate::graph::GraphClient::new(access_token);
-    let graph_folders = client.list_folders().await?;
-
-    // One `read_dir` per folder on the app dir and on the backup drive, and no
-    // await anywhere in the loop — so the whole loop goes to the blocking pool
-    // rather than stalling the runtime workers on a struggling drive.
-    let (folders, total_server, total_app, total_external) = {
-        let app = app_handle.clone();
-        let acct = account_id.clone();
-        let bp = backup_path.clone();
-        let email = email.to_string();
-        tokio::task::spawn_blocking(move || {
-            let mut folders = Vec::new();
-            let mut total_server = 0usize;
-            let mut total_app = 0usize;
-            let mut total_external = 0usize;
-
-            for gf in &graph_folders {
-                let mailbox_path = gf.storage_key.clone();
-                let sc = gf.total_item_count.max(0) as usize;
-                let app_count = scan_local_uids(&app, &acct, &mailbox_path).unwrap_or_default().len();
-                let ext_count = match bp.as_deref() {
-                    Some(bp) => scan_external_uids(bp, &email, &mailbox_path).len(),
-                    None => 0,
-                };
-
-                total_server += sc;
-                total_app += app_count;
-                total_external += ext_count;
-
-                if sc > 0 || app_count > 0 || ext_count > 0 {
-                    folders.push(FolderBackupStatus {
-                        path: mailbox_path.clone(),
-                        name: gf.display_name.clone(),
-                        server_count: sc,
-                        app_count,
-                        external_count: ext_count,
-                        children: vec![],
-                        folder_alias: mailbox_path,
-                        local_count_alias: app_count,
-                    });
-                }
-            }
-            (folders, total_server, total_app, total_external)
-        })
-        .await
-        .map_err(|e| format!("graph folder scan panicked: {}", e))?
-    };
-
-    let external_available = backup_path.is_some();
-
-    Ok(AccountBackupStatus {
-        folders,
-        total_server,
-        total_local: total_app,
-        total_app,
-        total_external,
-        external_available,
-        external_status: None,
-        external_error: None,
-    })
-}
-
-// ── Result ───────────────────────────────────────────────────────────────────
-
-#[derive(Serialize)]
-pub struct BackupResult {
-    pub emails_backed_up: usize,
-    pub errors: usize,
-    pub duration_secs: f64,
-    pub success: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error_message: Option<String>,
-    /// True if backup was cancelled mid-run (for resume support)
-    #[serde(default)]
-    pub cancelled: bool,
-    /// Number of folders completed before cancel/finish (resume checkpoint)
-    #[serde(default)]
-    pub completed_folders: usize,
-    /// External copy outcome — true if all external writes succeeded (or no external location configured)
-    #[serde(default = "default_true")]
-    pub external_copy_ok: bool,
-    /// Error message when external copy partially or fully failed
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub external_copy_error: Option<String>,
-    /// Number of emails that failed to copy to the external location
-    #[serde(default)]
-    pub external_copy_failed_count: usize,
-}
-
-fn default_true() -> bool { true }
-
 // ── Cancellation token (shared app state) ────────────────────────────────────
+//
+// Kept as-is for Task 6, which deletes `backup_cancel`'s Tauri command and
+// this state together (cancellation is `DaemonState.backup_runs` now).
 
 pub struct BackupCancelToken(pub std::sync::Mutex<Arc<AtomicBool>>);
 
@@ -586,855 +105,134 @@ impl Default for BackupCancelToken {
     }
 }
 
-// ── Scan local UIDs from Maildir ─────────────────────────────────────────────
+// ── Bookmark scopes held for an in-flight run ────────────────────────────────
 
-fn scan_local_uids(
-    app_handle: &tauri::AppHandle,
-    account_id: &str,
-    mailbox: &str,
-) -> Result<HashSet<u32>, String> {
-    scan_cur_uids(&crate::maildir_cur_path(app_handle, account_id, mailbox)?)
+/// `account_id` → the resolved mirror path whose security scope that
+/// account's in-flight backup run is still using. An entry's presence IS the
+/// "needs release" flag: `resolve_backup_path` only reports `needs_release`
+/// when it resolved a bookmark, and only then is anything parked here.
+///
+/// ponytail: two accounts backing up to the same drive resolve the same path,
+/// so the first terminal frame releases a scope the second run is still
+/// using. Pre-existing shape — the app-side runner resolved and released
+/// per-account too — and the next call re-resolves; refcount per path if a
+/// real double-run problem ever shows up.
+#[derive(Default)]
+pub struct HeldBackupPaths(pub Mutex<HashMap<String, String>>);
+
+/// `try_state`, not `state`: `release_after_terminal_progress` runs inside
+/// `daemon_channel.rs`'s read loop, and a panic there would take the app's
+/// one daemon connection down with it.
+fn held(app: &tauri::AppHandle) -> Option<tauri::State<'_, HeldBackupPaths>> {
+    app.try_state::<HeldBackupPaths>()
 }
 
-/// A backup folder's vault uids, counted after the pre-sync with its mirror
-/// when there is one. The run fetches every server uid missing from this set.
-/// Counted before the pre-sync, a uid only the mirror held was still missing
-/// once restored: the fetch downloaded it again and stored the server's copy
-/// beside the restored one, under a second name.
-fn vault_uids_after_presync(app_dir: &Path, mirror_dir: Option<&Path>) -> Result<HashSet<u32>, String> {
-    if let Some(mirror_dir) = mirror_dir {
-        let synced = sync_locations(app_dir, mirror_dir);
-        if synced > 0 {
-            info!("backup: pre-synced {} files between {:?} and {:?}", synced, app_dir, mirror_dir);
-        }
-    }
-    scan_cur_uids(app_dir)
-}
-
-fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
-    if !cur_dir.exists() {
-        return Ok(HashSet::new());
-    }
-
-    let mut uids = HashSet::new();
-    let entries = std::fs::read_dir(cur_dir)
-        .map_err(|e| format!("Failed to read Maildir cur dir: {}", e))?;
-
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        // Filename format: "<uid>:<flags>.eml" or "<uid>.eml" or "<uid>_<flags>.eml"
-        if let Some(uid) = mailvault_core::maildir::mirror_filename_uid(&name) {
-            uids.insert(uid);
-        }
-    }
-
-    Ok(uids)
-}
-
-// ── Core backup runner ───────────────────────────────────────────────────────
-
-pub async fn run_account_backup(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    cancel: Arc<AtomicBool>,
-    backup_path: Option<String>,
-    skip_folders: usize,
-) -> Result<BackupResult, String> {
-    let start = std::time::Instant::now();
-
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
-
-    // Resolve external path via bookmark if needed
-    let (resolved_path, needs_release) = resolve_backup_path(&app_handle, backup_path);
-    if let Some(ref root) = resolved_path {
-        info!("backup: using external path: {:?}", root);
-        // Drain BEFORE any mirroring work — a run that copies first would put
-        // back the very files the queue is about to delete.
-        if let Ok(dd) = app_handle.path().app_data_dir() {
-            drain_purge_queue(&dd, std::path::Path::new(root));
-        }
-    }
-
-    // Check if this is a Graph account
-    let is_graph = account.oauth2_transport.as_deref() == Some("graph");
-
-    let result = if is_graph {
-        run_graph_backup(app_handle, account_id, account_json, cancel, start, resolved_path.clone(), skip_folders).await
-    } else {
-        run_imap_backup_inner(app_handle, account_id, account_json, account, cancel, start, resolved_path.clone(), skip_folders).await
+/// Remember that `account_id`'s run needs `path` kept alive. A path already
+/// parked for this account belonged to a run that never reported a terminal
+/// frame (a cancelled Graph run does not emit one — a known gap in
+/// `architecture.md`) or is a second start over the top of a live run:
+/// release it here rather than leak it for the process's life.
+fn hold_backup_path(app: &tauri::AppHandle, account_id: &str, path: &str) {
+    let Some(held) = held(app) else {
+        // Unreachable while the app runs (registered in `main.rs`'s
+        // `.manage(...)` chain before any command can be invoked); releasing
+        // now is the safe reading if it ever is not.
+        warn!("backup: no HeldBackupPaths state — releasing the mirror scope immediately");
+        release_backup_path(path);
+        return;
     };
-
-    // Release bookmark access after backup completes
-    if needs_release {
-        if let Some(ref p) = resolved_path { release_backup_path(p); }
+    let displaced = held
+        .0
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(account_id.to_string(), path.to_string());
+    if let Some(old) = displaced {
+        warn!("backup: releasing a mirror scope left over from a previous run of {}", account_id);
+        release_backup_path(&old);
     }
+}
 
+/// A `backup-progress` frame just came up the daemon channel. When it is a
+/// terminal one (`active: false`), the run that owned the mirror scope is
+/// over: release it. Called for every `backup-progress` event, so anything
+/// that is not terminal, or names no account we hold a scope for, is a no-op.
+pub(crate) fn release_after_terminal_progress(app: &tauri::AppHandle, payload: &Value) {
+    if payload.get("active").and_then(Value::as_bool) != Some(false) {
+        return;
+    }
+    let Some(account_id) = payload.get("account_id").and_then(Value::as_str) else {
+        return;
+    };
+    let path = held(app).and_then(|h| h.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account_id));
+    if let Some(path) = path {
+        info!("backup: run for {} finished — releasing the mirror's scoped access", account_id);
+        release_backup_path(&path);
+    }
+}
+
+// ── Forwarders ───────────────────────────────────────────────────────────────
+
+/// Resolve the mirror, let `params` see the resolved root (the status command
+/// reports on that resolution), call the daemon with `mirrorRoot` added, then
+/// release. Blocking on purpose — every caller is already inside
+/// `spawn_blocking`. The release is unconditional: see the module doc.
+pub(crate) fn forward(
+    app: &tauri::AppHandle,
+    method: &str,
+    caller_path: Option<String>,
+    params: impl FnOnce(Option<&str>) -> Value,
+) -> Result<Value, String> {
+    let (root, needs_release) = resolve_backup_path(app, caller_path);
+    let mut params = params(root.as_deref());
+    if let Some(obj) = params.as_object_mut() {
+        obj.insert("mirrorRoot".into(), json!(root));
+    }
+    let result = crate::daemon_call_blocking(app, method, params, MIRROR_BUDGET);
+    if needs_release {
+        if let Some(ref p) = root {
+            release_backup_path(p);
+        }
+    }
+    if let Err(ref e) = result {
+        if needs_release {
+            // Same reasoning as `vault_flags.rs`'s: this fires on every error
+            // with a mirror in play, not only a timeout — the daemon may
+            // never have touched the mirror at all.
+            warn!(
+                "{method}: failed ({e}) — the backup mirror's access has been released; \
+                 if this call timed out mid-purge, the next run's queue drain heals it"
+            );
+        }
+    }
     result
 }
 
-async fn run_imap_backup_inner(
-    app_handle: tauri::AppHandle,
+/// Start one account's backup run. Fire-and-forget: the reply is the
+/// daemon's `{"runId": accountId}` ACK, and the run's own `backup-progress`
+/// events carry its outcome. The mirror's scoped access is held until the
+/// terminal frame — see the module doc and [`hold_backup_path`].
+pub(crate) fn run_account(
+    app: &tauri::AppHandle,
     account_id: String,
     account_json: String,
-    account: ImapConfig,
-    cancel: Arc<AtomicBool>,
-    start: std::time::Instant,
-    backup_path: Option<String>,
+    caller_path: Option<String>,
     skip_folders: usize,
-) -> Result<BackupResult, String> {
-
-    // ── IMAP path ────────────────────────────────────────────────────────────
-
-    let pool = pool();
-
-    // List all mailboxes
-    let mailboxes = {
-        let mut guard = pool.get_background(&account).await?;
-        let result = imap::bounded("LIST", 60, imap::list_mailboxes(&mut guard.session)).await?;
-        pool.return_background(&account, guard).await;
-        result
-    };
-
-    // Flatten and filter to selectable mailboxes
-    let all_flat = flatten_mailboxes(&mailboxes);
-    info!(
-        "backup: {} — {} total mailboxes from LIST, names: [{}]",
-        account.email,
-        all_flat.len(),
-        all_flat.iter().map(|m| format!("{}(noselect={})", m.path, m.noselect)).collect::<Vec<_>>().join(", ")
-    );
-    let selectable: Vec<_> = all_flat
-        .into_iter()
-        .filter(|m| !m.noselect)
-        .collect();
-
-    let total_folders = selectable.len();
-    let mut completed_folders = 0usize;
-    let mut total_backed_up = 0usize;
-    let mut total_errors = 0usize;
-    let mut total_ext_failures = 0usize;
-    // The server's words for the last message that could not be fetched. A
-    // count alone leaves the user with "something failed" and nowhere to look.
-    let mut last_message_error: Option<String> = None;
-
-    info!(
-        "backup: starting for {} ({} selectable folders)",
-        account.email, total_folders
-    );
-
-    let mut cancelled = false;
-    let mut bandwidth_limited = false;
-
-    for (folder_idx, mbox) in selectable.iter().enumerate() {
-        if cancel.load(Ordering::Relaxed) {
-            warn!("backup: cancelled for {} at folder {}/{}", account.email, completed_folders, total_folders);
-            cancelled = true;
-            break;
-        }
-
-        // Skip folders already completed in a previous run (resume support)
-        if folder_idx < skip_folders {
-            completed_folders += 1;
-            continue;
-        }
-
-        let mailbox_path = &mbox.path;
-
-        // Every 5 folders, drop pooled sessions to force re-auth on next use.
-        // This prevents OAuth2 token expiry during long backups (tokens last ~1 hour).
-        if folder_idx > 0 && folder_idx % 5 == 0 {
-            pool.clear_background(&account).await;
-            info!("backup: cleared pool sessions at folder {} to refresh auth", folder_idx);
-        }
-
-        // Get server UIDs. Neither SEARCH variant is safe here: ESEARCH and the
-        // one-long-line `* SEARCH` reply both hit parser limits on large
-        // mailboxes, and a corrupted session makes every later command return 0
-        // results — search_all_uids uses UID FETCH instead. Still discard the
-        // session if it fails, so nothing inherits a dirty read buffer.
-        let server_flags = {
-            let mut guard = pool.get_background(&account).await?;
-            // Generous: a 1:* listing of a 40k folder is a big response. Bounded
-            // all the same — a session the server dropped answers no faster than
-            // never, and the discard path below is exactly what should happen.
-            let result = imap::bounded(
-                &format!("UID FETCH 1:* {}", mailbox_path),
-                600,
-                imap::search_all_uid_flags(&mut guard.session, mailbox_path),
-            ).await;
-            match &result {
-                Ok(_) => pool.return_background(&account, guard).await,
-                Err(_) => pool.discard(&account, guard).await,
-            }
-            result?
-        };
-        let server_uids: Vec<u32> = server_flags.iter().map(|(uid, _)| *uid).collect();
-
-        // Get local UIDs, after the pre-sync with the mirror (see
-        // vault_uids_after_presync). Directory scans and file copies, some on
-        // an external drive: a read_dir of a folder on a drive another process
-        // is hammering can stall for seconds, and on a runtime worker that
-        // stall is paid by every IMAP socket the runtime is meant to be polling.
-        let local_uids = {
-            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, mailbox_path)?;
-            let mirror_dir = backup_path.as_ref().map(|root| {
-                std::path::PathBuf::from(root).join(&account.email).join(mailbox_path).join("cur")
-            });
-            tokio::task::spawn_blocking(move || vault_uids_after_presync(&app_dir, mirror_dir.as_deref()))
-                .await
-                .map_err(|e| format!("pre-sync panicked: {}", e))??
-        };
-
-        // Compute delta
-        let missing: Vec<u32> = server_uids
-            .iter()
-            .filter(|uid| !local_uids.contains(uid))
-            .copied()
-            .collect();
-
-        info!(
-            "backup: {} — server={} uids, local={} uids, missing={} to back up",
-            mailbox_path,
-            server_uids.len(),
-            local_uids.len(),
-            missing.len()
-        );
-
-        // Only emit progress at 25%, 50%, 75% and completion — not every folder
-        // This prevents flooding the JS event loop with re-renders
-        let progress_pct = if total_folders > 0 { (folder_idx * 100) / total_folders } else { 0 };
-        let should_emit = folder_idx == 0 || progress_pct % 25 == 0 || missing.len() > 0;
-        if should_emit {
-            let _ = app_handle.emit(
-                "backup-progress",
-                BackupProgress {
-                    account_id: account_id.clone(),
-                    folder: mailbox_path.clone(),
-                    total_folders,
-                    completed_folders,
-                    total_emails: total_backed_up + total_errors,
-                    completed_emails: total_backed_up,
-                    errors: total_errors,
-                    active: true,
-                    last_error: None,
-                    missing_in_folder: missing.len(),
-                },
-            );
-        }
-
-        if !missing.is_empty() {
-            // Fetch and store to BOTH app dir and backup dir simultaneously
-            let archive_result = crate::archive::run_with_backup(
-                app_handle.clone(),
-                account_id.clone(),
-                account_json.clone(),
-                mailbox_path.clone(),
-                missing,
-                Arc::clone(&cancel),
-                backup_path.clone(),
-                Some(account.email.clone()),
-                false,
-                "backup",
-            )
-            .await?;
-
-            total_backed_up += archive_result.completed;
-            total_errors += archive_result.errors;
-            total_ext_failures += archive_result.external_copy_failures;
-            if archive_result.errors > 0 && !archive_result.bandwidth_limited {
-                if let Some(ref e) = archive_result.last_error {
-                    last_message_error = Some(e.clone());
-                }
-            }
-            if archive_result.bandwidth_limited {
-                // archive already set the shared cancel flag — the folder loop
-                // breaks on the next iteration and the checkpoint allows resume
-                bandwidth_limited = true;
-            }
-        }
-
-        // The top-of-loop check only catches a cancel that landed between
-        // folders. One that landed mid-folder used to fall through to
-        // `completed_folders += 1`, and the checkpoint then told the next run to
-        // skip a folder it had half finished: 2026-09-10 left 1925 of INBOX's
-        // messages unstored and moved on to All Mail. The bandwidth-limit stop
-        // sets this same flag, so it re-scans its partial folder too — which is
-        // what its comment above already promises.
-        if cancel.load(Ordering::Relaxed) {
-            warn!(
-                "backup: cancelled for {} inside {} ({}/{} folders done)",
-                account.email, mailbox_path, completed_folders, total_folders
-            );
-            cancelled = true;
-            break;
-        }
-
-        // A copy that predates a change made on the server — read on the
-        // phone, starred elsewhere — carries the state it was stored with, and
-        // that state is what restore uploads and the mirror keeps. The listing
-        // above already has every flag, so catching up is one directory pass
-        // with nothing more to fetch. Only the copies that were already here,
-        // restored ones included (a legacy `<uid>.eml` comes back flagless):
-        // the ones just stored carry the server's flags already. Every copy the
-        // run counts as backed up is marked archived here, which is what heals
-        // an auto-cached `<uid>:2,.eml` once a backup vouches for it.
-        let changes = catch_up_changes(&server_flags, &local_uids);
-        if !changes.is_empty() {
-            // R2.1 bridge (Task 2.9b): the renames, the mirror and the custody
-            // patch all happen in the daemon, under the same `WRITER` the
-            // frontend's own `vault_apply_flags` takes — one writer for both
-            // callers, which is the point. `sidecars: false` keeps this path's
-            // original behaviour (a backup catch-up never rewrote the header
-            // cache). `backup_path` is already resolved here, so it is passed
-            // as `mirrorRoot` and this caller does not release anything the
-            // surrounding backup run still needs.
-            let (handle, acct, mbx) = (app_handle.clone(), account_id.clone(), mailbox_path.to_string());
-            let params = serde_json::json!({
-                "accountId": account_id,
-                "mailbox": mailbox_path,
-                "accountEmail": account.email,
-                "changes": changes,
-                "mirrorRoot": backup_path,
-                "sidecars": false,
-            });
-            // A daemon-call failure here (unlike a panic in the blocking task
-            // itself) must not abort this account's folder loop — see
-            // `map_flag_catchup_outcome`.
-            let outcome: Result<mailvault_core::vault_flags::Applied, String> =
-                tokio::task::spawn_blocking(move || {
-                    crate::daemon_call_blocking(&handle, "vault_apply_flags", params, std::time::Duration::from_secs(600))
-                        .and_then(|v| serde_json::from_value(v).map_err(|e| format!("{}/{}: unreadable reply: {}", acct, mbx, e)))
-                })
-                    .await
-                    .map_err(|e| format!("flag catch-up panicked: {}", e))?;
-            let applied = map_flag_catchup_outcome(outcome, &account_id, mailbox_path);
-            if applied.total() > 0 {
-                info!(
-                    "backup: {} — read state caught up on {} vault files, {} mirror files, {} custody entries",
-                    mailbox_path, applied.renamed, applied.mirrored, applied.index_patched
-                );
-            }
-        }
-
-        completed_folders += 1;
-    }
-
-    // Emit final completion/cancelled event (single event per account)
-    let _ = app_handle.emit(
-        "backup-progress",
-        BackupProgress {
-            account_id: account_id.clone(),
-            folder: if cancelled { "Cancelled".to_string() } else { "Complete".to_string() },
-            total_folders,
-            completed_folders,
-            total_emails: total_backed_up + total_errors,
-            completed_emails: total_backed_up,
-            errors: total_errors,
-            active: false,
-            last_error: None,
-            missing_in_folder: 0,
-        },
-    );
-
-    let duration = start.elapsed().as_secs_f64();
-    info!(
-        "backup: {} for {} — {} new emails backed up, {} errors, {:.1}s{} (folders: {}/{})",
-        if cancelled { "cancelled" } else { "completed" },
-        account.email, total_backed_up, total_errors, duration,
-        if let Some(ref p) = backup_path { format!(" (copied to {})", p) } else { String::new() },
-        completed_folders, total_folders
-    );
-    if total_ext_failures > 0 {
-        warn!("backup: {} external copy failures for {}", total_ext_failures, account.email);
-    }
-
-    Ok(BackupResult {
-        emails_backed_up: total_backed_up,
-        errors: total_errors,
-        duration_secs: duration,
-        // A message the server refused is a partial result, not a failed run:
-        // the other N-1 are on disk and re-running is what fixes the one.
-        success: !cancelled,
-        error_message: if bandwidth_limited {
-            Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
-        } else {
-            partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())
-        },
-        cancelled,
-        completed_folders,
-        external_copy_ok: total_ext_failures == 0,
-        external_copy_error: if total_ext_failures > 0 {
-            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
-        } else { None },
-        external_copy_failed_count: total_ext_failures,
-    })
-}
-
-/// Message-IDs the generation repair moved out of the uid namespace.
-///
-/// `orphaned/` is the repair's own record that a file is not this generation's:
-/// it read the Message-ID, found no uid the current server gives it, and set the
-/// file aside rather than delete it. The backup mirror still holds that same
-/// message under its OLD uid, and the restore direction below would copy it
-/// straight back into `cur/` — undoing the repair on every backup run, forever,
-/// because `.uidvalidity` now matches the server and `repair_generation` no-ops.
-///
-/// That is not hypothetical: rare@graphicmeat.com's INBOX had four March files
-/// byte-identical in `cur/` and `orphaned/`, and the vault's uid 4 was serving a
-/// StrictSeal mail under an August Zendesk row.
-///
-/// Built lazily by the caller — a sync with nothing to restore never reads it.
-fn orphaned_message_ids(app_dir: &std::path::Path) -> HashSet<String> {
-    let orphan_dir = match app_dir.parent() {
-        Some(p) => p.join(mailvault_core::maildir::ORPHAN_DIR),
-        None => return HashSet::new(),
-    };
-    let mut ids = HashSet::new();
-    if let Ok(entries) = std::fs::read_dir(&orphan_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() { continue; }
-            if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
-                ids.insert(id);
-            }
-        }
-    }
-    ids
-}
-
-/// One flag change per server uid the vault holds, carrying the server's flags
-/// plus `archived`: every copy this run counted as backed up is a vault copy,
-/// and `A` is what says so.
-fn catch_up_changes(
-    server_flags: &[(u32, Vec<String>)],
-    local_uids: &HashSet<u32>,
-) -> Vec<mailvault_core::vault_flags::FlagChange> {
-    server_flags
-        .iter()
-        .filter(|(uid, _)| local_uids.contains(uid))
-        .map(|(uid, flags)| {
-            let mut flags = flags.clone();
-            flags.push("archived".to_string());
-            mailvault_core::vault_flags::FlagChange { uid: *uid, flags }
-        })
-        .collect()
-}
-
-/// A daemon hiccup on the flag catch-up call (a restart the app itself
-/// triggered, a build-id mismatch, the 600s reply budget) must not fail an
-/// account whose folders otherwise saved everything: before Task 2.9b,
-/// `apply_everywhere` was infallible and swallowed a custody-patch failure on
-/// its own. Warn and fall back to `Applied::default()` — the next run's
-/// `catch_up_changes` recomputes the same set from `local_uids`, so the heal
-/// retries on its own instead of failing the whole account run.
-fn map_flag_catchup_outcome(
-    outcome: Result<mailvault_core::vault_flags::Applied, String>,
-    account_id: &str,
-    mailbox_path: &str,
-) -> mailvault_core::vault_flags::Applied {
-    match outcome {
-        Ok(applied) => applied,
-        Err(e) => {
-            warn!("backup: {}/{} flag catch-up failed: {}", account_id, mailbox_path, e);
-            mailvault_core::vault_flags::Applied::default()
-        }
-    }
-}
-
-/// Sync files between app Maildir and backup location (bidirectional).
-/// - App dir files missing from backup → copy to backup keeping the Maildir
-///   name (`<uid>:2,<flags>.eml`) so flags survive the round trip
-/// - Backup files missing from app dir → copy to app dir, named with `archived`
-///   on top of whatever flags the backup filename carried (legacy `<uid>.eml`
-///   copies carry none): the vault copy the restore makes is what puts the row
-///   in the list and what Clear cached emails keeps. Never re-imports a message
-///   the generation repair already set aside.
-/// Returns total files synced.
-fn sync_locations(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
-    use mailvault_core::maildir::{mirror_file_map, mirror_filename_uid, uid_file_map};
-    use std::fs;
-    let mut synced = 0;
-
-    // Ensure both dirs exist; if backup dir can't be created (disconnected drive), skip
-    let _ = fs::create_dir_all(app_dir);
-    if fs::create_dir_all(backup_dir).is_err() {
-        return 0; // Backup location not available — skip sync, backup to app dir only
-    }
-
-    // One listing per side instead of rescanning the other side per file,
-    // which on the external drive was n²/2 directory entries every backup. A
-    // copy counts in the set, as the rescan used to find the file it had just
-    // written. Each side keeps its own uid rule.
-    // ponytail: a writer landing the same uid mid-sync can leave it twice under
-    // two flag names; the rescan had that race too, only narrower.
-    let mut in_backup: HashSet<u32> = mirror_file_map(backup_dir).into_keys().collect();
-
-    // App → Backup: copy app files that don't exist in backup, keeping the
-    // Maildir name so the flag suffix travels with the message.
-    if let Ok(entries) = fs::read_dir(app_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() { continue; }
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(uid) = mirror_filename_uid(&name) else { continue };
-            if in_backup.contains(&uid) { continue; }
-            let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
-            if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() {
-                synced += 1;
-                in_backup.insert(uid);
-            }
-        }
-    }
-
-    // Backup → App: copy backup .eml files that don't exist in app dir,
-    // restoring flags from the backup filename (legacy `<uid>.eml` has none).
-    let mut in_app: HashSet<u32> = uid_file_map(app_dir).into_keys().collect();
-    let mut orphaned_ids: Option<HashSet<String>> = None;
-    if let Ok(entries) = fs::read_dir(backup_dir) {
-        for entry in entries.flatten() {
-            if entry.path().is_dir() { continue; }
-            let name = entry.file_name().to_string_lossy().to_string();
-            if !name.ends_with(".eml") { continue; }
-            let Some(uid) = mirror_filename_uid(&name) else { continue };
-            if in_app.contains(&uid) { continue; }
-            // The mirror is keyed by uid and carries no generation of its own, so
-            // a uid it holds is only as good as the generation that wrote it.
-            // `orphaned/` is the one local record of which messages this
-            // generation does NOT have — see orphaned_message_ids.
-            let ids = orphaned_ids.get_or_insert_with(|| orphaned_message_ids(app_dir));
-            if !ids.is_empty() {
-                if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
-                    if ids.contains(&id) {
-                        warn!(
-                            "backup: not restoring {} — the generation repair set this message aside",
-                            name
-                        );
-                        continue;
-                    }
-                }
-            }
-            let mut flags = super::parse_flags_from_filename(&name);
-            flags.push("archived".to_string());
-            let dst = app_dir.join(super::build_maildir_filename(uid, &flags));
-            if fs::copy(entry.path(), &dst).is_ok() {
-                synced += 1;
-                in_app.insert(uid);
-            }
-        }
-    }
-
-    synced
-}
-
-// ── Graph API backup path ────────────────────────────────────────────────────
-
-async fn run_graph_backup(
-    app_handle: tauri::AppHandle,
-    account_id: String,
-    account_json: String,
-    cancel: Arc<AtomicBool>,
-    start: std::time::Instant,
-    backup_path: Option<String>,
-    skip_folders: usize,
-) -> Result<BackupResult, String> {
-    use mailvault_core::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
-
-    let account: ImapConfig = serde_json::from_str(&account_json)
-        .map_err(|e| format!("Bad account JSON: {}", e))?;
-    let access_token = account
-        .access_token
-        .as_deref()
-        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
-
-    let client = crate::graph::GraphClient::new(access_token);
-
-    // List folders
-    let folders = client.list_folders().await?;
-    let total_folders = folders.len();
-    let mut completed_folders = 0usize;
-    let mut total_backed_up = 0usize;
-    let mut total_errors = 0usize;
-    let mut total_ext_failures = 0usize;
-    // The server's words for the last message that could not be fetched. A
-    // count alone leaves the user with "something failed" and nowhere to look.
-    let mut last_message_error: Option<String> = None;
-    // The first folder the uid ledger refused, and why. It stored nothing: a
-    // resumed run skips folders by position, so its checkpoint must not pass
-    // this one, and these are the words the user needs to read.
-    let mut refused: Option<(usize, String)> = None;
-
-    info!(
-        "backup(graph): starting for account {} ({} folders, skipping first {})",
-        account_id, total_folders, skip_folders
-    );
-
-    let mut cancelled = false;
-
-    for (folder_idx, folder) in folders.iter().enumerate() {
-        if cancel.load(Ordering::Relaxed) {
-            warn!("backup(graph): cancelled for account {} at folder {}/{}", account_id, completed_folders, total_folders);
-            cancelled = true;
-            break;
-        }
-
-        // Skip folders already completed in a previous run (resume support)
-        if folder_idx < skip_folders {
-            completed_folders += 1;
-            continue;
-        }
-
-        let folder_name = &folder.display_name;
-        // The locale-independent key `list_folders` computed; the app keys its
-        // sidecars, ledger and vault by the same string.
-        let mailbox_path = folder.storage_key.clone();
-
-        let mirror_dir = backup_path.as_ref().map(|custom_path| {
-            std::path::PathBuf::from(custom_path)
-                .join(&account.email)
-                .join(&mailbox_path)
-                .join("cur")
-        });
-
-        // List the whole folder before numbering any of it. The uid a message
-        // is filed under comes from the ledger the app keeps, never from where
-        // the message sits in this listing: Graph lists newest first, so one
-        // arrival moves every position, and filing by position put the oldest
-        // message under the number the ledger gives the new one. One call for
-        // the folder also means one read of the vault and one ledger write.
-        let mut listed: Vec<crate::graph::GraphMessage> = Vec::new();
-        let mut skip = 0u32;
-        let page_size = 100u32;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                break;
-            }
-            let (messages, next_link) = client.list_messages(&folder.id, page_size, skip).await?;
-            let page_len = messages.len();
-            listed.extend(messages);
-            if page_len == 0 || next_link.is_none() || page_len < page_size as usize {
-                break;
-            }
-            skip += page_size;
-        }
-
-        // Get local UIDs, after the pre-sync with the mirror, as the IMAP path
-        // does: a message restored here is not downloaded only to be skipped.
-        // Off the runtime workers for the same reason too.
-        let local_uids = {
-            let app_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-            let mirror_dir = mirror_dir.clone();
-            tokio::task::spawn_blocking(move || vault_uids_after_presync(&app_dir, mirror_dir.as_deref()))
-                .await
-                .map_err(|e| format!("pre-sync panicked: {}", e))??
-        };
-
-        // One listing per side for the whole folder, after the pre-sync so what
-        // it restored or mirrored counts. Looking every fetched message up again
-        // was a read_dir of cur/ and of the mirror folder per message, quadratic
-        // over a folder and on the external drive. Each side keeps its own uid
-        // rule, and a write joins its side's set, as the rescan found the file
-        // it had just written.
-        // ponytail: a copy another writer lands mid-folder is not in the listing,
-        // and this run writes its own beside it; the rescan had that race too, only narrower.
-        let (mut in_vault, mut in_mirror) = {
-            let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-            let mirror_dir = mirror_dir.clone();
-            tokio::task::spawn_blocking(move || {
-                let in_vault: HashSet<u32> = uid_file_map(&cur_dir).into_keys().collect();
-                let in_mirror: Option<HashSet<u32>> =
-                    mirror_dir.map(|dir| mirror_file_map(&dir).into_keys().collect());
-                (in_vault, in_mirror)
-            })
-            .await
-            .map_err(|e| format!("folder listing panicked: {}", e))?
-        };
-
-        if !listed.is_empty() && !cancel.load(Ordering::Relaxed) {
-            let entries: Vec<(String, Option<String>)> = listed
-                .iter()
-                .map(|m| (m.id.clone(), m.internet_message_id.clone()))
-                .collect();
-            let ledger_path = crate::graph_ledger_path(&app_handle, &account_id, &mailbox_path)?;
-            let cur_dir = crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-            let local = local_uids.clone();
-            // Directory scan, header reads and a file write, on whatever drive the vault is on.
-            let plan = tokio::task::spawn_blocking(move || {
-                mailvault_core::graph_ledger::plan_fetch(&ledger_path, &cur_dir, &entries, &local)
-            })
-            .await
-            .map_err(|e| format!("graph ledger panicked: {}", e))?;
-
-            match plan {
-                // No ledger, no numbers: filing by position instead is the bug
-                // this replaces. The folder is reported and the run moves on.
-                Err(e) => {
-                    warn!("backup(graph): {} not backed up: {}", mailbox_path, e);
-                    total_errors += 1;
-                    refused.get_or_insert((folder_idx, format!("{} was not backed up: {}", mailbox_path, e)));
-                }
-                Ok(plan) => {
-                    for (idx, uid) in plan {
-                        if cancel.load(Ordering::Relaxed) {
-                            break;
-                        }
-                        let msg = &listed[idx];
-
-                        // Fetch MIME content and store to app dir + external backup dir
-                        match client.get_mime_content(&msg.id).await {
-                            Ok(raw_bytes) => {
-                                let mirror_to = match copies_to_write(uid, &in_vault, in_mirror.as_ref()) {
-                                    CopiesToWrite::Nothing => continue,
-                                    CopiesToWrite::Vault => None,
-                                    CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
-                                };
-                                let cur_dir =
-                                    crate::maildir_cur_path(&app_handle, &account_id, &mailbox_path)?;
-                                let filename =
-                                    crate::build_maildir_filename(uid, &["archived".to_string()]);
-                                // Both writes off the runtime worker: a stalled write on
-                                // the external drive would hold every task it polls. A
-                                // failed vault write ends the run; a failed mirror write
-                                // is counted.
-                                let mirror_write = tokio::task::spawn_blocking(move || {
-                                    std::fs::create_dir_all(&cur_dir).map_err(|e| format!("mkdir: {}", e))?;
-                                    std::fs::write(cur_dir.join(&filename), &raw_bytes)
-                                        .map_err(|e| format!("write .eml: {}", e))?;
-                                    Ok::<_, String>(mirror_to.map(|dir| {
-                                        std::fs::create_dir_all(&dir)
-                                            .map_err(|e| format!("external mkdir failed: {}", e))
-                                            .and_then(|()| {
-                                                std::fs::write(dir.join(&filename), &raw_bytes)
-                                                    .map_err(|e| format!("external write failed: {}", e))
-                                            })
-                                    }))
-                                })
-                                .await
-                                .map_err(|e| format!("message write panicked: {}", e))??;
-                                in_vault.insert(uid);
-                                match mirror_write {
-                                    Some(Ok(())) => {
-                                        if let Some(mirrored) = in_mirror.as_mut() {
-                                            mirrored.insert(uid);
-                                        }
-                                    }
-                                    Some(Err(e)) => {
-                                        warn!("backup(graph): {}", e);
-                                        total_ext_failures += 1;
-                                    }
-                                    None => {}
-                                }
-
-                                total_backed_up += 1;
-                            }
-                            Err(e) => {
-                                warn!(
-                                    "backup(graph): failed to fetch message {} in {}: {}",
-                                    msg.id, folder_name, e
-                                );
-                                total_errors += 1;
-                                last_message_error = Some(e.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Same shape as the IMAP loop: the page loop breaks on cancel, and
-        // counting the folder anyway would have the next run skip past the pages
-        // it never fetched.
-        if cancel.load(Ordering::Relaxed) {
-            warn!(
-                "backup(graph): cancelled for account {} inside {} ({}/{} folders done)",
-                account_id, mailbox_path, completed_folders, total_folders
-            );
-            cancelled = true;
-            break;
-        }
-
-        completed_folders += 1;
-
-        let _ = app_handle.emit(
-            "backup-progress",
-            BackupProgress {
-                account_id: account_id.clone(),
-                folder: mailbox_path,
-                total_folders,
-                completed_folders,
-                total_emails: total_backed_up + total_errors,
-                completed_emails: total_backed_up,
-                errors: total_errors,
-                active: completed_folders < total_folders,
-                last_error: None,
-                missing_in_folder: 0,
-            },
-        );
-    }
-
-    let duration = start.elapsed().as_secs_f64();
-    info!(
-        "backup(graph): {} for {} — {} emails backed up, {} errors, {:.1}s (folders: {}/{})",
-        if cancelled { "cancelled" } else { "completed" },
-        account_id, total_backed_up, total_errors, duration,
-        completed_folders, total_folders
-    );
-
-    Ok(BackupResult {
-        emails_backed_up: total_backed_up,
-        errors: total_errors,
-        duration_secs: duration,
-        success: !cancelled,
-        error_message: refused
-            .as_ref()
-            .map(|(_, why)| why.clone())
-            .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())),
-        cancelled,
-        // What the scheduler resumes from after a cancel. A folder the ledger
-        // refused stored nothing, and a resumed run would skip it.
-        completed_folders: match &refused {
-            Some((idx, _)) if cancelled => completed_folders.min(*idx),
-            _ => completed_folders,
-        },
-        external_copy_ok: total_ext_failures == 0,
-        external_copy_error: if total_ext_failures > 0 {
-            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
-        } else { None },
-        external_copy_failed_count: total_ext_failures,
-    })
-}
-
-/// What to tell the user when a run finished but some messages did not.
-///
-/// `None` when nothing failed — the caller renders a plain success. Otherwise
-/// the count AND the server's own words, because "Unknown error" on an
-/// otherwise complete backup is what trains people to ignore the alarm.
-fn partial_error_message(errors: usize, backed_up: usize, last_error: Option<&str>) -> Option<String> {
-    if errors == 0 {
-        return None;
-    }
-    let attempted = backed_up + errors;
-    let head = format!(
-        "{} of {} message{} could not be fetched",
-        errors,
-        attempted,
-        if attempted == 1 { "" } else { "s" }
-    );
-    Some(match last_error {
-        Some(e) if !e.trim().is_empty() => format!("{}. Last error: {}", head, e.trim()),
-        _ => format!("{}.", head),
-    })
-}
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-/// Flatten nested mailbox tree into a flat list
-fn flatten_mailboxes(mailboxes: &[imap::MailboxInfo]) -> Vec<&imap::MailboxInfo> {
-    let mut result = Vec::new();
-    for m in mailboxes {
-        result.push(m);
-        if !m.children.is_empty() {
-            result.extend(flatten_mailboxes(&m.children));
-        }
+) -> Result<Value, String> {
+    let (root, needs_release) = resolve_backup_path(app, caller_path);
+    let params = json!({
+        "accountId": account_id,
+        "accountJson": account_json,
+        "mirrorRoot": root,
+        "skipFolders": skip_folders,
+    });
+    let result = crate::daemon_call_blocking(app, "backup_run_account", params, RUN_ACK_BUDGET);
+    match (&result, needs_release, &root) {
+        // The run is under way and needs the path live for its whole duration.
+        (Ok(_), true, Some(path)) => hold_backup_path(app, &account_id, path),
+        // Nothing started, so nothing needs it: release now rather than wait
+        // for a terminal frame that will never come.
+        (Err(_), true, Some(path)) => release_backup_path(path),
+        _ => {}
     }
     result
 }
@@ -1445,675 +243,79 @@ pub async fn backup_purge_uids(
     email: String,
     mailbox: String,
     uids: Vec<u32>,
-) -> Result<serde_json::Value, String> {
-    if uids.is_empty() {
-        return Ok(serde_json::json!({ "removed": 0, "queued": 0 }));
-    }
-
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("No app data dir: {}", e))?;
-
-    let (resolved, needs_release) = resolve_backup_path(&app_handle, None);
-    let Some(root) = resolved else {
-        // No backup configured at all is not a queue-worthy event.
-        let loc = external_location::get_external_location(
-            &data_dir,
-            external_location::SLOT_EXTERNAL_BACKUP,
-        );
-        if loc.status == "not_configured" {
-            return Ok(serde_json::json!({ "removed": 0, "queued": 0 }));
-        }
-        queue_purge(&data_dir, &email, &mailbox, &uids)?;
-        info!("backup_purge_uids: backup unreachable, queued {} uids", uids.len());
-        return Ok(serde_json::json!({ "removed": 0, "queued": uids.len() }));
-    };
-
-    let uid_set: HashSet<u32> = uids.iter().copied().collect();
-    let removed = purge_backup_files(Path::new(&root), &email, &mailbox, &uid_set);
-    if needs_release {
-        release_backup_path(&root);
-    }
-    info!("backup_purge_uids: removed {} mirror files for {}/{}", removed, email, mailbox);
-    Ok(serde_json::json!({ "removed": removed, "queued": 0 }))
+) -> Result<Value, String> {
+    tokio::task::spawn_blocking(move || {
+        // `purge_uids` fails closed on a missing `externalStatus` (it treats
+        // it as "not_configured" and does NOT queue), so this is the one
+        // piece of bookmark-adjacent state the daemon has no way to read for
+        // itself and must always be told: it is what separates "no backup
+        // configured, nothing to queue" from "configured but unreachable,
+        // queue it for the next run".
+        let status = external_location_status(&app_handle);
+        forward(&app_handle, "backup_purge_uids", None, |_root| {
+            json!({"email": email, "mailbox": mailbox, "uids": uids, "externalStatus": status})
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Which uids of `<email>/<mailbox>` are present in the external mirror.
 ///
-/// `Ok(None)` means "could not determine" — no backup location configured, or
+/// `null` means "could not determine" — no backup location configured, or
 /// one configured but unreachable (drive unplugged, bookmark stale). The UI
 /// renders that as an explicit unknown; it must never be confused with an
-/// empty set, which is the positive claim "nothing here is mirrored".
+/// empty list, which is the positive claim "nothing here is mirrored".
 #[tauri::command]
 pub async fn backup_scan_uids(
     app_handle: tauri::AppHandle,
     email: String,
     mailbox: String,
-) -> Result<Option<Vec<u32>>, String> {
-    let data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("No app data dir: {}", e))?;
+) -> Result<Value, String> {
+    tokio::task::spawn_blocking(move || {
+        // Users with no backup drive pay nothing: bail before resolving a
+        // bookmark or waking the daemon. Same `null` the daemon would answer.
+        if external_location_status(&app_handle).as_deref() == Some("not_configured") {
+            return Ok(Value::Null);
+        }
+        forward(&app_handle, "backup_scan_uids", None, |_root| {
+            json!({"email": email, "mailbox": mailbox})
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
 
-    // Users with no backup drive pay nothing: bail before resolving a bookmark.
-    let loc = external_location::get_external_location(
-        &data_dir,
-        external_location::SLOT_EXTERNAL_BACKUP,
-    );
-    if loc.status == "not_configured" {
-        return Ok(None);
+/// The stored external-location status (`"ready"`, `"needs_reauth"`,
+/// `"not_configured"`, ...), or `None` when there is no app data dir to read
+/// it from — which the callers below treat as "not configured", the same
+/// fail-closed reading `mailvault_core::backup::purge_uids` applies.
+fn external_location_status(app_handle: &tauri::AppHandle) -> Option<String> {
+    let data_dir = app_handle.path().app_data_dir().ok()?;
+    Some(external_location::get_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP).status)
+}
+
+/// How the external location resolved, as the two fields the status reply
+/// carries to the UI. Verbatim from the old `get_backup_status`'s own
+/// enrichment block: a configured location that would not resolve renders as
+/// `needs_reauth` plus whatever `validate_external_location` says went wrong.
+pub(crate) fn external_status_fields(
+    app_handle: &tauri::AppHandle,
+    resolved: Option<&str>,
+) -> (String, Option<String>) {
+    if resolved.is_some() {
+        return ("ready".to_string(), None);
     }
-
-    let (resolved, needs_release) = resolve_backup_path(&app_handle, None);
-    let Some(root) = resolved else {
-        return Ok(None);
+    let Ok(data_dir) = app_handle.path().app_data_dir() else {
+        return ("not_configured".to_string(), None);
     };
-
-    let uids = scan_external_uids(&root, &email, &mailbox);
-    if needs_release {
-        release_backup_path(&root);
+    let loc = external_location::get_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP);
+    if loc.status == "not_configured" {
+        return ("not_configured".to_string(), None);
     }
-    Ok(Some(uids.into_iter().collect()))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::sync_locations;
-    use std::fs;
-
-    /// Flags must survive both directions of the app ↔ external sync, and
-    /// legacy flagless `<uid>.eml` backups must still restore — carrying `A`,
-    /// because the restored copy is a vault copy: without it the row never
-    /// appears in the list and Clear cached emails deletes the file.
-    #[test]
-    fn sync_locations_preserves_flags() {
-        let base = std::env::temp_dir().join("mv-sync-flags-test");
-        let _ = fs::remove_dir_all(&base);
-        let app = base.join("app");
-        let ext = base.join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-
-        fs::write(app.join("101:2,SF.eml"), b"seen+flagged").unwrap();
-        fs::write(ext.join("202:2,S.eml"), b"seen").unwrap();
-        fs::write(ext.join("303.eml"), b"legacy").unwrap();
-
-        assert_eq!(sync_locations(&app, &ext), 3);
-
-        assert!(ext.join("101:2,SF.eml").exists(), "flags lost app → external");
-        assert!(app.join("202:2,AS.eml").exists(), "flags lost external → app");
-        assert!(app.join("303:2,A.eml").exists(), "legacy backup did not restore");
-
-        // Second pass must be a no-op — no duplicates under either naming scheme.
-        assert_eq!(sync_locations(&app, &ext), 0);
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    fn eml(message_id: &str) -> Vec<u8> {
-        format!(
-            "From: a@b.test\r\nSubject: s\r\nMessage-ID: <{}>\r\n\r\nbody\r\n",
-            message_id
-        )
-        .into_bytes()
-    }
-
-    /// The mirror keeps a message under the uid the PREVIOUS generation gave it.
-    /// Once `repair_generation` has set that message aside, the restore
-    /// direction must not hand it back — otherwise every backup run undoes the
-    /// repair, and `.uidvalidity` already matches so nothing re-checks.
-    #[test]
-    fn sync_locations_does_not_resurrect_orphans() {
-        let base = std::env::temp_dir().join("mv-sync-orphan-test");
-        let _ = fs::remove_dir_all(&base);
-        let mailbox = base.join("INBOX");
-        let app = mailbox.join("cur");
-        let orphaned = mailbox.join("orphaned");
-        let ext = base.join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&orphaned).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-
-        // The repair read this message, found no uid for it on the current
-        // server, and moved it aside.
-        fs::write(orphaned.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
-        // The mirror still holds the same message under the same old uid.
-        fs::write(ext.join("4:2,.eml"), eml("strictseal@old-host.test")).unwrap();
-        // ...and a genuinely missing message the restore SHOULD bring back.
-        fs::write(ext.join("7:2,S.eml"), eml("still-on-this-server@mock.test")).unwrap();
-
-        assert_eq!(sync_locations(&app, &ext), 1, "exactly one file should restore");
-
-        assert!(
-            super::super::find_file_by_uid(&app, 4).is_none(),
-            "an orphaned message came back into cur/ under its old uid"
-        );
-        assert!(
-            super::super::find_file_by_uid(&app, 7).is_some(),
-            "a legitimate restore was blocked"
-        );
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    /// A mirror file with no Message-ID cannot be shown to be an orphan, and
-    /// absence of proof is not proof — it still restores.
-    #[test]
-    fn sync_locations_restores_a_file_with_no_message_id() {
-        let base = std::env::temp_dir().join("mv-sync-noid-test");
-        let _ = fs::remove_dir_all(&base);
-        let mailbox = base.join("INBOX");
-        let app = mailbox.join("cur");
-        let orphaned = mailbox.join("orphaned");
-        let ext = base.join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&orphaned).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-
-        fs::write(orphaned.join("4:2,.eml"), eml("set-aside@old-host.test")).unwrap();
-        fs::write(ext.join("9:2,.eml"), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
-
-        assert_eq!(sync_locations(&app, &ext), 1);
-        assert!(super::super::find_file_by_uid(&app, 9).is_some());
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    /// With no `orphaned/` dir at all — a vault that has never been repaired —
-    /// the guard costs nothing and blocks nothing.
-    #[test]
-    fn sync_locations_restores_when_nothing_was_ever_orphaned() {
-        let base = std::env::temp_dir().join("mv-sync-noorphan-test");
-        let _ = fs::remove_dir_all(&base);
-        let app = base.join("INBOX").join("cur");
-        let ext = base.join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-
-        fs::write(ext.join("11:2,S.eml"), eml("fresh@mock.test")).unwrap();
-
-        assert_eq!(sync_locations(&app, &ext), 1);
-        assert!(super::super::find_file_by_uid(&app, 11).is_some());
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    /// The mirror scanner must recognise every filename shape the mirror has
-    /// carried — `<uid>:2,<flags>.eml`, `<uid>.eml`, `<uid>_<flags>.eml` —
-    /// or a backed-up message renders as "not backed up".
-    #[test]
-    fn scan_external_uids_reads_every_filename_shape() {
-        let base = std::env::temp_dir().join("mv-scan-ext-uids-test");
-        let _ = fs::remove_dir_all(&base);
-        let cur = base.join("luke@mock.test").join("INBOX").join("cur");
-        fs::create_dir_all(&cur).unwrap();
-        fs::write(cur.join("11:2,S.eml"), b"a").unwrap();
-        fs::write(cur.join("12.eml"), b"b").unwrap();
-        fs::write(cur.join("13_S.eml"), b"c").unwrap();
-        fs::write(cur.join("not-a-uid.eml"), b"d").unwrap();
-
-        let uids = super::scan_external_uids(base.to_str().unwrap(), "luke@mock.test", "INBOX");
-        assert_eq!(uids.len(), 3);
-        for uid in [11u32, 12, 13] {
-            assert!(uids.contains(&uid), "missing uid {}", uid);
-        }
-
-        // A mailbox with no mirror directory is empty, not an error.
-        let none = super::scan_external_uids(base.to_str().unwrap(), "luke@mock.test", "Sent");
-        assert!(none.is_empty());
-
-        let _ = fs::remove_dir_all(&base);
-    }
-
-    /// `sync_locations` before its one-pass listings, verbatim but for paths:
-    /// a directory rescan per file in both directions. Kept as a reference for
-    /// the UID RULES, not for the flags — it carries the same `archived` push
-    /// the restore does, so the equivalence below still says something about
-    /// which files move rather than what they are called.
-    fn sync_locations_per_uid(app_dir: &std::path::Path, backup_dir: &std::path::Path) -> usize {
-        let mut synced = 0;
-        let _ = fs::create_dir_all(app_dir);
-        if fs::create_dir_all(backup_dir).is_err() {
-            return 0;
-        }
-        if let Ok(entries) = fs::read_dir(app_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() { continue; }
-                let name = entry.file_name().to_string_lossy().to_string();
-                let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
-                let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
-                if crate::find_msg_file_by_uid(backup_dir, uid).is_some() { continue; }
-                let dst_name = if name.ends_with(".eml") { name.clone() } else { format!("{}.eml", name) };
-                if fs::copy(entry.path(), backup_dir.join(&dst_name)).is_ok() { synced += 1; }
-            }
-        }
-        let mut orphaned_ids: Option<std::collections::HashSet<String>> = None;
-        if let Ok(entries) = fs::read_dir(backup_dir) {
-            for entry in entries.flatten() {
-                if entry.path().is_dir() { continue; }
-                let name = entry.file_name().to_string_lossy().to_string();
-                if !name.ends_with(".eml") { continue; }
-                let uid_str = name.split(|c: char| c == ':' || c == '.' || c == '_').next().unwrap_or(&name);
-                let uid: u32 = match uid_str.parse() { Ok(u) => u, Err(_) => continue };
-                if crate::find_file_by_uid(app_dir, uid).is_some() { continue; }
-                let ids = orphaned_ids.get_or_insert_with(|| super::orphaned_message_ids(app_dir));
-                if !ids.is_empty() {
-                    if let Some(id) = mailvault_core::maildir::read_message_id(&entry.path()) {
-                        if ids.contains(&id) { continue; }
-                    }
-                }
-                let mut flags = crate::parse_flags_from_filename(&name);
-                flags.push("archived".to_string());
-                let dst = app_dir.join(crate::build_maildir_filename(uid, &flags));
-                if fs::copy(entry.path(), &dst).is_ok() { synced += 1; }
-            }
-        }
-        synced
-    }
-
-    /// Every name shape either side has held, and the edges each direction's
-    /// uid rule draws: the vault side matches `<uid>:` exactly, the mirror
-    /// side takes whatever precedes the first ':', '.' or '_'.
-    fn seed_presync(base: &std::path::Path) -> (std::path::PathBuf, std::path::PathBuf) {
-        let mailbox = base.join("INBOX");
-        let app = mailbox.join("cur");
-        let orphaned = mailbox.join("orphaned");
-        let ext = base.join("ext");
-        for dir in [&app, &orphaned, &ext] {
-            fs::create_dir_all(dir).unwrap();
-        }
-        for name in [
-            "101:2,SF.eml", // app only: mirrored under its own name
-            "102:2,S",      // app only, no extension: mirrored as .eml
-            "103_S.eml",    // legacy name in the vault: mirrored, then restored as 103:2,A.eml
-            "104:2,S.eml",  // mirror holds 104.eml: nothing moves
-            "105:2,F.eml",  // mirror holds 105_S.eml: nothing moves
-            "07:2,S.eml",   // mirror side reads 7, vault side does not
-            "300:2,S.eml",  // the mirror's directory named 300.eml counts as a copy
-            "notes.txt",
-            "_meta.json",
-        ] {
-            fs::write(app.join(name), format!("app {}", name)).unwrap();
-        }
-        fs::create_dir_all(app.join("400")).unwrap();
-        for name in [
-            "202:2,S.eml", // mirror only: restored with its flags, plus archived
-            "203.eml",     // legacy flagless: restored as 203:2,A.eml
-            "204_S.eml",   // legacy underscore: restored, flags not parsed
-            "205:2,F",     // no .eml: never restored
-            "08.eml",      // restored as 8:2,A.eml
-            "104.eml",
-            "105_S.eml",
-            "7:2,S.eml",   // the vault's 07:2,S.eml is not uid 7: restored
-            ".4711:2,S.eml.tmp-1",
-        ] {
-            fs::write(ext.join(name), format!("ext {}", name)).unwrap();
-        }
-        fs::create_dir_all(ext.join("300.eml")).unwrap();
-        fs::write(ext.join("206.eml"), eml("set-aside@old-host.test")).unwrap();
-        fs::write(orphaned.join("206:2,.eml"), eml("set-aside@old-host.test")).unwrap();
-        fs::write(ext.join("207.eml"), b"From: a@b.test\r\nSubject: no id\r\n\r\nbody".to_vec()).unwrap();
-        (app, ext)
-    }
-
-    fn listing(dir: &std::path::Path) -> Vec<(String, Vec<u8>)> {
-        let mut out: Vec<(String, Vec<u8>)> = fs::read_dir(dir)
-            .unwrap()
-            .flatten()
-            .map(|e| {
-                let bytes = if e.path().is_dir() { b"<dir>".to_vec() } else { fs::read(e.path()).unwrap() };
-                (e.file_name().to_string_lossy().to_string(), bytes)
-            })
-            .collect();
-        out.sort();
-        out
-    }
-
-    #[test]
-    fn sync_locations_matches_the_per_uid_version_on_every_name_shape() {
-        let tmp = tempfile::tempdir().unwrap();
-        let (old_app, old_ext) = seed_presync(&tmp.path().join("old"));
-        let (new_app, new_ext) = seed_presync(&tmp.path().join("new"));
-
-        for pass in ["first", "second"] {
-            let old = sync_locations_per_uid(&old_app, &old_ext);
-            let new = sync_locations(&new_app, &new_ext);
-            assert_eq!(new, old, "{pass} pass synced a different count");
-            assert_eq!(listing(&new_app), listing(&old_app), "{pass} pass: vault side differs");
-            assert_eq!(listing(&new_ext), listing(&old_ext), "{pass} pass: mirror side differs");
-        }
-
-        // The fixture has to reach the paths it claims to, or agreement is vacuous.
-        let app_names: Vec<String> = listing(&new_app).into_iter().map(|(n, _)| n).collect();
-        let ext_names: Vec<String> = listing(&new_ext).into_iter().map(|(n, _)| n).collect();
-        for name in ["202:2,AS.eml", "203:2,A.eml", "204:2,A.eml", "8:2,A.eml", "7:2,AS.eml", "103:2,A.eml", "207:2,A.eml"] {
-            assert!(app_names.contains(&name.to_string()), "not restored: {name} in {app_names:?}");
-        }
-        for name in [
-            "206:2,.eml", "205:2,F.eml", "205:2,.eml", "104:2,.eml", "105:2,.eml",
-            "206:2,A.eml", "205:2,AF.eml", "104:2,A.eml", "105:2,A.eml",
-        ] {
-            assert!(!app_names.contains(&name.to_string()), "restored but should not be: {name}");
-        }
-        for name in ["101:2,SF.eml", "102:2,S.eml", "103_S.eml"] {
-            assert!(ext_names.contains(&name.to_string()), "not mirrored: {name} in {ext_names:?}");
-        }
-        for name in ["104:2,S.eml", "105:2,F.eml", "07:2,S.eml", "300:2,S.eml"] {
-            assert!(!ext_names.contains(&name.to_string()), "mirrored but should not be: {name}");
-        }
-    }
-
-    /// Two files for one uid on one side: the first copy has to count for the
-    /// second, as the per-uid rescan found the file it had just copied.
-    #[test]
-    fn sync_locations_copies_one_file_per_uid_when_a_side_holds_two() {
-        let tmp = tempfile::tempdir().unwrap();
-        let app = tmp.path().join("INBOX").join("cur");
-        let ext = tmp.path().join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-        fs::write(app.join("209:2,S.eml"), b"a").unwrap();
-        fs::write(app.join("209_S.eml"), b"b").unwrap();
-        fs::write(ext.join("208.eml"), b"c").unwrap();
-        fs::write(ext.join("208:2,S.eml"), b"d").unwrap();
-
-        assert_eq!(sync_locations(&app, &ext), 2);
-
-        let count = |dir: &std::path::Path, uid: u32| {
-            fs::read_dir(dir).unwrap().flatten()
-                .filter(|e| mailvault_core::maildir::mirror_filename_uid(&e.file_name().to_string_lossy()) == Some(uid))
-                .count()
-        };
-        assert_eq!(count(&ext, 209), 1, "both vault files for uid 209 were mirrored");
-        assert_eq!(count(&app, 208), 1, "both mirror files for uid 208 were restored");
-        assert_eq!(sync_locations(&app, &ext), 0);
-    }
-
-    /// The backup fetches every server uid missing from this set, so a uid the
-    /// pre-sync restores has to be in it. Counted before the pre-sync, `4.eml`
-    /// read as missing and the fetch stored uid 4 again beside the restore.
-    #[test]
-    fn vault_uids_after_presync_include_what_the_presync_restored() {
-        let tmp = tempfile::tempdir().unwrap();
-        let app = tmp.path().join("Matrix").join("cur");
-        let ext = tmp.path().join("ext");
-        fs::create_dir_all(&app).unwrap();
-        fs::create_dir_all(&ext).unwrap();
-        fs::write(app.join("1:2,AS.eml"), eml("in-the-vault@mock.test")).unwrap();
-        fs::write(ext.join("3:2,S.eml"), eml("mirror-maildir-name@mock.test")).unwrap();
-        fs::write(ext.join("4.eml"), eml("mirror-legacy-name@mock.test")).unwrap();
-
-        let uids = super::vault_uids_after_presync(&app, Some(&ext)).unwrap();
-
-        assert_eq!(uids, std::collections::HashSet::from([1, 3, 4]));
-    }
-
-    /// No mirror, nothing to pre-sync: the vault as it stands, and a folder
-    /// nothing was ever stored into is empty rather than an error.
-    #[test]
-    fn vault_uids_after_presync_without_a_mirror_read_the_vault() {
-        let tmp = tempfile::tempdir().unwrap();
-        let app = tmp.path().join("INBOX").join("cur");
-        assert!(super::vault_uids_after_presync(&app, None).unwrap().is_empty());
-
-        fs::create_dir_all(&app).unwrap();
-        fs::write(app.join("5:2,S.eml"), eml("in-the-vault@mock.test")).unwrap();
-        assert_eq!(super::vault_uids_after_presync(&app, None).unwrap(), std::collections::HashSet::from([5]));
-    }
-
-    /// The catch-up walks the server's uids and keeps the ones the vault holds.
-    /// Every one of those is a copy this run counted as backed up, so it is
-    /// marked archived: that is what heals an auto-cached `<uid>:2,.eml` the
-    /// app wrote when the message was opened.
-    #[test]
-    fn catch_up_marks_every_counted_vault_copy_archived() {
-        let server_flags: Vec<(u32, Vec<String>)> = vec![
-            (1, vec!["\\Seen".to_string()]),
-            (2, vec![]),
-            (3, vec!["\\Flagged".to_string()]),
-        ];
-        let local_uids = std::collections::HashSet::from([1u32, 2, 9]);
-
-        let changes = super::catch_up_changes(&server_flags, &local_uids);
-
-        let uids: Vec<u32> = changes.iter().map(|c| c.uid).collect();
-        assert_eq!(uids, vec![1, 2], "only the server uids the vault holds");
-        assert!(changes[0].flags.iter().any(|f| f == "\\Seen"), "{:?}", changes[0].flags);
-        assert!(changes[0].flags.iter().any(|f| f == "archived"), "{:?}", changes[0].flags);
-        assert_eq!(changes[1].flags, vec!["archived".to_string()]);
-    }
-
-    /// I1 (task-2.11 carry-in): before Task 2.9b, `apply_everywhere` was
-    /// infallible — a custody-patch failure was swallowed, never propagated.
-    /// The daemon RPC that replaced it can fail transiently (a restart, a
-    /// timeout), and that failure must not fail the whole account's folder
-    /// loop: the mapping falls back to `Applied::default()` so the caller's
-    /// `?` never fires on this path, and the next run's `catch_up_changes`
-    /// recomputes the same set and retries the heal.
-    #[test]
-    fn a_failed_flag_catchup_call_maps_to_a_default_applied_not_a_propagated_error() {
-        let outcome: Result<mailvault_core::vault_flags::Applied, String> =
-            Err("daemon unavailable".to_string());
-        let applied = super::map_flag_catchup_outcome(outcome, "acct-1", "INBOX");
-        assert_eq!(applied, mailvault_core::vault_flags::Applied::default());
-    }
-
-    /// The success path is untouched: a real `Applied` passes through as-is.
-    #[test]
-    fn a_successful_flag_catchup_call_passes_the_applied_result_through() {
-        let make = || mailvault_core::vault_flags::Applied {
-            renamed: 3,
-            mirrored: 2,
-            index_patched: 3,
-            sidecars_patched: 0,
-        };
-        let outcome: Result<mailvault_core::vault_flags::Applied, String> = Ok(make());
-        let applied = super::map_flag_catchup_outcome(outcome, "acct-1", "INBOX");
-        assert_eq!(applied, make());
-    }
-
-    /// Not a gate.
-    /// `cargo test -p mailvault --release --bin mailvault bench_sync_locations -- --ignored --nocapture`
-    #[test]
-    #[ignore]
-    fn bench_sync_locations() {
-        // Both sides hold every message: the steady state of a backed-up
-        // folder, where the pre-sync is lookups and no copies.
-        fn seed(base: &std::path::Path, n: u32) -> (std::path::PathBuf, std::path::PathBuf) {
-            let app = base.join("INBOX").join("cur");
-            let ext = base.join("ext");
-            fs::create_dir_all(&app).unwrap();
-            fs::create_dir_all(&ext).unwrap();
-            for uid in 1..=n {
-                fs::write(app.join(format!("{uid}:2,S.eml")), b"x").unwrap();
-                fs::write(ext.join(format!("{uid}:2,S.eml")), b"x").unwrap();
-            }
-            (app, ext)
-        }
-        let tmp = tempfile::tempdir().unwrap();
-        for n in [2_000u32, 20_000] {
-            let (app, ext) = seed(&tmp.path().join(format!("new-{n}")), n);
-            let t = std::time::Instant::now();
-            assert_eq!(sync_locations(&app, &ext), 0);
-            println!("n={n} one_pass={:?}", t.elapsed());
-        }
-        let (app, ext) = seed(&tmp.path().join("old-2000"), 2_000);
-        let t = std::time::Instant::now();
-        assert_eq!(sync_locations_per_uid(&app, &ext), 0);
-        let old = t.elapsed();
-        // Both directions rescan the other side per file: n^2, so x100 at 10x n.
-        println!("n=2000 per_uid={old:?} projected n=20000 per_uid={:?}", old * 100);
-    }
-}
-
-#[cfg(test)]
-mod purge_queue_tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    fn seed_mirror(root: &Path, email: &str, mailbox: &str, names: &[&str]) {
-        let cur = root.join(email).join(mailbox).join("cur");
-        std::fs::create_dir_all(&cur).unwrap();
-        for n in names {
-            std::fs::write(cur.join(n), b"x").unwrap();
-        }
-    }
-
-    #[test]
-    fn purges_every_legacy_filename_shape() {
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        // The three shapes the mirror has carried over its lifetime.
-        seed_mirror(root, "me@x.test", "INBOX.Spam", &[
-            "101:2,S.eml",
-            "102.eml",
-            "103_S.eml",
-            "104:2,S.eml",
-            "1010:2,S.eml",
-        ]);
-
-        let uids: HashSet<u32> = [101u32, 102, 103].into_iter().collect();
-        let removed = purge_backup_files(root, "me@x.test", "INBOX.Spam", &uids);
-
-        let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
-        assert_eq!(removed, 3);
-        assert!(!cur.join("101:2,S.eml").exists());
-        assert!(!cur.join("102.eml").exists());
-        assert!(!cur.join("103_S.eml").exists());
-        assert!(cur.join("104:2,S.eml").exists());
-        assert!(cur.join("1010:2,S.eml").exists(), "1010 must survive a purge of 101");
-    }
-
-    #[test]
-    fn missing_mirror_dir_removes_nothing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let uids: HashSet<u32> = [1u32].into_iter().collect();
-        assert_eq!(purge_backup_files(tmp.path(), "me@x.test", "INBOX", &uids), 0);
-    }
-
-    #[test]
-    fn queue_appends_and_dedupes() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dd = tmp.path();
-
-        queue_purge(dd, "me@x.test", "INBOX.Spam", &[1, 2]).unwrap();
-        queue_purge(dd, "me@x.test", "INBOX.Spam", &[2, 3]).unwrap();
-        queue_purge(dd, "me@x.test", "INBOX", &[9]).unwrap();
-
-        let q = read_purge_queue(dd);
-        assert_eq!(q.get("me@x.test|INBOX.Spam").unwrap(), &vec![1, 2, 3]);
-        assert_eq!(q.get("me@x.test|INBOX").unwrap(), &vec![9]);
-    }
-
-    #[test]
-    fn corrupt_queue_file_reads_as_empty() {
-        let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(purge_queue_path(tmp.path()), b"{ not json").unwrap();
-        assert!(read_purge_queue(tmp.path()).is_empty());
-    }
-
-    #[test]
-    fn drain_removes_files_and_clears_entries() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dd = tmp.path().join("data");
-        let root = tmp.path().join("mirror");
-        std::fs::create_dir_all(&dd).unwrap();
-        seed_mirror(&root, "me@x.test", "INBOX.Spam", &["1:2,S.eml", "2.eml", "7:2,S.eml"]);
-
-        queue_purge(&dd, "me@x.test", "INBOX.Spam", &[1, 2]).unwrap();
-
-        let removed = drain_purge_queue(&dd, &root);
-
-        assert_eq!(removed, 2);
-        let cur = root.join("me@x.test").join("INBOX.Spam").join("cur");
-        assert!(!cur.join("1:2,S.eml").exists());
-        assert!(!cur.join("2.eml").exists());
-        assert!(cur.join("7:2,S.eml").exists());
-        assert!(read_purge_queue(&dd).is_empty(), "drained entries must be cleared");
-    }
-
-    #[test]
-    fn drain_of_empty_queue_is_a_noop() {
-        let tmp = tempfile::tempdir().unwrap();
-        assert_eq!(drain_purge_queue(tmp.path(), tmp.path()), 0);
-    }
-
-    #[test]
-    fn drain_keeps_entry_when_mirror_folder_missing() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dd = tmp.path().join("data");
-        let root = tmp.path().join("mirror");
-        std::fs::create_dir_all(&dd).unwrap();
-        // Deliberately never seed_mirror — INBOX.Missing has no cur/ dir under root.
-
-        queue_purge(&dd, "me@x.test", "INBOX.Missing", &[5, 6]).unwrap();
-
-        let removed = drain_purge_queue(&dd, &root);
-
-        assert_eq!(removed, 0);
-        let q = read_purge_queue(&dd);
-        assert_eq!(
-            q.get("me@x.test|INBOX.Missing").unwrap(),
-            &vec![5, 6],
-            "entry for an unmirrored folder must stay queued, not be dropped"
-        );
-    }
-
-    #[test]
-    fn drain_drops_malformed_key_but_still_drains_valid_entries() {
-        let tmp = tempfile::tempdir().unwrap();
-        let dd = tmp.path().join("data");
-        let root = tmp.path().join("mirror");
-        std::fs::create_dir_all(&dd).unwrap();
-        seed_mirror(&root, "me@x.test", "INBOX", &["4:2,S.eml"]);
-
-        let mut q: std::collections::BTreeMap<String, Vec<u32>> = Default::default();
-        q.insert("malformed-no-pipe".to_string(), vec![1, 2]);
-        q.insert("me@x.test|INBOX".to_string(), vec![4]);
-        write_purge_queue(&dd, &q).unwrap();
-
-        let removed = drain_purge_queue(&dd, &root);
-
-        assert_eq!(removed, 1, "the well-formed entry must still drain");
-        let cur = root.join("me@x.test").join("INBOX").join("cur");
-        assert!(!cur.join("4:2,S.eml").exists());
-        let leftover = read_purge_queue(&dd);
-        assert!(
-            !leftover.contains_key("malformed-no-pipe"),
-            "a key with no '|' separator must be dropped, not left queued forever"
-        );
-    }
-}
-
-#[cfg(test)]
-mod partial_error_tests {
-    use super::partial_error_message;
-
-    #[test]
-    fn no_errors_says_nothing() {
-        assert_eq!(partial_error_message(0, 788, None), None);
-    }
-
-    /// The 2026-08-27 report: 788 of 789 saved, and the notification said
-    /// "Backup failed - Unknown error" because this string was `None`.
-    #[test]
-    fn one_failure_names_the_count_and_the_server() {
-        let msg = partial_error_message(1, 788, Some("IMAP fetch failed: UID FETCH 799 failed"))
-            .expect("a run with errors must explain itself");
-        assert!(msg.contains("1 of 789 messages"), "got {msg}");
-        assert!(msg.contains("UID FETCH 799 failed"), "got {msg}");
-    }
-
-    #[test]
-    fn falls_back_to_the_count_when_the_error_is_blank() {
-        let msg = partial_error_message(2, 0, Some("   ")).unwrap();
-        assert_eq!(msg, "2 of 2 messages could not be fetched.");
-    }
-
-    #[test]
-    fn singular_when_one_message_was_attempted() {
-        let msg = partial_error_message(1, 0, None).unwrap();
-        assert_eq!(msg, "1 of 1 message could not be fetched.");
-    }
+    // There IS a configured location but it failed to resolve.
+    let err = external_location::validate_external_location(&data_dir, external_location::SLOT_EXTERNAL_BACKUP)
+        .map(|l| l.last_error)
+        .unwrap_or(None);
+    ("needs_reauth".to_string(), err)
 }

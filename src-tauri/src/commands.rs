@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 use crate::backup;
@@ -99,7 +98,16 @@ use crate::backup;
 // it outright.
 
 // ── Backup: Run account backup ───────────────────────────────────────────
+//
+// Both commands are forwarders now (Phase 3 remainder, Task 5): the runners,
+// the status comparison and every vault/mirror write moved to the daemon
+// (`src-daemon/src/handlers/backup.rs` over `mailvault_core::backup`). All
+// that is left on this side is the backup mirror's security-scoped bookmark,
+// which a daemon cannot resolve for itself — see `backup.rs`'s module doc for
+// the two release shapes.
 
+/// Starts the run and returns the daemon's `{"runId": accountId}` ACK — the
+/// outcome arrives as `backup-progress` events, not as this reply.
 #[tauri::command]
 pub async fn backup_run_account(
     app_handle: tauri::AppHandle,
@@ -107,15 +115,12 @@ pub async fn backup_run_account(
     account_json: String,
     backup_path: Option<String>,
     skip_folders: Option<usize>,
-    cancel_token: tauri::State<'_, backup::BackupCancelToken>,
-) -> Result<backup::BackupResult, String> {
-    let cancel = {
-        let mut guard = cancel_token.0.lock().unwrap();
-        let fresh = Arc::new(AtomicBool::new(false));
-        *guard = Arc::clone(&fresh);
-        fresh
-    };
-    backup::run_account_backup(app_handle, account_id, account_json, cancel, backup_path, skip_folders.unwrap_or(0)).await
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        backup::run_account(&app_handle, account_id, account_json, backup_path, skip_folders.unwrap_or(0))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -124,8 +129,24 @@ pub async fn backup_status(
     account_id: String,
     account_json: String,
     backup_path: Option<String>,
-) -> Result<backup::AccountBackupStatus, String> {
-    backup::get_backup_status(app_handle, account_id, account_json, backup_path).await
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        backup::forward(&app_handle, "backup_status", backup_path, |resolved| {
+            // The daemon has no bookmark API, so how the resolution went is
+            // this side's to report — it passes these two straight through
+            // onto the reply, exactly as the old app-side wrapper enriched
+            // its own otherwise-`None` fields after the fact.
+            let (status, error) = backup::external_status_fields(&app_handle, resolved);
+            serde_json::json!({
+                "accountId": account_id,
+                "accountJson": account_json,
+                "externalStatus": status,
+                "externalError": error,
+            })
+        })
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]

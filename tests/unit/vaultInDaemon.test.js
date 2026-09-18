@@ -206,16 +206,25 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
 });
 
 /**
- * Task 2.11 (corrected by Task 3.9, narrowed by Task 5.9): the remaining
- * app-side vault writer is a named, closed list of one: `backup.rs` (the
- * mirror sync + Graph/IMAP importers, still unmoved — see architecture.md's
- * Known Gaps). Everything else in `src-tauri/src` only reads through
+ * Task 2.11 (corrected by Task 3.9, narrowed by Task 5.9, closed by the
+ * Phase 3 remainder's Task 5): the app-side vault writer list is now
+ * **empty**. Every file in `src-tauri/src` only reads through
  * `vault_files::`, forwards to the daemon, or does not touch the vault at
- * all. A file outside this list calling a `vault_files::` write function, or
- * writing a vault path with a raw `fs::write`/`fs::copy`, would be exactly
- * the "new feature added to src-tauri instead of the daemon" mistake
- * CLAUDE.md's shell rule forbids; this guard catches it structurally
- * instead of relying on review.
+ * all. A file calling a `vault_files::` write function, or writing a vault
+ * path with a raw `fs::write`/`fs::copy`, would be exactly the "new feature
+ * added to src-tauri instead of the daemon" mistake CLAUDE.md's shell rule
+ * forbids; this guard catches it structurally instead of relying on review.
+ *
+ * `backup.rs` was the last name on the list. The Phase 3 remainder moved the
+ * IMAP and Graph backup runners, the mirror pre-sync (`fs::copy` in both
+ * directions) and the purge queue into `mailvault_core::backup`, run by
+ * `src-daemon/src/handlers/backup.rs` under the daemon's real write gate;
+ * `src-tauri/src/backup.rs` is now only the security-scoped bookmark broker
+ * (resolve, hold across a fire-and-forget run, release) plus four
+ * forwarders. `src-tauri/src/archive.rs` — the shim that built the core
+ * runner's context with the app's no-op gate — was deleted outright in the
+ * same task, since `backup.rs` was its only caller; the app now holds no
+ * `ImapPool` and no way to reach a core vault writer at all.
  *
  * Three names came off this list, for different reasons:
  * - `restore.rs` (Task 3.9) never wrote the vault at all: it read local
@@ -227,18 +236,15 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
  *   test is gone with it, not converted, since the claim it made has no
  *   subject any more (see the "migration.rs and restore.rs are deleted"
  *   test above).
- * - `archive.rs` (Task 3.9) no longer contains a literal vault write of any
- *   kind. Task 3.2 moved the archive/bulk runner's body, including the real
- *   `fsx::write_atomic` call, into `mailvault_core::archive` (see
- *   `src-core/src/archive.rs`). `src-tauri/src/archive.rs` is now only the
- *   `run_with_backup` shim `backup.rs` calls to build the core runner's
- *   context (root, pool, sinks, a no-op gate), a real file, but not one
- *   this file-text guard can honestly call a writer, since this guard reads
- *   only `src-tauri/src` and archive.rs's text has no write call left to
- *   see. `architecture.md` still names `archive.rs` in the *conceptual*
- *   ungated-writer list, because `backup.rs` still drives that core runner
- *   in-process with the app's no-op gate: the write is still reachable
- *   from the app, it just no longer lives in this directory's text.
+ * - `archive.rs` (Task 3.9, deleted in the Phase 3 remainder's Task 5) no
+ *   longer exists. Task 3.2 had already moved the archive/bulk runner's
+ *   body, including the real `fsx::write_atomic` call, into
+ *   `mailvault_core::archive`, leaving only the shim that built that
+ *   runner's context (root, pool, sinks, a no-op gate) for `backup.rs`.
+ *   With the backup runners in the daemon, that shim had no callers and the
+ *   file is gone — which also takes the *conceptual* ungated-writer entry
+ *   `architecture.md` kept for it: nothing app-side drives a core vault
+ *   writer any more.
  * - `commands.rs` and `main.rs` (Task 5.9) are the same shape as
  *   `archive.rs` above, closed out rather than left vacuous. `commands.rs`'s
  *   only writer, `graph_cache_mime`'s raw `std::fs::write` into the maildir
@@ -257,7 +263,9 @@ describe('custody.db has exactly one opener, and it is the daemon (Task 2.9b)', 
 describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
   const dir = 'src-tauri/src';
   const files = readdirSync(dir).filter((f) => f.endsWith('.rs') && !f.endsWith('_tests.rs'));
-  const ALLOWED_WRITERS = ['backup.rs'];
+  // Empty on purpose: the app has no vault writer left. A new name here
+  // needs the shell-rule argument in the doc comment above, not a quick add.
+  const ALLOWED_WRITERS = [];
   // The write-capable half of vault_files::, everything that creates,
   // renames or deletes a vault file or the attachment cache. The read family
   // (read/read_light/list/exists/...) is deliberately not in this list: every
@@ -315,35 +323,34 @@ describe('app-side vault writers are a closed, named list (Task 2.11)', () => {
     expect(offenders).toEqual([]);
   });
 
-  // Task 5.9: main.rs's last `vault_files::` writer (`maildir_store_raw`)
-  // moved to the daemon at Task 5.4a, and no other ALLOWED_WRITER ever used
-  // this pattern (backup.rs and the former commands.rs both write via raw
-  // `fs::write`/`fs::copy`, never `vault_files::`) — so, honestly, nothing
-  // in the current allowlist exercises `writePattern` any more. Asserting a
-  // file "really does" match it would be false today (checked: no match in
-  // backup.rs either). `writePattern` stays in the shared offender check
-  // above as a structural guard against a *future* caller, not because a
-  // current file needs it proven non-vacuous.
-  it('writePattern currently matches nothing in the allowlist (documented, not a gap: no ALLOWED_WRITER uses vault_files:: today)', () => {
-    for (const f of ALLOWED_WRITERS) {
-      expect(writePattern.test(readFileSync(`${dir}/${f}`, 'utf8'))).toBe(false);
-    }
+  // With ALLOWED_WRITERS empty the check above covers every file, so the
+  // two patterns can no longer be proven non-vacuous against a current
+  // offender — there is deliberately none left. What can be pinned is that
+  // both patterns still MATCH the shapes they are meant to catch, so an
+  // empty offender list means "nothing writes" and not "the regexes rotted".
+  it('both patterns still recognise a real vault write (an empty offender list is not a broken regex)', () => {
+    expect(writePattern.test('mailvault_core::vault_files::store(&root, "a", "INBOX", 1, &[], b"x")')).toBe(true);
+    expect(hasRawVaultWrite('let cur_dir = maildir_cur_path(&app, &id, &mbox)?;\n fs::write(cur_dir.join(&n), &b)?;')).toBe(true);
+    expect(hasRawVaultWrite('fs::write(settings_path, &json)?;')).toBe(false);
   });
 
-  // The raw-write pattern is the one still live: backup.rs (Graph backup)
-  // trips it. Task 4.6 moved main.rs's own last offender (import_mbox) to
-  // the daemon; Task 5.9 confirmed main.rs and the former commands.rs entry
-  // trip neither pattern any more (see the doc comment above — both removed
-  // from ALLOWED_WRITERS rather than left vacuously allowed).
-  it('the raw-write pattern is not vacuous: backup.rs (Graph backup) still trips it; main.rs and commands.rs no longer do', () => {
-    expect(hasRawVaultWrite(readFileSync(`${dir}/main.rs`, 'utf8'))).toBe(false);
-    expect(hasRawVaultWrite(readFileSync(`${dir}/commands.rs`, 'utf8'))).toBe(false);
-    expect(hasRawVaultWrite(readFileSync(`${dir}/backup.rs`, 'utf8'))).toBe(true);
-  });
-
-  it('archive.rs contains no literal vault write any more (moved to src-core/src/archive.rs in Task 3.2)', () => {
-    const body = readFileSync(`${dir}/archive.rs`, 'utf8');
+  // Phase 3 remainder, Task 5: backup.rs was the last raw-write offender
+  // (its Graph fetch loop and mirror pre-sync). Both moved to the daemon,
+  // and archive.rs — the shim that handed the core runner the app's no-op
+  // write gate — was deleted outright, so there is no app-side path to a
+  // vault write left, in this directory's text or behind it.
+  it('backup.rs no longer writes the vault or the mirror, and archive.rs is gone', () => {
+    const body = readFileSync(`${dir}/backup.rs`, 'utf8');
     expect(writePattern.test(body)).toBe(false);
     expect(hasRawVaultWrite(body)).toBe(false);
+    expect(existsSync(`${dir}/archive.rs`)).toBe(false);
+  });
+
+  // Not vacuous the other way either: backup.rs is still the bookmark broker
+  // the daemon cannot be, and it still forwards rather than doing the work.
+  it('backup.rs still resolves the mirror bookmark and forwards to the daemon', () => {
+    const body = readFileSync(`${dir}/backup.rs`, 'utf8');
+    expect(body).toMatch(/resolve_external_location/);
+    expect(body).toMatch(/daemon_call_blocking/);
   });
 });

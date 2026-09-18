@@ -3,7 +3,8 @@
 //!
 //! By default the working copy of the mail lives in the app data dir. The user
 //! can move it to any folder on any drive; from then on every mail-data read
-//! and write goes through [`root`].
+//! and write resolves against that folder — all of them in the daemon now,
+//! which resolves the vault root from its own state.
 //!
 //! Only mail data moves. Accounts, settings, logs and the daemon socket stay in
 //! the app data dir so the app can always boot far enough to report a missing
@@ -19,9 +20,9 @@
 //! `src-daemon/src/handlers/vault.rs`) — those commands' bodies now live in
 //! `main.rs` as thin forwarders. What's left here is the app-only bookmark
 //! resolution (`external_location`) and the local `VaultState` cache that
-//! `archive.rs`'s `build_ctx` and `main.rs`'s `graph_ledger_path` still read
-//! synchronously (both feed `backup.rs`'s still-unmoved Graph backup path,
-//! a documented Known Gap, out of this phase's scope) — plus `reset()`
+//! `status()` reads for the window title and the settings panel (Phase 3
+//! remainder Task 5 removed `root()` itself: the backup runners were the
+//! last app-side callers that needed a vault path) — plus `reset()`
 //! (clearing a bookmark is the entire operation; there is no file work to
 //! move) and `inspect_folder()` (a one-shot pick preview using access the
 //! app already holds from the picker; decided to stay, same category as
@@ -137,25 +138,11 @@ fn set_state(app_handle: &tauri::AppHandle, resolved: Option<Resolved>) {
     }
 }
 
-/// Root directory for mail data. Errors when the user moved the vault to a
-/// drive that is currently unreachable — callers must not silently fall back to
-/// the app data dir and start a second, divergent copy of the archive.
-pub fn root(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(state) = app_handle.try_state::<VaultState>() {
-        if let Ok(guard) = state.inner.lock() {
-            if let Some(ref r) = *guard {
-                return match r.error {
-                    Some(ref e) => Err(format!("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: {}", e)),
-                    None => Ok(r.root.clone()),
-                };
-            }
-        }
-    }
-    app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|e| format!("Could not get app data directory: {}", e))
-}
+// `root()` is gone (Phase 3 remainder, Task 5). It handed out the mail-data
+// directory to app-side readers and writers; the backup runners were the
+// last of those, and every vault path is now resolved inside the daemon
+// (`handlers::common::vault_root`) from the location it was told about. The
+// `Resolved` cache below stays — `status()` still reports it to the UI.
 
 pub fn status(app_handle: &tauri::AppHandle) -> VaultStatus {
     let data_dir = app_handle.path().app_data_dir().ok();

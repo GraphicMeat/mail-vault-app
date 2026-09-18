@@ -5,11 +5,11 @@ use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-pub(crate) use mailvault_core::vault_eml::{
-    find_file_by_uid, parse_address_str, parse_eml_bytes_light, parse_flags_from_filename,
-};
-pub(crate) use mailvault_core::vault_files::build_maildir_filename;
-pub(crate) use mailvault_core::header_cache::cache_base_name;
+// The `vault_eml` / `vault_files` / `header_cache` re-exports
+// (`find_file_by_uid`, `parse_flags_from_filename`,
+// `build_maildir_filename`, `cache_base_name`, ...) went with the backup
+// runners in the Phase 3 remainder's Task 5: `backup.rs` was their last
+// caller, and `mailvault_core::backup` now uses them in-crate.
 
 /// Localize the menu bar without rebuilding it.
 ///
@@ -79,7 +79,6 @@ use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
-mod archive;
 mod backup;
 mod commands;
 mod daemon_channel;
@@ -88,18 +87,22 @@ mod dropped_files;
 // #[tauri::command] on top of them moved to the daemon in an earlier task
 // (5.8, 5.5) and were left as unreferenced re-export shims for that task to
 // stay in scope; 5.9's cleanup pass confirmed each had zero remaining
-// src-tauri callers and deleted both files outright, same treatment. graph
-// stays because backup.rs still constructs GraphClient in-process.
+// src-tauri callers and deleted both files outright, same treatment.
+// archive.rs is gone the same way (Phase 3 remainder, Task 5): it was only
+// the `run_with_backup` shim that built the core runner's context — root,
+// the app's process-global `ImapPool`, a no-op write gate — for the app-side
+// backup runner, and that runner now lives in the daemon, which builds the
+// same context from its own state (`handlers::archive::archive_ctx`) under a
+// real gate. Deleting it takes the app's last ungated vault writer with it.
 mod external_location;
 mod github;
-// graph/imap now live in mailvault_core (shared with src-daemon). oauth2 also
-// moved there (Task 5.7) but src-tauri no longer references it at all --
-// OAuth2Manager is constructed once in the daemon's DaemonState instead of
-// here, so this file carries no re-export for it any more.
-pub use mailvault_core::graph;
+// graph/imap/oauth2 all live in mailvault_core (shared with src-daemon) and
+// src-tauri no longer references any of them: OAuth2Manager is constructed
+// once in the daemon's DaemonState (Task 5.7), and the Phase 3 remainder's
+// Task 5 moved the backup runners — this crate's last `GraphClient` and
+// `ImapPool` callers — there too, so no re-export is left for any of the three.
 mod iap;
 mod mailto;
-pub use mailvault_core::imap;
 mod notification_open;
 mod notification_sound;
 mod spellcheck;
@@ -774,33 +777,11 @@ fn send_notification(
     Ok(())
 }
 
-// ── Graph ID map path (Task 2.7 carve-out) ─────────────────────────────────
-//
-// `graph_allocate_uids`/`load_graph_id_map` moved to the daemon (Task 2.7),
-// but the Graph backup (Phase 3, R2.2 ruling) still allocates from the SAME
-// ledger file under the SAME cross-process lock while it remains in the app
-// — moving only the listing path's half would reopen the double-uid bug the
-// lock exists to close. `graph_ledger_path` stays as the one place both the
-// app (`backup.rs`) and the (moved) daemon router name this file.
-
-/// Lives in the mailbox's sidecar directory alongside the `<uid>.json` files.
-/// Its presence is what tells a reader that this mailbox's UIDs were allocated
-/// by us over a date-ordered Graph listing rather than issued by an IMAP server
-/// in arrival order. `mailvault_core::graph_ledger` is the only code that
-/// writes this file; the name is shared so its listing path and the backup
-/// always allocate from the same copy.
-const GRAPH_ID_MAP_FILE: &str = mailvault_core::graph_ledger::LEDGER_FILE;
-
-/// Where a mailbox's Outlook uid ledger lives. The backup (still in-app,
-/// Phase 3) and the daemon's `graph_allocate_uids`/`load_graph_id_map`
-/// routes must name the same file, so both come here (the daemon builds the
-/// identical path itself from `vault_root`, since it has no `AppHandle`).
-pub(crate) fn graph_ledger_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    Ok(vault::root(app_handle)?
-        .join("email_cache")
-        .join(cache_base_name(account_id, mailbox))
-        .join(GRAPH_ID_MAP_FILE))
-}
+// `graph_ledger_path`/`GRAPH_ID_MAP_FILE` are gone (Phase 3 remainder, Task
+// 5): the Graph backup was the app's last caller of the Outlook uid ledger,
+// and it now allocates from `mailvault_core::graph_ledger` inside the
+// daemon, alongside the (already moved) `graph_allocate_uids`/
+// `load_graph_id_map` routes — one process, one lock, one path builder.
 
 #[tauri::command]
 fn check_running_from_dmg() -> Result<bool, String> {
@@ -1277,28 +1258,11 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// One-line wrapper over the root-based core fn — the vault root is a
-/// Tauri-only concept (`vault::root` reads `VaultState`), everything else
-/// about the path lives in `mailvault_core::vault_files::cur_path`.
-pub fn maildir_cur_path(app_handle: &tauri::AppHandle, account_id: &str, mailbox: &str) -> Result<PathBuf, String> {
-    Ok(mailvault_core::vault_files::cur_path(&vault::root(app_handle)?, account_id, mailbox))
-}
-
-/// Find a message file for `uid` in a directory that may use either naming
-/// scheme: Maildir (`<uid>:2,<flags>[.eml]`) or the legacy flagless external
-/// backup name (`<uid>.eml`), with one directory rescan per call. Every mirror
-/// check now lists the folder once (`mirror_file_map`); this stays as the
-/// per-uid version the equivalence tests compare against.
-#[cfg(test)]
-pub fn find_msg_file_by_uid(dir: &Path, uid: u32) -> Option<PathBuf> {
-    let entries = fs::read_dir(dir).ok()?;
-    for entry in entries.flatten() {
-        if mailvault_core::maildir::mirror_filename_uid(&entry.file_name().to_string_lossy()) == Some(uid) {
-            return Some(entry.path());
-        }
-    }
-    None
-}
+// `maildir_cur_path` (the app's `vault::root` + `vault_files::cur_path`
+// wrapper) and `find_msg_file_by_uid` (its test-only per-uid mirror lookup)
+// are gone with the backup runners too (Phase 3 remainder, Task 5) —
+// `backup.rs` was the only caller of either, and the daemon builds the same
+// paths from its own root.
 
 // `maildir_store` moved to the daemon (Task 2.8, `handlers::vault_files`).
 // `maildir_store_raw` (this file's own single-UID, non-overwriting writer,
@@ -2023,12 +1987,10 @@ fn verify_daemon_build(app_handle: &tauri::AppHandle, socket_path: &Path, lifecy
     Ok(())
 }
 
-/// A vault writer changed `mailbox`: the daemon's index reconciles that folder
-/// soon. Fire-and-forget over the channel; a nudge lost while disconnected is
-/// caught by the reconnect's sweep_soon or the 15-minute sweep (spec §5.8).
-pub(crate) fn nudge_index(account_id: &str, mailbox: &str) {
-    daemon_channel::notify("search_index.nudge", serde_json::json!({"accountId": account_id, "mailbox": mailbox}));
-}
+// `nudge_index` is gone (Phase 3 remainder, Task 5): the app has no vault
+// writer left to nudge the index for. Its last caller was `archive.rs`'s
+// `run_with_backup` shim, deleted with the backup runners; the daemon signals
+// its own index in-process.
 
 /// One blocking daemon RPC: ensure the daemon is up, read its token, one
 /// request/response round trip. Used by code that isn't already async — the
@@ -2729,13 +2691,14 @@ fn main() {
     #[cfg(target_os = "linux")]
     let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
 
-    // No `.manage(imap::ImapPool::new())` — Task 5.4b moved the last
-    // interactive-command consumer of the app's managed `ImapPool` to the
-    // daemon (its own, separate pool). `archive.rs`/`backup.rs` (the
-    // still-unmoved Phase 3 backup remainder) keep their own pool access via
-    // `backup::pool()`, a process-global instance, not this managed one.
+    // No `ImapPool` in this process at all any more: Task 5.4b moved the
+    // interactive commands to the daemon's own pool, and the Phase 3
+    // remainder's Task 5 moved the backup runners there too — with them went
+    // `backup.rs`'s process-global `pool()` and `archive.rs`'s shim, the last
+    // app-side IMAP callers.
     let builder = builder
         .manage(backup::BackupCancelToken::default())
+        .manage(backup::HeldBackupPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
         .manage(UpdateCheckGuard::default())
@@ -3167,7 +3130,7 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::Exit => {
-                    info!("Application exiting — logging out IMAP sessions, cleaning up daemon child if on-demand");
+                    info!("Application exiting — flushing transfer stats, cleaning up daemon child if on-demand");
                     // Before anything else: stops a reconnect blocked inside
                     // ensure_daemon_running from spawning an orphan daemon
                     // once shutdown_daemon_child() below has released DAEMON_CHILD.
@@ -3179,20 +3142,10 @@ fn main() {
                     if let Ok(dir) = app_handle.path().app_data_dir() {
                         mailvault_core::transfer_stats::global().flush(&dir, "app");
                     }
-                    // Task 5.4b: no app-managed `ImapPool` left to pull from
-                    // `app_handle.state()` — `backup::pool_if_started()`
-                    // reads the process-global pool `archive.rs`/`backup.rs`
-                    // share WITHOUT constructing one, so quitting an app that
-                    // never ran a backup does not spin up a pool just to
-                    // shut down nothing.
-                    if let Some(pool) = backup::pool_if_started() {
-                        tauri::async_runtime::block_on(async move {
-                            let _ = tokio::time::timeout(
-                                std::time::Duration::from_secs(2),
-                                pool.shutdown(),
-                            ).await;
-                        });
-                    }
+                    // No IMAP sessions to log out of here any more: the app
+                    // process holds no `ImapPool` at all since the backup
+                    // runners moved to the daemon (Phase 3 remainder, Task
+                    // 5), which owns the only pool and shuts it down itself.
                     daemon_channel::stop();
                     shutdown_daemon_child();
                 }
@@ -3315,6 +3268,28 @@ mod tests {
         )
         .expect("write into a missing directory should succeed");
         assert_eq!(std::fs::read(&written).unwrap(), b"pixels");
+    }
+
+    /// Phase 3 remainder, Task 5: `backup.rs` resolves and releases the
+    /// backup mirror's bookmark and nothing else. Every write it used to do —
+    /// the mirror pre-sync's `fs::copy` in both directions, the Graph fetch
+    /// loop's `fs::write` into `cur/`, the purge queue's own file — moved to
+    /// `mailvault_core::backup`, running in the daemon. A write reappearing
+    /// here would be the app growing back a vault writer.
+    ///
+    /// The real gate on this claim is `tests/unit/vaultInDaemon.test.js`,
+    /// which reads every file in this directory and runs in CI (`cargo test
+    /// -p mailvault` does not). This is the same check from inside the crate.
+    #[test]
+    fn backup_rs_has_no_vault_or_mirror_writers_left() {
+        let src = std::fs::read_to_string("src/backup.rs").expect("run from the crate root");
+        for call in ["fs::write", "fs::copy", "fs::remove_file", "fs::create_dir_all"] {
+            assert!(!src.contains(call), "backup.rs should only resolve/release the bookmark now, found {call}");
+        }
+        // Not vacuous: the file is still the bookmark broker the daemon
+        // cannot be, and it still forwards.
+        assert!(src.contains("resolve_external_location"), "backup.rs stopped resolving the bookmark");
+        assert!(src.contains("daemon_call_blocking"), "backup.rs stopped forwarding to the daemon");
     }
 
     // -----------------------------------------------------------------------
