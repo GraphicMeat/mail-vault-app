@@ -82,6 +82,21 @@ pub struct BackupProgress {
     pub last_error: Option<String>,
     #[serde(default)]
     pub missing_in_folder: usize,
+    /// True if this run was cancelled mid-run — carried on the terminal
+    /// (`active: false`) frame so the frontend's completion handling (Task
+    /// 7b) can read it straight off the event instead of the RPC's return
+    /// value. Field-for-field with `BackupResult::cancelled`.
+    #[serde(default)]
+    pub cancelled: bool,
+    /// Field-for-field with `BackupResult::external_copy_ok`.
+    #[serde(default = "default_true")]
+    pub external_copy_ok: bool,
+    /// Field-for-field with `BackupResult::external_copy_error`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_copy_error: Option<String>,
+    /// Field-for-field with `BackupResult::external_copy_failed_count`.
+    #[serde(default)]
+    pub external_copy_failed_count: usize,
 }
 
 // ── Result ───────────────────────────────────────────────────────────────────
@@ -116,6 +131,42 @@ pub struct BackupResult {
 
 fn default_true() -> bool {
     true
+}
+
+/// Builds the one terminal (`active: false`) `BackupProgress` frame both
+/// runners emit exactly once, after their folder loop ends for any reason
+/// (normal completion, cancel, or zero folders/mailboxes). Shared so the two
+/// twins can't drift on this shape again the way Graph's terminal frame was
+/// simply missing before this fix — see the module doc's Task 7a note.
+fn terminal_backup_progress(
+    account_id: &str,
+    cancelled: bool,
+    total_folders: usize,
+    completed_folders: usize,
+    total_backed_up: usize,
+    total_errors: usize,
+    total_ext_failures: usize,
+) -> BackupProgress {
+    BackupProgress {
+        account_id: account_id.to_string(),
+        folder: if cancelled { "Cancelled".to_string() } else { "Complete".to_string() },
+        total_folders,
+        completed_folders,
+        total_emails: total_backed_up + total_errors,
+        completed_emails: total_backed_up,
+        errors: total_errors,
+        active: false,
+        last_error: None,
+        missing_in_folder: 0,
+        cancelled,
+        external_copy_ok: total_ext_failures == 0,
+        external_copy_error: if total_ext_failures > 0 {
+            Some(format!("{} emails failed to copy to external backup", total_ext_failures))
+        } else {
+            None
+        },
+        external_copy_failed_count: total_ext_failures,
+    }
 }
 
 // ── Injected context ─────────────────────────────────────────────────────────
@@ -302,6 +353,10 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 active: true,
                 last_error: None,
                 missing_in_folder: missing.len(),
+                cancelled: false,
+                external_copy_ok: total_ext_failures == 0,
+                external_copy_error: None,
+                external_copy_failed_count: total_ext_failures,
             });
         }
 
@@ -384,19 +439,20 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         completed_folders += 1;
     }
 
-    // Emit final completion/cancelled event (single event per account)
-    (ctx.on_progress)(BackupProgress {
-        account_id: account_id.clone(),
-        folder: if cancelled { "Cancelled".to_string() } else { "Complete".to_string() },
+    // Emit final completion/cancelled event (single event per account). Now
+    // carries the same completion data (`cancelled`, `external_copy_*`) the
+    // function's own `BackupResult` return value carries a few lines below —
+    // Task 7a: the RPC return value is fire-and-forget dropped by the
+    // daemon, so this frame is the only place JS can read it from.
+    (ctx.on_progress)(terminal_backup_progress(
+        account_id,
+        cancelled,
         total_folders,
         completed_folders,
-        total_emails: total_backed_up + total_errors,
-        completed_emails: total_backed_up,
-        errors: total_errors,
-        active: false,
-        last_error: None,
-        missing_in_folder: 0,
-    });
+        total_backed_up,
+        total_errors,
+        total_ext_failures,
+    ));
 
     let duration = start.elapsed().as_secs_f64();
     info!(
@@ -708,6 +764,12 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
 
         completed_folders += 1;
 
+        // Per-folder progress only — always `active: true`. The dedicated
+        // unconditional emit right after this loop (Task 7a) is now the only
+        // place `active: false` is reported, matching `run_imap_account`'s
+        // twin shape: this used to compute `completed_folders < total_folders`
+        // and so never fired `active: false` on a cancel-`break` or a
+        // zero-folder account (Problem 2 this task fixes).
         (ctx.on_progress)(BackupProgress {
             account_id: account_id.clone(),
             folder: mailbox_path,
@@ -716,11 +778,31 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
             total_emails: total_backed_up + total_errors,
             completed_emails: total_backed_up,
             errors: total_errors,
-            active: completed_folders < total_folders,
+            active: true,
             last_error: None,
             missing_in_folder: 0,
+            cancelled: false,
+            external_copy_ok: total_ext_failures == 0,
+            external_copy_error: None,
+            external_copy_failed_count: total_ext_failures,
         });
     }
+
+    // Emit final completion/cancelled event (single event per account),
+    // unconditionally — on every path that ends this loop (normal
+    // completion, a cancel-`break` above, or a zero-folder account that
+    // never runs an iteration at all). This is the fix for Problem 2: before
+    // this, only the per-folder emit above ever reported `active: false`,
+    // and only by coincidence on the last folder of an uncancelled run.
+    (ctx.on_progress)(terminal_backup_progress(
+        account_id,
+        cancelled,
+        total_folders,
+        completed_folders,
+        total_backed_up,
+        total_errors,
+        total_ext_failures,
+    ));
 
     let duration = start.elapsed().as_secs_f64();
     info!(
@@ -1705,6 +1787,47 @@ mod tests {
         let mut uids = scan_uids(Some(mirror_root.path()), "a@b.com", "INBOX").unwrap();
         uids.sort_unstable();
         assert_eq!(uids, vec![1u32, 3u32], "mirror_file_map is a HashMap — sort before comparing");
+    }
+
+    // ── Terminal progress frame (Task 7a) ────────────────────────────────────
+    //
+    // `run_graph_account` cannot be driven end-to-end in a unit test: it
+    // calls `GraphClient::new(access_token)` directly and makes real HTTP
+    // calls — no injected trait seam, the same real-code constraint the
+    // "Graph resume checkpoint" tests below already ran into for Task 2 (see
+    // that section's own comment). What both twins actually share, and what
+    // this task's fix is really about, is `terminal_backup_progress`: the one
+    // function that builds their identical terminal (`active: false`) frame.
+    // These tests exercise it directly. The surrounding code changes
+    // (asserted by inspection, not by a test that can't exist without a live
+    // GraphClient) make calling it from `run_graph_account` unconditional —
+    // once after the folder loop ends, for any reason: normal completion,
+    // the cancel-`break` at the top of the loop, the cancel-`break` after a
+    // folder finishes, or a zero-folder account that never runs an
+    // iteration. Before this fix, Graph had no call to it at all.
+    #[test]
+    fn terminal_backup_progress_reports_cancelled_with_no_external_failures() {
+        let progress = terminal_backup_progress("acct-1", true, 5, 2, 10, 1, 0);
+        assert!(!progress.active, "the terminal frame is always the one that flips active off");
+        assert!(progress.cancelled);
+        assert_eq!(progress.folder, "Cancelled");
+        assert!(progress.external_copy_ok, "no external failures means ok stays true");
+        assert!(progress.external_copy_error.is_none());
+        assert_eq!(progress.external_copy_failed_count, 0);
+        assert_eq!(progress.total_emails, 11);
+        assert_eq!(progress.completed_emails, 10);
+        assert_eq!(progress.errors, 1);
+    }
+
+    #[test]
+    fn terminal_backup_progress_reports_completion_and_external_failures() {
+        let progress = terminal_backup_progress("acct-1", false, 5, 5, 20, 0, 3);
+        assert!(!progress.active);
+        assert!(!progress.cancelled);
+        assert_eq!(progress.folder, "Complete");
+        assert!(!progress.external_copy_ok);
+        assert_eq!(progress.external_copy_failed_count, 3);
+        assert_eq!(progress.external_copy_error.as_deref(), Some("3 emails failed to copy to external backup"));
     }
 
     // ── Graph resume checkpoint ──────────────────────────────────────────────

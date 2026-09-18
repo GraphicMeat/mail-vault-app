@@ -167,6 +167,14 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
                 active: false,
                 last_error: Some(e),
                 missing_in_folder: 0,
+                // An early `?`-return isn't a user cancel, and it means the
+                // run never got far enough to know its own external-copy
+                // outcome — `false` is the conservative default so nothing
+                // downstream mistakes "unknown" for "succeeded".
+                cancelled: false,
+                external_copy_ok: false,
+                external_copy_error: None,
+                external_copy_failed_count: 0,
             };
             if let Ok(v) = serde_json::to_value(&progress) {
                 state2.events.emit("backup-progress", v);
