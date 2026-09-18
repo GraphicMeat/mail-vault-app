@@ -1282,8 +1282,9 @@ async fn vault_reset(app_handle: tauri::AppHandle) -> Result<vault::VaultStatus,
 // `src-daemon/src/handlers/archive.rs`, Task 3.4): cancel tokens are now
 // per-operation-kind daemon state instead of the app's single shared
 // `ArchiveCancelToken` (inventory-archive-bulk N4, fixed at the same time).
-// `src-tauri/src/archive.rs` keeps only the `run_with_backup` shim
-// `backup.rs` still calls.
+// `src-tauri/src/archive.rs`, which kept the `run_with_backup` shim for
+// `backup.rs` after that, is deleted too (Phase 3 remainder, Task 5) — the
+// backup runners moved to the daemon and took its only caller with them.
 
 // `maildir_delete` and `maildir_delete_many` both live in the daemon now
 // (Tasks 2.8 and 2.9b).
@@ -2885,11 +2886,12 @@ fn main() {
             // The app's own `.eml` startup sweep is deleted (Task 2.8): the
             // daemon already runs `migrate_add_eml_extension` at startup
             // (`src-daemon/src/main.rs`), so running it here too would be one
-            // process racing the other over the same renames. The app is NOT
-            // yet out of `cur/` altogether — `commands.rs`'s
-            // `graph_cache_mime`, `archive.rs`, `restore.rs` and the
-            // backup/mbox importers still write it until later Phase 5/6
-            // tasks move them (Task 2.8 review M3).
+            // process racing the other over the same renames. As of the
+            // Phase 3 remainder (Task 5) the app is out of `cur/`
+            // altogether: `graph_cache_mime` (Task 5.6), `restore.rs` (4.7),
+            // the mbox and ZIP importers (4.6, 4.4) and finally the backup
+            // runners and `archive.rs`'s shim all write from the daemon now
+            // (Task 2.8 review M3, closed).
 
             // --- Set up app menu ---
             // No "Check for Updates" on MAS builds — the App Store handles updates.

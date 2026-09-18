@@ -152,6 +152,14 @@ fn hold_backup_path(app: &tauri::AppHandle, account_id: &str, path: &str) {
     }
 }
 
+/// Claim `account_id`'s parked path, if there still is one. The map entry is
+/// the claim: whoever removes it owns the release, so the two racers below
+/// (this account's terminal frame and its own RPC error path) can never both
+/// release the same scope, and neither can release nothing.
+fn take_backup_path(app: &tauri::AppHandle, account_id: &str) -> Option<String> {
+    held(app).and_then(|h| h.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account_id))
+}
+
 /// A `backup-progress` frame just came up the daemon channel. When it is a
 /// terminal one (`active: false`), the run that owned the mirror scope is
 /// over: release it. Called for every `backup-progress` event, so anything
@@ -163,8 +171,7 @@ pub(crate) fn release_after_terminal_progress(app: &tauri::AppHandle, payload: &
     let Some(account_id) = payload.get("account_id").and_then(Value::as_str) else {
         return;
     };
-    let path = held(app).and_then(|h| h.0.lock().unwrap_or_else(|p| p.into_inner()).remove(account_id));
-    if let Some(path) = path {
+    if let Some(path) = take_backup_path(app, account_id) {
         info!("backup: run for {} finished — releasing the mirror's scoped access", account_id);
         release_backup_path(&path);
     }
@@ -219,6 +226,20 @@ pub(crate) fn run_account(
     skip_folders: usize,
 ) -> Result<Value, String> {
     let (root, needs_release) = resolve_backup_path(app, caller_path);
+    // Park the path BEFORE the call, not after it. The daemon spawns the run
+    // and only then writes this reply, and the reply and the event stream are
+    // two different connections read by two different app-side tasks: a run
+    // that fails in microseconds (a bad credential refused by
+    // `pool.get_background`) can have its terminal frame reach
+    // `release_after_terminal_progress` before `daemon_call_blocking` here
+    // has even returned. Parked first, that frame finds the entry and
+    // releases it; parked after, it would find nothing, and this function
+    // would then park a path with no run left to release it.
+    if needs_release {
+        if let Some(ref path) = root {
+            hold_backup_path(app, &account_id, path);
+        }
+    }
     let params = json!({
         "accountId": account_id,
         "accountJson": account_json,
@@ -226,13 +247,16 @@ pub(crate) fn run_account(
         "skipFolders": skip_folders,
     });
     let result = crate::daemon_call_blocking(app, "backup_run_account", params, RUN_ACK_BUDGET);
-    match (&result, needs_release, &root) {
-        // The run is under way and needs the path live for its whole duration.
-        (Ok(_), true, Some(path)) => hold_backup_path(app, &account_id, path),
-        // Nothing started, so nothing needs it: release now rather than wait
-        // for a terminal frame that will never come.
-        (Err(_), true, Some(path)) => release_backup_path(path),
-        _ => {}
+    // An `Ok` leaves it parked for the run. An `Err` means nothing started,
+    // so nothing will ever report a terminal frame for it — but the frame may
+    // already have arrived and released it (the daemon can spawn a run whose
+    // reply then fails to reach us), so claim the entry instead of releasing
+    // `root` blindly. Whichever side removes it owns the release; the other
+    // finds nothing and does nothing.
+    if result.is_err() {
+        if let Some(path) = take_backup_path(app, &account_id) {
+            release_backup_path(&path);
+        }
     }
     result
 }
