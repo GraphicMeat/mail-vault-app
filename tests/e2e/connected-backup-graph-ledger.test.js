@@ -319,7 +319,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
       timeoutMsg: 'the backup never asked for the held message',
     });
     expect(await mimeFetches()).toContain(GONE.id); // anti-vacuity: the 404 came before the hold
-    await invoke('backup_cancel', {});
+    await invoke('daemon_rpc', { method: 'backup_cancel', params: { accountId: ACCOUNT_ID } });
     await release();
 
     const result = await browser.executeAsync((done) => { window.__graphLedgerRun.then(done); });
