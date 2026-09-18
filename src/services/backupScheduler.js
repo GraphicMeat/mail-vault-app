@@ -455,6 +455,22 @@ class BackupCoordinator {
       }
       const result = await done;
 
+      // Daemon Err-synthesis fallback: a run that died before reaching its own
+      // terminal emit (bad credential, LIST timeout, connection loss) arrives
+      // as `{cancelled: false, success: false, error_message}`.
+      // `terminal_backup_progress` (src-core/src/backup.rs) sets
+      // `success: !cancelled` on every real runner frame, so `success: false`
+      // and `cancelled: false` together can only be this fallback shape —
+      // never a completed run. Route it through the retry ladder rather than
+      // the completion path below, and do it before any checkpoint mutation
+      // so a retried run keeps its resume position instead of re-scanning
+      // from scratch.
+      if (result.success === false && !result.cancelled) {
+        this._running.set(accountId, false);
+        this._failOrRetry(accountId, account, result.error_message || 'backup failed');
+        return;
+      }
+
       // Track checkpoint for potential resume
       if (result.cancelled) {
         this._checkpoints.set(accountId, result.completed_folders || 0);

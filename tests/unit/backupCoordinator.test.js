@@ -1138,6 +1138,64 @@ describe('BackupCoordinator — a stalled run', () => {
   });
 });
 
+// ── Recovery: a daemon-side run failure (Err-synthesis frame) is retried,
+// not filed as a completed run ──────────────────────────────────────────
+//
+// `backup_run_account` ACKs the start immediately; a run that dies before its
+// own terminal emit (bad credential, LIST timeout, connection loss) arrives as
+// `{cancelled: false, success: false, error_message}` on the terminal frame.
+// Unlike an RPC rejection (`mockRejectedValueOnce`, covered elsewhere), the RPC
+// here resolves fine — it's the run itself that failed, reported on the frame.
+
+describe('BackupCoordinator — a daemon-side run failure (Err-synthesis frame)', () => {
+  beforeEach(resetCoordinator);
+  afterEach(() => { vi.useRealTimers(); });
+
+  const errMessage = 'LIST timeout';
+  const errSynthesis = () => finishWith({ cancelled: false, success: false, error_message: errMessage });
+
+  it('is retried rather than filed as a completed failure, keeping its checkpoint', async () => {
+    vi.useFakeTimers();
+    // A prior cancelled run left a resume position — the fix must not let the
+    // completion path's checkpoint delete run before the retry branch does.
+    backupScheduler._checkpoints.set('acc-1', 3);
+
+    api.backupRunAccount.mockImplementationOnce(errSynthesis());
+    api.backupRunAccount.mockImplementationOnce(finishWith({ success: true, emails_backed_up: 1, duration_secs: 1 }));
+
+    backupScheduler.queueBackup('acc-1');
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(backupScheduler._retryCount.get('acc-1')).toBe(1);
+    expect(backupScheduler._checkpoints.get('acc-1')).toBe(3);
+    expect(mockSettingsState.addBackupHistoryEntry).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(10);
+
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(2);
+    // The retry resumes from the preserved checkpoint, not from scratch.
+    expect(api.backupRunAccount.mock.calls[1][3]).toBe(3);
+    expect(backupScheduler._retryCount.has('acc-1')).toBe(false);
+  });
+
+  it('resolves a manual trigger as failed with the daemon message, and never retries it', async () => {
+    api.backupRunAccount.mockImplementationOnce(errSynthesis());
+
+    const result = await backupScheduler.triggerManualBackup('acc-1');
+
+    expect(result).toEqual({ status: 'failed', message: errMessage });
+    expect(mockSettingsState.addBackupHistoryEntry).toHaveBeenCalledTimes(1);
+    expect(mockSettingsState.addBackupHistoryEntry).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      success: false,
+      error: errMessage,
+    }));
+
+    await settle();
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+  });
+});
+
 // ── Recovery: the progress listener must not paint a finished run as active ─
 
 describe('BackupCoordinator — progress listener', () => {
