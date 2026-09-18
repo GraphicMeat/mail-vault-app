@@ -1337,6 +1337,26 @@ describe('BackupCoordinator — completion arrives on the terminal progress fram
     expect(backupScheduler._queueRunning).toBe(false);
   });
 
+  it('a watchdog settle keeps the resume checkpoint instead of zeroing it', async () => {
+    // The synthesized terminal frame goes through the same `cancelled` branch
+    // that writes `_checkpoints`. With no `completed_folders` on it that write
+    // lands as 0, and the retry this settle triggers would then re-fetch every
+    // folder the cancelled run had already saved.
+    backupScheduler._checkpoints.set('acc-1', 2);
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    for (let i = 0; i < 2; i++) {
+      backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+      backupScheduler.tick();
+      await settle(20);
+    }
+
+    await within(promise);
+    expect(backupScheduler._checkpoints.get('acc-1')).toBe(2);
+  });
+
   it('a long run making progress is never settled by the watchdog', async () => {
     // The watchdog's clock is `_lastProgressAt`, restamped by every frame —
     // a six-hour backup that keeps reporting must never be cut short. A plain

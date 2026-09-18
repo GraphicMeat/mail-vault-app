@@ -229,8 +229,13 @@ class BackupCoordinator {
         // restamped by every progress frame, so a genuinely slow six-hour
         // backup never reaches here. A fixed timeout from the RPC call would
         // false-fail it.
+        // `completed_folders` carries this run's own start position, not 0:
+        // the cancelled branch of `_runBackup` writes it straight into
+        // `_checkpoints`, so a synthesized 0 would throw away the resume
+        // position the retry right below is about to read back.
         if (this._stalled.has(id) && this._settleRun(id, terminalFrameToResult({
           account_id: id, active: false, cancelled: true, success: false,
+          completed_folders: this._checkpoints.get(id) || 0,
         }))) {
           console.warn(`[backup] tick: ${id} reported no terminal frame after a cancel — settling it as stalled`);
           continue; // stays marked: the cancelled branch routes it to a retry
