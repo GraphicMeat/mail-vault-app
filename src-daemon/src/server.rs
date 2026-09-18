@@ -144,6 +144,20 @@ pub struct DaemonState {
     /// its own entry via `Drop`, keyed by pointer identity so it never
     /// removes a sibling run's.
     pub run_tokens: std::sync::Mutex<std::collections::HashMap<&'static str, Vec<Arc<RunTokens>>>>,
+    /// Task 1 (Phase 3 backup remainder): one cancel token per in-flight
+    /// account backup run, keyed by `account_id` rather than a fixed
+    /// `&'static str` kind — a backup run is naturally one-per-account, and
+    /// a future `cancel_backup` route needs to name *which* account to
+    /// cancel, which `run_tokens`' kind-keyed shape cannot express. Entries
+    /// are removed by `Arc::ptr_eq` on every exit path (success, error,
+    /// cancel), never by key alone, so a finishing run can't remove a
+    /// newer run's token for the same account.
+    /// ponytail: replace-on-insert if a second run for the same account is
+    /// ever allowed to start concurrently — orphans the first token
+    /// uncancellably, same shape `run_tokens`/`RunGuard`'s doc already
+    /// describes fixing for kind-keyed runs. Not observed in this task: a
+    /// backup route has no caller that starts two runs for one account yet.
+    pub backup_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<AtomicBool>>>,
     /// Task 3.6: in-daemon insights snapshots, moved whole from
     /// `src-tauri/src/insights.rs`. The app's own copy and its three Tauri
     /// commands still exist and still work until Task 3.7 cuts the frontend
@@ -313,6 +327,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     }
 
     if let Some(resp) = crate::handlers::archive::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
+    if let Some(resp) = crate::handlers::backup::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
 
@@ -497,6 +515,7 @@ impl DaemonState {
             journal: std::sync::Mutex::new(()),
             custody: crate::custody::CustodyState::default(),
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
+            backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
         })
     }

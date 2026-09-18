@@ -414,6 +414,7 @@ async fn daemon_main() {
         journal: std::sync::Mutex::new(()),
         custody: custody::CustodyState::default(),
         run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
+        backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
     });
 

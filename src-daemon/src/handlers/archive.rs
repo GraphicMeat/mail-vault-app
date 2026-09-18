@@ -52,7 +52,7 @@ macro_rules! req {
 /// though `with_vault_write`'s own doc says "blocking thread only": the core
 /// runner only ever calls `ctx.gate` from inside its own `spawn_blocking`
 /// (`src-core/src/archive.rs:510-571`), never across a tokio `.await`.
-fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) -> Arc<ArchiveCtx> {
+pub(crate) fn archive_ctx(state: &Arc<DaemonState>, root: std::path::PathBuf) -> Arc<ArchiveCtx> {
     let bus = state.events.clone();
     let emit: Arc<dyn Fn(&str, Value) + Send + Sync> = Arc::new(move |name: &str, payload: Value| {
         bus.emit(name, payload);
