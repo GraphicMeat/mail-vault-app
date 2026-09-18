@@ -104,3 +104,89 @@ async fn backup_run_account_via_route_returns_the_run_id() {
     let r = call(&s, "backup_run_account", json!({"accountId": "acct1", "accountJson": account_json()})).await;
     assert_eq!(r.result.unwrap(), json!({"runId": "acct1"}));
 }
+
+// ── backup_cancel (Task 4) ────────────────────────────────────────────────
+
+#[tokio::test]
+async fn cancelling_one_account_does_not_cancel_a_different_accounts_run() {
+    let (_v, s) = st();
+    let token_a = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let token_b = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    s.backup_runs.lock().unwrap().insert("acct-a".into(), token_a.clone());
+    s.backup_runs.lock().unwrap().insert("acct-b".into(), token_b.clone());
+
+    backup_cancel(&s, json!({"accountId": "acct-a"})).await.unwrap();
+
+    assert!(token_a.load(std::sync::atomic::Ordering::SeqCst));
+    assert!(!token_b.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn backup_cancel_on_an_unknown_account_is_a_tolerant_no_op() {
+    let (_v, s) = st();
+    // No entry for "ghost" at all -- must not error, matching the app-side
+    // `backup_cancel` this replaces (always succeeds, cancel active or not).
+    let result = backup_cancel(&s, json!({"accountId": "ghost"})).await;
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), json!({}));
+}
+
+#[tokio::test]
+async fn backup_cancel_rejects_missing_account_id() {
+    let (_v, s) = st();
+    let err = backup_cancel(&s, json!({})).await.unwrap_err();
+    assert!(err.contains("accountId"), "{err}");
+}
+
+#[tokio::test]
+async fn backup_cancel_via_route_returns_empty_object() {
+    let (_v, s) = st();
+    let r = call(&s, "backup_cancel", json!({"accountId": "acct1"})).await;
+    assert_eq!(r.result.unwrap(), json!({}));
+}
+
+// ── BackupRunGuard panic-safety (Task 4) ─────────────────────────────────
+//
+// `backup_run_account` cannot easily be driven all the way through a panic
+// in a unit test (the run itself dials IMAP/Graph). Exercised directly
+// against a bare `BackupRunGuard` instead, same shape
+// `handlers::archive`'s `guard_drops_when_the_task_holding_it_panics` uses
+// for `RunGuard`: construct the guard, move it into a spawned task that
+// panics, and assert the registry entry is gone once the task has finished
+// unwinding -- proving the removal happens via `Drop`, not the (deleted)
+// manual post-await removal this task replaced.
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_panicking_run_still_frees_its_backup_runs_entry() {
+    let (_v, s) = st();
+    let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    s.backup_runs.lock().unwrap().insert("acct-panics".into(), cancel.clone());
+    let guard = BackupRunGuard { state: Arc::clone(&s), account_id: "acct-panics".into(), cancel: Arc::clone(&cancel) };
+
+    let handle = tokio::spawn(async move {
+        let _guard = guard;
+        panic!("deliberate run-holder panic");
+    });
+    let joined = handle.await;
+
+    assert!(joined.is_err(), "the spawned task must have panicked");
+    assert!(!s.backup_runs.lock().unwrap().contains_key("acct-panics"), "a panicking run must not leak its backup_runs entry");
+}
+
+#[tokio::test]
+async fn a_guards_drop_never_evicts_a_newer_runs_token_for_the_same_account() {
+    let (_v, s) = st();
+    let old_cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let new_cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    s.backup_runs.lock().unwrap().insert("acct1".into(), old_cancel.clone());
+    let old_guard = BackupRunGuard { state: Arc::clone(&s), account_id: "acct1".into(), cancel: Arc::clone(&old_cancel) };
+
+    // A fresh run for the same account replaces the map entry before the
+    // old guard drops -- e.g. the old run took a while to unwind/finish.
+    s.backup_runs.lock().unwrap().insert("acct1".into(), new_cancel.clone());
+    drop(old_guard);
+
+    let runs = s.backup_runs.lock().unwrap();
+    assert!(runs.contains_key("acct1"), "the newer run's entry must survive the older guard's drop");
+    assert!(Arc::ptr_eq(runs.get("acct1").unwrap(), &new_cancel));
+}

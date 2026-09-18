@@ -147,11 +147,12 @@ pub struct DaemonState {
     /// Task 1 (Phase 3 backup remainder): one cancel token per in-flight
     /// account backup run, keyed by `account_id` rather than a fixed
     /// `&'static str` kind — a backup run is naturally one-per-account, and
-    /// a future `cancel_backup` route needs to name *which* account to
+    /// the `backup_cancel` route (Task 4) needs to name *which* account to
     /// cancel, which `run_tokens`' kind-keyed shape cannot express. Entries
-    /// are removed by `Arc::ptr_eq` on every exit path (success, error,
-    /// cancel), never by key alone, so a finishing run can't remove a
-    /// newer run's token for the same account.
+    /// are removed by `handlers::backup::BackupRunGuard`'s `Drop` (Task 4),
+    /// via `Arc::ptr_eq`, on every exit path — success, error, or a panic
+    /// inside the run — never by key alone, so a finishing (or panicking)
+    /// run can't remove a newer run's token for the same account.
     /// ponytail: replace-on-insert if a second run for the same account is
     /// ever allowed to start concurrently — orphans the first token
     /// uncancellably, same shape `run_tokens`/`RunGuard`'s doc already

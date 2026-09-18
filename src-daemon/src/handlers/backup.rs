@@ -18,7 +18,14 @@
 //!
 //! Cancellation is `DaemonState.backup_runs`, keyed by `account_id` (see its
 //! doc comment in `server.rs` for why this is not another `run_tokens`
-//! kind) — no `cancel_backup` route in this task.
+//! kind). Task 4 adds `backup_cancel` (looks the account up, sets its flag,
+//! tolerant of a missing/already-finished account like the app-side
+//! `backup_cancel` it replaces) and makes the map's entry-removal
+//! panic-safe: `BackupRunGuard` below, moved into the spawned task and
+//! dropped at the end of its body on every exit path — success, error, or a
+//! panic — same shape `handlers::common::RunGuard` uses for `run_tokens`,
+//! sized to this map's single-`Arc`-per-key shape instead of that one's
+//! `Vec`-per-kind shape.
 //!
 //! Task 2 adds the Graph dispatch below (`is_graph` check, same test
 //! `src-tauri/src/backup.rs`'s `run_account_backup` makes at ~line 618-621):
@@ -37,9 +44,36 @@ use mailvault_core::backup::{self, BackupProgress, BackupRunContext};
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use serde_json::Value;
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tracing::warn;
+
+/// RAII guard for one entry in `DaemonState.backup_runs`. Constructed right
+/// after the entry is inserted and moved into the spawned run's async block,
+/// so it is held across that task's whole body and its `Drop` removes the
+/// entry on every exit path — normal completion, an early `?`-return inside
+/// the run, or a panic unwinding through the block (`panic = "abort"` in
+/// this crate's `[profile.release]` only; the test/dev profile unwinds, so
+/// `Drop` runs there too, same posture `handlers::archive`'s `RunGuard`
+/// panic tests document). Removes by `Arc::ptr_eq`, never by key alone, so a
+/// guard from a finished run can never evict a newer run's token for the
+/// same account (`backup_runs`'s doc comment in `server.rs`).
+struct BackupRunGuard {
+    state: Arc<DaemonState>,
+    account_id: String,
+    cancel: Arc<AtomicBool>,
+}
+
+impl Drop for BackupRunGuard {
+    fn drop(&mut self) {
+        let mut runs = self.state.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
+        if let Some(existing) = runs.get(&self.account_id) {
+            if Arc::ptr_eq(existing, &self.cancel) {
+                runs.remove(&self.account_id);
+            }
+        }
+    }
+}
 
 /// Builds the run context and spawns the run; returns immediately with
 /// `{"runId": accountId}`. Callable directly (as this module's own tests do)
@@ -59,6 +93,7 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 
     let cancel = Arc::new(AtomicBool::new(false));
     state.backup_runs.lock().unwrap_or_else(|p| p.into_inner()).insert(account_id.clone(), Arc::clone(&cancel));
+    let guard = BackupRunGuard { state: Arc::clone(state), account_id: account_id.clone(), cancel: Arc::clone(&cancel) };
 
     let on_progress: Arc<dyn Fn(BackupProgress) + Send + Sync> = {
         let bus = state.events.clone();
@@ -103,22 +138,15 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
 
     let state2 = Arc::clone(state);
     let run_account_id = account_id.clone();
-    let run_cancel = Arc::clone(&cancel);
     tokio::spawn(async move {
-        let result = if is_graph { backup::run_graph_account(ctx).await } else { backup::run_imap_account(ctx).await };
+        // Held for this whole block: dropped at the end, on every exit path
+        // (normal return, `result` holding an `Err`, or a panic unwinding
+        // through this async block), which removes this run's own
+        // `backup_runs` entry — never a newer run's for the same account,
+        // since `BackupRunGuard::drop` only removes by `Arc::ptr_eq`.
+        let _guard = guard;
 
-        // Remove this run's own token — never a newer run's for the same
-        // account (ptr_eq, not by key alone): a fresh run for this account
-        // may already have replaced this entry in `backup_runs` by the time
-        // this one finishes.
-        {
-            let mut runs = state2.backup_runs.lock().unwrap_or_else(|p| p.into_inner());
-            if let Some(existing) = runs.get(&run_account_id) {
-                if Arc::ptr_eq(existing, &run_cancel) {
-                    runs.remove(&run_account_id);
-                }
-            }
-        }
+        let result = if is_graph { backup::run_graph_account(ctx).await } else { backup::run_imap_account(ctx).await };
 
         // `run_imap_account` emits its own terminal `backup-progress` frame
         // (`active: false`) on every path that reaches the end of its folder
@@ -147,6 +175,22 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     });
 
     Ok(serde_json::json!({"runId": account_id}))
+}
+
+/// Cancels one account's in-flight backup run by setting its `AtomicBool` in
+/// `state.backup_runs`. Tolerant like the app-side `backup_cancel` it
+/// replaces (`src-tauri/src/commands.rs`): that command always stores `true`
+/// on whatever `BackupCancelToken` currently holds, never erroring whether a
+/// run is active or not. Here, an unknown or already-finished `accountId`
+/// (no entry in the map) is just a no-op — not an error — and the entry is
+/// left in place either way; the run itself (or `BackupRunGuard`, on exit)
+/// owns removing it, never this route.
+pub(crate) async fn backup_cancel(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+    let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
+    if let Some(cancel) = state.backup_runs.lock().unwrap_or_else(|p| p.into_inner()).get(&account_id) {
+        cancel.store(true, Ordering::SeqCst);
+    }
+    Ok(serde_json::json!({}))
 }
 
 // ── Status / purge / scan (Task 3) ───────────────────────────────────────────
@@ -225,6 +269,10 @@ pub(crate) async fn backup_scan_uids(_state: &Arc<DaemonState>, params: Value) -
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "backup_run_account" => match backup_run_account(state, params.clone()).await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        },
+        "backup_cancel" => match backup_cancel(state, params.clone()).await {
             Ok(v) => RpcResponse::success(id, v),
             Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
         },
