@@ -467,7 +467,9 @@ class BackupCoordinator {
       // from scratch.
       if (result.success === false && !result.cancelled) {
         this._running.set(accountId, false);
-        this._failOrRetry(accountId, account, result.error_message || 'backup failed');
+        // `_failOrRetry` already falls back to 'Unknown error' for a null
+        // message (same as every other caller here) — no literal needed.
+        this._failOrRetry(accountId, account, result.error_message);
         return;
       }
 
