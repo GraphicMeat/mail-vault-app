@@ -2908,6 +2908,16 @@ fn main() {
             // PROBE (not for merge): "Probe: Backup Bookmark Scope (automatic)".
             #[cfg(target_os = "macos")]
             let probe_backup_scope_item = MenuItem::with_id(app, "probe_backup_scope", "Probe: Backup Bookmark Scope (automatic)", true, None::<&str>)?;
+            // PROBE (not for merge): "Probe: OAuth2 Loopback Bind (automatic)".
+            // Runs in-process (not the external scripts/probe-oauth2-loopback.py script)
+            // because that script's literal `~/.mailvault/mv.sock` path is invisible to an
+            // unsandboxed checker once the app+daemon are actually sandboxed: App Sandbox
+            // redirects $HOME for the (sandboxed) app/daemon pair into their Container, and
+            // TCC blocks any unsandboxed process — even Rokas's own Terminal without Full
+            // Disk Access — from reading in there. Doing the RPC + TCP check from inside the
+            // already-sandboxed app process sidesteps that entirely.
+            #[cfg(target_os = "macos")]
+            let probe_oauth2_item = MenuItem::with_id(app, "probe_oauth2_loopback", "Probe: OAuth2 Loopback Bind (automatic)", true, None::<&str>)?;
 
             #[cfg(target_os = "macos")]
             {
@@ -2948,6 +2958,7 @@ fn main() {
                                 let _ = sub.append(&more_apps_item);
                                 let _ = sub.append(&shortcuts_item);
                                 let _ = sub.append(&probe_backup_scope_item);
+                                let _ = sub.append(&probe_oauth2_item);
                                 break;
                             }
                         }
@@ -3018,6 +3029,12 @@ fn main() {
                     {
                         let h = app_handle_for_menu.clone();
                         std::thread::spawn(move || probe_backup_scope(h));
+                    }
+                } else if event.id().as_ref() == "probe_oauth2_loopback" {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let h = app_handle_for_menu.clone();
+                        std::thread::spawn(move || probe_oauth2_loopback(h));
                     }
                 } else if event.id().as_ref() == "quit_app" {
                     info!("Application quitting via menu");
@@ -3266,6 +3283,75 @@ fn probe_backup_scope(h: tauri::AppHandle) {
     h.dialog()
         .message(format!("{verdict}\n\nFull JSON in the log (search \"probe-backup-scope\")."))
         .title("Probe: Backup Bookmark Scope")
+        .blocking_show();
+}
+
+/// PROBE (not for merge): can the signed, sandboxed daemon bind the OAuth2
+/// loopback callback listener (127.0.0.1:19876)? Same question as
+/// `scripts/probe-oauth2-loopback.py`, but run in-process: that script talks
+/// to the daemon over its `~/.mailvault/mv.sock` control socket using the
+/// LITERAL path, which only resolves for an unsandboxed checker. Once the
+/// app+daemon are actually sandboxed, `$HOME` is redirected into the app's
+/// Container for both of them, and TCC blocks any outside process (even
+/// Rokas's own Terminal, without Full Disk Access) from reading in there —
+/// discovered while trying to run that script against this exact build.
+/// Doing the RPC (`oauth2_auth_url`, via the same `daemon_call_blocking` every
+/// other bridge caller uses) and the TCP probe from inside the app process
+/// sidesteps the whole problem: it shares the daemon's redirected view.
+#[cfg(target_os = "macos")]
+fn probe_oauth2_loopback(h: tauri::AppHandle) {
+    use serde_json::json;
+    use std::net::TcpStream;
+    use std::time::{Duration, Instant};
+    use tauri_plugin_dialog::DialogExt;
+
+    const CALLBACK_PORT: u16 = 19876;
+
+    let rpc_result = daemon_call_blocking(&h, "oauth2_auth_url", json!({}), Duration::from_secs(30));
+    let (auth_url_ok, rpc_err) = match &rpc_result {
+        Ok(v) => (v.get("authUrl").and_then(|s| s.as_str()).is_some(), None),
+        Err(e) => (false, Some(e.clone())),
+    };
+    info!("[probe-oauth2-loopback] oauth2_auth_url result: ok={} err={:?}", auth_url_ok, rpc_err);
+
+    if !auth_url_ok {
+        let verdict = format!(
+            "FAIL: oauth2_auth_url did not return an authUrl (daemon error: {}). The callback \
+             server bind is only requested as a side effect of this call, so it was never attempted.",
+            rpc_err.as_deref().unwrap_or("none, but authUrl missing from reply")
+        );
+        info!("[probe-oauth2-loopback] SUMMARY: {}", json!({"verdict": verdict}));
+        h.dialog().message(verdict).title("Probe: OAuth2 Loopback Bind — FAIL").blocking_show();
+        return;
+    }
+
+    // ensure_callback_server's bind runs on a spawned tokio task inside the
+    // daemon — give it a moment, then poll for the listener actually
+    // accepting connections, same 5 s budget as the external script.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut connected = false;
+    while Instant::now() < deadline {
+        if TcpStream::connect_timeout(&"127.0.0.1:19876".parse().unwrap(), Duration::from_millis(500)).is_ok() {
+            connected = true;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+
+    let verdict = if connected {
+        format!("PASS: the sandboxed daemon is listening on 127.0.0.1:{CALLBACK_PORT}. The OAuth2 loopback callback bind works under App Sandbox.")
+    } else {
+        format!(
+            "FAIL: oauth2_auth_url succeeded, but nothing accepted a TCP connection on \
+             127.0.0.1:{CALLBACK_PORT} within 5s — the sandboxed daemon likely could not bind the \
+             loopback listener. Check daemon.log for '[OAuth2]' / 'Failed to bind callback server' / \
+             'Operation not permitted'."
+        )
+    };
+    info!("[probe-oauth2-loopback] SUMMARY: {}", json!({"auth_url_ok": auth_url_ok, "connected": connected, "verdict": &verdict}));
+    h.dialog()
+        .message(verdict)
+        .title("Probe: OAuth2 Loopback Bind")
         .blocking_show();
 }
 
