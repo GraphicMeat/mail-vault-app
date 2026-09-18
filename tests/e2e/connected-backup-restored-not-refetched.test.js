@@ -24,7 +24,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 const VADER = 'vader@mock.test';
@@ -77,14 +77,15 @@ describe('Backup pre-sync: a uid restored from the mirror is not fetched again',
   let backupRoot = null;
 
   async function backup() {
-    const result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    const result = await runBackupAndWait({
       accountId: account.id,
       accountJson: JSON.stringify(account),
       backupPath: null,
       skipFolders: 5,
     });
-    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
-    console.log('[restored-not-refetched] backup_run_account ->', JSON.stringify(result));
+    console.log('[restored-not-refetched] backup ->', JSON.stringify(result));
     console.log('[restored-not-refetched] vault:', JSON.stringify(existsSync(cur) ? readdirSync(cur).sort() : []));
     return result;
   }

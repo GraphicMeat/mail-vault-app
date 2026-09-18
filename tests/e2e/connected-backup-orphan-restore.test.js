@@ -31,7 +31,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -118,13 +118,15 @@ describe('Backup pre-sync — orphaned messages stay orphaned', function () {
     // luke's mailboxes are [INBOX, Sent, Archive, Drafts, Trash] and
     // `skip_folders` skips a prefix of the LIST order, so this backs up Trash
     // and nothing else.
-    const result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    const result = await runBackupAndWait({
       accountId,
       accountJson: JSON.stringify(account),
       backupPath: null,
       skipFolders: 4,
     });
-    console.log('[backup-orphan] backup_run_account ->', JSON.stringify(result));
+    console.log('[backup-orphan] backup ->', JSON.stringify(result));
   });
 
   after(function () {

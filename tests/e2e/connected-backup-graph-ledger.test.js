@@ -30,7 +30,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, runBackupAndWait, startBackup } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 const ACCOUNT_ID = '7f3c2a1e-9b4d-4c8e-a6f1-0d5e8b2c4a17';
@@ -131,14 +131,15 @@ describe('Outlook backup files every message under its ledger uid', function () 
   }
 
   async function backup() {
-    const result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    const result = await runBackupAndWait({
       accountId: ACCOUNT_ID,
       accountJson: JSON.stringify(account),
       backupPath: null,
       skipFolders: 0,
     });
-    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
-    console.log('[graph-ledger] backup_run_account ->', JSON.stringify(result));
+    console.log('[graph-ledger] backup ->', JSON.stringify(result));
     return result;
   }
 
@@ -308,10 +309,9 @@ describe('Outlook backup files every message under its ledger uid', function () 
 
     // Started without waiting on it: a pending executeAsync holds the WebDriver
     // session, and backup_cancel has to go through that same session.
-    await browser.execute((cmd, args) => {
-      window.__graphLedgerRun = window.__TAURI__.core.invoke(cmd, args)
-        .catch((e) => ({ __error: String(e && e.message || e) }));
-    }, 'backup_run_account', { accountId: ACCOUNT_ID, accountJson: JSON.stringify(account), backupPath: null, skipFolders: 0 });
+    const run = await startBackup({
+      accountId: ACCOUNT_ID, accountJson: JSON.stringify(account), backupPath: null, skipFolders: 0,
+    });
 
     await browser.waitUntil(async () => (await mimeFetches()).includes(HELD.id), {
       timeout: 60_000,
@@ -322,8 +322,7 @@ describe('Outlook backup files every message under its ledger uid', function () 
     await invoke('daemon_rpc', { method: 'backup_cancel', params: { accountId: ACCOUNT_ID } });
     await release();
 
-    const result = await browser.executeAsync((done) => { window.__graphLedgerRun.then(done); });
-    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
+    const result = await run.finish();
     console.log('[graph-ledger] cancelled run ->', JSON.stringify(result));
     expect(result.cancelled).toBe(true);
     // Inbox is folder 0, Receipts 1, Slow 2. Counting Receipts would resume at Slow.

@@ -28,7 +28,7 @@
 import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { waitForApp, waitForEmails, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 
 const YODA = 'yoda@mock.test';
@@ -79,13 +79,15 @@ describe('Backup — a message the server refuses is a partial run, not a failed
     mirror = join(backupRoot, YODA, FOLDER, 'cur');
     await invoke('backup_save_external_location', { path: backupRoot });
 
-    result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    result = await runBackupAndWait({
       accountId,
       accountJson: JSON.stringify(account),
       backupPath: null,
       skipFolders: 5,
     });
-    console.log('[backup-partial] backup_run_account ->', JSON.stringify(result));
+    console.log('[backup-partial] backup ->', JSON.stringify(result));
   });
 
   after(function () {

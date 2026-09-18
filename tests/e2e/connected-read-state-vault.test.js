@@ -31,7 +31,7 @@
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { serverFlags, storeFlag } from './rawImap.js';
 
@@ -317,14 +317,14 @@ describe('Read state — a backup carries the server\'s state and catches up wit
   const flipped = [];     // [uid, op to undo] — put the mock back for the specs after this one
 
   async function backup() {
-    const result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    return runBackupAndWait({
       accountId: account.id,
       accountJson: JSON.stringify(account),
       backupPath: null,
       skipFolders: 5,
     });
-    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
-    return result;
   }
 
   before(async function () {

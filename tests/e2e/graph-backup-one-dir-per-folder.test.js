@@ -8,7 +8,7 @@
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { GRAPH_EMAIL } from './mockGraph.js';
 
@@ -45,11 +45,12 @@ describe('Graph backup: one directory per folder on each side', function () {
   });
 
   it('writes the vault and the mirror under the English keys, one directory per folder', async function () {
-    const result = await invoke('backup_run_account', {
+    // Fire-and-forget since the runners moved to the daemon: the outcome comes
+    // off the terminal `backup-progress` frame, not the RPC's return value.
+    const result = await runBackupAndWait({
       accountId: account.id, accountJson: JSON.stringify(account), backupPath: null, skipFolders: 0,
     });
-    if (result?.__error) throw new Error(`backup_run_account: ${result.__error}`);
-    console.log('[graph-backup] backup_run_account ->', JSON.stringify(result));
+    console.log('[graph-backup] backup ->', JSON.stringify(result));
 
     const vaultRoot = join(appDataDir(browser.testDataDir), 'Maildir', account.id);
     const onlyDirs = (root) => readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();

@@ -508,3 +508,126 @@ export async function churnAccounts(stops) {
   }
   return seen;
 }
+
+// ---------------------------------------------------------------------------
+// Backup
+// ---------------------------------------------------------------------------
+
+/**
+ * A terminal `backup-progress` frame in the shape the old blocking
+ * `backup_run_account` used to return.
+ *
+ * Mirrors `terminalFrameToResult` in `src/services/backupScheduler.js` — the
+ * app's own copy of this mapping, and the authority if the two ever disagree.
+ * Duplicated rather than imported because that module pulls in the Zustand
+ * stores, i18n and the Tauri API, none of which load in the wdio Node process.
+ * Two fields are named for the progress frame they ride on rather than for
+ * `BackupResult`: `completed_emails` is `emails_backed_up`, `last_error` is
+ * `error_message`.
+ */
+function terminalFrameToResult(p = {}) {
+  return {
+    cancelled: p.cancelled === true,
+    completed_folders: p.completed_folders || 0,
+    emails_backed_up: p.completed_emails || 0,
+    errors: p.errors || 0,
+    success: p.success !== false,
+    error_message: p.last_error || null,
+    external_copy_ok: p.external_copy_ok !== false,
+    external_copy_error: p.external_copy_error || null,
+    external_copy_failed_count: p.external_copy_failed_count || 0,
+  };
+}
+
+/**
+ * Arm a page-side collector for terminal (`active: false`) `backup-progress`
+ * frames, keyed by account, and clear whatever this account left behind.
+ *
+ * Always call this BEFORE the RPC that starts the run: the daemon can finish a
+ * small backup in milliseconds, and a listener installed afterwards would miss
+ * the only frame that ever reports the outcome. One listener per page — a
+ * second `listen()` would file every frame twice.
+ */
+async function armBackupTerminal(accountId) {
+  const armed = await browser.executeAsync((id, done) => {
+    window.__E2E_BACKUP_TERMINAL__ = window.__E2E_BACKUP_TERMINAL__ || {};
+    delete window.__E2E_BACKUP_TERMINAL__[id];
+    if (window.__E2E_BACKUP_LISTENING__) { done(true); return; }
+    window.__E2E_BACKUP_LISTENING__ = true;
+    window.__TAURI__.event.listen('backup-progress', (e) => {
+      const p = e.payload || {};
+      if (p.active === false) window.__E2E_BACKUP_TERMINAL__[p.account_id] = p;
+    }).then(() => done(true), (err) => {
+      window.__E2E_BACKUP_LISTENING__ = false;
+      done({ __error: String((err && err.message) || err) });
+    });
+  }, accountId);
+  if (armed?.__error) throw new Error(`backup-progress listen failed: ${armed.__error}`);
+}
+
+/**
+ * Wait for the terminal `backup-progress` frame of `accountId`'s current run
+ * and return it in `BackupResult` shape.
+ *
+ * Only useful after `armBackupTerminal(accountId)`.
+ */
+async function awaitBackupTerminal(accountId, timeout) {
+  let frame = null;
+  await browser.waitUntil(async () => {
+    frame = await browser.execute((id) => (window.__E2E_BACKUP_TERMINAL__ || {})[id] || null, accountId);
+    return frame !== null;
+  }, {
+    timeout,
+    interval: 250,
+    timeoutMsg: `backup of ${accountId} never emitted a terminal backup-progress frame within ${timeout}ms`,
+  });
+  return terminalFrameToResult(frame);
+}
+
+/**
+ * Run a full-account backup and return its outcome.
+ *
+ * `backup_run_account` is fire-and-forget since the Phase 3 remainder moved
+ * the runners into the daemon: it answers `{runId}` in milliseconds and the
+ * run's `BackupResult` never crosses the wire at all. The terminal
+ * (`active: false`) `backup-progress` frame is the only place the outcome
+ * reaches the app, so a spec that `await`ed the command and then read the
+ * vault was asserting against a backup that had not started yet — which is
+ * exactly how six of these specs failed on this branch's first mini run.
+ *
+ * @param {object} args - `backup_run_account` params: accountId, accountJson,
+ *   backupPath, skipFolders.
+ * @returns {Promise<object>} `BackupResult`-shaped: cancelled, success,
+ *   completed_folders, emails_backed_up, errors, error_message, external_copy_*.
+ */
+export async function runBackupAndWait(args, { timeout = 180_000 } = {}) {
+  await armBackupTerminal(args.accountId);
+  const started = await browser.executeAsync((cmd, a, done) => {
+    window.__TAURI__.core.invoke(cmd, a).then(done).catch((e) => done({ __error: String((e && e.message) || e) }));
+  }, 'backup_run_account', args);
+  if (started?.__error) throw new Error(`backup_run_account: ${started.__error}`);
+  return awaitBackupTerminal(args.accountId, timeout);
+}
+
+/**
+ * Start a backup without waiting for it, so the spec can interact with the run
+ * in flight (hold a fetch, cancel it) — a pending `executeAsync` would hold the
+ * one WebDriver session those follow-up commands need.
+ *
+ * Returns a `finish(timeout?)` that resolves the run's outcome, same shape as
+ * `runBackupAndWait`.
+ */
+export async function startBackup(args) {
+  await armBackupTerminal(args.accountId);
+  await browser.execute((cmd, a) => {
+    window.__E2E_BACKUP_RUN__ = window.__TAURI__.core.invoke(cmd, a)
+      .catch((e) => ({ __error: String((e && e.message) || e) }));
+  }, 'backup_run_account', args);
+  return {
+    finish: async (timeout = 180_000) => {
+      const started = await browser.executeAsync((done) => { window.__E2E_BACKUP_RUN__.then(done); });
+      if (started?.__error) throw new Error(`backup_run_account: ${started.__error}`);
+      return awaitBackupTerminal(args.accountId, timeout);
+    },
+  };
+}
