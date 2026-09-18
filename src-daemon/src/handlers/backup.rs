@@ -36,6 +36,7 @@ use crate::server::DaemonState;
 use mailvault_core::backup::{self, BackupProgress, BackupRunContext};
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use serde_json::Value;
+use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tracing::warn;
@@ -148,9 +149,94 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     Ok(serde_json::json!({"runId": account_id}))
 }
 
+// ── Status / purge / scan (Task 3) ───────────────────────────────────────────
+//
+// Unlike `backup_run_account` above, none of these three is long-running —
+// each is a bounded IMAP/Graph round trip or a couple of `read_dir`s, so
+// they run as ordinary blocking-style async handlers with no
+// `tokio::spawn`/fire-and-forget and no cancel-token bookkeeping.
+//
+// All three take an already-resolved `mirrorRoot` (and, where the app-side
+// behavior needs it, `externalStatus`/`externalError`) exactly like
+// `backup_run_account`'s own `mirrorRoot` param: resolving a security-scoped
+// bookmark stays a Tauri-shell concern (`external_location.rs`) the daemon
+// has no API for — see `mailvault_core::backup`'s module doc.
+
+/// Compare server email counts vs the vault/mirror backup counts for one
+/// account. Calls into `mailvault_core::backup::get_backup_status`, reusing
+/// this daemon's own `imap_pool` (no second pool, unlike the app-side
+/// original's process-global `pool()` singleton — that duplication doesn't
+/// exist here).
+pub(crate) async fn backup_status(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+    let account_id = params.get("accountId").and_then(Value::as_str).ok_or("Missing accountId")?.to_string();
+    let account_json = params.get("accountJson").and_then(Value::as_str).ok_or("Missing accountJson")?.to_string();
+    let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
+    let external_status = params.get("externalStatus").and_then(Value::as_str).map(str::to_string);
+    let external_error = params.get("externalError").and_then(Value::as_str).map(str::to_string);
+
+    let account: mailvault_core::imap::ImapConfig =
+        serde_json::from_str(&account_json).map_err(|e| format!("Bad account JSON: {}", e))?;
+
+    let root = common::vault_root(state)?;
+    let mirror_path = mirror_root.as_deref().map(Path::new);
+
+    let status =
+        backup::get_backup_status(&state.imap_pool, &account_id, &account, &root, mirror_path, external_status, external_error)
+            .await?;
+
+    serde_json::to_value(status).map_err(|e| format!("serialize backup status: {}", e))
+}
+
+/// Delete (or queue, if the mirror is unreachable) a set of uids from the
+/// external backup mirror. Calls into `mailvault_core::backup::purge_uids`.
+pub(crate) async fn backup_purge_uids(state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+    let email = params.get("email").and_then(Value::as_str).ok_or("Missing email")?.to_string();
+    let mailbox = params.get("mailbox").and_then(Value::as_str).ok_or("Missing mailbox")?.to_string();
+    let uids: Vec<u32> = params
+        .get("uids")
+        .cloned()
+        .and_then(|v| serde_json::from_value(v).ok())
+        .ok_or("Missing or invalid uids")?;
+    let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
+    let external_status = params.get("externalStatus").and_then(Value::as_str).map(str::to_string);
+
+    let mirror_path = mirror_root.as_deref().map(Path::new);
+    let outcome = backup::purge_uids(&state.app_dir, mirror_path, external_status.as_deref(), &email, &mailbox, &uids)?;
+
+    serde_json::to_value(outcome).map_err(|e| format!("serialize purge outcome: {}", e))
+}
+
+/// Which uids of `<email>/<mailbox>` are present in the external mirror, or
+/// `null` if that can't be determined (no mirror resolved). Calls into
+/// `mailvault_core::backup::scan_uids` — see that function's doc comment for
+/// the `None`/`Some(vec![])` distinction this route must not blur: `null` vs
+/// `[]` on the wire.
+pub(crate) async fn backup_scan_uids(_state: &Arc<DaemonState>, params: Value) -> Result<Value, String> {
+    let email = params.get("email").and_then(Value::as_str).ok_or("Missing email")?.to_string();
+    let mailbox = params.get("mailbox").and_then(Value::as_str).ok_or("Missing mailbox")?.to_string();
+    let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
+
+    let mirror_path = mirror_root.as_deref().map(Path::new);
+    let uids = backup::scan_uids(mirror_path, &email, &mailbox);
+
+    serde_json::to_value(uids).map_err(|e| format!("serialize scan result: {}", e))
+}
+
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
     Some(match method {
         "backup_run_account" => match backup_run_account(state, params.clone()).await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        },
+        "backup_status" => match backup_status(state, params.clone()).await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        },
+        "backup_purge_uids" => match backup_purge_uids(state, params.clone()).await {
+            Ok(v) => RpcResponse::success(id, v),
+            Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
+        },
+        "backup_scan_uids" => match backup_scan_uids(state, params.clone()).await {
             Ok(v) => RpcResponse::success(id, v),
             Err(e) => RpcResponse::error(id, ipc::INTERNAL_ERROR, e),
         },

@@ -9,11 +9,15 @@
 //! apart (backup would then compute `missing` against one `cur/` while the
 //! fetch step writes into another).
 //!
-//! What did NOT move here: `AccountBackupStatus`/`FolderBackupStatus` (the
-//! compare-with-server status view), `resolve_backup_path`/`release_backup_path`
-//! (bookmark resolution — a Rust/platform-integration concern that stays with
-//! `external_location.rs`), and `backup_purge_uids`. All out of scope for this
-//! task; `run_imap_account`'s name says which provider it covers.
+//! What did NOT move here: `resolve_backup_path`/`release_backup_path`
+//! (security-scoped bookmark resolution — a Rust/platform-integration concern
+//! that stays with `external_location.rs`, shell-permanent per `main.rs`'s
+//! module-list comment). Every function below that used to take a
+//! `tauri::AppHandle` and resolve its own bookmark instead takes an
+//! already-resolved `mirror_root: Option<&Path>` — the caller (daemon RPC
+//! handler today, eventually the Tauri command that still owns the bookmark)
+//! resolves it first, same convention `BackupRunContext::mirror_root` and
+//! `vault_flags`'s `mirrorRoot` param already use.
 //!
 //! The Graph/Outlook backup path (`run_graph_account`, ported from
 //! `run_graph_backup`, `src-tauri/src/backup.rs:1131-1404`) followed in Task 2,
@@ -25,6 +29,25 @@
 //! injected in-process closure (`BackupRunContext::apply_flags`) instead: the
 //! daemon wires it straight to `handlers::vault_flags::apply_flags`, no RPC
 //! round trip against itself.
+//!
+//! Task 3 ports the three remaining app-side entry points: `get_backup_status`
+//! (the compare-with-server status view, `AccountBackupStatus`/
+//! `FolderBackupStatus`), `purge_backup_files` (already private-ported above
+//! for `drain_purge_queue`'s own use — now also exposed as the read/write
+//! `backup_purge_uids` RPC needs, including `queue_purge`, the one write-side
+//! helper of the pending-purge queue this file hadn't needed until now), and
+//! `scan_uids` (the mirror-membership check `backup_scan_uids` exposes to the
+//! UI). None of the three is long-running like the account backup run above,
+//! so their daemon RPC handlers are ordinary blocking-style async handlers —
+//! no `tokio::spawn`/fire-and-forget.
+//!
+//! `get_backup_status`'s external-location enrichment (`external_status`/
+//! `external_error` on `AccountBackupStatus`) is the one field pair this port
+//! cannot compute itself, for the same bookmark reason as above: the daemon
+//! has no bookmark API (`main.rs`'s `VaultLocationInfo` doc comment makes the
+//! identical trade-off for `vault_get_status`). The caller passes them
+//! through as already-known strings; `get_backup_status` only sets them when
+//! given.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -750,6 +773,338 @@ fn graph_completed_folders_checkpoint(completed_folders: usize, refused: Option<
     }
 }
 
+// ── Backup status comparison ─────────────────────────────────────────────────
+//
+// Ported from `backup.rs:59-461` (`FolderBackupStatus`/`AccountBackupStatus`,
+// `get_backup_status`, `get_imap_backup_status`, `get_graph_backup_status`,
+// `build_folder_status`), minus the bookmark resolution and app-handle
+// plumbing — see the module doc's "What did NOT move here" note.
+// `scan_local_uids` did not port as its own function: it was a one-line
+// `scan_cur_uids(&maildir_cur_path(...)?)` wrapper, and `crate::vault_files::
+// cur_path` + `scan_cur_uids` (both already in this file) inline the same
+// thing at each call site below without an extra indirection.
+
+#[derive(Serialize, Clone)]
+pub struct FolderBackupStatus {
+    pub path: String,
+    pub name: String,
+    pub server_count: usize,
+    pub app_count: usize,
+    pub external_count: usize,
+    pub children: Vec<FolderBackupStatus>,
+    // Legacy aliases for frontend compat — field-for-field with
+    // `backup.rs:69-73`, do not rename or drop either alias.
+    #[serde(rename = "folder")]
+    pub folder_alias: String,
+    #[serde(rename = "local_count")]
+    pub local_count_alias: usize,
+}
+
+#[derive(Serialize)]
+pub struct AccountBackupStatus {
+    pub folders: Vec<FolderBackupStatus>,
+    pub total_server: usize,
+    pub total_local: usize,
+    pub total_app: usize,
+    pub total_external: usize,
+    pub external_available: bool,
+    /// Status of the external location: "ready", "needs_reauth",
+    /// "unavailable", "invalid", "not_configured". Not computed here — the
+    /// daemon has no bookmark API, see the module doc — the caller passes
+    /// through whatever `external_location::get_external_location` (or
+    /// equivalent) already told it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_error: Option<String>,
+}
+
+/// Build a FolderBackupStatus for one folder.
+///
+/// Both counts are `read_dir`s — one on the vault, one on the backup drive.
+/// On a drive another process is hammering they stall for seconds, and on a
+/// runtime worker that stall is paid by every IMAP socket the runtime is meant
+/// to be polling, so they run on the blocking pool.
+async fn build_folder_status(
+    path: &str,
+    name: &str,
+    server_count: usize,
+    vault_root: &Path,
+    account_id: &str,
+    mirror_root: Option<&Path>,
+    email: &str,
+    children: Vec<FolderBackupStatus>,
+) -> FolderBackupStatus {
+    let (app_count, external_count) = {
+        let vault_cur_dir = crate::vault_files::cur_path(vault_root, account_id, path);
+        let mirror_root = mirror_root.map(|p| p.to_path_buf());
+        let email = email.to_string();
+        let path_owned = path.to_string();
+        tokio::task::spawn_blocking(move || {
+            let app_count = scan_cur_uids(&vault_cur_dir).unwrap_or_default().len();
+            let external_count = match mirror_root {
+                Some(root) => scan_external_uids(&root, &email, &path_owned).len(),
+                None => 0,
+            };
+            (app_count, external_count)
+        })
+        .await
+        .unwrap_or_else(|e| {
+            warn!("build_folder_status: folder scan panicked: {}", e);
+            (0, 0)
+        })
+    };
+    FolderBackupStatus {
+        path: path.to_string(),
+        name: name.to_string(),
+        server_count,
+        app_count,
+        external_count,
+        children,
+        folder_alias: path.to_string(),
+        local_count_alias: app_count,
+    }
+}
+
+/// IMAP backup status with folder hierarchy. Ported from `backup.rs:366-470`.
+///
+/// Deviation from the app source: the app's inner `get_background` failure
+/// (`.unwrap_or_else(|_| panic!("pool"))`) is not ported — a pool hiccup on
+/// one folder must not crash the daemon process (it would take down every
+/// other account's sync and the search index with it). Propagated with `?`
+/// instead, same as every other daemon-facing route: a status call that
+/// can't reach the server fails outright rather than reporting a
+/// half-correct tree with zeroed-out counts for a folder it silently gave up
+/// on.
+///
+/// Also bounded (`imap::bounded`) where the app source left the `LIST` and
+/// per-folder `UID SEARCH` calls unbounded — an RPC handler awaiting an IMAP
+/// socket forever is the same hazard Task 1's `run_imap_account` already
+/// guards its own `LIST`/`UID FETCH` calls against; this status path gets no
+/// weaker a guarantee just because it isn't a long-running job.
+async fn get_imap_backup_status(
+    pool: &ImapPool,
+    account_id: &str,
+    account: &ImapConfig,
+    vault_root: &Path,
+    mirror_root: Option<&Path>,
+) -> Result<AccountBackupStatus, String> {
+    let mailboxes = {
+        let mut guard = pool.get_background(account).await?;
+        let result = imap::bounded("LIST", 60, imap::list_mailboxes(&mut guard.session)).await;
+        match &result {
+            Ok(_) => pool.return_background(account, guard).await,
+            Err(_) => pool.discard(account, guard).await,
+        }
+        result?
+    };
+
+    // Build tree recursively, getting server counts via IMAP. A `Result`
+    // return (the app source's `build_tree` returned a bare `Vec`) is what
+    // lets a mid-tree pool failure `?` out of the whole status call instead
+    // of panicking — see this function's own doc comment.
+    #[allow(clippy::too_many_arguments)]
+    async fn build_tree(
+        pool: &ImapPool,
+        account: &ImapConfig,
+        vault_root: &Path,
+        account_id: &str,
+        mailboxes: &[imap::MailboxInfo],
+        mirror_root: Option<&Path>,
+        total_server: &mut usize,
+        total_app: &mut usize,
+        total_external: &mut usize,
+    ) -> Result<Vec<FolderBackupStatus>, String> {
+        let mut result = Vec::new();
+        for mbox in mailboxes {
+            // Recurse into children first
+            let children = Box::pin(build_tree(
+                pool, account, vault_root, account_id,
+                &mbox.children, mirror_root,
+                total_server, total_app, total_external,
+            )).await?;
+
+            if mbox.noselect {
+                // Non-selectable folder: include only if it has children with data
+                if !children.is_empty() {
+                    result.push(FolderBackupStatus {
+                        path: mbox.path.clone(),
+                        name: mbox.name.clone(),
+                        server_count: 0,
+                        app_count: 0,
+                        external_count: 0,
+                        children,
+                        folder_alias: mbox.path.clone(),
+                        local_count_alias: 0,
+                    });
+                }
+                continue;
+            }
+
+            let server_uids = {
+                let mut guard = pool.get_background(account).await?;
+                let r = imap::bounded(
+                    &format!("UID SEARCH {}", mbox.path),
+                    60,
+                    imap::search_all_uids(&mut guard.session, &mbox.path, false),
+                )
+                .await;
+                // A failed command can leave unread bytes on the session — never re-pool it.
+                match &r {
+                    Ok(_) => pool.return_background(account, guard).await,
+                    Err(_) => pool.discard(account, guard).await,
+                }
+                r.unwrap_or_default()
+            };
+            let sc = server_uids.len();
+
+            let status = build_folder_status(
+                &mbox.path, &mbox.name, sc,
+                vault_root, account_id, mirror_root, &account.email,
+                children,
+            ).await;
+
+            *total_server += sc;
+            *total_app += status.app_count;
+            *total_external += status.external_count;
+
+            if sc > 0 || status.app_count > 0 || status.external_count > 0 || !status.children.is_empty() {
+                result.push(status);
+            }
+        }
+        Ok(result)
+    }
+
+    let mut total_server = 0usize;
+    let mut total_app = 0usize;
+    let mut total_external = 0usize;
+
+    let folders = build_tree(
+        pool, account, vault_root, account_id,
+        &mailboxes, mirror_root,
+        &mut total_server, &mut total_app, &mut total_external,
+    ).await?;
+
+    let external_available = mirror_root.is_some();
+
+    Ok(AccountBackupStatus {
+        folders,
+        total_server,
+        total_local: total_app,
+        total_app,
+        total_external,
+        external_available,
+        external_status: None,
+        external_error: None,
+    })
+}
+
+/// Graph/Outlook backup status — uses total_item_count from folder metadata.
+/// Ported from `backup.rs:473-543`.
+async fn get_graph_backup_status(
+    account_id: &str,
+    account: &ImapConfig,
+    vault_root: &Path,
+    mirror_root: Option<&Path>,
+) -> Result<AccountBackupStatus, String> {
+    let access_token = account
+        .access_token
+        .as_deref()
+        .ok_or_else(|| "Missing OAuth2 access token for Graph account".to_string())?;
+    let email = account.email.clone();
+
+    let client = crate::graph::GraphClient::new(access_token);
+    let graph_folders = client.list_folders().await?;
+
+    // One `read_dir` per folder on the vault and on the backup drive, and no
+    // await anywhere in the loop — so the whole loop goes to the blocking pool
+    // rather than stalling the runtime workers on a struggling drive.
+    let (folders, total_server, total_app, total_external) = {
+        let vault_root = vault_root.to_path_buf();
+        let account_id = account_id.to_string();
+        let mirror_root = mirror_root.map(|p| p.to_path_buf());
+        tokio::task::spawn_blocking(move || {
+            let mut folders = Vec::new();
+            let mut total_server = 0usize;
+            let mut total_app = 0usize;
+            let mut total_external = 0usize;
+
+            for gf in &graph_folders {
+                let mailbox_path = gf.storage_key.clone();
+                let sc = gf.total_item_count.max(0) as usize;
+                let cur_dir = crate::vault_files::cur_path(&vault_root, &account_id, &mailbox_path);
+                let app_count = scan_cur_uids(&cur_dir).unwrap_or_default().len();
+                let ext_count = match mirror_root.as_deref() {
+                    Some(root) => scan_external_uids(root, &email, &mailbox_path).len(),
+                    None => 0,
+                };
+
+                total_server += sc;
+                total_app += app_count;
+                total_external += ext_count;
+
+                if sc > 0 || app_count > 0 || ext_count > 0 {
+                    folders.push(FolderBackupStatus {
+                        path: mailbox_path.clone(),
+                        name: gf.display_name.clone(),
+                        server_count: sc,
+                        app_count,
+                        external_count: ext_count,
+                        children: vec![],
+                        folder_alias: mailbox_path,
+                        local_count_alias: app_count,
+                    });
+                }
+            }
+            (folders, total_server, total_app, total_external)
+        })
+        .await
+        .map_err(|e| format!("graph folder scan panicked: {}", e))?
+    };
+
+    let external_available = mirror_root.is_some();
+
+    Ok(AccountBackupStatus {
+        folders,
+        total_server,
+        total_local: total_app,
+        total_app,
+        total_external,
+        external_available,
+        external_status: None,
+        external_error: None,
+    })
+}
+
+/// Compare server email counts vs local backup counts for each folder.
+/// Ported from `backup.rs:311-363`'s `get_backup_status`, minus the bookmark
+/// resolution: `mirror_root` is already resolved by the caller, and
+/// `external_status`/`external_error` are whatever the caller already knows
+/// about that resolution (see `AccountBackupStatus::external_status`'s doc
+/// comment) — passed straight through onto the result, exactly as the app's
+/// own wrapper enriched `get_imap_backup_status`/`get_graph_backup_status`'s
+/// otherwise-`None` fields after the fact.
+pub async fn get_backup_status(
+    pool: &ImapPool,
+    account_id: &str,
+    account: &ImapConfig,
+    vault_root: &Path,
+    mirror_root: Option<&Path>,
+    external_status: Option<String>,
+    external_error: Option<String>,
+) -> Result<AccountBackupStatus, String> {
+    let mut status = if account.oauth2_transport.as_deref() == Some("graph") {
+        get_graph_backup_status(account_id, account, vault_root, mirror_root).await?
+    } else {
+        get_imap_backup_status(pool, account_id, account, vault_root, mirror_root).await?
+    };
+
+    status.external_status = external_status;
+    status.external_error = external_error;
+
+    Ok(status)
+}
+
 // ── Local/mirror uid scanning ────────────────────────────────────────────────
 
 /// A backup folder's vault uids, counted after the pre-sync with its mirror
@@ -784,6 +1139,30 @@ fn scan_cur_uids(cur_dir: &Path) -> Result<HashSet<u32>, String> {
     }
 
     Ok(uids)
+}
+
+/// Which uids of `<email>/<mailbox>` are present in an external backup
+/// directory. Ported from `backup.rs:143-153`.
+fn scan_external_uids(backup_path: &Path, email: &str, mailbox: &str) -> HashSet<u32> {
+    let cur_dir = backup_path.join(email).join(mailbox).join("cur");
+    crate::maildir::mirror_file_map(&cur_dir).into_keys().collect()
+}
+
+/// Which uids of `<email>/<mailbox>` are present in the external mirror.
+/// Ported from `backup.rs:1488-1518`'s `backup_scan_uids` command, minus the
+/// bookmark resolution — `mirror_root` is already resolved by the caller.
+///
+/// `None` means "could not determine": the app's two `None`-returning
+/// branches (no location configured at all, or one configured but
+/// unreachable) both collapse into the caller's single already-resolved
+/// `mirror_root: Option<&Path>` being `None` — this read path (unlike
+/// `purge_uids`) treats them identically, so no separate "not configured"
+/// signal is needed here. `Some(vec![])` is the positive claim "reachable,
+/// confirmed nothing mirrored" — the caller must never conflate the two, see
+/// the module doc's Global Constraint note.
+pub fn scan_uids(mirror_root: Option<&Path>, email: &str, mailbox: &str) -> Option<Vec<u32>> {
+    let root = mirror_root?;
+    Some(scan_external_uids(root, email, mailbox).into_iter().collect())
 }
 
 /// Sync files between the vault Maildir and the backup location (bidirectional).
@@ -975,9 +1354,9 @@ fn flatten_mailboxes(mailboxes: &[imap::MailboxInfo]) -> Vec<&imap::MailboxInfo>
 // The external backup volume is routinely absent (unplugged drive, unmounted
 // network share). "Delete everywhere" must still complete, so uids whose mirror
 // copy could not be reached are parked here and applied on the next backup run.
-// Ported from `backup.rs:190-260`; `queue_purge` itself (the writer side, used
-// by the app's `backup_purge_uids` command) is not — that command has not
-// moved to the daemon in this task.
+// Ported from `backup.rs:190-260`. Task 3 adds `queue_purge` (the writer side)
+// and `purge_uids` (the full `backup_purge_uids` decision: purge now vs queue
+// for later vs no-op when nothing is configured) below `purge_backup_files`.
 
 fn purge_queue_path(data_dir: &Path) -> PathBuf {
     data_dir.join("pending_backup_purge.json")
@@ -1019,6 +1398,64 @@ fn purge_backup_files(root: &Path, email: &str, mailbox: &str, uids: &HashSet<u3
         }
     }
     removed
+}
+
+/// Queue `uids` of `<email>/<mailbox>` for purge next time the mirror is
+/// reachable. Ported from `backup.rs:214-226`.
+fn queue_purge(data_dir: &Path, email: &str, mailbox: &str, uids: &[u32]) -> Result<(), String> {
+    let mut q = read_purge_queue(data_dir);
+    let entry = q.entry(format!("{}|{}", email, mailbox)).or_default();
+    entry.extend_from_slice(uids);
+    entry.sort_unstable();
+    entry.dedup();
+    write_purge_queue(data_dir, &q)
+}
+
+/// What `purge_uids` did: files removed now, or uids queued for the next
+/// reachable run.
+#[derive(Serialize, Debug, PartialEq, Eq)]
+pub struct PurgeOutcome {
+    pub removed: usize,
+    pub queued: usize,
+}
+
+/// Delete `uids` of `<email>/<mailbox>` from the external mirror now if it's
+/// reachable, or queue them for the next backup run that can reach it.
+/// Ported from `backup.rs:1443-1480`'s `backup_purge_uids` command, minus the
+/// bookmark resolution (`resolve_backup_path`) that stays with the Tauri
+/// shell — `mirror_root` is already resolved by the caller, `None` meaning
+/// either "not configured" or "configured but unreachable". `external_status`
+/// disambiguates those two exactly as `external_location::get_external_location`
+/// did for the app-side command (the daemon has no bookmark API to call that
+/// itself — `main.rs`'s module-list comment). A missing `external_status`
+/// (`None`) is treated as `"not_configured"`: the guard this queue exists to
+/// keep ("no backup configured at all is not a queue-worthy event") must fail
+/// closed, not open, when a caller omits the field.
+pub fn purge_uids(
+    data_dir: &Path,
+    mirror_root: Option<&Path>,
+    external_status: Option<&str>,
+    email: &str,
+    mailbox: &str,
+    uids: &[u32],
+) -> Result<PurgeOutcome, String> {
+    if uids.is_empty() {
+        return Ok(PurgeOutcome { removed: 0, queued: 0 });
+    }
+
+    let Some(root) = mirror_root else {
+        if external_status.unwrap_or("not_configured") == "not_configured" {
+            return Ok(PurgeOutcome { removed: 0, queued: 0 });
+        }
+        queue_purge(data_dir, email, mailbox, uids)?;
+        info!("backup purge: mirror unreachable, queued {} uids for {}/{}", uids.len(), email, mailbox);
+        return Ok(PurgeOutcome { removed: 0, queued: uids.len() });
+    };
+
+    let uid_set: HashSet<u32> = uids.iter().copied().collect();
+    let removed = purge_backup_files(root, email, mailbox, &uid_set);
+    info!("backup purge: removed {} mirror files for {}/{}", removed, email, mailbox);
+    Ok(PurgeOutcome { removed, queued: 0 })
 }
 
 /// Apply every queued purge against a now-reachable backup root.
@@ -1184,6 +1621,90 @@ mod tests {
         let leftover = read_purge_queue(app_dir.path());
         assert!(leftover.contains_key("me@example.com|Archive"), "the unreachable folder stays queued");
         assert!(!leftover.contains_key("me@example.com|INBOX"), "the applied entry is dropped from the queue");
+    }
+
+    #[test]
+    fn purge_uids_removes_now_when_the_mirror_is_reachable() {
+        let app_dir = tempfile::tempdir().unwrap();
+        let mirror_root = tempfile::tempdir().unwrap();
+        let cur = mirror_root.path().join("me@example.com").join("INBOX").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(crate::vault_files::build_maildir_filename(5, &[])), b"body").unwrap();
+
+        let outcome =
+            purge_uids(app_dir.path(), Some(mirror_root.path()), Some("ready"), "me@example.com", "INBOX", &[5]).unwrap();
+
+        assert_eq!(outcome, PurgeOutcome { removed: 1, queued: 0 });
+        assert!(read_purge_queue(app_dir.path()).is_empty(), "a reachable purge must not also queue");
+    }
+
+    #[test]
+    fn purge_uids_queues_when_configured_but_unreachable() {
+        let app_dir = tempfile::tempdir().unwrap();
+
+        let outcome = purge_uids(app_dir.path(), None, Some("unavailable"), "me@example.com", "INBOX", &[7, 8]).unwrap();
+
+        assert_eq!(outcome, PurgeOutcome { removed: 0, queued: 2 });
+        let queued = read_purge_queue(app_dir.path());
+        assert_eq!(queued.get("me@example.com|INBOX"), Some(&vec![7u32, 8u32]));
+    }
+
+    #[test]
+    fn purge_uids_is_a_no_op_when_nothing_is_configured() {
+        let app_dir = tempfile::tempdir().unwrap();
+
+        let outcome = purge_uids(app_dir.path(), None, Some("not_configured"), "me@example.com", "INBOX", &[9]).unwrap();
+
+        assert_eq!(outcome, PurgeOutcome { removed: 0, queued: 0 });
+        assert!(read_purge_queue(app_dir.path()).is_empty(), "no backup configured at all is not a queue-worthy event");
+    }
+
+    #[test]
+    fn purge_uids_fails_closed_to_not_configured_when_the_caller_omits_the_status() {
+        // A caller that forgets to pass `external_status` must not have its
+        // omission read as "configured but unreachable" — that would queue a
+        // purge for a user with no backup drive at all.
+        let app_dir = tempfile::tempdir().unwrap();
+
+        let outcome = purge_uids(app_dir.path(), None, None, "me@example.com", "INBOX", &[9]).unwrap();
+
+        assert_eq!(outcome, PurgeOutcome { removed: 0, queued: 0 });
+        assert!(read_purge_queue(app_dir.path()).is_empty());
+    }
+
+    // ── scan_uids ──────────────────────────────────────────────────────────
+    //
+    // The task brief's illustrative test called a single-signature
+    // `scan_uids(mirror_root: &Path, ...)` and a hypothetical
+    // `scan_uids_for_status("not_configured", &[])` helper that doesn't exist
+    // in the real code. The actual `scan_uids` takes `mirror_root: Option<&Path>`
+    // (see its doc comment for why one `Option` collapses the app's two
+    // `None`-returning cases) — these tests exercise that real signature.
+
+    #[test]
+    fn scan_uids_is_none_when_no_mirror_root_is_resolved() {
+        assert_eq!(scan_uids(None, "a@b.com", "INBOX"), None, "not configured and unreachable both resolve to no root");
+    }
+
+    #[test]
+    fn scan_uids_is_some_empty_when_the_mirror_is_reachable_but_has_nothing() {
+        let mirror_root = tempfile::tempdir().unwrap();
+        // Reachable root, but this account/mailbox has no `cur/` at all yet —
+        // still a confirmed "nothing mirrored", not an unknown.
+        assert_eq!(scan_uids(Some(mirror_root.path()), "a@b.com", "INBOX"), Some(vec![]));
+    }
+
+    #[test]
+    fn scan_uids_returns_every_mirrored_uid_when_reachable_and_populated() {
+        let mirror_root = tempfile::tempdir().unwrap();
+        let cur = mirror_root.path().join("a@b.com").join("INBOX").join("cur");
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(crate::vault_files::build_maildir_filename(3, &[])), b"x").unwrap();
+        std::fs::write(cur.join(crate::vault_files::build_maildir_filename(1, &[])), b"x").unwrap();
+
+        let mut uids = scan_uids(Some(mirror_root.path()), "a@b.com", "INBOX").unwrap();
+        uids.sort_unstable();
+        assert_eq!(uids, vec![1u32, 3u32], "mirror_file_map is a HashMap — sort before comparing");
     }
 
     // ── Graph resume checkpoint ──────────────────────────────────────────────
