@@ -658,7 +658,21 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
         const accountRows = messages.filter(row => row.accountId === args.accountId && row.serverPresent);
         accountRows.forEach(row => { row.vaultPresent = true; row.vaultFlags = [...new Set([...(row.vaultFlags || []), 'archived'])]; row._origin = row._origin || 'local'; row.source = row.source || 'local'; });
         emit('demo:state', { type: 'backup', accountId: args.accountId });
-        return { success: true, status: 'complete', copied: accountRows.length, emails_backed_up: accountRows.length, simulated: true };
+        // Fire-and-forget, like the daemon: the reply is only an ACK, and the
+        // outcome rides on the run's terminal `backup-progress` frame — which
+        // is what `backupScheduler.js` awaits. Without this emit the demo's
+        // "Back up now" would spin forever. `vite.demo.config.js` aliases
+        // `@tauri-apps/api/event` onto this same bus, so the scheduler's own
+        // listener receives it.
+        emit('backup-progress', {
+          account_id: args.accountId, folder: 'Complete',
+          total_folders: 1, completed_folders: 1,
+          total_emails: accountRows.length, completed_emails: accountRows.length,
+          errors: 0, active: false, last_error: null, missing_in_folder: 0,
+          cancelled: false, success: true,
+          external_copy_ok: true, external_copy_error: null, external_copy_failed_count: 0,
+        });
+        return { runId: args.accountId, simulated: true };
       }
       case 'backup_status': {
         const accountRows = messages.filter(row => !accountId || row.accountId === accountId);

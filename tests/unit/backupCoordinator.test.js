@@ -10,7 +10,7 @@ vi.mock('@tauri-apps/api/event', () => ({
 
 // Mock api — all calls are no-ops by default
 vi.mock('../../src/services/api', () => ({
-  backupRunAccount: vi.fn().mockResolvedValue({ emails_backed_up: 5, duration_secs: 2, success: true }),
+  backupRunAccount: vi.fn(),
   backupCancel: vi.fn().mockResolvedValue(undefined),
   sendNotification: vi.fn().mockResolvedValue(undefined),
 }));
@@ -94,7 +94,7 @@ vi.mock('../../src/services/snapshotService', () => ({
 // Destructured off a dynamic import on purpose: a named static import of an
 // export the module does not have yet is a link error that kills every test in
 // the file, which is not the RED we want to read.
-const { backupScheduler, State, computeNextEligibleTime, BACKUP_STALL_MS } = await import(
+const { backupScheduler, State, computeNextEligibleTime, BACKUP_STALL_MS, terminalFrameToResult } = await import(
   '../../src/services/backupScheduler'
 );
 const api = await import('../../src/services/api');
@@ -116,6 +116,7 @@ function resetCoordinator() {
   backupScheduler._pausedAccountId = null;
   backupScheduler._manualIds = new Set();
   backupScheduler._manualResolvers = new Map();
+  backupScheduler._terminalWaiters = new Map();
   backupScheduler._checkpoints = new Map();
   backupScheduler._stalled = new Set();
   backupScheduler._lastProgressAt = Date.now();
@@ -127,7 +128,7 @@ function resetCoordinator() {
   // whose retry never fires (exactly what the RED run looks like) would hand
   // its leftover to the next spec, which then fails for someone else's reason.
   api.backupRunAccount.mockReset();
-  api.backupRunAccount.mockResolvedValue({ emails_backed_up: 5, duration_secs: 2, success: true });
+  api.backupRunAccount.mockImplementation(finishWith({ emails_backed_up: 5, duration_secs: 2, success: true }));
 }
 
 /** A `backup-progress` payload in the shape Rust emits. */
@@ -142,6 +143,53 @@ const progressPayload = (over = {}) => ({
   active: true,
   ...over,
 });
+
+/** Fire one `backup-progress` event at the coordinator's own listener. */
+const emitBackupProgress = (payload) => mockEventHandlers['backup-progress']({ payload });
+
+/**
+ * `backup_run_account` as the daemon really answers it since Phase 3: ACK the
+ * start with `{runId}`, then report the outcome on the run's terminal
+ * `backup-progress` frame — which is what `_runBackup` awaits now. The RPC's
+ * resolved value carries nothing about the result any more.
+ *
+ * Specs describe the outcome in `BackupResult`'s vocabulary, the way they
+ * always did; this translates to the frame's two differing field names
+ * (`emails_backed_up` → `completed_emails`, `error_message` → `last_error`).
+ * Emitting synchronously is safe and deterministic: `_runBackup` registers its
+ * waiter BEFORE it calls the RPC, exactly so a run that dies in microseconds
+ * cannot beat it.
+ */
+const finishWith = (result = {}) => async (accountId) => {
+  const { emails_backed_up = 0, error_message = null, ...rest } = result;
+  delete rest.duration_secs; // not a frame field — _runBackup times the run itself
+  emitBackupProgress({
+    account_id: accountId,
+    folder: result.cancelled ? 'Cancelled' : 'Complete',
+    total_folders: 1,
+    completed_folders: 1,
+    total_emails: emails_backed_up,
+    completed_emails: emails_backed_up,
+    errors: 0,
+    active: false,
+    last_error: error_message,
+    missing_in_folder: 0,
+    cancelled: false,
+    success: true,
+    external_copy_ok: true,
+    external_copy_error: null,
+    external_copy_failed_count: 0,
+    ...rest,
+  });
+  return { runId: accountId };
+};
+
+/** A promise that never resolves must fail an assertion, not hang the run. */
+const TIMED_OUT = { status: 'never resolved' };
+const within = (promise, ms = 300) =>
+  Promise.race([promise, new Promise(r => setTimeout(() => r(TIMED_OUT), ms))]);
+
+const settle = (ms = 50) => new Promise(r => setTimeout(r, ms));
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -445,13 +493,13 @@ describe('BackupCoordinator — backup execution', () => {
 
   it('saves checkpoint on cancelled result and resumes with skipFolders', async () => {
     // First run returns cancelled at folder 3
-    api.backupRunAccount.mockResolvedValueOnce({
+    api.backupRunAccount.mockImplementationOnce(finishWith({
       emails_backed_up: 2,
       duration_secs: 1,
       success: false,
       cancelled: true,
       completed_folders: 3,
-    });
+    }));
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
 
@@ -461,13 +509,13 @@ describe('BackupCoordinator — backup execution', () => {
     expect(mockSettingsState.addBackupHistoryEntry).not.toHaveBeenCalled();
 
     // Second run should pass skipFolders=3
-    api.backupRunAccount.mockResolvedValueOnce({
+    api.backupRunAccount.mockImplementationOnce(finishWith({
       emails_backed_up: 5,
       duration_secs: 2,
       success: true,
       cancelled: false,
       completed_folders: 10,
-    });
+    }));
     backupScheduler._running.set('acc-1', false);
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
@@ -512,7 +560,7 @@ describe('BackupCoordinator — a run that lost some messages', () => {
   };
 
   it('records degraded, not failed', async () => {
-    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    api.backupRunAccount.mockImplementationOnce(finishWith(partialResult));
     mockSettingsState.backupNotifyOnFailure = true;
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
@@ -524,7 +572,7 @@ describe('BackupCoordinator — a run that lost some messages', () => {
   });
 
   it('notifies "partially complete" and never says "Unknown error"', async () => {
-    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    api.backupRunAccount.mockImplementationOnce(finishWith(partialResult));
     mockSettingsState.backupNotifyOnFailure = true;
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
@@ -539,7 +587,7 @@ describe('BackupCoordinator — a run that lost some messages', () => {
   });
 
   it('keeps the history entry honest — success with a count of what was lost', async () => {
-    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    api.backupRunAccount.mockImplementationOnce(finishWith(partialResult));
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
 
@@ -552,16 +600,16 @@ describe('BackupCoordinator — a run that lost some messages', () => {
   });
 
   it('resolves a manual run as degraded so the button does not claim failure', async () => {
-    api.backupRunAccount.mockResolvedValueOnce(partialResult);
+    api.backupRunAccount.mockImplementationOnce(finishWith(partialResult));
     const result = await backupScheduler.triggerManualBackup('acc-1');
     expect(result.status).toBe('degraded');
     expect(result.message).toBe(partialResult.error_message);
   });
 
   it('still reports a run with no errors as plain success', async () => {
-    api.backupRunAccount.mockResolvedValueOnce({
+    api.backupRunAccount.mockImplementationOnce(finishWith({
       emails_backed_up: 5, errors: 0, duration_secs: 2, success: true,
-    });
+    }));
     mockSettingsState.backupNotifyOnSuccess = true;
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
@@ -574,11 +622,11 @@ describe('BackupCoordinator — a run that lost some messages', () => {
   });
 
   it('an external-copy failure alone still reads as partial', async () => {
-    api.backupRunAccount.mockResolvedValueOnce({
+    api.backupRunAccount.mockImplementationOnce(finishWith({
       emails_backed_up: 12, errors: 0, duration_secs: 3, success: true,
       external_copy_ok: false, external_copy_failed_count: 2,
       external_copy_error: '2 emails failed to copy to external backup',
-    });
+    }));
     mockSettingsState.backupNotifyOnFailure = true;
     backupScheduler.queueBackup('acc-1');
     await new Promise(r => setTimeout(r, 100));
@@ -995,18 +1043,18 @@ describe('BackupCoordinator — a stalled run', () => {
 
   const stalledMessage = () => t('svc.backupScheduler.stalled', { minutes: 15 });
 
-  /** First call: watchdog fires mid-run, Rust returns cancelled at folder 2. */
+  /** First call: watchdog fires mid-run, the daemon reports cancelled at folder 2. */
   const mockStalledOnce = () => {
-    api.backupRunAccount.mockImplementationOnce(async () => {
+    api.backupRunAccount.mockImplementationOnce(async (accountId) => {
       backupScheduler._stalled.add('acc-1');
-      return { cancelled: true, completed_folders: 2, success: false, emails_backed_up: 0 };
+      return finishWith({ cancelled: true, completed_folders: 2, success: false, emails_backed_up: 0 })(accountId);
     });
   };
 
   it('is retried from its checkpoint', async () => {
     vi.useFakeTimers();
     mockStalledOnce();
-    api.backupRunAccount.mockResolvedValueOnce({ success: true, emails_backed_up: 1, duration_secs: 1 });
+    api.backupRunAccount.mockImplementationOnce(finishWith({ success: true, emails_backed_up: 1, duration_secs: 1 }));
 
     backupScheduler.queueBackup('acc-1');
     await vi.advanceTimersByTimeAsync(10);
@@ -1055,10 +1103,10 @@ describe('BackupCoordinator — a stalled run', () => {
   });
 
   it('leaves a server-side stop (bandwidth limit) reported as before', async () => {
-    api.backupRunAccount.mockResolvedValueOnce({
+    api.backupRunAccount.mockImplementationOnce(finishWith({
       cancelled: true, completed_folders: 2, success: false,
       error_message: 'Gmail daily bandwidth limit reached',
-    });
+    }));
     const result = await backupScheduler.triggerManualBackup('acc-1');
     expect(result.status).toBe('cancelled');
     expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
@@ -1070,19 +1118,19 @@ describe('BackupCoordinator — a stalled run', () => {
     // The watchdog fired while this account was still resolving credentials:
     // that mark belongs to no run, and a later pause must not be read as a stall.
     backupScheduler._stalled.add('acc-1');
-    api.backupRunAccount.mockResolvedValueOnce({ cancelled: true, completed_folders: 1, success: false });
+    api.backupRunAccount.mockImplementationOnce(finishWith({ cancelled: true, completed_folders: 1, success: false }));
     const result = await backupScheduler.triggerManualBackup('acc-1');
     expect(result.status).toBe('cancelled');
     expect(backupScheduler._stalled.size).toBe(0);
   });
 
   it('consumes the stall mark when a bandwidth stop lands after the watchdog fired', async () => {
-    api.backupRunAccount.mockImplementationOnce(async () => {
+    api.backupRunAccount.mockImplementationOnce(async (accountId) => {
       backupScheduler._stalled.add('acc-1');
-      return {
+      return finishWith({
         cancelled: true, completed_folders: 2, success: false,
         error_message: 'Gmail daily bandwidth limit reached',
-      };
+      })(accountId);
     });
     const result = await backupScheduler.triggerManualBackup('acc-1');
     expect(result.status).toBe('cancelled');
@@ -1153,6 +1201,193 @@ describe('BackupCoordinator — progress listener', () => {
   });
 });
 
+// ── Completion comes from the terminal frame, not the RPC reply ───────────
+//
+// Phase 3 moved the backup run into the daemon and made `backup_run_account`
+// fire-and-forget: it ACKs the start with `{runId}` in milliseconds while the
+// run itself keeps going for minutes. Awaiting that ACK made every run look
+// finished the instant it started — history entry for zero emails, checkpoint
+// cleared, `_running` false — and freed the next tick to start a SECOND run
+// over the top of the live one, which displaces the mirror's security-scoped
+// access the first is still writing through. These specs pin the run to its
+// terminal `backup-progress` frame instead.
+
+describe('BackupCoordinator — completion arrives on the terminal progress frame', () => {
+  beforeEach(resetCoordinator);
+
+  /** The daemon's ACK, and nothing else: no outcome in the RPC's reply. */
+  const ackOnly = () => api.backupRunAccount.mockImplementationOnce(async (id) => ({ runId: id }));
+
+  const terminalFrame = (over = {}) => ({
+    account_id: 'acc-1', folder: 'Complete', total_folders: 3, completed_folders: 3,
+    total_emails: 10, completed_emails: 10, errors: 0, active: false, last_error: null,
+    missing_in_folder: 0, cancelled: false, success: true,
+    external_copy_ok: true, external_copy_error: null, external_copy_failed_count: 0,
+    ...over,
+  });
+
+  it('stays running until the frame, then completes from what the frame says', async () => {
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    // The ACK has long since resolved. Nothing may have completed on it.
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+    expect(backupScheduler.isRunning('acc-1')).toBe(true);
+    expect(mockSettingsState.addBackupHistoryEntry).not.toHaveBeenCalled();
+    expect(await within(promise, 100)).toBe(TIMED_OUT);
+
+    emitBackupProgress(terminalFrame({ completed_emails: 10, completed_folders: 3 }));
+
+    expect(await within(promise)).toMatchObject({ status: 'success' });
+    expect(mockSettingsState.addBackupHistoryEntry).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      emailsBackedUp: 10, success: true,
+    }));
+    expect(backupScheduler.isRunning('acc-1')).toBe(false);
+  });
+
+  it('nothing can start a second run for an account whose frame has not landed', async () => {
+    ackOnly();
+    backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    // Both routes into a new run must decline while the daemon is still
+    // working: a second `hold_backup_path` for this account releases the
+    // mirror scope the live run is writing through.
+    backupScheduler.queueBackup('acc-1');
+    expect(backupScheduler._queue).toEqual([]);
+    backupScheduler.tick();
+    await settle(20);
+    expect(api.backupRunAccount).toHaveBeenCalledTimes(1);
+
+    emitBackupProgress(terminalFrame());
+    await settle();
+    expect(backupScheduler.isRunning('acc-1')).toBe(false);
+  });
+
+  it('a terminal frame for another account does not complete this run', async () => {
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    emitBackupProgress(terminalFrame({ account_id: 'acc-2' }));
+    expect(await within(promise, 100)).toBe(TIMED_OUT);
+
+    emitBackupProgress(terminalFrame());
+    expect(await within(promise)).toMatchObject({ status: 'success' });
+  });
+
+  it('carries the provider\'s own words for a bandwidth stop off the frame', async () => {
+    // `error_message` rides on the frame's `last_error`. Before Task 7b that
+    // field was hardcoded None, which silently dropped this message and the
+    // "N of M could not be fetched" one with it.
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    emitBackupProgress(terminalFrame({
+      folder: 'Cancelled', cancelled: true, success: false, completed_folders: 2,
+      last_error: 'Daily download limit reached for this provider.',
+    }));
+
+    expect(await within(promise)).toMatchObject({ status: 'cancelled' });
+    expect(mockSettingsState.updateBackupState).toHaveBeenCalledWith('acc-1', expect.objectContaining({
+      lastError: 'Daily download limit reached for this provider.',
+    }));
+    expect(backupScheduler._checkpoints.get('acc-1')).toBe(2);
+  });
+
+  it('a failed RPC settles the run rather than parking it on a frame that cannot come', async () => {
+    // Nothing started, so the daemon will never emit anything for this run.
+    // Waiting for a frame here is the one way to wedge the queue permanently.
+    api.backupRunAccount.mockRejectedValueOnce(new Error('daemon unreachable'));
+
+    const result = await within(backupScheduler.triggerManualBackup('acc-1'));
+
+    expect(result).toMatchObject({ status: 'failed' });
+    expect(result.message).toContain('daemon unreachable');
+    expect(backupScheduler._terminalWaiters.size).toBe(0);
+    expect(backupScheduler.isRunning('acc-1')).toBe(false);
+    expect(backupScheduler._queueRunning).toBe(false);
+  });
+
+  it('the watchdog settles a run whose frame never arrives, on its second stall tick', async () => {
+    // The daemon's event bus is a broadcast channel: it drops frames in
+    // flight across a reconnect and queued frames under a lagged receiver. A
+    // run whose terminal frame went that way would park `_runBackup` forever
+    // and hold `_queueRunning` true, wedging every later backup.
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+    backupScheduler.tick();
+    expect(api.backupCancel).toHaveBeenCalledTimes(1);
+    // A cancel normally answers with a terminal frame — give it the chance.
+    expect(await within(promise, 100)).toBe(TIMED_OUT);
+    expect(backupScheduler._stalled.has('acc-1')).toBe(true);
+
+    backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+    backupScheduler.tick();
+
+    expect(await within(promise)).toEqual({
+      status: 'failed', message: t('svc.backupScheduler.stalled', { minutes: 15 }),
+    });
+    expect(backupScheduler.isRunning('acc-1')).toBe(false);
+    expect(backupScheduler._queueRunning).toBe(false);
+  });
+
+  it('a long run making progress is never settled by the watchdog', async () => {
+    // The watchdog's clock is `_lastProgressAt`, restamped by every frame —
+    // a six-hour backup that keeps reporting must never be cut short. A plain
+    // timeout started at the RPC call would fail exactly this run.
+    ackOnly();
+    const promise = backupScheduler.triggerManualBackup('acc-1');
+    await settle(20);
+
+    backupScheduler._lastProgressAt = Date.now() - BACKUP_STALL_MS - 1000;
+    emitBackupProgress(progressPayload({ folder: 'Archive', active: true }));
+    backupScheduler.tick();
+
+    expect(api.backupCancel).not.toHaveBeenCalled();
+    expect(await within(promise, 100)).toBe(TIMED_OUT);
+  });
+});
+
+describe('terminalFrameToResult', () => {
+  it('renames the two fields the frame and BackupResult disagree on', () => {
+    const r = terminalFrameToResult({
+      account_id: 'acc-1', active: false, completed_emails: 788, last_error: '1 of 789 could not be fetched',
+      completed_folders: 9, errors: 1, cancelled: false, success: true,
+    });
+    expect(r.emails_backed_up).toBe(788);
+    expect(r.error_message).toBe('1 of 789 could not be fetched');
+    expect(r.completed_folders).toBe(9);
+    expect(r.errors).toBe(1);
+  });
+
+  it('reads the daemon\'s stand-in frame as a failure, not a success', () => {
+    // A run that died before its own terminal emit is neither complete nor
+    // cancelled. Deriving success from `cancelled` would file it as a clean
+    // backup of zero messages — hence `success` on the wire.
+    const r = terminalFrameToResult({
+      account_id: 'acc-1', folder: 'Error', active: false, cancelled: false, success: false,
+      last_error: 'vault root unavailable', external_copy_ok: false,
+    });
+    expect(r.success).toBe(false);
+    expect(r.cancelled).toBe(false);
+    expect(r.error_message).toBe('vault root unavailable');
+  });
+
+  it('defaults an older frame that omits the new fields to a plain success', () => {
+    expect(terminalFrameToResult({ account_id: 'acc-1', active: false, completed_emails: 7, completed_folders: 2 }))
+      .toMatchObject({
+        success: true, cancelled: false, external_copy_ok: true,
+        emails_backed_up: 7, completed_folders: 2, error_message: null,
+      });
+  });
+});
+
 // ── Edge cases around the manual-queue fix ────────────────────────────────
 //
 // The specs above prove a manual click runs. These prove what happens around
@@ -1164,23 +1399,20 @@ describe('BackupCoordinator - manual trigger edge cases', () => {
   beforeEach(resetCoordinator);
   afterEach(() => { vi.useRealTimers(); });
 
-  /** A promise that never resolves must fail an assertion, not hang the run. */
-  const TIMED_OUT = { status: 'never resolved' };
-  const within = (promise, ms = 300) =>
-    Promise.race([promise, new Promise(r => setTimeout(() => r(TIMED_OUT), ms))]);
-
-  const settle = (ms = 50) => new Promise(r => setTimeout(r, ms));
-
   /**
-   * Hold the next Rust call open. Returns the release, so a spec can put work
-   * behind a run that is genuinely still going.
+   * Hold the next run open. Returns the release, so a spec can put work behind
+   * a run that is genuinely still going.
+   *
+   * The gate now sits where the daemon's run does — between the RPC's ACK and
+   * the terminal frame — which is a truer model of a long backup than gating
+   * the ACK ever was: `_runBackup` is parked on the frame, not on the call.
    */
   function slowRun() {
     let release;
     const gate = new Promise((r) => { release = r; });
-    api.backupRunAccount.mockImplementationOnce(async () => {
-      await gate;
-      return { emails_backed_up: 1, duration_secs: 1, success: true };
+    api.backupRunAccount.mockImplementationOnce(async (accountId) => {
+      gate.then(() => finishWith({ emails_backed_up: 1, duration_secs: 1, success: true })(accountId));
+      return { runId: accountId };
     });
     return async () => { release(); await settle(); };
   }

@@ -37,6 +37,38 @@ export function partialBackupNotice(entry, result = {}) {
 }
 
 /**
+ * A terminal `backup-progress` frame, in the shape the completion handling in
+ * `_runBackup` reads.
+ *
+ * The daemon runs the backup on its own thread and answers `backup_run_account`
+ * with `{runId}` in milliseconds, dropping the run's `BackupResult` on the
+ * floor — so this frame, the one with `active: false`, is the only place that
+ * result reaches the app. Two of its fields are named for the progress frame
+ * they have always ridden on rather than for `BackupResult`: `completed_emails`
+ * is `emails_backed_up`, `last_error` is `error_message`.
+ *
+ * No `duration_secs`: the frame has never carried one and `_runBackup` already
+ * falls back to its own wall clock, which is the truer number now that the work
+ * happens in another process.
+ */
+export function terminalFrameToResult(p = {}) {
+  return {
+    cancelled: p.cancelled === true,
+    completed_folders: p.completed_folders || 0,
+    emails_backed_up: p.completed_emails || 0,
+    errors: p.errors || 0,
+    // Explicit on the wire, never derived from `cancelled`: a run that died
+    // before its own terminal emit is neither complete nor cancelled, and the
+    // daemon's stand-in frame is the only one that says so.
+    success: p.success !== false,
+    error_message: p.last_error || null,
+    external_copy_ok: p.external_copy_ok !== false,
+    external_copy_error: p.external_copy_error || null,
+    external_copy_failed_count: p.external_copy_failed_count || 0,
+  };
+}
+
+/**
  * Lifecycle states for the backup coordinator.
  * Only 'idle' and 'running' allow new work to start.
  * Paused states block queue processing until resumed.
@@ -59,6 +91,7 @@ class BackupCoordinator {
     this._checkpoints = new Map();   // accountId -> completedFolders (resume position)
     this._manualIds = new Set();     // accounts triggered manually (bypass gates)
     this._manualResolvers = new Map(); // accountId -> { promise, resolve } for triggerManualBackup
+    this._terminalWaiters = new Map(); // accountId -> resolve, for the run's terminal backup-progress frame
     this._lastProgressAt = 0;        // last backup-progress / archive-progress event
     this._stalled = new Set();       // accounts the watchdog cancelled (retry, don't call it cancelled)
     this._flushTimer = null;         // trailing flush for the progress throttle
@@ -183,11 +216,31 @@ class BackupCoordinator {
 
     if (this._hasActiveWork() && Date.now() - this._lastProgressAt > BACKUP_STALL_MS) {
       for (const [id, running] of this._running) {
-        if (running) this._stalled.add(id);
+        if (!running) continue;
+        // Already marked on an earlier tick: the cancel we sent then
+        // produced no terminal frame either, so none is coming. The daemon's
+        // event bus is a broadcast channel — it drops frames in flight
+        // across a channel reconnect and queued frames under a lagged
+        // receiver — and a run whose frame went that way would park
+        // `_runBackup` forever, which holds `_queueRunning` true and wedges
+        // the whole queue, not just this account. Settle it ourselves.
+        //
+        // Not a timer of its own: the watchdog's clock is `_lastProgressAt`,
+        // restamped by every progress frame, so a genuinely slow six-hour
+        // backup never reaches here. A fixed timeout from the RPC call would
+        // false-fail it.
+        if (this._stalled.has(id) && this._settleRun(id, terminalFrameToResult({
+          account_id: id, active: false, cancelled: true, success: false,
+        }))) {
+          console.warn(`[backup] tick: ${id} reported no terminal frame after a cancel — settling it as stalled`);
+          continue; // stays marked: the cancelled branch routes it to a retry
+        }
+        this._stalled.add(id);
       }
       console.warn(`[backup] tick: no progress for ${BACKUP_STALL_MS / 60_000} minutes — cancelling the run`);
-      // Rust returns { cancelled: true, completed_folders } through the normal
-      // path; _runBackup routes it to a retry because the id is in _stalled.
+      // The daemon reports { cancelled: true, completed_folders } on its
+      // terminal frame through the normal path; _runBackup routes it to a
+      // retry because the id is in _stalled.
       api.backupCancel(this._activeAccountId()).catch(() => {});
     }
   }
@@ -373,7 +426,29 @@ class BackupCoordinator {
       // A stall mark set while this account was still resolving credentials
       // belongs to no Rust run; only one set from here on counts.
       this._stalled.delete(accountId);
-      const result = await api.backupRunAccount(accountId, JSON.stringify(freshAccount), null, skipFolders);
+
+      // `backup_run_account` is fire-and-forget: it ACKs the start with
+      // `{runId}` in milliseconds and the daemon keeps running for minutes
+      // afterwards. Its reply says nothing about the outcome — the run's
+      // terminal `backup-progress` frame does — so this awaits the frame.
+      //
+      // Awaiting the ACK instead is what made this account look finished
+      // while its run was still live: `_running` cleared, a history entry
+      // filed for zero emails, and the next tick free to start a SECOND run
+      // over the top of the first (which displaces the mirror's
+      // security-scoped access the first one is still writing through —
+      // `src-tauri/src/backup.rs`'s `hold_backup_path`).
+      const done = new Promise((resolve) => { this._terminalWaiters.set(accountId, resolve); });
+      try {
+        await api.backupRunAccount(accountId, JSON.stringify(freshAccount), null, skipFolders);
+      } catch (err) {
+        // The run never started, so no frame is ever coming for it. Drop the
+        // waiter here rather than park this account on an event that cannot
+        // arrive; the catch below reports the failure exactly as it always has.
+        this._terminalWaiters.delete(accountId);
+        throw err;
+      }
+      const result = await done;
 
       // Track checkpoint for potential resume
       if (result.cancelled) {
@@ -600,6 +675,21 @@ class BackupCoordinator {
     return this._queue.some(id => this._manualIds.has(id));
   }
 
+  /**
+   * Hand a run its outcome (if one is still waiting for it).
+   *
+   * Two callers: the terminal `backup-progress` frame, which is the normal
+   * path, and `tick`'s watchdog for the runs no frame ever arrives for.
+   * Returns whether anything was waiting.
+   */
+  _settleRun(accountId, result) {
+    const resolve = this._terminalWaiters.get(accountId);
+    if (!resolve) return false;
+    this._terminalWaiters.delete(accountId);
+    resolve(result);
+    return true;
+  }
+
   /** Resolve the manual-backup promise for an account (if one exists). */
   _resolveManual(accountId, result) {
     const entry = this._manualResolvers.get(accountId);
@@ -701,6 +791,14 @@ class BackupCoordinator {
         if (event.payload.active === false) {
           if (this._flushTimer) clearTimeout(this._flushTimer);
           apply();
+          // The same frame, second job: it is also the daemon's only report
+          // that the run is over, so it is what completes `_runBackup`'s
+          // await. Deliberately this listener and not a second
+          // `listen('backup-progress')` — one subscription, one throttle,
+          // and no way for the two to disagree about which frame is final.
+          // Keyed off the payload, not the store: a frame for an account the
+          // card is not showing still has a run waiting on it.
+          this._settleRun(event.payload.account_id, terminalFrameToResult(event.payload));
           return;
         }
         // Throttle store updates to once per 2 seconds to avoid flooding re-renders,

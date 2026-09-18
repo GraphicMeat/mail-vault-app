@@ -172,6 +172,11 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
                 // outcome — `false` is the conservative default so nothing
                 // downstream mistakes "unknown" for "succeeded".
                 cancelled: false,
+                // The one frame that is neither a completion nor a cancel.
+                // Explicit, because JS reads `success !== false` and would
+                // otherwise file this dead run as a clean backup of zero
+                // messages — see `BackupProgress::success` (Task 7b).
+                success: false,
                 external_copy_ok: false,
                 external_copy_error: None,
                 external_copy_failed_count: 0,

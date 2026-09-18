@@ -88,6 +88,15 @@ pub struct BackupProgress {
     /// value. Field-for-field with `BackupResult::cancelled`.
     #[serde(default)]
     pub cancelled: bool,
+    /// Field-for-field with `BackupResult::success`. Explicit rather than
+    /// derived, because the one frame that is neither a completion nor a
+    /// cancel — the daemon's `Err` synthesis, for a run that died before it
+    /// reached its own terminal emit — is a failure that `!cancelled` would
+    /// report as a success. JS reads `success !== false`, so a frame that
+    /// simply omitted it would file a dead run as a clean backup of zero
+    /// messages (Task 7b).
+    #[serde(default = "default_true")]
+    pub success: bool,
     /// Field-for-field with `BackupResult::external_copy_ok`.
     #[serde(default = "default_true")]
     pub external_copy_ok: bool,
@@ -138,6 +147,16 @@ fn default_true() -> bool {
 /// (normal completion, cancel, or zero folders/mailboxes). Shared so the two
 /// twins can't drift on this shape again the way Graph's terminal frame was
 /// simply missing before this fix — see the module doc's Task 7a note.
+///
+/// `error_message` is `BackupResult::error_message` — the provider's own
+/// words for why a run stopped early (a Gmail daily-bandwidth stop) or what
+/// it lost on the way (`partial_error_message`'s "N of M messages could not
+/// be fetched"). It rides on `last_error`, the frame's pre-existing field for
+/// exactly this, because the daemon drops the run's `BackupResult` on the
+/// floor (Task 7a) and this frame is now the only path those words have to
+/// the user. Task 7a added `cancelled`/`external_copy_*` here but left
+/// `last_error` hardcoded `None`, which silently dropped both messages —
+/// completed in Task 7b, alongside the frontend that reads them.
 fn terminal_backup_progress(
     account_id: &str,
     cancelled: bool,
@@ -146,6 +165,7 @@ fn terminal_backup_progress(
     total_backed_up: usize,
     total_errors: usize,
     total_ext_failures: usize,
+    error_message: Option<String>,
 ) -> BackupProgress {
     BackupProgress {
         account_id: account_id.to_string(),
@@ -156,9 +176,12 @@ fn terminal_backup_progress(
         completed_emails: total_backed_up,
         errors: total_errors,
         active: false,
-        last_error: None,
+        last_error: error_message,
         missing_in_folder: 0,
         cancelled,
+        // Same rule both runners' `BackupResult` uses: a message the server
+        // refused is a partial result, not a failed run.
+        success: !cancelled,
         external_copy_ok: total_ext_failures == 0,
         external_copy_error: if total_ext_failures > 0 {
             Some(format!("{} emails failed to copy to external backup", total_ext_failures))
@@ -354,6 +377,9 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
                 last_error: None,
                 missing_in_folder: missing.len(),
                 cancelled: false,
+                // Mid-run: nothing has failed the run yet. Only the terminal
+                // frame's value is ever read for completion.
+                success: true,
                 external_copy_ok: total_ext_failures == 0,
                 external_copy_error: None,
                 external_copy_failed_count: total_ext_failures,
@@ -439,11 +465,21 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         completed_folders += 1;
     }
 
+    // Built here rather than inline in the `BackupResult` below, so the
+    // terminal frame and the return value carry the same words — the frame
+    // is the only one of the two JS ever sees (Task 7a/7b).
+    let error_message = if bandwidth_limited {
+        Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
+    } else {
+        partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())
+    };
+
     // Emit final completion/cancelled event (single event per account). Now
-    // carries the same completion data (`cancelled`, `external_copy_*`) the
-    // function's own `BackupResult` return value carries a few lines below —
-    // Task 7a: the RPC return value is fire-and-forget dropped by the
-    // daemon, so this frame is the only place JS can read it from.
+    // carries the same completion data (`cancelled`, `external_copy_*`,
+    // `error_message`) the function's own `BackupResult` return value
+    // carries a few lines below — Task 7a: the RPC return value is
+    // fire-and-forget dropped by the daemon, so this frame is the only place
+    // JS can read it from.
     (ctx.on_progress)(terminal_backup_progress(
         account_id,
         cancelled,
@@ -452,6 +488,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         total_backed_up,
         total_errors,
         total_ext_failures,
+        error_message.clone(),
     ));
 
     let duration = start.elapsed().as_secs_f64();
@@ -477,11 +514,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
         // A message the server refused is a partial result, not a failed run:
         // the other N-1 are on disk and re-running is what fixes the one.
         success: !cancelled,
-        error_message: if bandwidth_limited {
-            Some("Daily download limit reached for this provider. Backup stopped — it will pick up where it left off after the limit resets (usually within 1 hour, up to 24 hours).".to_string())
-        } else {
-            partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())
-        },
+        error_message,
         cancelled,
         completed_folders,
         external_copy_ok: total_ext_failures == 0,
@@ -782,6 +815,9 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
             last_error: None,
             missing_in_folder: 0,
             cancelled: false,
+            // Mid-run: nothing has failed the run yet. Only the terminal
+            // frame's value is ever read for completion.
+            success: true,
             external_copy_ok: total_ext_failures == 0,
             external_copy_error: None,
             external_copy_failed_count: total_ext_failures,
@@ -794,14 +830,30 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
     // never runs an iteration at all). This is the fix for Problem 2: before
     // this, only the per-folder emit above ever reported `active: false`,
     // and only by coincidence on the last folder of an uncancelled run.
+    //
+    // Both values are built once, here, and shared with the `BackupResult`
+    // below so the frame and the return value can never disagree. The
+    // checkpoint in particular MUST be the clamped one: JS feeds the frame's
+    // `completed_folders` straight back as the next run's `skip_folders`
+    // (`backupScheduler.js`'s `_checkpoints`), so handing it the raw count
+    // would have a resumed run skip clean past the folder the uid ledger
+    // refused — which stored nothing. Task 7a emitted the raw count here;
+    // inert then because nothing read the frame, load-bearing the moment
+    // Task 7b made it the source of truth.
+    let checkpoint = graph_completed_folders_checkpoint(completed_folders, refused.as_ref(), cancelled);
+    let error_message = refused
+        .as_ref()
+        .map(|(_, why)| why.clone())
+        .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref()));
     (ctx.on_progress)(terminal_backup_progress(
         account_id,
         cancelled,
         total_folders,
-        completed_folders,
+        checkpoint,
         total_backed_up,
         total_errors,
         total_ext_failures,
+        error_message.clone(),
     ));
 
     let duration = start.elapsed().as_secs_f64();
@@ -821,14 +873,12 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         errors: total_errors,
         duration_secs: duration,
         success: !cancelled,
-        error_message: refused
-            .as_ref()
-            .map(|(_, why)| why.clone())
-            .or_else(|| partial_error_message(total_errors, total_backed_up, last_message_error.as_deref())),
+        error_message,
         cancelled,
         // What the scheduler resumes from after a cancel. A folder the
         // ledger refused stored nothing, and a resumed run would skip it.
-        completed_folders: graph_completed_folders_checkpoint(completed_folders, refused.as_ref(), cancelled),
+        // Same value the terminal frame above carries, by construction.
+        completed_folders: checkpoint,
         external_copy_ok: total_ext_failures == 0,
         external_copy_error: if total_ext_failures > 0 {
             Some(format!("{} emails failed to copy to external backup", total_ext_failures))
@@ -1807,9 +1857,10 @@ mod tests {
     // iteration. Before this fix, Graph had no call to it at all.
     #[test]
     fn terminal_backup_progress_reports_cancelled_with_no_external_failures() {
-        let progress = terminal_backup_progress("acct-1", true, 5, 2, 10, 1, 0);
+        let progress = terminal_backup_progress("acct-1", true, 5, 2, 10, 1, 0, None);
         assert!(!progress.active, "the terminal frame is always the one that flips active off");
         assert!(progress.cancelled);
+        assert!(!progress.success, "a cancelled run is not a successful one");
         assert_eq!(progress.folder, "Cancelled");
         assert!(progress.external_copy_ok, "no external failures means ok stays true");
         assert!(progress.external_copy_error.is_none());
@@ -1819,11 +1870,27 @@ mod tests {
         assert_eq!(progress.errors, 1);
     }
 
+    /// Task 7b: the frame is the only path `BackupResult::error_message` has
+    /// to the user now that the daemon drops the run's result — a Gmail
+    /// bandwidth stop and `partial_error_message`'s "N of M could not be
+    /// fetched" both ride here, on `last_error`. Task 7a hardcoded it `None`.
+    #[test]
+    fn terminal_backup_progress_carries_the_runs_error_message() {
+        let why = "Daily download limit reached for this provider.".to_string();
+        let progress = terminal_backup_progress("acct-1", true, 5, 2, 10, 0, 0, Some(why.clone()));
+        assert_eq!(progress.last_error.as_deref(), Some(why.as_str()));
+
+        let clean = terminal_backup_progress("acct-1", false, 5, 5, 10, 0, 0, None);
+        assert!(clean.last_error.is_none(), "a run with nothing to report carries no message");
+        assert!(clean.success);
+    }
+
     #[test]
     fn terminal_backup_progress_reports_completion_and_external_failures() {
-        let progress = terminal_backup_progress("acct-1", false, 5, 5, 20, 0, 3);
+        let progress = terminal_backup_progress("acct-1", false, 5, 5, 20, 0, 3, None);
         assert!(!progress.active);
         assert!(!progress.cancelled);
+        assert!(progress.success, "an external-copy failure is a degraded run, not a failed one");
         assert_eq!(progress.folder, "Complete");
         assert!(!progress.external_copy_ok);
         assert_eq!(progress.external_copy_failed_count, 3);
