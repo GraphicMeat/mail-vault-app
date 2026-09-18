@@ -71,9 +71,18 @@ describe('vault-location commands stay registered as daemon forwarders (Phase 6)
   });
 
   it('vault.rs keeps the app-only bookmark broker and local status cache', () => {
-    for (const fn of ['pub fn resolve', 'pub fn root', 'pub fn status', 'pub fn reset', 'pub fn inspect_folder', 'pub struct VaultState']) {
+    for (const fn of ['pub fn resolve', 'pub fn status', 'pub fn reset', 'pub fn inspect_folder', 'pub struct VaultState']) {
       expect(vaultRs).toContain(fn);
     }
+  });
+
+  // Phase 3 remainder, Task 5: `root()` handed the mail-data directory to
+  // app-side readers and writers. The backup runners were the last of those,
+  // so it was deleted — every vault path now resolves inside the daemon
+  // (`handlers::common::vault_root`). The `Resolved` cache stays for
+  // `status()`, which is why the assertion above still holds.
+  it('vault.rs no longer hands out the mail-data root to app-side callers', () => {
+    expect(vaultRs).not.toContain('pub fn root');
   });
 });
 
