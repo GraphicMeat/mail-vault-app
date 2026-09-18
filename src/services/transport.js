@@ -232,6 +232,10 @@ export const DAEMON_OWNED = new Set([
   // web-build fallback, unrelated to daemon routing), so AccountModal.jsx
   // and ChangeServerModal.jsx reroute automatically.
   'resolve_email_settings', 'dns_mail_health',
+  // Task 6: the daemon's cancel token is per-account (`DaemonState.backup_runs`
+  // keyed by accountId), replacing the app's old single global
+  // `BackupCancelToken` — Tauri twin deleted in this same task.
+  'backup_cancel',
 ]);
 
 async function sendToDaemon(command, args) {

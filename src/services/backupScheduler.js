@@ -160,7 +160,7 @@ class BackupCoordinator {
       this._resolveManual(accountId, { status: 'cancelled' });
     }
     if (this._hasActiveWork()) {
-      api.backupCancel().catch(() => {});
+      api.backupCancel(this._activeAccountId()).catch(() => {});
     }
   }
 
@@ -188,7 +188,7 @@ class BackupCoordinator {
       console.warn(`[backup] tick: no progress for ${BACKUP_STALL_MS / 60_000} minutes — cancelling the run`);
       // Rust returns { cancelled: true, completed_folders } through the normal
       // path; _runBackup routes it to a retry because the id is in _stalled.
-      api.backupCancel().catch(() => {});
+      api.backupCancel(this._activeAccountId()).catch(() => {});
     }
   }
 
@@ -580,10 +580,15 @@ class BackupCoordinator {
   }
 
   _hasActiveWork() {
-    for (const [, running] of this._running) {
-      if (running) return true;
+    return this._activeAccountId() !== null;
+  }
+
+  /** The account currently mid-backup, if any — the queue runs one at a time. */
+  _activeAccountId() {
+    for (const [accountId, running] of this._running) {
+      if (running) return accountId;
     }
-    return false;
+    return null;
   }
 
   /** Mirror the queue into the store so every account card can show its place. */
@@ -605,15 +610,9 @@ class BackupCoordinator {
   }
 
   _pauseCurrentBackup() {
-    // Find the currently running account
-    for (const [accountId, running] of this._running) {
-      if (running) {
-        this._pausedAccountId = accountId;
-        break;
-      }
-    }
+    this._pausedAccountId = this._activeAccountId();
     // Cancel the Rust-side backup — it will cause the await in _runBackup to reject/return
-    api.backupCancel().catch(() => {});
+    api.backupCancel(this._pausedAccountId).catch(() => {});
   }
 
   _resumeInterrupted() {

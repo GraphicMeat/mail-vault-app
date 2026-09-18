@@ -25,8 +25,7 @@
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use tauri::Manager;
 use tracing::{info, warn};
 
@@ -90,19 +89,6 @@ pub(crate) fn resolve_backup_path(
 /// Release bookmark-based access if it was started.
 pub(crate) fn release_backup_path(path: &str) {
     external_location::release_external_access(path);
-}
-
-// ── Cancellation token (shared app state) ────────────────────────────────────
-//
-// Kept as-is for Task 6, which deletes `backup_cancel`'s Tauri command and
-// this state together (cancellation is `DaemonState.backup_runs` now).
-
-pub struct BackupCancelToken(pub std::sync::Mutex<Arc<AtomicBool>>);
-
-impl Default for BackupCancelToken {
-    fn default() -> Self {
-        BackupCancelToken(std::sync::Mutex::new(Arc::new(AtomicBool::new(false))))
-    }
 }
 
 // ── Bookmark scopes held for an in-flight run ────────────────────────────────

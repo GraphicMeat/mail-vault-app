@@ -42,7 +42,7 @@ export default function BackupConfig() {
     // app data dir — reading the data dir here would name a folder that is not
     // where the mail is.
     api.vaultGetStatus().then(s => setDefaultBackupPath(s?.displayPath || null)).catch(() => {}).finally(() => setPathLoading(false));
-    inv('backup_get_external_location').then(loc => {
+    api.backupGetExternalLocation().then(loc => {
       if (loc?.status !== 'not_configured') setExternalBackupLocation(loc);
     }).catch(() => {});
     const legacy = useSettingsStore.getState().backupCustomPath;

@@ -1,4 +1,3 @@
-use std::sync::atomic::Ordering;
 use tauri::Manager;
 
 use crate::backup;
@@ -147,15 +146,6 @@ pub async fn backup_status(
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
-}
-
-#[tauri::command]
-pub async fn backup_cancel(
-    cancel_token: tauri::State<'_, backup::BackupCancelToken>,
-) -> Result<(), String> {
-    let guard = cancel_token.0.lock().unwrap();
-    guard.store(true, Ordering::Relaxed);
-    Ok(())
 }
 
 // ── External backup location ─────────────────────────────────────────────

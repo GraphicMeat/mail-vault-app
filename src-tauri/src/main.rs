@@ -2698,7 +2698,6 @@ fn main() {
     // `backup.rs`'s process-global `pool()` and `archive.rs`'s shim, the last
     // app-side IMAP callers.
     let builder = builder
-        .manage(backup::BackupCancelToken::default())
         .manage(backup::HeldBackupPaths::default())
         .manage(dropped_files::DroppedPaths::default())
         .manage(iap::IapState::new())
@@ -2767,7 +2766,6 @@ fn main() {
             // transport.js's DAEMON_OWNED, no Tauri command left to register.
             commands::backup_run_account,
             commands::backup_status,
-            commands::backup_cancel,
             commands::backup_save_external_location,
             commands::backup_get_external_location,
             commands::backup_validate_external_location,

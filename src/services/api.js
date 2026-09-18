@@ -663,8 +663,8 @@ export async function backupStatus(accountId, accountJson, backupPath = null) {
   return tauriInvoke('backup_status', { accountId, accountJson, backupPath });
 }
 
-export async function backupCancel() {
-  return tauriInvoke('backup_cancel', {});
+export async function backupCancel(accountId) {
+  return tauriInvoke('backup_cancel', { accountId });
 }
 
 // `target` ({ accountId, mailbox, uid? }) is what a click on the banner opens.
