@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync } from 'fs';
 import { resolve } from 'path';
-import { execSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '../..');
-const APP_BUNDLE = resolve(ROOT, 'src-tauri/target/release/bundle/macos/MailVault.app');
+const APP_BUNDLE = resolve(ROOT, 'target/release/bundle/macos/MailVault.app');
 const DAEMON_BIN = resolve(APP_BUNDLE, 'Contents/MacOS/mailvault-daemon');
 
 const bundleExists = existsSync(APP_BUNDLE);
@@ -33,6 +33,19 @@ describe('Post-Build DMG Smoke Tests', () => {
       encoding: 'utf-8',
     });
     expect(result.trim()).toBe('');
+  });
+
+  it('packaged daemon declares itself background-only', () => {
+    if (!bundleExists) {
+      console.log('Skipping: app bundle not found');
+      return;
+    }
+    const value = execFileSync(
+      'plutil',
+      ['-extract', 'LSBackgroundOnly', 'raw', '-o', '-', DAEMON_BIN],
+      { encoding: 'utf8' },
+    );
+    expect(value.trim()).toBe('true');
   });
 
   it('legacy mailvault-server sidecar is absent', () => {
