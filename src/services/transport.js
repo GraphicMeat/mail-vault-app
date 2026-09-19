@@ -120,6 +120,8 @@ function mapArgs(command, args) {
 // test guards against.
 export const DAEMON_OWNED = new Set([
   'vault_search', 'vault_rows', 'search_index_configure', 'search_index_status', 'search_index_rebuild', 'search_index_destroy',
+  // Task 5: the daemon owns the search-run and cancellation lifecycle.
+  'mail_search_start', 'mail_search_cancel',
   'maildir_read', 'maildir_read_light', 'maildir_read_light_batch', 'maildir_read_raw_source', 'maildir_read_attachment',
   'maildir_exists', 'maildir_list', 'maildir_storage_stats', 'maildir_orphan_stats',
   'cache_attachment', 'cached_attachment_path', 'prefetch_attachments',

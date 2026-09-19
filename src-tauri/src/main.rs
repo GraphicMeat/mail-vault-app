@@ -2236,7 +2236,7 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
         | "load_graph_id_map" | "op_journal_queue" | "op_journal_clear" | "op_journal_read"
         | "read_pending_operation" | "save_pending_operation" | "clear_pending_operation" | "local_index_read"
         | "local_index_append" | "local_index_remove" | "custody_status" | "maildir_repair_generation"
-        | "maildir_orphan_stats" => Some(Duration::from_secs(30)),
+        | "maildir_orphan_stats" | "mail_search_start" | "mail_search_cancel" => Some(Duration::from_secs(30)),
 
         // I3 (2.6 review): `maildir_read_light_batch` and `maildir_list` can
         // be sent for a whole mailbox's uids in one call (`getLocalEmails`,
@@ -3520,7 +3520,7 @@ mod tests {
             "load_graph_id_map", "op_journal_queue", "op_journal_clear", "op_journal_read",
             "read_pending_operation", "save_pending_operation", "clear_pending_operation", "local_index_read",
             "local_index_append", "local_index_remove", "custody_status", "maildir_repair_generation",
-            "maildir_orphan_stats",
+            "maildir_orphan_stats", "mail_search_start", "mail_search_cancel",
         ] {
             assert_eq!(crate::reply_timeout(method), Some(std::time::Duration::from_secs(30)), "method={method}");
         }
