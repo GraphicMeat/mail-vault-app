@@ -17,12 +17,20 @@ import { insightsBodyMatchesHeader } from '../../utils/insights/messageIdentity'
 
 // Module-level mark-as-read timer
 let _markAsReadTimer = null;
+let _markAsReadStore = null;
+
+function _clearPendingMarkRead() {
+  if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
+  _markAsReadTimer = null;
+  _markAsReadStore?.setState({ markReadProgress: null });
+  _markAsReadStore = null;
+}
 
 let _insightsSelectionGeneration = 0;
 export function getSelectionGeneration() { return _insightsSelectionGeneration; }
 export function cancelSelection() {
   _insightsSelectionGeneration += 1;
-  if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
+  _clearPendingMarkRead();
 }
 export const cancelInsightsSelection = cancelSelection;
 
@@ -95,11 +103,17 @@ async function _autoMarkRead(useMailStore, { email, accountId, mailbox, uid, isU
   };
 
   if (markAsReadMode === 'delay') {
-    if (_markAsReadTimer) clearTimeout(_markAsReadTimer);
+    _clearPendingMarkRead();
+    const startedAt = Date.now();
+    const delay = (markAsReadDelay || 3) * 1000;
+    _markAsReadStore = useMailStore;
+    useMailStore.setState({ markReadProgress: { startedAt, endsAt: startedAt + delay } });
     _markAsReadTimer = setTimeout(() => {
       _markAsReadTimer = null;
+      useMailStore.setState({ markReadProgress: null });
+      _markAsReadStore = null;
       void doMark();
-    }, (markAsReadDelay || 3) * 1000);
+    }, delay);
     return email;
   }
 
@@ -364,7 +378,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   const cacheLimitMB = useSettingsStore.getState().cacheLimitMB;
 
   // Cancel any pending delayed mark-as-read from previous email
-  if (_markAsReadTimer) { clearTimeout(_markAsReadTimer); _markAsReadTimer = null; }
+  _clearPendingMarkRead();
 
   // Which account and folder a message came from is not recoverable from the
   // message: a body fetched from the server carries neither, so reply/forward

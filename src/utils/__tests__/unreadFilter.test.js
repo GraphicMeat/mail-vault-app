@@ -39,6 +39,17 @@ describe('filterUnread', () => {
     expect(filterUnread(list, true, 3).map(e => e.uid)).toEqual([2, 3, 4]);
   });
 
+  it('keeps a selected read message whose row uses a composite key', () => {
+    const spanning = [
+      { ...unread(2), _accountId: 'a', _mailbox: 'INBOX' },
+      { ...read(3), _accountId: 'b', _mailbox: 'Archive' },
+    ];
+    const keyOf = e => `${e._accountId}:${e._mailbox}:${e.uid}`;
+
+    expect(filterUnread(spanning, true, 'b:Archive:3', keyOf).map(keyOf))
+      .toEqual(['a:INBOX:2', 'b:Archive:3']);
+  });
+
   it('does not duplicate the selected message when it is already unread', () => {
     expect(filterUnread(list, true, 2).map(e => e.uid)).toEqual([2, 4]);
   });

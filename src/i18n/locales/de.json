@@ -1841,6 +1841,7 @@
   "compose.delay3m": "3 Min. Verzögerung",
   "compose.delay5m": "5 Min. Verzögerung",
   "viewer.loadingMessage": "Nachricht wird geladen…",
+  "viewer.markingAsRead": "Wird als gelesen markiert",
   "vaultAlert.reconnectDriveOrPointAtFolder": "Schließe das Laufwerk wieder an oder zeige MailVault den Ordner, falls er verschoben wurde.",
   "offlineBanner.title": "Keine Internetverbindung",
   "offlineBanner.body": "Deine E-Mails sind weiterhin da – MailVault zeigt, was bereits auf diesem Computer gespeichert ist. Der Abgleich wird automatisch fortgesetzt, sobald du wieder online bist.",

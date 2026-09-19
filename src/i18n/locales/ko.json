@@ -1841,6 +1841,7 @@
   "compose.delay3m": "3분 지연",
   "compose.delay5m": "5분 지연",
   "viewer.loadingMessage": "메시지 불러오는 중…",
+  "viewer.markingAsRead": "읽음으로 표시 중",
   "vaultAlert.reconnectDriveOrPointAtFolder": "드라이브를 다시 연결하거나, 폴더가 옮겨졌다면 MailVault에 위치를 알려 주세요.",
   "offlineBanner.title": "인터넷에 연결되어 있지 않습니다",
   "offlineBanner.body": "메일은 그대로 있습니다. MailVault는 이 컴퓨터에 이미 저장된 내용을 보여 주고 있습니다. 다시 온라인 상태가 되면 동기화가 자동으로 재개됩니다.",

@@ -1841,6 +1841,7 @@
   "compose.delay3m": "ritardo di 3 min",
   "compose.delay5m": "ritardo di 5 min",
   "viewer.loadingMessage": "Caricamento del messaggio…",
+  "viewer.markingAsRead": "Contrassegno come letto",
   "vaultAlert.reconnectDriveOrPointAtFolder": "Ricollega l'unità oppure indica a MailVault la cartella se è stata spostata.",
   "offlineBanner.title": "Nessuna connessione a internet",
   "offlineBanner.body": "La tua posta è ancora qui: MailVault mostra ciò che è già salvato su questo computer. La sincronizzazione riprenderà da sola quando tornerai online.",

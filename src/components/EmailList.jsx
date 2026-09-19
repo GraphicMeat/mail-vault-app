@@ -399,7 +399,8 @@ function EmailListComponent({ stacked = false }) {
   // filterUnread hands back the very same array when the filter is off, so the
   // identity checks downstream (row cache, thread cache) stay hot.
   const displayEmails = useMemo(
-    () => filterUnread(searchActive ? searchResults : sortedEmails, unreadOnly, selectedEmailId),
+    () => filterUnread(searchActive ? searchResults : sortedEmails, unreadOnly, selectedEmailId,
+      e => selectionKey(e, useMailStore.getState())),
     [searchActive, searchResults, sortedEmails, unreadOnly, selectedEmailId]
   );
 
@@ -518,7 +519,9 @@ function EmailListComponent({ stacked = false }) {
 
     // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
     const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
-    const emails = usesMerged ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId) : displayEmails;
+    const emails = usesMerged
+      ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId, e => selectionKey(e, useMailStore.getState()))
+      : displayEmails;
     const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}-${unreadOnly}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
