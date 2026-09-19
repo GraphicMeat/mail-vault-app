@@ -89,8 +89,8 @@ describe('daemon-backed search lifecycle', () => {
       addSearchToHistory: vi.fn(),
     };
     harness.started = [];
-    harness.startMailSearch.mockReset().mockImplementation(async (request, onProgress) => {
-      const run = { request, onProgress, unlisten: vi.fn() };
+    harness.startMailSearch.mockReset().mockImplementation(async (request, onProgress, onReconnect) => {
+      const run = { request, onProgress, onReconnect, unlisten: vi.fn() };
       harness.started.push(run);
       return { unlisten: run.unlisten };
     });
@@ -267,6 +267,15 @@ describe('daemon-backed search lifecycle', () => {
     expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['server']);
   });
 
+  it('surfaces an incomplete available index as building before the fallback scan arrives', async () => {
+    const run = await startSearch('invoice');
+    const coverage = { indexed: 20, total: 100, complete: false, matched: 4, shown: 4 };
+    progress(run, 1, { localMode: 'index', fallbackReason: 'building', coverage });
+
+    expect(useSearchStore.getState().searchFallback).toBe('building');
+    expect(useSearchStore.getState().searchIndexCoverage).toEqual(coverage);
+  });
+
   it('cancels a previous query and ignores its late frames', async () => {
     const oldRun = await startSearch('old query');
     const newRun = await startSearch('new query');
@@ -277,6 +286,23 @@ describe('daemon-backed search lifecycle', () => {
     expect(harness.cancelMailSearch).toHaveBeenCalledWith(oldRun.request.searchId);
     expect(newRun.request.searchId).not.toBe(oldRun.request.searchId);
     expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['current']);
+  });
+
+  it('restarts the acknowledged search after a daemon reconnect and ignores the lost run', async () => {
+    const lostRun = await startSearch('invoice');
+    progress(lostRun, 1, { rows: [result(20, 'before restart')] });
+
+    await lostRun.onReconnect?.();
+
+    expect(harness.started).toHaveLength(2);
+    const restartedRun = harness.started[1];
+    expect(harness.cancelMailSearch).toHaveBeenCalledWith(lostRun.request.searchId);
+    expect(restartedRun.request.query).toBe('invoice');
+    progress(lostRun, 2, { rows: [result(21, 'stale after restart')] });
+    progress(restartedRun, 1, { rows: [result(22, 'current after restart')] });
+
+    expect(useSearchStore.getState().activeSearchId).toBe(restartedRun.request.searchId);
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['current after restart']);
   });
 
   it('keeps account-local message identity and dedupes copies by normalized Message-ID', async () => {

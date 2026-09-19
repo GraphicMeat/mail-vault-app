@@ -1,18 +1,29 @@
 import { listen } from '@tauri-apps/api/event';
 import { send } from './transport.js';
+import { onDaemonReconnected } from './searchIndex.js';
 
 const PROGRESS_EVENT = 'mail-search-progress';
 
-export async function startMailSearch(request, onProgress) {
-  const unlisten = await listen(PROGRESS_EVENT, event => {
+export async function startMailSearch(request, onProgress, onReconnect) {
+  const unlistenProgress = await listen(PROGRESS_EVENT, event => {
     if (event?.event === PROGRESS_EVENT) onProgress?.(event.payload);
   });
+  let acknowledged = false;
+  let unlistenReconnect = null;
+  const unlisten = () => {
+    try { unlistenProgress?.(); } catch { /* Cleanup both event listeners independently. */ }
+    try { unlistenReconnect?.(); } catch { /* The other listener is still released. */ }
+  };
 
   try {
+    unlistenReconnect = await onDaemonReconnected(() => {
+      if (acknowledged) onReconnect?.();
+    });
     await send('mail_search_start', request);
+    acknowledged = true;
     return { unlisten };
   } catch (error) {
-    try { unlisten?.(); } catch { /* Preserve the start failure. */ }
+    unlisten();
     throw error;
   }
 }

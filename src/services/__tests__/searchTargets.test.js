@@ -112,6 +112,23 @@ describe('buildSearchTargets', () => {
     expect(auth.ensureFreshToken).not.toHaveBeenCalled();
   });
 
+  it('keeps local-only targets token-free even when server credentials exist', async () => {
+    const mail = {
+      accounts: [account('a')],
+      activeAccountId: 'a',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      mailboxes: [box('INBOX', 'INBOX')],
+    };
+
+    const [target] = await buildSearchTargets(mail, settings(), { ...filters('current'), location: 'local' });
+
+    expect(target.account).toBeNull();
+    expect(target.serverMailboxes).toEqual([]);
+    expect(target.localMailboxes).toEqual(['INBOX']);
+    expect(auth.ensureFreshToken).not.toHaveBeenCalled();
+  });
+
   it('keeps a named-folder search scoped to the active account in unified mode', async () => {
     const mail = {
       accounts: [account('a'), account('b')],

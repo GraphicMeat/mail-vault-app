@@ -262,6 +262,39 @@ describe('EmailList virtualization', () => {
     expect(lastVirtualizerConfig.count).toBe(500);
   });
 
+  it('passes a clicked search result row into message selection', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const search = useSearchStore.getState();
+    const settings = useSettingsStore.getState();
+    const previousMail = { ...mail };
+    const previousSearch = { ...search };
+    const previousSettings = { ...settings };
+    const hit = {
+      ...makeEmails(1)[0], _accountId: 'acc1', _mailbox: 'Sent', source: 'local',
+      messageId: '<search-hit@example.test>',
+    };
+    try {
+      mail.selectEmail.mockClear();
+      Object.assign(mail, { activeMailbox: 'UNIFIED', unifiedInbox: true, sortedEmails: [], sentEmails: [] });
+      Object.assign(search, { searchActive: true, searchResults: [hit] });
+      Object.assign(settings, { threadMode: 'flat' });
+      const { container } = render(React.createElement(EmailList));
+
+      fireEvent.click(container.querySelector('[data-testid="email-row"][data-uid="1"]'));
+
+      expect(mail.selectEmail).toHaveBeenLastCalledWith(expect.anything(), 'local', 'Sent', null, hit);
+    } finally {
+      cleanup();
+      Object.assign(mail, previousMail);
+      Object.assign(search, previousSearch);
+      Object.assign(settings, previousSettings);
+    }
+  });
+
   it('EmailRow does not use object selectors from useMailStore (PERF-04)', async () => {
     // Verify at module level that EmailRow uses individual selectors
     // by reading the source — the useMailStore mock tracks calls

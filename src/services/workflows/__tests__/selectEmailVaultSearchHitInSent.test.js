@@ -264,4 +264,43 @@ describe('a vault search hit in Sent, from an All Inboxes all-folders search', (
     expect(state.selectedEmail?._mailbox).toBe('Sent');
     expect(mockGetLocalEmailLight).toHaveBeenCalledWith(ACCT_A.id, 'Sent', 282);
   });
+
+  it('does not open a cached body that disagrees with the clicked search row', async () => {
+    const hit = (await searchFromUnifiedInbox()).find(r => r.uid === 282);
+    const localOnlyHit = { ...hit, source: 'local-only' };
+    useMailStore.getState().addToCache(`${ACCT_A.id}-Sent-282`, {
+      uid: 282, messageId: '<stale-cache@example.test>', subject: 'wrong cached message',
+      text: 'wrong cached body', html: '<p>wrong cached body</p>',
+    }, 128);
+    mockGetLocalEmailLight.mockResolvedValue(null);
+
+    await useMailStore.getState().selectEmail(
+      _selKey(localOnlyHit), localOnlyHit.source, localOnlyHit._mailbox, undefined, localOnlyHit,
+    );
+
+    const state = useMailStore.getState();
+    expect(state.selectedEmail?.messageId).toBe(hit.messageId);
+    expect(state.selectedEmail?.subject).toBe(hit.subject);
+    expect(state.selectedEmail?._bodyError).toBeTruthy();
+    expect(state.selectedEmail?.text).not.toBe('wrong cached body');
+  });
+
+  it('does not open a Maildir body that disagrees with the clicked search row', async () => {
+    const hit = (await searchFromUnifiedInbox()).find(r => r.uid === 282);
+    const localOnlyHit = { ...hit, source: 'local-only' };
+    mockGetLocalEmailLight.mockResolvedValue({
+      uid: 282, messageId: '<stale-maildir@example.test>', subject: 'wrong Maildir message',
+      text: 'wrong Maildir body', html: '<p>wrong Maildir body</p>', flags: [],
+    });
+
+    await useMailStore.getState().selectEmail(
+      _selKey(localOnlyHit), localOnlyHit.source, localOnlyHit._mailbox, undefined, localOnlyHit,
+    );
+
+    const state = useMailStore.getState();
+    expect(state.selectedEmail?.messageId).toBe(hit.messageId);
+    expect(state.selectedEmail?.subject).toBe(hit.subject);
+    expect(state.selectedEmail?._bodyError).toBeTruthy();
+    expect(state.selectedEmail?.text).not.toBe('wrong Maildir body');
+  });
 });

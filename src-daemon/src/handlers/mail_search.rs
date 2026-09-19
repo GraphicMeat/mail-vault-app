@@ -521,8 +521,6 @@ async fn run_local_lane(
             |error| json!({"available":false,"reason":"unavailable","error":error}),
         );
         let available = reply["available"] == true;
-        let fallback_reason =
-            (!available).then(|| FallbackReason::from_wire(reply["reason"].as_str()));
         let indexed_rows = reply["rows"].as_array().cloned().unwrap_or_default();
         let mut rows = indexed_rows;
         for row in &mut rows {
@@ -573,6 +571,12 @@ async fn run_local_lane(
         if target.local_mailboxes.is_none() && available {
             fallback_dirs.extend(selected_dirs.difference(&snapshot.indexed_dirs).cloned());
         }
+        let fallback_reason = if available {
+            (!index_coverage["complete"].as_bool().unwrap_or(false) || !fallback_dirs.is_empty())
+                .then_some(FallbackReason::Building)
+        } else {
+            Some(FallbackReason::from_wire(reply["reason"].as_str()))
+        };
         if !selected_dirs.is_empty() || !fallback_dirs.is_empty() {
             report.total_sources += selected_dirs.union(&uncovered).count().max(1);
         }
@@ -1414,7 +1418,13 @@ mod tests {
         let frames = collect_until_terminal(&mut rx, "indexed").await;
         assert_eq!(frames[0]["lane"], "local");
         assert_eq!(frames[0]["localMode"], "index");
+        assert_eq!(frames[0]["fallbackReason"], "building");
         assert_eq!(frames[0]["rows"][0]["subject"], "already indexed");
+        let fallback = frames
+            .iter()
+            .find(|frame| frame["localMode"] == "scan")
+            .unwrap();
+        assert_eq!(fallback["fallbackReason"], "building");
         let subjects = frames
             .iter()
             .flat_map(|frame| frame["rows"].as_array().unwrap())

@@ -177,11 +177,14 @@ export async function _prefetchAdjacentEmails(currentUid) {
 // message under a merged copy's uid; looking the row up by bare uid handed
 // that one back: its flags painted the Sent copy's viewer, and its Message-ID
 // made the Sent copy's own vault file look like another message's.
-function _rowOf(state, accountId, mailbox, uid) {
+function _rowOf(state, accountId, mailbox, uid, clickedRow = null) {
+  const belongsToSelection = row => row?.uid === uid
+    && (row._accountId || state.activeAccountId) === accountId
+    && (resolveEmailLocation(row, state)?.mailbox ?? mailbox) === mailbox;
+  if (belongsToSelection(clickedRow)) return clickedRow;
+
   const pool = [...(state.emails || []), ...(state.sortedEmails || []), ...(state.localEmails || []), ...(state.sentEmails || [])];
-  return pool.find(e => e.uid === uid
-    && (e._accountId || state.activeAccountId) === accountId
-    && (resolveEmailLocation(e, state)?.mailbox ?? mailbox) === mailbox);
+  return pool.find(belongsToSelection);
 }
 
 
@@ -299,7 +302,7 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
 
 // ── selectEmail workflow ──
 
-export async function selectEmail(uid, source = 'server', mailboxOverride = null, locationOverride = null) {
+export async function selectEmail(uid, source = 'server', mailboxOverride = null, locationOverride = null, clickedRow = null) {
   if (locationOverride) return _selectExplicitEmail(uid, source, mailboxOverride, locationOverride);
   cancelInsightsSelection();
   const generation = _insightsSelectionGeneration;
@@ -349,8 +352,9 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
   // opening an ordinary message costs nothing extra. Imported here rather than
   // at the top for the same reason mailStore is: localDrafts reaches back into
   // the store this workflow is reached FROM.
-  const clickedRow = _rowOf(state, accountId, mailbox, realUid);
-  if (clickedRow?.flags?.includes('draft')) {
+  const selectedRow = () => _rowOf(get(), accountId, mailbox, realUid, clickedRow);
+  const clickedHeader = selectedRow();
+  if (clickedHeader?.flags?.includes('draft')) {
     const { openLocalDraft } = await import('../localDrafts');
     if (!isCurrent()) return;
     if (await openLocalDraft(accountId, mailbox, realUid)) return;
@@ -388,14 +392,15 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     let actualSource = source;
 
     // 1. Check in-memory cache first
-    const cachedEmail = get().getFromCache(cacheKey);
+    let cachedEmail = get().getFromCache(cacheKey);
+    if (cachedEmail && !bodyMatchesHeader(selectedRow(), cachedEmail)) cachedEmail = null;
     if (cachedEmail) {
       const hydrated = await hydrateInlineImages(cachedEmail, accountId, mailbox);
       if (!isCurrent()) return;
       if (hydrated !== cachedEmail) get().addToCache(cacheKey, hydrated, cacheLimitMB);
       // The cached body is frozen at fetch time, but flags keep moving (mark
       // read/unread, sync, another client). The list row is the current copy.
-      const row = _rowOf(get(), accountId, mailbox, realUid);
+      const row = selectedRow();
       const fresh = row?.flags ? { ...hydrated, flags: row.flags } : hydrated;
       publish({ selectedEmail: withAccount(fresh), selectedEmailSource: source, loadingEmail: false });
       await _autoMarkRead(useMailStore, {
@@ -406,7 +411,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     }
 
     // 2. Check Maildir for cached .eml file
-    const headerRow = _rowOf(get(), accountId, mailbox, realUid);
+    const headerRow = selectedRow();
     const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, headerRow);
     if (!isCurrent()) return;
 
@@ -497,7 +502,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     // email whose body is its subject. `_bodyError` is what makes the two
     // distinguishable downstream (EmailViewer shows it, with a retry).
     const headerOnly = () => {
-      const headerEmail = _rowOf(get(), accountId, mailbox, realUid);
+      const headerEmail = selectedRow();
       if (!headerEmail) {
         publish({ error: decodeImapUtf7(`Failed to load email (UID ${realUid}, ${mailbox}): ${detail}`) });
         return;
@@ -511,7 +516,7 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
     try {
       // Same check as the primary read: a fallback is still a render, and the
       // wrong message is worse here than an honest "body did not load".
-      const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, _rowOf(get(), accountId, mailbox, realUid));
+      const localEmail = await _readVerifiedLocal(accountId, mailbox, realUid, selectedRow());
       if (!isCurrent()) return;
       if (localEmail) {
         publish({ selectedEmail: withAccount(localEmail), selectedEmailSource: 'local-only' });

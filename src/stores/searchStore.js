@@ -131,9 +131,7 @@ export const useSearchStore = create((set, get) => ({
         lastSequence: frame.sequence,
         searchProgress: terminal ? null : { done: frame.completed ?? 0, total: frame.total ?? 0 },
         searchIndexCoverage: frame.coverage ?? state.searchIndexCoverage,
-        searchFallback: frame.localMode === 'scan'
-          ? (frame.fallbackReason ?? state.searchFallback)
-          : state.searchFallback,
+        searchFallback: frame.fallbackReason ?? state.searchFallback,
         searchError: frame.errorKey || state.searchError,
         isSearching: !terminal,
       };
@@ -202,7 +200,11 @@ export const useSearchStore = create((set, get) => ({
       activeId = searchId;
       set({ activeSearchId: searchId });
 
-      const { unlisten } = await startMailSearch(request, frame => get().handleSearchProgress(frame));
+      const { unlisten } = await startMailSearch(request, frame => get().handleSearchProgress(frame), () => {
+        const state = get();
+        if (runGeneration !== generation || state.activeSearchId !== searchId || !state.isSearching) return;
+        return state.performSearch();
+      });
       if (runGeneration !== generation || get().activeSearchId !== searchId) {
         try { unlisten?.(); } catch { /* This run is already obsolete. */ }
         // A Clear can cancel before registration; after the ack, cancel is certain to find it.

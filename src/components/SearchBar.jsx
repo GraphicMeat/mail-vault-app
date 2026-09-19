@@ -648,11 +648,10 @@ export function SearchBar({ autoFocus = false }) {
                 onClick={() => useMailStore.getState().requestSettingsTab('storage')}
                 className="underline underline-offset-2"
               >
-                {t('search.fallback.openIndex')}
+                {t('search.fallback.openSettings')}
               </button>
               {effectiveSearchConcurrency === 1 && !isPremium && (
                 <span className="flex items-center gap-1">
-                  {t('search.fallback.premiumSpeed')}
                   <button
                     type="button"
                     data-testid="search-fallback-upgrade"

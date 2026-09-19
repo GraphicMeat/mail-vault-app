@@ -204,8 +204,17 @@ describe('SearchBar search lifecycle', () => {
 
     const openIndex = document.querySelector('[data-testid="search-fallback-index"]');
     const upgrade = document.querySelector('[data-testid="search-fallback-upgrade"]');
+    const unavailable = document.querySelector('[data-testid="search-fallback-unavailable"]');
     expect(openIndex).not.toBeNull();
     expect(upgrade).not.toBeNull();
+    expect(unavailable.textContent).toContain('The search index is unavailable, so Search is reading saved folders directly.');
+    expect(openIndex.textContent).toBe('Search index settings');
+    expect(upgrade.textContent).toBe('Upgrade for faster multi-folder search');
+    expect(unavailable.textContent).not.toContain('search.fallback.');
+    act(() => useSearchStore.setState({ searchFallback: 'building' }));
+    expect(document.querySelector('[data-testid="search-fallback-building"]')?.textContent)
+      .toContain('Indexed results are still being built. Search is reading the folders not indexed yet.');
+    act(() => useSearchStore.setState({ searchFallback: 'unavailable' }));
     fireEvent.click(openIndex);
     fireEvent.click(upgrade);
     expect(harness.mailState.requestSettingsTab).toHaveBeenNthCalledWith(1, 'storage');

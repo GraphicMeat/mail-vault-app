@@ -76,7 +76,9 @@ export async function buildSearchTargets(mail, settings, searchFilters) {
   return Promise.all(accounts.map(async account => {
     const tree = await mailboxTreeFor(account.id, mail);
     const serverMailboxes = resolveServerScope(account, tree, mail, folder);
-    const canSearchServer = account.oauth2Transport !== 'graph' && hasValidCredentials(account);
+    const canSearchServer = searchFilters?.location !== 'local'
+      && account.oauth2Transport !== 'graph'
+      && hasValidCredentials(account);
     return {
       accountId: account.id,
       account: canSearchServer ? await ensureFreshToken(account) : null,
