@@ -72,6 +72,25 @@ describe('Insights workspace lifecycle',()=>{
     await h.store.getState().refresh();
     expect(h.store.getState().query.accountIds).toEqual(['b']);
   });
+  it('hides the previous account result while the selected account loads',async()=>{
+    const gate=deferred();let created=0;
+    const results=[
+      {totals:{received:1,sent:0,both:1},senders:[{address:'coldzero@gmail.com'}],days:[{date:'2026-09-09',value:1}],lanes:[{address:'coldzero@gmail.com'}]},
+      {totals:{received:1,sent:0,both:1},senders:[{address:'prime@graphicmeat.com'}],days:[{date:'2026-09-09',value:1}],lanes:[{address:'prime@graphicmeat.com'}]},
+    ];
+    const store=createInsightsStore({
+      getAccounts:()=>[{id:'coldzero',email:'thecoldzero@gmail.com'},{id:'prime',email:'prime@graphicmeat.com'}],
+      getOwnAddresses:()=>({}),getPreferences:()=>({accountIds:['coldzero'],range:'30d'}),savePreferences:vi.fn(),
+      now:()=>new Date('2026-09-09T12:00:00Z'),timeZone:()=> 'Europe/Vilnius',
+      createSession:()=>{const index=created++;return {load:vi.fn(()=>index?gate.promise:Promise.resolve({coverage:{status:'ready'}})),query:vi.fn(async()=>results[index]),messages:vi.fn(),dispose:vi.fn()};},
+    });
+    await store.getState().openInsights();
+    const switching=store.getState().setQuery({accountIds:['prime']});
+    await Promise.resolve();
+    expect(store.getState()).toMatchObject({status:'loading',result:null,displayQuery:null,query:{accountIds:['prime']}});
+    gate.resolve({coverage:{status:'ready'}});await switching;
+    expect(store.getState()).toMatchObject({status:'ready',result:results[1],displayQuery:{accountIds:['prime']}});
+  });
 });
 
 // Real store -> real session -> real worker/model. Only the native inventory
