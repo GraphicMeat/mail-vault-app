@@ -2,7 +2,8 @@ import { Button } from './ui/Button';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
 import { useSearchStore } from '../stores/searchStore';
-import { useSettingsStore } from '../stores/settingsStore';
+import { effectiveSearchMailboxConcurrency, hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
+import { useMailStore } from '../stores/mailStore';
 import { flattenMailboxes } from '../stores/slices/unifiedHelpers';
 import { SUBTREE_PREFIX, mailboxDescendants } from '../services/workflows/mailboxTree';
 import { decodeImapUtf7 } from '../utils/imapUtf7';
@@ -42,13 +43,22 @@ export function SearchBar({ autoFocus = false }) {
   const isSearching = useSearchStore(s => s.isSearching);
   const searchProgress = useSearchStore(s => s.searchProgress);
   const searchIndexCoverage = useSearchStore(s => s.searchIndexCoverage);
+  const searchFallback = useSearchStore(s => s.searchFallback);
+  const searchError = useSearchStore(s => s.searchError);
   const searchResults = useSearchStore(s => s.searchResults);
   const setSearchQuery = useSearchStore(s => s.setSearchQuery);
   const setSearchFilters = useSearchStore(s => s.setSearchFilters);
   const performSearch = useSearchStore(s => s.performSearch);
+  const restartSearch = useSearchStore(s => s.restartSearch);
   const clearSearch = useSearchStore(s => s.clearSearch);
   const mailboxes = useAccountStore(s => s.mailboxes);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
+  const unifiedInbox = useAccountStore(s => s.unifiedInbox);
+  const unifiedFolder = useAccountStore(s => s.unifiedFolder);
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const effectiveSearchConcurrency = useSettingsStore(state => effectiveSearchMailboxConcurrency(state));
+  const isPremium = hasPremiumAccess(billingProfile);
 
   const {
     searchHistory,
@@ -65,9 +75,26 @@ export function SearchBar({ autoFocus = false }) {
   const inputRef = useRef(null);
   const filterRef = useRef(null);
   const historyRef = useRef(null);
+  const searchContextRef = useRef(null);
 
   // Get popular filters
   const popularFilters = useMemo(() => getPopularFilters(), [getPopularFilters]);
+
+  useEffect(() => {
+    const current = { activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, concurrency: effectiveSearchConcurrency, isPremium };
+    const previous = searchContextRef.current;
+    searchContextRef.current = current;
+    if (!previous) return;
+
+    const accountOrModeChanged = previous.activeAccountId !== activeAccountId
+      || previous.unifiedInbox !== unifiedInbox;
+    const currentFolderChanged = searchFilters.folder === 'current'
+      && (previous.activeMailbox !== activeMailbox || previous.unifiedFolder !== unifiedFolder);
+    const entitlementChanged = previous.isPremium !== isPremium
+      || previous.concurrency !== effectiveSearchConcurrency;
+    if (searchActive && (accountOrModeChanged || currentFolderChanged || entitlementChanged)) restartSearch();
+  }, [activeAccountId, activeMailbox, unifiedInbox, unifiedFolder, effectiveSearchConcurrency,
+    isPremium, searchFilters.folder, searchActive, restartSearch]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -611,6 +638,35 @@ export function SearchBar({ autoFocus = false }) {
                 </div>
               )}
             </>
+          )}
+          {searchFallback && (
+            <div className="mt-1 flex flex-wrap items-center gap-2" data-testid={`search-fallback-${searchFallback}`}>
+              <span>{t(`search.fallback.${searchFallback}`)}</span>
+              <button
+                type="button"
+                data-testid="search-fallback-index"
+                onClick={() => useMailStore.getState().requestSettingsTab('storage')}
+                className="underline underline-offset-2"
+              >
+                {t('search.fallback.openIndex')}
+              </button>
+              {effectiveSearchConcurrency === 1 && !isPremium && (
+                <span className="flex items-center gap-1">
+                  {t('search.fallback.premiumSpeed')}
+                  <button
+                    type="button"
+                    data-testid="search-fallback-upgrade"
+                    onClick={() => useMailStore.getState().requestSettingsTab('billing')}
+                    className="underline underline-offset-2"
+                  >
+                    {t('search.fallback.upgrade')}
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+          {searchError && !isSearching && (
+            <div className="mt-1" data-testid="search-error">{t(searchError)}</div>
           )}
         </div>
       )}
