@@ -50,6 +50,7 @@ tempfile = "3"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 candle-core = { version = "0.8", features = ["metal"] }
+embed_plist = "1.2.2"
 objc2 = "0.6"
 objc2-foundation = "0.3"
 objc2-pdf-kit = "0.3"
