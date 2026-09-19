@@ -57,7 +57,7 @@ describe('blog article CTA theme colors', () => {
         <body>
           <div class="mv-content-page"><main><div class="prose">
             <a class="mv-blog-cta mv-blog-cta-primary text-white">Download</a>
-            <a class="mv-blog-cta text-primary-600 dark:text-primary-400">See features</a>
+            <a class="mv-blog-cta mv-blog-cta-secondary text-primary-600 dark:text-primary-400">See features</a>
             <a class="text-primary-500">Read the source</a>
           </div></main></div>
         </body>
