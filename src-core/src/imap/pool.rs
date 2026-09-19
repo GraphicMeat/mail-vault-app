@@ -29,7 +29,7 @@ pub struct PooledSession {
 }
 
 /// Maximum number of pooled sessions per account per pool type.
-const MAX_POOL_SIZE: usize = 3;
+const MAX_POOL_SIZE: usize = 5;
 
 /// Sessions used within this window skip the NOOP health check.
 const NOOP_SKIP_SECS: u64 = 60;
@@ -616,5 +616,42 @@ mod connect_retry_tests {
 
         assert_eq!(out, Ok("session"));
         assert_eq!(calls.get(), 1);
+    }
+}
+
+#[cfg(test)]
+mod read_retry_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[tokio::test]
+    async fn permanent_no_is_not_retried() {
+        let calls = AtomicUsize::new(0);
+        let result = retry_once_on_dead_socket(|_| async {
+            calls.fetch_add(1, Ordering::SeqCst);
+            Err::<(), _>("NO no such mailbox".into())
+        })
+        .await;
+        assert!(result.is_err());
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn dead_socket_is_retried_exactly_once() {
+        let calls = AtomicUsize::new(0);
+        let result = retry_once_on_dead_socket(|fresh| {
+            let calls = &calls;
+            async move {
+                calls.fetch_add(1, Ordering::SeqCst);
+                if fresh {
+                    Ok("new session")
+                } else {
+                    Err("connection lost".into())
+                }
+            }
+        })
+        .await;
+        assert_eq!(result, Ok("new session"));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
     }
 }

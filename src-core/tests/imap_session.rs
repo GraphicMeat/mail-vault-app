@@ -11,6 +11,7 @@ use common::{config_for, eml, pool, session};
 use mailvault_core::imap::*;
 use mock_imap::state::{synthetic_mailbox, Mailbox};
 use mock_imap::{Action, MockImap, Scenario, Trigger};
+use std::time::Duration;
 
 #[async_std::test]
 async fn reads_the_greeting_before_authenticating() {
@@ -216,26 +217,67 @@ async fn the_pool_caps_concurrent_sessions_per_account() {
     let config = config_for(&server);
     let pool = pool();
 
+    let (send, receive) = async_std::channel::unbounded();
+    let mut workers = Vec::new();
+    for _ in 0..6 {
+        let pool = pool.clone();
+        let config = config.clone();
+        let send = send.clone();
+        workers.push(async_std::task::spawn(async move {
+            let guard = pool.get_background(&config).await.expect("checkout");
+            assert!(send.send(guard).await.is_ok(), "receiver remains open");
+        }));
+    }
+    drop(send);
+
     let mut guards = Vec::new();
-    for _ in 0..3 {
-        guards.push(pool.get_background(&config).await.expect("checkout"));
+    for _ in 0..5 {
+        match async_std::future::timeout(Duration::from_secs(2), receive.recv()).await {
+            Ok(Ok(guard)) => guards.push(guard),
+            _ => break,
+        }
+    }
+    if guards.len() != 5 {
+        let acquired = guards.len();
+        for guard in guards.drain(..) {
+            pool.return_background(&config, guard).await;
+        }
+        for worker in workers {
+            worker.await;
+        }
+        while let Ok(guard) = receive.try_recv() {
+            pool.return_background(&config, guard).await;
+        }
+        panic!("expected five simultaneous checkouts, got {acquired}");
     }
     assert_eq!(
         server.connection_count(),
-        3,
-        "three concurrent checkouts, three connections"
+        5,
+        "five concurrent checkouts, five connections"
     );
 
-    for g in guards {
-        pool.return_background(&config, g).await;
+    assert!(
+        async_std::future::timeout(Duration::from_millis(50), receive.recv())
+            .await
+            .is_err(),
+        "the sixth checkout must queue while five permits are held"
+    );
+    for guard in guards {
+        pool.return_background(&config, guard).await;
     }
-    let g = pool.get_background(&config).await.expect("checkout after return");
+    let sixth = async_std::future::timeout(Duration::from_secs(2), receive.recv())
+        .await
+        .expect("sixth checkout should start when a permit returns")
+        .expect("sixth checkout must succeed");
+    pool.return_background(&config, sixth).await;
+    for worker in workers {
+        worker.await;
+    }
     assert_eq!(
         server.connection_count(),
-        3,
+        5,
         "returned sessions must be reused rather than reconnected"
     );
-    pool.return_background(&config, g).await;
 }
 
 /// A pooled socket the peer closed while it sat idle answers the first command

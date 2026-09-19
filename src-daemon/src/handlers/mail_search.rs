@@ -310,22 +310,39 @@ fn emit_progress(state: &DaemonState, run: &SearchRun, mut frame: MailSearchProg
 
 async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: SearchRunGuard) {
     let run = Arc::clone(&guard.run);
-    let mut report = LocalReport::default();
-    if !request.targets.is_empty() && request.location != SearchLocation::Server {
-        let (ready_tx, mut ready_rx) = watch::channel(false);
+    let local_enabled = !request.targets.is_empty() && request.location != SearchLocation::Server;
+    let (ready_tx, ready_rx) = watch::channel(!local_enabled);
+    let local_task = local_enabled.then(|| {
         let local_state = Arc::clone(&state);
         let local_run = Arc::clone(&run);
         let local_request = request.clone();
-        let local = tokio::spawn(async move {
+        tokio::spawn(async move {
             run_local_lane(local_state, local_request, local_run, ready_tx).await
-        });
-        if let Ok(local_report) = local.await {
-            report = local_report;
+        })
+    });
+
+    let local_future = async move {
+        match local_task {
+            Some(task) => task.await.unwrap_or_default(),
+            None => SearchReport::default(),
         }
-        if !*ready_rx.borrow() {
-            let _ = ready_rx.changed().await;
+    };
+    let server_state = Arc::clone(&state);
+    let server_run = Arc::clone(&run);
+    let server_request = request.clone();
+    let server_future = async move {
+        if server_request.location != SearchLocation::Local {
+            run_server_lane(server_state, server_request, server_run, ready_rx).await
+        } else {
+            SearchReport::default()
         }
-    }
+    };
+    let (mut report, server_report) = tokio::join!(local_future, server_future);
+    report.total_sources += server_report.total_sources;
+    report.successful_sources += server_report.successful_sources;
+    report.completed += server_report.completed;
+    report.total += server_report.total;
+    report.failures.extend(server_report.failures);
 
     let mut terminal = progress(&request.search_id);
     terminal.total = report.total;
@@ -344,7 +361,7 @@ async fn run_search(state: Arc<DaemonState>, request: MailSearchStart, guard: Se
 }
 
 #[derive(Default)]
-struct LocalReport {
+struct SearchReport {
     total_sources: usize,
     successful_sources: usize,
     completed: usize,
@@ -387,9 +404,9 @@ async fn run_local_lane(
     request: MailSearchStart,
     run: Arc<SearchRun>,
     initial_local_published: watch::Sender<bool>,
-) -> LocalReport {
+) -> SearchReport {
     let mut ready = LocalReadyOnDrop(Some(initial_local_published));
-    let mut report = LocalReport::default();
+    let mut report = SearchReport::default();
     let mut aggregate = SearchCoverage {
         complete: true,
         ..Default::default()
@@ -708,6 +725,191 @@ async fn run_local_lane(
         }
     }
     report
+}
+
+#[derive(Clone)]
+struct ServerMailboxJob {
+    account_id: String,
+    account: mailvault_core::imap::ImapConfig,
+    mailbox: String,
+}
+
+struct ServerMailboxOutcome {
+    job: ServerMailboxJob,
+    result: Result<Vec<Value>, String>,
+}
+
+async fn run_server_lane(
+    state: Arc<DaemonState>,
+    request: MailSearchStart,
+    run: Arc<SearchRun>,
+    mut initial_local_published: watch::Receiver<bool>,
+) -> SearchReport {
+    let jobs = request
+        .targets
+        .iter()
+        .filter_map(|target| {
+            let account = target.account.as_ref()?;
+            (!target.server_mailboxes.is_empty()).then_some((target, account))
+        })
+        .flat_map(|(target, account)| {
+            target
+                .server_mailboxes
+                .iter()
+                .map(|mailbox| ServerMailboxJob {
+                    account_id: target.account_id.clone(),
+                    account: account.clone(),
+                    mailbox: mailbox.clone(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    let mut report = SearchReport {
+        total_sources: jobs.len(),
+        total: jobs.len(),
+        ..Default::default()
+    };
+    if jobs.is_empty() {
+        return report;
+    }
+
+    let filters = crate::handlers::imap::SearchFilters::for_mail_search(
+        request.sender.clone(),
+        request.date_from,
+        request.date_to,
+    );
+    let has_attachments = request.has_attachments;
+    let search_id = request.search_id.clone();
+    let query = request.query.clone();
+    let mut jobs = run_bounded_jobs(jobs, request.effective_concurrency(), {
+        let state = Arc::clone(&state);
+        let run = Arc::clone(&run);
+        let request_query = query;
+        move |job| {
+            let state = Arc::clone(&state);
+            let run = Arc::clone(&run);
+            let query = request_query.clone();
+            let filters = filters.clone();
+            async move {
+                if run.is_cancelled() {
+                    return None;
+                }
+                let account_id = job.account_id.clone();
+                let result = state
+                    .imap_pool
+                    .run_read(&job.account, false, |mut session| {
+                        let account_id = account_id.clone();
+                        let mailbox = job.mailbox.clone();
+                        let query = query.clone();
+                        let filters = filters.clone();
+                        async move {
+                            let (emails, _) = mailvault_core::imap::search_emails(
+                                &mut session,
+                                &mailbox,
+                                nonempty(&query),
+                                filters.from.as_deref(),
+                                None,
+                                filters.since.as_deref(),
+                                filters.before.as_deref(),
+                            )
+                            .await
+                            .map_err(|error| format!("Failed to search emails: {error}"))?;
+                            let mut rows = Vec::new();
+                            for email in emails {
+                                if has_attachments && !email.has_attachments {
+                                    continue;
+                                }
+                                let mut row = serde_json::to_value(email)
+                                    .map_err(|error| error.to_string())?;
+                                if let Some(object) = row.as_object_mut() {
+                                    object.insert("_accountId".into(), account_id.clone().into());
+                                    object.insert("_mailbox".into(), mailbox.clone().into());
+                                    object.insert("isLocal".into(), false.into());
+                                    object.insert("source".into(), "server-search".into());
+                                }
+                                rows.push(row);
+                            }
+                            Ok((rows, session, Some(mailbox)))
+                        }
+                    })
+                    .await;
+                Some(ServerMailboxOutcome { job, result })
+            }
+        }
+    });
+
+    let mut first_publication = true;
+    while let Some(outcome) = next_active_job(&mut jobs, &run).await {
+        let Some(outcome) = outcome else { continue };
+        report.completed += 1;
+        let mut frame = progress(&search_id);
+        frame.lane = Some(SearchLane::Server);
+        frame.completed = report.completed;
+        frame.total = report.total;
+        match outcome.result {
+            Ok(rows) => {
+                report.successful_sources += 1;
+                frame.rows = rows;
+            }
+            Err(error) => {
+                let failure = server_failure(&outcome.job.account_id, &outcome.job.mailbox, &error);
+                report.failures.push(failure.clone());
+                frame.failures.push(failure);
+            }
+        }
+
+        if run.is_cancelled() {
+            break;
+        }
+        if first_publication {
+            while !*initial_local_published.borrow() {
+                if initial_local_published.changed().await.is_err() {
+                    break;
+                }
+            }
+            first_publication = false;
+        }
+        if !run.is_cancelled() {
+            emit_progress(&state, &run, frame);
+        }
+    }
+    report
+}
+
+fn nonempty(value: &str) -> Option<&str> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then_some(trimmed)
+}
+
+fn server_failure(account_id: &str, mailbox: &str, error: &str) -> SearchFailure {
+    let lowered = error.to_ascii_lowercase();
+    let code = if [
+        "authentication",
+        "login failed",
+        "invalid credentials",
+        "password missing",
+        "oauth2",
+        "xoauth2",
+    ]
+    .iter()
+    .any(|needle| lowered.contains(needle))
+    {
+        "credentials"
+    } else if mailvault_core::imap::pool::is_retryable_connect_error(error)
+        || ["failed to connect", "connection refused", "timed out"]
+            .iter()
+            .any(|needle| lowered.contains(needle))
+    {
+        "connection"
+    } else {
+        "mailbox"
+    };
+    SearchFailure {
+        account_id: account_id.to_owned(),
+        mailbox: mailbox.to_owned(),
+        lane: SearchLane::Server,
+        code: code.to_owned(),
+    }
 }
 
 fn request_to_index(request: &MailSearchStart, target: &MailSearchTarget) -> SearchRequest {
@@ -1365,5 +1567,218 @@ mod tests {
             ..req.clone()
         };
         assert!(!matches_local_row(&row, &wrong_sender));
+    }
+
+    mod server {
+        use super::*;
+        use mock_imap::state::synthetic_mailbox;
+        use mock_imap::{Action, MockImap, Scenario, Trigger};
+
+        fn plaintext() {
+            std::env::set_var("MAILVAULT_IMAP_PLAINTEXT", "1");
+        }
+
+        fn account(server: &MockImap) -> Value {
+            json!({
+                "email": "user@example.test",
+                "password": "test-password",
+                "imapHost": server.host(),
+                "imapPort": server.port(),
+                "imapSecure": false
+            })
+        }
+
+        fn server_target(server: &MockImap, mailboxes: &[String]) -> Value {
+            json!({
+                "accountId": "acct",
+                "account": account(server),
+                "localMailboxes": [],
+                "knownMailboxes": mailboxes,
+                "serverMailboxes": mailboxes
+            })
+        }
+
+        async fn run(
+            state: &Arc<DaemonState>,
+            rx: &mut tokio::sync::broadcast::Receiver<Arc<str>>,
+            search_id: &str,
+            server: &MockImap,
+            mailboxes: &[String],
+            concurrency: usize,
+            location: &str,
+        ) -> Vec<Value> {
+            let started = call(
+                state,
+                "mail_search_start",
+                json!({
+                    "searchId": search_id,
+                    "query": "Message",
+                    "location": location,
+                    "concurrency": concurrency,
+                    "targets": [server_target(server, mailboxes)]
+                }),
+            )
+            .await;
+            assert_eq!(started.result.unwrap()["started"], true);
+            collect_until_terminal(rx, search_id).await
+        }
+
+        fn mailbox_names(prefix: &str, count: usize) -> Vec<String> {
+            (0..count).map(|i| format!("{prefix}{i}")).collect()
+        }
+
+        fn scenario_for(mailboxes: &[String]) -> Scenario {
+            mailboxes.iter().fold(Scenario::new(), |scenario, mailbox| {
+                scenario.mailbox(synthetic_mailbox(mailbox, 2))
+            })
+        }
+
+        #[test]
+        fn server_filter_conversion_keeps_the_end_date_inclusive() {
+            let from = chrono::DateTime::parse_from_rfc3339("2026-09-01T14:00:00Z")
+                .unwrap()
+                .timestamp();
+            let to = chrono::DateTime::parse_from_rfc3339("2026-09-03T18:00:00Z")
+                .unwrap()
+                .timestamp();
+            let filters = crate::handlers::imap::SearchFilters::for_mail_search(
+                Some("alice@example.test".into()),
+                Some(from),
+                Some(to),
+            );
+            assert_eq!(filters.from.as_deref(), Some("alice@example.test"));
+            assert_eq!(filters.since.as_deref(), Some("2026-09-01"));
+            assert_eq!(filters.before.as_deref(), Some("2026-09-04"));
+        }
+
+        #[test]
+        fn server_failures_use_stable_public_codes() {
+            let cases = [
+                ("TCP connect failed: connection refused", "connection"),
+                (
+                    "Login failed: NO [AUTHENTICATIONFAILED] Invalid credentials",
+                    "credentials",
+                ),
+                ("SELECT Archive failed: NO [NONEXISTENT]", "mailbox"),
+            ];
+            for (error, code) in cases {
+                let failure = server_failure("acct", "Archive", error);
+                assert_eq!(serde_json::to_value(failure.lane).unwrap(), json!("server"));
+                assert_eq!(failure.code, code);
+            }
+        }
+
+        #[tokio::test]
+        async fn server_lane_keeps_successes_after_retry_and_folder_failure() {
+            plaintext();
+            let mailboxes = vec!["RetryBox".to_string(), "INBOX".to_string()];
+            let server = MockImap::start(
+                scenario_for(&mailboxes).fault(Trigger::nth("SELECT", 1), Action::DropConnection),
+            );
+            let (_tmp, state) = state();
+            let mut rx = state.events.subscribe();
+            let frames = run(
+                &state,
+                &mut rx,
+                "server-partial",
+                &server,
+                &["RetryBox".into(), "Missing".into(), "INBOX".into()],
+                3,
+                "server",
+            )
+            .await;
+
+            let rows = frames
+                .iter()
+                .flat_map(|frame| frame["rows"].as_array().into_iter().flatten())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                rows.len(),
+                4,
+                "both valid folders should keep their rows: {rows:?}; frames: {frames:?}; commands: {:?}",
+                server.commands()
+            );
+            assert!(rows.iter().all(|row| row["_accountId"] == "acct"));
+            assert!(rows.iter().any(|row| row["_mailbox"] == "RetryBox"));
+            assert!(rows.iter().any(|row| row["_mailbox"] == "INBOX"));
+
+            let terminal = frames.last().unwrap();
+            assert_eq!(terminal["terminal"], "complete");
+            assert_eq!(terminal["failures"].as_array().unwrap().len(), 1);
+            assert_eq!(terminal["failures"][0]["mailbox"], "Missing");
+            assert_eq!(terminal["failures"][0]["lane"], "server");
+            assert_eq!(terminal["failures"][0]["code"], "mailbox");
+            assert!(
+                server.connection_count() >= 2,
+                "the dead socket should be replaced"
+            );
+        }
+
+        #[tokio::test]
+        async fn server_lane_honors_one_three_and_five_connection_limits() {
+            plaintext();
+            for concurrency in [1, 3, 5] {
+                let names = mailbox_names(&format!("Box{concurrency}_"), 6);
+                let server = MockImap::start(scenario_for(&names).fault(
+                    Trigger::on("SEARCH"),
+                    Action::Delay(Duration::from_millis(80)),
+                ));
+                let (_tmp, state) = state();
+                let mut rx = state.events.subscribe();
+                let frames = run(
+                    &state,
+                    &mut rx,
+                    &format!("server-limit-{concurrency}"),
+                    &server,
+                    &names,
+                    concurrency,
+                    "server",
+                )
+                .await;
+
+                assert_eq!(frames.last().unwrap()["terminal"], "complete");
+                assert_eq!(server.count_commands("SEARCH"), names.len());
+                assert_eq!(
+                    server.connection_count(),
+                    concurrency,
+                    "the server lane should reach the requested limit {concurrency}"
+                );
+            }
+        }
+
+        #[tokio::test]
+        async fn first_server_publication_waits_for_the_initial_local_frame() {
+            plaintext();
+            let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 1)));
+            let (tmp, state) = state();
+            write_mail(tmp.path(), "acct", "INBOX", 1, "local result", "local body");
+            let mut rx = state.events.subscribe();
+            let gate = state.vault_gate.write().unwrap();
+            let started = call(
+                &state,
+                "mail_search_start",
+                json!({
+                    "searchId": "server-after-local",
+                    "query": "Message",
+                    "location": "all",
+                    "concurrency": 1,
+                    "targets": [{
+                        "accountId": "acct",
+                        "account": account(&server),
+                        "localMailboxes": ["INBOX"],
+                        "knownMailboxes": ["INBOX"],
+                        "serverMailboxes": ["INBOX"]
+                    }]
+                }),
+            )
+            .await;
+            assert_eq!(started.result.unwrap()["started"], true);
+            wait_until(|| server.count_commands("SEARCH") > 0).await;
+            drop(gate);
+
+            let frames = collect_until_terminal(&mut rx, "server-after-local").await;
+            assert_eq!(frames[0]["lane"], "local");
+            assert!(frames.iter().any(|frame| frame["lane"] == "server"));
+        }
     }
 }

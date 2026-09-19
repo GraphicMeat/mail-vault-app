@@ -114,12 +114,40 @@ fn account_arg(id: &Value, params: &Value) -> Result<ImapConfig, RpcResponse> {
 /// Mirrors `commands.rs`'s local `SearchFilters` (`imap_search_emails`) —
 /// small enough that a second copy here beats promoting it to core for one
 /// caller on each side.
-#[derive(Debug, Default, serde::Deserialize)]
-struct SearchFilters {
-    from: Option<String>,
-    subject: Option<String>,
-    since: Option<String>,
-    before: Option<String>,
+#[derive(Clone, Debug, Default, serde::Deserialize)]
+pub(crate) struct SearchFilters {
+    pub(crate) from: Option<String>,
+    pub(crate) subject: Option<String>,
+    pub(crate) since: Option<String>,
+    pub(crate) before: Option<String>,
+}
+
+impl SearchFilters {
+    pub(crate) fn for_mail_search(
+        from: Option<String>,
+        date_from: Option<i64>,
+        date_to: Option<i64>,
+    ) -> Self {
+        let day = |timestamp| {
+            chrono::DateTime::<chrono::Utc>::from_timestamp(timestamp, 0)
+                .map(|value| value.date_naive())
+        };
+        let since = date_from
+            .and_then(day)
+            .map(|date| date.format("%Y-%m-%d").to_string());
+        // IMAP BEFORE is exclusive; advance the user's inclusive end day.
+        let before = date_to
+            .and_then(day)
+            .and_then(|date| date.succ_opt())
+            .map(|date| date.format("%Y-%m-%d").to_string());
+
+        Self {
+            from,
+            subject: None,
+            since,
+            before,
+        }
+    }
 }
 
 pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value, id: Value) -> Option<RpcResponse> {
