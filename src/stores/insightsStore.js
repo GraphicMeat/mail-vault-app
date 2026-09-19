@@ -67,7 +67,9 @@ export function createInsightsStore(options = {}) {
         const id=++generation; ++queryGeneration;clearDetail();
         session?.dispose();session=deps.createSession();const current=session;loadingSession=current;
         const {accounts,query}=configure(get().preferences);
-        set({status:'loading',error:null,progress:null,coverage:get().coverage?{...get().coverage,status:'stale'}:null});
+        const scopeChanged=JSON.stringify(get().displayQuery?.accountIds)!==JSON.stringify(query.accountIds);
+        set({status:'loading',error:null,progress:null,coverage:scopeChanged?null:get().coverage?{...get().coverage,status:'stale'}:null,
+          ...(scopeChanged?{result:null,displayQuery:null}:{})});
         try {
           const {coverage}=await current.load({accountIds:query.accountIds,accounts,ownAddressesByAccount:deps.getOwnAddresses(),
             onProgress:progress=>{if(id===generation && get().isOpen)set({progress});}});

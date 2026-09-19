@@ -10,6 +10,7 @@ import { ChatTopicsList } from './ChatTopicsList';
 import { ChatBubbleView } from './ChatBubbleView';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useT, t  } from '../i18n/index.js';
+import { ReadDelayProgress } from './ReadDelayProgress';
 
 function ChatViewWrapperComponent({ onComposeReply }) {
   const t = useT();
@@ -134,6 +135,7 @@ function ChatViewWrapperComponent({ onComposeReply }) {
 
   return (
     <div data-testid="chat-view" className="flex-1 flex flex-col h-full min-h-0 overflow-hidden bg-mail-bg">
+      <ReadDelayProgress />
       <AnimatePresence mode="wait">
         {currentView === 'senders' && (
           <motion.div

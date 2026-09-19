@@ -3855,6 +3855,7 @@ dependencies = [
  "candle-transformers",
  "chrono",
  "dirs 5.0.1",
+ "embed_plist",
  "flate2",
  "futures",
  "hf-hub",

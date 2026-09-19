@@ -1847,6 +1847,7 @@
   "compose.delay3m": "3m delay",
   "compose.delay5m": "5m delay",
   "viewer.loadingMessage": "Loading message…",
+  "viewer.markingAsRead": "Marking as read",
   "vaultAlert.reconnectDriveOrPointAtFolder": "Reconnect the drive, or point MailVault at the folder if it moved.",
   "offlineBanner.title": "No internet connection",
   "offlineBanner.body": "Your mail is still here — MailVault is showing what is already saved on this computer. Syncing resumes on its own once you are back online.",

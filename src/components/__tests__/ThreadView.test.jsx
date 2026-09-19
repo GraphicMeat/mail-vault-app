@@ -2,14 +2,14 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup, fireEvent, act } from '@testing-library/react';
-const { scrollToIndex } = vi.hoisted(() => ({ scrollToIndex: vi.fn() }));
+const { scrollToIndex, bodies } = vi.hoisted(() => ({ scrollToIndex: vi.fn(), bodies: new Map() }));
 vi.mock('@tanstack/react-virtual', () => ({ useVirtualizer: options => ({
   scrollToIndex, measure: vi.fn(), measureElement: vi.fn(), getTotalSize: () => 144,
   getVirtualItems: () => Array.from({ length: options.count }, (_, index) => ({ index, key: options.getItemKey(index), start: index * 72 })),
 }) }));
 vi.mock('../../hooks/useChatBodyLoader', async () => {
   const { emailKey } = await import('../../stores/slices/unifiedHelpers');
-  return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: new Map() }, registerListener: () => () => {} }) };
+  return { emailKey, useChatBodyLoader: () => ({ bodiesMapRef: { current: bodies }, registerListener: () => () => {} }) };
 });
 vi.mock('../email/EmailActionBar', () => ({ EmailActionBar: () => null }));
 vi.mock('../../utils/replyTarget', () => ({ replyTarget: async (header) => header }));
@@ -20,7 +20,7 @@ const emails = [
   { uid: 7, _mailbox: 'Sent', date: '2026-09-02', from: { name: 'Newest', address: 'new@example.com' }, to: [], subject: 'Latest' },
 ];
 const thread = { threadId: 'one', subject: 'Conversation', emails, messageCount: 2 };
-afterEach(() => { cleanup(); vi.clearAllMocks(); });
+afterEach(() => { cleanup(); bodies.clear(); vi.clearAllMocks(); });
 describe('thread reader layouts', () => {
   it('opens the newest full message identity and follows changes to sort order', () => {
     useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
@@ -83,5 +83,17 @@ describe('thread message click targets', () => {
     expect(onComposeReply.mock.calls[0][1].from.address).toBe('old@example.com');
     // Composing left the message folded — the two acts are independent.
     expect(expandedFlags()).toEqual(['false', 'true']);
+  });
+});
+
+describe('thread body loading', () => {
+  it('shows an animated status indicator while a body loads', () => {
+    useSettingsStore.setState({ threadReaderLayout: 'timeline', threadSortOrder: 'oldest-first' });
+    bodies.set('|INBOX|7', { status: 'loading', email: null });
+    bodies.set('|Sent|7', { status: 'loading', email: null });
+    render(<ThreadView thread={thread} />);
+    const indicators = screen.getAllByRole('status', { name: /Loading message/ });
+    expect(indicators.length).toBeGreaterThan(0);
+    expect(indicators[0].querySelector('.animate-spin')).toBeTruthy();
   });
 });

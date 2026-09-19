@@ -26,6 +26,7 @@ export const createSelectionSlice = (set, get) => ({
   selectedEmailSource: null, // 'server' | 'local' | 'local-only'
   selectedThread: null, // thread object from buildThreads, or null for single email
   loadingEmail: false,
+  markReadProgress: null,
 
   // Account of the last message opened. Only meaningful in the unified inbox,
   // where activeAccountId is just whichever account was last activated and the
@@ -53,6 +54,7 @@ export const createSelectionSlice = (set, get) => ({
       selectedEmail: null,
       selectedEmailSource: null,
       loadingEmail: false,
+      markReadProgress: null,
       // Only unified rows are tagged; a single-account row leaves it standing.
       lastSelectedAccountId: thread.lastEmail._accountId || state.lastSelectedAccountId,
     }));
@@ -82,6 +84,7 @@ export const createSelectionSlice = (set, get) => ({
       selectedEmailSource: null,
       selectedThread: null,
       loadingEmail: false,
+      markReadProgress: null,
     });
   },
 

@@ -1843,6 +1843,7 @@
   "compose.delay3m": "atraso de 3 min",
   "compose.delay5m": "atraso de 5 min",
   "viewer.loadingMessage": "Carregando a mensagem…",
+  "viewer.markingAsRead": "Marcando como lido",
   "vaultAlert.reconnectDriveOrPointAtFolder": "Reconecte a unidade ou aponte o MailVault para a pasta, caso ela tenha mudado.",
   "offlineBanner.title": "Sem conexão com a internet",
   "offlineBanner.body": "Seus e-mails continuam aqui: o MailVault mostra o que já está salvo neste computador. A sincronização recomeça sozinha assim que você voltar a ficar on-line.",

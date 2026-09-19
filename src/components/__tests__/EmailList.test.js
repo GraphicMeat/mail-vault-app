@@ -600,6 +600,7 @@ describe('unread-only filter', () => {
       sortedEmails: mockEmails,
       totalEmails: 500,
       selectedEmailId: null,
+      activeMailbox: 'INBOX',
     });
   });
 
@@ -635,6 +636,23 @@ describe('unread-only filter', () => {
     render(React.createElement(EmailList));
 
     expect(lastVirtualizerConfig.count).toBe(6);
+  });
+
+  it('keeps the open read row in a spanning unread list', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const rows = [
+      { ...mixed(1)[0], _accountId: 'acc1', _mailbox: 'INBOX' },
+      { ...mixed(2)[1], _accountId: 'acc2', _mailbox: 'Archive' },
+    ];
+    useMailStore.setState({
+      activeMailbox: 'UNIFIED', sortedEmails: rows, totalEmails: 2,
+      unreadOnly: true, selectedEmailId: 'acc2:Archive:2',
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    expect(lastVirtualizerConfig.count).toBe(2);
   });
 
   it('counts the unread rows in the header, not the whole window', async () => {

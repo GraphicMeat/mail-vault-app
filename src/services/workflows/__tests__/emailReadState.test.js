@@ -229,10 +229,15 @@ describe('selectEmail — auto mark as read', () => {
 
       await useMailStore.getState().selectEmail(1);
       expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+      expect(useMailStore.getState().markReadProgress).toEqual({
+        startedAt: Date.now(),
+        endsAt: Date.now() + 3000,
+      });
 
       await vi.advanceTimersByTimeAsync(3000);
       expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'add', 'INBOX');
       expect(seenOf(1)).toBe(true);
+      expect(useMailStore.getState().markReadProgress).toBeNull();
     });
 
     it('cancels the timer when the reader closes and restarts it on reopen', async () => {
@@ -241,6 +246,7 @@ describe('selectEmail — auto mark as read', () => {
 
       await useMailStore.getState().selectEmail(1);
       useMailStore.getState().closeEmail();
+      expect(useMailStore.getState().markReadProgress).toBeNull();
       await vi.advanceTimersByTimeAsync(3000);
       expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
 
@@ -350,6 +356,7 @@ describe('selectEmail — auto mark as read', () => {
       useMailStore.getState().selectThread({
         threadId: 'thread-b', lastEmail: { uid: 2 }, emails: [{ uid: 2 }], messageCount: 1,
       });
+      expect(useMailStore.getState().markReadProgress).toBeNull();
       await vi.advanceTimersByTimeAsync(3000);
 
       expect(mockUpdateEmailFlags).not.toHaveBeenCalled();

@@ -40,6 +40,9 @@ pub mod sync_engine;
 // Task 4.7 (no cutover yet -- the Tauri commands in src-tauri still exist too
 // and still serve the frontend until Task 4.8).
 
+#[cfg(target_os = "macos")]
+embed_plist::embed_info_plist!("../Info.plist");
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tracing::{info, warn, error, Level};

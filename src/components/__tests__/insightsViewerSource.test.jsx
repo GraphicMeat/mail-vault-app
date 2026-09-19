@@ -67,8 +67,17 @@ it('uses Insights custody instead of a stale active row with the same UID', () =
   useMailStore.setState({ selectedEmail: selected, selectedEmailSource: 'local-only', sortedEmails: [staleActiveRow], serverUids: { complete: true, uids: new Set([7]) } });
   render(<EmailViewer />);
   expect(screen.getByText('Saved in your vault')).toBeTruthy();
-  expect(screen.getByText('Server copy not verified yet.')).toBeTruthy();
+  expect(screen.queryByText('Server copy not verified yet.')).toBeNull();
   expect(screen.queryByText('Also still on the server.')).toBeNull();
+});
+
+it('keeps the custody band compact without a manual server check', () => {
+  const selected = { ...email(b, 'Selected account'), _insightsReadOnly: false, isArchived: true, source: 'local' };
+  useMailStore.setState({ selectedEmail: selected, selectedEmailSource: 'local', sortedEmails: [selected], serverUids: { complete: false, uids: new Set() } });
+  render(<EmailViewer />);
+  expect(screen.getByText('Saved in your vault')).toBeTruthy();
+  expect(screen.queryByTestId('custody-check-server')).toBeNull();
+  expect(screen.queryByText('Server copy not verified yet.')).toBeNull();
 });
 
 it('preserves only-copy wording for an Insights record with a completed absence proof', () => {
