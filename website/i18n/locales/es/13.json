@@ -1,4 +1,12 @@
 {
+  "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Búsqueda indexada instantánea en el correo guardado localmente</strong> — los resultados provienen del índice privado de tu bóveda, incluso sin conexión</span>",
+  "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Búsqueda más rápida en varias carpetas</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — busca hasta cinco buzones del servidor y carpetas locales sin indexar a la vez, con el nivel de concurrencia que elijas</span>",
+  "d3a6f92e8981": "Ver las 17 funciones",
+  "6a8492b29242": "Ver las 12 funciones",
+  "b11668f8a640": "Todo lo de Gratis, más estas 13 funciones. Selecciona una para ver cómo funciona.",
+  "2966eb8bc710": "Búsqueda más rápida en varias carpetas",
+  "b4eeaa045260": "Las mismas 13 funciones que verás en la introducción de la app. Abre una función para explorarla.",
+  "2987dae0bc04": "busca hasta cinco buzones del servidor y carpetas locales sin indexar a la vez, con el nivel de concurrencia que elijas",
   "58a81e55d8f5": "Haz clic en cualquier burbuja para ver los mensajes que hay detrás y leerlos sin salir de la página.",
   "139290f7723a": "El mapa de remitentes: el área de la burbuja es el volumen, la distancia es el tiempo desde el último mensaje.",
   "07f2808a43bb": "Cronología: un carril por remitente, con lo recibido y lo enviado marcado por separado.",

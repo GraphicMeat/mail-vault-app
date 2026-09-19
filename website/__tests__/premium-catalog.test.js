@@ -1,6 +1,16 @@
 import { it, expect } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
+it('publishes fast multi-folder search with app copy',()=>{
+ const strings=JSON.parse(readFileSync('src/i18n/locales/en.json','utf8'));
+ const d=new JSDOM(readFileSync('website/pricing.html','utf8')).window.document;
+ const detail=d.getElementById('premium-fast-multi-folder-search');
+ expect(detail).not.toBeNull();
+ expect(detail.textContent).toContain('Search up to five server mailboxes');
+ expect(d.querySelectorAll('.mv-premium-detail')).toHaveLength(13);
+ expect(detail.querySelector('summary').textContent).toBe(strings['premium.fastMultiFolderSearch.title']);
+ expect(detail.textContent).toContain(strings['premium.fastMultiFolderSearch.blurb']);
+});
 it('explains every feature in the app onboarding catalog with its exact English copy',()=>{
  const source=readFileSync('src/data/premiumFeatures.js','utf8');
  const strings=JSON.parse(readFileSync('src/i18n/locales/en.json','utf8'));

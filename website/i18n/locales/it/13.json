@@ -1,4 +1,12 @@
 {
+  "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Ricerca indicizzata istantanea nella posta salvata localmente</strong> — i risultati provengono dall'indice privato del vault, anche offline</span>",
+  "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Ricerca più rapida in più cartelle</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — cerca fino a cinque caselle server e cartelle locali non indicizzate alla volta, con il livello di concorrenza che scegli</span>",
+  "d3a6f92e8981": "Vedi tutte le 17 funzionalità",
+  "6a8492b29242": "Vedi tutte le 12 funzionalità",
+  "b11668f8a640": "Tutto quello che c’è in Gratuito, più queste 13 funzioni. Selezionane una per vedere come funziona.",
+  "2966eb8bc710": "Ricerca più rapida in più cartelle",
+  "b4eeaa045260": "Le stesse 13 funzioni che trovi nell’introduzione dell’app. Apri una funzione per esplorarla.",
+  "2987dae0bc04": "cerca fino a cinque caselle server e cartelle locali non indicizzate alla volta, con il livello di concorrenza che scegli",
   "58a81e55d8f5": "Fai clic su una bolla qualsiasi per vedere i messaggi che ci stanno dietro e leggerli senza lasciare la pagina.",
   "139290f7723a": "La mappa dei mittenti: l’area della bolla è il volume, la distanza è il tempo passato dall’ultimo messaggio.",
   "07f2808a43bb": "Cronologia: una corsia per mittente, con ricevuti e inviati segnati separatamente.",

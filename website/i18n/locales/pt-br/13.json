@@ -1,4 +1,12 @@
 {
+  "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Pesquisa indexada instantânea nos e-mails salvos localmente</strong> — os resultados vêm do índice privado do seu cofre, mesmo offline</span>",
+  "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Pesquisa mais rápida em várias pastas</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — pesquise até cinco caixas do servidor e pastas locais não indexadas ao mesmo tempo, com o nível de simultaneidade que você escolher</span>",
+  "d3a6f92e8981": "Ver todos os 17 recursos",
+  "6a8492b29242": "Ver todos os 12 recursos",
+  "b11668f8a640": "Tudo o que há no Grátis, mais estes 13 recursos. Selecione um para ver como funciona.",
+  "2966eb8bc710": "Pesquisa mais rápida em várias pastas",
+  "b4eeaa045260": "Os mesmos 13 recursos que você encontra na introdução do app. Abra um recurso para explorá-lo.",
+  "2987dae0bc04": "pesquise até cinco caixas do servidor e pastas locais não indexadas ao mesmo tempo, com o nível de simultaneidade que você escolher",
   "58a81e55d8f5": "Clique em qualquer bolha para ver as mensagens por trás dela e lê-las sem sair da página.",
   "139290f7723a": "O mapa de remetentes: a área da bolha é o volume, a distância é o tempo desde a última mensagem.",
   "07f2808a43bb": "Linha do tempo: uma faixa por remetente, com recebidas e enviadas marcadas separadamente.",

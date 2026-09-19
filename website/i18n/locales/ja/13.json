@@ -1,4 +1,12 @@
 {
+  "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>ローカル保存メールを瞬時にインデックス検索</strong> — オフラインでも、保管庫内のプライベートなインデックスから結果を表示します</span>",
+  "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>複数フォルダーをより高速に検索</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — サーバー上のメールボックスと未インデックスのローカルフォルダーを最大5件まで、指定した並列数で同時に検索します</span>",
+  "d3a6f92e8981": "すべての17機能を見る",
+  "6a8492b29242": "すべての12機能を見る",
+  "b11668f8a640": "無料版のすべてに、この 13 の機能が加わります。ひとつ選ぶと、その仕組みが見られます。",
+  "2966eb8bc710": "複数フォルダーをより高速に検索",
+  "b4eeaa045260": "アプリの初回案内で紹介される 13 の機能と同じものです。機能をひとつ開いて確かめてください。",
+  "2987dae0bc04": "サーバー上のメールボックスと未インデックスのローカルフォルダーを最大5件まで、指定した並列数で同時に検索します",
   "58a81e55d8f5": "バブルをクリックすると、その裏にあるメッセージが表示され、ページを離れずに読めます。",
   "139290f7723a": "送信者マップ: バブルの面積はやり取りの量、距離は最後のメッセージからの時間。",
   "07f2808a43bb": "タイムライン: 送信者ごとに一本のレーン、受信と送信は別々の印。",
