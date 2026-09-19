@@ -40,12 +40,17 @@ describe('Post-Build DMG Smoke Tests', () => {
       console.log('Skipping: app bundle not found');
       return;
     }
-    const value = execFileSync(
-      'plutil',
-      ['-extract', 'LSBackgroundOnly', 'raw', '-o', '-', DAEMON_BIN],
-      { encoding: 'utf8' },
-    );
-    expect(value.trim()).toBe('true');
+    const section = execFileSync('otool', ['-s', '__TEXT', '__info_plist', DAEMON_BIN], {
+      encoding: 'utf8',
+    });
+    const words = section.split('\n').flatMap((line) => {
+      const match = line.match(/^\s*[0-9a-f]{12,16}\s+((?:[0-9a-f]{8}\s*)+)$/i);
+      return match ? match[1].trim().split(/\s+/) : [];
+    });
+    const plist = Buffer.concat(
+      words.map((word) => Buffer.from(word.match(/../g).reverse().join(''), 'hex')),
+    ).toString('utf8');
+    expect(plist).toMatch(/<key>LSBackgroundOnly<\/key>\s*<true\/>/);
   });
 
   it('legacy mailvault-server sidecar is absent', () => {
