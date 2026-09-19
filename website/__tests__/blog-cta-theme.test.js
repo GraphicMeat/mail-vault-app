@@ -24,19 +24,26 @@ describe('blog article CTA theme colors', () => {
     expect(articles).toHaveLength(5);
 
     for (const article of articles) {
-      const englishCtas = readCtaAnchors(resolve(blogRoot, article));
+      const englishPath = resolve(blogRoot, article);
+      const englishCtas = readCtaAnchors(englishPath);
       expect(englishCtas.length, article).toBe(2);
+      expect(readFileSync(englishPath, 'utf8'), englishPath)
+        .toContain('/assets/english-content.css?v=3');
 
       for (const locale of locales) {
         const localizedPath = resolve(websiteRoot, locale, 'blog', article);
         expect(existsSync(localizedPath), localizedPath).toBe(true);
         const localizedCtas = readCtaAnchors(localizedPath);
         expect(localizedCtas.length, localizedPath).toBe(2);
+        expect(readFileSync(localizedPath, 'utf8'), localizedPath)
+          .toContain('/assets/english-content.css?v=3');
 
         for (const cta of [...englishCtas, ...localizedCtas]) {
           expect(cta.classList.contains('mv-blog-cta')).toBe(true);
           if (cta.classList.contains('lamp-bg')) {
             expect(cta.classList.contains('mv-blog-cta-primary')).toBe(true);
+          } else {
+            expect(cta.classList.contains('mv-blog-cta-secondary')).toBe(true);
           }
         }
       }
@@ -51,17 +58,20 @@ describe('blog article CTA theme colors', () => {
           <div class="mv-content-page"><main><div class="prose">
             <a class="mv-blog-cta mv-blog-cta-primary text-white">Download</a>
             <a class="mv-blog-cta text-primary-600 dark:text-primary-400">See features</a>
+            <a class="text-primary-500">Read the source</a>
           </div></main></div>
         </body>
       </html>
     `);
-    const [primary, secondary] = dom.window.document.querySelectorAll('.prose a');
+    const [primary, secondary, proseLink] = dom.window.document.querySelectorAll('.prose a');
 
     expect(dom.window.getComputedStyle(primary).color).toBe('rgb(255, 255, 255)');
     expect(dom.window.getComputedStyle(secondary).color).toBe('var(--mv-accent)');
+    expect(dom.window.getComputedStyle(proseLink).color).toBe('var(--mv-accent)');
 
     dom.window.document.documentElement.classList.add('dark');
     expect(dom.window.getComputedStyle(primary).color).toBe('rgb(255, 255, 255)');
     expect(dom.window.getComputedStyle(secondary).color).toBe('rgb(255, 255, 255)');
+    expect(dom.window.getComputedStyle(proseLink).color).toBe('var(--mv-accent)');
   });
 });
