@@ -409,6 +409,7 @@ async fn daemon_main() {
         shutdown: Arc::new(tokio::sync::Notify::new()),
         events,
         search_index: Arc::clone(&search_index_state),
+        search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),

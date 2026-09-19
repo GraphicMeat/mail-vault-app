@@ -30,6 +30,7 @@ pub(crate) mod graph;
 pub(crate) mod imap;
 pub(crate) mod insights;
 pub(crate) mod journal;
+pub(crate) mod mail_search;
 pub(crate) mod mbox;
 pub(crate) mod migration;
 pub(crate) mod oauth2;
