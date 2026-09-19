@@ -18,9 +18,7 @@ import {
 import { getRealAttachments, replaceCidUrls } from '../services/attachmentUtils';
 import * as db from '../services/db';
 import { describeMessageState, useBackedUp } from './email/MessageStateIcon';
-import { custodyProof, custodyRowFor } from '../stores/slices/custody';
-import { probeServerCopy } from '../services/workflows/probeServerCopy';
-import { decodeImapUtf7 } from '../utils/imapUtf7';
+import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
@@ -49,6 +47,7 @@ import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/ifram
 import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
+import { ReadDelayProgress } from './ReadDelayProgress';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -151,62 +150,9 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // Read the row, through the same key builder the rows use.
   const backedUp = useBackedUp(insightsCustody ? selectedEmail : custodyRow || selectedEmail);
   const custody = describeMessageState(custodySubject, { serverKnown: insightsCustody ? false : serverKnown, backedUp });
-  // Who may be asked. A vault copy the app has no proof about, obviously — and
-  // also a gold row whose proof is a sweep, because a server can change its
-  // mind: a message restored from the Bin, or re-delivered, leaves that verdict
-  // a lie on disk with nothing able to overturn it. The other two proofs are
-  // facts about this app's own actions and no sweep can disprove them, and a
-  // message with no vault copy has nothing riding on the answer.
-  const canCheckServer = !selectedEmail?._insightsReadOnly && !selectedEmail?._insightsNoServerActions
-    && (custody.tone === 'local' || custodyProof(custodySubject) === 'server-lost-it');
-
-  // ── "Check the server" ──
-  //
-  // The one question the gold row rests on, asked out loud: does ANY folder on
-  // this account still hold this Message-ID? Manual because it is a sweep of
-  // every folder — cheap on a click, ruinous as a per-row background job — and
-  // because the answer is durable once given: `probeServerCopy` writes it to
-  // the vault entry, so the row keeps its verdict across reloads.
-  const [probing, setProbing] = useState(false);
-  const [probeResult, setProbeResult] = useState(null);
-
-  const handleCheckServer = async () => {
-    if (!selectedEmail || probing) return;
-    setProbing(true);
-    setProbeResult(null);
-    try {
-      setProbeResult(await probeServerCopy(selectedEmail.uid, {
-        accountId: custodyRow?._accountId || selectedEmail._accountId,
-        mailbox: custodyRow?._mailbox || selectedEmail._mailbox,
-      }));
-    } finally {
-      setProbing(false);
-    }
-  };
-
-  // What a finished check adds to the band. 'absent' says nothing here: the
-  // band itself has already turned gold and said it in its own words.
-  //
-  // Every other outcome is UNKNOWN, and each one names which part of the
-  // question went unanswered — a probe that cannot say why it failed is a probe
-  // the user has to guess about.
-  const probeNote = !probeResult || probeResult.state === 'absent' ? null
-    : probeResult.state === 'present'
-      ? (probeResult.locations?.[0]?.mailbox
-          ? t('viewer.stillServer', { decodeImapUtf7: decodeImapUtf7(probeResult.locations[0].mailbox) })
-          : t('viewer.stillServer2'))
-      : probeResult.reason === 'incomplete'
-        ? t('viewer.couldnTOpenFolderS', { probeResult: probeResult.failed?.length || 'some' })
-        : probeResult.reason === 'no-message-id' ? t('viewer.noMessageIdMessageLook')
-        : probeResult.reason === 'graph' ? t('viewer.availableMicrosoftAccounts')
-        : probeResult.reason === 'offline' ? t('viewer.signAccountFirst')
-        : probeResult.reason === 'not-in-vault' ? t('viewer.noVaultCopyKeep')
-        : t('viewer.couldnTReachServer');
-
   // Reset view states when switching emails
   useEffect(() => {
     ++rawRequest.current;
-    setProbeResult(null);
     setShowRaw(false);
     setRawSource(null);
     setRawError(null);
@@ -588,6 +534,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
 
   return (
     <div className="email-reader flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full relative">
+      <ReadDelayProgress />
       {/* Drag region */}
       <div data-tauri-drag-region className="h-2 border-b border-mail-border" />
 
@@ -628,25 +575,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
           ? <Cloud size={14} className="flex-shrink-0 text-mail-server" />
           : <HardDrive size={14} className="flex-shrink-0 text-mail-local" />}
         <span className="font-medium text-mail-text">{custody.label}</span>
-        <span className="text-mail-text-on-tint truncate">{custody.detail}</span>
-        {probeNote && (
-          <span data-testid="custody-check-result" className="text-mail-text-on-tint truncate">
-            {probeNote}
-          </span>
-        )}
-        {canCheckServer && (
-          <Button
-            data-testid="custody-check-server"
-            variant="link"
-            size="xs"
-            loading={probing}
-            onClick={handleCheckServer}
-            className="ml-auto flex-shrink-0 whitespace-nowrap"
-          >
-            {probing ? t('viewer.checkingEveryFolder')
-              : custody.tone === 'only-copy' ? t('viewer.checkAgain') : t('viewer.checkServer')}
-          </Button>
-        )}
+        {custody.tone !== 'local' && <span className="text-mail-text-on-tint truncate">{custody.detail}</span>}
       </div>
 
       {/* Header */}

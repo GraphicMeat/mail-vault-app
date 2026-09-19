@@ -18,6 +18,7 @@ import {
   Paperclip,
   Archive,
   ImageDown,
+  Loader,
 } from 'lucide-react';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
@@ -41,6 +42,7 @@ import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { AddressText } from './AddressText';
 import { t as tr, useT  } from '../../i18n/index.js';
+import { ReadDelayProgress } from '../ReadDelayProgress';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
@@ -183,8 +185,8 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="w-5 h-5 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
+      <div role="status" aria-label={t('viewer.loadingMessage')} className="flex items-center justify-center py-8">
+        <Loader size={20} className="animate-spin text-mail-accent-text" aria-hidden="true" />
       </div>
     );
   }
@@ -627,6 +629,7 @@ export function ThreadView({ thread, onComposeReply }) {
 
   return (
     <div className="thread-reader flex-1 flex flex-col bg-mail-bg overflow-hidden min-h-0 min-w-0 h-full">
+      <ReadDelayProgress />
       {/* Thread header */}
       <div data-tauri-drag-region className="flex items-center justify-between px-3 py-2.5 border-b border-mail-border">
         <div className="flex flex-col justify-center flex-1 min-w-0 min-h-[34px]">

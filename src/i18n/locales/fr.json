@@ -1841,6 +1841,7 @@
   "compose.delay3m": "délai de 3 min",
   "compose.delay5m": "délai de 5 min",
   "viewer.loadingMessage": "Chargement du message…",
+  "viewer.markingAsRead": "Marquage comme lu",
   "vaultAlert.reconnectDriveOrPointAtFolder": "Rebranchez le disque, ou indiquez à MailVault le dossier s'il a été déplacé.",
   "offlineBanner.title": "Pas de connexion internet",
   "offlineBanner.body": "Votre courrier est toujours là : MailVault affiche ce qui est déjà enregistré sur cet ordinateur. La synchronisation reprendra d'elle-même dès que vous serez de nouveau en ligne.",

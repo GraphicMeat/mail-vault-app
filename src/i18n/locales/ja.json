@@ -1841,6 +1841,7 @@
   "compose.delay3m": "3 分後に送信",
   "compose.delay5m": "5 分後に送信",
   "viewer.loadingMessage": "メッセージを読み込み中…",
+  "viewer.markingAsRead": "既読にしています",
   "vaultAlert.reconnectDriveOrPointAtFolder": "ドライブを接続し直すか、フォルダーが移動した場合は MailVault にその場所を指定してください。",
   "offlineBanner.title": "インターネットに接続していません",
   "offlineBanner.body": "メールはここに残っています。MailVault はこのコンピュータに保存済みの内容を表示しています。オンラインに戻ると同期は自動的に再開します。",
