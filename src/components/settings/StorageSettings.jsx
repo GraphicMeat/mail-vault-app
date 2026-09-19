@@ -378,7 +378,7 @@ export function StorageSettings({ accounts, onUpgrade }) {
         </div>
       </div>
 
-      <SearchIndexSettings />
+      <SearchIndexSettings onUpgrade={onUpgrade} />
 
       {/* Auto-Cleanup Rules */}
       <div data-testid="settings-auto-cleanup" className="settings-section relative overflow-hidden">

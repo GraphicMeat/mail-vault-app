@@ -1,6 +1,6 @@
 import {
   CalendarClock, ShieldCheck, Sparkles, Clock, EyeOff,
-  Trash2, ArrowLeftRight, Server, Image, Timer, Monitor, FileSearch,
+  Trash2, ArrowLeftRight, Server, Image, Timer, Monitor, FileSearch, Gauge,
 } from 'lucide-react';
 
 /**
@@ -27,4 +27,5 @@ export const PREMIUM_FEATURES = Object.freeze([
   { id: 'focus-session',    icon: Timer,          titleKey: 'premium.focusSession.title',    blurbKey: 'premium.focusSession.blurb',    shot: 'premium-focus-session',    tab: null },
   { id: 'devices',          icon: Monitor,        titleKey: 'premium.devices.title',         blurbKey: 'premium.devices.blurb',         shot: null,                       tab: null },
   { id: 'attachment-search', icon: FileSearch,    titleKey: 'premium.attachmentSearch.title', blurbKey: 'premium.attachmentSearch.blurb', shot: null,                       tab: 'storage' },
+  { id: 'fast-multi-folder-search', icon: Gauge, titleKey: 'premium.fastMultiFolderSearch.title', blurbKey: 'premium.fastMultiFolderSearch.blurb', shot: null, tab: 'storage' },
 ]);

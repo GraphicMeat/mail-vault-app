@@ -12,9 +12,23 @@ import ptBR from '../locales/pt-BR.json';
 import ja from '../locales/ja.json';
 import ko from '../locales/ko.json';
 import zhHans from '../locales/zh-Hans.json';
+import { PREMIUM_FEATURES } from '../../data/premiumFeatures.js';
 
 const catalogs = { es, fr, it: itIT, de, 'pt-BR': ptBR, ja, ko, 'zh-Hans': zhHans };
 const LOCALES = Object.keys(catalogs);
+const SEARCH_KEYS = [
+  'search.fallback.off',
+  'search.fallback.building',
+  'search.fallback.unavailable',
+  'search.fallback.openSettings',
+  'search.fallback.upgrade',
+  'search.allSourcesFailed',
+  'settings.searchIndex.concurrency',
+  'settings.searchIndex.concurrencyHint',
+  'settings.searchIndex.concurrencyFree',
+  'premium.fastMultiFolderSearch.title',
+  'premium.fastMultiFolderSearch.blurb',
+];
 
 const placeholders = (s) => (String(s).match(/\{\{(\w+)\}\}/g) || []).sort();
 const slots = (s) => (String(s).match(/<(\d)>/g) || []).sort();
@@ -26,6 +40,25 @@ const CATEGORIES = {
   de: ['one', 'other'], 'pt-BR': ['one', 'other'],
   ja: ['other'], ko: ['other'], 'zh-Hans': ['other'],
 };
+
+describe('daemon search copy and Premium catalog', () => {
+  it('defines every search key in each app locale', () => {
+    for (const [locale, catalog] of Object.entries({ en, ...catalogs })) {
+      expect(SEARCH_KEYS.filter(key => !(key in catalog)), locale).toEqual([]);
+      expect(SEARCH_KEYS.filter(key => !String(catalog[key] || '').trim()), locale).toEqual([]);
+    }
+  });
+
+  it('registers one multi-folder-search feature in storage settings', () => {
+    const features = PREMIUM_FEATURES.filter(feature => feature.id === 'fast-multi-folder-search');
+    expect(features).toHaveLength(1);
+    expect(features[0]).toMatchObject({
+      titleKey: 'premium.fastMultiFolderSearch.title',
+      blurbKey: 'premium.fastMultiFolderSearch.blurb',
+      tab: 'storage',
+    });
+  });
+});
 
 for (const loc of LOCALES) describe(`${loc} catalog`, () => {
   const cat = catalogs[loc];

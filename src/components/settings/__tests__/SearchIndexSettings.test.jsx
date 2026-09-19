@@ -25,7 +25,14 @@ beforeEach(() => {
   progress = null;
   rebuild.mockReset().mockResolvedValue(undefined);
   destroy.mockReset().mockResolvedValue({ ok: true });
-  useSettingsStore.setState({ searchIndexBodies: true, searchIndexAttachments: true, searchIndexImageText: true, searchIndexEnabled: true });
+  useSettingsStore.setState({
+    billingProfile: null,
+    searchMailboxConcurrency: 3,
+    searchIndexBodies: true,
+    searchIndexAttachments: true,
+    searchIndexImageText: true,
+    searchIndexEnabled: true,
+  });
 });
 afterEach(cleanup);
 
@@ -34,6 +41,35 @@ describe('Search index settings', () => {
     render(<SearchIndexSettings />);
     await waitFor(() => expect(statusText()).toBe(`12 / 40 indexed · ${formatBytes(2048)}`));
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('30');
+  });
+
+  it('shows free users one mailbox at a time without changing their saved preference', () => {
+    useSettingsStore.setState({ billingProfile: null, searchMailboxConcurrency: 4 });
+    const onUpgrade = vi.fn();
+    render(<SearchIndexSettings onUpgrade={onUpgrade} />);
+
+    const select = screen.getByTestId('search-mailbox-concurrency');
+    expect(select.value).toBe('1');
+    expect(select.disabled).toBe(true);
+    expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(4);
+    fireEvent.click(screen.getByTestId('search-concurrency-upgrade'));
+    expect(onUpgrade).toHaveBeenCalledOnce();
+  });
+
+  it('lets Premium save any mailbox concurrency from one through five', () => {
+    useSettingsStore.setState({
+      billingProfile: { hasSubscription: true, status: 'active' },
+      searchMailboxConcurrency: 3,
+    });
+    render(<SearchIndexSettings onUpgrade={vi.fn()} />);
+
+    const select = screen.getByTestId('search-mailbox-concurrency');
+    expect(select.value).toBe('3');
+    expect(select.disabled).toBe(false);
+    for (const value of [1, 2, 3, 4, 5]) {
+      fireEvent.change(select, { target: { value: String(value) } });
+      expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(value);
+    }
   });
 
   it('turns message bodies off and on', async () => {
