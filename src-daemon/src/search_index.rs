@@ -12,7 +12,7 @@ use mailvault_core::search_index::reconcile::{self, AttachmentMeta, IndexConfig,
 use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use mailvault_core::search_index::{self as core, db, lock, SharedConn};
 use mailvault_core::maildir::vault_filename_uid;
-use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, parse_eml_bytes_light, parse_flags_from_filename, part_filename, read_light_at};
+use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, parse_eml_bytes_light, parse_flags_from_filename, part_filename};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
@@ -201,46 +201,19 @@ pub(crate) fn read_attachment_part(
     ))
 }
 
-/// One row per hit, in hit order: the list row read from the hit's own file,
-/// plus `vaultDir`, `snippet` and `matchedIn`. The index knows each filename,
-/// so there is no folder listing; `read_light_at` rescans once only if the file
-/// was renamed since (a flag change). A hit whose file is gone, or whose uid now
-/// holds a message with another Message-ID, is dropped and `total` still counts
-/// it until the next sweep: transient, never a wrong row.
-pub fn assemble_rows(root: &Path, account_id: &str, page: &core::query::SearchPage) -> Vec<serde_json::Value> {
+/// One row per hit from the stored header cache. Current filename flags remain
+/// authoritative; the reader revalidates the message when a result is opened.
+pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
     page.hits
         .iter()
         .filter_map(|h| {
-            let cur = root.join("Maildir").join(account_id).join(&h.vault_dir).join("cur");
-            let email = read_light_at(&cur, h.uid, Some(&cur.join(&h.filename)))?;
-            let mut row = serde_json::to_value(&email).ok()?;
-            // A UID reissue repair since the last sweep can give this uid to another
-            // message: that row is not this hit. Same parser on both sides, so exact.
-            if let Some(indexed) = &h.message_id {
-                if row.get("messageId").and_then(|v| v.as_str()) != Some(indexed.as_str()) {
-                    return None;
-                }
-            }
-            let body = body_of(&row);
-            let subject = row.get("subject").and_then(|s| s.as_str()).unwrap_or("").to_string();
-            // Names and addresses only: the JSON text around them would match `name` or `address`.
-            let from = addr_text(&row["from"]);
-            let to = ["to", "cc", "bcc"]
-                .iter()
-                .filter_map(|k| row.get(*k)?.as_array())
-                .flatten()
-                .map(addr_text)
-                .collect::<Vec<_>>()
-                .join(" ");
-            let matched: Vec<&str> = [("subject", &subject), ("from", &from), ("to", &to), ("body", &body)]
-                .into_iter()
-                .filter(|(_, text)| page.needles.iter().any(|n| core::text::contains_folded(text, n)))
-                .map(|(label, _)| label)
-                .collect();
+            let mut row: serde_json::Value = serde_json::from_str(&h.row_json).ok()?;
+            let flags = parse_flags_from_filename(&h.filename);
             let obj = row.as_object_mut()?;
+            obj.insert("uid".into(), h.uid.into());
             obj.insert("vaultDir".into(), h.vault_dir.clone().into());
-            obj.insert("snippet".into(), core::text::snippet(&body, &page.needles, 160).into());
-            obj.insert("matchedIn".into(), matched.into());
+            obj.insert("flags".into(), serde_json::json!(flags));
+            obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
             Some(row)
         })
         .collect()
@@ -275,30 +248,37 @@ pub(crate) fn emit(st: &SearchIndexState) {
     st.bus.emit("search-index-progress", status_json(st));
 }
 
-/// `{ available: false }` until the worker has opened the index and finished
-/// its first full pass over it.
+/// Returns explicit availability reasons so the daemon coordinator can decide
+/// whether the local lane needs to read files.
 pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest) -> Result<serde_json::Value, String> {
     // `enabled` is read and released before `db` is locked (lock order).
     if *g(&st.enabled) == Some(false) {
-        return Ok(serde_json::json!({ "available": false }));
+        return Ok(serde_json::json!({ "available": false, "reason": "off" }));
     }
-    let (root, page, counts) = {
+    let (page, coverage, counts) = {
         let guard = lock(&st.db);
-        // Root read under the db lock, so it is the root this connection was opened for.
-        let (Some(conn), Some(root)) = (guard.as_ref(), g(&st.root).clone()) else {
-            return Ok(serde_json::json!({ "available": false }));
+        let Some(conn) = guard.as_ref() else {
+            return Ok(serde_json::json!({ "available": false, "reason": "unavailable" }));
         };
         // A first build (or a rebuild) still misses mail the scan finds.
         if !db::first_pass_done(conn) {
-            return Ok(serde_json::json!({ "available": false }));
+            return Ok(serde_json::json!({ "available": false, "reason": "building" }));
         }
-        (root, core::query::search(conn, request)?, db::counts(conn))
-    }; // released before any file is read
-    let rows = assemble_rows(&root, &request.account_id, &page);
+        (
+            core::query::search(conn, request)?,
+            db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())?,
+            db::counts(conn),
+        )
+    };
+    let rows = assemble_rows(&page);
+    let uncovered_vault_dirs = coverage.uncovered_vault_dirs.clone();
     Ok(serde_json::json!({
         "available": true,
+        "mode": "index",
         "rows": rows,
         "total": page.total,
+        "coverage": coverage,
+        "uncoveredVaultDirs": uncovered_vault_dirs,
         "indexed": counts.indexed,
         "totalMessages": counts.total,
         "complete": counts.total > 0 && counts.indexed >= counts.total,
@@ -946,56 +926,44 @@ mod tests {
     }
 
     #[test]
-    fn assemble_rows_keeps_hit_order_and_adds_snippet_and_matched_in() {
+    fn assemble_rows_uses_row_json_without_reading_the_eml() {
         use mailvault_core::search_index::query::{SearchHit, SearchPage};
-        let tmp = tempfile::tempdir().unwrap();
-        let root = tmp.path();
-        for (dir, uid, subject, body) in [("INBOX", 3u32, "Budget", "the quarterly budget is attached"), ("Archive", 9, "Lunch", "no budget words here? budget!")] {
-            let cur = root.join("Maildir/acct").join(dir).join("cur");
-            std::fs::create_dir_all(&cur).unwrap();
-            std::fs::write(cur.join(format!("{uid}:2,S.eml")), format!("From: A <a@x.test>\r\nTo: b@x.test\r\nSubject: {subject}\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\n{body}\r\n")).unwrap();
-        }
         let page = SearchPage {
-            hits: vec![
-                SearchHit { vault_dir: "Archive".into(), uid: 9, filename: "9:2,S.eml".into(), message_id: None },
-                SearchHit { vault_dir: "INBOX".into(), uid: 3, filename: "3:2,S.eml".into(), message_id: None },
-                SearchHit { vault_dir: "INBOX".into(), uid: 404, filename: "404:2,.eml".into(), message_id: None },
-            ],
-            total: 3,
-            needles: vec!["budget".into()],
+            hits: vec![SearchHit {
+                vault_dir: "INBOX".into(),
+                uid: 7,
+                filename: "7:2,AS.eml".into(),
+                message_id: Some("<seven@example>".into()),
+                row_json: r#"{"uid":7,"messageId":"<seven@example>","subject":"Indexed only"}"#.into(),
+            }],
+            total: 1,
+            needles: vec!["indexed".into()],
         };
-        let rows = crate::search_index::assemble_rows(root, "acct", &page);
-        assert_eq!(rows.len(), 2, "a hit whose file vanished is dropped, not an error");
-        assert_eq!(rows[0]["uid"], 9);
-        assert_eq!(rows[0]["vaultDir"], "Archive");
-        assert_eq!(rows[1]["uid"], 3);
-        assert!(rows[1]["snippet"].as_str().unwrap().to_lowercase().contains("budget"));
-        let matched: Vec<&str> = rows[1]["matchedIn"].as_array().unwrap().iter().filter_map(|v| v.as_str()).collect();
-        assert!(matched.contains(&"subject") && matched.contains(&"body"));
-        assert!(rows[0]["flags"].as_array().unwrap().iter().any(|f| f == "\\Seen"), "flags from the filename");
-
-        // matchedIn reads names and addresses, not the JSON around them.
-        let keys = SearchPage { needles: vec!["address".into()], ..page };
-        let rows = crate::search_index::assemble_rows(root, "acct", &keys);
-        assert!(rows.iter().all(|r| r["matchedIn"].as_array().unwrap().is_empty()), "{rows:?}");
-        assert!(rows.iter().all(|r| r["snippet"].is_null()));
+        let rows = crate::search_index::assemble_rows(&page);
+        assert_eq!(rows[0]["subject"], "Indexed only");
+        assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "seen", "\\Seen"]));
+        assert_eq!(rows[0]["vaultDir"], "INBOX");
     }
 
     #[test]
-    fn assemble_rows_drops_a_hit_whose_uid_now_holds_another_message() {
+    fn assemble_rows_leaves_message_id_verification_for_open_time() {
         use mailvault_core::search_index::query::{SearchHit, SearchPage};
-        let tmp = tempfile::tempdir().unwrap();
-        let cur = tmp.path().join("Maildir/acct/INBOX/cur");
-        std::fs::create_dir_all(&cur).unwrap();
-        for (uid, id) in [(5u32, "<reissued@x.test>"), (6, "<six@x.test>")] {
-            std::fs::write(cur.join(format!("{uid}:2,.eml")), format!("From: a@x.test\r\nSubject: Budget {uid}\r\nMessage-ID: {id}\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbudget\r\n")).unwrap();
-        }
-        let hit = |uid: u32, id: &str| SearchHit { vault_dir: "INBOX".into(), uid, filename: format!("{uid}:2,.eml"), message_id: Some(id.into()) };
-        // Indexed before a UID reissue repair gave uid 5 to another message.
-        let page = SearchPage { hits: vec![hit(5, "<indexed@x.test>"), hit(6, "<six@x.test>")], total: 2, needles: vec!["budget".into()] };
-        let rows = crate::search_index::assemble_rows(tmp.path(), "acct", &page);
-        let uids: Vec<u64> = rows.iter().filter_map(|r| r["uid"].as_u64()).collect();
-        assert_eq!(uids, vec![6], "the reissued uid's row is another message: dropped, never shown for this hit");
+        let page = SearchPage {
+            hits: vec![SearchHit {
+                vault_dir: "INBOX".into(),
+                uid: 5,
+                filename: "5:2,.eml".into(),
+                message_id: Some("<indexed@x.test>".into()),
+                row_json: r#"{"uid":5,"messageId":"<indexed@x.test>","subject":"Indexed budget"}"#.into(),
+            }],
+            total: 1,
+            needles: vec!["budget".into()],
+        };
+        // Opening still uses the reader's existing location/Message-ID guard;
+        // search assembly returns the indexed row without rereading the file.
+        let rows = crate::search_index::assemble_rows(&page);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["messageId"], "<indexed@x.test>");
     }
 
     #[test]
@@ -1009,6 +977,7 @@ mod tests {
             crate::search_index::search_reply(&st, &req).unwrap()
         };
         assert_eq!((status()["available"].as_bool(), search()["available"].as_bool()), (Some(false), Some(false)), "closed");
+        assert_eq!(search()["reason"], "unavailable");
 
         *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
         *st.root.lock().unwrap() = Some(tmp.path().to_path_buf());
@@ -1016,11 +985,14 @@ mod tests {
         assert_eq!(s["available"], true, "open: Settings shows the first build's progress and can Rebuild");
         assert_eq!(s["indexed"], 0);
         assert_eq!(search()["available"], false, "a first build misses mail the scan finds: search keeps scanning");
+        assert_eq!(search()["reason"], "building");
 
         db::meta_set(lock(&st.db).as_ref().unwrap(), db::FIRST_PASS_DONE, "1").unwrap();
         let reply = search();
         assert_eq!(reply["available"], true);
         assert_eq!(reply["rows"], serde_json::json!([]));
+        assert_eq!(reply["mode"], "index");
+        assert_eq!(reply["coverage"]["complete"], true);
         assert_eq!(status()["available"], true);
     }
 
@@ -1091,7 +1063,9 @@ mod tests {
         let s = crate::search_index::status_json(&st);
         assert_eq!((s["available"].as_bool(), s["state"].as_str()), (Some(false), Some("off")));
         let req = mailvault_core::search_index::query::SearchRequest { account_id: "acct".into(), query: "x".into(), ..Default::default() };
-        assert_eq!(crate::search_index::search_reply(&st, &req).unwrap()["available"], false);
+        let reply = crate::search_index::search_reply(&st, &req).unwrap();
+        assert_eq!(reply["available"], false);
+        assert_eq!(reply["reason"], "off");
     }
 
     /// Not a gate. The app parser over 50k ~3 KB multipart files, then what
@@ -1179,7 +1153,7 @@ mod tests {
             let page = search(lock(&db).as_ref().unwrap(), &r).unwrap();
             let searched = t.elapsed();
             let t = Instant::now();
-            let rows = crate::search_index::assemble_rows(root, "bench", &page);
+            let rows = crate::search_index::assemble_rows(&page);
             println!("query {label:?} total={} hits={} rows={} search={searched:?} assemble={:?}", page.total, page.hits.len(), rows.len(), t.elapsed());
         }
     }

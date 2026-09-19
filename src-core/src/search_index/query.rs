@@ -46,9 +46,10 @@ pub struct SearchHit {
     pub vault_dir: String,
     pub uid: u32,
     pub filename: String,
-    /// The Message-ID indexed for this uid. Row assembly drops a hit whose file
-    /// now carries another one (a UID reissue repaired since the last sweep).
+    /// The Message-ID indexed for this uid, rechecked by the reader when opened.
     pub message_id: Option<String>,
+    /// Stored list-row metadata. Search result assembly must not parse the `.eml`.
+    pub row_json: String,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -166,12 +167,12 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)? })
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -275,6 +276,28 @@ mod tests {
         SearchRequest { account_id: account.into(), query: q.into(), ..Default::default() }
     }
 
+    fn coverage_fixture() -> (tempfile::TempDir, rusqlite::Connection) {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = db::open(tmp.path()).unwrap();
+        (tmp, conn)
+    }
+
+    fn seed_scan(conn: &rusqlite::Connection, account: &str, vault_dir: &str, file_count: i64) {
+        conn.execute(
+            "INSERT INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, 1, ?3)",
+            rusqlite::params![account, vault_dir, file_count],
+        ).unwrap();
+    }
+
+    fn seed_rows(conn: &rusqlite::Connection, account: &str, vault_dir: &str, count: u32, body_state: i64) {
+        for uid in 1..=count {
+            conn.execute(
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, body_state) VALUES (?1, ?2, ?3, ?4, 1, 1, 1, ?5)",
+                rusqlite::params![account, vault_dir, uid, format!("{uid}:2,.eml"), body_state],
+            ).unwrap();
+        }
+    }
+
     #[test]
     fn whole_phrase_substring_matches_like_includes_did() {
         let (_t, db) = fixture();
@@ -339,5 +362,51 @@ mod tests {
         let g = crate::search_index::lock(&db);
         let page = search(g.as_ref().unwrap(), &SearchRequest { account_id: "luke".into(), limit: Some(2), ..Default::default() }).unwrap();
         assert_eq!((page.hits.len(), page.total), (2, 4));
+    }
+
+    #[test]
+    fn scoped_coverage_names_only_incomplete_requested_folders() {
+        let (_tmp, conn) = coverage_fixture();
+        seed_scan(&conn, "a", "INBOX", 2);
+        seed_scan(&conn, "a", "Archive", 3);
+        seed_rows(&conn, "a", "INBOX", 2, 1);
+        seed_rows(&conn, "a", "Archive", 1, 1);
+        seed_scan(&conn, "b", "INBOX", 50);
+
+        let coverage = db::scope_coverage(&conn, "a", Some(&["INBOX".into(), "Archive".into()])).unwrap();
+        assert_eq!((coverage.indexed, coverage.total, coverage.complete), (3, 5, false));
+        assert_eq!(coverage.uncovered_vault_dirs, vec!["Archive"]);
+    }
+
+    #[test]
+    fn all_scope_coverage_includes_vault_only_and_body_pending_folders() {
+        let (_tmp, conn) = coverage_fixture();
+        seed_scan(&conn, "a", "vault-only", 4);
+        seed_scan(&conn, "a", "pending", 1);
+        seed_rows(&conn, "a", "pending", 1, crate::search_index::reconcile::BODY_PENDING);
+        seed_scan(&conn, "b", "other-account", 99);
+
+        let coverage = db::scope_coverage(&conn, "a", None).unwrap();
+        assert_eq!((coverage.indexed, coverage.total, coverage.complete), (0, 5, false));
+        assert_eq!(coverage.uncovered_vault_dirs, vec!["pending", "vault-only"]);
+    }
+
+    #[test]
+    fn explicitly_requested_folder_without_scan_row_is_uncovered() {
+        let (_tmp, conn) = coverage_fixture();
+        let coverage = db::scope_coverage(&conn, "a", Some(&["Missing".into()])).unwrap();
+        assert_eq!((coverage.indexed, coverage.total, coverage.complete), (0, 0, false));
+        assert_eq!(coverage.uncovered_vault_dirs, vec!["Missing"]);
+    }
+
+    #[test]
+    fn coverage_deduplicates_server_paths_that_share_a_vault_directory() {
+        let (_tmp, conn) = coverage_fixture();
+        seed_scan(&conn, "a", "Projects_2026", 2);
+        seed_rows(&conn, "a", "Projects_2026", 2, 1);
+
+        let coverage = db::scope_coverage(&conn, "a", Some(&["Projects/2026".into(), "Projects_2026".into()])).unwrap();
+        assert_eq!((coverage.indexed, coverage.total, coverage.complete), (2, 2, true));
+        assert!(coverage.uncovered_vault_dirs.is_empty());
     }
 }

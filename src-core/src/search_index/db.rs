@@ -1,4 +1,5 @@
-use rusqlite::{Connection, ErrorCode, OptionalExtension};
+use rusqlite::{params_from_iter, types::Value, Connection, ErrorCode, OptionalExtension};
+use std::collections::BTreeSet;
 use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
@@ -191,6 +192,69 @@ pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String>
 pub struct IndexCounts {
     pub indexed: u64,
     pub total: u64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScopeCoverage {
+    pub indexed: u64,
+    pub total: u64,
+    pub complete: bool,
+    pub uncovered_vault_dirs: Vec<String>,
+}
+
+/// Coverage for the requested server mailbox paths, or every indexed/vault
+/// directory for one account when `mailboxes` is absent or empty.
+pub fn scope_coverage(conn: &Connection, account_id: &str, mailboxes: Option<&[String]>) -> Result<ScopeCoverage, String> {
+    let requested: Option<BTreeSet<String>> = mailboxes
+        .filter(|boxes| !boxes.is_empty())
+        .map(|boxes| boxes.iter().map(|name| crate::search_index::text::vault_dir_name(name)).collect());
+    let mut args = vec![Value::Text(account_id.to_string())];
+    let scope = if let Some(dirs) = requested {
+        args.extend(dirs.iter().cloned().map(Value::Text));
+        let values = (2..args.len() + 1).map(|n| format!("(?{n})")).collect::<Vec<_>>().join(", ");
+        format!("scope(vault_dir) AS (VALUES {values})")
+    } else {
+        "scope(vault_dir) AS (SELECT vault_dir FROM mailbox_scan WHERE account_id = ?1 UNION SELECT vault_dir FROM messages WHERE account_id = ?1)".into()
+    };
+    let sql = format!(
+        "WITH {scope} \
+         SELECT s.vault_dir, sc.file_count IS NOT NULL, COALESCE(sc.file_count, 0), \
+                COUNT(m.id), COUNT(m.id) FILTER (WHERE m.body_state != {}), \
+                COUNT(m.id) FILTER (WHERE m.body_state = {}) \
+         FROM scope s \
+         LEFT JOIN mailbox_scan sc ON sc.account_id = ?1 AND sc.vault_dir = s.vault_dir \
+         LEFT JOIN messages m ON m.account_id = ?1 AND m.vault_dir = s.vault_dir \
+         GROUP BY s.vault_dir, sc.file_count ORDER BY s.vault_dir",
+        crate::search_index::reconcile::BODY_PENDING,
+        crate::search_index::reconcile::BODY_PENDING,
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(params_from_iter(args.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)? != 0,
+                row.get::<_, i64>(2)?,
+                row.get::<_, i64>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+    let mut coverage = ScopeCoverage { complete: true, ..Default::default() };
+    for row in rows {
+        let (vault_dir, has_scan, file_count, row_count, indexed_count, pending_count) = row.map_err(|e| e.to_string())?;
+        let file_count = file_count.max(0);
+        let row_count = row_count.max(0);
+        coverage.indexed += u64::try_from(indexed_count.max(0)).unwrap_or(0);
+        coverage.total += u64::try_from(file_count.max(row_count)).unwrap_or(0);
+        if !has_scan || row_count < file_count || pending_count > 0 {
+            coverage.complete = false;
+            coverage.uncovered_vault_dirs.push(vault_dir);
+        }
+    }
+    Ok(coverage)
 }
 
 /// Index coverage. `total` is the larger of the rows and the files each
