@@ -1948,13 +1948,44 @@ pub async fn search_emails(
 
     let search_str = criteria_parts.join(" ");
 
-    // Use UID SEARCH
-    let uids: Vec<u32> = session
-        .uid_search(&search_str)
+    // async-imap's uid_search parser treats EOF before the tagged completion as
+    // a successful empty result. Read the response through its tagged OK so a
+    // dropped pooled socket reaches ImapPool's existing one-time read retry.
+    use imap_proto::{MailboxDatum, Response, Status};
+    let command = format!("UID SEARCH {search_str}");
+    let id = session
+        .run_command(&command)
         .await
-        .map_err(|e| format!("SEARCH failed: {}", e))?
-        .into_iter()
-        .collect();
+        .map_err(|e| format!("SEARCH failed: {}", e))?;
+    let mut uids = Vec::new();
+    loop {
+        let response = session
+            .read_response()
+            .await
+            .map_err(|e| format!("SEARCH failed: {}", e))?
+            .ok_or_else(|| "SEARCH failed: connection lost".to_string())?;
+        match response.parsed() {
+            Response::Done {
+                tag,
+                status,
+                information,
+                ..
+            } if *tag == id => {
+                match status {
+                    Status::Ok => break,
+                    _ => {
+                        return Err(format!(
+                            "SEARCH failed: {:?} {}",
+                            status,
+                            information.as_deref().unwrap_or("")
+                        ));
+                    }
+                }
+            }
+            Response::MailboxData(MailboxDatum::Search(found)) => uids.extend(found),
+            _ => {} // keepalives and other unsolicited responses can interleave
+        }
+    }
 
     let total_matches = uids.len() as u32;
 

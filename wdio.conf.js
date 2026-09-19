@@ -7,6 +7,8 @@ import {
   startMockImap,
   scenario,
   slowCommand,
+  slowCommandWith,
+  dropNthCommandWith,
   unreadableBody,
   bodyFetchDropsAlways,
   unreachableMessage,
@@ -185,16 +187,22 @@ let MOCK_ACCOUNTS = [
     //   - Its uids start at 9101 so a fault can name a message in THIS folder
     //     and nowhere else: faults match a uid with no mailbox scoping, and the
     //     default range (1..3) is also Sent's and Archive's.
+    searchMailbox: { name: 'Search Missing', count: 0 },
     extraMailbox: { name: 'Bokelmu&Awg-hle', count: 3, subjectPrefix: 'Yoda umlaut', uidStart: 9101 },
     faults: [
       slowCommand('MOVE', 4000),
       slowCommand('EXPUNGE', 4000),
+      // Only these search shapes are slowed/dropped, so unrelated specs using
+      // yoda's otherwise-dedicated server do not pay for search race fixtures.
+      slowCommandWith('SEARCH', 'TEXT "BODY"', 5000),
+      slowCommandWith('SEARCH', 'TEXT "LUKE MESSAGE', 2500),
+      dropNthCommandWith('SEARCH', 'TEXT "YODA SEARCH RETRY FIXTURE', 1),
       ...unreadableBody(907, 3000),
       ...unreachableMessage(908),
       ...vanishedMessage(909),
       // One message of the umlaut folder's three is refused outright. That
       // folder is LAST in yoda's LIST order, so connected-backup-partial-failure
-      // can back it up alone (skipFolders: 5) and get a run that saves 2 of 3 —
+      // can back it up alone (skipFolders: 6) and get a run that saves 2 of 3 —
       // the shape that used to notify "Backup failed - Unknown error".
       ...unreachableMessage(9102),
     ],
@@ -369,6 +377,7 @@ export const config = {
         faults: a.faults,
         archiveCount: a.archiveCount,
         archiveSubjectPrefix: a.archiveSubjectPrefix,
+        searchMailbox: a.searchMailbox,
         extraMailbox: a.extraMailbox,
         nestedMailboxes: a.nestedMailboxes,
       }))),

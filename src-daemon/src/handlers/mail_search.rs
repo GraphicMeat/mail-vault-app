@@ -7,7 +7,7 @@ use mailvault_core::vault_eml::LightEmail;
 use mailvault_core::vault_files;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -373,6 +373,7 @@ struct InitialSnapshot {
     reply: Result<Value, String>,
     on_disk_dirs: Result<Option<Vec<String>>, String>,
     indexed_dirs: HashSet<String>,
+    custody: Arc<HashMap<(String, u32), Value>>,
 }
 
 #[derive(Clone)]
@@ -382,6 +383,7 @@ struct LocalFolder {
     mailbox: String,
     local_only: bool,
     fallback_reason: Option<FallbackReason>,
+    custody: Arc<HashMap<(String, u32), Value>>,
 }
 
 struct FolderOutcome {
@@ -442,6 +444,11 @@ async fn run_local_lane(
             }
             let root = vault_root(&snapshot_state)?;
             let reply = crate::search_index::search_reply(&snapshot_state.search_index, &query);
+            let custody = crate::custody::with_conn(&snapshot_state, |conn| {
+                mailvault_core::custody::entries::entries_for_account(conn, &snapshot_account_id)
+            })
+            .map(custody_by_vault_uid)
+            .unwrap_or_default();
             let on_disk_dirs = if needs_disk_dirs {
                 mailvault_core::search_index::reconcile::list_vault_dirs(&root.join("Maildir")).map(
                     |dirs| {
@@ -471,6 +478,7 @@ async fn run_local_lane(
                 reply,
                 on_disk_dirs,
                 indexed_dirs,
+                custody: Arc::new(custody),
             })
         })
         .await
@@ -529,6 +537,7 @@ async fn run_local_lane(
                 &vault_dir,
                 &target.known_mailboxes,
                 false,
+                &snapshot.custody,
             );
         }
 
@@ -582,13 +591,14 @@ async fn run_local_lane(
         }
 
         for dir in fallback_dirs {
-            let (mailbox, local_only) = mailbox_for_vault_dir(&dir, &target.known_mailboxes);
+            let (mailbox, local_only, _) = mailbox_for_vault_dir(&dir, &target.known_mailboxes);
             jobs.push(LocalFolder {
                 account_id: target.account_id.clone(),
                 vault_dir: dir,
                 mailbox,
                 local_only,
                 fallback_reason,
+                custody: Arc::clone(&snapshot.custody),
             });
         }
         report.total = jobs.len();
@@ -676,6 +686,7 @@ async fn run_local_lane(
                                     .map(|t| t.known_mailboxes.as_slice())
                                     .unwrap_or(&[]),
                                 folder_for_blocking.local_only,
+                                &folder_for_blocking.custody,
                             );
                             rows.push(row);
                         }
@@ -943,6 +954,30 @@ fn list_indexed_dirs(
         .map_err(|error| error.to_string())
 }
 
+fn custody_by_vault_uid(rows: Vec<(String, Value)>) -> HashMap<(String, u32), Value> {
+    let mut custody = HashMap::new();
+    let mut ambiguous = HashSet::new();
+    for (mailbox, entry) in rows {
+        let Some(uid) = entry
+            .get("uid")
+            .and_then(Value::as_u64)
+            .and_then(|uid| u32::try_from(uid).ok())
+        else {
+            continue;
+        };
+        let key = (core_search::text::vault_dir_name(&mailbox), uid);
+        if ambiguous.contains(&key) {
+            continue;
+        }
+        if custody.remove(&key).is_some() {
+            ambiguous.insert(key);
+        } else {
+            custody.insert(key, entry);
+        }
+    }
+    custody
+}
+
 fn unique_vault_dirs(mailboxes: &[String]) -> HashSet<String> {
     mailboxes
         .iter()
@@ -950,13 +985,14 @@ fn unique_vault_dirs(mailboxes: &[String]) -> HashSet<String> {
         .collect()
 }
 
-fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String, bool) {
+fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String, bool, bool) {
     let mut matches = known_mailboxes
         .iter()
         .filter(|mailbox| core_search::text::vault_dir_name(mailbox) == vault_dir);
     match (matches.next(), matches.next()) {
-        (Some(mailbox), None) => (mailbox.clone(), false),
-        _ => (vault_dir.to_owned(), true),
+        (Some(mailbox), None) => (mailbox.clone(), false, false),
+        (Some(_), Some(_)) => (vault_dir.to_owned(), true, true),
+        _ => (vault_dir.to_owned(), true, false),
     }
 }
 
@@ -966,9 +1002,10 @@ fn stamp_local_row(
     vault_dir: &str,
     known_mailboxes: &[String],
     already_local_only: bool,
+    custody: &HashMap<(String, u32), Value>,
 ) {
-    let (mailbox, ambiguous) = mailbox_for_vault_dir(vault_dir, known_mailboxes);
-    let local_only = already_local_only || ambiguous;
+    let (mailbox, local_only_folder, ambiguous) = mailbox_for_vault_dir(vault_dir, known_mailboxes);
+    let local_only = already_local_only || local_only_folder;
     if let Some(object) = row.as_object_mut() {
         object.insert("_accountId".into(), account_id.into());
         object.insert(
@@ -984,6 +1021,30 @@ fn stamp_local_row(
         object.insert("source".into(), "local".into());
         if local_only {
             object.insert("_localOnlyFolder".into(), true.into());
+        }
+        if !ambiguous {
+            let uid = object
+                .get("uid")
+                .and_then(Value::as_u64)
+                .and_then(|uid| u32::try_from(uid).ok());
+            if let Some(entry) = uid.and_then(|uid| custody.get(&(vault_dir.to_owned(), uid))) {
+                if let Some(origin) = entry.get("source") {
+                    object.insert("_origin".into(), origin.clone());
+                }
+                for field in ["serverDeleted", "serverAbsent"] {
+                    if let Some(value) = entry.get(field) {
+                        object.insert(field.into(), value.clone());
+                    }
+                }
+                let origin = object.get("_origin").and_then(Value::as_str);
+                let has_proof = object.get("_localStaged").and_then(Value::as_bool) == Some(true)
+                    || matches!(origin, Some("local_sent" | "local_draft"))
+                    || object.get("serverDeleted").and_then(Value::as_bool) == Some(true)
+                    || object.get("serverAbsent").and_then(Value::as_bool) == Some(true);
+                if object.get("isArchived").and_then(Value::as_bool) == Some(true) && has_proof {
+                    object.insert("source".into(), "local-only".into());
+                }
+            }
         }
     }
 }
@@ -1179,9 +1240,18 @@ mod tests {
             .unwrap();
         }
         for (mailbox, uid, subject, row_json) in rows {
+            let filename = if serde_json::from_str::<Value>(row_json)
+                .ok()
+                .and_then(|row| row["isArchived"].as_bool())
+                .unwrap_or(false)
+            {
+                format!("{uid}:2,A.eml")
+            } else {
+                format!("{uid}:2,.eml")
+            };
             conn.execute(
                 "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json) VALUES ('acct', ?1, ?2, ?3, 1, 1, NULL, 1, 'sender@example.test', 'sender', ?4, '', 0, 1, ?5)",
-                rusqlite::params![mailbox, uid, format!("{uid}:2,.eml"), subject.to_lowercase(), row_json],
+                rusqlite::params![mailbox, uid, filename, subject.to_lowercase(), row_json],
             )
             .unwrap();
         }
@@ -1363,6 +1433,82 @@ mod tests {
             sequences.windows(2).all(|pair| pair[0] < pair[1]),
             "progress sequence must be increasing: {sequences:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn indexed_local_rows_keep_custody_proof() {
+        let (_tmp, state) = state();
+        let mut row = serde_json::from_str::<Value>(&indexed_row("proven local copy")).unwrap();
+        row["uid"] = json!(7);
+        row["isArchived"] = json!(true);
+        enable_index(
+            &state,
+            &[("INBOX", 7, "proven local copy", &row.to_string())],
+            &[("INBOX", 1)],
+        );
+        crate::custody::open_into(&state).unwrap();
+        crate::custody::with_conn(&state, |conn| {
+            mailvault_core::custody::entries::upsert(
+                conn,
+                "acct",
+                "INBOX",
+                &[json!({"uid":7,"source":"local","serverDeleted":true,"serverAbsent":false})],
+            )
+            .map(|_| ())
+        })
+        .unwrap();
+
+        let mut rx = state.events.subscribe();
+        let frames = {
+            call(&state, "mail_search_start", request("custody", 1)).await;
+            collect_until_terminal(&mut rx, "custody").await
+        };
+        let hit = frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .find(|row| row["subject"] == "proven local copy")
+            .unwrap();
+        assert_eq!(hit["_origin"], "local");
+        assert_eq!(hit["serverDeleted"], true);
+        assert_eq!(hit["serverAbsent"], false);
+        assert_eq!(hit["source"], "local-only");
+    }
+
+    #[test]
+    fn custody_proof_maps_unique_vault_only_dirs_but_not_colliding_dirs() {
+        let known = vec!["INBOX".to_owned()];
+        let unique = custody_by_vault_uid(vec![(
+            "VaultOnly".into(),
+            json!({"uid":7,"source":"local","serverDeleted":true}),
+        )]);
+        let mut vault_only = json!({"uid":7,"isArchived":true});
+        stamp_local_row(&mut vault_only, "acct", "VaultOnly", &known, true, &unique);
+        assert_eq!(vault_only["source"], "local-only");
+        assert_eq!(vault_only["serverDeleted"], true);
+
+        let colliding_mailboxes = vec!["Projects/2026".to_owned(), "Projects_2026".to_owned()];
+        let collision = custody_by_vault_uid(vec![
+            (
+                "Projects/2026".into(),
+                json!({"uid":7,"source":"local","serverDeleted":true}),
+            ),
+            (
+                "Projects_2026".into(),
+                json!({"uid":7,"source":"local","serverAbsent":true}),
+            ),
+        ]);
+        let mut ambiguous = json!({"uid":7,"isArchived":true});
+        stamp_local_row(
+            &mut ambiguous,
+            "acct",
+            "Projects_2026",
+            &colliding_mailboxes,
+            false,
+            &collision,
+        );
+        assert_eq!(ambiguous["source"], "local");
+        assert!(ambiguous.get("serverDeleted").is_none());
+        assert!(ambiguous.get("serverAbsent").is_none());
     }
 
     #[tokio::test]

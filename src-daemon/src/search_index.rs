@@ -208,12 +208,31 @@ pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
         .iter()
         .filter_map(|h| {
             let mut row: serde_json::Value = serde_json::from_str(&h.row_json).ok()?;
+            let subject = row.get("subject").and_then(Value::as_str).unwrap_or("");
+            let from = addr_text(&row["from"]);
+            let to = ["to", "cc", "bcc"]
+                .iter()
+                .filter_map(|key| row.get(*key)?.as_array())
+                .flatten()
+                .map(addr_text)
+                .collect::<Vec<_>>()
+                .join(" ");
+            let mut matched_in = Vec::new();
+            for (label, text) in [("subject", subject), ("from", from.as_str()), ("to", to.as_str())] {
+                if page.needles.iter().any(|needle| core::text::contains_folded(text, needle)) {
+                    matched_in.push(label);
+                }
+            }
+            if h.body_matched {
+                matched_in.push("body");
+            }
             let flags = parse_flags_from_filename(&h.filename);
             let obj = row.as_object_mut()?;
             obj.insert("uid".into(), h.uid.into());
             obj.insert("vaultDir".into(), h.vault_dir.clone().into());
             obj.insert("flags".into(), serde_json::json!(flags));
             obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
+            obj.insert("matchedIn".into(), serde_json::json!(matched_in));
             Some(row)
         })
         .collect()
@@ -935,6 +954,7 @@ mod tests {
                 filename: "7:2,AS.eml".into(),
                 message_id: Some("<seven@example>".into()),
                 row_json: r#"{"uid":7,"messageId":"<seven@example>","subject":"Indexed only"}"#.into(),
+                body_matched: true,
             }],
             total: 1,
             needles: vec!["indexed".into()],
@@ -943,6 +963,7 @@ mod tests {
         assert_eq!(rows[0]["subject"], "Indexed only");
         assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "seen", "\\Seen"]));
         assert_eq!(rows[0]["vaultDir"], "INBOX");
+        assert_eq!(rows[0]["matchedIn"], serde_json::json!(["subject", "body"]));
     }
 
     #[test]
@@ -955,6 +976,7 @@ mod tests {
                 filename: "5:2,.eml".into(),
                 message_id: Some("<indexed@x.test>".into()),
                 row_json: r#"{"uid":5,"messageId":"<indexed@x.test>","subject":"Indexed budget"}"#.into(),
+                body_matched: false,
             }],
             total: 1,
             needles: vec!["budget".into()],
@@ -1076,7 +1098,7 @@ mod tests {
     #[ignore]
     fn search_index_bench_50k_real_parser() {
         use mailvault_core::search_index::{db, lock, query::{search, SearchRequest}, reconcile::{self, IndexConfig}};
-        use std::time::Instant;
+        use std::time::{Duration, Instant};
 
         // splitmix64: which messages carry a word is set by its rate alone.
         fn mix(mut x: u64) -> u64 {
@@ -1131,11 +1153,16 @@ mod tests {
 
         let db: mailvault_core::search_index::SharedConn = std::sync::Mutex::new(Some(db::open(root).unwrap()));
         let maildir = root.join("Maildir");
+        let parser_calls = std::sync::atomic::AtomicUsize::new(0);
+        let parse = |raw: &[u8], uid, filename: &str| {
+            parser_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            crate::search_index::index_doc_from_light(raw, uid, filename)
+        };
         let t = Instant::now();
         for (a, d) in reconcile::list_vault_dirs(&maildir).unwrap() {
-            let parse = &crate::search_index::index_doc_from_light;
-            reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true, attachments: true, image_text: true }, parse, &|| true, &mut |_| {}).unwrap();
+            reconcile::reconcile_mailbox(&db, &maildir, &a, &d, IndexConfig { bodies: true, attachments: true, image_text: true }, &parse, &|| true, &mut |_| {}).unwrap();
         }
+        assert_eq!(parser_calls.load(std::sync::atomic::Ordering::SeqCst), N as usize);
         println!("index_build n={N} elapsed={:?}", t.elapsed());
         {
             let g = lock(&db);
@@ -1147,8 +1174,20 @@ mod tests {
         }
 
         let req = |q: &str| SearchRequest { account_id: "bench".into(), query: q.into(), ..Default::default() };
+        let invoice = req("invoice");
+        let warm_page = search(lock(&db).as_ref().unwrap(), &invoice).unwrap();
+        let _warm_rows = crate::search_index::assemble_rows(&warm_page);
+        parser_calls.store(0, std::sync::atomic::Ordering::SeqCst);
+        let t = Instant::now();
+        let page = search(lock(&db).as_ref().unwrap(), &invoice).unwrap();
+        let rows = crate::search_index::assemble_rows(&page);
+        let elapsed = t.elapsed();
+        let result_parse_calls = parser_calls.load(std::sync::atomic::Ordering::SeqCst);
+        println!("warm_query \"invoice\" hits={} rows={} search_plus_assembly={elapsed:?} parser_calls={result_parse_calls}", page.hits.len(), rows.len());
+        assert!(elapsed < Duration::from_millis(200), "warm indexed search and row assembly took {elapsed:?}, expected < 200 ms");
+        assert_eq!(result_parse_calls, 0, "indexed result assembly invoked the MIME parser");
         let week = SearchRequest { date_from: Some(NEWEST - 7 * 86_400), date_to: Some(NEWEST), ..req("") };
-        for (label, r) in [("invoice", req("invoice")), ("budget meeting", req("budget meeting")), ("会議", req("会議")), ("update 4999", req("update 4999")), ("<empty>, last 7 days", week)] {
+        for (label, r) in [("budget meeting", req("budget meeting")), ("会議", req("会議")), ("update 4999", req("update 4999")), ("<empty>, last 7 days", week)] {
             let t = Instant::now();
             let page = search(lock(&db).as_ref().unwrap(), &r).unwrap();
             let searched = t.elapsed();

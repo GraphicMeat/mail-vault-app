@@ -403,11 +403,25 @@ fn match_faults(
     args: &str,
     counts: &Arc<Mutex<HashMap<String, usize>>>,
 ) -> Vec<Action> {
-    let n = {
+    let args = args.to_uppercase();
+    let (n, nth_with_counts) = {
         let mut c = counts.lock().unwrap();
-        let e = c.entry(name.to_string()).or_insert(0);
-        *e += 1;
-        *e
+        let n = {
+            let count = c.entry(name.to_string()).or_insert(0);
+            *count += 1;
+            *count
+        };
+        let mut nth_with_counts = HashMap::new();
+        for fault in faults {
+            let Trigger::OnNthCommandWith(cmd, needle, _) = &fault.trigger else { continue };
+            if cmd != name || !args.contains(needle) { continue }
+            let key = format!("{name}\0{needle}");
+            if nth_with_counts.contains_key(&key) { continue }
+            let count = c.entry(key.clone()).or_insert(0);
+            *count += 1;
+            nth_with_counts.insert(key, *count);
+        }
+        (n, nth_with_counts)
     };
     faults
         .iter()
@@ -416,7 +430,12 @@ fn match_faults(
             Trigger::OnNthCommand(c, k) => c == name && *k == n,
             Trigger::OnConnect => false,
             Trigger::OnCommandWith(c, needle) => {
-                c == name && args.to_uppercase().contains(needle.as_str())
+                c == name && args.contains(needle.as_str())
+            }
+            Trigger::OnNthCommandWith(c, needle, k) => {
+                c == name
+                    && args.contains(needle.as_str())
+                    && nth_with_counts.get(&format!("{name}\0{needle}")) == Some(k)
             }
         })
         .map(|f| f.action.clone())
@@ -587,4 +606,29 @@ fn write_line(out: &mut TcpStream, line: &[u8]) -> std::io::Result<()> {
     out.write_all(line)?;
     out.write_all(b"\r\n")?;
     out.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::match_faults;
+    use crate::scenario::{Action, Fault, Trigger};
+    use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn nth_command_with_counts_only_matching_arguments() {
+        let faults = [Fault {
+            trigger: Trigger::OnNthCommandWith("SEARCH".into(), "RETRY-ONCE".into(), 2),
+            action: Action::DropConnection,
+        }];
+        let counts = Arc::new(Mutex::new(HashMap::new()));
+
+        assert!(match_faults(&faults, "SEARCH", "SUBJECT \"OTHER\"", &counts).is_empty());
+        assert!(match_faults(&faults, "SEARCH", "SUBJECT \"RETRY-ONCE\"", &counts).is_empty());
+        assert_eq!(
+            match_faults(&faults, "SEARCH", "SUBJECT \"RETRY-ONCE\"", &counts),
+            vec![Action::DropConnection],
+        );
+        assert!(match_faults(&faults, "SEARCH", "SUBJECT \"RETRY-ONCE\"", &counts).is_empty());
+    }
 }

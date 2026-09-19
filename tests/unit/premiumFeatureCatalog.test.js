@@ -13,6 +13,7 @@ describe('premium feature catalog', () => {
       'backup-schedule', 'backup-health', 'cleanup', 'time-capsule',
       'tracker-blocking', 'auto-cleanup', 'migration', 'server-change',
       'export-image', 'focus-session', 'devices', 'attachment-search',
+      'fast-multi-folder-search',
     ]);
   });
 

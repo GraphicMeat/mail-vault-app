@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Search stays with the account and folder you are looking at.** Locally indexed matches appear first while the background service searches server mailboxes and any uncovered local folders; changing the current account or folder cancels the old search, and one failed folder no longer hides successful results. A temporary IMAP connection failure is retried once. Premium users can choose a saved concurrency level from 1 to 5; signing out does not erase that preference.
 - **You can delete the search index and build it again.** Settings → Storage → Search index has Delete search index. It shows the index size, and search keeps working (just slower) while the index is off. Build search index starts a fresh one.
 - **A big index build shows its progress.** The first build, a rebuild, or 500+ new messages open a small window with a progress bar and the index size. Hide shrinks it to a chip in the bottom-right corner. It never opens while you are typing, and it closes when the build finishes. If MailVault quits or its background service stops mid-build, the build picks up where it stopped.
 

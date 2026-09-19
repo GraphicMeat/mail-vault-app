@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{eml, session};
+use common::{config_for, eml, pool, session};
 use mailvault_core::imap::*;
 use mock_imap::state::{synthetic_mailbox, Mailbox};
 use mock_imap::{Action, MockImap, Scenario, Trigger};
@@ -171,6 +171,35 @@ async fn search_filters_by_from_and_subject() {
             .expect("subject search");
     assert_eq!(by_subject.len(), 1);
     assert_eq!(by_subject[0].subject, "Lunch");
+}
+
+#[async_std::test]
+async fn pooled_text_search_retries_a_dropped_search_and_returns_its_match() {
+    let query = "Yoda message 901";
+    let server = MockImap::start(
+        Scenario::new()
+            .mailbox(Mailbox::new("INBOX").push(eml(query, "sender@example.com", "matching body")))
+            .fault(
+                Trigger::nth_with("SEARCH", "TEXT \"Yoda message 901\"", 1),
+                Action::DropConnection,
+            ),
+    );
+    let config = config_for(&server);
+    let pool = pool();
+
+    let (emails, total) = pool
+        .run_read(&config, false, |mut session| async move {
+            let result = search_emails(&mut session, "INBOX", Some(query), None, None, None, None).await?;
+            Ok((result, session, Some("INBOX".to_string())))
+        })
+        .await
+        .expect("a dropped SEARCH connection must retry once on a fresh session");
+
+    assert_eq!(total, 1);
+    assert_eq!(emails.len(), 1);
+    assert_eq!(emails[0].subject, query);
+    let search_commands = server.commands().iter().filter(|line| line.to_uppercase().contains("SEARCH TEXT")).count();
+    assert_eq!(search_commands, 2, "first SEARCH should drop and one retry should answer");
 }
 
 // ── Cross-folder Message-ID probe ───────────────────────────────────────────

@@ -19,7 +19,7 @@
  * saved messages was the words "Unknown error".
  *
  * Scoped to yoda's "Bokelmu&Awg-hle", which is LAST in its LIST order —
- * `skip_folders` skips a PREFIX, so skipFolders: 5 backs up that folder and
+ * `skip_folders` skips a PREFIX, so skipFolders: 6 backs up that folder and
  * nothing else. Its uids start at 9101 (wdio.conf.js) precisely so the fault on
  * 9102 can name a message in this folder and in no other: mock faults match a
  * uid with no mailbox scoping.
@@ -85,7 +85,7 @@ describe('Backup — a message the server refuses is a partial run, not a failed
       accountId,
       accountJson: JSON.stringify(account),
       backupPath: null,
-      skipFolders: 5,
+      skipFolders: 6,
     });
     console.log('[backup-partial] backup ->', JSON.stringify(result));
   });

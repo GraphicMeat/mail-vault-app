@@ -11,10 +11,11 @@
  * `state`: a configure or a rebuild reaches the worker through a channel, so
  * `idle` right after a click is still the pass before it.
  */
-import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
+import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav, clickSidebarItem } from './helpers.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
+const YODA = 'yoda@mock.test';
 const LUKE_ID = '11111111-1111-4111-8111-111111111111';
 const VADER_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -71,6 +72,15 @@ describe('Search index', function () {
     return true;
   }, query, folder);
 
+  const runCombinedSearch = (query, filters) => browser.execute((q, f) => {
+    const store = window.__SEARCH_STORE__;
+    if (!store) return false;
+    store.setState({ searchQuery: q });
+    store.getState().setSearchFilters(f);
+    store.getState().performSearch();
+    return true;
+  }, query, filters);
+
   const searchSettled = () => browser.execute(() => {
     const s = window.__SEARCH_STORE__?.getState?.();
     return !!s && s.searchActive === true && s.isSearching === false;
@@ -93,6 +103,18 @@ describe('Search index', function () {
 
   const results = () => browser.execute(() => (window.__SEARCH_STORE__?.getState?.().searchResults || [])
     .map((r) => ({ subject: r.subject, accountId: r._accountId, matchedIn: r.matchedIn || null })));
+
+  const combinedState = () => browser.execute(() => {
+    const s = window.__SEARCH_STORE__?.getState?.();
+    return s ? {
+      isSearching: s.isSearching,
+      progress: s.searchProgress,
+      rows: (s.searchResults || []).map((r) => ({
+        subject: r.subject, accountId: r._accountId, mailbox: r._mailbox,
+        source: r.source, matchedIn: r.matchedIn || null,
+      })),
+    } : null;
+  });
 
   async function localSearch(query) {
     expect(await runLocalSearch(query, 'all')).toBe(true);
@@ -194,6 +216,44 @@ describe('Search index', function () {
     const lukeHits = await localSearch(bodyPhrase(lukeSubject));
     expect(lukeHits.find((r) => r.subject === lukeSubject)).toBeUndefined();
     expect(lukeHits.every((r) => r.accountId === VADER_ID)).toBe(true);
+  });
+
+  it('emits the indexed local row before a delayed server folder finishes', async function () {
+    // All Inboxes makes the server lane span the three mock accounts. Yoda's
+    // matching SEARCH commands are delayed, while lukeSubject is already in
+    // the local index from the setup archive above.
+    await inboxOf(YODA);
+    expect(await clickSidebarItem('All Inboxes')).toBe(true);
+    await browser.waitUntil(() => browser.execute(() => {
+      const s = window.__MAIL_STORE__?.getState?.();
+      return s?.unifiedInbox === true && s.activeMailbox === 'UNIFIED';
+    }), { timeout: 20_000, interval: 200, timeoutMsg: 'All Inboxes never became active' });
+
+    expect(await runCombinedSearch(lukeSubject, { folder: 'all', location: 'all' })).toBe(true);
+    await browser.waitUntil(async () => {
+      const state = await combinedState();
+      return state?.isSearching === true
+        && state.progress?.total > state.progress?.done
+        && state.rows.some((row) => row.subject === lukeSubject
+          && row.accountId === LUKE_ID && Array.isArray(row.matchedIn));
+    }, {
+      timeout: 30_000, interval: 100,
+      timeoutMsg: `indexed row "${lukeSubject}" did not arrive while remote work was pending`,
+    });
+
+    const early = (await combinedState()).rows.find((row) => row.subject === lukeSubject);
+    expect(early.source).toBe('local');
+    expect(early.matchedIn).toContain('subject');
+
+    // Release the fixed-delay gate and ensure the eventual remote frames leave
+    // the already-published indexed row intact.
+    await browser.waitUntil(async () => !(await combinedState())?.isSearching, {
+      timeout: 60_000, interval: 250, timeoutMsg: 'delayed server search never reached a terminal frame',
+    });
+    const final = (await combinedState()).rows.find((row) => row.subject === lukeSubject);
+    expect(final.accountId).toBe(LUKE_ID);
+    expect(final.matchedIn).toContain('subject');
+    await clearSearch();
   });
 
   it('turning bodies off removes body matches but keeps subjects searchable', async function () {

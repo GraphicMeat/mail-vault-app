@@ -50,6 +50,8 @@ pub struct SearchHit {
     pub message_id: Option<String>,
     /// Stored list-row metadata. Search result assembly must not parse the `.eml`.
     pub row_json: String,
+    /// Whether any matched query term appears in the indexed body column.
+    pub body_matched: bool,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -165,14 +167,38 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
 
     // Formatted from the clamped usize only, never from request text.
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
+    let mut body_queries: Vec<(&str, String)> = Vec::new();
+    if let Some(whole) = &plan.whole {
+        body_queries.push(("msg_fts", format!("body : {whole}")));
+    }
+    for needle in plan.needles.iter().skip(1).filter(|needle| needle.chars().count() >= 3) {
+        let query = format!("body : {}", fts_string(needle));
+        if !body_queries.iter().any(|(table, existing)| *table == "msg_fts" && *existing == query) {
+            body_queries.push(("msg_fts", query));
+        }
+    }
+    for cjk in &plan.cjk {
+        body_queries.push(("msg_cjk", format!("body : {cjk}")));
+    }
+    let body_match_sql = if body_queries.is_empty() {
+        "0".to_string()
+    } else {
+        body_queries
+            .iter()
+            .map(|(table, _)| format!("EXISTS (SELECT 1 FROM {table} WHERE rowid = m.id AND {table} MATCH ?)") )
+            .collect::<Vec<_>>()
+            .join(" OR ")
+    };
+    let mut select_args: Vec<Value> = body_queries.iter().map(|(_, query)| Value::Text(query.clone())).collect();
+    select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}) FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
-        .query_map(rusqlite::params_from_iter(args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)? })
+        .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -312,6 +338,19 @@ mod tests {
         let page = search(g.as_ref().unwrap(), &req("luke", "PO 4471")).unwrap();
         let ids: Vec<Option<&str>> = page.hits.iter().map(|h| h.message_id.as_deref()).collect();
         assert_eq!(ids, vec![Some("<luke.INBOX.2@x.test>")]);
+    }
+
+    #[test]
+    fn reports_body_matches_from_fts_without_loading_body_text() {
+        let (_t, db) = fixture();
+        let g = crate::search_index::lock(&db);
+        let body = search(g.as_ref().unwrap(), &req("luke", "attached")).unwrap();
+        assert_eq!(body.hits.len(), 1);
+        assert!(body.hits[0].body_matched);
+
+        let subject = search(g.as_ref().unwrap(), &req("luke", "invoice")).unwrap();
+        assert_eq!(subject.hits.len(), 1);
+        assert!(!subject.hits[0].body_matched);
     }
 
     #[test]

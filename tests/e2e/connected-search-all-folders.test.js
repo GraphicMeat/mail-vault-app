@@ -15,18 +15,23 @@
  * returns nothing at all.
  */
 
-import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { ImapFlow } from 'imapflow';
+import { waitForApp, waitForEmails, switchToFolder, sidebarHasFolder } from './helpers.js';
+import { MOCK_PASSWORD } from './mockImap.js';
 
 const ACCOUNT = 'luke@mock.test';
+const YODA = 'yoda@mock.test';
+const MISSING_FOLDER = 'Search Missing';
 const ARCHIVE_SUBJECT = 'Luke archive 2';
+const RETRY_SUBJECT = 'Yoda search retry fixture';
 
 /** Search with an explicit scope, the way the filter dropdown sets it. */
-const searchScoped = (query, filters) => browser.execute(async (q, f) => {
+const searchScoped = (query, filters) => browser.execute((q, f) => {
   const store = window.__SEARCH_STORE__;
   if (!store) return false;
   store.setState({ searchQuery: q });
   store.getState().setSearchFilters(f);
-  await store.getState().performSearch();
+  store.getState().performSearch();
   return true;
 }, query, filters);
 
@@ -47,6 +52,43 @@ const viewerState = () => browser.execute(() => {
   };
 });
 
+const searchState = () => browser.execute(() => {
+  const s = window.__SEARCH_STORE__?.getState?.();
+  const m = window.__MAIL_STORE__?.getState?.();
+  return s ? {
+    isSearching: s.isSearching,
+    searchActive: s.searchActive,
+    activeSearchId: s.activeSearchId,
+    searchQuery: s.searchQuery,
+    searchFilters: s.searchFilters,
+    searchError: s.searchError,
+    searchProgress: s.searchProgress,
+    activeAccountId: m?.activeAccountId,
+    activeMailbox: m?.activeMailbox,
+    unifiedInbox: m?.unifiedInbox,
+    rows: (s.searchResults || []).map((row) => ({
+      subject: row.subject, accountId: row._accountId, mailbox: row._mailbox, source: row.source,
+    })),
+  } : null;
+});
+
+async function withMockImap(email, action) {
+  const index = (browser.mockAccounts || []).findIndex((account) => account.email === email);
+  if (index < 0) throw new Error(`Mock account ${email} was not seeded`);
+  const { host, port } = browser.mockImap[index];
+  const client = new ImapFlow({
+    host, port, secure: false,
+    auth: { user: 'e2e-harness', pass: MOCK_PASSWORD },
+    logger: false,
+  });
+  await client.connect();
+  try {
+    return await action(client);
+  } finally {
+    await client.logout();
+  }
+}
+
 const clickRow = (subject) => browser.execute((want) => {
   for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
     const lines = (row.innerText || '').split('\n').map((l) => l.trim());
@@ -57,6 +99,8 @@ const clickRow = (subject) => browser.execute((want) => {
 
 describe('Connected Search — "all folders" means all folders', function () {
   this.timeout(180_000);
+
+  let missingFolderRemoved = false;
 
   before(async function () {
     await waitForApp();
@@ -119,7 +163,156 @@ describe('Connected Search — "all folders" means all folders', function () {
     expect((await resultRow('Luke message 3')).mailbox).toBe('INBOX');
   });
 
+  it('retries one dropped SEARCH connection and keeps successful folders when one disappears', async function () {
+    await browser.execute(() => window.__SEARCH_STORE__?.getState?.().clearSearch?.());
+    await switchToFolder(YODA, 'INBOX');
+    await browser.executeAsync((done) => {
+      window.__MAIL_SEARCH_TRACE__ = [];
+      window.__TAURI__.event.listen('mail-search-progress', (event) => window.__MAIL_SEARCH_TRACE__.push(event.payload))
+        .then((stop) => { window.__MAIL_SEARCH_TRACE_STOP__ = stop; done(true); }, (error) => done({ error: String(error) }));
+    });
+    const seededYodaUids = await withMockImap(YODA, async (client) => {
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        const date = new Date('2020-01-01T00:00:00Z');
+        await client.append('INBOX', Buffer.from([
+          `From: Search fixture <search-fixture@mock.test>`,
+          `To: ${YODA}`,
+          `Subject: ${RETRY_SUBJECT}`,
+          `Date: ${date.toUTCString()}`,
+          'Content-Type: text/plain; charset=utf-8',
+          '',
+          RETRY_SUBJECT,
+          '',
+        ].join('\r\n')), [], date);
+        return client.search({ subject: RETRY_SUBJECT }, { uid: true });
+      } finally {
+        lock.release();
+      }
+    });
+    expect(seededYodaUids.length).toBeGreaterThan(0);
+
+    // The fixture drops only the first matching SEARCH on Yoda. Success proves
+    // the daemon retried that dead connection once rather than surfacing an
+    // empty result or turning the search into a terminal failure.
+    await searchScoped(RETRY_SUBJECT, { folder: 'all', location: 'server' });
+    const searchTrace = [];
+    try {
+      await browser.waitUntil(async () => {
+        const state = await searchState();
+        if (searchTrace.at(-1) !== JSON.stringify(state)) searchTrace.push(JSON.stringify(state));
+        return (await resultRow(RETRY_SUBJECT)) !== null;
+      }, {
+        timeout: 40_000, interval: 250, timeoutMsg: 'Yoda SEARCH did not succeed after its one transient disconnect',
+      });
+    } catch (error) {
+      const frames = await browser.execute(() => window.__MAIL_SEARCH_TRACE__ || []);
+      await browser.execute(() => window.__MAIL_SEARCH_TRACE_STOP__?.());
+      throw new Error(`${error.message}; state trace: ${searchTrace.join(' -> ')}; progress frames: ${JSON.stringify(frames)}`);
+    }
+    await browser.execute(() => window.__MAIL_SEARCH_TRACE_STOP__?.());
+    await browser.waitUntil(async () => !(await searchState())?.isSearching, {
+      timeout: 40_000, interval: 250, timeoutMsg: 'retried server search never reached a terminal frame',
+    });
+    const retried = await resultRow(RETRY_SUBJECT);
+    expect(retried.source).toBe('server-search');
+    expect(retried.mailbox).toBe('INBOX');
+
+    await browser.execute(() => window.__SEARCH_STORE__?.getState?.().clearSearch?.());
+    await browser.waitUntil(() => sidebarHasFolder(MISSING_FOLDER), {
+      timeout: 20_000, interval: 250, timeoutMsg: `Yoda's cached folder list never contained ${MISSING_FOLDER}`,
+    });
+    await withMockImap(YODA, (client) => client.mailboxDelete(MISSING_FOLDER));
+    missingFolderRemoved = true;
+
+    // Yoda's cached LIST still contributes Search Missing to the request. The
+    // server now says that folder is gone; its successful INBOX result must
+    // survive and the run must still terminate.
+    await searchScoped(RETRY_SUBJECT, { folder: 'all', location: 'server' });
+    await browser.waitUntil(async () => (await resultRow(RETRY_SUBJECT)) !== null, {
+      timeout: 40_000, interval: 250, timeoutMsg: 'successful INBOX result was erased by the missing folder',
+    });
+    await browser.waitUntil(async () => !(await searchState())?.isSearching, {
+      timeout: 40_000, interval: 250, timeoutMsg: 'partial server search never reached a terminal frame',
+    });
+
+    const partial = await searchState();
+    expect(partial.rows.some((row) => row.subject === RETRY_SUBJECT
+      && row.accountId === browser.mockAccounts.find((account) => account.email === YODA).id
+      && row.mailbox === 'INBOX')).toBe(true);
+    expect(partial.searchError).toBe(null);
+  });
+
+  it('settles server-only Graph and all-hidden searches with no rows', async function () {
+    await browser.execute(() => window.__SEARCH_STORE__?.getState?.().clearSearch?.());
+    await switchToFolder(ACCOUNT, 'INBOX');
+    const accountId = browser.mockAccounts.find((account) => account.email === ACCOUNT).id;
+    const originalTransport = await browser.execute((id) => {
+      const account = window.__MAIL_STORE__.getState().accounts.find((item) => item.id === id);
+      return account?.oauth2Transport ?? null;
+    }, accountId);
+
+    await browser.execute((id) => {
+      const store = window.__MAIL_STORE__;
+      store.setState({ accounts: store.getState().accounts.map((account) =>
+        account.id === id ? { ...account, oauth2Transport: 'graph' } : account) });
+    }, accountId);
+    try {
+      await searchScoped('no graph remote match', { folder: 'current', location: 'server' });
+      await browser.waitUntil(async () => {
+        const state = await searchState();
+        return state && state.isSearching === false;
+      }, { timeout: 15_000, interval: 200, timeoutMsg: 'Graph server-only search left the spinner active' });
+      expect((await searchState()).rows).toHaveLength(0);
+    } finally {
+      await browser.execute((id, transport) => {
+        const store = window.__MAIL_STORE__;
+        store.setState({ accounts: store.getState().accounts.map((account) => {
+          if (account.id !== id) return account;
+          const restored = { ...account };
+          if (transport == null) delete restored.oauth2Transport;
+          else restored.oauth2Transport = transport;
+          return restored;
+        }) });
+      }, accountId, originalTransport);
+    }
+
+    const hidden = await browser.execute(() => window.__SETTINGS_STORE__.getState().hiddenAccounts || {});
+    await browser.execute(() => {
+      const accounts = window.__MAIL_STORE__.getState().accounts;
+      window.__SETTINGS_STORE__.setState({ hiddenAccounts: Object.fromEntries(accounts.map((account) => [account.id, true])) });
+    });
+    try {
+      await searchScoped('no visible account match', { folder: 'all', location: 'server' });
+      await browser.waitUntil(async () => {
+        const state = await searchState();
+        return state && state.isSearching === false;
+      }, { timeout: 15_000, interval: 200, timeoutMsg: 'all-hidden server-only search left the spinner active' });
+      expect((await searchState()).rows).toHaveLength(0);
+    } finally {
+      await browser.execute((saved) => window.__SETTINGS_STORE__.setState({ hiddenAccounts: saved }), hidden);
+    }
+  });
+
   after(async function () {
+    if (missingFolderRemoved) {
+      await withMockImap(YODA, async (client) => {
+        try { await client.mailboxCreate(MISSING_FOLDER); } catch { /* already restored */ }
+      });
+    }
+    try {
+      await withMockImap(YODA, async (client) => {
+        const lock = await client.getMailboxLock('INBOX');
+        try {
+          const uids = await client.search({ subject: RETRY_SUBJECT }, { uid: true });
+          if (uids.length) await client.messageDelete(uids, { uid: true });
+        } finally {
+          lock.release();
+        }
+      });
+    } catch (error) {
+      console.warn('[connected-search-all-folders] retry fixture cleanup failed:', error.message);
+    }
     await browser.execute(() => {
       window.__SEARCH_STORE__?.getState?.().clearSearch?.();
       window.__SEARCH_STORE__?.setState?.({ searchActive: false, searchResults: [], searchQuery: '' });
