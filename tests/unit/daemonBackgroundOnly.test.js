@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 const INFO_PLIST = 'src-daemon/Info.plist';
 const cargo = readFileSync('src-daemon/Cargo.toml', 'utf8');
 const main = readFileSync('src-daemon/src/main.rs', 'utf8');
+const dmgSmoke = readFileSync('tests/integration/dmg-smoke.test.js', 'utf8');
 
 describe('mailvault-daemon macOS process classification', () => {
   it('declares exactly one daemon-specific Info.plist key: LSBackgroundOnly=true', () => {
@@ -23,5 +24,10 @@ describe('mailvault-daemon macOS process classification', () => {
     expect(main).toMatch(
       /#\[cfg\(target_os = "macos"\)\]\s*embed_plist::embed_info_plist!\("\.\.\/Info\.plist"\);/,
     );
+  });
+
+  it('checks the requested release target and fails when its bundle is missing', () => {
+    expect(dmgSmoke).toMatch(/process\.env\.BUILD_TARGET/);
+    expect(dmgSmoke).toMatch(/expect\(\s*bundleExists,[\s\S]*?\)\.toBe\(true\)/);
   });
 });

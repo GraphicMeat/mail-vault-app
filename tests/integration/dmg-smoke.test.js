@@ -4,7 +4,10 @@ import { resolve } from 'path';
 import { execFileSync, execSync } from 'child_process';
 
 const ROOT = resolve(import.meta.dirname, '../..');
-const APP_BUNDLE = resolve(ROOT, 'target/release/bundle/macos/MailVault.app');
+const RELEASE_DIR = process.env.BUILD_TARGET
+  ? resolve(ROOT, 'target', process.env.BUILD_TARGET, 'release')
+  : resolve(ROOT, 'target/release');
+const APP_BUNDLE = resolve(RELEASE_DIR, 'bundle/macos/MailVault.app');
 const DAEMON_BIN = resolve(APP_BUNDLE, 'Contents/MacOS/mailvault-daemon');
 
 const bundleExists = existsSync(APP_BUNDLE);
@@ -36,10 +39,10 @@ describe('Post-Build DMG Smoke Tests', () => {
   });
 
   it('packaged daemon declares itself background-only', () => {
-    if (!bundleExists) {
-      console.log('Skipping: app bundle not found');
-      return;
-    }
+    expect(
+      bundleExists,
+      `App bundle not found at ${APP_BUNDLE}; set BUILD_TARGET for targeted release builds`,
+    ).toBe(true);
     const section = execFileSync('otool', ['-s', '__TEXT', '__info_plist', DAEMON_BIN], {
       encoding: 'utf8',
     });
