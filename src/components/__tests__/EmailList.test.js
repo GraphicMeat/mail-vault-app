@@ -295,6 +295,67 @@ describe('EmailList virtualization', () => {
     }
   });
 
+  it('passes a sender-group search row through Enter when results arrive after the listener', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { groupBySender } = await import('../../utils/emailParser');
+    const { EmailList } = await import('../EmailList.jsx');
+    const mail = useMailStore.getState();
+    const search = useSearchStore.getState();
+    const settings = useSettingsStore.getState();
+    const previousMail = { ...mail };
+    const previousSearch = { ...search };
+    const previousSettings = { ...settings };
+    const previousGroupBySender = groupBySender.getMockImplementation();
+    const hit = {
+      ...makeEmails(1)[0], _accountId: 'acc1', _mailbox: 'Sent', source: 'local',
+      messageId: '<late-keyboard-hit@example.test>',
+    };
+    try {
+      mail.selectEmail.mockClear();
+      Object.assign(mail, { activeMailbox: 'Sent', unifiedInbox: false, sortedEmails: [], sentEmails: [] });
+      Object.assign(search, { searchActive: false, searchResults: [] });
+      Object.assign(settings, { emailListGrouping: 'sender', threadMode: 'flat' });
+      groupBySender.mockImplementation(emails => emails.length ? [{
+        senderEmail: 'sender@test.com', senderName: 'Sender', totalEmails: emails.length,
+        unreadCount: 0, lastDate: new Date(hit.date),
+        topics: [{
+          topicId: 'late-topic', originalSubject: hit.subject, participants: [], emails,
+          unreadCount: 0, lastDate: new Date(hit.date),
+        }],
+      }] : []);
+
+      const view = render(React.createElement(EmailList));
+      await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
+
+      Object.assign(search, { searchActive: true, searchResults: [hit] });
+      await act(async () => {
+        view.rerender(React.createElement(EmailList, { stacked: true }));
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      await screen.findByTestId('sender-group-row');
+
+      const press = key => fireEvent.keyDown(window, { key });
+      press('j');
+      press('Enter');
+      press('j');
+      press('Enter');
+      press('j');
+      press('Enter');
+
+      expect(mail.selectEmail).toHaveBeenLastCalledWith(expect.anything(), 'local', 'Sent', null, hit);
+    } finally {
+      cleanup();
+      groupBySender.mockReset();
+      if (previousGroupBySender) groupBySender.mockImplementation(previousGroupBySender);
+      else groupBySender.mockReturnValue([]);
+      Object.assign(mail, previousMail);
+      Object.assign(search, previousSearch);
+      Object.assign(settings, previousSettings);
+    }
+  });
+
   it('EmailRow does not use object selectors from useMailStore (PERF-04)', async () => {
     // Verify at module level that EmailRow uses individual selectors
     // by reading the source — the useMailStore mock tracks calls
@@ -996,7 +1057,9 @@ describe('thread modes', () => {
     // And opening it opens it in its own folder.
     const { useMailStore } = await import('../../stores/mailStore');
     fireEvent.click(rows[2]);
-    expect(useMailStore.getState().selectEmail).toHaveBeenLastCalledWith(2, 'server', 'Sent');
+    expect(useMailStore.getState().selectEmail).toHaveBeenLastCalledWith(
+      2, 'server', 'Sent', null, expect.objectContaining({ uid: 2, _mailbox: 'Sent', _fromSentFolder: true }),
+    );
   });
 
   it('expandable: members follow threadSortOrder', async () => {

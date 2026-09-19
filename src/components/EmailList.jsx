@@ -154,9 +154,8 @@ function EmailListComponent({ stacked = false }) {
   const loadEmails = useMessageListStore(s => s.loadEmails);
   const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
   const selectEmail = useSelectionStore(s => s.selectEmail);
-  const selectEmailRow = (key, email, mailbox = email._mailbox, source = email.source) => searchResults.includes(email)
-    ? selectEmail(key, source, mailbox, null, email)
-    : selectEmail(key, source, mailbox);
+  const selectEmailRow = useCallback((key, email, mailbox = email._mailbox, source = email.source) =>
+    selectEmail(key, source, mailbox, null, email), [selectEmail]);
   const selectThread = useSelectionStore(s => s.selectThread);
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
   const selectedThread = useSelectionStore(s => s.selectedThread);
@@ -358,7 +357,7 @@ function EmailListComponent({ stacked = false }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isExplorer, emailListGrouping, selectEmail]);
+  }, [isExplorer, emailListGrouping, selectEmailRow]);
 
   useEffect(() => {
     setFocusedRow(null);
