@@ -152,12 +152,12 @@ export function SearchIndexSettings({ onUpgrade }) {
                 )}
               </div>
               <div className="flex gap-2">
-                <Button size="sm" data-testid="search-index-rebuild" disabled={!info?.available}
+                <Button size="sm" data-testid="search-index-rebuild"
                   onClick={() => rebuild().catch(e => console.warn('[searchIndex] rebuild failed:', e))}>
                   {t('settings.searchIndex.rebuild')}
                 </Button>
                 <Button size="sm" variant="dangerTint" data-testid="search-index-delete"
-                  disabled={deleting || !info?.available}
+                  disabled={deleting}
                   onClick={() => setConfirming(true)}>
                   {t('settings.searchIndex.delete')}
                 </Button>

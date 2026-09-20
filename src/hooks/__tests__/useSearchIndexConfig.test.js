@@ -20,7 +20,11 @@ beforeAll(async () => {
   await vi.waitFor(() => expect(useSettingsStore.persist.hasHydrated()).toBe(true));
   configure.mockResolvedValue(true); // default: every push succeeds unless a test overrides it
 });
-afterEach(() => { cleanup(); configure.mockReset().mockResolvedValue(true); });
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  configure.mockReset().mockResolvedValue(true);
+});
 
 describe('effectiveSearchIndexConfig', () => {
   it('bodies follow the toggle for everyone', () => {
@@ -89,20 +93,21 @@ describe('useSearchIndexConfig', () => {
     expect(reconnect).toBeNull();
   });
 
-  it('retries after a failed push: the dedupe key clears so the next store change pushes again', async () => {
+  it('retries a failed push without waiting for another store or reconnect event', async () => {
+    vi.useFakeTimers();
     useSettingsStore.setState({ searchIndexBodies: true, searchIndexEnabled: true, billingProfile: null });
-    configure.mockResolvedValueOnce(false);
+    configure.mockResolvedValueOnce(false).mockResolvedValue(true);
     renderHook(() => useSearchIndexConfig());
-    await vi.waitFor(() => expect(configure).toHaveBeenCalledTimes(1));
+    await act(async () => { await Promise.resolve(); });
+    expect(configure).toHaveBeenCalledTimes(1);
 
-    // A store change unrelated to the search index still triggers push();
-    // the failed push left `last` cleared, so the same config is sent again.
-    await act(async () => { useSettingsStore.setState({ sendDelay: 31 }); });
-    await vi.waitFor(() => expect(configure).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(configure).toHaveBeenCalledTimes(2);
     expect(configure).toHaveBeenLastCalledWith({ enabled: true, bodies: true, attachments: false, imageText: false });
 
-    // A push that resolves true does not retry on the next unrelated change.
-    await act(async () => { useSettingsStore.setState({ sendDelay: 32 }); });
+    await vi.advanceTimersByTimeAsync(5000);
     expect(configure).toHaveBeenCalledTimes(2);
   });
 });

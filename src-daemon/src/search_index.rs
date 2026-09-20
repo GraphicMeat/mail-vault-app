@@ -22,6 +22,8 @@ use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+const REOPEN_EVERY: Duration = Duration::from_secs(5);
+
 pub struct SearchIndexState {
     pub db: SharedConn,
     pub(crate) root: Mutex<Option<PathBuf>>,
@@ -543,7 +545,10 @@ fn worker(st: &SearchIndexState, rx: mpsc::Receiver<Signal>) {
             Signal::Sweep
         } else {
             // Counted from the last full pass, so a stream of nudges cannot postpone it.
-            match rx.recv_timeout(SWEEP_EVERY.saturating_sub(last_full.elapsed())) {
+            let enabled = *g(&st.enabled);
+            let closed = enabled == Some(true) && lock(&st.db).is_none();
+            let wait = if closed { REOPEN_EVERY } else { SWEEP_EVERY.saturating_sub(last_full.elapsed()) };
+            match rx.recv_timeout(wait) {
                 Ok(s) => s,
                 Err(mpsc::RecvTimeoutError::Timeout) => Signal::Sweep,
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
@@ -580,7 +585,9 @@ fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec
     if st.switch.is_switching() {
         return; // the vault operation's reopen() sends a Reopen, which is a full pass
     }
-    if reopen {
+    let enabled = *g(&st.enabled);
+    let closed = enabled == Some(true) && lock(&st.db).is_none();
+    if reopen || closed {
         open_into(st);
     }
     if *g(&st.enabled) != Some(true) {
@@ -667,11 +674,11 @@ fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec
 /// Delete the index files and open a fresh index. A file that will not go is
 /// never reopened: the index stays unavailable instead.
 fn rebuild_index(st: &SearchIndexState) {
-    if st.switch.is_switching() {
+    if !st.mail_dir_ok || st.switch.is_switching() {
         return;
     }
     let gen = st.switch.current();
-    let Some(root) = g(&st.root).clone() else { return };
+    let root = st.vault_root.clone();
     *lock(&st.db) = None; // drop = checkpoint; then the files can go
     let dir = root.join(db::DB_DIR);
     let mut stuck = false;
@@ -1290,6 +1297,53 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
         assert_eq!(crate::search_index::status_json(&st)["state"], "unavailable");
         assert!(!index_file(tmp.path()).exists());
+    }
+
+    #[test]
+    fn a_configured_closed_index_reopens_without_rebuilding() {
+        use mailvault_core::search_index::{db, lock, reconcile::IndexConfig};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        {
+            let conn = db::open(tmp.path()).unwrap();
+            db::meta_set(&conn, "recovery_sentinel", "keep").unwrap();
+        }
+        let st = state(tmp.path());
+        *st.enabled.lock().unwrap() = Some(true);
+        *st.config.lock().unwrap() = Some(IndexConfig { bodies: true, attachments: false, image_text: false });
+
+        super::run_pass(&st, false, false, Some(Vec::new()));
+
+        assert_eq!(crate::search_index::status_json(&st)["available"], true);
+        let guard = lock(&st.db);
+        assert_eq!(db::meta_get(guard.as_ref().unwrap(), "recovery_sentinel").as_deref(), Some("keep"), "automatic recovery must reopen, not delete, the existing index");
+    }
+
+    #[test]
+    fn explicit_rebuild_replaces_an_unavailable_newer_schema_index() {
+        use mailvault_core::search_index::{db, lock, reconcile::IndexConfig};
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let conn = db::open(tmp.path()).unwrap();
+            db::meta_set(&conn, "schema_version", "99").unwrap();
+        }
+        let st = state(tmp.path());
+        *st.enabled.lock().unwrap() = Some(true);
+        *st.config.lock().unwrap() = Some(IndexConfig { bodies: true, attachments: false, image_text: false });
+        crate::search_index::open_into(&st);
+        assert_eq!(crate::search_index::status_json(&st)["available"], false);
+        assert!(st.root.lock().unwrap().is_none());
+        {
+            let conn = rusqlite::Connection::open(index_file(tmp.path())).unwrap();
+            let version: String = conn.query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |row| row.get(0)).unwrap();
+            assert_eq!(version, "99", "automatic open must preserve a newer-schema index");
+        }
+
+        super::rebuild_index(&st);
+
+        assert_eq!(crate::search_index::status_json(&st)["available"], true);
+        let guard = lock(&st.db);
+        assert_eq!(db::meta_get(guard.as_ref().unwrap(), "schema_version"), Some(db::SCHEMA_VERSION.to_string()));
     }
 
     /// Task 1.10 review I1: `total` must count every listed folder from the
