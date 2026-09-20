@@ -10,6 +10,23 @@ import { PremiumFeatureList } from '../PremiumFeatureList';
 afterEach(cleanup);
 
 describe('PremiumFeatureList', () => {
+  it('lists the multi-folder search upgrade once and opens storage settings', () => {
+    const searchFeatures = PREMIUM_FEATURES.filter(f => f.id === 'fast-multi-folder-search');
+    expect(searchFeatures).toHaveLength(1);
+    expect(searchFeatures[0]).toMatchObject({
+      titleKey: 'premium.fastMultiFolderSearch.title',
+      blurbKey: 'premium.fastMultiFolderSearch.blurb',
+      tab: 'storage',
+    });
+
+    const onNavigate = vi.fn();
+    render(<PremiumFeatureList isPremium={false} onNavigate={onNavigate} />);
+    const row = screen.getByTestId('premium-feature-fast-multi-folder-search');
+    expect(row).toBeTruthy();
+    fireEvent.click(row.querySelector('button'));
+    expect(onNavigate).toHaveBeenCalledWith('storage');
+  });
+
   it('lists every premium feature, tracker removal included', () => {
     render(<PremiumFeatureList isPremium={false} onNavigate={() => {}} />);
     for (const f of PREMIUM_FEATURES) {

@@ -2,14 +2,12 @@
 // open - "Cannot tell which account and folder hold message 282. Reload the
 // list and try again." The user searched "from the inbox"; the hit was in Sent.
 //
-// Both halves of that sentence are the same state. With two or more accounts
-// the sidebar's All Inboxes mode lists its folders with "Inbox" first
-// (Sidebar.jsx UNIFIED_FOLDERS), and a 'current folder' search there has no
-// folder to narrow to (searchStore.js searchScope: activeMailbox 'UNIFIED' ->
-// every folder), so it reaches Sent. The refusal only exists in a view that
-// spans mailboxes (selectEmail.js, `isUnified && !unified`), and
-// `_resolveUnifiedContext` answers from the loaded lists only, never from
-// searchResults, so an old Sent hit resolves to nothing.
+// Both halves of that sentence are the same state. The current All Inboxes
+// scope is the selected unified folder, so this regression explicitly asks for
+// all folders to include Sent. The refusal only exists in a view that spans
+// mailboxes (selectEmail.js, `isUnified && !unified`), and `_resolveUnifiedContext`
+// answers from the loaded lists only, never from searchResults, so a Sent hit
+// must carry its own account/folder identity through selection.
 //
 // Shape of the real account (info@moderniosaplikacijos.lt, mailboxes.json):
 // INBOX, Sent (\Sent), Sent Messages (\Sent, listed later), and the message
@@ -31,11 +29,18 @@ const mockFetchEmailLight = vi.fn();
 const mockFetchEmails = vi.fn();
 const mockGetEmailHeadersPartial = vi.fn();
 const mockGetLocalEmailLight = vi.fn().mockResolvedValue(null);
-const mockSearchLocalEmails = vi.fn();
+const mockSearch = vi.hoisted(() => ({
+  start: vi.fn(),
+  cancel: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../mailSearch.js', () => ({
+  startMailSearch: (...args) => mockSearch.start(...args),
+  cancelMailSearch: (...args) => mockSearch.cancel(...args),
+}));
 
 vi.mock('../../db', () => ({
   getLocalEmailLight: (...a) => mockGetLocalEmailLight(...a),
-  searchLocalEmails: (...a) => mockSearchLocalEmails(...a),
   getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: (...a) => mockGetEmailHeadersPartial(...a),
@@ -100,6 +105,7 @@ vi.mock('../../cacheManager', () => ({
 }));
 
 vi.mock('../../../stores/settingsStore', () => ({
+  effectiveSearchMailboxConcurrency: () => 1,
   useSettingsStore: {
     getState: () => ({
       cacheLimitMB: 128,
@@ -182,7 +188,20 @@ beforeEach(() => {
   mockGetLocalEmailLight.mockResolvedValue(null);
   mockGetEmailHeadersPartial.mockResolvedValue({ emails: [LOADED_ROW], totalEmails: 1 });
   mockFetchEmails.mockResolvedValue({ emails: [LOADED_ROW] });
-  mockSearchLocalEmails.mockResolvedValue([searchHit(282), searchHit(283)]);
+  mockSearch.start.mockImplementation(async (request, onProgress) => {
+    onProgress({
+      searchId: request.searchId,
+      sequence: 1,
+      lane: 'local',
+      rows: [searchHit(282), searchHit(283)],
+      completed: 1,
+      total: 1,
+      localMode: 'index',
+      coverage: { indexed: 2, total: 2, complete: true, matched: 2, shown: 2 },
+      terminal: 'complete',
+    });
+    return { unlisten: vi.fn() };
+  });
   baseState();
   useSearchStore.setState({
     searchActive: false, searchQuery: '', searchResults: [], isSearching: false,
@@ -198,20 +217,25 @@ async function searchFromUnifiedInbox() {
   useMailStore.setState({ unifiedInbox: true });
   await useMailStore.getState().loadUnifiedInbox(null, 'INBOX');
   expect(useMailStore.getState().activeMailbox).toBe('UNIFIED');
+  useSearchStore.getState().setSearchFilters({ location: 'local', folder: 'all' });
   useSearchStore.setState({ searchQuery: 'didelis laiskas' });
   await useSearchStore.getState().performSearch();
   return useSearchStore.getState().searchResults;
 }
 
-describe('a vault search hit in Sent, from the All Inboxes "Inbox"', () => {
+describe('a vault search hit in Sent, from an All Inboxes all-folders search', () => {
   // Precondition, green at HEAD: the search half already tags each hit with
   // its real account and folder, so everything the click needs is on the row.
   it('is found by performSearch, tagged with its real folder', async () => {
     const rows = await searchFromUnifiedInbox();
-    // 'current folder' in All Inboxes names no folder: the vault search runs
-    // over every folder, which is how an "Inbox" search reaches Sent.
-    expect(mockSearchLocalEmails).toHaveBeenCalledWith(ACCT_A.id, 'didelis laiskas',
-      expect.objectContaining({ mailbox: null, restrictTo: null }));
+    // The daemon receives explicit target metadata; all local folders are
+    // represented by null rather than a frontend fan-out of mailbox reads.
+    expect(mockSearch.start).toHaveBeenCalledTimes(1);
+    expect(mockSearch.start.mock.calls[0][0]).toMatchObject({
+      query: 'didelis laiskas',
+      location: 'local',
+      targets: [expect.objectContaining({ accountId: ACCT_A.id, localMailboxes: null })],
+    });
     // Two files, one Message-ID: search shows the message once, the first copy.
     expect(rows.map(r => r.uid)).toEqual([282]);
     for (const row of rows) {
@@ -239,5 +263,44 @@ describe('a vault search hit in Sent, from the All Inboxes "Inbox"', () => {
     expect(state.selectedEmail?._accountId).toBe(ACCT_A.id);
     expect(state.selectedEmail?._mailbox).toBe('Sent');
     expect(mockGetLocalEmailLight).toHaveBeenCalledWith(ACCT_A.id, 'Sent', 282);
+  });
+
+  it('does not open a cached body that disagrees with the clicked search row', async () => {
+    const hit = (await searchFromUnifiedInbox()).find(r => r.uid === 282);
+    const localOnlyHit = { ...hit, source: 'local-only' };
+    useMailStore.getState().addToCache(`${ACCT_A.id}-Sent-282`, {
+      uid: 282, messageId: '<stale-cache@example.test>', subject: 'wrong cached message',
+      text: 'wrong cached body', html: '<p>wrong cached body</p>',
+    }, 128);
+    mockGetLocalEmailLight.mockResolvedValue(null);
+
+    await useMailStore.getState().selectEmail(
+      _selKey(localOnlyHit), localOnlyHit.source, localOnlyHit._mailbox, undefined, localOnlyHit,
+    );
+
+    const state = useMailStore.getState();
+    expect(state.selectedEmail?.messageId).toBe(hit.messageId);
+    expect(state.selectedEmail?.subject).toBe(hit.subject);
+    expect(state.selectedEmail?._bodyError).toBeTruthy();
+    expect(state.selectedEmail?.text).not.toBe('wrong cached body');
+  });
+
+  it('does not open a Maildir body that disagrees with the clicked search row', async () => {
+    const hit = (await searchFromUnifiedInbox()).find(r => r.uid === 282);
+    const localOnlyHit = { ...hit, source: 'local-only' };
+    mockGetLocalEmailLight.mockResolvedValue({
+      uid: 282, messageId: '<stale-maildir@example.test>', subject: 'wrong Maildir message',
+      text: 'wrong Maildir body', html: '<p>wrong Maildir body</p>', flags: [],
+    });
+
+    await useMailStore.getState().selectEmail(
+      _selKey(localOnlyHit), localOnlyHit.source, localOnlyHit._mailbox, undefined, localOnlyHit,
+    );
+
+    const state = useMailStore.getState();
+    expect(state.selectedEmail?.messageId).toBe(hit.messageId);
+    expect(state.selectedEmail?.subject).toBe(hit.subject);
+    expect(state.selectedEmail?._bodyError).toBeTruthy();
+    expect(state.selectedEmail?.text).not.toBe('wrong Maildir body');
   });
 });

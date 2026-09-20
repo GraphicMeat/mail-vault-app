@@ -1,533 +1,322 @@
-/**
- * Search is the one list whose rows span folders. Two things went wrong there:
- * the rows carried no location, so opening one fetched the uid from whatever
- * folder was selected; and the dedup key was the bare uid, so folder A's uid 34
- * and folder B's uid 34 collapsed into a single row before anyone clicked.
- */
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+const harness = vi.hoisted(() => ({
+  mailState: null,
+  settingsState: null,
+  started: [],
+  startMailSearch: vi.fn(),
+  cancelMailSearch: vi.fn(),
+  buildSearchTargets: vi.fn(),
+  unlisten: vi.fn(),
+}));
 
-const ACTIVE_MAILBOX = 'INBOX.Archive.Projekt Nystart.Lieferanten.CRM Centralstation';
-
-const state = {
-  activeAccountId: 'acct-1',
-  activeMailbox: ACTIVE_MAILBOX,
-  accounts: [{ id: 'acct-1', email: 'a@b.c', password: 'x', imapHost: 'h', imapPort: 993 }],
-  savedEmailIds: new Set(),
-  emails: [{ uid: 34, subject: 'Angebot CRM', from: { address: 'sales@crm.example' } }],
-  localEmails: [],
-  mailboxes: [{ path: 'INBOX', children: [] }],
-};
-
-let localResults = [];
-let serverResults = [];
-let localFilters = null;
-// mailbox path → rows that server search answers with, when a spec wants the
-// folders to differ. Otherwise every folder answers `serverResults`.
-let serverByMailbox = null;
-let serverCalls = [];
-let serverFailIn = new Set();
-let serverGate = null;
-
-vi.mock('../mailStore', () => ({ useMailStore: { getState: () => state } }));
+vi.mock('../mailStore', () => ({ useMailStore: { getState: () => harness.mailState } }));
 vi.mock('../settingsStore', () => ({
-  useSettingsStore: { getState: () => ({ addSearchToHistory: () => {} }) },
+  useSettingsStore: { getState: () => harness.settingsState },
+  effectiveSearchMailboxConcurrency: state => (state?.billingProfile?.premiumAccess
+    ? Math.max(1, Math.min(5, Number(state.searchMailboxConcurrency) || 3))
+    : 1),
+}));
+vi.mock('../../services/mailSearch.js', () => ({
+  startMailSearch: (...args) => harness.startMailSearch(...args),
+  cancelMailSearch: (...args) => harness.cancelMailSearch(...args),
+}));
+vi.mock('../../services/searchTargets.js', () => ({
+  buildSearchTargets: (...args) => harness.buildSearchTargets(...args),
 }));
 vi.mock('../../services/authUtils', () => ({
-  hasValidCredentials: () => true,
-  ensureFreshToken: (a) => Promise.resolve(a),
+  hasValidCredentials: () => false,
+  ensureFreshToken: async account => account,
 }));
-vi.mock('../../services/db', () => ({
-  searchLocalEmails: (_acct, _q, filters) => { localFilters = filters; return Promise.resolve(localResults); },
-}));
-vi.mock('../../services/api', () => ({
-  searchEmails: async (_acct, mailbox) => {
-    serverCalls.push(mailbox);
-    if (serverGate) await serverGate;
-    if (serverFailIn.has(mailbox)) throw new Error(`SELECT ${mailbox} failed`);
-    const emails = serverByMailbox ? (serverByMailbox[mailbox] || []) : serverResults;
-    return { emails, total: emails.length };
-  },
-}));
+vi.mock('../../services/db', () => ({ searchLocalEmails: async () => [] }));
+vi.mock('../../services/api', () => ({ searchEmails: async () => ({ emails: [], total: 0 }) }));
 
-const { useSearchStore, serverSearchTargets, searchScope } = await import('../searchStore');
+const { useSearchStore } = await import('../searchStore.js');
 
-beforeEach(() => {
-  localResults = [];
-  serverResults = [];
-  localFilters = null;
-  serverByMailbox = null;
-  serverCalls = [];
-  serverFailIn = new Set();
-  serverGate = null;
-  state.mailboxes = [{ path: 'INBOX', children: [] }];
-  state.activeMailbox = ACTIVE_MAILBOX;
-  useSearchStore.setState({ searchResults: [], searchQuery: '', searchFilters: {
-    location: 'all', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-  } });
+const DEFAULT_FILTERS = {
+  location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
+};
+const account = { id: 'acct-1', email: 'a@example.test', password: 'secret' };
+const mailbox = (path) => ({ path, name: path, delimiter: '.', children: [] });
+const result = (uid, subject, extra = {}) => ({
+  uid, subject, from: { address: 'sender@example.test' }, date: '2026-09-19T12:00:00Z', ...extra,
+});
+const progress = (run, sequence, extra = {}) => run.onProgress({
+  searchId: run.request.searchId,
+  sequence,
+  lane: 'local',
+  rows: [],
+  completed: 0,
+  total: 1,
+  localMode: null,
+  fallbackReason: null,
+  coverage: null,
+  failures: [],
+  terminal: null,
+  errorKey: null,
+  ...extra,
 });
 
-describe('search results carry their own location', () => {
-  it('stamps the active folder on in-memory hits and the searched folder on server hits', async () => {
-    serverResults = [{ uid: 77, subject: 'Angebot from server', from: { address: 'sales@crm.example' } }];
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults;
-    const inMemory = rows.find(r => r.uid === 34);
-    const fromServer = rows.find(r => r.uid === 77);
-    expect(inMemory._mailbox).toBe(state.activeMailbox);
-    expect(inMemory._accountId).toBe('acct-1');
-    // folder: 'all' sends the server search at INBOX; the row must say INBOX,
-    // not the folder the sidebar has selected.
-    expect(fromServer._mailbox).toBe('INBOX');
+async function startSearch(query, filterOverrides = {}) {
+  useSearchStore.setState({
+    searchQuery: query,
+    searchFilters: { ...DEFAULT_FILTERS, ...filterOverrides },
   });
+  await useSearchStore.getState().performSearch();
+  return harness.started.at(-1);
+}
 
-  it('hands the vault the mailbox list, so its rows can name a real folder', async () => {
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    await useSearchStore.getState().performSearch();
-    expect(localFilters.mailboxes).toBe(state.mailboxes);
-  });
-
-  it('keeps the same uid from two different folders as two rows', async () => {
-    localResults = [
-      { uid: 34, subject: 'Angebot CRM', _accountId: 'acct-1', _mailbox: 'INBOX.Archive.Lieferanten', source: 'local', from: { address: 'sales@crm.example' } },
-      { uid: 34, subject: 'Angebot Nystart', _accountId: 'acct-1', _mailbox: 'INBOX.Archive.Nystart', source: 'local', from: { address: 'sales@crm.example' } },
-    ];
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults.filter(r => r.uid === 34);
-    expect(rows.map(r => r._mailbox).sort()).toEqual([
-      'INBOX.Archive.Lieferanten',
-      'INBOX.Archive.Nystart',
-      state.activeMailbox,
-    ].sort());
-  });
-
-  it('still collapses the same message found twice in one folder', async () => {
-    localResults = [
-      { uid: 34, subject: 'Angebot CRM', _accountId: 'acct-1', _mailbox: state.activeMailbox, source: 'local', from: { address: 'sales@crm.example' } },
-    ];
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults.filter(r => r.uid === 34);
-    expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('local');
-  });
-});
-
-/**
- * One message, two vault folders: a Gmail message archived from INBOX is also
- * backed up from another label, and the index holds both files. Search listed
- * it twice — one row "Saved in your vault and backup drive", its twin "Backup
- * drive not connected" — because the dedup key names the folder.
- */
-describe('one message filed in two folders is one search row', () => {
-  const MID = '<CAF+sparneliai@mail.gmail.com>';
-  const hit = (over) => ({
-    subject: 'Fwd: Vištų sparneliai', from: { address: 'agne@example.com' },
-    _accountId: 'acct-1', source: 'local', messageId: MID, ...over,
-  });
-
+describe('daemon-backed search lifecycle', () => {
   beforeEach(() => {
-    state.activeMailbox = 'UNIFIED';
-    delete state.backedUpKeys; delete state.backedUpScopes; delete state.backupConfigured;
-  });
-  afterEach(() => { delete state.backedUpKeys; delete state.backedUpScopes; delete state.backupConfigured; });
-
-  it('collapses the vault copies, the open view first when no scan decides', async () => {
-    localResults = [
-      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
-      hit({ uid: 41, _mailbox: 'INBOX' }),
-    ];
-    useSearchStore.setState({ searchQuery: 'sparneliai' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults;
-    expect(rows).toHaveLength(1);
-    // No backup scan either way: the open view's folder (INBOX for UNIFIED) wins.
-    expect(rows[0]).toMatchObject({ uid: 41, _mailbox: 'INBOX', source: 'local' });
-  });
-
-  it('keeps the copy the backup drive is known to hold, whichever folder it is in', async () => {
-    // Each row's dot is read from its OWN folder's scan: here the label copy
-    // was scanned and found on the drive, INBOX's scan never ran.
-    state.backupConfigured = true;
-    state.backedUpScopes = new Set(['acct-1:[Gmail]/All Mail']);
-    state.backedUpKeys = new Set(['acct-1:[Gmail]/All Mail:912']);
-    localResults = [
-      hit({ uid: 41, _mailbox: 'INBOX' }),
-      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
-    ];
-    useSearchStore.setState({ searchQuery: 'sparneliai' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ uid: 912, _mailbox: '[Gmail]/All Mail' });
-  });
-
-  it('prefers the open folder over INBOX outside the unified view', async () => {
-    state.activeMailbox = '[Gmail]/All Mail';
-    localResults = [
-      hit({ uid: 41, _mailbox: 'INBOX' }),
-      hit({ uid: 912, _mailbox: '[Gmail]/All Mail' }),
-    ];
-    useSearchStore.setState({ searchQuery: 'sparneliai', searchFilters: {
-      location: 'local', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ uid: 912, _mailbox: '[Gmail]/All Mail' });
-  });
-
-  it('keeps the vault copy over a server hit, whatever brackets the id wears', async () => {
-    serverByMailbox = { INBOX: [{ uid: 41, subject: 'Fwd: Vištų sparneliai', messageId: MID.slice(1, -1) }] };
-    localResults = [hit({ uid: 912, _mailbox: '[Gmail]/All Mail', source: 'local-only' })];
-    useSearchStore.setState({ searchQuery: 'sparneliai' });
-    await useSearchStore.getState().performSearch();
-
-    const rows = useSearchStore.getState().searchResults;
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ _mailbox: '[Gmail]/All Mail', source: 'local-only' });
-  });
-
-  it('never merges the same Message-ID across two accounts', async () => {
-    localResults = [
-      hit({ uid: 41, _mailbox: 'INBOX' }),
-      hit({ uid: 41, _mailbox: 'INBOX', _accountId: 'acct-2' }),
-    ];
-    useSearchStore.setState({ searchQuery: 'sparneliai' });
-    await useSearchStore.getState().performSearch();
-
-    expect(useSearchStore.getState().searchResults.map(r => r._accountId).sort()).toEqual(['acct-1', 'acct-2']);
-  });
-});
-
-/**
- * "All folders" meant two things in one search: the vault half walked every
- * folder, the server half SELECTed INBOX and stopped. bson73 (discussion #1)
- * has 59 nested folders and a backup that looked smaller than his server —
- * the header said "in all folders" over hits from one of them.
- */
-describe('server search covers the folders the UI claims', () => {
-  const TREE = [
-    { path: 'INBOX', children: [
-      { path: 'INBOX.Archive', noselect: true, children: [
-        { path: 'INBOX.Archive.Lieferanten', children: [] },
-        { path: 'INBOX.Archive.Nystart', children: [] },
-      ] },
-    ] },
-    { path: 'Sent', children: [] },
-  ];
-
-  it('SELECTs every selectable folder, INBOX first, containers skipped', async () => {
-    state.mailboxes = TREE;
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'all', location: 'server' });
-    await useSearchStore.getState().performSearch();
-
-    expect(serverCalls).toEqual([
-      'INBOX',
-      'INBOX.Archive.Lieferanten',
-      'INBOX.Archive.Nystart',
-      'Sent',
-    ]);
-  });
-
-  it('returns a hit that lives in a folder other than INBOX', async () => {
-    state.mailboxes = TREE;
-    serverByMailbox = {
-      'INBOX.Archive.Nystart': [{ uid: 7, subject: 'Angebot Nystart', from: { address: 'sales@crm.example' } }],
+    useSearchStore.getState().clearSearch();
+    harness.mailState = {
+      activeAccountId: 'acct-1',
+      activeMailbox: 'INBOX',
+      unifiedInbox: false,
+      unifiedFolder: 'INBOX',
+      accounts: [account],
+      mailboxes: [mailbox('INBOX')],
+      emails: [],
+      savedEmailIds: new Set(),
+      backedUpKeys: new Set(),
+      backedUpScopes: new Set(),
+      backupConfigured: false,
+      requestSettingsTab: vi.fn(),
     };
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'all', location: 'server' });
-    await useSearchStore.getState().performSearch();
-
-    const hit = useSearchStore.getState().searchResults.find(r => r.uid === 7);
-    expect(hit).toBeTruthy();
-    // The row has to name the folder it was found in, or opening it fetches
-    // uid 7 from whatever the sidebar has selected.
-    expect(hit._mailbox).toBe('INBOX.Archive.Nystart');
-  });
-
-  it('keeps the other folders when one folder refuses', async () => {
-    state.mailboxes = TREE;
-    serverFailIn = new Set(['INBOX.Archive.Lieferanten']);
-    serverByMailbox = {
-      'Sent': [{ uid: 9, subject: 'Angebot Sent', from: { address: 'me@crm.example' } }],
+    harness.settingsState = {
+      billingProfile: { hasSubscription: true, premiumAccess: true },
+      searchMailboxConcurrency: 3,
+      addSearchToHistory: vi.fn(),
     };
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'all', location: 'server' });
-    await useSearchStore.getState().performSearch();
-
-    expect(serverCalls).toContain('Sent');
-    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toContain(9);
+    harness.started = [];
+    harness.startMailSearch.mockReset().mockImplementation(async (request, onProgress, onReconnect) => {
+      const run = { request, onProgress, onReconnect, unlisten: vi.fn() };
+      harness.started.push(run);
+      return { unlisten: run.unlisten };
+    });
+    harness.cancelMailSearch.mockReset().mockResolvedValue(undefined);
+    harness.buildSearchTargets.mockReset().mockImplementation(async () => [{
+      accountId: 'acct-1', account, localMailboxes: null, knownMailboxes: ['INBOX'], serverMailboxes: ['INBOX'],
+    }]);
+    useSearchStore.setState({
+      searchQuery: '',
+      searchFilters: { ...DEFAULT_FILTERS },
+      searchActive: false,
+      searchResults: [],
+      isSearching: false,
+      searchProgress: null,
+      searchIndexCoverage: null,
+      searchFallback: null,
+      searchError: null,
+      activeSearchId: null,
+      searchGeneration: 0,
+      lastSequence: 0,
+      searchSnapshot: null,
+    });
   });
 
-  it('searches only the picked folder when the user picks one', async () => {
-    state.mailboxes = TREE;
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'Sent', location: 'server' });
-    await useSearchStore.getState().performSearch();
-    expect(serverCalls).toEqual(['Sent']);
+  it('sends normalized query filters, explicit targets, and effective concurrency', async () => {
+    harness.settingsState.searchMailboxConcurrency = 5;
+    const targets = [{ accountId: 'acct-1', localMailboxes: null, serverMailboxes: ['INBOX'] }];
+    harness.buildSearchTargets.mockResolvedValueOnce(targets);
+
+    const run = await startSearch('  invoice  ', {
+      location: 'local', folder: 'all', sender: 'alice@example.test',
+      dateFrom: '2026-09-01', dateTo: '2026-09-03', hasAttachments: true,
+    });
+
+    expect(run.request).toMatchObject({
+      searchId: expect.any(String),
+      query: 'invoice',
+      sender: 'alice@example.test',
+      dateFrom: Date.parse('2026-09-01T00:00:00Z') / 1000,
+      dateTo: Date.parse('2026-09-03T23:59:59Z') / 1000,
+      hasAttachments: true,
+      location: 'local',
+      concurrency: 5,
+      targets,
+    });
+    expect(harness.buildSearchTargets).toHaveBeenCalledWith(
+      harness.mailState,
+      harness.settingsState,
+      expect.objectContaining({ folder: 'all', location: 'local' }),
+    );
   });
 
-  it('searches only the active folder for "current"', async () => {
-    state.mailboxes = TREE;
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'current', location: 'server' });
-    await useSearchStore.getState().performSearch();
-    expect(serverCalls).toEqual([ACTIVE_MAILBOX]);
+  it('searches attachment-only filters and keeps a saved Premium limit after logout', async () => {
+    harness.settingsState.searchMailboxConcurrency = 5;
+    harness.settingsState.billingProfile = null;
+
+    const run = await startSearch('', { hasAttachments: true });
+
+    expect(run.request.concurrency).toBe(1);
+    expect(run.request.hasAttachments).toBe(true);
+    expect(harness.settingsState.searchMailboxConcurrency).toBe(5);
   });
 
-  it('fans out for "current" in the unified view, which is not a mailbox', async () => {
-    state.mailboxes = TREE;
-    state.activeMailbox = 'UNIFIED';
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'current', location: 'server' });
-    await useSearchStore.getState().performSearch();
-    // SELECT UNIFIED is an error, and the view it names is every folder.
-    expect(serverCalls).not.toContain('UNIFIED');
-    expect(serverCalls).toEqual(['INBOX', 'INBOX.Archive.Lieferanten', 'INBOX.Archive.Nystart', 'Sent']);
-  });
-
-  it('reports progress while the sweep runs and clears it at the end', async () => {
-    state.mailboxes = TREE;
-    const seen = [];
-    const unsub = useSearchStore.subscribe((s) => seen.push(s.searchProgress));
-    useSearchStore.setState({ searchQuery: 'Angebot' });
-    useSearchStore.getState().setSearchFilters({ folder: 'all', location: 'server' });
-    await useSearchStore.getState().performSearch();
-    unsub();
-
-    expect(seen).toContainEqual({ done: 4, total: 4 });
-    expect(useSearchStore.getState().searchProgress).toBeNull();
-  });
-
-  it('a newer search discards the sweep the old query started', async () => {
-    state.mailboxes = TREE;
-    let release;
-    serverGate = new Promise((r) => { release = r; });
-    serverByMailbox = { 'INBOX': [{ uid: 1, subject: 'Stale', from: { address: 's@x.y' } }] };
-
-    useSearchStore.setState({ searchQuery: 'Stale' });
-    useSearchStore.getState().setSearchFilters({ folder: 'all', location: 'server' });
-    const stale = useSearchStore.getState().performSearch();
-
-    // Second search wins; the first is still on the wire.
-    serverGate = null;
-    serverByMailbox = { 'INBOX': [{ uid: 2, subject: 'Fresh', from: { address: 's@x.y' } }] };
-    useSearchStore.setState({ searchQuery: 'Fresh' });
-    await useSearchStore.getState().performSearch();
-
-    release();
-    await stale;
-
-    const subjects = useSearchStore.getState().searchResults.map(r => r.subject);
-    expect(subjects).toContain('Fresh');
-    expect(subjects).not.toContain('Stale');
-  });
-});
-
-describe('serverSearchTargets', () => {
-  it('skips \\Noselect containers, dedupes, and leads with INBOX', () => {
-    expect(serverSearchTargets([
-      { path: 'Sent', children: [] },
-      { path: 'Placeholder', noselect: true, children: [{ path: 'Placeholder.Real', children: [] }] },
-      { path: 'INBOX', children: [{ path: 'Sent', children: [] }] },
-    ])).toEqual(['INBOX', 'Sent', 'Placeholder.Real']);
-  });
-
-  it('is empty when the tree is', () => {
-    expect(serverSearchTargets(undefined)).toEqual([]);
-  });
-});
-
-// ── Searching a branch instead of one folder or all of them ────────────────
-// bson73: "the structure tells us exactly where something was filed, which lets
-// us narrow down search much more effectively." One folder is too narrow and
-// all 59 is too wide; the useful scope is the branch.
-
-const box = (path, extra = {}) => ({ path, name: path.split('.').pop(), delimiter: '.', children: [], ...extra });
-const NESTED = [
-  box('INBOX'),
-  box('Kunden'),
-  box('Kunden.Company XY'),
-  box('Kunden.Company XY.Invoices'),
-  box('Kunden.Company XY.Invoices.erledigt'),
-  box('Kunden-Alt'),
-  box('Sammelmappe', { noselect: true }),
-  box('Sammelmappe.Real'),
-];
-const scopeOf = (folder, activeMailbox = 'INBOX') =>
-  searchScope(folder, { activeMailbox, mailboxes: NESTED });
-
-describe('searchScope', () => {
-  it('sends "all folders" at every folder the server will open', () => {
-    expect(scopeOf('all').targets).toEqual(serverSearchTargets(NESTED));
-    expect(scopeOf('all').targets).not.toContain('Sammelmappe');
-  });
-
-  it('sends "current folder" at exactly that folder', () => {
-    expect(scopeOf('current', 'Kunden.Company XY').targets).toEqual(['Kunden.Company XY']);
-  });
-
-  it('treats the unified view as every folder, since it is not a mailbox', () => {
-    expect(scopeOf('current', 'UNIFIED').targets).toEqual(serverSearchTargets(NESTED));
-  });
-
-  it('sends a named folder at just that folder', () => {
-    expect(scopeOf('Kunden.Company XY').targets).toEqual(['Kunden.Company XY']);
-  });
-
-  it('sends a branch at the folder and everything filed under it', () => {
-    expect(scopeOf('sub:Kunden').targets).toEqual([
-      'Kunden', 'Kunden.Company XY', 'Kunden.Company XY.Invoices',
-      'Kunden.Company XY.Invoices.erledigt',
-    ]);
-  });
-
-  it('does not let a branch swallow a sibling whose name it prefixes', () => {
-    expect(scopeOf('sub:Kunden').targets).not.toContain('Kunden-Alt');
-  });
-
-  it('skips a branch root the server will not open, but keeps its children', () => {
-    expect(scopeOf('sub:Sammelmappe').targets).toEqual(['Sammelmappe.Real']);
-  });
-
-  it('names one mailbox for the vault when the scope is one folder', () => {
-    expect(scopeOf('Kunden.Company XY').localMailbox).toBe('Kunden.Company XY');
-    expect(scopeOf('current', 'INBOX').localMailbox).toBe('INBOX');
-  });
-
-  it('lets the vault read everything when the scope is wider than one folder', () => {
-    expect(scopeOf('all').localMailbox).toBe(null);
-    expect(scopeOf('sub:Kunden').localMailbox).toBe(null);
-  });
-
-  it('restricts vault rows only for a branch, never for "all folders"', () => {
-    // A vault directory for a folder the server no longer lists still holds
-    // readable mail, and "all folders" must not discard it.
-    expect(scopeOf('all').restrictTo).toBe(null);
-    expect([...scopeOf('sub:Kunden').restrictTo]).toContain('Kunden.Company XY');
-  });
-});
-
-describe('searching a branch', () => {
-  it('asks the server about the branch and no other folder', async () => {
-    state.mailboxes = NESTED;
-    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
-      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    expect(serverCalls).toEqual([
-      'Kunden', 'Kunden.Company XY', 'Kunden.Company XY.Invoices',
-      'Kunden.Company XY.Invoices.erledigt',
-    ]);
-  });
-
-  it('drops a vault hit that was filed outside the branch', async () => {
-    state.mailboxes = NESTED;
-    state.activeMailbox = 'Kunden';
-    localResults = [
-      { uid: 1, subject: 'Rechnung A', _accountId: 'acct-1', _mailbox: 'Kunden.Company XY.Invoices', source: 'local', from: { address: 'a@b.c' } },
-      { uid: 2, subject: 'Rechnung B', _accountId: 'acct-1', _mailbox: 'Kunden-Alt', source: 'local', from: { address: 'a@b.c' } },
-    ];
-    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
-      location: 'local', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    const found = useSearchStore.getState().searchResults.map(r => r._mailbox);
-    expect(found).toContain('Kunden.Company XY.Invoices');
-    expect(found).not.toContain('Kunden-Alt');
-  });
-
-  it('keeps a vault hit from a folder the server no longer lists, on "all folders"', async () => {
-    state.mailboxes = NESTED;
-    localResults = [
-      { uid: 3, subject: 'Rechnung alt', _accountId: 'acct-1', _mailbox: 'Ehemalige Kunden', source: 'local', from: { address: 'a@b.c' } },
-    ];
-    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
-      location: 'local', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    expect(useSearchStore.getState().searchResults.map(r => r._mailbox)).toContain('Ehemalige Kunden');
-  });
-});
-
-describe('searching a branch, continued', () => {
-  it('does not surface the open folder in-memory rows when it sits outside the branch', async () => {
-    // The loaded headers belong to whatever folder is selected. Searching a
-    // branch you are not currently in must not smuggle them in.
-    state.mailboxes = NESTED;
-    state.activeMailbox = 'Kunden-Alt';
-    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
-      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    expect(useSearchStore.getState().searchResults.find(r => r.uid === 34)).toBeUndefined();
-  });
-
-  it('keeps them when the open folder is inside the branch', async () => {
-    state.mailboxes = NESTED;
-    state.activeMailbox = 'Kunden.Company XY';
-    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
-      location: 'all', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    expect(useSearchStore.getState().searchResults.find(r => r.uid === 34)).toBeTruthy();
-  });
-});
-
-describe('the vault half answers from the offline index', () => {
-  const withCoverage = (rows, coverage) => Object.defineProperty(rows, 'coverage', { value: coverage, enumerable: false });
-
-  it('hands the index the branch and keeps how much of the vault it covered', async () => {
-    state.mailboxes = NESTED;
-    localResults = withCoverage([], { indexed: 40, total: 50, complete: false });
-    useSearchStore.setState({ searchQuery: 'Rechnung', searchFilters: {
-      location: 'local', folder: 'sub:Kunden', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-
-    expect(localFilters.restrictTo).toEqual(expect.arrayContaining(['Kunden', 'Kunden.Company XY.Invoices.erledigt']));
-    expect(localFilters.restrictTo).not.toContain('Kunden-Alt');
-    expect(useSearchStore.getState().searchIndexCoverage).toEqual({ indexed: 40, total: 50, complete: false });
+  it('clear invalidates synchronously and late events cannot republish rows', async () => {
+    const run = await startSearch('old');
+    const oldId = useSearchStore.getState().activeSearchId;
+    const generationBeforeClear = useSearchStore.getState().searchGeneration;
 
     useSearchStore.getState().clearSearch();
-    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+    progress(run, 1, { lane: 'server', rows: [result(1, 'stale')] });
+
+    expect(harness.cancelMailSearch).toHaveBeenCalledWith(oldId);
+    expect(useSearchStore.getState().searchGeneration).toBeGreaterThan(generationBeforeClear);
+    expect(useSearchStore.getState().activeSearchId).toBeNull();
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+    expect(useSearchStore.getState().searchActive).toBe(false);
   });
 
-  it('has no coverage when the scan answered, and no restriction on "all folders"', async () => {
-    useSearchStore.setState({ searchIndexCoverage: { indexed: 1, total: 2, complete: false }, searchQuery: 'Angebot' });
-    await useSearchStore.getState().performSearch();
+  it('ignores obsolete and non-increasing frames while merging local then server rows', async () => {
+    const run = await startSearch('invoice');
+    const id = run.request.searchId;
 
-    expect(localFilters.restrictTo).toBeNull();
-    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+    progress(run, 1, { searchId: 'previous-run', rows: [result(10, 'obsolete')] });
+    progress(run, 1, { lane: 'local', rows: [result(1, 'local')] });
+    progress(run, 1, { lane: 'server', rows: [result(2, 'duplicate-sequence')] });
+    progress(run, 0, { lane: 'server', rows: [result(3, 'out-of-order')] });
+    progress(run, 2, { lane: 'server', rows: [result(4, 'server')] });
+
+    expect(useSearchStore.getState().activeSearchId).toBe(id);
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['local', 'server']);
+    expect(useSearchStore.getState().lastSequence).toBe(2);
   });
 
-  it('never keeps the coverage of a previous query', async () => {
-    localResults = withCoverage([], { indexed: 40, total: 50, complete: false });
-    useSearchStore.setState({ searchQuery: 'Rechnung' });
-    await useSearchStore.getState().performSearch();
-    expect(useSearchStore.getState().searchIndexCoverage).toEqual({ indexed: 40, total: 50, complete: false });
+  it('stops at the terminal frame and writes history once for the active run', async () => {
+    const run = await startSearch('invoice');
 
-    localFilters = null;
-    useSearchStore.setState({ searchQuery: 'Angebot', searchFilters: {
-      location: 'server', folder: 'all', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
-    } });
-    await useSearchStore.getState().performSearch();
-    expect(localFilters).toBeNull(); // the vault was never asked
-    expect(useSearchStore.getState().searchIndexCoverage).toBeNull();
+    progress(run, 1, { rows: [result(7, 'done')], completed: 1, total: 1, terminal: 'complete' });
+    progress(run, 1, { rows: [result(8, 'duplicate terminal')], terminal: 'complete' });
+
+    expect(useSearchStore.getState().isSearching).toBe(false);
+    expect(useSearchStore.getState().searchProgress).toBeNull();
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['done']);
+    expect(harness.settingsState.addSearchToHistory).toHaveBeenCalledTimes(1);
+    expect(harness.settingsState.addSearchToHistory).toHaveBeenCalledWith('invoice');
+  });
+
+  it('releases the active event listener when the daemon run terminates', async () => {
+    const run = await startSearch('invoice');
+
+    progress(run, 1, { terminal: 'complete' });
+
+    expect(run.unlisten).toHaveBeenCalledOnce();
+  });
+
+  it('releases a listener when terminal progress races the start acknowledgement', async () => {
+    let acknowledgeStart;
+    harness.startMailSearch.mockImplementation((request, onProgress) => {
+      const run = { request, onProgress, unlisten: vi.fn() };
+      harness.started.push(run);
+      return new Promise(resolve => { acknowledgeStart = () => resolve({ unlisten: run.unlisten }); });
+    });
+    useSearchStore.setState({ searchQuery: 'invoice' });
+
+    const pendingStart = useSearchStore.getState().performSearch();
+    await Promise.resolve();
+    const run = harness.started[0];
+    progress(run, 1, { terminal: 'complete' });
+    acknowledgeStart();
+    await pendingStart;
+
+    expect(run.unlisten).toHaveBeenCalledOnce();
+  });
+
+  it('cancels again after start acknowledgement if Clear raced registration', async () => {
+    let acknowledgeStart;
+    harness.startMailSearch.mockImplementation((request, onProgress) => {
+      const run = { request, onProgress, unlisten: vi.fn() };
+      harness.started.push(run);
+      return new Promise(resolve => { acknowledgeStart = () => resolve({ unlisten: run.unlisten }); });
+    });
+    useSearchStore.setState({ searchQuery: 'invoice' });
+
+    const pendingStart = useSearchStore.getState().performSearch();
+    await Promise.resolve();
+    const run = harness.started[0];
+    useSearchStore.getState().clearSearch();
+    expect(harness.cancelMailSearch).toHaveBeenCalledTimes(1);
+    acknowledgeStart();
+    await pendingStart;
+
+    expect(harness.cancelMailSearch).toHaveBeenCalledTimes(2);
+    expect(harness.cancelMailSearch).toHaveBeenNthCalledWith(2, run.request.searchId);
+    expect(run.unlisten).toHaveBeenCalledOnce();
+  });
+
+  it('preserves published rows and exposes the error key when every source fails', async () => {
+    const run = await startSearch('invoice');
+    progress(run, 1, { rows: [result(8, 'partial result')] });
+    progress(run, 2, { terminal: 'error', errorKey: 'errors.searchFailed' });
+
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['partial result']);
+    expect(useSearchStore.getState().searchError).toBe('errors.searchFailed');
+    expect(useSearchStore.getState().isSearching).toBe(false);
+  });
+
+  it('surfaces the local scan fallback and retains it across server progress', async () => {
+    const run = await startSearch('invoice');
+    const coverage = { indexed: 20, total: 100, complete: false, matched: 4, shown: 4 };
+    progress(run, 1, { localMode: 'scan', fallbackReason: 'building', coverage });
+    progress(run, 2, { lane: 'server', rows: [result(9, 'server')] });
+
+    expect(useSearchStore.getState().searchFallback).toBe('building');
+    expect(useSearchStore.getState().searchIndexCoverage).toEqual(coverage);
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['server']);
+  });
+
+  it('surfaces an incomplete available index as building before the fallback scan arrives', async () => {
+    const run = await startSearch('invoice');
+    const coverage = { indexed: 20, total: 100, complete: false, matched: 4, shown: 4 };
+    progress(run, 1, { localMode: 'index', fallbackReason: 'building', coverage });
+
+    expect(useSearchStore.getState().searchFallback).toBe('building');
+    expect(useSearchStore.getState().searchIndexCoverage).toEqual(coverage);
+  });
+
+  it('cancels a previous query and ignores its late frames', async () => {
+    const oldRun = await startSearch('old query');
+    const newRun = await startSearch('new query');
+
+    progress(oldRun, 1, { rows: [result(11, 'stale')] });
+    progress(newRun, 1, { rows: [result(12, 'current')] });
+
+    expect(harness.cancelMailSearch).toHaveBeenCalledWith(oldRun.request.searchId);
+    expect(newRun.request.searchId).not.toBe(oldRun.request.searchId);
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['current']);
+  });
+
+  it('restarts the acknowledged search after a daemon reconnect and ignores the lost run', async () => {
+    const lostRun = await startSearch('invoice');
+    progress(lostRun, 1, { rows: [result(20, 'before restart')] });
+
+    await lostRun.onReconnect?.();
+
+    expect(harness.started).toHaveLength(2);
+    const restartedRun = harness.started[1];
+    expect(harness.cancelMailSearch).toHaveBeenCalledWith(lostRun.request.searchId);
+    expect(restartedRun.request.query).toBe('invoice');
+    progress(lostRun, 2, { rows: [result(21, 'stale after restart')] });
+    progress(restartedRun, 1, { rows: [result(22, 'current after restart')] });
+
+    expect(useSearchStore.getState().activeSearchId).toBe(restartedRun.request.searchId);
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['current after restart']);
+  });
+
+  it('keeps account-local message identity and dedupes copies by normalized Message-ID', async () => {
+    const run = await startSearch('same message');
+    progress(run, 1, { rows: [
+      result(100, 'archive copy', { _accountId: 'acct-1', _mailbox: 'Archive', messageId: '<same@example.test>', source: 'local' }),
+      result(7, 'inbox copy', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: 'same@example.test', source: 'local' }),
+      result(7, 'other account copy', { _accountId: 'acct-2', _mailbox: 'INBOX', messageId: 'same@example.test', source: 'local' }),
+    ] });
+
+    expect(useSearchStore.getState().searchResults).toHaveLength(2);
+    expect(useSearchStore.getState().searchResults.map(row => [row._accountId, row._mailbox])).toEqual([
+      ['acct-1', 'INBOX'],
+      ['acct-2', 'INBOX'],
+    ]);
   });
 });

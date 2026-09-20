@@ -665,7 +665,7 @@ function append(box, messages) {
  * Default account mailbox set: INBOX plus the special-use folders the
  * archive / move-to-folder / compose specs expect to find.
  */
-export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', extraMailbox = null, nestedMailboxes = null } = {}) {
+export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, htmlQuoted = false, withAttachments = false, crossFolderThread = true, faults = [], archiveCount = 3, archiveSubjectPrefix = 'Archived message', searchMailbox = null, extraMailbox = null, nestedMailboxes = null } = {}) {
   const inboxBox = mailbox('INBOX', inbox, { owner, subjectPrefix, htmlQuoted, withAttachments, uidStart: inboxUidStart });
   const sentBox = mailbox('Sent', 5, { owner, attrs: ['\\HasNoChildren', '\\Sent'], subjectPrefix: 'Sent message', sentByOwner: true });
 
@@ -822,6 +822,15 @@ export function scenario({ owner, inbox = 40, inboxUidStart = 1, subjectPrefix, 
     mailbox('Trash', 0, { owner, attrs: ['\\HasNoChildren', '\\Trash'] }),
   ];
 
+  // Empty by design: search-orchestration E2E deletes this known mailbox after
+  // the app has cached LIST, proving one vanished folder cannot erase another
+  // folder's successful results. Keep it before the backup fixture below.
+  if (searchMailbox) {
+    mailboxes.push(mailbox(searchMailbox.name, searchMailbox.count || 0, {
+      owner, attrs: ['\\HasNoChildren'], subjectPrefix: searchMailbox.subjectPrefix || 'Search fixture',
+    }));
+  }
+
   // Must stay LAST in this array: the mock IMAP server's LIST command
   // returns mailboxes in this exact array order (src-mock-imap/src/
   // commands.rs's do_list), and connected-storage-matrix.test.js relies on
@@ -869,6 +878,22 @@ export function slowCommand(command, ms) {
   return {
     trigger: { OnCommand: command.toUpperCase() },
     action: { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } },
+  };
+}
+
+/** Stall command occurrences whose arguments contain `needle`. */
+export function slowCommandWith(command, needle, ms) {
+  return {
+    trigger: { OnCommandWith: [command.toUpperCase(), needle.toUpperCase()] },
+    action: { Delay: { secs: Math.floor(ms / 1000), nanos: (ms % 1000) * 1e6 } },
+  };
+}
+
+/** Drop only the nth matching command, leaving its next attempt to succeed. */
+export function dropNthCommandWith(command, needle, n = 1) {
+  return {
+    trigger: { OnNthCommandWith: [command.toUpperCase(), needle.toUpperCase(), n] },
+    action: 'DropConnection',
   };
 }
 

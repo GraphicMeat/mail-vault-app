@@ -11,6 +11,12 @@ import { UpgradeCta } from '../UpgradeCta';
 afterEach(cleanup);
 
 describe('premium gallery', () => {
+  it('shows multi-folder search as a selectable feature', () => {
+    render(<PremiumGallery />);
+    fireEvent.click(screen.getByTestId('premium-tile-fast-multi-folder-search'));
+    expect(screen.getByTestId('premium-detail').dataset.feature).toBe('fast-multi-folder-search');
+  });
+
   it('shows every catalog feature', () => {
     render(<PremiumGallery />);
     for (const f of PREMIUM_FEATURES) {

@@ -163,7 +163,7 @@ mod tests {
     async fn vault_search_on_a_closed_index_is_unavailable() {
         let (_t, s) = st();
         let r = call(&s, "vault_search", json!({"request": {"accountId": "a", "query": "x"}})).await.result.unwrap();
-        assert_eq!(r, json!({"available": false}));
+        assert_eq!(r, json!({"available": false, "reason": "unavailable"}));
     }
 
     #[tokio::test]

@@ -21,6 +21,10 @@ pub enum Trigger {
     /// others: a body read is `BODY.PEEK[]`, a header page is
     /// `BODY.PEEK[HEADER.FIELDS (…)]`, and both arrive as "FETCH".
     OnCommandWith(String, String),
+    /// The nth occurrence (1-based) of a command whose arguments contain
+    /// `needle` (case-insensitive). Unlike `OnNthCommand`, unrelated commands
+    /// with the same verb do not consume the ordinal.
+    OnNthCommandWith(String, String, usize),
 }
 
 impl Trigger {
@@ -32,6 +36,9 @@ impl Trigger {
     }
     pub fn with(cmd: &str, needle: &str) -> Self {
         Trigger::OnCommandWith(cmd.to_uppercase(), needle.to_uppercase())
+    }
+    pub fn nth_with(cmd: &str, needle: &str, n: usize) -> Self {
+        Trigger::OnNthCommandWith(cmd.to_uppercase(), needle.to_uppercase(), n)
     }
 }
 

@@ -488,7 +488,6 @@ fn do_search(cmd: &Command, state: &ServerState, sess: &Session, faults: &[Actio
         .filter(|m| matches_criteria(m, &cmd.args))
         .map(|m| if cmd.is_uid { m.uid } else { mb.seq_of(m.uid).unwrap_or(0) })
         .collect();
-
     if let Some(Action::PartialSearchResult(frac)) = faults
         .iter()
         .find(|f| matches!(f, Action::PartialSearchResult(_)))

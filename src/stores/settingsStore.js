@@ -93,6 +93,10 @@ const normalizeSidebarBackupStatusLocation = location => ['row', 'hidden'].inclu
 const normalizeEmailListView = value => value === 'explorer' ? 'explorer' : 'list';
 const normalizeExplorerGrouping = value => ['sender', 'conversation'].includes(value) ? value : 'date';
 const normalizeExplorerDateDepth = value => value === 'day' ? 'day' : 'month';
+export const normalizeSearchMailboxConcurrency = value => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
+};
 const normalizeExplorerPaths = value => Object.fromEntries(
   Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
     .filter(([key, path]) => key.length <= 2048 && Array.isArray(path) && path.length <= 6
@@ -116,6 +120,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
   insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
+  searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -312,6 +317,7 @@ export const useSettingsStore = create(
 
       // Search settings
       searchHistoryLimit: 20, // Max number of searches to keep (20-500)
+      searchMailboxConcurrency: 3,
       searchHistory: [], // Array of recent search queries
       filterHistoryPeriodDays: 30, // Period for tracking popular filters (1-365 days)
       topFiltersLimit: 20, // Number of top filters to show (1-50)
@@ -837,6 +843,10 @@ export const useSettingsStore = create(
 
       // Search settings
       setSearchHistoryLimit: (limit) => set({ searchHistoryLimit: Math.min(500, Math.max(20, limit)) }),
+      setSearchMailboxConcurrency: value => {
+        if (!hasPremiumAccess(get().billingProfile)) return;
+        set({ searchMailboxConcurrency: normalizeSearchMailboxConcurrency(value) });
+      },
       addSearchToHistory: (query) => {
         if (!query || !query.trim()) return;
         const trimmed = query.trim();
@@ -1036,6 +1046,7 @@ export const useSettingsStore = create(
           viewerPaneSize: 50,
           onboardingComplete: false,
           searchHistoryLimit: 20,
+          searchMailboxConcurrency: 3,
           searchHistory: [],
           filterHistoryPeriodDays: 30,
           topFiltersLimit: 20,
@@ -1157,4 +1168,10 @@ export function hasPremiumAccess(billingProfile) {
   if (['trialing', 'active', 'past_due'].includes(status)) return true;
   if (status === 'canceled' && currentPeriodEnd) return new Date(currentPeriodEnd).getTime() > Date.now();
   return false;
+}
+
+export function effectiveSearchMailboxConcurrency(state = useSettingsStore.getState()) {
+  return hasPremiumAccess(state?.billingProfile)
+    ? normalizeSearchMailboxConcurrency(state?.searchMailboxConcurrency)
+    : 1;
 }

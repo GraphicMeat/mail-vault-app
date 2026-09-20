@@ -12,7 +12,14 @@ vi.mock('../safeStorage', () => {
   };
 });
 
-const { useSettingsStore, isTrackerBlockingActive, DEFAULT_SHORTCUTS, _mergePersistedSettings } = await import('../settingsStore');
+const {
+  useSettingsStore,
+  isTrackerBlockingActive,
+  DEFAULT_SHORTCUTS,
+  _mergePersistedSettings,
+  effectiveSearchMailboxConcurrency,
+  normalizeSearchMailboxConcurrency,
+} = await import('../settingsStore');
 
 describe('settingsStore defaults', () => {
   it('has cacheLimitMB default of 128', () => {
@@ -34,6 +41,36 @@ describe('settingsStore defaults', () => {
     store.setCacheLimitMB(999);
     store.resetSettings();
     expect(useSettingsStore.getState().cacheLimitMB).toBe(128);
+  });
+
+  it('resetSettings restores search mailbox concurrency to 3', () => {
+    useSettingsStore.setState({ searchMailboxConcurrency: 5 });
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(3);
+  });
+});
+
+describe('Premium search mailbox concurrency', () => {
+  it('normalizes the saved preference to 1..5 with default 3', () => {
+    expect([undefined, 'x', 0, 2, 9].map(normalizeSearchMailboxConcurrency)).toEqual([3, 3, 1, 2, 5]);
+    const merged = _mergePersistedSettings({ searchMailboxConcurrency: 9 }, { searchMailboxConcurrency: 3 });
+    expect(merged.searchMailboxConcurrency).toBe(5);
+  });
+
+  it('preserves the saved preference through logout and restores it on login', () => {
+    useSettingsStore.setState({ searchMailboxConcurrency: 5, billingProfile: { hasSubscription: true, status: 'active' } });
+    expect(effectiveSearchMailboxConcurrency()).toBe(5);
+    useSettingsStore.getState().clearBillingProfile();
+    expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(5);
+    expect(effectiveSearchMailboxConcurrency()).toBe(1);
+    useSettingsStore.getState().setBillingProfile({ hasSubscription: true, status: 'active' });
+    expect(effectiveSearchMailboxConcurrency()).toBe(5);
+  });
+
+  it('does not let a free caller overwrite the saved premium preference', () => {
+    useSettingsStore.setState({ searchMailboxConcurrency: 4, billingProfile: null });
+    useSettingsStore.getState().setSearchMailboxConcurrency(2);
+    expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(4);
   });
 });
 

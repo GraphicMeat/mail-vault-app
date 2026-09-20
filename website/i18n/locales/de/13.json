@@ -1,4 +1,12 @@
 {
+  "ce648ac866d4": "<svg class=\"w-5 h-5 text-primary-600 dark:text-primary-400 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Sofortige indexierte Suche in lokal gespeicherten E-Mails</strong> — Ergebnisse kommen aus dem privaten Index in Ihrem Tresor, auch offline</span>",
+  "6a9d4dcb6156": "<svg class=\"w-5 h-5 text-amber-500 mt-0.5 shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\" clip-rule=\"evenodd\"/></svg> <span class=\"text-slate-700 dark:text-slate-300\"><strong>Schnellere Suche in mehreren Ordnern</strong> <span class=\"align-middle inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400\">Premium</span> — Durchsuchen Sie bis zu fünf Server-Postfächer und nicht indexierte lokale Ordner gleichzeitig, mit einer von Ihnen festgelegten Parallelität</span>",
+  "d3a6f92e8981": "Alle 17 Funktionen anzeigen",
+  "6a8492b29242": "Alle 12 Funktionen anzeigen",
+  "b11668f8a640": "Alles aus Kostenlos, plus diese 13 Funktionen. Wähle eine aus, um zu sehen, wie sie funktioniert.",
+  "2966eb8bc710": "Schnellere Suche in mehreren Ordnern",
+  "b4eeaa045260": "Dieselben 13 Funktionen, die dir die App beim Einrichten zeigt. Öffne eine Funktion, um sie zu erkunden.",
+  "2987dae0bc04": "Durchsuchen Sie bis zu fünf Server-Postfächer und nicht indexierte lokale Ordner gleichzeitig, mit einer von Ihnen festgelegten Parallelität",
   "58a81e55d8f5": "Klicke auf eine Blase, um die E-Mails dahinter zu sehen und sie zu lesen, ohne die Seite zu verlassen.",
   "139290f7723a": "Die Absenderkarte: Die Fläche einer Blase ist die Menge, der Abstand die Zeit seit der letzten E-Mail.",
   "07f2808a43bb": "Zeitverlauf: eine Spur pro Absender, Empfangenes und Gesendetes getrennt markiert.",

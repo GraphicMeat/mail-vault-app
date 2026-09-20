@@ -3,13 +3,18 @@ import { Search } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { ToggleSwitch } from './ToggleSwitch';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
 import { status, rebuild, destroy, onProgress } from '../../services/searchIndex';
 import { formatBytes } from '../../utils/formatBytes';
 import { useT } from '../../i18n/index.js';
 
-export function SearchIndexSettings() {
+export function SearchIndexSettings({ onUpgrade }) {
   const t = useT();
+  const billingProfile = useSettingsStore(s => s.billingProfile);
+  const savedConcurrency = useSettingsStore(s => s.searchMailboxConcurrency);
+  const setSearchMailboxConcurrency = useSettingsStore(s => s.setSearchMailboxConcurrency);
+  const isPremium = hasPremiumAccess(billingProfile);
+  const concurrency = isPremium ? savedConcurrency : 1;
   const bodies = useSettingsStore(s => s.searchIndexBodies);
   const setSearchIndexBodies = useSettingsStore(s => s.setSearchIndexBodies);
   const attachments = useSettingsStore(s => s.searchIndexAttachments);
@@ -90,6 +95,32 @@ export function SearchIndexSettings() {
           </div>
           <ToggleSwitch active={imageText} onClick={() => setSearchIndexImageText(!imageText)}
             testId="search-index-image-text" label={t('settings.searchIndex.imageText')} />
+        </div>
+
+        <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
+          <div className="min-w-0">
+            <div className="text-sm text-mail-text">{t('settings.searchIndex.concurrency')}</div>
+            <div className="text-xs text-mail-text-muted">
+              {t(isPremium ? 'settings.searchIndex.concurrencyHint' : 'settings.searchIndex.concurrencyFree')}
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <select
+              data-testid="search-mailbox-concurrency"
+              aria-label={t('settings.searchIndex.concurrency')}
+              value={concurrency}
+              disabled={!isPremium}
+              onChange={e => setSearchMailboxConcurrency(Number(e.target.value))}
+              className="rounded-lg border border-mail-border bg-mail-surface px-3 py-1.5 text-sm text-mail-text disabled:opacity-70"
+            >
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+            {!isPremium && onUpgrade && (
+              <Button size="sm" variant="primary" data-testid="search-concurrency-upgrade" onClick={onUpgrade}>
+                {t('search.fallback.upgrade')}
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">

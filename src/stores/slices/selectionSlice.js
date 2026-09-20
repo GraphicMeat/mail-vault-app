@@ -91,7 +91,7 @@ export const createSelectionSlice = (set, get) => ({
   // ── Passthrough wrappers to workflow functions ──
 
   _prefetchAdjacentEmails: (currentUid) => _prefetchAdjacentEmails(currentUid),
-  selectEmail: (uid, source, mailboxOverride, locationOverride) => _selectEmail(uid, source, mailboxOverride, locationOverride),
+  selectEmail: (uid, source, mailboxOverride, locationOverride, clickedRow) => _selectEmail(uid, source, mailboxOverride, locationOverride, clickedRow),
 
   // ── Simple inline actions (stay in slice) ──
 

@@ -154,6 +154,8 @@ function EmailListComponent({ stacked = false }) {
   const loadEmails = useMessageListStore(s => s.loadEmails);
   const loadMoreEmails = useMessageListStore(s => s.loadMoreEmails);
   const selectEmail = useSelectionStore(s => s.selectEmail);
+  const selectEmailRow = useCallback((key, email, mailbox = email._mailbox, source = email.source) =>
+    selectEmail(key, source, mailbox, null, email), [selectEmail]);
   const selectThread = useSelectionStore(s => s.selectThread);
   const syncSelectedThread = useSelectionStore(s => s.syncSelectedThread);
   const selectedThread = useSelectionStore(s => s.selectedThread);
@@ -347,7 +349,7 @@ function EmailListComponent({ stacked = false }) {
             const sender = groups.find(s => s.senderEmail === fr.senderEmail);
             const topic = sender?.topics.find(t => `${fr.senderEmail}-${t.topicId}` === fr.topicKey);
             const email = topic?.emails.find(e => e.uid === fr.emailUid);
-            if (email) selectEmail(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
+            if (email) selectEmailRow(rowKey(email, spansMailboxes(useMailStore.getState())), email);
           }
         }
       }
@@ -355,7 +357,7 @@ function EmailListComponent({ stacked = false }) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isExplorer, emailListGrouping, selectEmail]);
+  }, [isExplorer, emailListGrouping, selectEmailRow]);
 
   useEffect(() => {
     setFocusedRow(null);
@@ -1058,7 +1060,7 @@ function EmailListComponent({ stacked = false }) {
             unreadOnly={unreadOnly} selectedEmailIds={selectedEmailIds} getSelectionKey={selKey}
             onSetSelection={setEmailsSelected} onOpenThread={selectThread} rowHeight={ROW_HEIGHT}
             hasOpenThread={!!selectedThread} onThreadsChanged={syncSelectedThread}
-            onSelectEmail={email => selectEmail(selKey(email), email.source, email._mailbox)}
+            onSelectEmail={email => selectEmailRow(selKey(email), email)}
             onSearchMailbox={() => { setEmailListView('list'); setShowSearch(true); }}
             partial={!searchActive && windowIsPartial} hasMore={!searchActive && viewMode !== 'local' && hasMoreEmails}
             loadingMore={loadingMore} loading={loading || showSkeleton} onLoadMore={loadMoreEmails} searchActive={searchActive}
@@ -1066,7 +1068,7 @@ function EmailListComponent({ stacked = false }) {
               const key = selKey(email);
               return <RowComponent rowId={key} email={email} style={rowStyle}
                 isSelected={selectedEmailId === key} isRelated={relatedKeys.has(key)} isChecked={selectedEmailIds.has(key)}
-                onSelect={() => selectEmail(key, email.source, email._mailbox)}
+                onSelect={() => selectEmailRow(key, email)}
                 onToggleSelection={() => setEmailsSelected([email], !selectedEmailIds.has(key))}
                 actions={{ ...rowActions, saveEmailLocally: () => saveEmailsLocally([email]) }}
                 unifiedInbox={unifiedInbox} accountColors={accountColors}
@@ -1293,7 +1295,7 @@ function EmailListComponent({ stacked = false }) {
                           // stamped `_mailbox` is the answer.
                           const mailbox = item.email._mailbox
                             || (item.email._fromSentFolder ? getSentMailboxPath() : null);
-                          selectEmail(rowKey(item.email, spansMailboxes(useMailStore.getState())), item.email.source, mailbox);
+                          selectEmailRow(rowKey(item.email, spansMailboxes(useMailStore.getState())), item.email, mailbox);
                           if (layoutMode !== 'three-column') {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }
@@ -1454,7 +1456,7 @@ function EmailListComponent({ stacked = false }) {
                     isSelected={selectedEmailId === selKey(item.email)}
                     isRelated={relatedKeys.has(selKey(item.email))}
                     isChecked={selectedEmailIds.has(selKey(item.email))}
-                    onSelect={selectEmail}
+                    onSelect={(key, source, mailbox) => selectEmailRow(key, item.email, mailbox, source)}
                     onToggleSelection={toggleEmailSelection}
                     style={rowStyle}
                     actions={rowActions}

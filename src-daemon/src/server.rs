@@ -110,6 +110,9 @@ pub struct DaemonState {
     /// Broadcast bus for `channel.open` connections; any module can `emit` into it.
     pub events: crate::events::EventBus,
     pub search_index: Arc<crate::search_index::SearchIndexState>,
+    /// Named local/server search runs. The handler removes entries by pointer
+    /// identity so an older completion cannot unregister a newer run.
+    pub(crate) search_runs: std::sync::Mutex<std::collections::HashMap<String, Arc<crate::handlers::mail_search::SearchRun>>>,
     /// Task 2.9a: not opened at daemon startup by this task (Task 2.9b wires
     /// that, once nothing in the app still holds the exclusive lock on
     /// `custody.db`) — see `crate::custody`.
@@ -319,6 +322,10 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
         return resp;
     }
 
+    if let Some(resp) = crate::handlers::mail_search::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
+
     if let Some(resp) = crate::handlers::vault_files::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
@@ -510,6 +517,7 @@ impl DaemonState {
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
             search_index: crate::search_index::SearchIndexState::new(mail_dir, mail_dir_ok, events.clone()),
+            search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             events,
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
