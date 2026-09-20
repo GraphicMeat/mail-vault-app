@@ -124,11 +124,96 @@
       <h1 class="text-4xl font-bold mb-2">Changelog</h1>
       <p class="text-slate-500 dark:text-slate-400 mb-10">New features, improvements, and fixes in every release.</p>
 
+      <article class="mb-16" data-version="2.15.0">
+        <div class="flex items-center gap-3 mb-6">
+          <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.15.0</span>
+          <span class="text-slate-500 dark:text-slate-400 text-sm">September 20, 2026</span>
+          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+            </span>
+            Added
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search stays with the account and folder you are looking at.</strong> Locally indexed matches appear first while the background service searches server mailboxes and any uncovered local folders; changing the current account or folder cancels the old search, and one failed folder no longer hides successful results. A temporary IMAP connection failure is retried once. Premium users can choose a saved concurrency level from 1 to 5; signing out does not erase that preference.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>You can delete the search index and build it again.</strong> Settings → Storage → Search index has Delete search index. It shows the index size, and search keeps working (just slower) while the index is off. Build search index starts a fresh one.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A big index build shows its progress.</strong> The first build, a rebuild, or 500+ new messages open a small window with a progress bar and the index size. Hide shrinks it to a chip in the bottom-right corner. It never opens while you are typing, and it closes when the build finishes. If MailVault quits or its background service stops mid-build, the build picks up where it stopped.</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="mb-8">
+          <h3 class="flex items-center gap-2 text-lg font-semibold mb-4">
+            <span class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center flex-shrink-0">
+              <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </span>
+            Fixed
+          </h3>
+          <ul class="space-y-3 text-slate-600 dark:text-slate-400">
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail shows up right after MailVault starts.</strong> On a vault that still holds older cache files, MailVault's background service moved them into its new database before it would accept a single request. On a large vault that took minutes, during which the mail list spun with nothing in it and Settings reported the background helper as not running even though it was running. The move now happens in the background, one folder at a time, and it is done once instead of repeating on every start.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A busy background service no longer slows the window down.</strong> MailVault's background service now answers the app from a thread of its own, separate from syncing, classification, restores and backups. The disk work those jobs do — writing a folder's cached message list, scanning a folder, reading every cached header before a reclassification — has moved off the threads that answer the app as well. A large sync, a backfill or a reclassification pass can no longer make opening a folder wait.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Search repairs its local index after structural damage and keeps indexed searches responsive on large vaults.</strong> The background worker rebuilds only the derived search-index files when the SQLite schema or contents cannot be read, and keeps locked or inaccessible files for a later retry. Indexed search now follows the saved mailbox concurrency in SQL batches while keeping the same newest results.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Opening a big folder no longer freezes the window.</strong> Mail files, cache files and the local search index are now all read and written by MailVault's background service instead of the app window itself, so scrolling, typing and switching folders keep working while a large folder loads or a bulk change is being saved.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Archiving and bulk deleting no longer freeze the window either.</strong> Both now run in MailVault's background service too, so scrolling, typing and switching folders keep working while a large archive or bulk delete is in progress.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Cancelling an archive no longer stops an unrelated bulk delete.</strong> If an automatic archive and a manual bulk delete happened to be running at the same time, cancelling one could silently stop the other. Each now has its own cancel.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Mail Insights is now as consistent as the rest of your mail data.</strong> It reads through MailVault's background service too, the same way mail files and search do.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Outlook message numbers can no longer collide.</strong> MailVault's background service and its backup could assign the same internal number to a new Outlook message at the same moment. Assigning a number now takes a lock both share.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>An account's backup card shows its stored size again.</strong> Settings → Backup, each account's card always showed "--" for Storage instead of the size on disk.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>A message imported through Import MBOX stays in the list and survives Clear cached emails.</strong> A message brought in through Import MBOX was saved without MailVault's archived marker, so a later Clear cached emails run could remove it, the same gap the backup-mirror restore had before 2.14.0. Imported messages are now marked archived, so they stay in your vault the way anything else you've explicitly saved does.</span>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-2"></span>
+              <span><strong>Import, export, mailbox migration and restoring emails to the server are now as consistent as the rest of your mail data.</strong> They all run in MailVault's background service too, the same way mail files, search, archiving and Insights already do.</span>
+            </li>
+          </ul>
+        </div>
+
+      </article>
       <article class="mb-16" data-version="2.14.0">
         <div class="flex items-center gap-3 mb-6">
           <span class="inline-flex items-center px-3 py-1 rounded-full gradient-bg text-white text-sm font-semibold">v2.14.0</span>
           <span class="text-slate-500 dark:text-slate-400 text-sm">September 15, 2026</span>
-          <span data-latest-badge class="inline-flex items-center px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">Latest</span>
         </div>
 
         <div class="mb-8">

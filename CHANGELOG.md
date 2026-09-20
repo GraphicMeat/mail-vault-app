@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.15.0] - 2026-09-20
+
 ### Added
 - **Search stays with the account and folder you are looking at.** Locally indexed matches appear first while the background service searches server mailboxes and any uncovered local folders; changing the current account or folder cancels the old search, and one failed folder no longer hides successful results. A temporary IMAP connection failure is retried once. Premium users can choose a saved concurrency level from 1 to 5; signing out does not erase that preference.
 - **You can delete the search index and build it again.** Settings → Storage → Search index has Delete search index. It shows the index size, and search keeps working (just slower) while the index is off. Build search index starts a fresh one.
@@ -10,8 +12,6 @@
 ### Fixed
 - **Mail shows up right after MailVault starts.** On a vault that still holds older cache files, MailVault's background service moved them into its new database before it would accept a single request. On a large vault that took minutes, during which the mail list spun with nothing in it and Settings reported the background helper as not running even though it was running. The move now happens in the background, one folder at a time, and it is done once instead of repeating on every start.
 - **A busy background service no longer slows the window down.** MailVault's background service now answers the app from a thread of its own, separate from syncing, classification, restores and backups. The disk work those jobs do — writing a folder's cached message list, scanning a folder, reading every cached header before a reclassification — has moved off the threads that answer the app as well. A large sync, a backfill or a reclassification pass can no longer make opening a folder wait.
-- **Delete search index closes the moment you confirm it.** The confirmation used to sit there with a spinner until the background service had finished deleting, which can take up to two minutes. It closes at once now and the delete finishes in the background.
-- **Turning the search index off shows all of its switches off.** Message bodies, attachments and image text now read off while indexing is off, and come back exactly as you set them when you build the index again.
 - **Search repairs its local index after structural damage and keeps indexed searches responsive on large vaults.** The background worker rebuilds only the derived search-index files when the SQLite schema or contents cannot be read, and keeps locked or inaccessible files for a later retry. Indexed search now follows the saved mailbox concurrency in SQL batches while keeping the same newest results.
 - **Opening a big folder no longer freezes the window.** Mail files, cache files and the local search index are now all read and written by MailVault's background service instead of the app window itself, so scrolling, typing and switching folders keep working while a large folder loads or a bulk change is being saved.
 - **Archiving and bulk deleting no longer freeze the window either.** Both now run in MailVault's background service too, so scrolling, typing and switching folders keep working while a large archive or bulk delete is in progress.
