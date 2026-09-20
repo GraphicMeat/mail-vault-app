@@ -12,6 +12,9 @@
  * `idle` right after a click is still the pass before it.
  */
 import { waitForApp, waitForEmails, switchToFolder, openSettings, closeSettings, clickSettingsNav, clickSidebarItem } from './helpers.js';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { appDataDir } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -195,6 +198,36 @@ describe('Search index', function () {
     const s = await indexStatus();
     expect(s.available).toBe(true);
     expect(s.total).toBeGreaterThanOrEqual(s.indexed);
+  });
+
+  it('rebuilds a damaged derived index on startup without touching custody', async function () {
+    const sentinel = join(appDataDir(browser.testDataDir), 'custody', 'search-recovery-sentinel.bin');
+    expect(readFileSync(sentinel, 'utf8')).toBe('custody remains untouched');
+    await inboxOf(LUKE);
+    const hits = await localSearch('ZEBRARECOVERYTOKEN');
+    const recovered = hits.find((row) => row.subject === 'Search recovery fixture');
+    expect(recovered).toBeDefined();
+    expect(recovered.accountId).toBe(LUKE_ID);
+    expect(recovered.matchedIn).toContain('body');
+    expect(readFileSync(sentinel, 'utf8')).toBe('custody remains untouched');
+  });
+
+  it('opens Billing from an inline Premium link in Search Index settings', async function () {
+    await openSettings();
+    expect(await clickSettingsNav('Storage')).toBe(true);
+    const clicked = await browser.execute(() => {
+      const link = document.querySelector('[data-testid="search-index-premium-link"]');
+      if (!link) return false;
+      link.click();
+      return true;
+    });
+    expect(clicked).toBe(true);
+    await browser.waitUntil(() => browser.execute(() =>
+      [...document.querySelectorAll('.settings-nav-item[aria-current="page"]')]
+        .some((item) => item.textContent.trim() === 'Billing')),
+    { timeout: 5000, interval: 100, timeoutMsg: 'Premium link did not open Billing' });
+    expect(await clickSettingsNav('Storage')).toBe(true);
+    await closeSettings();
   });
 
   it('finds a luke message by a phrase that exists only in its body', async function () {

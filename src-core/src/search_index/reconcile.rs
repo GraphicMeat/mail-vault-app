@@ -10,7 +10,7 @@ use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
 use crate::maildir::vault_filename_uid;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
@@ -177,6 +177,23 @@ pub fn reconcile_mailbox(
     keep_going: &dyn Fn() -> bool,
     progress: &mut dyn FnMut(usize),
 ) -> Result<ReconcileStats, String> {
+    reconcile_mailbox_guarded(db, maildir_root, account_id, vault_dir, config, parse, keep_going, &|| true, progress)
+}
+
+/// Like `reconcile_mailbox`, with a second fence checked at each DB mutation
+/// boundary, including again after acquiring the mutex. `commit_allowed` may
+/// run while the DB guard is held and therefore must inspect no DB-locked state.
+pub fn reconcile_mailbox_guarded(
+    db: &SharedConn,
+    maildir_root: &Path,
+    account_id: &str,
+    vault_dir: &str,
+    config: IndexConfig,
+    parse: ParseFn,
+    keep_going: &dyn Fn() -> bool,
+    commit_allowed: &dyn Fn() -> bool,
+    progress: &mut dyn FnMut(usize),
+) -> Result<ReconcileStats, String> {
     let mut stats = ReconcileStats::default();
     // account_id is NOT sanitized: a legacy, pre-migration account directory
     // is keyed by the raw email address (see vault_files::cur_path's doc).
@@ -231,6 +248,10 @@ pub fn reconcile_mailbox(
             return Ok(stats);
         }
         let mut guard = lock(db);
+        if !commit_allowed() {
+            stats.interrupted = true;
+            return Ok(stats);
+        }
         let conn = same_conn(&mut guard, &db_path)?;
         apply_removals_and_renames(conn, chunk).map_err(db_err)?;
         let removed = chunk.iter().filter(|(_, name)| name.is_none()).count();
@@ -278,8 +299,22 @@ pub fn reconcile_mailbox(
             if doc.is_some() { stats.parsed += 1 } else { stats.failed += 1 }
             docs.push((file, doc));
         }
+        // Parsing can take long enough for a disable/rebuild/vault switch to
+        // arrive. Do not commit the batch that was read before that request.
+        if !keep_going() {
+            stats.interrupted = true;
+            break;
+        }
+        if !commit_allowed() {
+            stats.interrupted = true;
+            break;
+        }
         {
             let mut guard = lock(db);
+            if !commit_allowed() {
+                stats.interrupted = true;
+                break;
+            }
             let conn = same_conn(&mut guard, &db_path)?;
             commit_batch(conn, account_id, vault_dir, config, docs).map_err(db_err)?;
         } // guard dropped before progress: the callback locks the same mutex
@@ -427,38 +462,38 @@ pub const EXTRACT_BATCH: usize = 50;
 /// changed state, so the caller can decide whether a progress signal is
 /// worth emitting.
 pub fn run_pending_extractions(
-    conn: &mut Connection,
+    db: &SharedConn,
     premium: bool,
     image_text_enabled: bool,
     bodies: bool,
     extractor: &dyn super::attachments::TextExtractor,
     read_part: impl Fn(&str, &str, u32, &str, usize) -> Option<(super::attachments::AttachmentInput, IndexDoc)>,
     keep_going: &dyn Fn() -> bool,
-) -> usize {
+) -> Result<usize, String> {
     use super::attachments::extract;
 
-    let mut stmt = match conn.prepare(
-        "SELECT a.message_row, a.part_index, m.uid, m.account_id, m.vault_dir, m.filename \
-         FROM attachments a JOIN messages m ON m.id = a.message_row \
-         WHERE a.state = 'pending' LIMIT ?1",
-    ) {
-        Ok(s) => s,
-        Err(_) => return 0,
+    // Collect one bounded batch, then release the sole SQLite connection
+    // before reading message files or invoking an extractor.
+    let pending = {
+        let guard = lock(db);
+        let conn = guard.as_ref().ok_or_else(closed)?;
+        let mut stmt = conn.prepare(
+            "SELECT a.message_row, a.part_index, m.uid, m.account_id, m.vault_dir, m.filename \
+             FROM attachments a JOIN messages m ON m.id = a.message_row \
+             WHERE a.state = 'pending' LIMIT ?1",
+        ).map_err(db_err)?;
+        let rows = stmt.query_map(params![EXTRACT_BATCH as i64], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, i64>(1)?,
+                r.get::<_, i64>(2)? as u32,
+                r.get::<_, String>(3)?,
+                r.get::<_, String>(4)?,
+                r.get::<_, String>(5)?,
+            ))
+        }).map_err(db_err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(db_err)?
     };
-    let pending: Vec<(i64, i64, u32, String, String, String)> = match stmt.query_map(params![EXTRACT_BATCH as i64], |r| {
-        Ok((
-            r.get::<_, i64>(0)?,
-            r.get::<_, i64>(1)?,
-            r.get::<_, i64>(2)? as u32,
-            r.get::<_, String>(3)?,
-            r.get::<_, String>(4)?,
-            r.get::<_, String>(5)?,
-        ))
-    }) {
-        Ok(rows) => rows.filter_map(Result::ok).collect(),
-        Err(_) => return 0,
-    };
-    drop(stmt);
 
     let mut changed = 0usize;
     for (message_row, part_index, uid, account_id, vault_dir, filename) in pending {
@@ -481,50 +516,78 @@ pub fn run_pending_extractions(
             // a terminal state on a condition that can still change.
             continue;
         }
-        let Ok(tx) = conn.transaction() else { continue };
-        if tx
-            .execute(
-                "UPDATE attachments SET state = ?1, text = ?2 WHERE message_row = ?3 AND part_index = ?4",
-                params![state, text, message_row, part_index],
+        if !keep_going() {
+            break;
+        }
+        let mut guard = lock(db);
+        // The generation may have changed between the pre-lock check and
+        // acquiring the connection. Daemon callbacks only inspect operation
+        // state here, so this final fence is safe while holding the DB guard.
+        if !keep_going() {
+            break;
+        }
+        let conn = guard.as_mut().ok_or_else(closed)?;
+        let current: Option<(u32, String, String, String)> = conn
+            .query_row(
+                "SELECT uid, account_id, vault_dir, filename FROM messages WHERE id = ?1",
+                [message_row],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
-            .is_err()
+            .optional()
+            .map_err(db_err)?;
+        if !matches!(current, Some((current_uid, current_account, current_dir, current_filename))
+            if current_uid == uid && current_account == account_id && current_dir == vault_dir && current_filename == filename)
         {
             continue;
         }
+        let tx = conn.transaction().map_err(db_err)?;
+        tx.execute(
+            "UPDATE attachments SET state = ?1, text = ?2 WHERE message_row = ?3 AND part_index = ?4",
+            params![state, text, message_row, part_index],
+        ).map_err(db_err)?;
         let attach_text: String = tx
             .query_row(
                 "SELECT group_concat(text, char(10)) FROM attachments WHERE message_row = ?1 AND state = 'ok'",
                 [message_row],
                 |r| r.get::<_, Option<String>>(0),
             )
-            .ok()
-            .flatten()
+            .map_err(db_err)?
             .unwrap_or_default();
         let addrs = doc.addrs.join("\n");
         // Same bodies-toggle normalization commit_batch applies: an
         // extraction sweep must not smuggle the raw, uncapped body back into
         // the FTS row when the user has bodies indexing turned off.
         let body_text = if bodies { cap_chars(doc.body_text.clone(), MAX_BODY_CHARS) } else { String::new() };
-        let _ = delete_fts(&tx, message_row);
+        delete_fts(&tx, message_row).map_err(db_err)?;
         if !doc.subject.is_empty() || !addrs.is_empty() || !body_text.is_empty() || !attach_text.is_empty() {
-            let _ = insert_fts(&tx, message_row, &doc.subject, &addrs, &body_text, &attach_text);
+            insert_fts(&tx, message_row, &doc.subject, &addrs, &body_text, &attach_text).map_err(db_err)?;
         }
-        if tx.commit().is_ok() {
-            changed += 1;
-        }
+        tx.commit().map_err(db_err)?;
+        changed += 1;
     }
-    changed
+    Ok(changed)
 }
 
 /// Drop every folder whose `(account_id, vault_dir)` is not in `present`.
 /// Returns the number of folders removed.
 pub fn prune_missing_dirs(db: &SharedConn, present: &[(String, String)]) -> Result<usize, String> {
-    let mut guard = lock(db);
-    let conn = guard.as_mut().ok_or_else(closed)?;
-    prune(conn, present).map_err(db_err)
+    prune_missing_dirs_guarded(db, present, &|| true)?.ok_or_else(|| "search index closed".to_string())
 }
 
-fn prune(conn: &mut Connection, present: &[(String, String)]) -> rusqlite::Result<usize> {
+/// Same as `prune_missing_dirs`, but rolls its transaction back if `keep_going`
+/// turns false before the commit. The callback runs while the DB guard is held
+/// and must inspect only atomic/independent operation state.
+pub fn prune_missing_dirs_guarded(
+    db: &SharedConn,
+    present: &[(String, String)],
+    keep_going: &dyn Fn() -> bool,
+) -> Result<Option<usize>, String> {
+    let mut guard = lock(db);
+    let conn = guard.as_mut().ok_or_else(closed)?;
+    prune(conn, present, keep_going).map_err(db_err)
+}
+
+fn prune(conn: &mut Connection, present: &[(String, String)], keep_going: &dyn Fn() -> bool) -> rusqlite::Result<Option<usize>> {
     let tx = conn.transaction()?;
     // Scan rows too: a folder listed but never indexed still adds to `counts().total`.
     let indexed: Vec<(String, String)> = tx
@@ -534,14 +597,20 @@ fn prune(conn: &mut Connection, present: &[(String, String)]) -> rusqlite::Resul
     // ponytail: O(folders²) membership test; fine for hundreds of folders, HashSet if vaults reach thousands.
     let missing: Vec<(String, String)> = indexed.into_iter().filter(|pair| !present.contains(pair)).collect();
     for (account_id, vault_dir) in &missing {
+        if !keep_going() {
+            return Ok(None); // dropping the transaction rolls back all deletes
+        }
         let scope = params![account_id, vault_dir];
         tx.execute("DELETE FROM msg_fts WHERE rowid IN (SELECT id FROM messages WHERE account_id = ?1 AND vault_dir = ?2)", scope)?;
         tx.execute("DELETE FROM msg_cjk WHERE rowid IN (SELECT id FROM messages WHERE account_id = ?1 AND vault_dir = ?2)", scope)?;
         tx.execute("DELETE FROM messages WHERE account_id = ?1 AND vault_dir = ?2", scope)?;
         tx.execute("DELETE FROM mailbox_scan WHERE account_id = ?1 AND vault_dir = ?2", scope)?;
     }
+    if !keep_going() {
+        return Ok(None);
+    }
     tx.commit()?;
-    Ok(missing.len())
+    Ok(Some(missing.len()))
 }
 
 /// Off: every indexed row's FTS entry is rewritten without its body (subject
@@ -604,7 +673,7 @@ fn strip_bodies(conn: &Connection) -> rusqlite::Result<()> {
 mod tests {
     use super::*;
     use crate::search_index::db;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     fn fake_parse(raw: &[u8], _uid: u32, _name: &str) -> Option<IndexDoc> {
@@ -903,15 +972,78 @@ mod tests {
     fn keep_going_false_stops_between_batches_and_resumes() {
         let v = vault();
         for uid in 1..=(BATCH as u32 + 20) { put(&v, "a1", "INBOX", &format!("{uid}:2,.eml"), &eml(&format!("m{uid}"), "x")); }
-        let calls = AtomicUsize::new(0);
+        let keep_running = AtomicBool::new(true);
         let parse = |raw: &[u8], uid: u32, name: &str| fake_parse(raw, uid, name);
-        let stop_after_first = || calls.fetch_add(1, Ordering::SeqCst) == 0;
-        let s = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &parse, &stop_after_first, &mut |_| {}).unwrap();
+        let stop_after_first_committed_batch = || keep_running.load(Ordering::SeqCst);
+        let mut stop_after_commit = |done: usize| {
+            if done >= BATCH {
+                keep_running.store(false, Ordering::SeqCst);
+            }
+        };
+        let s = reconcile_mailbox(&v.db, &v.root.join("Maildir"), "a1", "INBOX", ON, &parse, &stop_after_first_committed_batch, &mut stop_after_commit).unwrap();
         assert!(s.interrupted);
         assert_eq!(s.parsed, BATCH);
+        assert_eq!(row_count(&v.db), BATCH as i64, "the first batch is committed before progress requests cancellation");
         let n = AtomicUsize::new(0);
         let s2 = run(&v, "a1", "INBOX", ON, &n);
         assert_eq!(s2.parsed, 20);
+    }
+
+    #[test]
+    fn invalidated_generation_while_waiting_for_commit_lock_skips_the_batch() {
+        use std::sync::mpsc;
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,.eml", &eml("new", "body"));
+        let Vault { _tmp, root, db } = v;
+        let shared = std::sync::Arc::new(db);
+        let maildir = root.join("Maildir");
+        let (parsed_tx, parsed_rx) = mpsc::channel();
+        let (continue_tx, continue_rx) = mpsc::channel();
+        let continue_rx = std::sync::Mutex::new(continue_rx);
+        let parse = move |raw: &[u8], uid: u32, filename: &str| {
+            parsed_tx.send(()).unwrap();
+            continue_rx.lock().unwrap().recv().unwrap();
+            fake_parse(raw, uid, filename)
+        };
+        let current_generation = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let commit_checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let thread_db = shared.clone();
+        let thread_root = maildir.clone();
+        let thread_generation = current_generation.clone();
+        let thread_checks = commit_checks.clone();
+        let join = std::thread::spawn(move || {
+            let commit_allowed = || {
+                if thread_checks.fetch_add(1, Ordering::SeqCst) == 0 {
+                    true // the batch passes its pre-lock check, then waits on the held DB mutex
+                } else {
+                    thread_generation.load(Ordering::SeqCst)
+                }
+            };
+            reconcile_mailbox_guarded(
+                &thread_db,
+                &thread_root,
+                "a1",
+                "INBOX",
+                ON,
+                &parse,
+                &|| true,
+                &commit_allowed,
+                &mut |_| {},
+            )
+        });
+
+        parsed_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("parser did not reach the deterministic pause");
+        let guard = lock(&shared);
+        continue_tx.send(()).unwrap();
+        while commit_checks.load(Ordering::SeqCst) == 0 {
+            std::thread::yield_now();
+        }
+        current_generation.store(false, Ordering::SeqCst);
+        drop(guard);
+
+        let stats = join.join().unwrap().unwrap();
+        assert!(stats.interrupted, "generation change while the batch waited for the mutex must cancel it");
+        assert_eq!(row_count(&shared), 0, "a stale parsed batch must not write into the database");
     }
 
     #[test]
@@ -1157,15 +1289,18 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let shared = Mutex::new(Some(conn));
 
-        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
+        let changed = super::run_pending_extractions(&shared, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
             Some((
                 crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
                 IndexDoc { subject: "Invoice".into(), ..IndexDoc::default() },
             ))
         }, &|| true);
-        assert_eq!(changed, 1);
+        assert_eq!(changed.unwrap(), 1);
 
+        let guard = crate::search_index::lock(&shared);
+        let conn = guard.as_ref().unwrap();
         let (state, text): (String, Option<String>) = conn.query_row("SELECT state, text FROM attachments", [], |r| Ok((r.get(0)?, r.get(1)?))).unwrap();
         assert_eq!(state, "ok");
         assert_eq!(text.as_deref(), Some("hello world"));
@@ -1186,18 +1321,21 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let shared = Mutex::new(Some(conn));
 
         // bodies: false — the extraction rewrite must not smuggle the raw
         // body text back into the FTS row even though the read_part callback
         // hands back a doc with body_text set.
-        let changed = super::run_pending_extractions(&mut conn, true, true, false, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
+        let changed = super::run_pending_extractions(&shared, true, true, false, &crate::search_index::attachments::NoOcrExtractor, |_acct, _dir, _uid, _filename, _part_index| {
             Some((
                 crate::search_index::attachments::AttachmentInput { filename: "notes.txt".into(), mime: "text/plain".into(), size: 11, bytes: b"hello world".to_vec() },
                 IndexDoc { subject: "Invoice".into(), body_text: "a very secret body about quokkas".into(), ..IndexDoc::default() },
             ))
         }, &|| true);
-        assert_eq!(changed, 1);
+        assert_eq!(changed.unwrap(), 1);
 
+        let guard = crate::search_index::lock(&shared);
+        let conn = guard.as_ref().unwrap();
         let body_hits: i64 = conn.query_row("SELECT count(*) FROM msg_fts WHERE msg_fts MATCH '\"quokkas\"'", [], |r| r.get(0)).unwrap();
         assert_eq!(body_hits, 0, "bodies:false must keep the raw body text out of the FTS row");
 
@@ -1215,6 +1353,7 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let shared = Mutex::new(Some(conn));
 
         struct AlwaysTransient;
         impl crate::search_index::attachments::TextExtractor for AlwaysTransient {
@@ -1228,13 +1367,15 @@ mod tests {
                 Err(crate::search_index::attachments::ExtractError::Transient("timeout".into()))
             }
         }
-        let changed = super::run_pending_extractions(&mut conn, true, true, true, &AlwaysTransient, |_a, _d, _u, _f, _p| {
+        let changed = super::run_pending_extractions(&shared, true, true, true, &AlwaysTransient, |_a, _d, _u, _f, _p| {
             Some((
                 crate::search_index::attachments::AttachmentInput { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000, bytes: vec![] },
                 IndexDoc::default(),
             ))
         }, &|| true);
-        assert_eq!(changed, 0, "a transient error changes nothing observable");
+        assert_eq!(changed.unwrap(), 0, "a transient error changes nothing observable");
+        let guard = crate::search_index::lock(&shared);
+        let conn = guard.as_ref().unwrap();
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending", "must still be pending so the next sweep retries it");
     }
@@ -1249,9 +1390,28 @@ mod tests {
             ..IndexDoc::default()
         };
         commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
-        let changed = super::run_pending_extractions(&mut conn, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None, &|| true);
-        assert_eq!(changed, 0);
+        let shared = Mutex::new(Some(conn));
+        let changed = super::run_pending_extractions(&shared, true, true, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| None, &|| true);
+        assert_eq!(changed.unwrap(), 0);
+        let guard = crate::search_index::lock(&shared);
+        let conn = guard.as_ref().unwrap();
         let state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
         assert_eq!(state, "pending");
+    }
+
+    #[test]
+    fn attachment_read_part_runs_without_holding_the_shared_connection() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut conn = db::open(tmp.path()).unwrap();
+        let file = DiskFile { uid: 1, filename: "1:2,".into(), size: 10, mtime_ns: 0 };
+        let doc = IndexDoc { attachment_candidates: vec![AttachmentMeta { filename: "a.pdf".into(), mime: "application/pdf".into(), size: 5000 }], ..IndexDoc::default() };
+        commit_batch(&mut conn, "acct", "INBOX", IndexConfig { bodies: true, attachments: true, image_text: true }, vec![(&file, Some(doc))]).unwrap();
+        let shared = Mutex::new(Some(conn));
+        let observed_unlocked = std::sync::atomic::AtomicBool::new(false);
+        let _ = super::run_pending_extractions(&shared, true, false, true, &crate::search_index::attachments::NoOcrExtractor, |_a, _d, _u, _f, _p| {
+            observed_unlocked.store(shared.try_lock().is_ok(), Ordering::SeqCst);
+            None
+        }, &|| true);
+        assert!(observed_unlocked.load(Ordering::SeqCst), "message and attachment reading must happen outside the DB mutex");
     }
 }

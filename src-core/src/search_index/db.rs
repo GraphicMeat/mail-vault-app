@@ -57,48 +57,35 @@ CREATE INDEX attachments_pending ON attachments (state) WHERE state = 'pending';
 
 #[derive(Debug)]
 pub enum OpenError {
-    /// The file was written by a newer app. Never deleted: from phase 2 on it
-    /// holds custody data this build does not understand.
-    Newer(i64),
+    /// Derived search data is unusable and may be replaced by the daemon worker.
+    Rebuildable(String),
     Io(String),
 }
 
 impl std::fmt::Display for OpenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            OpenError::Newer(v) => write!(f, "search index schema {v} is newer than this app ({SCHEMA_VERSION})"),
+            OpenError::Rebuildable(e) => write!(f, "search index needs a rebuild: {e}"),
             OpenError::Io(e) => write!(f, "{e}"),
         }
     }
 }
 
-/// Open (creating if needed) the vault's index. Phase 1: every table is
-/// derived from the .eml files, so a corrupt file is deleted and rebuilt.
-/// Any other failure (locked by another process, permission, read-only
-/// volume, a failed migration) leaves the files untouched.
+/// Open (creating if needed) the vault's derived index. This function never
+/// removes files: only the owning daemon worker decides when a rebuild is safe.
 pub fn open(vault_root: &Path) -> Result<Connection, OpenError> {
     let dir = vault_root.join(DB_DIR);
     std::fs::create_dir_all(&dir).map_err(|e| OpenError::Io(format!("create {}: {e}", dir.display())))?;
     let path = dir.join(DB_FILE);
-    match open_at(&path) {
-        Ok(conn) => Ok(conn),
-        Err(Fail::Other(e)) => Err(e),
-        Err(Fail::Corrupt(first)) => {
-            tracing::warn!("search index corrupt ({first}); rebuilding {}", path.display());
-            for suffix in ["", "-wal", "-shm", "-journal"] {
-                let _ = std::fs::remove_file(dir.join(format!("{DB_FILE}{suffix}")));
-            }
-            open_at(&path).map_err(|f| match f {
-                Fail::Corrupt(e) => OpenError::Io(e),
-                Fail::Other(e) => e,
-            })
-        }
-    }
+    open_at(&path).map_err(|failure| match failure {
+        Fail::Rebuildable(e) => OpenError::Rebuildable(e),
+        Fail::Other(e) => e,
+    })
 }
 
-/// Why `open_at` failed. Only `Corrupt` lets `open` delete the file.
+/// Why `open_at` failed. Only rebuildable failures let the daemon replace the files.
 enum Fail {
-    Corrupt(String),
+    Rebuildable(String),
     Other(OpenError),
 }
 
@@ -112,11 +99,31 @@ fn io<E: std::fmt::Display>(e: E) -> OpenError {
     OpenError::Io(e.to_string())
 }
 
+fn retryable_sql(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(
+            ErrorCode::DatabaseBusy
+                | ErrorCode::DatabaseLocked
+                | ErrorCode::ReadOnly
+                | ErrorCode::SystemIoFailure
+                | ErrorCode::DiskFull
+                | ErrorCode::CannotOpen
+                | ErrorCode::PermissionDenied
+                | ErrorCode::FileLockingProtocolFailed
+        )
+    )
+}
+
 fn sql(e: rusqlite::Error) -> Fail {
     match e.sqlite_error_code() {
-        Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => Fail::Corrupt(e.to_string()),
+        Some(ErrorCode::NotADatabase | ErrorCode::DatabaseCorrupt) => Fail::Rebuildable(e.to_string()),
         _ => Fail::Other(io(e)),
     }
+}
+
+fn schema_sql(e: rusqlite::Error) -> Fail {
+    if retryable_sql(&e) { Fail::Other(io(e)) } else { Fail::Rebuildable(e.to_string()) }
 }
 
 fn open_at(path: &Path) -> Result<Connection, Fail> {
@@ -134,29 +141,58 @@ fn open_at(path: &Path) -> Result<Connection, Fail> {
     conn.execute_batch("PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;").map_err(sql)?;
     let check: String = conn.query_row("PRAGMA quick_check", [], |r| r.get(0)).map_err(sql)?;
     if check != "ok" {
-        return Err(Fail::Corrupt(format!("quick_check: {check}")));
+        return Err(Fail::Rebuildable(format!("quick_check: {check}")));
     }
     migrate(&conn)?;
+    validate_schema(&conn)?;
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> Result<(), OpenError> {
-    conn.execute_batch("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);").map_err(io)?;
-    let version = meta_get(conn, "schema_version").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
+fn migrate(conn: &Connection) -> Result<(), Fail> {
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);").map_err(schema_sql)?;
+    let raw: Option<String> = conn
+        .query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0))
+        .optional()
+        .map_err(schema_sql)?;
+    let version = raw.as_deref().map(|v| v.parse::<i64>().map_err(|_| Fail::Rebuildable(format!("invalid schema_version: {v}")))).transpose()?.unwrap_or(0);
     if version > SCHEMA_VERSION {
-        return Err(OpenError::Newer(version));
+        return Err(Fail::Rebuildable(format!("schema {version} is newer than this app ({SCHEMA_VERSION})")));
     }
     if version < 1 {
         conn.execute_batch(&format!(
             "BEGIN; {SCHEMA_V1} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1'); COMMIT;"
         ))
-        .map_err(io)?;
+        .map_err(schema_sql)?;
     }
     if version < 2 {
         conn.execute_batch(&format!(
             "BEGIN; {SCHEMA_V2} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2'); COMMIT;"
         ))
-        .map_err(io)?;
+        .map_err(schema_sql)?;
+    }
+    Ok(())
+}
+
+fn validate_schema(conn: &Connection) -> Result<(), Fail> {
+    for query in [
+        "SELECT key, value FROM meta LIMIT 0",
+        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json FROM messages LIMIT 0",
+        "SELECT account_id, vault_dir, scanned_at, file_count FROM mailbox_scan LIMIT 0",
+        "SELECT message_row, part_index, filename, mime, size, state, text FROM attachments LIMIT 0",
+        "SELECT rowid, subject, addrs, body, attach FROM msg_fts LIMIT 0",
+        "SELECT rowid, subject, addrs, body, attach FROM msg_cjk LIMIT 0",
+    ] {
+        conn.prepare(query).map_err(schema_sql)?;
+    }
+    // The daemon reads these optional control keys as text after opening the
+    // index. Validate their storage classes here so malformed derived metadata
+    // is classified as rebuildable instead of trapping every retry in the
+    // same health-read failure. Missing keys and arbitrary text values remain valid.
+    for key in [FIRST_PASS_DONE, "bodies_enabled"] {
+        let _: Option<String> = conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()
+            .map_err(schema_sql)?;
     }
     Ok(())
 }
@@ -178,7 +214,11 @@ pub fn meta_get_checked(conn: &Connection, key: &str) -> Result<Option<String>, 
 pub const FIRST_PASS_DONE: &str = "first_pass_done";
 
 pub fn first_pass_done(conn: &Connection) -> bool {
-    meta_get(conn, FIRST_PASS_DONE).is_some()
+    first_pass_done_checked(conn).unwrap_or(false)
+}
+
+pub fn first_pass_done_checked(conn: &Connection) -> Result<bool, String> {
+    meta_get_checked(conn, FIRST_PASS_DONE).map(|value| value.is_some())
 }
 
 pub fn meta_set(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
@@ -261,15 +301,19 @@ pub fn scope_coverage(conn: &Connection, account_id: &str, mailboxes: Option<&[S
 /// folder's last listing found (`mailbox_scan.file_count`), so a half-built
 /// index never reads as complete. A failed query counts as zero: this only
 /// feeds a progress line.
-pub fn counts(conn: &Connection) -> IndexCounts {
+pub fn counts_checked(conn: &Connection) -> Result<IndexCounts, String> {
     let (rows, indexed, listed): (i64, i64, i64) = conn
         .query_row(
             "SELECT count(*), count(*) FILTER (WHERE body_state != 0), (SELECT coalesce(sum(file_count), 0) FROM mailbox_scan) FROM messages",
             [],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
-        .unwrap_or((0, 0, 0));
-    IndexCounts { indexed: u64::try_from(indexed).unwrap_or(0), total: u64::try_from(rows.max(listed)).unwrap_or(0) }
+        .map_err(|e| e.to_string())?;
+    Ok(IndexCounts { indexed: u64::try_from(indexed).unwrap_or(0), total: u64::try_from(rows.max(listed)).unwrap_or(0) })
+}
+
+pub fn counts(conn: &Connection) -> IndexCounts {
+    counts_checked(conn).unwrap_or_default()
 }
 
 pub fn db_size_bytes(vault_root: &Path) -> u64 {
@@ -326,12 +370,13 @@ mod tests {
     }
 
     #[test]
-    fn garbage_file_is_rebuilt() {
+    fn garbage_file_is_reported_as_rebuildable_without_deleting_it() {
         let tmp = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(tmp.path().join(DB_DIR)).unwrap();
         std::fs::write(tmp.path().join(DB_DIR).join(DB_FILE), b"this is not a database at all, not even close").unwrap();
-        let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        let err = open(tmp.path()).unwrap_err();
+        assert!(matches!(err, OpenError::Rebuildable(_)), "got {err:?}");
+        assert_eq!(std::fs::read(tmp.path().join(DB_DIR).join(DB_FILE)).unwrap(), b"this is not a database at all, not even close");
     }
 
     #[test]
@@ -372,6 +417,36 @@ mod tests {
             [],
         )
         .unwrap();
+    }
+
+    #[test]
+    fn conflicting_v1_attachments_table_is_a_rebuildable_migration_failure() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join(DB_DIR);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(DB_FILE);
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '1');
+                 CREATE TABLE attachments (unexpected TEXT);",
+            ))
+            .unwrap();
+        }
+
+        let error = open(tmp.path()).unwrap_err();
+        match &error {
+            OpenError::Rebuildable(detail) => assert!(detail.contains("attachments already exists"), "must fail specifically at the v2 attachments migration, got {detail}"),
+            OpenError::Io(detail) => panic!("migration schema conflict must be rebuildable, got I/O error: {detail}"),
+        }
+
+        let raw = Connection::open(path).unwrap();
+        let table: String = raw.query_row("SELECT name FROM sqlite_master WHERE name = 'attachments'", [], |r| r.get(0)).unwrap();
+        let version: String = raw.query_row("SELECT value FROM meta WHERE key = 'schema_version'", [], |r| r.get(0)).unwrap();
+        assert_eq!(table, "attachments", "failed migration must preserve the conflicting derived table until the worker decides to rebuild");
+        assert_eq!(version, "1");
     }
 
     #[test]
@@ -418,6 +493,22 @@ mod tests {
     }
 
     #[test]
+    fn index_path_io_failure_is_not_classified_as_rebuildable_or_removed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let blocked_path = tmp.path().join(DB_DIR).join(DB_FILE);
+        std::fs::create_dir_all(&blocked_path).unwrap();
+        let sentinel = blocked_path.join("keep.bin");
+        std::fs::write(&sentinel, b"preserve the blocking filesystem entry").unwrap();
+
+        match open(tmp.path()) {
+            Err(OpenError::Io(_)) => {}
+            other => panic!("expected an I/O failure for a directory at the database path, got {:?}", other.map(|_| ())),
+        }
+        assert!(blocked_path.is_dir(), "I/O failure must never replace the blocked path");
+        assert_eq!(std::fs::read(&sentinel).unwrap(), b"preserve the blocking filesystem entry");
+    }
+
+    #[test]
     fn counts_use_the_larger_of_rows_and_listed_files() {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
@@ -437,12 +528,62 @@ mod tests {
             meta_set(&conn, "probe", "from the future").unwrap();
         }
         match open(tmp.path()) {
-            Err(OpenError::Newer(99)) => {}
+            Err(OpenError::Rebuildable(_)) => {}
             other => panic!("expected Newer(99), got {:?}", other.map(|_| ())),
         }
         // Reopen raw: the file and its rows are still there.
         let raw = rusqlite::Connection::open(tmp.path().join(DB_DIR).join(DB_FILE)).unwrap();
         let v: String = raw.query_row("SELECT value FROM meta WHERE key='probe'", [], |r| r.get(0)).unwrap();
         assert_eq!(v, "from the future");
+    }
+
+    #[test]
+    fn malformed_schema_version_is_rebuildable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        meta_set(&conn, "schema_version", "not-a-number").unwrap();
+        drop(conn);
+        assert!(matches!(open(tmp.path()), Err(OpenError::Rebuildable(_))));
+    }
+
+    #[test]
+    fn current_version_with_missing_required_table_or_column_is_rebuildable() {
+        for damage in [
+            "DROP TABLE messages",
+            "ALTER TABLE messages DROP COLUMN body_state",
+            "DROP TABLE msg_fts",
+            "DROP TABLE msg_cjk",
+            "DROP TABLE attachments",
+            "ALTER TABLE mailbox_scan DROP COLUMN file_count",
+            "ALTER TABLE meta DROP COLUMN value",
+        ] {
+            let tmp = tempfile::tempdir().unwrap();
+            let conn = open(tmp.path()).unwrap();
+            conn.execute_batch(damage).unwrap();
+            drop(conn);
+            assert!(matches!(open(tmp.path()), Err(OpenError::Rebuildable(_))), "damage: {damage}");
+        }
+    }
+
+    #[test]
+    fn non_text_health_metadata_is_rebuildable_for_both_checked_keys() {
+        for key in [FIRST_PASS_DONE, "bodies_enabled"] {
+            let tmp = tempfile::tempdir().unwrap();
+            let conn = open(tmp.path()).unwrap();
+            conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?1, X'00')", [key]).unwrap();
+            drop(conn);
+
+            assert!(matches!(open(tmp.path()), Err(OpenError::Rebuildable(_))), "non-text {key} metadata must trigger derived-index recovery");
+        }
+    }
+
+    #[test]
+    fn checked_health_reads_preserve_sql_errors() {
+        let tmp = tempfile::tempdir().unwrap();
+        let conn = open(tmp.path()).unwrap();
+        conn.execute_batch("DROP TABLE messages").unwrap();
+        assert!(counts_checked(&conn).is_err());
+        conn.execute_batch("DROP TABLE meta").unwrap();
+        assert!(first_pass_done_checked(&conn).is_err());
     }
 }

@@ -18,6 +18,7 @@
  */
 
 import { spawn, execFileSync } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import { ImapFlow } from 'imapflow';
 import { writeFileSync, mkdirSync, existsSync, rmSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -1268,6 +1269,36 @@ export function seedIndexBacklog(home, accountId, count) {
       '',
     ].join('\r\n'));
   }
+}
+
+/** A derived index that must be rebuilt during daemon startup, plus mail whose
+ * indexed `matchedIn` marker proves the result came from FTS after recovery. */
+export function seedDamagedSearchIndex(home, accountId) {
+  const data = appDataDir(home);
+  const indexDir = join(data, 'search_index');
+  mkdirSync(indexDir, { recursive: true });
+  const indexPath = join(indexDir, 'index.db');
+  rmSync(indexPath, { force: true });
+  const db = new DatabaseSync(indexPath);
+  db.exec('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+  db.prepare('INSERT INTO meta(key, value) VALUES (?, ?)').run('schema_version', '99');
+  db.close();
+  const cur = join(data, 'Maildir', accountId, 'IndexRecovery', 'cur');
+  mkdirSync(cur, { recursive: true });
+  writeFileSync(join(cur, '990099:2,S.eml'), [
+    'From: Recovery Fixture <recovery@mock.test>',
+    'To: luke@mock.test',
+    'Subject: Search recovery fixture',
+    'Date: Mon, 01 Sep 2026 10:00:00 +0000',
+    'Message-ID: <search-recovery@mock.test>',
+    'Content-Type: text/plain; charset=UTF-8',
+    '',
+    'The vault recovery token is ZEBRARECOVERYTOKEN.',
+    '',
+  ].join('\r\n'));
+  const custodyDir = join(data, 'custody');
+  mkdirSync(custodyDir, { recursive: true });
+  writeFileSync(join(custodyDir, 'search-recovery-sentinel.bin'), 'custody remains untouched');
 }
 
 export const MOCK_PASSWORD = 'mock-password';

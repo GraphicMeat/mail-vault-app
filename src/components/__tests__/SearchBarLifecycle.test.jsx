@@ -214,6 +214,12 @@ describe('SearchBar search lifecycle', () => {
     act(() => useSearchStore.setState({ searchFallback: 'building' }));
     expect(document.querySelector('[data-testid="search-fallback-building"]')?.textContent)
       .toContain('Indexed results are still being built. Search is reading the folders not indexed yet.');
+    act(() => useSearchStore.setState({ searchFallback: 'recovering' }));
+    expect(document.querySelector('[data-testid="search-fallback-recovering"]')?.textContent)
+      .toContain('The search index is recovering automatically. Search reads saved folders directly while it repairs.');
+    act(() => useSearchStore.setState({ searchFallback: 'error' }));
+    expect(document.querySelector('[data-testid="search-fallback-error"]')?.textContent)
+      .toContain('Search could not use the index because recovery hit a problem. Search is reading saved folders directly. Retry from Search Index settings.');
     act(() => useSearchStore.setState({ searchFallback: 'unavailable' }));
     fireEvent.click(openIndex);
     fireEvent.click(upgrade);

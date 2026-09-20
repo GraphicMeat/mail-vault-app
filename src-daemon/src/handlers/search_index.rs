@@ -137,10 +137,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn status_before_any_configure_is_unavailable_with_first_pass_done_false() {
+    async fn status_before_any_configure_is_starting_with_first_pass_done_false() {
         let (_t, s) = st();
         let r = call(&s, "search_index_status", json!({})).await.result.unwrap();
-        assert_eq!(r["state"], "unavailable");
+        assert_eq!(r["state"], "starting");
         assert_eq!(r["firstPassDone"], false);
     }
 
@@ -267,7 +267,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false);
         let resp = crate::server::handle_request_for_test(&s, "search_index_status", json!({})).await;
-        assert_eq!(resp.result.unwrap()["state"], "unavailable");
+        assert_eq!(resp.result.unwrap()["state"], "starting");
     }
 
     /// `vault_close`/`vault_reopen` are the app's own move machinery, called

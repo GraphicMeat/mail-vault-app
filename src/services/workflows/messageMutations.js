@@ -7,7 +7,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
-import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
+import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
 import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
@@ -2193,7 +2193,12 @@ export async function moveEmails(keys, targetMailbox) {
   const { useSearchStore } = await import('../../stores/searchStore');
   const search = useSearchStore.getState();
   if (search.searchActive) {
-    useSearchStore.setState({ searchResults: search.searchResults.filter(e => !keySet.has(selectionKey(e, state))) });
+    const movedCopyKeys = [...groups.values()].flatMap(group => group.uids.map(uid => emailKey({
+      _accountId: group.accountId,
+      _mailbox: group.mailbox,
+      uid,
+    })));
+    search.removeSearchResults(movedCopyKeys);
   }
 
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');

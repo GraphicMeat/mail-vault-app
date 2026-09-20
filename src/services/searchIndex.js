@@ -6,7 +6,12 @@ import { send } from './transport.js';
 export const configure = (config) => send('search_index_configure', { config })
   .then(() => true, (e) => { console.warn('[searchIndex] configure failed:', e); return false; });
 export const status = () => send('search_index_status', {})
-  .catch((e) => ({ available: false, state: 'unavailable', error: e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : undefined }));
+  .catch((e) => ({
+    available: false,
+    state: 'error',
+    errorKey: e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : 'errors.daemonUnavailable',
+    errorDetail: e?.message || String(e),
+  }));
 export const rebuild = () => send('search_index_rebuild', {});
 /** Resolves `{ok:true}` or `{ok:false, error:<catalog key>}`; rejects only when the daemon is unreachable. */
 export const destroy = () => send('search_index_destroy', {});

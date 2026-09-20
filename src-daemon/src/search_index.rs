@@ -15,14 +15,15 @@ use mailvault_core::maildir::vault_filename_uid;
 use mailvault_core::vault_eml::{collect_attachment_parts, find_file_by_uid, parse_eml_bytes_light, parse_flags_from_filename, part_filename};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
+use rusqlite::OptionalExtension;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-const REOPEN_EVERY: Duration = Duration::from_secs(5);
+const RETRY_DELAYS: [Duration; 3] = [Duration::from_secs(5), Duration::from_secs(10), Duration::from_secs(30)];
 
 pub struct SearchIndexState {
     pub db: SharedConn,
@@ -34,7 +35,12 @@ pub struct SearchIndexState {
     /// None until the first configure; Some(false) = destroyed or switched off.
     pub(crate) enabled: Mutex<Option<bool>>,
     pub(crate) signals: Mutex<Option<mpsc::Sender<Signal>>>,
-    pub(crate) phase: Mutex<&'static str>, // "idle" | "indexing" | "unavailable" | "off"
+    pub(crate) phase: Mutex<&'static str>, // starting | recovering | indexing | idle | error | off
+    pub(crate) error_detail: Mutex<Option<String>>,
+    pub(crate) recovery_queued: AtomicBool,
+    pub(crate) operation_generation: AtomicU64,
+    pub(crate) destroy_generation: AtomicU64,
+    pub(crate) rebuild_pending: AtomicBool,
     pub(crate) interrupt: AtomicBool,
     pub(crate) switch: SwitchGuard,
     pub(crate) destroy_reply: Mutex<Vec<mpsc::Sender<Result<(), &'static str>>>>,
@@ -43,6 +49,15 @@ pub struct SearchIndexState {
     /// interfere with each other's count.
     #[cfg(test)]
     pub(crate) prescan_reads: AtomicUsize,
+    /// Per-state log of real account SQL scopes, used to prove mailbox chunking without global fault hooks.
+    #[cfg(test)]
+    pub(crate) search_scopes: Mutex<Vec<Option<Vec<String>>>>,
+    #[cfg(test)]
+    pub(crate) search_batch_hook: Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    pub(crate) open_before_install_hook: Mutex<Option<std::sync::Arc<dyn Fn() + Send + Sync>>>,
+    #[cfg(test)]
+    pub(crate) worker_passes: AtomicUsize,
 }
 
 impl SearchIndexState {
@@ -56,12 +71,25 @@ impl SearchIndexState {
             config: Mutex::new(None),
             enabled: Mutex::new(None),
             signals: Mutex::new(None),
-            phase: Mutex::new("unavailable"),
+            phase: Mutex::new("starting"),
+            error_detail: Mutex::new(None),
+            recovery_queued: AtomicBool::new(false),
+            operation_generation: AtomicU64::new(0),
+            destroy_generation: AtomicU64::new(0),
+            rebuild_pending: AtomicBool::new(false),
             interrupt: AtomicBool::new(false),
             switch: SwitchGuard::default(),
             destroy_reply: Mutex::new(Vec::new()),
             #[cfg(test)]
             prescan_reads: AtomicUsize::new(0),
+            #[cfg(test)]
+            search_scopes: Mutex::new(Vec::new()),
+            #[cfg(test)]
+            search_batch_hook: Mutex::new(None),
+            #[cfg(test)]
+            open_before_install_hook: Mutex::new(None),
+            #[cfg(test)]
+            worker_passes: AtomicUsize::new(0),
         })
     }
 }
@@ -244,24 +272,47 @@ pub fn status_json(st: &SearchIndexState) -> Value {
     // `enabled` is read and released before `db` is locked (lock order).
     let enabled = *g(&st.enabled);
     if enabled == Some(false) {
-        return serde_json::json!({ "available": false, "state": "off", "indexed": 0, "total": 0, "sizeBytes": 0, "complete": false, "firstPassDone": false });
+        return serde_json::json!({ "available": false, "state": "off", "indexed": 0, "total": 0, "sizeBytes": 0, "complete": false, "firstPassDone": false, "errorKey": null, "errorDetail": null });
     }
     let guard = lock(&st.db);
     let Some(conn) = guard.as_ref() else {
-        return serde_json::json!({ "available": false, "state": "unavailable", "indexed": 0, "total": 0, "sizeBytes": 0, "complete": false, "firstPassDone": false });
+        let state = *g(&st.phase);
+        let detail = g(&st.error_detail).clone();
+        return serde_json::json!({
+            "available": false, "state": state, "indexed": 0, "total": 0, "sizeBytes": 0,
+            "complete": false, "firstPassDone": false,
+            "errorKey": if state == "error" { Some("searchIndex.recoveryFailed") } else { None },
+            "errorDetail": detail,
+        });
     };
-    let c = db::counts(conn);
+    let (c, first_pass_done) = match db::counts_checked(conn).and_then(|counts| db::first_pass_done_checked(conn).map(|first_pass| (counts, first_pass))) {
+        Ok(health) => health,
+        Err(_detail) => {
+            drop(guard);
+            request_recovery(st);
+            let state = *g(&st.phase);
+            let detail = g(&st.error_detail).clone();
+            return serde_json::json!({
+                "available": false, "state": state, "indexed": 0, "total": 0, "sizeBytes": 0,
+                "complete": false, "firstPassDone": false,
+                "errorKey": if state == "error" { Some("searchIndex.recoveryFailed") } else { None },
+                "errorDetail": detail,
+            });
+        }
+    };
     let size = g(&st.root).as_ref().map(|r| db::db_size_bytes(r)).unwrap_or(0);
-    // counts() yields 0/0 on error: never "complete". Available whenever open, so
-    // Settings shows a first build's progress; only vault_search waits for first_pass_done.
+    let state = *g(&st.phase);
+    let detail = g(&st.error_detail).clone();
     serde_json::json!({
         "available": true,
-        "state": *g(&st.phase),
+        "state": state,
         "indexed": c.indexed,
         "total": c.total,
         "sizeBytes": size,
         "complete": c.total > 0 && c.indexed >= c.total,
-        "firstPassDone": db::first_pass_done(conn),
+        "firstPassDone": first_pass_done,
+        "errorKey": if state == "error" { Some("searchIndex.recoveryFailed") } else { None },
+        "errorDetail": detail,
     })
 }
 
@@ -271,34 +322,80 @@ pub(crate) fn emit(st: &SearchIndexState) {
 
 /// Returns explicit availability reasons so the daemon coordinator can decide
 /// whether the local lane needs to read files.
-pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest) -> Result<serde_json::Value, String> {
-    // `enabled` is read and released before `db` is locked (lock order).
+pub(crate) struct SearchPageReply {
+    pub page: core::query::SearchPage,
+    pub coverage: db::ScopeCoverage,
+}
+
+pub(crate) fn search_page_reply(
+    st: &SearchIndexState,
+    request: &core::query::SearchRequest,
+) -> Result<Result<SearchPageReply, &'static str>, String> {
     if *g(&st.enabled) == Some(false) {
-        return Ok(serde_json::json!({ "available": false, "reason": "off" }));
+        return Ok(Err("off"));
     }
-    let (page, coverage, counts) = {
+    let result = {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else {
+            return Ok(Err("unavailable"));
+        };
+        // A first build (or a rebuild) still misses mail the scan finds.
+        match db::first_pass_done_checked(conn) {
+            Ok(false) => return Ok(Err("building")),
+            Err(e) => Err(e),
+            Ok(true) => {
+                #[cfg(test)]
+                g(&st.search_scopes).push(request.mailboxes.clone());
+                core::query::search(conn, request).and_then(|page| {
+                db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())
+                    .map(|coverage| SearchPageReply { page, coverage })
+                })
+            }
+        }
+    };
+    #[cfg(test)]
+    if matches!(&result, Ok(_)) {
+        let hook = g(&st.search_batch_hook).clone();
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+    match result {
+        Ok(result) => Ok(Ok(result)),
+        Err(error) => {
+            request_recovery(st);
+            Err(error)
+        }
+    }
+}
+
+pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest) -> Result<serde_json::Value, String> {
+    let result = match search_page_reply(st, request)? {
+        Ok(result) => result,
+        Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason })),
+    };
+    let rows = assemble_rows(&result.page);
+    let counts = {
         let guard = lock(&st.db);
         let Some(conn) = guard.as_ref() else {
             return Ok(serde_json::json!({ "available": false, "reason": "unavailable" }));
         };
-        // A first build (or a rebuild) still misses mail the scan finds.
-        if !db::first_pass_done(conn) {
-            return Ok(serde_json::json!({ "available": false, "reason": "building" }));
-        }
-        (
-            core::query::search(conn, request)?,
-            db::scope_coverage(conn, &request.account_id, request.mailboxes.as_deref())?,
-            db::counts(conn),
-        )
+        db::counts_checked(conn)
     };
-    let rows = assemble_rows(&page);
-    let uncovered_vault_dirs = coverage.uncovered_vault_dirs.clone();
+    let counts = match counts {
+        Ok(counts) => counts,
+        Err(error) => {
+            request_recovery(st);
+            return Err(error);
+        }
+    };
+    let uncovered_vault_dirs = result.coverage.uncovered_vault_dirs.clone();
     Ok(serde_json::json!({
         "available": true,
         "mode": "index",
         "rows": rows,
-        "total": page.total,
-        "coverage": coverage,
+        "total": result.page.total,
+        "coverage": result.coverage,
         "uncoveredVaultDirs": uncovered_vault_dirs,
         "indexed": counts.indexed,
         "totalMessages": counts.total,
@@ -317,27 +414,30 @@ pub fn rows_reply(st: &SearchIndexState, account_id: &str, mailbox: &str, uids: 
     let guard = lock(&st.db);
     let Some(conn) = guard.as_ref() else { return Vec::new() };
     let vault_dir = core::text::vault_dir_name(mailbox);
-    let mut stmt = match conn.prepare_cached("SELECT filename, row_json FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3") {
-        Ok(s) => s,
-        Err(e) => {
-            warn!("vault_rows: {e}");
-            return Vec::new();
-        }
-    };
-    uids.iter()
-        .filter_map(|uid| {
-            let (filename, row_json): (String, String) = stmt
-                .query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get(0)?, r.get(1)?)))
-                .ok()?;
-            let mut row: serde_json::Value = serde_json::from_str(&row_json).ok()?;
+    let rows = (|| -> Result<Vec<Value>, String> {
+        let mut stmt = conn.prepare_cached("SELECT filename, row_json FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3").map_err(|e| e.to_string())?;
+        let mut rows = Vec::new();
+        for uid in uids {
+            let Some((filename, row_json)) = stmt.query_row((account_id, vault_dir.as_str(), *uid), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).optional().map_err(|e| e.to_string())? else { continue };
+            let Ok(mut row) = serde_json::from_str::<serde_json::Value>(&row_json) else { continue };
             let flags = parse_flags_from_filename(&filename);
-            let obj = row.as_object_mut()?;
+            let Some(obj) = row.as_object_mut() else { continue };
             obj.insert("uid".into(), (*uid).into());
             obj.insert("isArchived".into(), flags.iter().any(|f| f == "archived").into());
             obj.insert("flags".into(), serde_json::json!(flags));
-            Some(row)
-        })
-        .collect()
+            rows.push(row);
+        }
+        Ok(rows)
+    })();
+    match rows {
+        Ok(rows) => rows,
+        Err(e) => {
+            warn!("vault_rows: {e}");
+            drop(guard);
+            request_recovery(st);
+            Vec::new()
+        }
+    }
 }
 
 fn yes() -> bool {
@@ -359,6 +459,8 @@ pub struct ConfigArgs {
 pub(crate) struct SweepOutcome {
     pub parsed: usize,
     pub completed: bool,
+    pub success: bool,
+    pub error: Option<String>,
 }
 
 fn send(st: &SearchIndexState, s: Signal) {
@@ -367,41 +469,82 @@ fn send(st: &SearchIndexState, s: Signal) {
     }
 }
 
+fn set_error(st: &SearchIndexState, detail: impl Into<String>) {
+    *g(&st.error_detail) = Some(detail.into());
+    *g(&st.phase) = "error";
+}
+
+fn clear_error(st: &SearchIndexState) {
+    *g(&st.error_detail) = None;
+}
+
+/// A runtime query/status failure wakes the existing worker once. The caller
+/// must release the SQLite guard before calling this.
+fn request_recovery(st: &SearchIndexState) {
+    if *g(&st.enabled) != Some(true) {
+        return;
+    }
+    if st.recovery_queued.swap(true, SeqCst) {
+        return;
+    }
+    clear_error(st);
+    *g(&st.phase) = "recovering";
+    st.interrupt.store(true, SeqCst);
+    send(st, Signal::Recover);
+}
+
+pub(crate) fn request_search_recovery(st: &SearchIndexState) {
+    request_recovery(st);
+}
+
 /// The vault's files are moving; its reopen() queues the open for afterwards.
 /// Before the root is resolved and quick_check runs: a close() from here on
 /// makes this open stale. Never opens while unconfigured or off (spec §5.5).
-pub(crate) fn open_into(st: &SearchIndexState) {
+pub(crate) fn open_into(st: &SearchIndexState) -> Result<(), db::OpenError> {
     if st.switch.is_switching() {
-        *g(&st.phase) = "unavailable";
-        return;
+        *g(&st.phase) = "recovering";
+        return Ok(());
     }
     if *g(&st.enabled) != Some(true) {
-        return; // unconfigured or off: never create the file
+        return Ok(()); // unconfigured or off: never create the file
     }
     if !st.mail_dir_ok {
         *g(&st.root) = None;
-        *g(&st.phase) = "unavailable";
-        return;
+        let error = db::OpenError::Io("mail vault is unavailable".into());
+        set_error(st, error.to_string());
+        return Err(error);
     }
-    let gen = st.switch.current();
+    let switch_gen = st.switch.current();
+    let operation_gen = st.operation_generation.load(SeqCst);
     *lock(&st.db) = None; // one connection per file: a stale exclusive lock would make this open BUSY
+    *g(&st.phase) = "recovering";
+    clear_error(st);
     match db::open(&st.vault_root) {
         Ok(conn) => {
-            if !install_if_current(&st.db, &st.switch, gen, conn) {
-                return; // a switch started while this opened: the connection is dropped
+            #[cfg(test)]
+            if let Some(hook) = g(&st.open_before_install_hook).clone() {
+                hook();
             }
+            if st.operation_generation.load(SeqCst) != operation_gen || *g(&st.enabled) != Some(true) {
+                return Ok(()); // explicit off/Delete/Rebuild arrived during open
+            }
+            if !install_if_current(&st.db, &st.switch, switch_gen, conn) { return Ok(()) }
             *g(&st.root) = Some(st.vault_root.clone());
-            *g(&st.phase) = "idle";
-            // A close() that landed between the install and here cleared root before this set it.
-            if st.switch.current() != gen {
+            // Configure can be accepted while open runs without taking the DB
+            // mutex. Recheck its generation after installation and discard the
+            // connection if a newer off/Delete won.
+            if st.switch.current() != switch_gen || st.operation_generation.load(SeqCst) != operation_gen || *g(&st.enabled) != Some(true) {
+                *lock(&st.db) = None;
                 *g(&st.root) = None;
-                *g(&st.phase) = "unavailable";
+                *g(&st.phase) = if *g(&st.enabled) == Some(false) { "off" } else { "recovering" };
             }
+            Ok(())
         }
         Err(e) => {
-            warn!("search index unavailable: {e:?}");
+            warn!("search index open failed: {e}");
             *g(&st.root) = None;
-            *g(&st.phase) = "unavailable";
+            set_error(st, e.to_string());
+            Err(e)
         }
     }
 }
@@ -435,16 +578,29 @@ pub fn sweep_soon(st: &SearchIndexState) {
 
 pub fn configure(st: &SearchIndexState, args: ConfigArgs) {
     *g(&st.config) = Some(IndexConfig { bodies: args.bodies, attachments: args.attachments, image_text: args.image_text });
-    *g(&st.enabled) = Some(args.enabled);
-    st.interrupt.store(true, SeqCst); // stop a running sweep at its next batch
-    let closed = lock(&st.db).is_none();
-    if args.enabled && closed {
-        send(st, Signal::Reopen);
+    {
+        let mut enabled = g(&st.enabled);
+        let before = std::mem::replace(&mut *enabled, Some(args.enabled));
+        // An already-off config is idempotent. In particular, a delayed settings
+        // hook must not invalidate a destroy that has already claimed the off generation.
+        if !args.enabled && before != Some(false) {
+            st.operation_generation.fetch_add(1, SeqCst);
+        }
     }
+    st.interrupt.store(true, SeqCst); // stop a running sweep at its next batch
     send(st, Signal::Configure);
 }
 
 pub fn rebuild(st: &SearchIndexState) {
+    *g(&st.enabled) = Some(true);
+    if g(&st.config).is_none() {
+        *g(&st.config) = Some(IndexConfig { bodies: true, attachments: false, image_text: false });
+    }
+    st.operation_generation.fetch_add(1, SeqCst);
+    st.rebuild_pending.store(true, SeqCst);
+    st.recovery_queued.store(false, SeqCst);
+    clear_error(st);
+    *g(&st.phase) = "recovering";
     st.interrupt.store(true, SeqCst);
     send(st, Signal::Rebuild);
 }
@@ -454,7 +610,15 @@ pub fn destroy(st: &SearchIndexState, timeout: Duration) -> Value {
     if st.switch.is_switching() {
         return serde_json::json!({"ok": false, "error": "searchIndex.busy"});
     }
-    let before = std::mem::replace(&mut *g(&st.enabled), Some(false));
+    let (before, generation) = {
+        let mut enabled = g(&st.enabled);
+        let before = std::mem::replace(&mut *enabled, Some(false));
+        let generation = st.operation_generation.fetch_add(1, SeqCst) + 1;
+        st.destroy_generation.store(generation, SeqCst);
+        (before, generation)
+    };
+    st.rebuild_pending.store(false, SeqCst);
+    clear_error(st);
     let (tx, rx) = mpsc::channel();
     g(&st.destroy_reply).push(tx);
     st.interrupt.store(true, SeqCst);
@@ -462,7 +626,7 @@ pub fn destroy(st: &SearchIndexState, timeout: Duration) -> Value {
     match rx.recv_timeout(timeout) {
         Ok(Ok(())) => serde_json::json!({"ok": true}),
         Ok(Err(key)) => {
-            if key == "searchIndex.busy" {
+            if key == "searchIndex.busy" && st.operation_generation.load(SeqCst) == generation {
                 // A switch began after the check above: nothing was deleted, so nothing is off.
                 let mut enabled = g(&st.enabled);
                 if *enabled == Some(false) {
@@ -476,7 +640,7 @@ pub fn destroy(st: &SearchIndexState, timeout: Duration) -> Value {
 }
 
 /// Runs on the worker only, so no second thread touches the files.
-fn destroy_index(st: &SearchIndexState) -> Result<(), &'static str> {
+fn destroy_index(st: &SearchIndexState, operation_gen: u64) -> Result<(), &'static str> {
     // Review I1: while the vault is unreachable, `st.vault_root` is the
     // app-data FALLBACK root `resolve_mail_dir` hands back, never the real
     // vault. Unlinking there and reporting success would "delete" nothing
@@ -486,37 +650,39 @@ fn destroy_index(st: &SearchIndexState) -> Result<(), &'static str> {
     if !st.mail_dir_ok {
         return Err("searchIndex.destroyFailed");
     }
-    if st.switch.is_switching() {
+    let mut guard = lock(&st.db);
+    let gen = st.switch.current();
+    if st.switch.is_switching() || st.operation_generation.load(SeqCst) != operation_gen {
         return Err("searchIndex.busy");
     }
-    let gen = st.switch.current();
-    *lock(&st.db) = None; // drop = checkpoint; then the files can go
+    *guard = None; // drop = checkpoint; keep the mutex through unlinking so a switch cannot begin mid-delete
     *g(&st.root) = None;
     let dir = st.vault_root.join(db::DB_DIR);
-    let mut stuck = false;
     // Reverse order (journal, shm, wal, then the database file itself): an
     // abort mid-delete (a switch starting between two unlinks) never leaves a
     // -wal without the index.db it belongs to.
     for suffix in ["-journal", "-shm", "-wal", ""] {
         // A vault operation may start between the check above and this unlink.
-        if st.switch.is_switching() || st.switch.current() != gen {
+        if st.switch.is_switching() || st.switch.current() != gen || st.operation_generation.load(SeqCst) != operation_gen {
             return Err("searchIndex.busy");
         }
         let path = dir.join(format!("{}{suffix}", db::DB_FILE));
         if let Err(e) = std::fs::remove_file(&path) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 warn!("search index destroy: cannot remove {}: {e}", path.display());
-                stuck = true;
+                let detail = format!("could not remove {}: {e}", path.display());
+                drop(guard);
+                set_error(st, detail);
+                emit(st);
+                return Err("searchIndex.destroyFailed");
             }
         }
     }
-    *g(&st.phase) = if stuck { "unavailable" } else { "off" };
+    drop(guard);
+    *g(&st.phase) = "off";
+    clear_error(st);
     emit(st);
-    if stuck {
-        Err("searchIndex.destroyFailed")
-    } else {
-        Ok(())
-    }
+    Ok(())
 }
 
 pub fn start(st: Arc<SearchIndexState>) {
@@ -536,21 +702,28 @@ pub fn start(st: Arc<SearchIndexState>) {
 }
 
 fn worker(st: &SearchIndexState, rx: mpsc::Receiver<Signal>) {
-    open_into(st); // here, not in setup: open runs quick_check
     let mut last_full = Instant::now();
+    let mut failed_attempts = 0usize;
+    let mut next_retry: Option<Instant> = None;
     loop {
+        let enabled = *g(&st.enabled);
+        let retrying = enabled == Some(true) && (*g(&st.phase) == "error" || lock(&st.db).is_none());
+        let retry_index = failed_attempts.saturating_sub(1).min(RETRY_DELAYS.len() - 1);
+        let retry_delay = RETRY_DELAYS[retry_index];
         // An interrupt still set here arrived after the last drain: its signal was
         // either drained already (its pass was cut short) or is queued. Go again now.
         let first = if st.interrupt.load(SeqCst) {
             Signal::Sweep
         } else {
             // Counted from the last full pass, so a stream of nudges cannot postpone it.
-            let enabled = *g(&st.enabled);
-            let closed = enabled == Some(true) && lock(&st.db).is_none();
-            let wait = if closed { REOPEN_EVERY } else { SWEEP_EVERY.saturating_sub(last_full.elapsed()) };
+            let wait = if retrying {
+                next_retry.map_or(retry_delay, |deadline| deadline.saturating_duration_since(Instant::now()))
+            } else {
+                SWEEP_EVERY.saturating_sub(last_full.elapsed())
+            };
             match rx.recv_timeout(wait) {
                 Ok(s) => s,
-                Err(mpsc::RecvTimeoutError::Timeout) => Signal::Sweep,
+                Err(mpsc::RecvTimeoutError::Timeout) => if retrying { Signal::Recover } else { Signal::Sweep },
                 Err(mpsc::RecvTimeoutError::Disconnected) => return,
             }
         };
@@ -558,9 +731,23 @@ fn worker(st: &SearchIndexState, rx: mpsc::Receiver<Signal>) {
         // is drained now or leaves `interrupt` set and a queued signal.
         st.interrupt.store(false, SeqCst);
         // A burst of two or more nudges waits up to COALESCE for the nudges behind it; a lone nudge runs now.
-        let Plan { reopen, rebuild, destroy, only } = plan(collect_burst(first, &rx, COALESCE));
+        let signals = collect_burst(first, &rx, COALESCE);
+        let explicit = signals.iter().any(|signal| matches!(signal, Signal::Configure | Signal::Rebuild | Signal::Destroy | Signal::Reopen));
+        if retrying && next_retry.is_some_and(|deadline| Instant::now() < deadline) && !explicit {
+            continue; // the bounded full retry subsumes queued nudges/sweeps/recovery wakes
+        }
+        // Once the bounded delay expires, any admitted automatic wake is the
+        // retry: do not let a scoped nudge clear an error while failed work in
+        // another mailbox remains pending.
+        let retry_due = retrying && next_retry.map_or(true, |deadline| Instant::now() >= deadline);
+        let Plan { reopen, rebuild, recover, destroy, only } = plan(signals);
+        if rebuild {
+            failed_attempts = 0;
+            next_retry = None;
+        }
         if destroy {
-            let outcome = destroy_index(st);
+            next_retry = None;
+            let outcome = destroy_index(st, st.destroy_generation.load(SeqCst));
             let waiting = std::mem::take(&mut *g(&st.destroy_reply));
             for tx in waiting {
                 let _ = tx.send(outcome);
@@ -570,75 +757,146 @@ fn worker(st: &SearchIndexState, rx: mpsc::Receiver<Signal>) {
             }
             // A configure {enabled:true} landed behind the destroy: plan() dropped its Reopen.
         }
-        let full = needs_full(last_full.elapsed(), only.is_none());
-        run_pass(st, reopen || destroy, rebuild, if full { None } else { only });
+        // Keep an explicit rebuild request through a temporary vault move.
+        // Its queued signal can be consumed while switching, so the operation
+        // flag is the durable intent until a rebuild actually succeeds.
+        let rebuild = rebuild || (!st.switch.is_switching() && st.rebuild_pending.load(SeqCst));
+        let enabled = *g(&st.enabled) == Some(true);
+        let closed = enabled && lock(&st.db).is_none();
+        let first_pass_missing = if enabled {
+            let guard = lock(&st.db);
+            guard.as_ref().map_or(true, |conn| !db::first_pass_done_checked(conn).unwrap_or(false))
+        } else {
+            false
+        };
+        let full = needs_full(last_full.elapsed(), only.is_none() || reopen || destroy || rebuild || recover || retry_due || closed || first_pass_missing);
+        #[cfg(test)]
+        st.worker_passes.fetch_add(1, SeqCst);
+        let healthy = run_pass(st, reopen || destroy || retry_due, rebuild, recover || retry_due, if full { None } else { only });
+        let completed_full_pass = healthy && full && !st.interrupt.load(SeqCst) && *g(&st.phase) == "idle";
+        if completed_full_pass {
+            failed_attempts = 0;
+            next_retry = None;
+            st.recovery_queued.store(false, SeqCst);
+        } else if !healthy && !st.interrupt.load(SeqCst) {
+            failed_attempts = failed_attempts.saturating_add(1);
+            if *g(&st.phase) == "error" || (*g(&st.enabled) == Some(true) && lock(&st.db).is_none()) {
+                let delay_index = failed_attempts.saturating_sub(1).min(RETRY_DELAYS.len() - 1);
+                next_retry = Some(Instant::now() + RETRY_DELAYS[delay_index]);
+            }
+        }
         // Not cut short = complete. A pass skipped because the index is unconfigured
         // or closed counts too: the configure or reopen that changes that forces its
         // own full pass. Resetting here is also what keeps a zero timeout from spinning.
-        if full && !st.interrupt.load(SeqCst) {
+        if full && healthy && !st.interrupt.load(SeqCst) {
             last_full = Instant::now();
         }
     }
 }
 
-fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec<(String, String)>>) {
+fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, recover: bool, only: Option<Vec<(String, String)>>) -> bool {
     if st.switch.is_switching() {
-        return; // the vault operation's reopen() sends a Reopen, which is a full pass
+        return true; // the vault operation's reopen() sends a Reopen, which is a full pass
     }
     let enabled = *g(&st.enabled);
     let closed = enabled == Some(true) && lock(&st.db).is_none();
-    if reopen || closed {
-        open_into(st);
-    }
     if *g(&st.enabled) != Some(true) {
         // Off: release a connection a configure {enabled:false} left open, once.
         if lock(&st.db).take().is_some() {
             *g(&st.root) = None;
             *g(&st.phase) = "off";
+            clear_error(st);
             emit(st);
         }
-        return;
+        return true;
     }
-    let Some(config) = *g(&st.config) else { return }; // nothing until the frontend configures
+    if enabled.is_none() { return true; }
+    let Some(config) = *g(&st.config) else { return true }; // nothing until the frontend configures
+    let operation_gen = st.operation_generation.load(SeqCst);
+    let rebuild = rebuild || st.rebuild_pending.load(SeqCst);
     if rebuild {
-        rebuild_index(st);
+        if let Err(error) = rebuild_index(st, operation_gen) {
+            set_error(st, error);
+            emit(st);
+            return false;
+        }
+        st.rebuild_pending.store(false, SeqCst);
+        if let Err(error) = open_into(st) {
+            set_error(st, error.to_string());
+            emit(st);
+            return false;
+        }
+    } else if reopen || closed || recover {
+        match open_into(st) {
+            Ok(()) => {}
+            Err(db::OpenError::Rebuildable(detail)) => {
+                warn!("search index structure is not usable; rebuilding derived index: {detail}");
+                if let Err(error) = rebuild_index(st, operation_gen) {
+                    set_error(st, error);
+                    emit(st);
+                    return false;
+                }
+                if let Err(error) = open_into(st) {
+                    set_error(st, error.to_string());
+                    emit(st);
+                    return false;
+                }
+            }
+            Err(error) => {
+                set_error(st, error.to_string());
+                emit(st);
+                return false;
+            }
+        }
     }
     // Read after a reopen or rebuild, which resolve the vault root afresh.
-    let Some(root) = g(&st.root).clone() else { return };
+    let Some(root) = g(&st.root).clone() else { return *g(&st.phase) != "error" };
     let maildir = root.join("Maildir");
 
     // Every pass, not only after a configure: one drained while the index was
     // closed, or a toggle that lost a race with a vault switch, lands here.
     let action = {
         let guard = lock(&st.db);
-        let Some(conn) = guard.as_ref() else { return };
-        let stored = match db::meta_get_checked(conn, "bodies_enabled") {
-            Ok(v) => v,
-            Err(e) => {
-                // Read as "unset", a failed read would record over the real flag and
-                // skip stripping bodies the user turned off. The next pass retries.
-                warn!("search index: reading the bodies setting failed: {e}");
-                return;
-            }
-        };
-        let action = bodies_action(stored.as_deref(), config.bodies);
-        if action == BodiesAction::RecordOnly {
-            if let Err(e) = db::meta_set(conn, "bodies_enabled", if config.bodies { "1" } else { "0" }) {
-                // Sweeping without the flag could index bodies a later "off" would never strip.
-                warn!("search index: recording the bodies setting failed: {e}");
-                return;
-            }
+        match guard.as_ref() {
+            None => Err("search index closed".to_string()),
+            Some(conn) => db::meta_get_checked(conn, "bodies_enabled").and_then(|stored| {
+                let action = bodies_action(stored.as_deref(), config.bodies);
+                if action == BodiesAction::RecordOnly {
+                    db::meta_set(conn, "bodies_enabled", if config.bodies { "1" } else { "0" })
+                        .map_err(|e| e.to_string())?;
+                }
+                Ok(action)
+            }),
         }
-        action
+    };
+    let action = match action {
+        Ok(action) => action,
+        Err(error) => {
+            set_error(st, format!("search index configuration read failed: {error}"));
+            emit(st);
+            return false;
+        }
     };
     if action == BodiesAction::Toggle {
         match reconcile::set_bodies_enabled(&st.db, config.bodies) {
             Ok(()) => {}
-            Err(e) if e.contains("closed") => return, // the next pass retries
-            Err(e) => warn!("search index: bodies toggle failed: {e}"),
+            Err(e) if e.contains("closed") => return false,
+            Err(e) => {
+                set_error(st, format!("bodies toggle failed: {e}"));
+                emit(st);
+                return false;
+            }
         }
     }
-    let _ = sweep(st, &maildir, config, only);
+    let outcome = sweep(st, &maildir, config, if reopen || closed || recover || rebuild { None } else { only }, operation_gen);
+    if let Some(error) = outcome.error {
+        set_error(st, error);
+        emit(st);
+        return false;
+    }
+    if !outcome.success {
+        return false;
+    }
     // Attachment text extraction: gated on the same `attachments` toggle the
     // sweep above used to decide whether to write pending rows at all. Runs
     // under the same `conn` sweep just released, never a second connection.
@@ -648,61 +906,83 @@ fn run_pass(st: &SearchIndexState, reopen: bool, rebuild: bool, only: Option<Vec
         // (useSearchIndexConfig.js gates it on hasPremiumAccess); no
         // Rust-side general-premium entitlement exists to re-check here.
         let premium = true;
-        let mut guard = lock(&st.db);
-        if let Some(conn) = guard.as_mut() {
-            reconcile::run_pending_extractions(
-                conn,
+        let switch_gen = st.switch.current();
+        match reconcile::run_pending_extractions(
+                &st.db,
                 premium,
                 config.image_text,
                 config.bodies,
                 &extractor,
                 |account_id, vault_dir, uid, filename, part_index| read_attachment_part(&maildir, account_id, vault_dir, uid, filename, part_index),
-                &|| !st.interrupt.load(SeqCst),
-            );
+                &|| !st.interrupt.load(SeqCst)
+                    && st.operation_generation.load(SeqCst) == operation_gen
+                    && st.switch.current() == switch_gen
+                    && !st.switch.is_switching(),
+            ) {
+            Ok(_) => {}
+            Err(error) => {
+                set_error(st, format!("attachment extraction failed: {error}"));
+                emit(st);
+                return false;
+            }
         }
     }
     // Deferred optimize + VACUUM + WAL truncate after bodies-off, only when nothing is pending.
-    if !st.interrupt.load(SeqCst) {
+    if !st.interrupt.load(SeqCst) && st.operation_generation.load(SeqCst) == operation_gen {
         match reconcile::compact_if_pending(&st.db) {
             Ok(true) => emit(st),
             Ok(false) => {}
-            Err(e) => warn!("search index compaction: {e}"),
+            Err(e) => {
+                set_error(st, format!("search index compaction failed: {e}"));
+                emit(st);
+                return false;
+            }
         }
     }
+    if st.operation_generation.load(SeqCst) != operation_gen || st.interrupt.load(SeqCst) || *g(&st.enabled) != Some(true) {
+        return false;
+    }
+    clear_error(st);
+    *g(&st.phase) = "idle";
+    emit(st);
+    true
 }
 
 /// Delete the index files and open a fresh index. A file that will not go is
 /// never reopened: the index stays unavailable instead.
-fn rebuild_index(st: &SearchIndexState) {
+fn rebuild_index(st: &SearchIndexState, operation_gen: u64) -> Result<(), String> {
     if !st.mail_dir_ok || st.switch.is_switching() {
-        return;
+        return Err("mail vault is unavailable or switching".into());
     }
     let gen = st.switch.current();
     let root = st.vault_root.clone();
-    *lock(&st.db) = None; // drop = checkpoint; then the files can go
+    let mut guard = lock(&st.db);
+    if st.switch.is_switching() || st.switch.current() != gen || st.operation_generation.load(SeqCst) != operation_gen || *g(&st.enabled) != Some(true) {
+        return Err("search index rebuild was superseded".into());
+    }
+    *guard = None; // drop = checkpoint; keep the mutex through unlinking so a vault switch cannot start mid-delete
+    *g(&st.root) = None;
     let dir = root.join(db::DB_DIR);
-    let mut stuck = false;
     // Reverse order, same reasoning as destroy_index.
     for suffix in ["-journal", "-shm", "-wal", ""] {
         // A vault operation may be copying these files, or `root` is no longer the vault.
-        if st.switch.is_switching() || st.switch.current() != gen {
-            return;
+        if st.switch.is_switching() || st.switch.current() != gen || st.operation_generation.load(SeqCst) != operation_gen || *g(&st.enabled) != Some(true) {
+            return Err("search index rebuild was superseded".into());
         }
         let path = dir.join(format!("{}{suffix}", db::DB_FILE));
         if let Err(e) = std::fs::remove_file(&path) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 warn!("search index rebuild: cannot remove {}: {e}", path.display());
-                stuck = true;
+                drop(guard);
+                set_error(st, format!("could not remove {}: {e}", path.display()));
+                return Err(format!("could not remove {}: {e}", path.display()));
             }
         }
     }
-    if stuck {
-        *g(&st.root) = None;
-        *g(&st.phase) = "unavailable";
-        emit(st);
-    } else {
-        open_into(st); // installs through install_if_current
-    }
+    drop(guard);
+    *g(&st.phase) = "recovering";
+    clear_error(st);
+    Ok(())
 }
 
 /// Task 1.10 review I1: a count-only listing of every NOT-YET-SCANNED listed
@@ -729,17 +1009,25 @@ fn rebuild_index(st: &SearchIndexState) {
 /// authoritative listing finds (it can be more, corrected on the real visit).
 /// An unreadable folder is skipped: `reconcile_mailbox` will report or skip it
 /// too, so there is nothing here worth prefilling.
-fn prescan_folder_counts(st: &SearchIndexState, maildir: &Path, dirs: &[(String, String)], keep_going: &dyn Fn() -> bool) {
-    let known: std::collections::HashSet<(String, String)> = match lock(&st.db).as_ref() {
-        Some(conn) => conn
-            .prepare("SELECT account_id, vault_dir FROM mailbox_scan")
-            .and_then(|mut s| s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?.collect())
-            .unwrap_or_default(), // a failed read only costs the prefill; reconcile still visits every folder
-        None => return,
+fn prescan_folder_counts(
+    st: &SearchIndexState,
+    maildir: &Path,
+    dirs: &[(String, String)],
+    keep_going: &dyn Fn() -> bool,
+) -> Result<(), String> {
+    let known: std::collections::HashSet<(String, String)> = {
+        let guard = lock(&st.db);
+        let conn = guard.as_ref().ok_or_else(|| "search index closed".to_string())?;
+        let mut stmt = conn.prepare("SELECT account_id, vault_dir FROM mailbox_scan").map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(|e| e.to_string())?
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        rows
     };
     for (account, dir) in dirs {
         if !keep_going() {
-            return;
+            return Ok(());
         }
         if known.contains(&(account.clone(), dir.clone())) {
             continue; // already has a real, authoritative count from a previous pass
@@ -749,21 +1037,33 @@ fn prescan_folder_counts(st: &SearchIndexState, maildir: &Path, dirs: &[(String,
         let n = entries.flatten().filter(|e| vault_filename_uid(&e.file_name().to_string_lossy()).is_some()).count();
         #[cfg(test)]
         st.prescan_reads.fetch_add(1, SeqCst);
-        if let Some(conn) = lock(&st.db).as_ref() {
-            if let Err(e) = conn.execute(
-                "INSERT OR IGNORE INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, unixepoch(), ?3)",
-                rusqlite::params![account, dir, n as i64],
-            ) {
-                warn!("search index prescan {account}/{dir}: {e}");
-            }
-        }
+        let guard = lock(&st.db);
+        let conn = guard.as_ref().ok_or_else(|| "search index closed".to_string())?;
+        conn.execute(
+            "INSERT OR IGNORE INTO mailbox_scan (account_id, vault_dir, scanned_at, file_count) VALUES (?1, ?2, unixepoch(), ?3)",
+            rusqlite::params![account, dir, n as i64],
+        )
+        .map_err(|e| format!("prescan {account}/{dir}: {e}"))?;
     }
+    Ok(())
 }
 
-pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, only: Option<Vec<(String, String)>>) -> SweepOutcome {
+pub(crate) fn sweep(
+    st: &SearchIndexState,
+    maildir: &Path,
+    config: IndexConfig,
+    only: Option<Vec<(String, String)>>,
+    operation_gen: u64,
+) -> SweepOutcome {
     *g(&st.phase) = "indexing";
     emit(st);
-    let keep_going = || lock(&st.db).is_some() && !st.interrupt.load(SeqCst);
+    // This callback can also be checked at a DB commit boundary. It must not
+    // take the DB mutex itself.
+    let keep_going = || {
+        !st.interrupt.load(SeqCst)
+            && st.operation_generation.load(SeqCst) == operation_gen
+            && !st.switch.is_switching()
+    };
     let full = only.is_none();
     let (dirs, listed) = match only {
         Some(folders) => (folders, true),
@@ -771,7 +1071,7 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
             Ok(dirs) => (dirs, true),
             Err(e) => {
                 warn!("search index: listing the vault failed: {e}");
-                (Vec::new(), false)
+                return SweepOutcome { parsed: 0, completed: false, success: false, error: Some(e) };
             }
         },
     };
@@ -782,21 +1082,32 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
         // reconciling any of them, so `total` (and so `complete`) is right
         // before any folder's own batches start landing, not just after every
         // folder has had its own turn.
-        prescan_folder_counts(st, maildir, &dirs, &keep_going);
+        if let Err(e) = prescan_folder_counts(st, maildir, &dirs, &keep_going) {
+            return SweepOutcome { parsed: 0, completed: false, success: false, error: Some(e) };
+        }
+        if !keep_going() {
+            return SweepOutcome { parsed: 0, completed: false, success: false, error: None };
+        }
         // Task 1.11 review M3: the phase-change emit above this block is
         // still `0 of 0` on a first pass (no rows, no mailbox_scan yet) — emit
         // again now the prescan has filled `total` in, so the pass's first
         // meaningful progress event already carries the real total.
         emit(st);
-        if let Err(e) = reconcile::prune_missing_dirs(&st.db, &dirs) {
-            warn!("search index prune: {e}");
+        match reconcile::prune_missing_dirs_guarded(&st.db, &dirs, &keep_going) {
+            Ok(Some(_)) => {}
+            Ok(None) => return SweepOutcome { parsed: 0, completed: false, success: false, error: None },
+            Err(e) => return SweepOutcome { parsed: 0, completed: false, success: false, error: Some(format!("pruning missing folders failed: {e}")) },
         }
     }
     let mut completed = full && listed;
     let mut parsed = 0usize;
     for (account, dir) in dirs {
+        if !keep_going() {
+            completed = false;
+            return SweepOutcome { parsed, completed, success: false, error: None };
+        }
         let mut on_batch = |done: usize| { emit(st); e2e_pause_after(done); };
-        match reconcile::reconcile_mailbox(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &mut on_batch) {
+        match reconcile::reconcile_mailbox_guarded(&st.db, maildir, &account, &dir, config, &index_doc_from_light, &keep_going, &keep_going, &mut on_batch) {
             // configure/rebuild/close asked us to stop
             Ok(s) => {
                 parsed += s.parsed;
@@ -812,23 +1123,42 @@ pub(crate) fn sweep(st: &SearchIndexState, maildir: &Path, config: IndexConfig, 
             }
             Err(e) if e.contains("closed") => {
                 completed = false;
-                break;
+                return SweepOutcome { parsed, completed, success: false, error: None };
             }
-            Err(e) => warn!("search index {account}/{dir}: {e}"), // one bad folder must not stop the sweep
+            Err(e) => {
+                warn!("search index {account}/{dir}: {e}");
+                return SweepOutcome {
+                    parsed,
+                    completed: false,
+                    success: false,
+                    error: Some(format!("reconciling {account}/{dir} failed: {e}")),
+                };
+            }
         }
     }
-    // Before the idle emit below, so that event already reports the index available.
-    if completed && keep_going() {
-        if let Some(conn) = lock(&st.db).as_ref().filter(|c| !db::first_pass_done(c)) {
-            if let Err(e) = db::meta_set(conn, db::FIRST_PASS_DONE, "1") {
-                warn!("search index: recording the first full pass failed: {e}");
+    if !keep_going() {
+        return SweepOutcome { parsed, completed: false, success: false, error: None };
+    }
+    // First-pass completion is a promise that every folder was visited and all
+    // corresponding SQL succeeded. Never publish it after a partial/error pass.
+    if completed {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else {
+            return SweepOutcome { parsed, completed: false, success: false, error: None };
+        };
+        match db::first_pass_done_checked(conn) {
+            Ok(false) => {
+                if let Err(e) = db::meta_set(conn, db::FIRST_PASS_DONE, "1") {
+                    return SweepOutcome { parsed, completed: false, success: false, error: Some(format!("recording first pass completion failed: {e}")) };
+                }
+            }
+            Ok(true) => {}
+            Err(e) => {
+                return SweepOutcome { parsed, completed: false, success: false, error: Some(format!("checking first pass completion failed: {e}")) };
             }
         }
     }
-    let open = lock(&st.db).is_some();
-    *g(&st.phase) = if open { "idle" } else { "unavailable" };
-    emit(st);
-    SweepOutcome { parsed, completed }
+    SweepOutcome { parsed, completed, success: true, error: None }
 }
 
 /// Test seam for e2e only: how long to pause after `done` files. Pure, so the
@@ -962,6 +1292,8 @@ mod tests {
                 message_id: Some("<seven@example>".into()),
                 row_json: r#"{"uid":7,"messageId":"<seven@example>","subject":"Indexed only"}"#.into(),
                 body_matched: true,
+                date_utc: 1,
+                row_id: 7,
             }],
             total: 1,
             needles: vec!["indexed".into()],
@@ -984,6 +1316,8 @@ mod tests {
                 message_id: Some("<indexed@x.test>".into()),
                 row_json: r#"{"uid":5,"messageId":"<indexed@x.test>","subject":"Indexed budget"}"#.into(),
                 body_matched: false,
+                date_utc: 1,
+                row_id: 5,
             }],
             total: 1,
             needles: vec!["budget".into()],
@@ -1268,7 +1602,7 @@ mod tests {
         let st = state(tmp.path());
         crate::search_index::start(std::sync::Arc::clone(&st));
         std::thread::sleep(std::time::Duration::from_millis(300));
-        assert_eq!(crate::search_index::status_json(&st)["state"], "unavailable", "unconfigured");
+        assert_eq!(crate::search_index::status_json(&st)["state"], "starting", "unconfigured");
         let mut off = cfg();
         off.enabled = false;
         crate::search_index::configure(&st, off);
@@ -1289,13 +1623,174 @@ mod tests {
     }
 
     #[test]
-    fn an_unreachable_vault_reports_unavailable_and_opens_nothing() {
+    fn runtime_query_sql_failure_returns_an_error_then_worker_rebuilds_derived_index() {
+        use mailvault_core::search_index::{db, lock, query::SearchRequest};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        let mail = tmp.path().join("Maildir/acct/INBOX/cur/1:2,S.eml");
+        let mail_before = std::fs::read(&mail).unwrap();
+        let sentinel = tmp.path().join("custody/search-recovery-sentinel.bin");
+        std::fs::create_dir_all(sentinel.parent().unwrap()).unwrap();
+        std::fs::write(&sentinel, b"custody data survives derived-index recovery").unwrap();
+        let custody_before = std::fs::read(&sentinel).unwrap();
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        wait_for(&st, "initial index", |s| s["firstPassDone"] == true && s["state"] == "idle");
+
+        lock(&st.db).as_ref().unwrap().execute_batch("DROP TABLE messages").unwrap();
+        let request = SearchRequest { account_id: "acct".into(), query: "body 1".into(), ..Default::default() };
+        assert!(crate::search_index::search_reply(&st, &request).is_err(), "the RPC that detects a live-connection failure returns its SQL error");
+
+        let recovered = wait_for(&st, "automatic structural recovery", |s| s["firstPassDone"] == true && s["state"] == "idle" && s["errorKey"].is_null());
+        assert_eq!(recovered["available"], true);
+        let reply = crate::search_index::search_reply(&st, &request).unwrap();
+        assert_eq!(reply["available"], true);
+        assert_eq!(reply["rows"][0]["subject"], "Seed 1");
+        assert_eq!(std::fs::read(mail).unwrap(), mail_before, "recovery reads, never rewrites, mail");
+        assert_eq!(std::fs::read(sentinel).unwrap(), custody_before, "recovery never opens or changes custody");
+        let guard = lock(&st.db);
+        assert_eq!(db::meta_get(guard.as_ref().unwrap(), db::FIRST_PASS_DONE).as_deref(), Some("1"));
+    }
+
+    #[test]
+    fn enabled_startup_automatically_rebuilds_a_newer_search_schema() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        {
+            let conn = db::open(tmp.path()).unwrap();
+            db::meta_set(&conn, "schema_version", "99").unwrap();
+        }
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        let status = wait_for(&st, "newer schema recovery", |s| s["state"] == "idle" && s["firstPassDone"] == true && s["errorKey"].is_null());
+        assert_eq!(status["available"], true);
+        assert_eq!(status["indexed"], 1);
+        let guard = lock(&st.db);
+        assert_eq!(db::meta_get(guard.as_ref().unwrap(), "schema_version").as_deref(), Some("2"));
+    }
+
+    #[test]
+    fn a_scoped_nudge_after_startup_lock_retries_with_a_full_first_pass() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        seed(tmp.path(), "acct", "Archive", 1);
+        let holder = db::open(tmp.path()).unwrap();
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        wait_for(&st, "transient startup-lock error", |s| s["state"] == "error");
+        drop(holder);
+
+        crate::search_index::nudge(&st, "acct", "INBOX");
+        let recovered = wait_for(&st, "full first pass after scoped nudge", |s| s["state"] == "idle" && s["firstPassDone"] == true);
+        assert_eq!(recovered["indexed"], 2, "reopening after the failed startup must reconcile every folder");
+        assert_eq!(lock(&st.db).as_ref().unwrap().query_row("SELECT count(*) FROM messages", [], |r| r.get::<_, i64>(0)).unwrap(), 2);
+    }
+
+    #[test]
+    fn non_text_first_pass_metadata_rebuilds_automatically_without_touching_mail_or_custody() {
+        use mailvault_core::search_index::{db, query::SearchRequest};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        let mail = tmp.path().join("Maildir/acct/INBOX/cur/1:2,S.eml");
+        let mail_before = std::fs::read(&mail).unwrap();
+        let sentinel = tmp.path().join("custody/search-recovery-sentinel.bin");
+        std::fs::create_dir_all(sentinel.parent().unwrap()).unwrap();
+        std::fs::write(&sentinel, b"custody survives malformed derived metadata").unwrap();
+        let custody_before = std::fs::read(&sentinel).unwrap();
+        let conn = db::open(tmp.path()).unwrap();
+        conn.execute("INSERT OR REPLACE INTO meta(key, value) VALUES ('first_pass_done', X'00')", []).unwrap();
+        drop(conn);
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        let status = wait_for(&st, "automatic malformed-metadata rebuild", |s| s["state"] == "idle" && s["firstPassDone"] == true && s["errorKey"].is_null());
+        assert_eq!(status["available"], true);
+        assert_eq!(status["indexed"], 1);
+
+        let reply = crate::search_index::search_reply(
+            &st,
+            &SearchRequest { account_id: "acct".into(), query: "body 1".into(), ..Default::default() },
+        ).unwrap();
+        assert_eq!(reply["available"], true);
+        assert_eq!(reply["rows"][0]["subject"], "Seed 1");
+        assert_eq!(std::fs::read(mail).unwrap(), mail_before, "recovery reads, never rewrites, source mail");
+        assert_eq!(std::fs::read(sentinel).unwrap(), custody_before, "recovery never opens or changes custody data");
+    }
+
+    #[test]
+    fn first_pass_meta_write_failure_stays_in_error_and_retries_after_the_obstacle_is_removed() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path(), "acct", "INBOX", 1);
+        {
+            let conn = db::open(tmp.path()).unwrap();
+            conn.execute_batch(
+                "CREATE TRIGGER reject_first_pass BEFORE INSERT ON meta
+                 WHEN NEW.key = 'first_pass_done'
+                 BEGIN SELECT RAISE(FAIL, 'injected first-pass write failure'); END;",
+            )
+            .unwrap();
+        }
+
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        let failed = wait_for(&st, "first-pass meta write error", |status| status["state"] == "error");
+        assert_eq!(failed["available"], true, "the SQL connection remains usable while recording first-pass completion fails");
+        assert_eq!(failed["firstPassDone"], false);
+        assert_eq!(failed["errorKey"], "searchIndex.recoveryFailed");
+
+        lock(&st.db)
+            .as_ref()
+            .unwrap()
+            .execute_batch("DROP TRIGGER reject_first_pass")
+            .unwrap();
+
+        let recovered = wait_for(&st, "automatic first-pass retry", |status| status["state"] == "idle" && status["firstPassDone"] == true);
+        assert_eq!(recovered["available"], true);
+        assert_eq!(recovered["errorKey"], serde_json::Value::Null);
+        assert_eq!(recovered["indexed"], 1);
+    }
+
+    #[test]
+    fn transient_lock_nudges_respect_retry_deadline_then_recover_automatically() {
+        use mailvault_core::search_index::{db, lock};
+        let tmp = tempfile::tempdir().unwrap();
+        let holder = db::open(tmp.path()).unwrap();
+        db::meta_set(&holder, "transient_sentinel", "keep").unwrap();
+        let st = state(tmp.path());
+        crate::search_index::start(std::sync::Arc::clone(&st));
+        crate::search_index::configure(&st, cfg());
+        let failed = wait_for(&st, "lock error state", |s| s["state"] == "error");
+        assert_eq!(failed["errorKey"], "searchIndex.recoveryFailed");
+        let attempts = st.worker_passes.load(std::sync::atomic::Ordering::SeqCst);
+        for _ in 0..3 {
+            crate::search_index::nudge(&st, "acct", "INBOX");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            assert_eq!(st.worker_passes.load(std::sync::atomic::Ordering::SeqCst), attempts, "automatic folder nudges must not bypass the bounded recovery delay");
+        }
+        drop(holder);
+        let recovered = wait_for(&st, "retry after removing lock", |s| s["state"] == "idle" && s["firstPassDone"] == true);
+        assert_eq!(recovered["available"], true);
+        let guard = lock(&st.db);
+        assert_eq!(db::meta_get(guard.as_ref().unwrap(), "transient_sentinel").as_deref(), Some("keep"));
+    }
+
+    #[test]
+    fn an_unreachable_vault_reports_a_retryable_error_and_opens_nothing() {
         let tmp = tempfile::tempdir().unwrap();
         let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
         crate::search_index::start(std::sync::Arc::clone(&st));
         crate::search_index::configure(&st, cfg());
         std::thread::sleep(std::time::Duration::from_millis(500));
-        assert_eq!(crate::search_index::status_json(&st)["state"], "unavailable");
+        let status = crate::search_index::status_json(&st);
+        assert_eq!(status["state"], "error");
+        assert_eq!(status["errorKey"], "searchIndex.recoveryFailed");
         assert!(!index_file(tmp.path()).exists());
     }
 
@@ -1312,11 +1807,142 @@ mod tests {
         *st.enabled.lock().unwrap() = Some(true);
         *st.config.lock().unwrap() = Some(IndexConfig { bodies: true, attachments: false, image_text: false });
 
-        super::run_pass(&st, false, false, Some(Vec::new()));
+        assert!(super::run_pass(&st, false, false, false, Some(Vec::new())));
 
         assert_eq!(crate::search_index::status_json(&st)["available"], true);
         let guard = lock(&st.db);
         assert_eq!(db::meta_get(guard.as_ref().unwrap(), "recovery_sentinel").as_deref(), Some("keep"), "automatic recovery must reopen, not delete, the existing index");
+    }
+
+    #[test]
+    fn disabling_after_open_before_install_discards_the_connection() {
+        use mailvault_core::search_index::lock;
+        use std::sync::{Arc, Barrier};
+        let tmp = tempfile::tempdir().unwrap();
+        let st = state(tmp.path());
+        *st.enabled.lock().unwrap() = Some(true);
+        *st.config.lock().unwrap() = Some(mailvault_core::search_index::reconcile::IndexConfig { bodies: true, attachments: false, image_text: false });
+        let opened = Arc::new(Barrier::new(2));
+        let release = Arc::new(Barrier::new(2));
+        let opened_hook = Arc::clone(&opened);
+        let release_hook = Arc::clone(&release);
+        *st.open_before_install_hook.lock().unwrap() = Some(Arc::new(move || {
+            opened_hook.wait();
+            release_hook.wait();
+        }));
+
+        let opening = Arc::clone(&st);
+        let join = std::thread::spawn(move || crate::search_index::open_into(&opening));
+        opened.wait();
+        crate::search_index::configure(&st, crate::search_index::ConfigArgs { enabled: false, bodies: true, attachments: false, image_text: false });
+        release.wait();
+
+        assert!(join.join().unwrap().is_ok());
+        assert!(lock(&st.db).is_none(), "a connection opened by the superseded generation must not install");
+        assert!(st.root.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn extraction_result_from_an_old_generation_does_not_commit_to_a_reopened_index() {
+        use mailvault_core::search_index::{attachments::{AttachmentInput, ExtractError, TextExtractor}, db, lock, query::SearchRequest, reconcile::{self, IndexDoc}};
+        use std::sync::{mpsc, Arc, Mutex};
+
+        struct BlockingPdf { entered: mpsc::Sender<()>, release: Mutex<mpsc::Receiver<()>> }
+        impl TextExtractor for BlockingPdf {
+            fn pdf_text_layer(&self, _bytes: &[u8]) -> Result<(String, usize), ExtractError> {
+                self.entered.send(()).unwrap();
+                self.release.lock().unwrap().recv().unwrap();
+                Ok(("stale extracted text should never reach the replacement index".into(), 1))
+            }
+            fn pdf_ocr(&self, _bytes: &[u8], _max_pages: usize) -> Result<String, ExtractError> { unreachable!() }
+            fn image_ocr(&self, _bytes: &[u8], _mime: &str) -> Result<String, ExtractError> { unreachable!() }
+        }
+        fn with_pending_part(conn: &rusqlite::Connection) {
+            conn.execute("INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, has_attachments, body_state, row_json) VALUES ('acct', 'INBOX', 1, '1:2,.eml', 1, 1, 1, 1, 1, '{}')", []).unwrap();
+            conn.execute("INSERT INTO attachments(message_row, part_index, filename, mime, size, state) VALUES (1, 0, 'report.pdf', 'application/pdf', 100, 'pending')", []).unwrap();
+            conn.execute("INSERT INTO messages(account_id, vault_dir, uid, filename, size, mtime_ns, date_utc, subject_lc, body_state, row_json) VALUES ('acct', 'INBOX', 2, '2:2,.eml', 1, 1, 2, 'responsive indexed row', 1, '{\"subject\":\"Responsive indexed row\",\"from\":{\"name\":\"\",\"address\":\"sender@example.test\"},\"to\":[],\"cc\":[],\"bcc\":[]}')", []).unwrap();
+            let indexed_row = conn.last_insert_rowid();
+            conn.execute("INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, 'Responsive indexed row', '', '', '')", [indexed_row]).unwrap();
+            db::meta_set(conn, db::FIRST_PASS_DONE, "1").unwrap();
+        }
+
+        let old_root = tempfile::tempdir().unwrap();
+        let new_root = tempfile::tempdir().unwrap();
+        let st = state(old_root.path());
+        let old = db::open(old_root.path()).unwrap();
+        with_pending_part(&old);
+        *lock(&st.db) = Some(old);
+        *st.enabled.lock().unwrap() = Some(true);
+        let generation = st.operation_generation.load(std::sync::atomic::Ordering::SeqCst);
+
+        let new = db::open(new_root.path()).unwrap();
+        with_pending_part(&new);
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+        let extractor = Arc::new(BlockingPdf { entered: entered_tx, release: Mutex::new(release_rx) });
+        let worker_state = Arc::clone(&st);
+        let worker_extractor = Arc::clone(&extractor);
+        let join = std::thread::spawn(move || reconcile::run_pending_extractions(
+            &worker_state.db,
+            true,
+            false,
+            true,
+            worker_extractor.as_ref(),
+            |_account, _dir, _uid, _filename, _part_index| Some((
+                AttachmentInput { filename: "report.pdf".into(), mime: "application/pdf".into(), size: 100, bytes: vec![1] },
+                IndexDoc::default(),
+            )),
+            &|| worker_state.operation_generation.load(std::sync::atomic::Ordering::SeqCst) == generation
+                && *worker_state.enabled.lock().unwrap() == Some(true),
+        ));
+
+        entered_rx.recv_timeout(std::time::Duration::from_secs(5)).expect("extractor did not reach the deterministic pause");
+
+        // While extraction is paused outside the DB mutex, exercise the same
+        // status, SQL search, disable, and rebuild entry points used by callers.
+        // Bound the wait so a regressed lock scope fails cleanly after releasing
+        // the extractor instead of hanging the test thread indefinitely.
+        let (api_tx, api_rx) = mpsc::channel();
+        let api_state = Arc::clone(&st);
+        let api_join = std::thread::spawn(move || {
+            let status = crate::search_index::status_json(&api_state);
+            let reply = crate::search_index::search_reply(
+                &api_state,
+                &SearchRequest { account_id: "acct".into(), query: "responsive".into(), ..Default::default() },
+            ).unwrap();
+            crate::search_index::configure(&api_state, crate::search_index::ConfigArgs { enabled: false, bodies: true, attachments: true, image_text: true });
+            crate::search_index::rebuild(&api_state);
+            api_tx.send((status, reply)).unwrap();
+        });
+        let (status, reply) = match api_rx.recv_timeout(std::time::Duration::from_secs(5)) {
+            Ok(result) => result,
+            Err(error) => {
+                let _ = release_tx.send(());
+                let extraction_result = join.join().unwrap();
+                let _ = api_join.join();
+                panic!("status/search/configure/rebuild did not respond while extraction was paused: {error}; extraction result {extraction_result:?}");
+            }
+        };
+        api_join.join().unwrap();
+        assert_eq!(status["available"], true);
+        assert_eq!(reply["available"], true);
+        assert_eq!(reply["rows"][0]["subject"], "Responsive indexed row");
+        assert!(st.operation_generation.load(std::sync::atomic::Ordering::SeqCst) > generation);
+
+        *lock(&st.db) = Some(new);
+        release_tx.send(()).unwrap();
+        assert_eq!(join.join().unwrap().unwrap(), 0);
+        let guard = lock(&st.db);
+        let conn = guard.as_ref().unwrap();
+        let attachment_state: String = conn.query_row("SELECT state FROM attachments", [], |r| r.get(0)).unwrap();
+        assert_eq!(attachment_state, "pending", "a slow result from the old generation must not update the replacement connection");
+        let fts_rows: i64 = conn.query_row("SELECT count(*) FROM msg_fts", [], |r| r.get(0)).unwrap();
+        assert_eq!(fts_rows, 1, "the replacement index retains its preexisting indexed row");
+        let stale_hits = mailvault_core::search_index::query::search(
+            conn,
+            &SearchRequest { account_id: "acct".into(), query: "stale extracted text".into(), ..Default::default() },
+        ).unwrap();
+        assert!(stale_hits.hits.is_empty(), "the completed extractor result must never be searchable in the replacement index");
     }
 
     #[test]
@@ -1339,9 +1965,13 @@ mod tests {
             assert_eq!(version, "99", "automatic open must preserve a newer-schema index");
         }
 
-        super::rebuild_index(&st);
+        crate::search_index::rebuild(&st);
+        st.interrupt.store(false, std::sync::atomic::Ordering::SeqCst); // the worker clears this before processing the queued Rebuild signal
+        assert!(super::run_pass(&st, false, false, false, None));
 
-        assert_eq!(crate::search_index::status_json(&st)["available"], true);
+        let status = crate::search_index::status_json(&st);
+        assert_eq!(status["available"], true);
+        assert_eq!(status["state"], "idle");
         let guard = lock(&st.db);
         assert_eq!(db::meta_get(guard.as_ref().unwrap(), "schema_version"), Some(db::SCHEMA_VERSION.to_string()));
     }
@@ -1419,7 +2049,7 @@ mod tests {
         ];
         let calls = std::sync::atomic::AtomicUsize::new(0);
         let keep_going = || calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst) < 1; // true once, then false
-        super::prescan_folder_counts(&st, &tmp.path().join("Maildir"), &dirs, &keep_going);
+        super::prescan_folder_counts(&st, &tmp.path().join("Maildir"), &dirs, &keep_going).unwrap();
 
         assert_eq!(
             st.prescan_reads.load(std::sync::atomic::Ordering::SeqCst),
@@ -1505,7 +2135,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_file_that_will_not_delete_fails_destroy_and_leaves_the_index_unavailable() {
+    fn a_file_that_will_not_delete_fails_destroy_and_reports_the_cause_while_remaining_off() {
         use std::os::unix::fs::PermissionsExt;
         let tmp = tempfile::tempdir().unwrap();
         seed(tmp.path(), "acct", "INBOX", 2);
@@ -1520,7 +2150,14 @@ mod tests {
         let reply = crate::search_index::destroy(&st, std::time::Duration::from_secs(20));
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o755)).unwrap();
         assert_eq!(reply, serde_json::json!({"ok": false, "error": "searchIndex.destroyFailed"}));
-        assert_eq!(*st.phase.lock().unwrap(), "unavailable");
+        assert_eq!(*st.phase.lock().unwrap(), "error");
+        let detail = st.error_detail.lock().unwrap().clone().unwrap();
+        assert!(detail.contains("could not remove") && detail.contains("search_index"), "the status must retain the filesystem failure cause: {detail}");
+        assert_eq!(*st.enabled.lock().unwrap(), Some(false), "a failed explicit destroy still leaves indexing off");
+        let status = crate::search_index::status_json(&st);
+        assert_eq!(status["state"], "off", "disabled status remains off even while retaining the destroy error internally");
+        assert_eq!(status["errorKey"], serde_json::Value::Null);
+        assert!(index_file(tmp.path()).exists(), "failed removal leaves the index file in place");
     }
 
     /// Spec §5.7.1. A daemon killed after its first 500-file commit: the next daemon
@@ -1550,7 +2187,7 @@ mod tests {
         *st.enabled.lock().unwrap() = Some(true);
         *st.config.lock().unwrap() = Some(config);
         crate::search_index::open_into(&st);
-        let out = crate::search_index::sweep(&st, &maildir, config, None);
+        let out = crate::search_index::sweep(&st, &maildir, config, None, st.operation_generation.load(std::sync::atomic::Ordering::SeqCst));
         assert!(out.completed);
         assert_eq!(out.parsed, 700, "only the files the first daemon never committed");
         let guard = lock(&st.db);
@@ -1609,6 +2246,31 @@ mod tests {
         spawn_worker(&st, rx);
         assert_eq!(d.join().unwrap()["ok"], true);
         wait_for(&st, "built again after the queued destroy", |s| s["available"] == true && s["firstPassDone"] == true);
+    }
+
+    #[test]
+    fn redundant_off_configure_does_not_cancel_a_queued_destroy() {
+        use mailvault_core::search_index::db;
+        let tmp = tempfile::tempdir().unwrap();
+        drop(db::open(tmp.path()).unwrap());
+        let st = state(tmp.path());
+        *st.enabled.lock().unwrap() = Some(true);
+        let rx = manual_channel(&st);
+        let destroy = spawn_destroy(&st);
+        wait_reply_slot(&st);
+        let destroy_generation = st.destroy_generation.load(std::sync::atomic::Ordering::SeqCst);
+
+        crate::search_index::configure(&st, crate::search_index::ConfigArgs { enabled: false, bodies: false, attachments: false, image_text: false });
+        assert_eq!(
+            st.operation_generation.load(std::sync::atomic::Ordering::SeqCst),
+            destroy_generation,
+            "a repeated off configuration must not supersede the already queued destroy",
+        );
+        spawn_worker(&st, rx);
+
+        assert_eq!(destroy.join().unwrap(), serde_json::json!({"ok": true}));
+        assert!(!index_file(tmp.path()).exists(), "the queued destroy must remove the index files");
+        assert_eq!(*st.enabled.lock().unwrap(), Some(false));
     }
 
     #[test]

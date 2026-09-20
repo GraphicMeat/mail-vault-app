@@ -23,6 +23,7 @@ import {
   seedCorruptCustody,
   seedAttachmentSearchMessage,
   seedIndexBacklog,
+  seedDamagedSearchIndex,
   MOCK_PASSWORD,
 } from './tests/e2e/mockImap.js';
 import { startMockGraph } from './tests/e2e/mockGraph.js';
@@ -505,6 +506,9 @@ export const config = {
       // runs during app setup.
       if ((specs || []).some((s) => s.includes('connected-attachment-search'))) {
         seedAttachmentSearchMessage(testDataDir, accounts[0].id);
+      }
+      if ((specs || []).some((s) => s.includes('connected-search-index.test'))) {
+        seedDamagedSearchIndex(testDataDir, accounts[0].id);
       }
       // A real index backlog before boot (search index modal, destroy, resume).
       const backlog = { 'connected-search-index-modal': 2000, 'connected-search-index-destroy': 1500, 'connected-search-index-resume': 3000 };

@@ -92,6 +92,9 @@ export const useSearchStore = create((set, get) => ({
     hasAttachments: false,
   },
   searchResults: [],
+  indexedSearchRows: {},
+  searchRowsOutsideIndex: [],
+  excludedSearchCopies: new Set(),
   isSearching: false,
   activeSearchId: null,
   searchGeneration: 0,
@@ -120,14 +123,37 @@ export const useSearchStore = create((set, get) => ({
         || !Number.isFinite(frame.sequence)
         || frame.sequence <= state.lastSequence) return state;
 
+      const rows = Array.isArray(frame.rows) ? frame.rows : [];
+      const replaceAccountId = frame.replaceIndexAccountId;
+      if (replaceAccountId != null && (typeof replaceAccountId !== 'string'
+        || !replaceAccountId
+        || frame.lane !== 'local'
+        || frame.localMode !== 'index'
+        || !Array.isArray(frame.rows)
+        || rows.some(row => row?._accountId !== replaceAccountId))) return state;
+
       accepted = true;
       const terminal = !!frame.terminal;
       if (terminal && state.isSearching && state.searchQuery.trim()) historyQuery = state.searchQuery.trim();
+      const indexedSearchRows = replaceAccountId == null
+        ? state.indexedSearchRows
+        : {
+          ...state.indexedSearchRows,
+          [replaceAccountId]: rows.filter(row => !state.excludedSearchCopies.has(emailKey(row))),
+        };
+      const searchRowsOutsideIndex = replaceAccountId == null
+        ? [
+          ...state.searchRowsOutsideIndex,
+          ...rows.filter(row => !state.excludedSearchCopies.has(emailKey(row))),
+        ]
+        : state.searchRowsOutsideIndex;
       return {
         searchResults: finalize([
-          ...state.searchResults,
-          ...(Array.isArray(frame.rows) ? frame.rows : []),
+          ...Object.values(indexedSearchRows).flat(),
+          ...searchRowsOutsideIndex,
         ], state.searchSnapshot || {}),
+        indexedSearchRows,
+        searchRowsOutsideIndex,
         lastSequence: frame.sequence,
         searchProgress: terminal ? null : { done: frame.completed ?? 0, total: frame.total ?? 0 },
         searchIndexCoverage: frame.coverage ?? state.searchIndexCoverage,
@@ -143,6 +169,43 @@ export const useSearchStore = create((set, get) => ({
       activeUnlisten = null;
       try { unlisten?.(); } catch { /* The terminal event already ended this run. */ }
     }
+  },
+
+  removeSearchResults: keys => {
+    const copyKeys = new Set(keys);
+    if (!copyKeys.size) return;
+    set(state => {
+      const sourceRows = [
+        ...Object.values(state.indexedSearchRows).flat(),
+        ...state.searchRowsOutsideIndex,
+      ];
+      const removedCopies = new Set([...sourceRows, ...state.searchResults]
+        .filter(row => copyKeys.has(emailKey(row)))
+        .map(emailKey));
+      if (!removedCopies.size) return state;
+
+      const excludedSearchCopies = new Set([
+        ...state.excludedSearchCopies,
+        ...removedCopies,
+      ]);
+      const keep = row => !excludedSearchCopies.has(emailKey(row));
+      const indexedSearchRows = Object.fromEntries(Object.entries(state.indexedSearchRows)
+        .map(([accountId, rows]) => [accountId, rows.filter(keep)]));
+      const indexedRows = Object.values(indexedSearchRows).flat();
+      const searchRowsOutsideIndex = state.searchRowsOutsideIndex.filter(keep);
+      const representedCopies = new Set([...indexedRows, ...searchRowsOutsideIndex].map(emailKey));
+      searchRowsOutsideIndex.push(...state.searchResults.filter(row => keep(row)
+        && !representedCopies.has(emailKey(row))));
+      return {
+        indexedSearchRows,
+        searchRowsOutsideIndex,
+        excludedSearchCopies,
+        searchResults: finalize([
+          ...indexedRows,
+          ...searchRowsOutsideIndex,
+        ], state.searchSnapshot || {}),
+      };
+    });
   },
 
   restartSearch: () => get().performSearch(),
@@ -171,6 +234,9 @@ export const useSearchStore = create((set, get) => ({
       lastSequence: 0,
       searchSnapshot,
       searchResults: [],
+      indexedSearchRows: {},
+      searchRowsOutsideIndex: [],
+      excludedSearchCopies: new Set(),
       isSearching: hasCriteria,
       searchActive: hasCriteria,
       searchProgress: null,
@@ -249,6 +315,9 @@ export const useSearchStore = create((set, get) => ({
         hasAttachments: false,
       },
       searchResults: [],
+      indexedSearchRows: {},
+      searchRowsOutsideIndex: [],
+      excludedSearchCopies: new Set(),
       isSearching: false,
       searchProgress: null,
       searchIndexCoverage: null,

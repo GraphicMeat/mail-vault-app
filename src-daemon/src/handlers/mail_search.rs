@@ -2,7 +2,10 @@ use crate::handlers::common::vault_root;
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
 use futures::{stream, Stream, StreamExt};
-use mailvault_core::search_index::{self as core_search, query::SearchRequest};
+use mailvault_core::search_index::{
+    self as core_search,
+    query::{SearchHit, SearchPage, SearchRequest},
+};
 use mailvault_core::vault_eml::LightEmail;
 use mailvault_core::vault_files;
 use serde::{Deserialize, Serialize};
@@ -68,6 +71,7 @@ pub(crate) struct MailSearchProgress {
     pub local_mode: Option<LocalMode>,
     pub fallback_reason: Option<FallbackReason>,
     pub coverage: Option<SearchCoverage>,
+    pub replace_index_account_id: Option<String>,
     pub failures: Vec<SearchFailure>,
     pub terminal: Option<SearchTerminal>,
     pub error_key: Option<String>,
@@ -101,6 +105,8 @@ pub(crate) enum FallbackReason {
     Off,
     Building,
     Unavailable,
+    Recovering,
+    Error,
 }
 
 impl FallbackReason {
@@ -108,8 +114,18 @@ impl FallbackReason {
         match value {
             Some("off") => Self::Off,
             Some("building") => Self::Building,
+            Some("recovering") => Self::Recovering,
+            Some("error") => Self::Error,
             _ => Self::Unavailable,
         }
+    }
+}
+
+fn index_fallback_reason(state: &DaemonState, reason: Option<&str>) -> FallbackReason {
+    match *crate::search_index::g(&state.search_index.phase) {
+        "recovering" => FallbackReason::Recovering,
+        "error" => FallbackReason::Error,
+        _ => FallbackReason::from_wire(reason),
     }
 }
 
@@ -288,6 +304,7 @@ fn progress(search_id: &str) -> MailSearchProgress {
         local_mode: None,
         fallback_reason: None,
         coverage: None,
+        replace_index_account_id: None,
         failures: Vec::new(),
         terminal: None,
         error_key: None,
@@ -370,9 +387,9 @@ struct SearchReport {
 }
 
 struct InitialSnapshot {
-    reply: Result<Value, String>,
-    on_disk_dirs: Result<Option<Vec<String>>, String>,
-    indexed_dirs: HashSet<String>,
+    selected_dirs: Vec<String>,
+    on_disk_error: Option<String>,
+    indexed_dirs_error: Option<String>,
     custody: Arc<HashMap<(String, u32), Value>>,
 }
 
@@ -415,21 +432,22 @@ async fn run_local_lane(
     };
     let mut has_coverage = false;
     let mut jobs = Vec::new();
+    let mut indexed_shown = 0usize;
+    let mut fallback_shown = 0usize;
 
     for target in &request.targets {
         if run.is_cancelled() {
             break;
         }
         let prior_failure_count = report.failures.len();
-        let explicitly_empty = target.local_mailboxes.as_ref().is_some_and(Vec::is_empty);
-        if explicitly_empty {
+        if target.local_mailboxes.as_ref().is_some_and(Vec::is_empty) {
             continue;
         }
         let target = target.clone();
-        let query = request_to_index(&request, &target);
         let snapshot_state = Arc::clone(&state);
         let snapshot_run = Arc::clone(&run);
         let snapshot_account_id = target.account_id.clone();
+        let explicit_mailboxes = target.local_mailboxes.clone();
         let needs_disk_dirs = target.local_mailboxes.is_none();
         let snapshot = tokio::task::spawn_blocking(move || -> Result<InitialSnapshot, String> {
             if snapshot_run.is_cancelled() {
@@ -443,41 +461,48 @@ async fn run_local_lane(
                 return Err("cancelled".into());
             }
             let root = vault_root(&snapshot_state)?;
-            let reply = crate::search_index::search_reply(&snapshot_state.search_index, &query);
             let custody = crate::custody::with_conn(&snapshot_state, |conn| {
                 mailvault_core::custody::entries::entries_for_account(conn, &snapshot_account_id)
             })
             .map(custody_by_vault_uid)
             .unwrap_or_default();
-            let on_disk_dirs = if needs_disk_dirs {
-                mailvault_core::search_index::reconcile::list_vault_dirs(&root.join("Maildir")).map(
-                    |dirs| {
-                        Some(
-                            dirs.into_iter()
-                                .filter_map(|(account, dir)| {
-                                    (account == snapshot_account_id).then_some(dir)
-                                })
-                                .collect(),
-                        )
-                    },
+            let (mut selected_dirs, on_disk_error) = if needs_disk_dirs {
+                mailvault_core::search_index::reconcile::list_vault_dirs(&root.join("Maildir"))
+                    .map(|dirs| {
+                        let dirs = dirs
+                            .into_iter()
+                            .filter_map(|(account, dir)| {
+                                (account == snapshot_account_id).then_some(dir)
+                            })
+                            .collect::<Vec<_>>();
+                        (dirs, None)
+                    })
+                    .unwrap_or_else(|error| (Vec::new(), Some(error)))
+            } else {
+                (
+                    unique_vault_dirs(explicit_mailboxes.as_deref().unwrap_or_default())
+                        .into_iter()
+                        .collect(),
+                    None,
                 )
-            } else {
-                Ok(None)
             };
-            let indexed_dirs = if reply
-                .as_ref()
-                .ok()
-                .is_some_and(|value| value["available"] == true)
+            let (indexed_dirs, indexed_dirs_error) = if needs_disk_dirs
+                && *crate::search_index::g(&snapshot_state.search_index.enabled) != Some(false)
             {
-                list_indexed_dirs(&snapshot_state.search_index, &snapshot_account_id)
-                    .unwrap_or_default()
+                match list_indexed_dirs(&snapshot_state.search_index, &snapshot_account_id) {
+                    Ok(dirs) => (dirs, None),
+                    Err(error) => (HashSet::new(), Some(error)),
+                }
             } else {
-                HashSet::new()
+                (HashSet::new(), None)
             };
+            selected_dirs.extend(indexed_dirs);
+            selected_dirs.sort_unstable();
+            selected_dirs.dedup();
             Ok(InitialSnapshot {
-                reply,
-                on_disk_dirs,
-                indexed_dirs,
+                selected_dirs,
+                on_disk_error,
+                indexed_dirs_error,
                 custody: Arc::new(custody),
             })
         })
@@ -497,13 +522,15 @@ async fn run_local_lane(
                     .map(|mailboxes| unique_vault_dirs(mailboxes).len())
                     .unwrap_or(1);
                 report.total_sources += count;
+                report.total += count;
+                report.completed += count;
                 report
                     .failures
                     .push(failure(&target.account_id, "", "vault"));
                 let mut frame = progress(&request.search_id);
                 frame.lane = Some(SearchLane::Local);
                 frame.local_mode = Some(LocalMode::Scan);
-                frame.fallback_reason = Some(FallbackReason::Unavailable);
+                frame.fallback_reason = Some(index_fallback_reason(&state, None));
                 frame.total = report.total;
                 frame.completed = report.completed;
                 frame.failures = vec![report.failures.last().unwrap().clone()];
@@ -517,84 +544,215 @@ async fn run_local_lane(
             }
         };
 
-        let reply = snapshot.reply.unwrap_or_else(
-            |error| json!({"available":false,"reason":"unavailable","error":error}),
-        );
-        let available = reply["available"] == true;
-        let indexed_rows = reply["rows"].as_array().cloned().unwrap_or_default();
-        let mut rows = indexed_rows;
-        for row in &mut rows {
-            let vault_dir = row
-                .get("vaultDir")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_owned();
-            stamp_local_row(
-                row,
-                &target.account_id,
-                &vault_dir,
-                &target.known_mailboxes,
-                false,
-                &snapshot.custody,
+        if let Some(error) = snapshot.on_disk_error.as_ref() {
+            report.total_sources += 1;
+            report.total += 1;
+            report.completed += 1;
+            report
+                .failures
+                .push(failure(&target.account_id, "", "vault"));
+            aggregate.complete = false;
+            tracing::debug!(
+                "could not enumerate local folders for {}: {error}",
+                target.account_id
+            );
+        }
+        if let Some(error) = snapshot.indexed_dirs_error.as_ref() {
+            crate::search_index::request_search_recovery(&state.search_index);
+            report.total_sources += 1;
+            report.total += 1;
+            report.completed += 1;
+            report
+                .failures
+                .push(failure(&target.account_id, "", "index"));
+            aggregate.complete = false;
+            tracing::debug!(
+                "could not enumerate indexed folders for {}: {error}",
+                target.account_id
             );
         }
 
-        let index_coverage = reply["coverage"].clone();
-        let uncovered: HashSet<String> = reply["uncoveredVaultDirs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_owned)
-            .collect();
-        let selected_dirs = match (&target.local_mailboxes, snapshot.on_disk_dirs) {
-            (Some(mailboxes), _) => unique_vault_dirs(mailboxes),
-            (None, Ok(Some(dirs))) => dirs.into_iter().collect::<HashSet<_>>(),
-            (None, Err(error)) => {
-                report.total_sources += 1;
-                report
-                    .failures
-                    .push(failure(&target.account_id, "", "vault"));
-                tracing::debug!(
-                    "could not enumerate local folders for {}: {error}",
-                    target.account_id
-                );
-                HashSet::new()
+        let batches = snapshot
+            .selected_dirs
+            .chunks(request.effective_concurrency())
+            .map(|chunk| chunk.to_vec())
+            .collect::<Vec<_>>();
+        report.total_sources += batches.len();
+        report.total += batches.len();
+        let indexed_shown_before_account = indexed_shown;
+        let mut merged_hits: Vec<SearchHit> = Vec::new();
+        let mut matched = 0u64;
+        let mut fallback_dirs = snapshot
+            .indexed_dirs_error
+            .as_ref()
+            .map_or_else(HashSet::new, |_| {
+                snapshot.selected_dirs.iter().cloned().collect()
+            });
+        report.total += fallback_dirs.len();
+        report.total_sources += fallback_dirs.len();
+        let mut fallback_reason = snapshot
+            .indexed_dirs_error
+            .as_ref()
+            .map(|_| index_fallback_reason(&state, None))
+            .or_else(|| {
+                snapshot
+                    .on_disk_error
+                    .as_ref()
+                    .map(|_| FallbackReason::Unavailable)
+            });
+        let mut account_has_index = false;
+        let mut index_failed =
+            snapshot.on_disk_error.is_some() || snapshot.indexed_dirs_error.is_some();
+
+        for batch in &batches {
+            if run.is_cancelled() {
+                break;
             }
-            (None, Ok(None)) => HashSet::new(),
-        };
-        let mut fallback_dirs = if available {
-            uncovered.clone()
-        } else {
-            selected_dirs.clone()
-        };
-        if target.local_mailboxes.is_none() && available {
-            fallback_dirs.extend(selected_dirs.difference(&snapshot.indexed_dirs).cloned());
-        }
-        let fallback_reason = if available {
-            (!index_coverage["complete"].as_bool().unwrap_or(false) || !fallback_dirs.is_empty())
-                .then_some(FallbackReason::Building)
-        } else {
-            Some(FallbackReason::from_wire(reply["reason"].as_str()))
-        };
-        if !selected_dirs.is_empty() || !fallback_dirs.is_empty() {
-            report.total_sources += selected_dirs.union(&uncovered).count().max(1);
-        }
-        if available {
-            let complete_dirs = selected_dirs.difference(&fallback_dirs).count();
-            report.successful_sources += complete_dirs;
-            has_coverage = true;
-            aggregate.indexed += index_coverage["indexed"].as_u64().unwrap_or(0);
-            aggregate.total += index_coverage["total"].as_u64().unwrap_or(0);
-            aggregate.matched += reply["total"].as_u64().unwrap_or(0);
-            aggregate.shown += rows.len();
-            aggregate.complete &=
-                index_coverage["complete"].as_bool().unwrap_or(false) && fallback_dirs.is_empty();
-        } else {
-            aggregate.complete = false;
+            let mut query = request_to_index(&request, &target);
+            query.mailboxes = Some(batch.clone());
+            let batch_state = Arc::clone(&state);
+            let batch_run = Arc::clone(&run);
+            let query_result = tokio::task::spawn_blocking(move || {
+                if batch_run.is_cancelled() {
+                    return None;
+                }
+                let _gate = batch_state
+                    .vault_gate
+                    .read()
+                    .unwrap_or_else(|p| p.into_inner());
+                if batch_run.is_cancelled() {
+                    return None;
+                }
+                let result =
+                    crate::search_index::search_page_reply(&batch_state.search_index, &query);
+                if batch_run.is_cancelled() {
+                    None
+                } else {
+                    Some(result)
+                }
+            })
+            .await
+            .unwrap_or_else(|error| Some(Err(format!("index search task failed: {error}"))));
+
+            if run.is_cancelled() || query_result.is_none() {
+                break;
+            }
+            report.completed += 1;
+            let batch_failure_count = report.failures.len();
+            let mut frame = progress(&request.search_id);
+            frame.lane = Some(SearchLane::Local);
+            frame.total = report.total;
+            frame.completed = report.completed;
+
+            match query_result.unwrap() {
+                Ok(Ok(result)) => {
+                    let coverage_complete = result.coverage.complete;
+                    account_has_index = true;
+                    has_coverage = true;
+                    aggregate.indexed += result.coverage.indexed;
+                    aggregate.total += result.coverage.total;
+                    aggregate.matched += result.page.total;
+                    aggregate.complete &= result.coverage.complete;
+                    matched += result.page.total;
+                    let fallback_count_before = fallback_dirs.len();
+                    fallback_dirs.extend(result.coverage.uncovered_vault_dirs.iter().cloned());
+                    let new_fallback_dirs = fallback_dirs.len() - fallback_count_before;
+                    report.total += new_fallback_dirs;
+                    report.total_sources += new_fallback_dirs;
+                    if !result.coverage.uncovered_vault_dirs.is_empty() {
+                        fallback_reason = Some(FallbackReason::Building);
+                    }
+                    merged_hits.extend(result.page.hits);
+                    merged_hits.sort_by(|a, b| (b.date_utc, b.row_id).cmp(&(a.date_utc, a.row_id)));
+                    merged_hits.truncate(core_search::query::DEFAULT_LIMIT);
+                    indexed_shown = indexed_shown_before_account + merged_hits.len();
+                    aggregate.shown = indexed_shown + fallback_shown;
+
+                    let mut rows = crate::search_index::assemble_rows(&SearchPage {
+                        hits: merged_hits.clone(),
+                        total: matched,
+                        needles: result.page.needles,
+                    });
+                    for row in &mut rows {
+                        let vault_dir = row
+                            .get("vaultDir")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_owned();
+                        stamp_local_row(
+                            row,
+                            &target.account_id,
+                            &vault_dir,
+                            &target.known_mailboxes,
+                            false,
+                            &snapshot.custody,
+                        );
+                    }
+                    frame.rows = rows;
+                    frame.local_mode = Some(LocalMode::Index);
+                    frame.replace_index_account_id = Some(target.account_id.clone());
+                    if coverage_complete || !frame.rows.is_empty() {
+                        report.successful_sources += 1;
+                    }
+                }
+                Ok(Err(reason)) => {
+                    index_failed = true;
+                    aggregate.complete = false;
+                    let fallback_count_before = fallback_dirs.len();
+                    fallback_dirs.extend(batch.iter().cloned());
+                    let new_fallback_dirs = fallback_dirs.len() - fallback_count_before;
+                    report.total += new_fallback_dirs;
+                    report.total_sources += new_fallback_dirs;
+                    fallback_reason = Some(index_fallback_reason(&state, Some(reason)));
+                    frame.local_mode = Some(LocalMode::Scan);
+                }
+                Err(error) => {
+                    index_failed = true;
+                    aggregate.complete = false;
+                    let fallback_count_before = fallback_dirs.len();
+                    fallback_dirs.extend(batch.iter().cloned());
+                    let new_fallback_dirs = fallback_dirs.len() - fallback_count_before;
+                    report.total += new_fallback_dirs;
+                    report.total_sources += new_fallback_dirs;
+                    fallback_reason = Some(index_fallback_reason(&state, None));
+                    report
+                        .failures
+                        .push(failure(&target.account_id, "", "index"));
+                    frame.local_mode = Some(LocalMode::Scan);
+                    tracing::debug!(
+                        "indexed local search failed for {}: {error}",
+                        target.account_id
+                    );
+                }
+            }
+
+            if index_failed {
+                aggregate.complete = false;
+            }
+            frame.total = report.total;
+            frame.fallback_reason = fallback_reason;
+            frame.coverage = has_coverage.then(|| aggregate.clone());
+            frame.failures = report.failures[batch_failure_count..].to_vec();
+            emit_progress(&state, &run, frame);
         }
 
-        for dir in fallback_dirs {
+        if run.is_cancelled() {
+            break;
+        }
+
+        if index_failed || !fallback_dirs.is_empty() || snapshot.on_disk_error.is_some() {
+            aggregate.complete = false;
+        }
+        if fallback_reason.is_none() && !fallback_dirs.is_empty() {
+            fallback_reason = Some(FallbackReason::Building);
+        }
+        if !account_has_index && !batches.is_empty() && fallback_reason.is_none() {
+            fallback_reason = Some(index_fallback_reason(&state, None));
+        }
+
+        let mut ordered_fallback_dirs = fallback_dirs.into_iter().collect::<Vec<_>>();
+        ordered_fallback_dirs.sort_unstable();
+        for dir in ordered_fallback_dirs {
             let (mailbox, local_only, _) = mailbox_for_vault_dir(&dir, &target.known_mailboxes);
             jobs.push(LocalFolder {
                 account_id: target.account_id.clone(),
@@ -605,22 +763,26 @@ async fn run_local_lane(
                 custody: Arc::clone(&snapshot.custody),
             });
         }
-        report.total = jobs.len();
 
-        let mut frame = progress(&request.search_id);
-        frame.lane = Some(SearchLane::Local);
-        frame.rows = rows;
-        frame.local_mode = Some(if available {
-            LocalMode::Index
-        } else {
-            LocalMode::Scan
-        });
-        frame.fallback_reason = fallback_reason;
-        frame.coverage = has_coverage.then(|| aggregate.clone());
-        frame.total = report.total;
-        frame.completed = report.completed;
-        frame.failures = report.failures[prior_failure_count..].to_vec();
-        emit_progress(&state, &run, frame);
+        if (!batches.is_empty() && !account_has_index)
+            || snapshot.on_disk_error.is_some()
+            || snapshot.indexed_dirs_error.is_some()
+        {
+            let mut frame = progress(&request.search_id);
+            frame.lane = Some(SearchLane::Local);
+            frame.local_mode = Some(LocalMode::Scan);
+            frame.fallback_reason = fallback_reason;
+            frame.coverage = has_coverage.then(|| aggregate.clone());
+            frame.total = report.total;
+            frame.completed = report.completed;
+            frame.failures = report.failures[prior_failure_count..].to_vec();
+            emit_progress(&state, &run, frame);
+        }
+
+        if !snapshot.selected_dirs.is_empty() && !account_has_index {
+            aggregate.complete = false;
+        }
+        aggregate.shown = indexed_shown + fallback_shown;
     }
 
     // Server search can start while index requests are running, but it waits
@@ -719,9 +881,7 @@ async fn run_local_lane(
             Ok(rows) => {
                 report.successful_sources += 1;
                 frame.rows = rows;
-                if let Some(coverage) = frame.coverage.as_mut() {
-                    coverage.shown += frame.rows.len();
-                }
+                fallback_shown += frame.rows.len();
             }
             Err(error) if error == "cancelled" => return report,
             Err(error) => {
@@ -734,6 +894,9 @@ async fn run_local_lane(
                 report.failures.push(failure.clone());
                 frame.failures.push(failure);
             }
+        }
+        if let Some(coverage) = frame.coverage.as_mut() {
+            coverage.shown = indexed_shown + fallback_shown;
         }
         if !run.is_cancelled() {
             emit_progress(&state, &run, frame);
@@ -1128,6 +1291,7 @@ mod tests {
     use super::*;
     use crate::ipc;
     use crate::server::{handle_request_for_test, DaemonState};
+    use chrono::TimeZone;
     use mailvault_core::search_index::{self as core_search, db};
     use mailvault_core::vault_eml::{LightAttachment, LightEmail, MaildirAddress};
     use serde_json::{json, Value};
@@ -1244,6 +1408,12 @@ mod tests {
             .unwrap();
         }
         for (mailbox, uid, subject, row_json) in rows {
+            let row = serde_json::from_str::<Value>(row_json).unwrap_or_default();
+            let date_utc = row["date"]
+                .as_str()
+                .and_then(|date| chrono::DateTime::parse_from_rfc3339(date).ok())
+                .map(|date| date.timestamp())
+                .unwrap_or(1);
             let filename = if serde_json::from_str::<Value>(row_json)
                 .ok()
                 .and_then(|row| row["isArchived"].as_bool())
@@ -1254,8 +1424,20 @@ mod tests {
                 format!("{uid}:2,.eml")
             };
             conn.execute(
-                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json) VALUES ('acct', ?1, ?2, ?3, 1, 1, NULL, 1, 'sender@example.test', 'sender', ?4, '', 0, 1, ?5)",
-                rusqlite::params![mailbox, uid, filename, subject.to_lowercase(), row_json],
+                "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json) VALUES ('acct', ?1, ?2, ?3, 1, 1, NULL, ?4, 'sender@example.test', 'sender', ?5, '', 0, 1, ?6)",
+                rusqlite::params![mailbox, uid, filename, date_utc, subject.to_lowercase(), row_json],
+            )
+            .unwrap();
+            let row_id = conn.last_insert_rowid();
+            let indexed_subject = row["subject"].as_str().unwrap_or(subject);
+            conn.execute(
+                "INSERT INTO msg_fts (rowid, subject, addrs, body, attach) VALUES (?1, ?2, 'sender@example.test', '', '')",
+                rusqlite::params![row_id, indexed_subject],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO msg_cjk (rowid, subject, addrs, body, attach) VALUES (?1, ?2, '', '', '')",
+                rusqlite::params![row_id, core_search::text::cjk_units(indexed_subject)],
             )
             .unwrap();
         }
@@ -1443,6 +1625,595 @@ mod tests {
             sequences.windows(2).all(|pair| pair[0] < pair[1]),
             "progress sequence must be increasing: {sequences:?}"
         );
+    }
+
+    #[tokio::test]
+    async fn indexed_sql_search_publishes_cumulative_mailbox_batches_with_the_configured_limit() {
+        let (_tmp, state) = state();
+        let folders = (0..7).map(|n| format!("Folder{n}")).collect::<Vec<_>>();
+        let owned_rows = folders.iter().enumerate().map(|(n, folder)| (
+            folder.clone(), n as u32 + 1, "batch row".to_string(),
+            json!({"uid": n + 1, "subject": format!("batch row {n}"), "messageId": format!("<batch-{n}@x.test>"), "date": format!("2026-09-{:02}T00:00:00Z", n + 1)}).to_string(),
+        )).collect::<Vec<_>>();
+        let rows = owned_rows
+            .iter()
+            .map(|(folder, uid, subject, row)| {
+                (folder.as_str(), *uid, subject.as_str(), row.as_str())
+            })
+            .collect::<Vec<_>>();
+        let scans = folders
+            .iter()
+            .map(|folder| (folder.as_str(), 1))
+            .collect::<Vec<_>>();
+        enable_index(&state, &rows, &scans);
+        let mut rx = state.events.subscribe();
+        let req = request_with_targets(
+            "mailbox-batches",
+            3,
+            vec![target(
+                "acct",
+                Some(folders.iter().map(String::as_str).collect()),
+            )],
+        );
+
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "mailbox-batches").await;
+        let indexed = frames
+            .iter()
+            .filter(|frame| frame["replaceIndexAccountId"] == "acct")
+            .collect::<Vec<_>>();
+        assert_eq!(indexed.len(), 3, "7 selected directories at concurrency 3 should query three disjoint scopes: {frames:?}");
+        let sizes = indexed
+            .iter()
+            .map(|frame| frame["rows"].as_array().unwrap().len())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sizes,
+            vec![3, 6, 7],
+            "each indexed frame replaces with the cumulative, sorted account snapshot"
+        );
+        let unique = indexed.last().unwrap()["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|row| row["uid"].as_u64().unwrap())
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            unique.len(),
+            7,
+            "every selected folder contributes exactly once"
+        );
+        assert_eq!(indexed.last().unwrap()["coverage"]["matched"], 7);
+    }
+
+    #[tokio::test]
+    async fn configured_sql_batches_use_unique_bounded_directory_scopes_for_limits_one_three_and_five(
+    ) {
+        for limit in [1, 3, 5] {
+            let (_tmp, state) = state();
+            let mailboxes = vec![
+                "Nested/Archive",
+                "Nested_Archive",
+                "Folder1",
+                "Folder2",
+                "Folder3",
+                "Folder4",
+                "Folder5",
+            ];
+            let vault_dirs = [
+                "Nested_Archive",
+                "Folder1",
+                "Folder2",
+                "Folder3",
+                "Folder4",
+                "Folder5",
+            ];
+            let owned_rows = vault_dirs.iter().enumerate().map(|(i, folder)| (
+                folder.to_string(), i as u32 + 1, "".to_string(),
+                json!({"uid": i + 1, "subject": format!("hit {i}"), "messageId": format!("<hit-{i}@x.test>"), "date": format!("2026-09-{:02}T00:00:00Z", i + 1)}).to_string(),
+            )).collect::<Vec<_>>();
+            let rows = owned_rows
+                .iter()
+                .map(|(folder, uid, subject, row)| {
+                    (folder.as_str(), *uid, subject.as_str(), row.as_str())
+                })
+                .collect::<Vec<_>>();
+            let scans = vault_dirs
+                .iter()
+                .map(|folder| (*folder, 1))
+                .collect::<Vec<_>>();
+            enable_index(&state, &rows, &scans);
+            let mut rx = state.events.subscribe();
+            let target = json!({"accountId":"acct", "account":null, "localMailboxes":mailboxes, "knownMailboxes":mailboxes, "serverMailboxes":[]});
+            assert_eq!(
+                call(
+                    &state,
+                    "mail_search_start",
+                    request_with_targets(&format!("limit-{limit}"), limit, vec![target])
+                )
+                .await
+                .result
+                .unwrap()["started"],
+                true
+            );
+            let frames = collect_until_terminal(&mut rx, &format!("limit-{limit}")).await;
+            let scopes = state.search_index.search_scopes.lock().unwrap().clone();
+            assert!(
+                !scopes.iter().any(Option::is_none),
+                "no account-wide SQL escaped batching: {scopes:?}"
+            );
+            assert!(
+                scopes
+                    .iter()
+                    .flatten()
+                    .all(|scope| !scope.is_empty() && scope.len() <= limit),
+                "scope limit {limit}: {scopes:?}"
+            );
+            let flattened = scopes.into_iter().flatten().flatten().collect::<Vec<_>>();
+            assert_eq!(
+                flattened.len(),
+                6,
+                "the two aliases should produce one database scope"
+            );
+            assert_eq!(
+                flattened.iter().collect::<HashSet<_>>().len(),
+                6,
+                "each unique directory must be searched once"
+            );
+            let last_indexed = frames
+                .iter()
+                .rev()
+                .find(|frame| frame["replaceIndexAccountId"] == "acct")
+                .expect("indexed batch should publish coverage");
+            assert_eq!(last_indexed["coverage"]["matched"], 6);
+        }
+    }
+
+    #[tokio::test]
+    async fn an_explicitly_empty_mailbox_list_never_becomes_an_all_mailboxes_query() {
+        let (_tmp, state) = state();
+        enable_index(&state, &[], &[]);
+        let mut rx = state.events.subscribe();
+        assert_eq!(
+            call(
+                &state,
+                "mail_search_start",
+                request_with_targets("empty-local", 5, vec![target("acct", Some(vec![]))])
+            )
+            .await
+            .result
+            .unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "empty-local").await;
+        assert!(state.search_index.search_scopes.lock().unwrap().is_empty());
+        assert!(frames
+            .iter()
+            .all(|frame| frame["rows"].as_array().unwrap().is_empty()));
+    }
+
+    #[tokio::test]
+    async fn all_folder_search_unions_disk_only_and_index_only_directories() {
+        let (tmp, state) = state();
+        write_mail(
+            tmp.path(),
+            "acct",
+            "DiskOnly",
+            2,
+            "disk only hit",
+            "disk body",
+        );
+        enable_index(
+            &state,
+            &[(
+                "IndexOnly",
+                1,
+                "indexed only hit",
+                &indexed_row("indexed only hit"),
+            )],
+            &[("IndexOnly", 1)],
+        );
+        let mut rx = state.events.subscribe();
+        let req = request_with_targets("all-union", 1, vec![target("acct", None)]);
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "all-union").await;
+
+        let scopes = state.search_index.search_scopes.lock().unwrap().clone();
+        let flattened = scopes
+            .into_iter()
+            .flatten()
+            .flatten()
+            .collect::<HashSet<_>>();
+        assert_eq!(
+            flattened,
+            HashSet::from(["DiskOnly".to_string(), "IndexOnly".to_string()])
+        );
+        let subjects = frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .filter_map(|row| row["subject"].as_str().map(str::to_owned))
+            .collect::<HashSet<_>>();
+        assert!(subjects.contains("disk only hit"));
+        assert!(subjects.contains("indexed only hit"));
+    }
+
+    fn make_unreadable_mailbox(root: &Path, mailbox: &str) {
+        let cur = root.join("Maildir").join("acct").join(mailbox).join("cur");
+        std::fs::create_dir_all(cur.parent().unwrap()).unwrap();
+        std::fs::write(cur, "not a directory").unwrap();
+    }
+
+    #[tokio::test]
+    async fn disk_only_folder_scan_failure_is_error_without_a_usable_index_result() {
+        let (tmp, state) = state();
+        make_unreadable_mailbox(tmp.path(), "Broken");
+        enable_index(&state, &[], &[]);
+        let mut rx = state.events.subscribe();
+        let mut req = request_with_targets(
+            "failed-disk-only",
+            1,
+            vec![target("acct", Some(vec!["Broken"]))],
+        );
+        req["query"] = json!("no matching message");
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "failed-disk-only").await;
+        let terminal = frames.last().unwrap();
+        assert_eq!(terminal["terminal"], "error");
+        assert_eq!(terminal["errorKey"], "search.allSourcesFailed");
+        assert!(terminal["failures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|failure| failure["code"] == "mailbox"));
+    }
+
+    #[tokio::test]
+    async fn partial_index_hit_is_retained_when_an_uncovered_folder_scan_fails() {
+        let (tmp, state) = state();
+        make_unreadable_mailbox(tmp.path(), "Broken");
+        let row = indexed_row("needle partial result");
+        enable_index(
+            &state,
+            &[("Indexed", 1, "needle partial result", &row)],
+            &[("Indexed", 1)],
+        );
+        let mut rx = state.events.subscribe();
+        let mut req = request_with_targets(
+            "partial-index-before-failure",
+            1,
+            vec![target("acct", Some(vec!["Broken", "Indexed"]))],
+        );
+        req["query"] = json!("needle");
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "partial-index-before-failure").await;
+        let terminal = frames.last().unwrap();
+        assert_eq!(terminal["terminal"], "complete");
+        assert!(frames
+            .iter()
+            .flat_map(|frame| frame["rows"].as_array().unwrap())
+            .any(|row| row["subject"] == "needle partial result"));
+        assert!(terminal["failures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|failure| failure["code"] == "mailbox"));
+    }
+
+    #[tokio::test]
+    async fn fallback_coverage_shown_includes_prior_successes_on_a_later_failure() {
+        let (tmp, state) = state();
+        for uid in 1..=10 {
+            write_mail(tmp.path(), "acct", "A", uid, "fallback row", "body");
+        }
+        make_unreadable_mailbox(tmp.path(), "Z");
+        let row = indexed_row("indexed row");
+        enable_index(
+            &state,
+            &[("Indexed", 1, "indexed row", &row)],
+            &[("Indexed", 1)],
+        );
+        let mut rx = state.events.subscribe();
+        let req = request_with_targets(
+            "fallback-shown",
+            1,
+            vec![target("acct", Some(vec!["Indexed", "A", "Z"]))],
+        );
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "fallback-shown").await;
+        let successful_fallback = frames
+            .iter()
+            .find(|frame| {
+                frame["localMode"] == "scan"
+                    && frame["rows"]
+                        .as_array()
+                        .is_some_and(|rows| rows.len() == 10)
+            })
+            .unwrap();
+        let failed_fallback = frames
+            .iter()
+            .find(|frame| {
+                frame["localMode"] == "scan"
+                    && frame["failures"]
+                        .as_array()
+                        .is_some_and(|failures| !failures.is_empty())
+            })
+            .unwrap();
+        assert_eq!(successful_fallback["coverage"]["shown"], 11);
+        assert_eq!(failed_fallback["coverage"]["shown"], 11);
+    }
+
+    #[tokio::test]
+    async fn batched_merge_keeps_exact_newest_500_and_row_id_tie_order() {
+        let (_tmp, state) = state();
+        let mut owned_rows = Vec::new();
+        for uid in 1..=501u32 {
+            let date = chrono::Utc
+                .timestamp_opt(1_700_000_000 + i64::from(uid) * 1_000, 0)
+                .single()
+                .unwrap()
+                .to_rfc3339();
+            owned_rows.push(("A".to_string(), uid, "".to_string(), json!({"uid":uid,"subject":format!("会議 filter A {uid}"),"messageId":format!("<a-{uid}@x.test>"),"date":date}).to_string()));
+        }
+        for uid in 502..=511u32 {
+            let date = chrono::Utc
+                .timestamp_opt(1_800_000_000, 0)
+                .single()
+                .unwrap()
+                .to_rfc3339();
+            owned_rows.push(("B".to_string(), uid, "".to_string(), json!({"uid":uid,"subject":format!("会議 filter B {uid}"),"messageId":format!("<b-{uid}@x.test>"),"date":date}).to_string()));
+        }
+        let rows = owned_rows
+            .iter()
+            .map(|(folder, uid, subject, row)| {
+                (folder.as_str(), *uid, subject.as_str(), row.as_str())
+            })
+            .collect::<Vec<_>>();
+        enable_index(&state, &rows, &[("A", 501), ("B", 10)]);
+        let mut rx = state.events.subscribe();
+        let mut req =
+            request_with_targets("top-500", 1, vec![target("acct", Some(vec!["A", "B"]))]);
+        req["query"] = json!("会議");
+        req["sender"] = json!("sender@example.test");
+        req["dateFrom"] = json!(1_700_000_000);
+        req["dateTo"] = json!(1_800_000_000);
+        assert_eq!(
+            call(&state, "mail_search_start", req.clone())
+                .await
+                .result
+                .unwrap()["started"],
+            true
+        );
+        let frames = collect_until_terminal(&mut rx, "top-500").await;
+        let indexed = frames
+            .iter()
+            .filter(|frame| frame["replaceIndexAccountId"] == "acct")
+            .collect::<Vec<_>>();
+        assert_eq!(indexed.len(), 2);
+        assert_eq!(indexed[0]["rows"].as_array().unwrap().len(), 500);
+        assert_eq!(indexed[1]["rows"].as_array().unwrap().len(), 500);
+        assert_eq!(indexed[1]["coverage"]["matched"], 511);
+        let rows = indexed[1]["rows"].as_array().unwrap();
+        assert_eq!(
+            rows.iter().filter(|row| row["vaultDir"] == "B").count(),
+            10,
+            "the later scope contains the newest row IDs at the equal-date boundary"
+        );
+        let top_b = rows
+            .iter()
+            .take(10)
+            .map(|row| row["uid"].as_u64().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(top_b, (502u64..=511).rev().collect::<Vec<_>>());
+
+        let parsed = serde_json::from_value::<MailSearchStart>(req.clone()).unwrap();
+        let query = request_to_index(&parsed, &parsed.targets[0]);
+        let (unbatched_page, unbatched_coverage, unbatched_rows) = {
+            let guard = core_search::lock(&state.search_index.db);
+            let conn = guard.as_ref().unwrap();
+            let page = core_search::query::search(conn, &query).unwrap();
+            let coverage =
+                core_search::db::scope_coverage(conn, "acct", query.mailboxes.as_deref()).unwrap();
+            let rows = crate::search_index::assemble_rows(&page);
+            (page, coverage, rows)
+        };
+        let copy_key = |row: &Value| {
+            (
+                row["vaultDir"].as_str().unwrap().to_owned(),
+                row["uid"].as_u64().unwrap(),
+            )
+        };
+        assert_eq!(
+            rows.iter().map(copy_key).collect::<Vec<_>>(),
+            unbatched_rows.iter().map(copy_key).collect::<Vec<_>>(),
+            "the exact final 500 copies and their order must match one unbatched SQL query"
+        );
+        assert_eq!(
+            indexed[1]["coverage"]["indexed"],
+            unbatched_coverage.indexed
+        );
+        assert_eq!(indexed[1]["coverage"]["total"], unbatched_coverage.total);
+        assert_eq!(
+            indexed[1]["coverage"]["complete"],
+            unbatched_coverage.complete
+        );
+        assert_eq!(indexed[1]["coverage"]["matched"], unbatched_page.total);
+        assert_eq!(indexed[1]["coverage"]["shown"], unbatched_page.hits.len());
+
+        req["searchId"] = json!("top-500-zero-match");
+        req["query"] = json!("不存在");
+        let mut rx = state.events.subscribe();
+        assert_eq!(
+            call(&state, "mail_search_start", req.clone())
+                .await
+                .result
+                .unwrap()["started"],
+            true
+        );
+        let zero_frames = collect_until_terminal(&mut rx, "top-500-zero-match").await;
+        let zero_indexed = zero_frames
+            .iter()
+            .filter(|frame| frame["replaceIndexAccountId"] == "acct")
+            .last()
+            .unwrap();
+        let parsed_zero = serde_json::from_value::<MailSearchStart>(req).unwrap();
+        let query_zero = request_to_index(&parsed_zero, &parsed_zero.targets[0]);
+        let guard = core_search::lock(&state.search_index.db);
+        let conn = guard.as_ref().unwrap();
+        let unbatched_zero = core_search::query::search(conn, &query_zero).unwrap();
+        let zero_coverage =
+            core_search::db::scope_coverage(conn, "acct", query_zero.mailboxes.as_deref()).unwrap();
+        assert_eq!(unbatched_zero.total, 0);
+        assert!(unbatched_zero.hits.is_empty());
+        assert_eq!(zero_indexed["rows"].as_array().unwrap().len(), 0);
+        assert_eq!(zero_indexed["coverage"]["indexed"], zero_coverage.indexed);
+        assert_eq!(zero_indexed["coverage"]["total"], zero_coverage.total);
+        assert_eq!(zero_indexed["coverage"]["complete"], zero_coverage.complete);
+        assert_eq!(zero_indexed["coverage"]["matched"], unbatched_zero.total);
+        assert_eq!(zero_indexed["coverage"]["shown"], 0);
+    }
+
+    #[tokio::test]
+    async fn cancelling_after_first_sql_batch_skips_later_batches_and_publication() {
+        use std::sync::Mutex as StdMutex;
+        let (_tmp, state) = state();
+        let owned_rows = (0..7).map(|n| (
+            format!("Folder{n}"), n as u32 + 1, "".to_string(),
+            json!({"uid":n+1,"subject":format!("row {n}"),"messageId":format!("<row-{n}@x.test>"),"date":"2026-09-20T00:00:00Z"}).to_string(),
+        )).collect::<Vec<_>>();
+        let rows = owned_rows
+            .iter()
+            .map(|(folder, uid, subject, row)| {
+                (folder.as_str(), *uid, subject.as_str(), row.as_str())
+            })
+            .collect::<Vec<_>>();
+        let scans = owned_rows
+            .iter()
+            .map(|(folder, ..)| (folder.as_str(), 1))
+            .collect::<Vec<_>>();
+        enable_index(&state, &rows, &scans);
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        let release_rx = Arc::new(StdMutex::new(release_rx));
+        *state.search_index.search_batch_hook.lock().unwrap() = Some(Arc::new(move || {
+            let _ = entered_tx.send(());
+            let _ = release_rx.lock().unwrap().recv();
+        }));
+        let mut rx = state.events.subscribe();
+        let mailboxes = owned_rows
+            .iter()
+            .map(|(folder, ..)| folder.as_str())
+            .collect::<Vec<_>>();
+        let req = request_with_targets("cancel-batch", 1, vec![target("acct", Some(mailboxes))]);
+        assert_eq!(
+            call(&state, "mail_search_start", req).await.result.unwrap()["started"],
+            true
+        );
+        tokio::task::spawn_blocking(move || entered_rx.recv().unwrap())
+            .await
+            .unwrap();
+        let cancelled_result = call(
+            &state,
+            "mail_search_cancel",
+            json!({"searchId":"cancel-batch"}),
+        )
+        .await
+        .result;
+        let released = release_tx.send(());
+        let frames = collect_until_terminal(&mut rx, "cancel-batch").await;
+        let scopes = state.search_index.search_scopes.lock().unwrap().clone();
+        assert_eq!(
+            cancelled_result.unwrap(),
+            json!({"success": true, "found": true})
+        );
+        assert!(
+            released.is_ok(),
+            "the blocked SQL hook must always be released"
+        );
+        assert_eq!(scopes.len(), 1, "the worker must observe cancellation before scheduling the next mailbox scope: {scopes:?}");
+        assert!(
+            frames
+                .iter()
+                .all(|frame| frame["replaceIndexAccountId"].is_null()),
+            "no indexed result may publish after cancellation acknowledgement: {frames:?}"
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "coordinator first indexed publication benchmark"]
+    async fn first_index_publication_latency_at_one_and_five_mailbox_batches() {
+        for concurrency in [1, 5] {
+            let (_tmp, state) = state();
+            let folders = (0..50)
+                .map(|n| format!("Mailbox{n:02}"))
+                .collect::<Vec<_>>();
+            let owned_rows = folders.iter().flat_map(|folder| (1..=20).map(move |uid| (
+                folder.clone(), uid, "".to_string(),
+                json!({"uid":uid,"subject":format!("{folder} {uid}"),"messageId":format!("<{folder}-{uid}@x.test>"),"date":"2026-09-20T00:00:00Z"}).to_string(),
+            ))).collect::<Vec<_>>();
+            let rows = owned_rows
+                .iter()
+                .map(|(folder, uid, subject, row)| {
+                    (folder.as_str(), *uid, subject.as_str(), row.as_str())
+                })
+                .collect::<Vec<_>>();
+            let scans = folders
+                .iter()
+                .map(|folder| (folder.as_str(), 20))
+                .collect::<Vec<_>>();
+            enable_index(&state, &rows, &scans);
+            let mailboxes = folders.iter().map(String::as_str).collect::<Vec<_>>();
+            let mut rx = state.events.subscribe();
+            let started = std::time::Instant::now();
+            assert_eq!(
+                call(
+                    &state,
+                    "mail_search_start",
+                    request_with_targets(
+                        &format!("coordinator-{concurrency}"),
+                        concurrency,
+                        vec![target("acct", Some(mailboxes))],
+                    )
+                )
+                .await
+                .result
+                .unwrap()["started"],
+                true
+            );
+            loop {
+                let frame = next_progress(&mut rx).await;
+                if frame["searchId"] == format!("coordinator-{concurrency}")
+                    && frame["replaceIndexAccountId"] == "acct"
+                {
+                    eprintln!(
+                        "first indexed publication at concurrency {concurrency}: {:?}",
+                        started.elapsed()
+                    );
+                    break;
+                }
+            }
+            let _ = call(
+                &state,
+                "mail_search_cancel",
+                json!({"searchId":format!("coordinator-{concurrency}")}),
+            )
+            .await;
+            let _ = collect_until_terminal(&mut rx, &format!("coordinator-{concurrency}")).await;
+        }
     }
 
     #[tokio::test]

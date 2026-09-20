@@ -52,6 +52,9 @@ pub struct SearchHit {
     pub row_json: String,
     /// Whether any matched query term appears in the indexed body column.
     pub body_matched: bool,
+    /// Internal merge keys preserving SQLite's existing newest-first order across mailbox batches.
+    pub date_utc: i64,
+    pub row_id: i64,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -193,12 +196,12 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}) FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)? })
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, date_utc: r.get(6)?, row_id: r.get(7)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -393,6 +396,15 @@ mod tests {
         // 2026-09-08T00:00:00Z .. 2026-09-09T23:59:59Z
         let dated = uids(&db, SearchRequest { account_id: "luke".into(), date_from: Some(1788825600), date_to: Some(1788998399), ..Default::default() });
         assert_eq!(dated, vec![("Projects_2026".into(), 1), ("INBOX".into(), 2)]);
+    }
+
+    #[test]
+    fn hits_expose_internal_merge_keys_in_existing_order() {
+        let (_t, db) = fixture();
+        let g = crate::search_index::lock(&db);
+        let page = search(g.as_ref().unwrap(), &SearchRequest { account_id: "luke".into(), ..Default::default() }).unwrap();
+        assert!(page.hits.windows(2).all(|pair| (pair[0].date_utc, pair[0].row_id) >= (pair[1].date_utc, pair[1].row_id)));
+        assert!(page.hits.iter().all(|hit| hit.row_id > 0));
     }
 
     #[test]

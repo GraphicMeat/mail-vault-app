@@ -1187,6 +1187,7 @@ describe('moveEmails', () => {
     primeStore([], []);
     useMailStore.setState({ activeMailbox: 'Sent', mailboxes: MAILBOXES });
     const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
     useSearchStore.setState({ searchActive: true, searchResults: [hit] });
     const state = useMailStore.getState();
     const key = selectionKey(hit, state);
@@ -1197,6 +1198,107 @@ describe('moveEmails', () => {
     expect(mockMoveEmails).toHaveBeenCalledWith(ACCOUNT, [42], 'INBOX', 'Archive');
     expect(useSearchStore.getState().searchResults).toEqual([]);
     useSearchStore.setState({ searchActive: false, searchResults: [] });
+  });
+
+  it('keeps a moved indexed search copy gone across later progress frames', async () => {
+    primeStore([], []);
+    useMailStore.setState({ activeMailbox: 'Sent', mailboxes: MAILBOXES });
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
+    const indexedHit = {
+      uid: 42, messageId: 'moved@mock', subject: 'Moved indexed copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-03T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local',
+    };
+    const otherIndexedHit = {
+      uid: 43, messageId: 'other@mock', subject: 'Other indexed copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-02T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local',
+    };
+    const scanHit = {
+      uid: 44, messageId: 'scan@mock', subject: 'Fallback copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-01T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'Archive', source: 'local',
+    };
+    const serverHit = {
+      uid: 45, messageId: 'server@mock', subject: 'Server copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-08-31T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'server-search',
+    };
+    useSearchStore.setState({
+      searchActive: true, activeSearchId: 'move-search', isSearching: true, searchSnapshot: {},
+    });
+    const send = (sequence, extra = {}) => useSearchStore.getState().handleSearchProgress({
+      searchId: 'move-search', sequence, rows: [], lane: 'local', completed: sequence,
+      total: 4, localMode: null, fallbackReason: null, coverage: null, failures: [],
+      terminal: null, errorKey: null, ...extra,
+    });
+    send(1, {
+      rows: [indexedHit, otherIndexedHit], localMode: 'index', replaceIndexAccountId: ACCOUNT.id,
+    });
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toContain('Moved indexed copy');
+    send(2, { rows: [scanHit], localMode: 'scan' });
+    send(3, { rows: [serverHit], lane: 'server' });
+
+    const state = useMailStore.getState();
+    const key = selectionKey(indexedHit, state);
+    expect(key).toBe(`${ACCOUNT.id}:INBOX:42`);
+    await state.moveEmails([key], 'Archive');
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual([
+      'Other indexed copy', 'Fallback copy', 'Server copy',
+    ]);
+
+    send(4, { terminal: 'complete' });
+    send(5, {
+      rows: [indexedHit, otherIndexedHit], localMode: 'index', replaceIndexAccountId: ACCOUNT.id,
+    });
+
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual([
+      'Other indexed copy', 'Fallback copy', 'Server copy',
+    ]);
+    useSearchStore.getState().clearSearch();
+  });
+
+  it('uses the move-time mailbox when the active scope changes before the move resolves', async () => {
+    primeStore([], []);
+    useMailStore.setState({ activeMailbox: 'Sent', mailboxes: MAILBOXES });
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
+    const inboxCopy = {
+      uid: 42, messageId: 'inbox-copy@mock', subject: 'Inbox copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-02T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'local',
+    };
+    const archiveCopy = {
+      uid: 42, messageId: 'archive-copy@mock', subject: 'Archive copy', flags: [],
+      from: { address: 'partner@example.com' }, date: '2026-09-01T10:00:00Z',
+      _accountId: ACCOUNT.id, _mailbox: 'Archive', source: 'local',
+    };
+    useSearchStore.setState({
+      searchActive: true, activeSearchId: 'moving-scope', isSearching: true, searchSnapshot: {},
+    });
+    useSearchStore.getState().handleSearchProgress({
+      searchId: 'moving-scope', sequence: 1, lane: 'local', localMode: 'index',
+      replaceIndexAccountId: ACCOUNT.id, rows: [inboxCopy, archiveCopy],
+    });
+
+    let finishMove;
+    mockMoveEmails.mockImplementationOnce(() => new Promise(resolve => { finishMove = resolve; }));
+    const moveKey = selectionKey(archiveCopy, useMailStore.getState());
+    expect(moveKey).toBe(`${ACCOUNT.id}:Archive:42`);
+    const pendingMove = useMailStore.getState().moveEmails([moveKey], 'Filed');
+    await vi.waitFor(() => expect(mockMoveEmails).toHaveBeenCalledOnce());
+    useMailStore.setState({ activeMailbox: 'Archive' });
+    finishMove({ newUids: [84] });
+    await pendingMove;
+
+    const cumulative = useSearchStore.getState().handleSearchProgress;
+    cumulative({
+      searchId: 'moving-scope', sequence: 2, lane: 'local', localMode: 'index',
+      replaceIndexAccountId: ACCOUNT.id, rows: [inboxCopy, archiveCopy],
+    });
+    expect(useSearchStore.getState().searchResults.map(row => row._mailbox)).toEqual(['INBOX']);
+    useSearchStore.getState().clearSearch();
   });
 
   it('skips a key that names no row it can place, and moves the rest', async () => {

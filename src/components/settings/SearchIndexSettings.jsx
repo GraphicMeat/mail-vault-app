@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { ToggleSwitch } from './ToggleSwitch';
 import { useSettingsStore, hasPremiumAccess } from '../../stores/settingsStore';
-import { status, rebuild, destroy, onProgress } from '../../services/searchIndex';
+import { status, rebuild, destroy, onProgress, onDaemonReconnected } from '../../services/searchIndex';
 import { formatBytes } from '../../utils/formatBytes';
 import { useT } from '../../i18n/index.js';
+
+const PREMIUM_MARKER = '\uE000premium\uE001';
 
 export function SearchIndexSettings({ onUpgrade }) {
   const t = useT();
@@ -27,39 +29,146 @@ export function SearchIndexSettings({ onUpgrade }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
+  const lifecycleRef = useRef(null);
+  const deleteInFlight = useRef(false);
+  const rebuildInFlight = useRef(false);
+
+  const isCurrentLifecycle = lifecycle => lifecycle?.active && lifecycleRef.current === lifecycle;
+  const refreshStatus = (lifecycle, options) => isCurrentLifecycle(lifecycle)
+    ? lifecycle.refreshStatus(options)
+    : Promise.resolve(null);
 
   useEffect(() => {
-    let alive = true;
-    let unlisten = null;
-    onProgress(p => { if (alive) setInfo(p); }).then(u => { if (alive) unlisten = u; else u(); });
-    // A progress event that beat the status reply is the newer of the two.
-    status().then(s => { if (alive) setInfo(cur => cur ?? s); });
-    return () => { alive = false; unlisten?.(); };
+    const lifecycle = {
+      active: true,
+      progressVersion: 0,
+      statusSequence: 0,
+      refreshStatus: null,
+      unlistenProgress: null,
+      unlistenReconnect: null,
+    };
+    lifecycleRef.current = lifecycle;
+    const isActive = () => lifecycle.active && lifecycleRef.current === lifecycle;
+    const refresh = ({ preserveActionError = false } = {}) => {
+      if (!isActive()) return Promise.resolve(null);
+      const requestSequence = ++lifecycle.statusSequence;
+      const progressVersion = lifecycle.progressVersion;
+      return status().then(next => {
+        if (!isActive() || requestSequence !== lifecycle.statusSequence || progressVersion !== lifecycle.progressVersion) return next;
+        setInfo(next);
+        if (!preserveActionError && next?.available && next.state !== 'error' && !next.errorKey && !next.error) setError(null);
+        return next;
+      });
+    };
+    lifecycle.refreshStatus = refresh;
+    const handleProgress = next => {
+      if (!isActive()) return;
+      lifecycle.progressVersion += 1;
+      lifecycle.statusSequence += 1;
+      setInfo(next);
+      if (next?.available && next.state !== 'error' && !next.errorKey && !next.error) setError(null);
+    };
+    onProgress(handleProgress).then(unlisten => {
+      if (isActive()) lifecycle.unlistenProgress = unlisten;
+      else unlisten?.();
+    });
+    onDaemonReconnected(refresh).then(unlisten => {
+      if (isActive()) lifecycle.unlistenReconnect = unlisten;
+      else unlisten?.();
+    });
+    refresh();
+    return () => {
+      lifecycle.active = false;
+      lifecycle.statusSequence += 1;
+      lifecycle.unlistenProgress?.();
+      lifecycle.unlistenReconnect?.();
+      if (lifecycleRef.current === lifecycle) lifecycleRef.current = null;
+    };
   }, []);
 
-  const indexing = info?.available && info.state === 'indexing';
+  const indexing = info?.available && !info.errorKey && !info.error && info.state === 'indexing';
   const pct = info?.total > 0 ? Math.floor((100 * info.indexed) / info.total) : 0;
+  const premiumLabel = t('common.premium');
+
+  const renderPremiumHint = key => {
+    const text = t(key, { premium: PREMIUM_MARKER });
+    const parts = text.split(PREMIUM_MARKER);
+    return parts.map((part, index) => (
+      <React.Fragment key={`${key}-${index}`}>
+        {part}
+        {index < parts.length - 1 && (onUpgrade ? (
+          <button
+            type="button"
+            data-testid="search-index-premium-link"
+            aria-label={premiumLabel}
+            onClick={onUpgrade}
+            className="inline cursor-pointer p-0 text-mail-accent-text underline underline-offset-2 hover:text-mail-accent-hover"
+          >
+            {premiumLabel}
+          </button>
+        ) : premiumLabel)}
+      </React.Fragment>
+    ));
+  };
+
+  const rebuildIndex = async () => {
+    if (rebuildInFlight.current) return;
+    const lifecycle = lifecycleRef.current;
+    if (!isCurrentLifecycle(lifecycle)) return;
+    rebuildInFlight.current = true;
+    lifecycle.statusSequence += 1;
+    setError(null);
+    setSearchIndexEnabled(true);
+    try {
+      const reply = await rebuild();
+      if (reply?.ok === false && isCurrentLifecycle(lifecycle)) setError(reply.error || 'searchIndex.recoveryFailed');
+    } catch (e) {
+      if (isCurrentLifecycle(lifecycle)) setError(e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : (e?.message || 'errors.daemonUnavailable'));
+    } finally {
+      refreshStatus(lifecycle, { preserveActionError: true });
+      rebuildInFlight.current = false;
+    }
+  };
 
   const deleteIndex = async () => {
+    if (deleteInFlight.current) return;
+    const lifecycle = lifecycleRef.current;
+    if (!isCurrentLifecycle(lifecycle)) return;
+    deleteInFlight.current = true;
+    lifecycle.statusSequence += 1;
     setDeleting(true);
     setError(null);
-    setSearchIndexEnabled(false); // spec §5.5: off first, so a restart never rebuilds what is being deleted
+    const wasEnabled = useSettingsStore.getState().searchIndexEnabled !== false;
+    setSearchIndexEnabled(false);
     try {
       const reply = await destroy();
       if (!reply?.ok) {
-        const key = reply?.error || 'searchIndex.destroyFailed';
-        if (key === 'searchIndex.busy') setSearchIndexEnabled(true); // nothing was deleted
-        setError(key);
+        if (reply?.error === 'searchIndex.busy') setSearchIndexEnabled(wasEnabled);
+        if (isCurrentLifecycle(lifecycle)) setError(reply?.error || 'searchIndex.destroyFailed');
       }
     } catch (e) {
-      // unreachable or died mid-request: keep indexing on; a partly deleted index rebuilds
-      setSearchIndexEnabled(true);
-      setError(e?.message || 'errors.daemonUnavailable');
+      setSearchIndexEnabled(wasEnabled);
+      if (isCurrentLifecycle(lifecycle)) setError(e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : (e?.message || 'errors.daemonUnavailable'));
     } finally {
-      setDeleting(false);
-      setConfirming(false);
+      refreshStatus(lifecycle, { preserveActionError: true });
+      if (isCurrentLifecycle(lifecycle)) {
+        setDeleting(false);
+        setConfirming(false);
+      }
+      deleteInFlight.current = false;
     }
   };
+
+  const statusErrorKey = info?.errorKey || info?.error;
+  const hasStatusError = !!statusErrorKey || info?.state === 'error';
+  const statusMessage = statusErrorKey
+    ? t(statusErrorKey)
+    : info?.state === 'starting'
+      ? t('settings.searchIndex.starting')
+      : info?.state === 'error'
+        ? t('searchIndex.recoveryFailed')
+        : t('settings.searchIndex.recovering');
+  const errorDetail = info?.errorDetail;
 
   return (
     <div className="settings-section" id="settings-search-index">
@@ -82,7 +191,7 @@ export function SearchIndexSettings({ onUpgrade }) {
         <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
           <div>
             <div className="text-sm text-mail-text">{t('settings.searchIndex.attachments')}</div>
-            <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.attachmentsHint')}</div>
+            <div className="text-xs text-mail-text-muted">{renderPremiumHint('settings.searchIndex.attachmentsHint')}</div>
           </div>
           <ToggleSwitch active={attachments} onClick={() => setSearchIndexAttachments(!attachments)}
             testId="search-index-attachments" label={t('settings.searchIndex.attachments')} />
@@ -91,7 +200,7 @@ export function SearchIndexSettings({ onUpgrade }) {
         <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
           <div>
             <div className="text-sm text-mail-text">{t('settings.searchIndex.imageText')}</div>
-            <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.imageTextHint')}</div>
+            <div className="text-xs text-mail-text-muted">{renderPremiumHint('settings.searchIndex.imageTextHint')}</div>
           </div>
           <ToggleSwitch active={imageText} onClick={() => setSearchIndexImageText(!imageText)}
             testId="search-index-image-text" label={t('settings.searchIndex.imageText')} />
@@ -101,7 +210,7 @@ export function SearchIndexSettings({ onUpgrade }) {
           <div className="min-w-0">
             <div className="text-sm text-mail-text">{t('settings.searchIndex.concurrency')}</div>
             <div className="text-xs text-mail-text-muted">
-              {t(isPremium ? 'settings.searchIndex.concurrencyHint' : 'settings.searchIndex.concurrencyFree')}
+              {renderPremiumHint(isPremium ? 'settings.searchIndex.concurrencyHint' : 'settings.searchIndex.concurrencyFree')}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -124,56 +233,55 @@ export function SearchIndexSettings({ onUpgrade }) {
         </div>
 
         <div className="flex items-center justify-between gap-4 p-3 bg-mail-bg rounded-lg">
-          {enabled ? (
-            <>
-              <div className="flex-1 min-w-0">
-                {info?.available ? (
-                  <>
-                    <div className="text-sm text-mail-text" data-testid="search-index-status">
-                      {t('settings.searchIndex.status', {
-                        indexed: (info.indexed || 0).toLocaleString(),
-                        total: (info.total || 0).toLocaleString(),
-                        size: formatBytes(info.sizeBytes || 0),
-                      })}
-                    </div>
-                    {indexing && (
-                      <>
-                        <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.indexing')}</div>
-                        <div role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
-                          aria-label={t('settings.searchIndex.indexing')}
-                          className="h-1.5 rounded-full bg-mail-border mt-2 overflow-hidden">
-                          <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : info && (
-                  <div className="text-xs text-mail-text-muted">{t(info.error === 'errors.daemonOutdated' ? 'errors.daemonOutdated' : 'settings.searchIndex.unavailable')}</div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" data-testid="search-index-rebuild"
-                  onClick={() => rebuild().catch(e => console.warn('[searchIndex] rebuild failed:', e))}>
-                  {t('settings.searchIndex.rebuild')}
-                </Button>
-                <Button size="sm" variant="dangerTint" data-testid="search-index-delete"
-                  disabled={deleting}
-                  onClick={() => setConfirming(true)}>
-                  {t('settings.searchIndex.delete')}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
+          <div className="flex-1 min-w-0">
+            {!enabled && !hasStatusError ? (
               <div className="text-xs text-mail-text-muted" data-testid="search-index-off">
                 {t('settings.searchIndex.off')}
               </div>
-              <Button size="sm" data-testid="search-index-build"
-                onClick={() => { setError(null); setSearchIndexEnabled(true); }}>
+            ) : info?.available && !hasStatusError ? (
+              <>
+                <div className="text-sm text-mail-text" data-testid="search-index-status">
+                  {t('settings.searchIndex.status', {
+                    indexed: (info.indexed || 0).toLocaleString(),
+                    total: (info.total || 0).toLocaleString(),
+                    size: formatBytes(info.sizeBytes || 0),
+                  })}
+                </div>
+                {indexing && (
+                  <>
+                    <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.indexing')}</div>
+                    <div role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}
+                      aria-label={t('settings.searchIndex.indexing')}
+                      className="h-1.5 rounded-full bg-mail-border mt-2 overflow-hidden">
+                      <div className="h-1.5 rounded-full bg-mail-accent transition-all" style={{ width: `${pct}%` }} />
+                    </div>
+                  </>
+                )}
+              </>
+            ) : info && (
+              <div className="text-xs text-mail-text-muted" data-testid="search-index-status-message" role={statusErrorKey ? 'alert' : undefined}>
+                <span>{statusMessage}</span>
+                {errorDetail && errorDetail !== statusMessage && errorDetail !== statusErrorKey && (
+                  <span>{` ${errorDetail}`}</span>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {enabled ? (
+              <Button size="sm" data-testid="search-index-rebuild" onClick={rebuildIndex}>
+                {t('settings.searchIndex.rebuild')}
+              </Button>
+            ) : (
+              <Button size="sm" data-testid="search-index-build" onClick={rebuildIndex}>
                 {t('settings.searchIndex.build')}
               </Button>
-            </>
-          )}
+            )}
+            <Button size="sm" variant="dangerTint" data-testid="search-index-delete"
+              onClick={() => setConfirming(true)}>
+              {t('settings.searchIndex.delete')}
+            </Button>
+          </div>
         </div>
         {error && (
           <div className="text-xs text-mail-danger mt-2" role="alert" data-testid="search-index-error">

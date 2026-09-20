@@ -15,6 +15,8 @@ pub enum Signal {
     Sweep,
     Nudge { account_id: String, vault_dir: String },
     Rebuild,
+    /// Runtime SQL failure: close, reopen, and rebuild only if structural damage is confirmed.
+    Recover,
     /// The config itself is read from state on every pass; this only wakes the worker.
     Configure,
     /// A vault operation finished: open the current root, then a full pass.
@@ -28,13 +30,14 @@ pub enum Signal {
 pub struct Plan {
     pub reopen: bool,
     pub rebuild: bool,
+    pub recover: bool,
     pub destroy: bool,
     /// `Some(folders)` when every signal was a nudge; otherwise a full pass.
     pub only: Option<Vec<(String, String)>>,
 }
 
 pub fn plan(queue: Vec<Signal>) -> Plan {
-    let mut p = Plan { reopen: false, rebuild: false, destroy: false, only: None };
+    let mut p = Plan { reopen: false, rebuild: false, recover: false, destroy: false, only: None };
     let mut full = false;
     let mut nudges: Vec<(String, String)> = Vec::new();
     for s in queue {
@@ -47,6 +50,10 @@ pub fn plan(queue: Vec<Signal>) -> Plan {
                 p.rebuild = true;
                 full = true;
             }
+            Signal::Recover => {
+                p.recover = true;
+                full = true;
+            }
             Signal::Destroy => {
                 p.destroy = true;
                 full = true;
@@ -56,7 +63,7 @@ pub fn plan(queue: Vec<Signal>) -> Plan {
         }
     }
     if p.destroy {
-        return Plan { reopen: false, rebuild: false, destroy: true, only: None };
+        return Plan { reopen: false, rebuild: false, recover: false, destroy: true, only: None };
     }
     if !full {
         // However many folders: a scoped pass over each costs dirents plus what
@@ -132,7 +139,7 @@ mod tests {
     }
 
     fn quiet() -> Plan {
-        Plan { reopen: false, rebuild: false, destroy: false, only: None }
+        Plan { reopen: false, rebuild: false, recover: false, destroy: false, only: None }
     }
 
     fn folders(pairs: &[(&str, &str)]) -> Option<Vec<(String, String)>> {
@@ -152,7 +159,7 @@ mod tests {
     #[test]
     fn destroy_is_planned_and_cancels_the_rest_of_the_burst() {
         let p = plan(vec![Signal::Rebuild, nudge("a", "INBOX"), Signal::Destroy, Signal::Reopen]);
-        assert_eq!(p, Plan { reopen: false, rebuild: false, destroy: true, only: None });
+        assert_eq!(p, Plan { reopen: false, rebuild: false, recover: false, destroy: true, only: None });
     }
 
     #[test]
@@ -162,6 +169,8 @@ mod tests {
         // Rebuild and reopen are never swallowed by the nudges queued behind them.
         assert_eq!(plan(vec![Signal::Rebuild, nudge("a", "INBOX")]), Plan { rebuild: true, ..quiet() });
         assert_eq!(plan(vec![Signal::Reopen, nudge("a", "INBOX")]), Plan { reopen: true, ..quiet() });
+        assert_eq!(plan(vec![Signal::Recover, Signal::Recover]), Plan { recover: true, ..quiet() }, "runtime errors coalesce into one full worker recovery");
+        assert_eq!(plan(vec![Signal::Recover, Signal::Rebuild]), Plan { recover: true, rebuild: true, ..quiet() });
     }
 
     #[test]

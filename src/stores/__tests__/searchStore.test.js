@@ -267,6 +267,36 @@ describe('daemon-backed search lifecycle', () => {
     expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual(['server']);
   });
 
+  it('replaces cumulative indexed snapshots per account while retaining other sources', async () => {
+    const run = await startSearch('invoice');
+    const row = (uid, subject, accountId, day, source = 'local') => result(uid, subject, {
+      _accountId: accountId, _mailbox: 'INBOX', source, messageId: `<${uid}@${accountId}.test>`,
+      date: `2026-09-${String(day).padStart(2, '0')}T12:00:00Z`,
+    });
+    progress(run, 1, { rows: [row(1, 'account one old', 'acct-1', 1)], lane: 'local', localMode: 'index', replaceIndexAccountId: 'acct-1' });
+    progress(run, 2, { rows: [row(7, 'account two', 'acct-2', 2)], lane: 'local', localMode: 'index', replaceIndexAccountId: 'acct-2' });
+    progress(run, 3, { rows: [row(2, 'fallback from account one', 'acct-1', 4)], lane: 'local', localMode: 'scan' });
+    progress(run, 4, { rows: [row(3, 'account one newest', 'acct-1', 5)], lane: 'local', localMode: 'index', replaceIndexAccountId: 'acct-1' });
+    progress(run, 5, { rows: [row(9, 'server', 'acct-1', 3, 'server-search')], lane: 'server' });
+
+    expect(useSearchStore.getState().searchResults.map(row => row.subject)).toEqual([
+      'account one newest', 'fallback from account one', 'server', 'account two',
+    ]);
+  });
+
+  it('rejects an indexed snapshot that names a different account than its rows', async () => {
+    const run = await startSearch('invoice');
+    const row = (uid, subject, accountId) => result(uid, subject, {
+      _accountId: accountId, _mailbox: 'INBOX', source: 'local', messageId: `<${uid}@${accountId}.test>`,
+    });
+    const indexed = { lane: 'local', localMode: 'index' };
+    progress(run, 1, { ...indexed, rows: [row(1, 'kept snapshot', 'acct-1')], replaceIndexAccountId: 'acct-1' });
+    progress(run, 2, { ...indexed, rows: [row(2, 'wrong account', 'acct-2')], replaceIndexAccountId: 'acct-1' });
+
+    expect(useSearchStore.getState().lastSequence).toBe(1);
+    expect(useSearchStore.getState().searchResults.map(email => email.subject)).toEqual(['kept snapshot']);
+  });
+
   it('surfaces an incomplete available index as building before the fallback scan arrives', async () => {
     const run = await startSearch('invoice');
     const coverage = { indexed: 20, total: 100, complete: false, matched: 4, shown: 4 };
