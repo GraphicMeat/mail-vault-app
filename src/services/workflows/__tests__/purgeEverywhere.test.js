@@ -97,6 +97,14 @@ vi.mock('../../../stores/settingsStore', () => ({
   },
 }));
 
+// The open search results — a purge has to reach them too.
+const mockRemoveSearchResults = vi.fn();
+vi.mock('../../../stores/searchStore', () => ({
+  useSearchStore: {
+    getState: () => ({ searchActive: true, removeSearchResults: (...a) => mockRemoveSearchResults(...a) }),
+  },
+}));
+
 const { useMailStore } = await import('../../../stores/mailStore');
 const { purgeEverywhere } = await import('../messageMutations');
 
@@ -152,6 +160,7 @@ beforeEach(() => {
   mockGraphDeleteMessage.mockReset().mockResolvedValue(undefined);
   mockIsGraphAccount.mockReset().mockReturnValue(false);
   mockGetGraphMessageId.mockReset().mockReturnValue(null);
+  mockRemoveSearchResults.mockReset();
 });
 
 describe('purgeEverywhere — storage matrix', () => {
@@ -608,5 +617,29 @@ describe('purgeEverywhere — UIDVALIDITY guard', () => {
     expect(mockBackupPurgeUids).not.toHaveBeenCalled();
     expect(res.deleted).toBe(0);
     expect(res.failed).toBe(1);
+  });
+});
+
+describe('purgeEverywhere and the rest of the app', () => {
+  it('takes the purged rows out of the open search results', async () => {
+    prime({ emails: [serverMsg(1), serverMsg(2)] });
+
+    await purgeEverywhere([1]);
+
+    expect(mockRemoveSearchResults.mock.calls.flat(2)).toEqual([`${ACCOUNT.id}|INBOX.Spam|1`]);
+  });
+
+  it('keeps a tick the user made while the purge ran', async () => {
+    prime({ emails: [serverMsg(1), serverMsg(2)] });
+    useMailStore.setState({ selectedEmailIds: new Set([1]) });
+    // The provenance read is the purge's own await before the optimistic paint.
+    mockGetLocalIndexProvenance.mockImplementationOnce(async () => {
+      useMailStore.setState(s => ({ selectedEmailIds: new Set([...s.selectedEmailIds, 2]) }));
+      return new Map();
+    });
+
+    await purgeEverywhere([1]);
+
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
   });
 });

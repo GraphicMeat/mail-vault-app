@@ -574,6 +574,8 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       : {})),
   });
   get().updateSortedEmails();
+  // The result list is not `emails` — it needs telling separately.
+  await pruneSearchResults([{ accountId, mailbox, uid: realUid }]);
   // Now, not after the round trip: the reader is empty from this paint, and a
   // message that appears seconds later reads as a bug. A delete the server
   // refuses restores the row, not the reader — the same trade the optimistic
@@ -806,6 +808,33 @@ export async function stampVaultEntry(accountId, mailbox, uid, extra) {
 // "This app deleted the server copy" — one of the three proofs custody accepts.
 export async function markServerDeleted(accountId, mailbox, uid) {
   return stampVaultEntry(accountId, mailbox, uid, { serverDeleted: true });
+}
+
+// ── pruneSearchResults ──
+//
+// A search result list is not `emails`: the optimistic row removal, the
+// tombstones and the post-delete reconcile all act on the folder's list, and
+// `loadEmails` reloads a folder, never a search. So a message deleted out of
+// an open result list stayed on screen — with its row still clickable — until
+// the query was run again. `removeSearchResults` is the store's own eviction;
+// the callers just have to name the copies.
+//
+// Awaited at the optimistic paint, not after the round trip: "gone from the
+// list now" is the same promise the row removal makes, and the eviction is
+// permanent for the run either way (the move path made that trade first).
+//
+// The key is `emailKey`'s, never a selection key — a single folder's list keys
+// its selection by bare uid, which matches no result row at all.
+export async function pruneSearchResults(copies) {
+  if (!copies.length) return;
+  const { useSearchStore } = await import('../../stores/searchStore');
+  const search = useSearchStore.getState();
+  if (!search.searchActive) return;
+  search.removeSearchResults(copies.map(({ accountId, mailbox, uid }) => emailKey({
+    _accountId: accountId,
+    _mailbox: mailbox,
+    uid,
+  })));
 }
 
 // ── selectionStillNames ──
@@ -1183,16 +1212,11 @@ export async function markEmailReadStatus(uid, read) {
     // this is — the viewer's toggle reaches a vault-only message too.
     await applyFlagToTargets([{ account, accountId, mailbox, uid, emailObj: row }], '\\Seen', read);
 
-    // Marking the open email unread means "not dealt with yet" — keeping it on
-    // screen contradicts that, and the next open would just mark it read again.
-    if (!read && useMailStore.getState().selectedEmail?.uid === uid) {
-      useMailStore.setState({
-        selectedEmailId: null,
-        selectedEmail: null,
-        selectedEmailSource: null,
-        selectedThread: null,
-      });
-    }
+    // The reader stays put. Marking the open message unread used to close it —
+    // "not dealt with yet" — but a flag change is not one of the three things
+    // allowed to take a message off the screen (a delete, a move, or the
+    // close button). Nothing reopens it either: the auto mark-as-read runs on
+    // open, not on a flag write, so the message stays open and unread.
   } catch (error) {
     useMailStore.setState({ error: tr('svc.messageMutations.couldChangeReadStatusServer', { error: error.message }) });
   }
@@ -1589,13 +1613,19 @@ export async function deleteSelectedFromServer() {
   // closed one just as readily.
   useMailStore.setState({
     deleteTombstones: newTombstones,
-    selectedEmailIds: new Set(),
+    // Live minus what this batch owns, never a blanket clear: the journal
+    // write above is awaited, and a row the user ticks across it is theirs.
+    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !deletedKeySet.has(k))),
     emails: state.emails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
     sentEmails: state.sentEmails.filter(e => !deletedKeySet.has(selectionKey(e, state))),
     totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
     ...(closesReader ? { selectedEmailId: null, selectedEmail: null } : {}),
   });
   get().updateSortedEmails();
+  await pruneSearchResults(keys.map(key => {
+    const { uid, accountId, mailbox } = contextOf(key);
+    return { accountId, mailbox, uid };
+  }));
   if (openNext) get().selectEmail(selectionKey(openNext, state));
 
   const deletedRealUids = new Set();
@@ -1869,12 +1899,15 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   for (const t of targets) tombstones.add(t.tombstone);
   useMailStore.setState({
     deleteTombstones: tombstones,
-    selectedEmailIds: new Set(),
+    // Live minus this purge's own keys — the provenance reads above are
+    // awaited, and a tick made across them is not this purge's to drop.
+    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
     emails: state.emails.filter(e => !keySet.has(selectionKey(e, state))),
     sentEmails: state.sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
     totalEmails: Math.max(0, (state.totalEmails || 0) - keys.length),
   });
   get().updateSortedEmails();
+  await pruneSearchResults(targets.map(({ accountId, mailbox, uid }) => ({ accountId, mailbox, uid })));
 
   // ── UIDVALIDITY guard ──
   // Neither the vault nor the custody store carries a UIDVALIDITY stamp. After
@@ -2174,7 +2207,9 @@ export async function moveEmails(keys, targetMailbox) {
     emails: filteredEmails,
     sentEmails: get().sentEmails.filter(e => !keySet.has(selectionKey(e, state))),
     totalEmails: newTotal,
-    selectedEmailIds: new Set([...state.selectedEmailIds].filter(k => !keySet.has(k))),
+    // Live, not the snapshot: the per-group network loop above is awaited, and
+    // a row ticked across it is the user's, not this move's to drop.
+    selectedEmailIds: new Set([...get().selectedEmailIds].filter(k => !keySet.has(k))),
   };
 
   if (selectionStillNames(get, { keys: keySet })) {
@@ -2190,16 +2225,11 @@ export async function moveEmails(keys, targetMailbox) {
 
   // A hit moved out of the results list stays gone: the results are not
   // `emails`, and loadEmails() reloads the folder, not the search.
-  const { useSearchStore } = await import('../../stores/searchStore');
-  const search = useSearchStore.getState();
-  if (search.searchActive) {
-    const movedCopyKeys = [...groups.values()].flatMap(group => group.uids.map(uid => emailKey({
-      _accountId: group.accountId,
-      _mailbox: group.mailbox,
-      uid,
-    })));
-    search.removeSearchResults(movedCopyKeys);
-  }
+  await pruneSearchResults([...groups.values()].flatMap(group => group.uids.map(uid => ({
+    accountId: group.accountId,
+    mailbox: group.mailbox,
+    uid,
+  }))));
 
   const { invalidateRestoreDescriptors: _invalidateRestore } = await import('../cacheManager');
   // Only the view's own folder can name removed uids — the sidecar is per

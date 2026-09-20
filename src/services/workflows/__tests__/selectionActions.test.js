@@ -5,7 +5,7 @@
 // fingerprints that ignore flags unless the flag counter is bumped. Marking a
 // selection as read used to update `emails` alone, so the rows kept showing the
 // old unread state until something else forced a re-derive.
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { serverUids } from '../../../stores/slices/serverUids';
 import { _selKey, selectionKey } from '../../../stores/slices/unifiedHelpers';
 
@@ -1552,5 +1552,108 @@ describe('removeLocalEmail keeps the known archived set on a failed read (I-5)',
     await useMailStore.getState().removeLocalEmail(1);
 
     expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+  });
+});
+
+// ── the other half of the in-flight rule ──
+//
+// The reader was fixed once (selectionStillNames); the tick list was not. Every
+// bulk path wrote `selectedEmailIds: new Set()` — or a snapshot taken before
+// its own awaits — after the network work, so a checkbox the user ticked while
+// the operation ran was wiped and had to be ticked again.
+describe('a finished mutation does not clear a tick made while it ran', () => {
+  const tickSecond = () => useMailStore.setState(s => ({
+    selectedEmailIds: new Set([...s.selectedEmailIds, 2]),
+  }));
+
+  it('the selection bar\'s delete keeps only what it did not delete', async () => {
+    primeStore(seedThread(), [1]);
+    // The journal write is the bulk delete's own await before the paint.
+    mockQueueOp.mockImplementationOnce(async () => { tickSecond(); });
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
+  });
+
+  it('the move keeps only what it did not move', async () => {
+    primeStore(seedThread(), [1]);
+    mockMoveEmails.mockImplementationOnce(async () => { tickSecond(); });
+
+    await useMailStore.getState().moveEmails([1], 'Archive');
+
+    expect([...useMailStore.getState().selectedEmailIds]).toEqual([2]);
+  });
+});
+
+// ── a delete has to reach the open search results ──
+//
+// The results list is `searchStore.searchResults`, not `emails`: neither the
+// optimistic row removal nor the post-delete reconcile touches it, so a message
+// deleted out of a result list stayed on screen until the search was re-run.
+// Move already pruned; the deletes did not.
+describe('a delete takes the row out of the open search results', () => {
+  const hit = (uid) => ({
+    uid, messageId: `s${uid}@mock`, subject: `Hit ${uid}`, flags: [],
+    from: { address: 'them@mock.test' }, date: '2026-08-01T10:00:00Z',
+    _accountId: ACCOUNT.id, _mailbox: 'INBOX', source: 'server-search',
+  });
+
+  const openResults = async (rows) => {
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
+    useSearchStore.setState({ searchActive: true, searchResults: rows });
+    return useSearchStore;
+  };
+
+  const subjects = (store) => store.getState().searchResults.map(r => r.subject);
+
+  afterEach(async () => {
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
+  });
+
+  it('the single delete drops its own hit and leaves the rest', async () => {
+    primeStore(seedThread(), []);
+    const store = await openResults([hit(1), hit(2)]);
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(subjects(store)).toEqual(['Hit 2']);
+  });
+
+  it('drops the row as it disappears, not after the server answers', async () => {
+    primeStore(seedThread(), []);
+    const store = await openResults([hit(1)]);
+    let goneBeforeTheServerCall = null;
+    mockDeleteEmail.mockImplementationOnce(async () => {
+      goneBeforeTheServerCall = subjects(store);
+    });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(goneBeforeTheServerCall).toEqual([]);
+  });
+
+  it("the selection bar's delete drops every hit it deleted", async () => {
+    primeStore(seedThread(), [1, 2]);
+    const store = await openResults([hit(1), hit(2), hit(3)]);
+
+    await useMailStore.getState().deleteSelectedFromServer();
+
+    // Keyed by emailKey, not by the bare uid the single-folder list selects
+    // with — a bare uid matches no result row at all.
+    expect(subjects(store)).toEqual(['Hit 3']);
+  });
+
+  it('leaves a closed search alone', async () => {
+    primeStore(seedThread(), []);
+    const { useSearchStore } = await import('../../../stores/searchStore');
+    useSearchStore.getState().clearSearch();
+    useSearchStore.setState({ searchActive: false, searchResults: [hit(1)] });
+
+    await useMailStore.getState().deleteEmailFromServer(1);
+
+    expect(useSearchStore.getState().searchResults.map(r => r.subject)).toEqual(['Hit 1']);
   });
 });

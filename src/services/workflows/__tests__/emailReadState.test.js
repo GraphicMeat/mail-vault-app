@@ -437,15 +437,18 @@ describe('selectEmail — a Sent copy opened from the INBOX list', () => {
 });
 
 describe('markEmailReadStatus', () => {
-  it('closes the viewer when the open email is marked unread', async () => {
+  // A flag change is not one of the three things allowed to close the reader
+  // (delete, move, the close button). It used to close on unread, which read
+  // as the message being taken away for having been marked.
+  it('keeps the viewer open when the open email is marked unread', async () => {
     primeStore(['\\Seen']);
     useMailStore.setState({ selectedEmailId: 1, selectedEmail: { uid: 1, flags: ['\\Seen'] }, selectedEmailSource: 'server' });
 
     await useMailStore.getState().markEmailReadStatus(1, false);
 
     expect(seenOf(1)).toBe(false);
-    expect(useMailStore.getState().selectedEmail).toBe(null);
-    expect(useMailStore.getState().selectedEmailId).toBe(null);
+    expect(useMailStore.getState().selectedEmailId).toBe(1);
+    expect(useMailStore.getState().selectedEmail?.flags).not.toContain('\\Seen');
   });
 
   it('drops the stale cached copy so a reopen re-reads the flags', async () => {
@@ -506,7 +509,8 @@ describe('markEmailReadStatus', () => {
     expect(mockUpdateEmailFlags).not.toHaveBeenCalledWith(expect.anything(), 1, ['\\Seen'], 'remove', 'INBOX');
     expect(seenOf(1)).toBe(true); // INBOX's own message 1, untouched
     expect(useMailStore.getState().sentEmails[0].flags).not.toContain('\\Seen');
-    expect(useMailStore.getState().selectedEmail).toBe(null);
+    // …and the Sent copy the toggle was pressed in stays open.
+    expect(useMailStore.getState().selectedEmail?.messageId).toBe('s@mock');
   });
 });
 
