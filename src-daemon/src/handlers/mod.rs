@@ -101,7 +101,7 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
         // app only ever paginated part of) — fill it here, once, instead of
         // letting the app re-page the whole mailbox off the server every launch.
         if result.success {
-            let short = state.sync_engine.sidecar_shortfall(&account_id, &mailbox_clone, result.total_emails);
+            let short = state.sync_engine.sidecar_shortfall(&account_id, &mailbox_clone, result.total_emails).await;
             if short > 0 {
                 state.sync_engine.backfill_mailbox(&account, &mailbox_clone).await;
             }

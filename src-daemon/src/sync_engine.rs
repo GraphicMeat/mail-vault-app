@@ -184,37 +184,18 @@ impl SyncEngine {
         *self.custody_db.lock().unwrap_or_else(|p| p.into_inner()) = Some(db);
     }
 
-    fn with_cache_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>) -> Result<Option<T>, String> {
-        let attached = self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone();
-        let Some(attached) = attached else { return Ok(None) };
-        let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
-        let Some(conn) = guard.as_ref() else { return Ok(None) };
-        f(conn).map(Some)
-    }
-
-    fn sql_write_meta(&self, account: &str, mailbox: &str, total: u32, uid_validity: Option<u32>, uid_next: Option<u32>, highest_modseq: Option<u64>, last_reconcile: Option<u64>) -> Result<(), String> {
-        let value = serde_json::json!({
-            "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
-            "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
-        });
-        self.with_cache_db(|conn| mailvault_core::custody::cache::save_headers(conn, account, mailbox, &value.to_string())).map(|_| ())
-    }
-
-    fn sql_write_headers(&self, account: &str, mailbox: &str, headers: &[ImapEmailHeader]) -> Result<(), String> {
-        let value = serde_json::json!({"emails": headers});
-        self.with_cache_db(|conn| mailvault_core::custody::cache::save_headers(conn, account, mailbox, &value.to_string())).map(|_| ())
-    }
-
-    fn sql_patch_flags(&self, account: &str, mailbox: &str, changes: &[(u32, Vec<String>)]) -> Result<(), String> {
-        self.with_cache_db(|conn| mailvault_core::custody::cache::patch_flags(conn, account, mailbox, changes)).map(|_| ())
-    }
-
-    fn sql_prune(&self, account: &str, mailbox: &str, live: &[u32]) -> Result<(), String> {
-        self.with_cache_db(|conn| mailvault_core::custody::cache::prune_headers(conn, account, mailbox, live)).map(|_| ())
-    }
-
-    fn sql_clear(&self, account: &str, mailbox: &str) -> Result<(), String> {
-        self.with_cache_db(|conn| mailvault_core::custody::cache::clear_headers(conn, Some(account), Some(mailbox))).map(|_| ())
+    /// One cache step's inputs, cloned into a blocking task (`cache_io`).
+    fn cache_ctx(&self, account_id: &str, mailbox: &str) -> CacheCtx {
+        CacheCtx {
+            vault_closed: Arc::clone(&self.vault_closed),
+            vault_gate: Arc::clone(&self.vault_gate),
+            root: self.data_dir.clone(),
+            cache_dir: tauri_cache_dir(&self.data_dir, account_id, mailbox),
+            account: account_id.to_string(),
+            mailbox: mailbox.to_string(),
+            contacts: Arc::clone(&self.contacts),
+            db: self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+        }
     }
 
     /// The vault root this engine writes into — Task 2.7 (2.3 review F1)
@@ -302,7 +283,20 @@ impl SyncEngine {
     /// `Some(reason)` when this account has spent its daily transfer allowance
     /// and must not sync again until the next UTC day. `None` = go ahead.
     async fn transfer_cap_reached(&self, account: &SyncAccount) -> Option<String> {
-        let limits = read_transfer_limits(&self.app_dir, &account.id)?;
+        // Two settings/stats file reads: small, but still disk, so they go to
+        // a blocking thread together rather than onto a tokio worker.
+        let (limits, used) = {
+            let app_dir = self.app_dir.clone();
+            let account_id = account.id.clone();
+            tokio::task::spawn_blocking(move || {
+                let limits = read_transfer_limits(&app_dir, &account_id);
+                let used = transfer_stats::usage_today(&app_dir, &account_id);
+                (limits, used)
+            })
+            .await
+            .ok()?
+        };
+        let limits = limits?;
         if !limits.cap_enabled {
             return None;
         }
@@ -310,7 +304,6 @@ impl SyncEngine {
         let down_limit = limits.daily_down_limit_bytes.or(default_down);
         let up_limit = limits.daily_up_limit_bytes.or(default_up);
 
-        let used = transfer_stats::usage_today(&self.app_dir, &account.id);
         let over_down = down_limit.is_some_and(|l| used.down >= l);
         let over_up = up_limit.is_some_and(|l| used.up >= l);
         if !over_down && !over_up {
@@ -654,9 +647,8 @@ impl SyncEngine {
         let (total, uid_validity, server_uid_next, highest_modseq) =
             imap::check_mailbox_status(session, mailbox, has_condstore).await?;
 
-        let cache_dir = tauri_cache_dir(&self.data_dir, account_id, mailbox);
-        let cached = read_tauri_cache_meta(&cache_dir);
-        let sidecar_count = count_sidecars(&cache_dir);
+        let io = self.cache_ctx(account_id, mailbox);
+        let (cached, sidecar_count) = cache_io(&io, |io| Ok(io.meta_and_count())).await?;
 
         let uid_validity_ok = match (cached.as_ref().and_then(|c| c.uid_validity), uid_validity) {
             (Some(a), Some(b)) => a == b,
@@ -680,18 +672,17 @@ impl SyncEngine {
                     "[sync] UIDVALIDITY changed for {} ({}) — clearing {} cached sidecars",
                     account.email, mailbox, sidecar_count
                 );
-                wipe_generation(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir)?;
-                self.sql_clear(account_id, mailbox)?;
+                cache_io(&io, |io| io.wipe()).await?;
                 None
             };
             let (headers, _total, _has_more, _skipped) =
                 imap::fetch_emails_page(session, mailbox, 1, 500).await?;
             let new_emails = headers.len();
-            write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
-            write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &headers)?;
-            self.sql_write_meta(account_id, mailbox, total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
-            self.sql_write_headers(account_id, mailbox, &headers)?;
-            self.contacts.observe_headers(account_id, mailbox, &headers);
+            cache_io(&io, move |io| {
+                io.write_meta(total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
+                io.write_headers(&headers)
+            })
+            .await?;
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
             return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total, session_dirty: false });
         }
@@ -725,8 +716,7 @@ impl SyncEngine {
             (Some(cached_modseq), Some(server_modseq)) if server_modseq != cached_modseq => {
                 match imap::fetch_changed_flags(session, mailbox, cached_modseq).await {
                     Ok(changes) => {
-                        updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &changes)?;
-                        self.sql_patch_flags(account_id, mailbox, &changes)?;
+                        updated_flags = cache_io(&io, move |io| io.patch_flags(&changes)).await?;
                     }
                     Err(e) => warn!("[sync] CHANGEDSINCE failed for {}: {}", account.email, e),
                 }
@@ -739,8 +729,7 @@ impl SyncEngine {
                 let from_uid = cached_uid_next.saturating_sub(FLAG_REFRESH_WINDOW).max(1);
                 match imap::fetch_flags_from(session, mailbox, from_uid).await {
                     Ok(flags) => {
-                        updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &flags)?;
-                        self.sql_patch_flags(account_id, mailbox, &flags)?;
+                        updated_flags = cache_io(&io, move |io| io.patch_flags(&flags)).await?;
                     }
                     Err(e) => warn!("[sync] Flag refresh failed for {}: {}", account.email, e),
                 }
@@ -773,12 +762,12 @@ impl SyncEngine {
                     warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
                 }
                 Ok(uids) => {
-                    let pruned = prune_sidecars(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &uids)?;
-                    self.sql_prune(account_id, mailbox, &uids)?;
+                    let server_uid_count = uids.len();
+                    let pruned = cache_io(&io, move |io| io.prune(&uids)).await?;
                     reconciled_at = Some(now_ms());
                     info!(
                         "[sync] Reconciled {} ({}): {} server UIDs, {} pruned (counts_disagree={}, due={})",
-                        account.email, mailbox, uids.len(), pruned, counts_disagree, reconcile_due
+                        account.email, mailbox, server_uid_count, pruned, counts_disagree, reconcile_due
                     );
                 }
                 Err(e) => {
@@ -788,21 +777,23 @@ impl SyncEngine {
             }
         }
 
-        write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
-        self.sql_write_meta(account_id, mailbox, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
-        if !new_headers.is_empty() {
-            write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &new_headers)?;
-            self.sql_write_headers(account_id, mailbox, &new_headers)?;
-            self.contacts.observe_headers(account_id, mailbox, &new_headers);
-        }
+        let new_count = new_headers.len();
+        cache_io(&io, move |io| {
+            io.write_meta(total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
+            if new_headers.is_empty() {
+                return Ok(());
+            }
+            io.write_headers(&new_headers)
+        })
+        .await?;
 
         info!(
             "[sync] Delta sync for {} ({}): {} new, {} flag updates, {} total",
-            account.email, mailbox, new_headers.len(), updated_flags, total
+            account.email, mailbox, new_count, updated_flags, total
         );
 
         Ok(SyncDelta {
-            new_emails: new_headers.len(),
+            new_emails: new_count,
             updated_flags,
             total_emails: total,
             session_dirty,
@@ -834,9 +825,11 @@ impl SyncEngine {
     /// `_meta.json.totalEmails`, which is the count the server reported LAST
     /// time — so a mailbox holding 503 sidecars out of 15,060 looks perfectly
     /// in sync, and nothing ever fills it in.
-    pub fn sidecar_shortfall(&self, account_id: &str, mailbox: &str, total: u32) -> usize {
-        let cache_dir = tauri_cache_dir(&self.data_dir, account_id, mailbox);
-        (total as usize).saturating_sub(count_sidecars(&cache_dir))
+    pub async fn sidecar_shortfall(&self, account_id: &str, mailbox: &str, total: u32) -> usize {
+        let io = self.cache_ctx(account_id, mailbox);
+        // A directory listing: never on the caller's worker thread.
+        let cached = cache_io(&io, |io| Ok(io.sidecar_count())).await.unwrap_or(0);
+        (total as usize).saturating_sub(cached)
     }
 
     /// Fill the sidecar cache up to the server's full message list.
@@ -934,13 +927,13 @@ impl SyncEngine {
         account: &SyncAccount,
         mailbox: &str,
     ) -> Result<usize, String> {
-        let cache_dir = tauri_cache_dir(&self.data_dir, account.id.as_str(), mailbox);
+        let io = self.cache_ctx(account.id.as_str(), mailbox);
         let server_uids = imap::search_all_uids(session, mailbox, false).await?;
         if server_uids.is_empty() {
             return Ok(0);
         }
 
-        let have = cached_uids(&cache_dir);
+        let have = cache_io(&io, |io| Ok(io.cached_uids())).await?;
         // Newest first — the user is looking at the top of the list.
         let mut missing: Vec<u32> = server_uids
             .into_iter()
@@ -964,10 +957,9 @@ impl SyncEngine {
                 warn!("[backfill] Empty response for a {}-UID chunk — stopping", chunk.len());
                 break;
             }
-            write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &headers)?;
-            self.sql_write_headers(account.id.as_str(), mailbox, &headers)?;
-            self.contacts.observe_headers(account.id.as_str(), mailbox, &headers);
-            written += headers.len();
+            let chunk_len = headers.len();
+            cache_io(&io, move |io| io.write_headers(&headers)).await?;
+            written += chunk_len;
             info!(
                 "[backfill] {} ({}): {}/{} headers cached",
                 account.email, mailbox, written, missing.len()
@@ -1019,6 +1011,106 @@ fn read_transfer_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimi
         .get("transferLimits")?
         .get(account_id)?;
     serde_json::from_value(entry.clone()).ok()
+}
+
+// ── One cache step, on a blocking thread ────────────────────────────────────
+//
+// `sync_mailbox` and `backfill_with_session` are async tasks on the daemon's
+// startup runtime. Every cache step they take is disk work — a directory
+// listing of a mailbox that can hold 30k sidecars, up to 500 sidecar writes,
+// and the SQL mirror under the shared custody mutex — and running it inline
+// parked a tokio worker for the whole step. Each step now goes through
+// `cache_io`, which owns a clone of everything the step needs; the sidecar
+// write, its SQL mirror and the contacts observation travel together, so one
+// step is one hop, not four (2026-09-20, same pass that moved the socket and
+// the classification walk off the worker threads).
+
+#[derive(Clone)]
+struct CacheCtx {
+    vault_closed: Arc<AtomicBool>,
+    vault_gate: Arc<std::sync::RwLock<()>>,
+    root: PathBuf,
+    cache_dir: PathBuf,
+    account: String,
+    mailbox: String,
+    contacts: Arc<ContactsState>,
+    db: Option<Arc<mailvault_core::custody::SharedConn>>,
+}
+
+impl CacheCtx {
+    fn with_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>) -> Result<Option<T>, String> {
+        let Some(attached) = self.db.as_ref() else { return Ok(None) };
+        let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(conn) = guard.as_ref() else { return Ok(None) };
+        f(conn).map(Some)
+    }
+
+    /// `_meta.json` plus the sidecar count: two directory reads, one hop.
+    fn meta_and_count(&self) -> (Option<CachedMeta>, usize) {
+        (read_tauri_cache_meta(&self.cache_dir), count_sidecars(&self.cache_dir))
+    }
+
+    fn cached_uids(&self) -> HashSet<u32> {
+        cached_uids(&self.cache_dir)
+    }
+
+    fn sidecar_count(&self) -> usize {
+        count_sidecars(&self.cache_dir)
+    }
+
+    fn write_meta(
+        &self,
+        total: u32,
+        uid_validity: Option<u32>,
+        uid_next: Option<u32>,
+        highest_modseq: Option<u64>,
+        last_reconcile: Option<u64>,
+    ) -> Result<(), String> {
+        write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, total, uid_validity, uid_next, highest_modseq, last_reconcile)?;
+        let value = serde_json::json!({
+            "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
+            "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
+        });
+        self.with_db(|conn| mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())).map(|_| ())
+    }
+
+    /// Sidecars, the SQL mirror and the contacts observation — the three
+    /// things that always follow a header fetch.
+    fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
+        write_headers(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, headers)?;
+        let value = serde_json::json!({"emails": headers});
+        self.with_db(|conn| mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string()))?;
+        self.contacts.observe_headers(&self.account, &self.mailbox, headers);
+        Ok(())
+    }
+
+    fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
+        let patched = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, changes)?;
+        self.with_db(|conn| mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes))?;
+        Ok(patched)
+    }
+
+    fn prune(&self, live: &[u32]) -> Result<usize, String> {
+        let pruned = prune_sidecars(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, live)?;
+        self.with_db(|conn| mailvault_core::custody::cache::prune_headers(conn, &self.account, &self.mailbox, live))?;
+        Ok(pruned)
+    }
+
+    /// UIDVALIDITY changed: the whole generation goes, in both stores.
+    fn wipe(&self) -> Result<(), String> {
+        wipe_generation(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir)?;
+        self.with_db(|conn| mailvault_core::custody::cache::clear_headers(conn, Some(&self.account), Some(&self.mailbox))).map(|_| ())
+    }
+}
+
+/// Run one cache step on a blocking thread. Never call the `CacheCtx` methods
+/// directly from an async fn — that is the bug this exists to prevent.
+async fn cache_io<T: Send + 'static>(
+    ctx: &CacheCtx,
+    f: impl FnOnce(CacheCtx) -> Result<T, String> + Send + 'static,
+) -> Result<T, String> {
+    let ctx = ctx.clone();
+    tokio::task::spawn_blocking(move || f(ctx)).await.map_err(|e| format!("cache task failed: {e}"))?
 }
 
 // ── Tauri-compatible cache format ────────────────────────────────────────────
@@ -1552,6 +1644,42 @@ mod tests {
     /// Mock connectivity object: a gate whose probe answers what the test says.
     fn gate(online: bool) -> Arc<NetGate> {
         NetGate::with_probe(Arc::new(move || Box::pin(async move { online })))
+    }
+
+    /// Every cache step a sync takes goes through `cache_io`, which runs it on
+    /// a blocking thread. `#[tokio::test]` is `current_thread`, so if the step
+    /// ran inline the runtime would be parked with it and a 20ms timer could
+    /// not fire until the step was released. The release comes from an OS
+    /// thread on purpose: a regression then fails on the timing assertion
+    /// instead of deadlocking the whole suite.
+    #[tokio::test]
+    async fn a_cache_step_never_parks_the_runtime_that_asked_for_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = engine_for(dir.path());
+        let ctx = engine.cache_ctx("acc1", "INBOX");
+        let (release, wait) = std::sync::mpsc::channel::<()>();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(400));
+            let _ = release.send(());
+        });
+
+        let step = tokio::spawn(async move {
+            cache_io(&ctx, move |io| {
+                wait.recv().ok(); // parks whichever thread runs this
+                Ok(io.sidecar_count())
+            })
+            .await
+        });
+
+        let start = std::time::Instant::now();
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        let timer = start.elapsed();
+
+        assert_eq!(step.await.unwrap().unwrap(), 0);
+        assert!(
+            timer < std::time::Duration::from_millis(300),
+            "the cache step parked the caller's runtime: a 20ms timer took {timer:?}"
+        );
     }
 
     fn engine_for(dir: &Path) -> SyncEngine {

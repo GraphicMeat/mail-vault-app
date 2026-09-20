@@ -93,7 +93,7 @@ One box, one thread. Every separate action runs on a thread of its own, and noth
 **Daemon process.** Four owners, each with its own thread:
 
 - **`ipc-server` thread, its own tokio runtime** (`server::spawn_on_own_thread`) — the socket: bind, accept, per-connection framing, RPC dispatch, and the long jobs handlers spawn (restore, migration, backup, `mail_search`, reclassify). Nothing else is on this runtime, so no background work anywhere else in the daemon can delay an accept or a reply.
-- **Startup runtime** (`daemon_main`) — the periodic and long-lived workers: the sync engine, the IDLE watchers, the classification queue worker, the contacts flush, transfer stats and the Insights snapshot sweeper. It binds nothing and answers nothing.
+- **Startup runtime** (`daemon_main`) — the periodic and long-lived workers: the sync engine, the IDLE watchers, the classification queue worker, the contacts flush, transfer stats and the Insights snapshot sweeper. It binds nothing and answers nothing. Its own disk work leaves it too: every sync cache step (the `_meta.json` read and sidecar count, the sidecar writes, the flag patch, the prune, the SQL mirror and the contacts observation) goes through `sync_engine::cache_io`, one blocking hop per step, and the cached-header walk behind classification and the local scan behind a restore do the same.
 - **`search-index` OS thread** — the index worker, sole owner of the search index's SQLite connection: level-triggered reconciles, rebuilds, destroys and compaction, coalescing signals rather than blocking a caller.
 - **`custody-import` OS thread** — the one-time legacy JSON import, taking the custody lock one mailbox at a time.
 
