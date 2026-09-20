@@ -11,6 +11,7 @@
 - **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
 
 ### Fixed
+- **Search on large vaults is back to milliseconds.** Marking attachment-only hits made every search re-probe the index once per row, which took a fifth of a second to half a second on a 50,000-message vault. It is back to a few milliseconds.
 - **A delete the server refuses is retried instead of quietly coming back.** A failed delete used to put the row back on the list and forget the whole thing, so a dead connection was enough to undo a delete you had confirmed. It is now re-sent straight away, and if that fails too it stays queued and is retried on reconnect, every few minutes, and at the next launch.
 - **Deleting a search result takes it out of the results straight away.** A message deleted from a result list stayed on screen, still clickable, until the search was run again. It now disappears the moment it is deleted, the same way a moved message already did.
 - **Marking the open message unread no longer closes it.** Only deleting it, moving it, or closing the reader yourself takes a message off the screen now.

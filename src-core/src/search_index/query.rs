@@ -132,7 +132,9 @@ fn column_match_sql(queries: &[(&'static str, String)]) -> String {
     }
     queries
         .iter()
-        .map(|(table, _)| format!("EXISTS (SELECT 1 FROM {table} WHERE rowid = m.id AND {table} MATCH ?)"))
+        // Uncorrelated on purpose: FTS5 runs the MATCH once. A correlated
+        // `EXISTS (... WHERE rowid = m.id ...)` re-probes per row (~30x slower at 50k).
+        .map(|(table, _)| format!("m.id IN (SELECT rowid FROM {table} WHERE {table} MATCH ?)"))
         .collect::<Vec<_>>()
         .join(" OR ")
 }
@@ -238,6 +240,14 @@ mod tests {
     use super::*;
     use crate::search_index::{db, reconcile::*, SharedConn};
     use std::sync::Mutex;
+
+    #[test]
+    fn column_match_sql_is_uncorrelated() {
+        let sql = column_match_sql(&[("msg_fts", "body : \"a\"".into()), ("msg_cjk", "body : \"b\"".into())]);
+        assert_eq!(sql.matches("m.id IN (SELECT rowid FROM").count(), 2);
+        assert!(!sql.contains("rowid = m.id") && !sql.contains("EXISTS"), "correlated FTS probe is per-row slow: {sql}");
+        assert_eq!(column_match_sql(&[]), "0");
+    }
 
     #[test]
     fn plan_routes_terms() {
