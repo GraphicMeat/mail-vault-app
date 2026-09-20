@@ -40,9 +40,9 @@
 
 import { ImapFlow } from 'imapflow';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, renameSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { openTab, setPremium } from './mockBilling.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
 
@@ -561,7 +561,6 @@ describe('Account migration through the daemon (Task 4.10)', function () {
       throw new Error(`daemon.pid names ${before} but its command line ("${fullCmd}") is not mailvault-daemon; refusing to touch it`);
     }
     const binPath = fullCmd.split(/\s+/)[0];
-    const hiddenPath = `${binPath}.e2e-hidden`;
 
     const eventsBefore = (await rawEvents('migration-progress')).length;
 
@@ -570,7 +569,7 @@ describe('Account migration through the daemon (Task 4.10)', function () {
     // `ensure_daemon_running` on-demand respawn before this test could ever
     // observe a failure. Renaming the binary aside makes the respawn attempt
     // itself fail, a deterministic window instead of a race.
-    renameSync(binPath, hiddenPath);
+    const restoreDaemonBinaries = hideDaemonBinaries(binPath);
     try {
       process.kill(before, 'SIGKILL');
       const resp = await daemonRpc('start_migration', {
@@ -585,7 +584,7 @@ describe('Account migration through the daemon (Task 4.10)', function () {
       expect(resp.__error).toContain('errors.daemonUnavailable');
       expect((await rawEvents('migration-progress')).length).toBe(eventsBefore);
     } finally {
-      renameSync(hiddenPath, binPath);
+      restoreDaemonBinaries();
     }
 
     let after = null;

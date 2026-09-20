@@ -58,10 +58,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { openTab } from './mockBilling.js';
 import { appDataDir } from './mockImap.js';
 
@@ -367,7 +367,6 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     // (src-tauri/src/main.rs) spawns it with `Command::new(&daemon_bin)` and
     // no arguments.
     const binPath = fullCmd.split(/\s+/)[0];
-    const hiddenPath = `${binPath}.e2e-hidden`;
 
     const eventsBefore = (await rawEvents('export-progress')).length;
 
@@ -380,7 +379,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
     // makes the respawn attempt itself fail ("mailvault-daemon binary not
     // found", `find_daemon_binary` returns `None`) -- a real, deterministic
     // daemonUnavailable window instead of a race against the reconnect loop.
-    renameSync(binPath, hiddenPath);
+    const restoreDaemonBinaries = hideDaemonBinaries(binPath);
     try {
       process.kill(before, 'SIGKILL');
       const dest = join(workDir, 'never-written.zip');
@@ -395,7 +394,7 @@ describe('Backup ZIP and MBOX import/export through the daemon (Task 4.10)', fun
       expect(existsSync(dest)).toBe(false);
       expect((await rawEvents('export-progress')).length).toBe(eventsBefore);
     } finally {
-      renameSync(hiddenPath, binPath);
+      restoreDaemonBinaries();
     }
 
     // Leave the shared runner in a working state for whatever spec file

@@ -6,6 +6,9 @@
  * so nothing here has to protect real accounts from the suite.
  */
 
+import { existsSync, renameSync } from 'node:fs';
+import { join } from 'node:path';
+
 // ---------------------------------------------------------------------------
 // Wait helpers
 // ---------------------------------------------------------------------------
@@ -218,6 +221,44 @@ export async function clickSettingsNav(label) {
  * A retained minimized panel still has size, so only a visible, non-inert
  * `settings-page` with the active dialog role counts as open.
  */
+/**
+ * Hide every binary the daemon could be respawned from, not only the one that
+ * is running.
+ *
+ * The three "NEGATIVE: with no daemon connection" cases rename the running
+ * daemon aside so the on-demand respawn inside `daemon_rpc` fails and the RPC
+ * answers `errors.daemonUnavailable`. That only works while the running binary
+ * is the ONLY candidate: `find_daemon_binary` (src-tauri/src/main.rs) falls
+ * back to `<cwd>/target/{debug,release}/mailvault-daemon` as well. A
+ * `target/release/mailvault-daemon` left behind by any earlier build answers
+ * the respawn, the RPC succeeds, and the test reads as a product regression
+ * (2026-09-20: a three-hour-old release binary on the runner failed all three
+ * this way).
+ *
+ * Returns the restore function; call it from a `finally`.
+ */
+export function hideDaemonBinaries(runningBinPath) {
+  const candidates = new Set([runningBinPath]);
+  for (const profile of ['debug', 'release']) {
+    candidates.add(join(process.cwd(), 'target', profile, 'mailvault-daemon'));
+  }
+  const moved = [];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    const hidden = `${path}.e2e-hidden`;
+    renameSync(path, hidden);
+    moved.push([hidden, path]);
+  }
+  if (moved.length === 0) {
+    throw new Error(`no daemon binary to hide; looked at ${[...candidates].join(', ')}`);
+  }
+  return () => {
+    for (const [hidden, path] of moved) {
+      if (existsSync(hidden)) renameSync(hidden, path);
+    }
+  };
+}
+
 export async function openSettings() {
   const isOpen = () => browser.execute(() => {
     const el = document.querySelector('[data-testid="settings-page"]');

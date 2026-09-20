@@ -40,9 +40,9 @@
 
 import { ImapFlow } from 'imapflow';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, renameSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { waitForApp, waitForEmails } from './helpers.js';
+import { hideDaemonBinaries, waitForApp, waitForEmails } from './helpers.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
@@ -308,7 +308,6 @@ describe('Restore (local vault -> server) through the daemon (Task 4.10)', funct
       throw new Error(`daemon.pid names ${before} but its command line ("${fullCmd}") is not mailvault-daemon; refusing to touch it`);
     }
     const binPath = fullCmd.split(/\s+/)[0];
-    const hiddenPath = `${binPath}.e2e-hidden`;
 
     const eventsBefore = (await rawEvents('restore-progress')).length;
 
@@ -317,7 +316,7 @@ describe('Restore (local vault -> server) through the daemon (Task 4.10)', funct
     // `ensure_daemon_running` on-demand respawn before this test could ever
     // observe a failure. Renaming the binary aside makes the respawn attempt
     // itself fail, a deterministic window instead of a race.
-    renameSync(binPath, hiddenPath);
+    const restoreDaemonBinaries = hideDaemonBinaries(binPath);
     try {
       process.kill(before, 'SIGKILL');
       const resp = await daemonRpc('count_local_folder', { accountId: lukeId, mailbox: 'Drafts' });
@@ -325,7 +324,7 @@ describe('Restore (local vault -> server) through the daemon (Task 4.10)', funct
       expect(resp.__error).toContain('errors.daemonUnavailable');
       expect((await rawEvents('restore-progress')).length).toBe(eventsBefore);
     } finally {
-      renameSync(hiddenPath, binPath);
+      restoreDaemonBinaries();
     }
 
     let after = null;
