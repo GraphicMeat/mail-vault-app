@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { useAccountStore } from '../stores/accountStore';
 import { useSelectionStore } from '../stores/selectionStore';
+import { getAccountCacheMailboxes } from '../services/cacheManager';
 import { FolderSymlink, Search, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { mailboxLabel, decodeImapUtf7 } from '../utils/imapUtf7';
 import { buildMailboxTree } from '../services/workflows/mailboxTree';
 import { useViewportShift } from '../hooks/useViewportShift';
+import { registerPopoverLayer } from '../hooks/useDialogA11y';
 import { t as tr, useT  } from '../i18n/index.js';
 
 /**
@@ -29,9 +32,10 @@ function selectableFolders(mailboxes) {
   return out;
 }
 
-export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
+export function MoveToFolderDropdown({ uids, onClose, anchorRect, accountId, currentMailbox, onMove, returnFocusRef }) {
   const t = useT();
   const mailboxes = useAccountStore(s => s.mailboxes);
+  const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
   const moveEmails = useSelectionStore(s => s.moveEmails);
 
@@ -40,6 +44,10 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
   const [error, setError] = useState(null);
   const inputRef = useRef(null);
   const dropdownRef = useRef(null);
+  const closePicker = useCallback(() => {
+    onClose?.();
+    requestAnimationFrame(() => returnFocusRef?.current?.focus?.());
+  }, [onClose, returnFocusRef]);
 
   // Inside the window wherever it opened: beside a menu item on the bottom
   // row, above the selection bar, under a toolbar button.
@@ -56,7 +64,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-        onClose();
+        closePicker();
       }
     };
     // Delay listener to avoid immediate close from the click that opened the dropdown
@@ -65,29 +73,52 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       clearTimeout(t);
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [onClose]);
+  }, [closePicker]);
 
-  // Close on Escape
+  // Own Escape/Tab while open so a host dialog does not close or trap focus
+  // before the folder picker gets to dismiss itself.
+  useEffect(() => registerPopoverLayer(closePicker, { handlesTab: true }), [closePicker]);
+
+  // The host dialog yields Tab to this portal. Let normal Tab movement work
+  // inside the picker, and wrap at either end so focus stays in the layer.
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
+      if (e.key !== 'Tab') return;
+      const panel = dropdownRef.current;
+      if (!panel) return;
+      e.stopImmediatePropagation();
+      const focusable = [...panel.querySelectorAll('input:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])')];
+      if (!focusable.length) { e.preventDefault(); return; }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!panel.contains(document.activeElement)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
     document.addEventListener('keydown', handleKeyDown, true);
     return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [onClose]);
+  }, []);
 
+  const targetMailboxes = accountId && accountId !== activeAccountId
+    ? getAccountCacheMailboxes(accountId) || []
+    : mailboxes;
+  const excludedMailbox = currentMailbox || (accountId === activeAccountId ? activeMailbox : null);
   const folders = useMemo(() => {
     // Filter out the current mailbox
-    const filtered = selectableFolders(mailboxes).filter(mb => mb.path !== activeMailbox);
+    const filtered = selectableFolders(targetMailboxes).filter(mb => mb.path !== excludedMailbox);
     if (!filter.trim()) return filtered;
     const q = filter.toLowerCase();
     return filtered.filter(mb => mailboxLabel(mb.name).toLowerCase().includes(q)
       || decodeImapUtf7(mb.path).toLowerCase().includes(q)
       || mb.path.toLowerCase().includes(q));
-  }, [mailboxes, activeMailbox, filter]);
+  }, [targetMailboxes, excludedMailbox, filter]);
 
   // A search takes the parents away, and indentation with nothing to indent
   // from says nothing — so the row names its own parent instead.
@@ -98,8 +129,8 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
     setMoving(true);
     setError(null);
     try {
-      await moveEmails(uids, targetPath);
-      onClose();
+      await (onMove ? onMove(targetPath) : moveEmails(uids, targetPath));
+      closePicker();
     } catch (err) {
       console.error('Move failed:', err);
       setError(err.message || 'Failed to move emails');
@@ -116,7 +147,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
     style.zIndex = 9999;
   }
 
-  return (
+  const content = (
     <motion.div
       ref={dropdownRef}
       // Scale, like every other popover: a slide would put the measured box
@@ -128,6 +159,7 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       data-testid="move-to-folder-dropdown"
       className="bg-mail-bg border border-mail-border rounded-xl overflow-hidden w-64"
       style={style}
+      onClick={event => event.stopPropagation()}
     >
       {/* Search input */}
       <div className="p-2 border-b border-mail-border">
@@ -190,4 +222,5 @@ export function MoveToFolderDropdown({ uids, onClose, anchorRect }) {
       )}
     </motion.div>
   );
+  return anchorRect ? createPortal(content, document.body) : content;
 }

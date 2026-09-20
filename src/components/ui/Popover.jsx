@@ -2,6 +2,7 @@ import React, { forwardRef, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useViewportShift } from '../../hooks/useViewportShift';
+import { hasOpenDialog, registerPopoverLayer } from '../../hooks/useDialogA11y';
 import { Z } from './layers';
 
 /**
@@ -40,6 +41,8 @@ export const Popover = forwardRef(function Popover({
   style,
   variant = 'menu',
   role,
+  z,
+  handlesTab = false,
   className = '',
   children,
   ...rest
@@ -54,23 +57,16 @@ export const Popover = forwardRef(function Popover({
   // and re-runs when the caller moves the panel after measuring its anchor.
   useViewportShift(panelRef, true, [open, style?.top, style?.left, style?.right, style?.bottom]);
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      onClose?.();
-    };
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [open, onClose]);
+  useEffect(() => open ? registerPopoverLayer(onClose, { handlesTab }) : undefined, [open, onClose, handlesTab]);
+
+  const layer = z || (hasOpenDialog() ? Z.dialogPopover : Z.popover);
 
   return createPortal(
     <AnimatePresence>
       {open && (
         <>
           <div
-            className={`fixed inset-0 ${Z.popover}`}
+            className={`fixed inset-0 ${layer}`}
             onClick={(e) => { e.stopPropagation(); onClose?.(); }}
           />
           <motion.div
@@ -79,7 +75,7 @@ export const Popover = forwardRef(function Popover({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             role={role}
-            className={`fixed ${Z.popover} ${VARIANTS[variant]} ${className}`}
+            className={`fixed ${layer} ${VARIANTS[variant]} ${className}`}
             style={style}
             onClick={(e) => e.stopPropagation()}
             {...rest}

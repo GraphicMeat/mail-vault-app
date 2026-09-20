@@ -3,14 +3,14 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { useAccountStore } from '../../stores/accountStore';
 import { useMailStore } from '../../stores/mailStore';
-import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, emailScopeKey, spansMailboxes, rowKey, selectionKey } from '../../stores/slices/unifiedHelpers';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { getEmailColors } from '../../utils/mailChrome';
 import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import { formatDateTime } from '../../utils/dateFormat';
-import { X, Loader, Sun, Moon } from 'lucide-react';
+import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
@@ -22,6 +22,16 @@ import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { getSelectionGeneration } from '../../services/workflows/selectEmail';
+import { EmailActionBar } from './EmailActionBar';
+import { LocalMailLabels } from '../LocalMailLabels';
+import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
+import { DeleteConfirmModal } from '../DeleteConfirmModal';
+import { describePurge } from '../../utils/custodyCopy';
+import { useExportStore } from '../../stores/exportStore';
+import { openCompose } from '../../utils/composeOpener';
+import { replyTarget } from '../../utils/replyTarget';
+import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
+import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
 
 // Full-screen modal for viewing complete email with HTML rendering
 export function FullViewEmailModal({ email: initialEmail, onClose }) {
@@ -31,10 +41,16 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const loadingEmail = useSelectionStore(s => s.loadingEmail);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const backedUpScopes = useMailStore(s => s.backedUpScopes);
+  const backupConfigured = useMailStore(s => s.backupConfigured);
   const iframeRef = useRef(null);
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const selectionOwnership = useRef(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const moveButtonRef = useRef(null);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
   const appTheme = useThemeStore(s => s.theme);
@@ -62,7 +78,15 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     }
     onClose?.();
   };
-  useEffect(() => setThemeOverride(null), [initialEmail.uid, initialEmail._accountId, initialEmail._mailbox]);
+  const initialLocation = resolveEmailLocation(initialEmail, useMailStore.getState());
+  const initialIdentity = JSON.stringify([initialLocation?.accountId || initialEmail?._accountId || null, initialLocation?.mailbox || initialEmail?._mailbox || null, String(initialEmail?.uid)]);
+  useEffect(() => {
+    setFetchedEmail(null);
+    setThemeOverride(null);
+    setPendingDelete(null);
+    setShowMoveDropdown(false);
+    selectionOwnership.current = null;
+  }, [initialIdentity]);
   const linkSafetyClickConfirm = useSettingsStore(s => s.linkSafetyClickConfirm);
 
   // Fetch full email content if not already available
@@ -104,13 +128,47 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
 
   // Use selectedEmail from store if we just fetched it
   useEffect(() => {
-    if (selectedEmail && selectedEmail.uid === initialEmail.uid) {
+    const state = useMailStore.getState();
+    const selectedLocation = selectedEmail && resolveEmailLocation(selectedEmail, state);
+    const sameTarget = selectedEmail && String(selectedEmail.uid) === String(initialEmail.uid)
+      && initialLocation && selectedLocation
+      && selectedLocation.accountId === initialLocation.accountId
+      && selectedLocation.mailbox === initialLocation.mailbox;
+    if (sameTarget) {
       setFetchedEmail(selectedEmail);
     }
-  }, [selectedEmail, initialEmail.uid]);
+  }, [selectedEmail, initialIdentity]);
 
   // Use fetched email or fall back to initial
   const email = fetchedEmail || initialEmail;
+  const emailLocation = resolveEmailLocation(email, useMailStore.getState());
+  const emailKey = selectionKey(email, useMailStore.getState());
+  const isArchived = !!email?.isArchived;
+  const isLocalOnly = email?.source === 'local-only' || email?._origin === 'local-only';
+  const isSentEmail = emailLocation?.mailbox?.toLowerCase() === 'sent' || email?.flags?.includes('\\Sent');
+  const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
+  const backupEmail = emailLocation
+    ? { ...email, _accountId: emailLocation.accountId, _mailbox: emailLocation.mailbox }
+    : email;
+  const isBackedUp = isEmailBackedUp(backupEmail, backupScan) === true;
+  const purgeDescription = describePurge({ server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp }, 1);
+  const requestDelete = (target = email) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
+    const localOnly = target.source === 'local-only' || target._origin === 'local-only';
+    setPendingDelete({
+      executor: () => localOnly
+        ? useMailStore.getState().removeLocalEmail(target.uid, explicitLocation)
+        : useMailStore.getState().deleteEmailFromServer(target.uid, { accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox }),
+      copy: {
+        title: t('viewer.deleteEmail'),
+        description: localOnly ? t('viewer.emailOnlyExistsLocalArchive') : target.isArchived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        confirmLabel: t('common.delete'),
+      },
+    });
+  };
 
   // Fourth renderer, same duty: record what the body carries so the row it was
   // opened from shows the glyph. `scanTrackers` is cached per key + body
@@ -189,6 +247,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   }, [email]);
 
   return (
+    <>
     <Dialog
       open={Boolean(email)}
       onClose={close}
@@ -205,10 +264,6 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
               {email.subject || '(No subject)'}
             </h2>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setThemeOverride(isDark ? 'light' : 'dark')} className="mr-2">
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            {isDark ? t('emailActionBar.light') : t('emailActionBar.dark')}
-          </Button>
           <Button variant="ghost" icon onClick={close} aria-label={t('common.close')} className="flex-shrink-0">
             <X size={20} />
           </Button>
@@ -236,6 +291,48 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           </div>
         </div>
 
+        <div className="px-3 py-2 border-b border-mail-border bg-mail-bg shrink-0">
+          <LocalMailLabels email={email} />
+          <EmailActionBar email={email} variant="single"
+            onReply={async target => openCompose({ mode: 'reply', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
+            onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
+            onForward={async target => openCompose({ mode: 'forward', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
+            onArchive={target => {
+              if (target.isArchived) {
+                const location = resolveEmailLocation(target, useMailStore.getState());
+                if (!location) return;
+                setPendingDelete({ executor: () => useMailStore.getState().removeLocalEmail(target.uid, { accountId: location.accountId, mailbox: location.mailbox }),
+                  copy: { title: t('viewer.unarchiveEmail'), description: isLocalOnly ? t('viewer.emailOnlyExistsLocalArchive') : t('viewer.cachedCopyRemovedEmailStill'), confirmLabel: t('rowMenu.unarchive') } });
+              }
+              else return useMailStore.getState().saveEmailsLocally([target]);
+            }}
+            onDelete={requestDelete}
+            onMove={() => setShowMoveDropdown(value => !value)}
+            onToggleRead={async (target, desired) => {
+              const read = !!target.flags?.includes('\\Seen');
+              const nextRead = typeof desired === 'boolean' ? desired : !read;
+              await applyFlagToKeys([selectionKey(target, useMailStore.getState())], '\\Seen', nextRead);
+            }}
+            onToggleFlag={target => useMailStore.getState().toggleFlagged(selectionKey(target, useMailStore.getState()))}
+            onDeleteEverywhere={purgeDescription && emailLocation ? target => {
+              const purge = describePurge({ server: !isLocalOnly, vault: !!target.isArchived || isLocalOnly, backup: isBackedUp }, 1);
+              if (!purge) return;
+              const key = selectionKey(target, useMailStore.getState());
+              setPendingDelete({ executor: () => purgeEverywhere([key]), copy: { title: purge.title, description: purge.description, confirmLabel: purge.label } });
+            } : null}
+            onExport={target => useExportStore.getState().openExport({ messages: [target] })}
+            onToggleEmailTheme={() => setThemeOverride(isDark ? 'light' : 'dark')}
+            emailThemeDark={isDark} isArchived={isArchived} isRead={!!email.flags?.includes('\\Seen')}
+            isLocalOnly={isLocalOnly} isSentEmail={isSentEmail} singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
+            disabled={{ archive: !emailLocation, delete: !emailLocation }}
+            moveButtonRef={moveButtonRef} moveDropdownOpen={showMoveDropdown} />
+          {showMoveDropdown && <MoveToFolderDropdown uids={[emailKey]} accountId={emailLocation?.accountId}
+            currentMailbox={emailLocation?.mailbox} anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+            returnFocusRef={moveButtonRef}
+            onMove={targetPath => useMailStore.getState().moveEmails([emailKey], targetPath)}
+            onClose={() => setShowMoveDropdown(false)} />}
+        </div>
+
         {/* Email Body - Full Height iframe */}
         <div className="flex-1 min-h-0 overflow-hidden relative" style={{ backgroundColor: emailColors.background }}>
           {!fetchedEmail && loadingEmail ? (
@@ -259,7 +356,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         {/* Attachments */}
         {(() => {
           const modalAttachments = getRealAttachments(email.attachments, email.html);
-          const modalMailbox = resolveEmailLocation(initialEmail, useMailStore.getState())?.mailbox;
+          const modalMailbox = emailLocation?.mailbox;
           return modalAttachments.length > 0 ? (
             <div className="px-4 py-3 border-t border-mail-border bg-mail-bg shrink-0 max-h-36 overflow-y-auto">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -269,7 +366,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                     attachment={att}
                     attachmentIndex={att._originalIndex}
                     emailUid={email.uid}
-                    accountId={activeAccountId}
+                    accountId={emailLocation?.accountId || activeAccountId}
                     mailbox={modalMailbox}
                   />
                 ))}
@@ -287,5 +384,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         }}
       />
     </Dialog>
+    <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
+    </>
   );
 }

@@ -40,6 +40,7 @@ vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: marker, getThreadReply
 vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: marker, getThreadTrackerInfo: () => ({ count: 1 }) }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
+vi.mock('../RowQuickActions', () => ({ RowQuickActions: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
   describeMessageState: () => ({ tone: 'local' }),

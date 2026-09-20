@@ -61,6 +61,11 @@ describe('selectionKey', () => {
     expect(selectionKey({ uid: 7, _mailbox: 'INBOX' }, single)).toBe(7);
   });
 
+  it('keeps a foreign account row composite even when it shares the active folder name', () => {
+    const foreign = row('a2', 'INBOX', 7);
+    expect(selectionKey(foreign, single)).toBe(_selKey(foreign));
+  });
+
   it('gives a Sent copy merged into the INBOX list the full key', () => {
     const full = _selKey({ _accountId: 'a1', _mailbox: 'Sent', uid: 7 });
     expect(selectionKey({ uid: 7, _accountId: 'a1', _fromSentFolder: true, _mailbox: 'Sent' }, single)).toBe(full);

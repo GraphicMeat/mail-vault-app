@@ -37,7 +37,10 @@ vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }) => children,
 }));
 vi.mock('../RichTextEditor', () => ({
-  RichTextEditor: ({ placeholder }) => React.createElement('div', { className: 'ProseMirror', 'data-testid': 'editor-stub' }, placeholder),
+  RichTextEditor: ({ content, onUpdate }) => React.createElement('textarea', {
+    className: 'ProseMirror', 'data-testid': 'editor-stub', value: content,
+    onChange: (event) => onUpdate(event.target.value),
+  }),
   insertImages: vi.fn(),
   textToHtml: (s) => s || '',
   htmlToText: (h) => (h || '').replace(/<[^>]*>/g, ''),
@@ -120,11 +123,12 @@ beforeEach(() => {
   mail.emails = [];
   invoke.mockReset();
   sendEmail.mockClear();
+  buildOutgoingMime.mockClear();
 });
 afterEach(() => cleanup());
 
-async function send(mode, fill) {
-  render(<ComposeModal mode={mode} replyTo={parent} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
+async function send(mode, fill, composeProps = {}) {
+  render(<ComposeModal mode={mode} replyTo={parent} {...composeProps} onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />);
   const to = await screen.findByTestId('compose-to');
   if (fill) fireEvent.change(to, { target: { value: fill } });
   const btn = await screen.findByTestId('compose-send');
@@ -143,6 +147,65 @@ describe('the reply the compose window stages for the UI', () => {
     expect(staged.inReplyTo).toBe('<parent@example.test>');
     expect(staged.references).toEqual(['<parent@example.test>']);
     expect(staged.messageId).toBe('<mine@example.test>');
+  });
+
+  it('starts a reply with the selected template while keeping reply recipients and headers', async () => {
+    await send('reply', undefined, { templateBody: 'Thanks for reaching out.' });
+
+    const payload = buildOutgoingMime.mock.calls[0][1];
+    expect(payload.to).toBe('them@example.test');
+    expect(payload.inReplyTo).toBe('<parent@example.test>');
+    expect(payload.references).toBe('<parent@example.test>');
+    expect(payload.text).toContain('Thanks for reaching out.');
+    expect(payload.text).toContain('Original Message');
+  });
+
+  it('keeps the template body through StrictMode effect replay', async () => {
+    const templateBody = 'Thanks for reaching out.';
+    render(
+      <React.StrictMode>
+        <ComposeModal mode="reply" replyTo={parent} templateBody={templateBody}
+          onClose={() => {}} onMinimize={() => {}} onSaveState={() => {}} />
+      </React.StrictMode>
+    );
+
+    const editor = await screen.findByTestId('editor-stub');
+    await waitFor(() => expect(editor.value).toBe(templateBody));
+  });
+
+  it('keeps edited reply text when the original message is rehydrated', async () => {
+    const templateBody = 'Thanks for reaching out.';
+    const props = { mode: 'reply', replyTo: parent, templateBody, onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    const { rerender } = render(<ComposeModal {...props} />);
+    const editor = await screen.findByTestId('editor-stub');
+    fireEvent.change(editor, { target: { value: 'Edited reply' } });
+
+    rerender(<ComposeModal {...props} replyTo={{ ...parent, html: '<p>How much?</p>' }} />);
+
+    await waitFor(() => expect(editor.value).toBe('Edited reply'));
+    fireEvent.click(await screen.findByTestId('compose-send'));
+    await waitFor(() => expect(sendEmail).toHaveBeenCalled());
+
+    const payload = buildOutgoingMime.mock.calls[0][1];
+    expect(payload.text).toContain('Edited reply');
+    expect(payload.text).not.toContain(templateBody);
+    expect(payload.text).toContain('How much?');
+    expect(payload.to).toBe('them@example.test');
+    expect(payload.inReplyTo).toBe('<parent@example.test>');
+    expect(payload.references).toBe('<parent@example.test>');
+  });
+
+  it('keeps the original dirty baseline when the reply is rehydrated', async () => {
+    const props = { mode: 'reply', replyTo: parent, templateBody: 'Thanks for reaching out.', onClose: () => {}, onMinimize: () => {}, onSaveState: () => {} };
+    const { rerender } = render(<ComposeModal {...props} />);
+    const editor = await screen.findByTestId('editor-stub');
+    fireEvent.change(editor, { target: { value: 'Edited reply' } });
+
+    rerender(<ComposeModal {...props} replyTo={{ ...parent, html: '<p>How much?</p>' }} />);
+    await waitFor(() => expect(editor.value).toBe('Edited reply'));
+    fireEvent.click(screen.getByTitle('Close'));
+
+    expect(await screen.findByTestId('compose-discard-dialog')).toBeTruthy();
   });
 
   it('joins the conversation it answers instead of opening a second one', async () => {

@@ -5,6 +5,7 @@ import { WorkspaceSettings } from './WorkspaceSettings';
 import { SettingRow } from './SettingRow';
 import { DateTimePreview, ReadingPreview } from './PreferencePreview';
 import { SettingsTabs } from './SettingsTabs';
+import { QuickActionsSettings } from './QuickActionsSettings';
 import { useT } from '../../i18n/index.js';
 import '../../styles/settings-usability.css';
 
@@ -29,6 +30,7 @@ const sections = [
   { id: 'layout', key: 'layout' },
   { id: 'reading', key: 'reading' },
   { id: 'date-time', key: 'dateTime' },
+  { id: 'quick-actions', key: 'quickActions' },
 ];
 const validSection = value => sections.some(section => section.id === value) ? value : 'colors';
 
@@ -51,12 +53,13 @@ export function AppearanceSettings({ initialSection = 'colors', onSectionChange 
       options: [['icon-only', 'iconsOnly'], ['icon-label', 'iconsLabels'], ['text-only', 'labelsOnly']] },
   ];
   return (
-    <SettingsTabs tabs={sections.map(({ id, key }) => ({ id, label: t(`settings.appearance.section.${key}`) }))}
+    <SettingsTabs tabs={sections.map(({ id, key }) => ({ id, label: key === 'quickActions' ? t('quickActions.title') : t(`settings.appearance.section.${key}`) }))}
       value={section} onChange={value => { setSection(value); onSectionChange?.(value); }} label={t('settings.appearance.appearance')}>
     <div className="appearance-settings">
       <p className="appearance-preview-intro">{t('settings.preview.intro')}</p>
       {section === 'colors' && <ColorSchemeSettings />}
       {section === 'layout' && <WorkspaceSettings windowIsNarrow={windowIsNarrow} />}
+      {section === 'quick-actions' && <QuickActionsSettings />}
       {section === 'reading' && <section className="settings-preference-group" aria-labelledby="reading-settings-title">
         <h4 id="reading-settings-title">{t('settings.appearance.readingAndConversations')}</h4>
         {readingOptions.map(({ key, setter, label, options }) => {

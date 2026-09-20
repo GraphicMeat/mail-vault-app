@@ -16,6 +16,26 @@ const FOCUSABLE = [
 // the whole stack at once and the outer Tab trap would yank focus back out of
 // the inner dialog. Only the top of the stack handles keys.
 const openDialogs = [];
+const openPopovers = [];
+
+export function hasOpenDialog() { return openDialogs.length > 0; }
+
+export function registerPopoverLayer(onClose, { handlesTab = false } = {}) {
+  const layer = { onClose, handlesTab };
+  openPopovers.push(layer);
+  const onKeyDown = event => {
+    if (event.key !== 'Escape' || openPopovers[openPopovers.length - 1] !== layer) return;
+    event.stopPropagation();
+    event.preventDefault();
+    layer.onClose?.();
+  };
+  document.addEventListener('keydown', onKeyDown, true);
+  return () => {
+    document.removeEventListener('keydown', onKeyDown, true);
+    const index = openPopovers.indexOf(layer);
+    if (index !== -1) openPopovers.splice(index, 1);
+  };
+}
 
 /**
  * Keyboard and focus behaviour for a modal dialog.
@@ -67,6 +87,11 @@ export function useDialogA11y(isOpen, onClose, { preventScroll = false } = {}) {
     initial?.focus({ preventScroll });
 
     const onKeyDown = (e) => {
+      // A portal menu belongs to this dialog even though it is mounted under
+      // body. Its own Escape/Tab handling must get the first chance to restore
+      // focus to the trigger before the host dialog traps focus or closes.
+      if (e.key === 'Escape' && openPopovers.length) return;
+      if (e.key === 'Tab' && openPopovers[openPopovers.length - 1]?.handlesTab) return;
       if (openDialogs[openDialogs.length - 1] !== token) return;
       // No close handler means the caller owns Escape (compose minimizes, an
       // update mid-download refuses to close). Leave the key alone entirely.

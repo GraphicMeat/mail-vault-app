@@ -1,4 +1,3 @@
-import { Button } from './ui/Button';
 import React from 'react';
 import { displayText } from '../utils/bidiText';
 import { getAccountColor, useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
@@ -13,14 +12,12 @@ import { LinkAlertIcon } from './LinkAlertIcon';
 import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
-import { RowActionMenu } from './RowActionMenu';
-import { RowActionMenuItems } from './RowActionMenuItems';
+import { RowQuickActions } from './RowQuickActions';
+import { LocalMailLabels } from './LocalMailLabels';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import {
-  RefreshCw,
   Paperclip,
-  Archive,
   Star,
 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
@@ -90,10 +87,8 @@ function openRow(email, onSelect) {
   onSelect(rowKey(email, spansMailboxes(useMailStore.getState())), email.source, email._mailbox);
 }
 
-export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
-  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
-  const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
@@ -109,7 +104,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
     e.stopPropagation();
     onStartSaving(rowId);
     try {
-      await saveEmailLocally(email.uid);
+      await actions.saveEmailsLocally([email]);
     } finally {
       onStopSaving(rowId);
     }
@@ -197,6 +192,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(email.subject, '(No subject)')}
         </span>
+        <LocalMailLabels email={email} />
         <AttachmentGlyph email={email} size={14} />
         <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
           {formatEmailDate(email.date)}
@@ -204,32 +200,15 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
       </div>
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
-        {!email.isArchived && (
-          <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
-            onClick={handleSave}
-            disabled={isSaving}
-            title={t('common.archive')}
-          >
-            {isSaving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
-            ) : (
-              <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
-            )}
-          </Button>
-        )}
-
-        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
-          <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
-        </RowActionMenu>
+        <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} />
       </div>
     </div>
   );
 });
 
-export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving }) {
+export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, email, isSelected, isRelated = false, onSelect, onToggleSelection, isChecked, style, actions, unifiedInbox, accountColors, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving }) {
   const t = useT();
-  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
-  const { saveEmailLocally } = actions;
   // Scan results are cached per `accountId-mailbox-uid`; a bare uid would pull
   // another account's links into this row's tooltip. The handoff below keys off
   // the same string, for the same reason.
@@ -313,21 +292,15 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(email.subject, '(No subject)')}
           </span>
+          <LocalMailLabels email={email} />
           <AttachmentGlyph email={email} size={12} />
         </div>
       </div>
 
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
-        {!email.isArchived && (
-          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleSave} disabled={isSaving} title={t('common.archive')}>
-            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
-              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </Button>
-        )}
-        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
-          <RowActionMenuItems emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
-        </RowActionMenu>
+        <RowQuickActions emails={[email]} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} onActionStart={onActionStart}
+          onArchive={handleSave} disabled={isSaving} identity={scopeKey} display="icon-only" />
       </div>
     </div>
   );

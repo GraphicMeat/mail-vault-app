@@ -17,6 +17,7 @@ import { findSentMailboxPath } from '../utils/sentFolder';
 import { buildEmailIframeHtml, attachEmailIframeAutoSize } from '../utils/emailIframeTemplate';
 import { extractInlineImages } from '../utils/inlineImages';
 import { buildReplyHeaders, parseReferenceList, computeReplyRecipients, splitRecipients } from '../utils/emailParser';
+import { replyTemplateHtml } from '../utils/replyTemplate';
 import { suggestSendAsAddresses, composeIdentities, resolveInitialComposeIdentity } from '../utils/sendAsSuggestions';
 import { resolveDraftsMailbox, saveLocalDraft, deleteLocalDraft, newDraftUid } from '../services/localDrafts';
 import { markAnswered, markForwarded } from '../services/workflows/messageMutations';
@@ -158,7 +159,7 @@ const QuotedOriginal = React.memo(function QuotedOriginal({ html }) {
 // editor must not paint the modal as a drop target.
 const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes('Files');
 
-export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, onClose, onMinimize, onSaveState }) {
+export function ComposeModal({ mode = 'new', replyTo = null, initialData = null, templateBody = null, onClose, onMinimize, onSaveState }) {
   const t = useT();
   const titleId = useId();
   // Compose owns Escape (minimize or discard); the shared hook owns focus.
@@ -254,11 +255,16 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // scheduled the effect holds the EMPTY pre-init form, so a signature-only
   // draft or an untouched forward reads as "unsaved changes".
   const initialSnapshot = useRef(null);
+  const replyTemplateApplied = useRef(false);
+  const replyTemplateCurrentBody = useRef('');
 
   // Initialize form based on mode and replyTo email
   useEffect(() => {
-    const initForm = (next) => {
-      initialSnapshot.current = { to: next.to, subject: next.subject, body: next.body };
+    const initForm = (next, { preserveSnapshot = false } = {}) => {
+      if (!preserveSnapshot) {
+        initialSnapshot.current = { to: next.to, subject: next.subject, body: next.body };
+      }
+      if (replyTemplateApplied.current) replyTemplateCurrentBody.current = next.body;
       setFormData(next);
     };
     let signatureHtml = '';
@@ -332,7 +338,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     // toggle AND append the original a second time at send.
     if (mode !== 'forward') setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
 
-    const replyBody = signatureHtml;
+    const replyBody = templateBody == null
+      ? signatureHtml
+      : replyTemplateApplied.current ? replyTemplateCurrentBody.current : replyTemplateHtml(templateBody) + signatureHtml;
 
     // Every identity of every account: replying to a message *I* sent (from
     // any account or alias) must target its recipients, not me — and
@@ -350,7 +358,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         subject: originalSubject.startsWith('Re:') ? originalSubject : t('compose.re', { originalSubject }),
         body: replyBody,
         ...buildReplyHeaders(replyTo)
-      });
+      }, { preserveSnapshot: templateBody != null && replyTemplateApplied.current });
+      if (templateBody != null && !replyTemplateApplied.current) {
+        replyTemplateCurrentBody.current = replyBody;
+        replyTemplateApplied.current = true;
+      }
     } else if (mode === 'forward') {
       initForm({
         to: '',
@@ -372,7 +384,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         })));
       }
     }
-  }, [mode, replyTo, initialData, selectedAccountId]);
+  }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
 
   // Mine each account's Sent cache so the From list offers every address the
   // mailbox can actually send from, not just its login.
@@ -504,7 +516,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       editor.chain().focus().insertContent(templateHtml).run();
     } else {
       // Fallback: append to body
-      setFormData(prev => ({ ...prev, body: prev.body + textToHtml(template.body) }));
+      setFormData(prev => {
+        const body = prev.body + textToHtml(template.body);
+        if (replyTemplateApplied.current) replyTemplateCurrentBody.current = body;
+        return { ...prev, body };
+      });
     }
     setShowTemplates(false);
   };
@@ -1420,6 +1436,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
               editorRef={editorRef}
               onFiles={addFiles}
               onUpdate={(html) => {
+                if (replyTemplateApplied.current) replyTemplateCurrentBody.current = html;
                 setFormData(prev => ({ ...prev, body: html }));
                 setError(null);
               }}

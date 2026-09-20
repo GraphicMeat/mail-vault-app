@@ -38,6 +38,7 @@ vi.mock('../SenderAlertIcon', () => ({ SenderAlertIcon: () => null, getSenderAle
 vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadReplyToMismatch: () => null }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
+vi.mock('../RowQuickActions', () => ({ RowQuickActions: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
   // EmailRow asks this whether the row is the only copy, to decide the gold

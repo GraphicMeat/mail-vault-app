@@ -28,6 +28,9 @@ const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
 const mockIsGraphAccount = vi.fn().mockReturnValue(false);
 const mockGraphDeleteMessage = vi.fn().mockResolvedValue(undefined);
 const mockGetArchivedEmailIds = vi.fn().mockResolvedValue(new Set());
+const mockGetSavedEmailIds = vi.fn().mockResolvedValue(new Set());
+const mockGetLocalEmails = vi.fn().mockResolvedValue([]);
+const mockRemoveFromLocalIndex = vi.fn().mockResolvedValue(undefined);
 // The vault's index entry for the message being deleted, and the write that
 // stamps it. Absent from this file's mocks, `stampVaultEntry` threw on
 // `db.getLocalIndexEntry is not a function`, its own catch swallowed that, and
@@ -51,9 +54,9 @@ vi.mock('../../db', () => ({
   getEmailHeadersMeta: vi.fn().mockResolvedValue(null),
   getEmailHeadersPartial: vi.fn().mockResolvedValue({ emails: [], totalEmails: 0 }),
   getArchivedEmailIds: (...a) => mockGetArchivedEmailIds(...a),
-  getSavedEmailIds: vi.fn().mockResolvedValue(new Set()),
+  getSavedEmailIds: (...a) => mockGetSavedEmailIds(...a),
   getCachedMailboxEntry: vi.fn().mockResolvedValue(null),
-  getLocalEmails: vi.fn().mockResolvedValue([]),
+  getLocalEmails: (...a) => mockGetLocalEmails(...a),
   readLocalEmailIndex: vi.fn().mockResolvedValue(null),
   getArchivedEmails: vi.fn().mockResolvedValue([]),
   deleteLocalEmail: (...a) => mockDeleteLocalEmail(...a),
@@ -82,7 +85,7 @@ vi.mock('../../api', () => ({
   graphDeleteMessage: (...a) => mockGraphDeleteMessage(...a),
   moveEmails: (...a) => mockMoveEmails(...a),
   appendLocalIndex: (...a) => mockAppendLocalIndex(...a),
-  removeFromLocalIndex: vi.fn().mockResolvedValue(undefined),
+  removeFromLocalIndex: (...a) => mockRemoveFromLocalIndex(...a),
 }));
 
 vi.mock('../../authUtils', () => ({
@@ -129,8 +132,9 @@ vi.mock('../../safeStorage', () => ({
 }));
 
 const { useMailStore } = await import('../../../stores/mailStore');
+const { removeLocalEmail: removeLocalEmailWorkflow } = await import('../messageMutations');
 const { loadEmails: realLoadEmails } = await import('../loadEmails');
-const { invalidateChatAndThreadCaches } = await import('../../../stores/slices/messageListSlice');
+const { invalidateChatAndThreadCaches, _resetArchivedGroupsForTest, setArchivedGroup, getArchivedGroup } = await import('../../../stores/slices/messageListSlice');
 
 const ACCOUNT = { id: 'acct1', email: 'me@mock.test' };
 const OTHER_ACCOUNT = { id: 'acct2', email: 'other@mock.test' };
@@ -189,6 +193,7 @@ const seenOf = (uid) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _resetArchivedGroupsForTest();
   netOnline = true;
   afterDeleteSelect = 'none';
   // uid 1 is the message every delete case here removes; the vault holds it.
@@ -200,6 +205,9 @@ beforeEach(() => {
   mockGetGraphMessageId.mockReturnValue(null);
   mockGraphDeleteMessage.mockResolvedValue(undefined);
   mockGetArchivedEmailIds.mockResolvedValue(new Set());
+  mockGetSavedEmailIds.mockResolvedValue(new Set());
+  mockGetLocalEmails.mockResolvedValue([]);
+  mockRemoveFromLocalIndex.mockResolvedValue(undefined);
 });
 
 describe('markSelectedAsRead', () => {
@@ -948,6 +956,47 @@ describe('deleteEmailFromServer', () => {
     expect(useMailStore.getState().selectedEmailId).toBeNull();
     expect(useMailStore.getState().selectedEmail).toBeNull();
   });
+
+  it('uses an explicit foreign search-result location without mutating the active row with the same uid', async () => {
+    const activeRow = { ...seedThread()[0], _accountId: ACCOUNT.id, _mailbox: 'INBOX' };
+    primeStore([activeRow], []);
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT],
+      selectedEmailId: 1,
+      selectedEmail: activeRow,
+    });
+
+    await useMailStore.getState().deleteEmailFromServer(1, {
+      accountId: OTHER_ACCOUNT.id,
+      mailboxOverride: 'Sent',
+      skipRefresh: true,
+    });
+
+    expect(mockQueueOp).toHaveBeenCalledWith({ op: 'delete', accountId: OTHER_ACCOUNT.id, mailbox: 'Sent', uids: [1] });
+    expect(mockDeleteEmail).toHaveBeenCalledWith(OTHER_ACCOUNT, 1, 'Sent');
+    expect(useMailStore.getState().emails).toEqual([activeRow]);
+    expect(useMailStore.getState().selectedEmailId).toBe(1);
+    expect(useMailStore.getState().selectedEmail).toBe(activeRow);
+  });
+
+  it('keeps another UID open when an explicit delete targets the same account and folder', async () => {
+    const target = { ...seedThread()[0], _accountId: OTHER_ACCOUNT.id, _mailbox: 'Sent' };
+    const open = { ...seedThread()[1], _accountId: OTHER_ACCOUNT.id, _mailbox: 'Sent' };
+    primeStore([target, open], []);
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeAccountId: OTHER_ACCOUNT.id, activeMailbox: 'Sent',
+      selectedEmailId: 2, selectedEmail: open,
+    });
+
+    await useMailStore.getState().deleteEmailFromServer(1, {
+      accountId: OTHER_ACCOUNT.id,
+      mailboxOverride: 'Sent',
+      skipRefresh: true,
+    });
+
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
+    expect(useMailStore.getState().selectedEmail).toBe(open);
+  });
 });
 
 // settings.behavior.afterDeleting. The default ('none') is the case above:
@@ -1552,6 +1601,84 @@ describe('removeLocalEmail keeps the known archived set on a failed read (I-5)',
     await useMailStore.getState().removeLocalEmail(1);
 
     expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([9]));
+  });
+});
+
+describe('removeLocalEmail resolves one exact local copy', () => {
+  it('uses explicit account and mailbox when raw UIDs collide, and preserves spanning unions', async () => {
+    primeStore([], []);
+    _resetArchivedGroupsForTest();
+    const rows = [
+      { uid: 5, _accountId: ACCOUNT.id, _mailbox: 'INBOX' },
+      { uid: 5, _accountId: OTHER_ACCOUNT.id, _mailbox: 'INBOX' },
+      { uid: 5, _accountId: OTHER_ACCOUNT.id, _mailbox: 'Sent' },
+    ];
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeMailbox: 'UNIFIED', unifiedInbox: true,
+      unifiedFolder: 'INBOX', emails: [], localEmails: rows,
+      savedEmailIds: new Set([5]), archivedEmailIds: new Set([5]),
+    });
+    setArchivedGroup(ACCOUNT.id, 'INBOX', new Set([5]));
+    setArchivedGroup(OTHER_ACCOUNT.id, 'INBOX', new Set([5]));
+    setArchivedGroup(OTHER_ACCOUNT.id, 'Sent', new Set([5]));
+    mockGetSavedEmailIds.mockResolvedValueOnce(new Set());
+    mockGetArchivedEmailIds.mockResolvedValueOnce(new Set());
+    mockGetLocalEmails.mockResolvedValueOnce([]);
+    useMailStore.getState().updateSortedEmails();
+
+    await removeLocalEmailWorkflow(5, { accountId: OTHER_ACCOUNT.id, mailbox: 'Sent' });
+
+    expect(mockDeleteLocalEmail).toHaveBeenCalledWith('acct2-Sent-5');
+    expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith(OTHER_ACCOUNT.id, 'Sent', 5);
+    expect(useMailStore.getState().localEmails.map(e => [e._accountId, e._mailbox, e.uid]))
+      .toEqual([[ACCOUNT.id, 'INBOX', 5], [OTHER_ACCOUNT.id, 'INBOX', 5]]);
+    const sortedCopies = useMailStore.getState().sortedEmails.map(e => [e._accountId, e._mailbox, e.uid]);
+    expect(sortedCopies).toHaveLength(2);
+    expect(sortedCopies).toEqual(expect.arrayContaining([
+      [ACCOUNT.id, 'INBOX', 5], [OTHER_ACCOUNT.id, 'INBOX', 5],
+    ]));
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([5]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([5]));
+    expect(getArchivedGroup(OTHER_ACCOUNT.id, 'Sent')).toEqual(new Set());
+  });
+
+  it('refuses a bare UID that is ambiguous or absent from a spanning view', async () => {
+    primeStore([], []);
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], activeMailbox: 'UNIFIED', unifiedInbox: true,
+      emails: [
+        { uid: 5, _accountId: ACCOUNT.id, _mailbox: 'INBOX' },
+        { uid: 5, _accountId: OTHER_ACCOUNT.id, _mailbox: 'INBOX' },
+      ],
+    });
+
+    await removeLocalEmailWorkflow(5);
+    await removeLocalEmailWorkflow(99);
+
+    expect(mockDeleteLocalEmail).not.toHaveBeenCalled();
+    expect(mockRemoveFromLocalIndex).not.toHaveBeenCalled();
+  });
+
+  it('parses a composite key before building the local id and leaves another live folder intact', async () => {
+    primeStore(seedThread(), []);
+    const liveLocals = [{ uid: 2, _accountId: ACCOUNT.id, _mailbox: 'INBOX' }];
+    useMailStore.setState({
+      accounts: [ACCOUNT, OTHER_ACCOUNT], localEmails: liveLocals,
+      savedEmailIds: new Set([2]), archivedEmailIds: new Set([2]),
+      selectedEmailId: 2,
+    });
+    mockGetSavedEmailIds.mockResolvedValueOnce(new Set([9]));
+    mockGetArchivedEmailIds.mockResolvedValueOnce(new Set([9]));
+    mockGetLocalEmails.mockResolvedValueOnce([{ uid: 9, _accountId: OTHER_ACCOUNT.id, _mailbox: 'Sent' }]);
+
+    await removeLocalEmailWorkflow(`${OTHER_ACCOUNT.id}:Sent:9`);
+
+    expect(mockDeleteLocalEmail).toHaveBeenCalledWith('acct2-Sent-9');
+    expect(mockRemoveFromLocalIndex).toHaveBeenCalledWith(OTHER_ACCOUNT.id, 'Sent', 9);
+    expect(useMailStore.getState().localEmails).toEqual(liveLocals);
+    expect(useMailStore.getState().savedEmailIds).toEqual(new Set([2]));
+    expect(useMailStore.getState().archivedEmailIds).toEqual(new Set([2]));
+    expect(useMailStore.getState().selectedEmailId).toBe(2);
   });
 });
 

@@ -15,7 +15,7 @@ import {
   isFromUser
 } from '../utils/emailParser';
 import { useChatBodyLoader, emailKey } from '../hooks/useChatBodyLoader';
-import { resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey, emailScopeKey } from '../stores/slices/unifiedHelpers';
 import {
   ChevronLeft,
   Paperclip,
@@ -37,12 +37,18 @@ import { useThemeStore } from '../stores/themeStore';
 import { scanEmailLinks, checkLinkAlert } from '../utils/linkSafety';
 import { scanTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
-import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { LinkSafetyModal } from './LinkSafetyModal';
 import { getEmailColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
+import { LocalMailLabels } from './LocalMailLabels';
+import { MoveToFolderDropdown } from './MoveToFolderDropdown';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { useExportStore } from '../stores/exportStore';
+import { describePurge } from '../utils/custodyCopy';
+import { isBackedUp as isEmailBackedUp } from './email/MessageStateIcon';
+import { applyFlagToKeys, purgeEverywhere } from '../services/workflows/messageMutations';
 
 export function ChatBubbleView({ correspondent, threadId, threadsMap, userEmail, onBack, onReply }) {
   const t = useT();
@@ -263,9 +269,18 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const menuOpenRef = useRef(false);
+  const setQuickActionMenuOpen = useCallback(open => { menuOpenRef.current = open; }, []);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const moveButtonRef = useRef(null);
   const [senderPopover, setSenderPopover] = useState(null);
 
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
+  const backedUpScopes = useMailStore(s => s.backedUpScopes);
+  const backupConfigured = useMailStore(s => s.backupConfigured);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   const trackerBlocking = useSettingsStore(isTrackerBlockingActive);
@@ -274,6 +289,119 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
   const palette = useThemeStore(s => s.palette);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
   const activeMailbox = useAccountStore(s => s.activeMailbox);
+
+  const mailState = useMailStore.getState();
+  const emailLocation = resolveEmailLocation(email, mailState);
+  const scopedEmail = emailLocation
+    ? { ...email, _accountId: emailLocation.accountId, _mailbox: emailLocation.mailbox }
+    : email;
+  const emailSelectionKey = emailLocation ? selectionKey(scopedEmail, mailState) : null;
+  const isArchived = !!email.isArchived || (!Object.hasOwn(email, 'isArchived')
+    && emailLocation?.accountId === mailState.activeAccountId
+    && emailLocation?.mailbox === mailState.activeMailbox
+    && archivedEmailIds.has(email.uid));
+  const isLocalOnly = email.source === 'local-only' || email._origin === 'local-only';
+  const isSentEmail = emailLocation?.mailbox?.toLowerCase() === 'sent' || fromUser || email.flags?.includes('\\Sent');
+  const isRead = !!email.flags?.includes('\\Seen');
+  const backupScan = { backedUpKeys, backedUpScopes, backupConfigured, activeAccountId, activeMailbox };
+  const isBackedUp = isEmailBackedUp(scopedEmail, backupScan) === true;
+  const purgeDescription = emailLocation && describePurge({
+    server: !isLocalOnly, vault: isArchived || isLocalOnly, backup: isBackedUp,
+  }, 1);
+
+  const setPendingConfirmation = pending => {
+    menuOpenRef.current = true;
+    setPendingDelete(pending);
+  };
+  const closePendingConfirmation = () => {
+    menuOpenRef.current = false;
+    setPendingDelete(null);
+  };
+  const requestDelete = (target = email) => {
+    const location = resolveEmailLocation(target, useMailStore.getState());
+    if (!location) return;
+    const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
+    const localOnly = target.source === 'local-only' || target._origin === 'local-only';
+    setPendingConfirmation({
+      executor: () => localOnly
+        ? useMailStore.getState().removeLocalEmail(target.uid, explicitLocation)
+        : useMailStore.getState().deleteEmailFromServer(target.uid, {
+          accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox,
+        }),
+      copy: {
+        title: t('viewer.deleteEmail'),
+        description: localOnly ? t('viewer.emailOnlyExistsLocalArchive') : target.isArchived ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        confirmLabel: t('common.delete'),
+      },
+    });
+  };
+  const handleArchive = (target = email) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
+    const targetArchived = !!target.isArchived || isArchived;
+    if (targetArchived) {
+      setPendingConfirmation({
+        executor: () => useMailStore.getState().removeLocalEmail(target.uid, explicitLocation),
+        copy: {
+          title: t('viewer.unarchiveEmail'),
+          description: (target.source === 'local-only' || target._origin === 'local-only')
+            ? t('viewer.emailOnlyExistsLocalArchive') : t('viewer.cachedCopyRemovedEmailStill'),
+          confirmLabel: t('rowMenu.unarchive'),
+        },
+      });
+      return;
+    }
+    return state.saveEmailsLocally([{ ...target, _accountId: explicitLocation.accountId, _mailbox: explicitLocation.mailbox }]);
+  };
+  const requestDeleteEverywhere = (target = email) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    const scopedTarget = { ...target, _accountId: location.accountId, _mailbox: location.mailbox };
+    const localOnly = target.source === 'local-only' || target._origin === 'local-only';
+    const copy = describePurge({
+      server: !localOnly,
+      vault: !!target.isArchived || localOnly || isArchived,
+      backup: isEmailBackedUp(scopedTarget, {
+        backedUpKeys: state.backedUpKeys, backedUpScopes: state.backedUpScopes,
+        backupConfigured: state.backupConfigured, activeAccountId: state.activeAccountId, activeMailbox: state.activeMailbox,
+      }) === true,
+    }, 1);
+    if (!copy) return;
+    const key = selectionKey(scopedTarget, state);
+    setPendingConfirmation({
+      executor: () => purgeEverywhere([key]),
+      copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
+    });
+  };
+  const handleToggleRead = async (target, requestedRead) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    const scopedTarget = { ...target, _accountId: location.accountId, _mailbox: location.mailbox };
+    const key = selectionKey(scopedTarget, state);
+    const shouldRead = typeof requestedRead === 'boolean' ? requestedRead : !target.flags?.includes('\\Seen');
+    return applyFlagToKeys([key], '\\Seen', shouldRead);
+  };
+  const handleMove = () => {
+    if (!emailLocation) return;
+    menuOpenRef.current = !showMoveDropdown;
+    setShowMoveDropdown(open => !open);
+  };
+  const handleCloseMove = () => {
+    menuOpenRef.current = false;
+    setShowMoveDropdown(false);
+  };
+  const handleToggleFlag = (target, desired) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    return applyFlagToKeys([selectionKey({
+      ...target, _accountId: location.accountId, _mailbox: location.mailbox,
+    }, state)], '\\Flagged', typeof desired === 'boolean' ? desired : !target.flags?.includes('\\Flagged'));
+  };
 
   // Subscribe to body load updates for this specific email
   const [, forceUpdate] = useState(0);
@@ -524,6 +652,10 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       className={`flex gap-2 ${fromUser ? 'flex-row-reverse' : 'flex-row'}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onFocusCapture={() => setFocused(true)}
+      onBlurCapture={event => {
+        if (!menuOpenRef.current && !event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+      }}
     >
       {/* Avatar (only for other person) */}
       {!fromUser && (
@@ -544,29 +676,51 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
       <div className={`max-w-[80%] ${fromUser ? 'items-end' : 'items-start'}`}>
         {/* Hover action toolbar — near top, below sender area */}
         <AnimatePresence>
-          {hovered && (
+          {(hovered || focused || pendingDelete || showMoveDropdown) && (
             <EmailActionBar
               email={email}
               variant="chat"
               onReply={() => onReply?.()}
               onReplyAll={() => onReplyAll?.()}
               onForward={() => onForward?.()}
-              onArchive={null}
-              onDelete={null}
-              onMove={null}
-              onToggleRead={null}
+              onArchive={handleArchive}
+              onDelete={requestDelete}
+              onDeleteEverywhere={purgeDescription ? requestDeleteEverywhere : null}
+              onMove={handleMove}
+              onToggleRead={handleToggleRead}
+              onToggleFlag={handleToggleFlag}
+              onExport={target => useExportStore.getState().openExport({ messages: [target] })}
               onOpenInWindow={() => onOpenFullView?.()}
               onViewSource={null}
-              isArchived={false}
-              isRead={true}
-              isLocalOnly={false}
-              isSentEmail={fromUser}
+              isArchived={isArchived}
+              isRead={isRead}
+              isLocalOnly={isLocalOnly}
+              isSentEmail={isSentEmail}
               singleRecipient={false}
+              disabled={{ archive: !emailLocation, delete: !emailLocation }}
+              moveButtonRef={moveButtonRef}
+              moveDropdownOpen={showMoveDropdown}
+              onMenuOpenChange={setQuickActionMenuOpen}
             />
           )}
         </AnimatePresence>
 
+        {showMoveDropdown && emailLocation && emailSelectionKey && (
+          <MoveToFolderDropdown
+            uids={[emailSelectionKey]}
+            accountId={emailLocation.accountId}
+            currentMailbox={emailLocation.mailbox}
+            anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+            returnFocusRef={moveButtonRef}
+            onMove={targetPath => useMailStore.getState().moveEmails([emailSelectionKey], targetPath)}
+            onClose={handleCloseMove}
+          />
+        )}
+
         <div
+          tabIndex={0}
+          role="group"
+          aria-label={t('chat.bubble.emailContent')}
           onDoubleClick={handleDoubleClick}
           className={`rounded-2xl overflow-hidden cursor-pointer ${
             fromUser
@@ -718,6 +872,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           <span className="text-[10px] text-mail-text-muted">
             {formatMessageTime(email.date)}
           </span>
+          <LocalMailLabels email={email} />
 
           {/* View original toggle (for text messages or to see full HTML) */}
           {(wasStripped || hasHtml) && (
@@ -772,6 +927,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => window.open(url, '_blank'));
         }}
       />
+      <DeleteConfirmModal pending={pendingDelete} onClose={closePendingConfirmation} />
     </motion.div>
   );
 });

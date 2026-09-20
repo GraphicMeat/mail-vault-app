@@ -3,6 +3,10 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
+import {
+  DEFAULT_QUICK_ACTIONS, localMailLabelKey, normalizeQuickActions,
+  resetQuickActionScope, setQuickActionSurface,
+} from '../utils/quickActions';
 
 // Palette of visually distinct avatar colors
 // An account's identity colour, and deliberately none of the reserved words.
@@ -124,6 +128,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerDateDepth: normalizeExplorerDateDepth(persisted?.explorerDateDepth ?? current.explorerDateDepth),
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
   insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
+  quickActions: normalizeQuickActions(persisted?.quickActions ?? current.quickActions),
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
   backupMailboxConcurrency: normalizeBackupMailboxConcurrency(persisted?.backupMailboxConcurrency ?? current.backupMailboxConcurrency),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
@@ -334,6 +339,9 @@ export const useSettingsStore = create(
 
       // Email templates
       emailTemplates: [], // Each: { id: string, name: string, body: string, createdAt: string (ISO) }
+      quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS),
+      localMailLabels: [], // User-defined labels applied only to MailVault's local view state
+      localMailLabelAssignments: {}, // JSON [accountId, mailbox, uid] -> label ids
 
       // Keyboard shortcuts
       keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
@@ -840,6 +848,53 @@ export const useSettingsStore = create(
       setSignatureDisplay: (mode) => set({ signatureDisplay: mode }),
       setActionButtonDisplay: (mode) => set({ actionButtonDisplay: mode }),
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
+      setQuickActionSurface: (surface, scope, config) => set(state => ({
+        quickActions: setQuickActionSurface(state.quickActions, surface, scope, config),
+      })),
+      resetQuickActionScope: (scope, surface) => set(state => ({
+        quickActions: resetQuickActionScope(state.quickActions, scope, surface),
+      })),
+      resetQuickActions: () => set({ quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS) }),
+      addLocalMailLabel: name => {
+        const trimmed = typeof name === 'string' ? name.trim().slice(0, 80) : '';
+        if (!trimmed) return null;
+        const existing = get().localMailLabels.find(label => label.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+        if (existing) return existing;
+        const id = globalThis.crypto?.randomUUID?.() || `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const label = { id, name: trimmed };
+        set(state => ({ localMailLabels: [...state.localMailLabels, label] }));
+        return label;
+      },
+      removeLocalMailLabel: labelId => set(state => {
+        const assignments = Object.fromEntries(Object.entries(state.localMailLabelAssignments || {}).map(([key, ids]) => [
+          key, ids.filter(id => id !== labelId),
+        ]).filter(([, ids]) => ids.length));
+        return {
+          localMailLabels: state.localMailLabels.filter(label => label.id !== labelId),
+          localMailLabelAssignments: assignments,
+        };
+      }),
+      applyLocalMailLabel: (email, location, labelId) => {
+        const key = localMailLabelKey(email, location);
+        if (!key || !get().localMailLabels.some(label => label.id === labelId)) return false;
+        set(state => {
+          const ids = state.localMailLabelAssignments[key] || [];
+          if (ids.includes(labelId)) return {};
+          return { localMailLabelAssignments: { ...state.localMailLabelAssignments, [key]: [...ids, labelId] } };
+        });
+        return true;
+      },
+      removeLocalMailLabelFromEmail: (email, location, labelId) => {
+        const key = localMailLabelKey(email, location);
+        if (!key) return;
+        set(state => {
+          const ids = (state.localMailLabelAssignments[key] || []).filter(id => id !== labelId);
+          const assignments = { ...state.localMailLabelAssignments };
+          if (ids.length) assignments[key] = ids;
+          else delete assignments[key];
+          return { localMailLabelAssignments: assignments };
+        });
+      },
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setListPaneHeight: (size) => set({ listPaneHeight: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),
@@ -1065,6 +1120,7 @@ export const useSettingsStore = create(
           updateSnoozeUntil: null,
           updateSkippedVersion: null,
           emailTemplates: [],
+          quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS),
           keyboardShortcuts: { ...DEFAULT_SHORTCUTS },
           keyboardShortcutsEnabled: true,
           billingEmail: '',

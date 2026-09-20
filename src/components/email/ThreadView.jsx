@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { AnimatePresence } from 'framer-motion';
 import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
-import { resolveEmailLocation, selectionKey, spansMailboxes } from '../../stores/slices/unifiedHelpers';
+import { resolveEmailLocation, selectionKey } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
 import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { splitQuotedContent } from '../../utils/quoteFolding';
@@ -25,6 +25,7 @@ import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUti
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
 import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
+import { LocalMailLabels } from '../LocalMailLabels';
 import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
@@ -39,6 +40,9 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { getEmailColors } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
+import { describePurge } from '../../utils/custodyCopy';
+import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
+import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
 import { ConnectedStateIcon } from './MessageStateIcon';
 import { formatEmailDate } from '../../utils/dateFormat';
 import { AddressText } from './AddressText';
@@ -291,7 +295,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, expanded, onToggle, compact = false }) {
+function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
@@ -302,6 +306,8 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
   const [loadingRaw, setLoadingRaw] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
+  const [showMoveDropdown, setShowMoveDropdown] = useState(false);
+  const moveButtonRef = useRef(null);
   const appTheme = useThemeStore(s => s.theme);
   const palette = useThemeStore(s => s.palette);
   const emailViewerTheme = useSettingsStore(s => s.emailViewerTheme);
@@ -316,6 +322,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
   // active view is not it — reading a UID from the wrong folder returns a
   // different message (raw source, attachments).
   const location = resolveEmailLocation(email, useMailStore.getState());
+  const isArchived = typeof email.isArchived === 'boolean' ? email.isArchived : !!archivedEmailIds?.has(email.uid);
 
   // Register for body load notifications
   useEffect(() => {
@@ -389,6 +396,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
           </p>
         )}
       </div>
+      <div className="pl-12 pb-1"><LocalMailLabels email={email} /></div>
 
       {/* Action bar — below sender info, above content */}
       {expanded && (
@@ -399,13 +407,13 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
             onReply={() => compose('reply')}
             onReplyAll={() => compose('replyAll')}
             onForward={() => compose('forward')}
-            onArchive={null}
-            // A vault-only row (server copy gone) is not this delete's to make:
-            // the workflow looks the row up in `emails`, and a vault row lives
-            // in `localEmails`. The same gate Archive/Move/Read apply.
-            onDelete={email.source === 'local-only' ? null : onDelete}
-            onMove={null}
-            onToggleRead={null}
+            onArchive={onArchive}
+            onDelete={onDelete}
+            onDeleteEverywhere={onDeleteEverywhere}
+            onMove={() => setShowMoveDropdown(value => !value)}
+            onToggleRead={onToggleRead}
+            onToggleFlag={onToggleFlag}
+            onExport={target => useExportStore.getState().openExport({ messages: [target] })}
             onOpenInWindow={() => {
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke) return;
@@ -429,12 +437,19 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
             onViewSource={toggleRawSource}
             onToggleEmailTheme={() => setEmailThemeOverride(emailDarkMode ? 'light' : 'dark')}
             emailThemeDark={emailDarkMode}
-            isArchived={archivedEmailIds?.has(email.uid)}
+            isArchived={isArchived}
             isRead={!!email.flags?.includes('\\Seen')}
             isLocalOnly={email.source === 'local-only'}
-            isSentEmail={false}
+            isSentEmail={location?.mailbox?.toLowerCase() === 'sent' || email.flags?.includes('\\Sent')}
             singleRecipient={(email.to || []).length <= 1 && !(email.cc?.length > 0)}
+            disabled={{ archive: saving, move: !location || email.source === 'local-only', toggleRead: !location || email.source === 'local-only', toggleFlag: !location || email.source === 'local-only' }}
+            moveButtonRef={moveButtonRef}
+            moveDropdownOpen={showMoveDropdown}
+            onActionStart={onActionStart}
           />
+          {showMoveDropdown && location && <MoveToFolderDropdown uids={[selectionKey(email, useMailStore.getState())]} accountId={location.accountId}
+            currentMailbox={location.mailbox} anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+            onClose={() => setShowMoveDropdown(false)} />}
         </div>
       )}
 
@@ -493,6 +508,7 @@ export function ThreadView({ thread, onComposeReply }) {
   const t = useT();
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
   const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const signatureDisplay = useSettingsStore(s => s.signatureDisplay);
   const threadSortOrder = useSettingsStore(s => s.threadSortOrder);
@@ -503,27 +519,91 @@ export function ThreadView({ thread, onComposeReply }) {
   const [saving, setSaving] = useState(false);
   const [pendingDelete, setPendingDelete] = useState(null);
   const scrollContainerRef = useRef(null);
+  const confirmationReturnRef = useRef(null);
 
   // One message, not the thread. The confirm reads as the reading pane's
   // (viewer.*): the message leaves the server; a vault copy stays.
   const requestDelete = useCallback((email) => {
     const state = useMailStore.getState();
-    const mailbox = resolveEmailLocation(email, state)?.mailbox;
-    // A composite key only where the workflow parses one (the unified list);
-    // elsewhere the bare uid plus the folder this row resolves to — a thread
-    // merges INBOX with Sent, so the active folder is not where every row lives.
-    const id = spansMailboxes(state) ? selectionKey(email, state) : email.uid;
+    const location = resolveEmailLocation(email, state);
+    const localOnly = email.source === 'local-only' || email._origin === 'local-only';
     setPendingDelete({
-      executor: () => useMailStore.getState().deleteEmailFromServer(id, { mailboxOverride: mailbox }),
+      executor: () => localOnly
+        ? useMailStore.getState().removeLocalEmail(email.uid, location)
+        : useMailStore.getState().deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox }),
       copy: {
         title: t('viewer.deleteEmail'),
-        description: archivedEmailIds.has(email.uid)
+        description: localOnly
+          ? t('viewer.emailOnlyExistsLocalArchive')
+          : (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
           ? t('viewer.emailArchivedLocallyDeletingServer')
           : t('viewer.emailPermanentlyDeletedServer'),
-        confirmLabel: t('common.delete'),
+        confirmLabel: localOnly ? t('rowMenu.unarchive') : t('common.delete'),
       },
     });
   }, [archivedEmailIds, t]);
+
+  const requestUnarchive = useCallback((email) => {
+    const location = resolveEmailLocation(email, useMailStore.getState());
+    setPendingDelete({
+      executor: () => useMailStore.getState().removeLocalEmail(email.uid, location),
+      copy: {
+        title: t('viewer.unarchiveEmail'),
+        description: email.source === 'local-only' || email._origin === 'local-only'
+          ? t('viewer.emailOnlyExistsLocalArchive') : t('viewer.cachedCopyRemovedEmailStill'),
+        confirmLabel: t('rowMenu.unarchive'),
+      },
+    });
+  }, [t]);
+
+  const handleQuickArchive = useCallback(async (email, entry) => {
+    if (entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))) {
+      requestUnarchive(email);
+      return;
+    }
+    if (saving) return;
+    setSaving(true);
+    try { await saveEmailsLocally([email]); }
+    finally { setSaving(false); }
+  }, [archivedEmailIds, requestUnarchive, saveEmailsLocally, saving]);
+
+  const handleQuickRead = useCallback((email, desired) => {
+    const key = selectionKey(email, useMailStore.getState());
+    const read = typeof desired === 'boolean' ? desired : !email.flags?.includes('\\Seen');
+    return applyFlagToKeys([key], '\\Seen', read);
+  }, []);
+
+  const handleQuickFlag = useCallback((email, desired) => {
+    const key = selectionKey(email, useMailStore.getState());
+    const flagged = typeof desired === 'boolean' ? desired : !email.flags?.includes('\\Flagged');
+    return applyFlagToKeys([key], '\\Flagged', flagged);
+  }, []);
+
+  const requestDeleteEverywhere = useCallback((email) => {
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(email, state);
+    if (!location) return;
+    const localOnly = email.source === 'local-only' || email._origin === 'local-only';
+    const archived = !!email.isArchived || localOnly;
+    const backup = state.backedUpKeys?.has(`${location.accountId}:${location.mailbox}:${email.uid}`);
+    const copy = describePurge({ server: !localOnly, vault: archived, backup: !!backup }, 1);
+    if (!copy) return;
+    const key = selectionKey(email, state);
+    setPendingDelete({
+      executor: () => purgeEverywhere([key]),
+      copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
+    });
+  }, []);
+
+  const restoreConfirmationFocus = () => {
+    requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+  };
+
+  const beginQuickAction = useCallback((_event, trigger, entry) => {
+    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'archive'].includes(entry?.action)) {
+      confirmationReturnRef.current = trigger;
+    }
+  }, []);
 
   // Sort emails by user preference (oldest-first or newest-first)
   const sortedEmails = useMemo(() =>
@@ -721,6 +801,12 @@ export function ThreadView({ thread, onComposeReply }) {
                   shouldShowSignature={sigVisMap[email.uid] !== false}
                   onComposeReply={onComposeReply}
                   onDelete={requestDelete}
+                  onArchive={handleQuickArchive}
+                  onDeleteEverywhere={requestDeleteEverywhere}
+                  onToggleRead={handleQuickRead}
+                  onToggleFlag={handleQuickFlag}
+                  onActionStart={beginQuickAction}
+                  saving={saving}
                 />}
               </div>
             );
@@ -734,11 +820,13 @@ export function ThreadView({ thread, onComposeReply }) {
             onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(selectedEmail)]: !(previous[emailKey(selectedEmail)] ?? true) }))}
             bodiesMapRef={bodiesMapRef} registerListener={registerListener} archivedEmailIds={archivedEmailIds}
             signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}
-            onComposeReply={onComposeReply} onDelete={requestDelete} />
+            onComposeReply={onComposeReply} onDelete={requestDelete} onArchive={handleQuickArchive}
+            onDeleteEverywhere={requestDeleteEverywhere}
+            onToggleRead={handleQuickRead} onToggleFlag={handleQuickFlag} onActionStart={beginQuickAction} saving={saving} />
         </div>
       )}
       </div>
-      <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
+      <DeleteConfirmModal pending={pendingDelete} onClose={() => { setPendingDelete(null); restoreConfirmationFocus(); }} />
     </div>
   );
 }

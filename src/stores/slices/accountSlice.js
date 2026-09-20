@@ -153,7 +153,7 @@ export const createAccountSlice = (set, get) => ({
   },
 
   saveSelectedLocally: () => _saveSelectedLocally(),
-  removeLocalEmail: (uid) => _removeLocalEmail(uid),
+  removeLocalEmail: (uid, location) => _removeLocalEmail(uid, location),
   deleteEmailFromServer: (uid, opts) => _deleteEmailFromServer(uid, opts),
   markEmailReadStatus: (uid, read) => _markEmailReadStatus(uid, read),
   exportEmail: (uid) => _exportEmail(uid),

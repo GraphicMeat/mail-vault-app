@@ -7,7 +7,7 @@
 // current state.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 
 vi.mock('framer-motion', () => ({
   motion: { div: React.forwardRef((props, ref) => React.createElement('div', { ...props, ref })) },
@@ -18,6 +18,10 @@ const settings = vi.hoisted(() => ({ actionButtonDisplay: 'icon-label' }));
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: (selector) => selector(settings),
 }));
+const mailState = { activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [] };
+function useMailStore(selector) { return selector(mailState); }
+useMailStore.getState = () => mailState;
+vi.mock('../../stores/mailStore', () => ({ useMailStore }));
 
 const { EmailActionBar } = await import('../email/EmailActionBar');
 
@@ -224,6 +228,7 @@ describe('EmailActionBar — star', () => {
         singleRecipient={false}
         emailThemeDark={false}
         disabled={extra.disabled ?? {}}
+        configOverride={extra.configOverride}
         onToggleFlag={onToggleFlag}
       />
     );
@@ -243,7 +248,22 @@ describe('EmailActionBar — star', () => {
   it('hands the open message to the handler', () => {
     const { email, onToggleFlag } = renderStar([]);
     fireEvent.click(action('Star'));
-    expect(onToggleFlag).toHaveBeenCalledWith(email);
+    expect(onToggleFlag).toHaveBeenCalledWith(email, true);
+  });
+
+  it('toggles a single configured star off when the message is already flagged', () => {
+    const { email, onToggleFlag } = renderStar(['\\Flagged']);
+    fireEvent.click(action('Remove star'));
+    expect(onToggleFlag).toHaveBeenCalledWith(email, false);
+  });
+
+  it('keeps explicit star and unstar entries directional', () => {
+    const configOverride = { mode: 'inline', palette: 'neutral', favoriteId: null, entries: [
+      { id: 'star', action: 'star' }, { id: 'unstar', action: 'unstar' },
+    ] };
+    const { email, onToggleFlag } = renderStar([], { configOverride });
+    fireEvent.click(action('Star'));
+    expect(onToggleFlag).toHaveBeenCalledWith(email, true);
   });
 
   it('honours disabled.toggleFlag', () => {
@@ -268,7 +288,7 @@ describe('EmailActionBar — star', () => {
 
 
 describe('reader toolbar action placement', () => {
-  it('keeps common actions visible and focuses the menu with full keyboard navigation', () => {
+  it('keeps common actions visible and focuses the menu with full keyboard navigation', async () => {
     renderBar();
     expect(screen.queryByRole('menu')).toBeNull();
     expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Reply', 'Reply All', 'Forward', 'Archive', 'Delete', 'Move', 'Mark unread', 'Dark', 'More']);
@@ -284,7 +304,7 @@ describe('reader toolbar action placement', () => {
     expect(document.activeElement.textContent).toBe('Source');
     fireEvent.keyDown(document.activeElement, { key: 'Escape' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
-    expect(document.activeElement).toBe(more);
+    await waitFor(() => expect(document.activeElement).toBe(more));
   });
 
   it.each(['icon-only', 'icon-label', 'text-only'])('exposes everyday actions directly in %s mode', display => {
@@ -293,7 +313,7 @@ describe('reader toolbar action placement', () => {
     for (const [label, handler] of [['Move', 'onMove'], ['Mark unread', 'onToggleRead'], ['Star', 'onToggleFlag'], ['Export', 'onExport']]) {
       const button = screen.getByRole('button', { name: label, exact: true });
       fireEvent.click(button);
-      expect(handlers[handler]).toHaveBeenCalledWith(EMAIL);
+      expect(handlers[handler]).toHaveBeenCalledWith(...(handler === 'onToggleFlag' ? [EMAIL, true] : [EMAIL]));
       expect(button.querySelector('svg') !== null).toBe(display !== 'text-only');
       expect(button.textContent).toBe(display === 'icon-only' ? '' : label);
     }

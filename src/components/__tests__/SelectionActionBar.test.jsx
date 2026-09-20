@@ -44,7 +44,12 @@ vi.mock('../MoveToFolderDropdown', () => ({
   MoveToFolderDropdown: () => React.createElement('div', { 'data-testid': 'move-dropdown' }),
 }));
 
+const selectionFixtureRows = [1, 2].map(uid => ({
+  uid, _accountId: 'acct-1', _mailbox: 'INBOX', source: 'server', flags: [], isArchived: false,
+}));
 const useMailStoreMock = create(() => ({
+  activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [],
+  emails: selectionFixtureRows, sortedEmails: selectionFixtureRows, localEmails: [], sentEmails: [],
   selectedEmailIds: new Set([1, 2]),
   archivedEmailIds: new Set(),
   clearSelection: vi.fn(),
@@ -82,6 +87,8 @@ import { SelectionActionBar } from '../SelectionActionBar';
 describe('SelectionActionBar delete confirmation', () => {
   beforeEach(() => {
     useMailStoreMock.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [],
+      emails: selectionFixtureRows, sortedEmails: selectionFixtureRows, localEmails: [], sentEmails: [],
       selectedEmailIds: new Set([1, 2]),
       archivedEmailIds: new Set(),
       clearSelection: vi.fn(),
@@ -150,25 +157,25 @@ describe('SelectionActionBar delete confirmation', () => {
     expect(screen.getByText(/Delete 11 emails in 2 conversations from the server/)).toBeTruthy();
   });
 
-  it('confirming after Delete everywhere calls purgeSelectedEverywhere, not deleteSelectedFromServer', () => {
+  it('confirming after Delete everywhere calls purgeSelectedEverywhere, not deleteSelectedFromServer', async () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete everywhere'));
 
     const confirmButtons = screen.getAllByRole('button', { name: 'Delete everywhere' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
 
-    expect(useMailStoreMock.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(useMailStoreMock.getState().purgeSelectedEverywhere).toHaveBeenCalledTimes(1));
     expect(useMailStoreMock.getState().deleteSelectedFromServer).not.toHaveBeenCalled();
   });
 
-  it('confirming after Delete (server-only) calls deleteSelectedFromServer, not purgeSelectedEverywhere', () => {
+  it('confirming after Delete (server-only) calls deleteSelectedFromServer, not purgeSelectedEverywhere', async () => {
     render(<SelectionActionBar />);
     fireEvent.click(screen.getByTitle('Delete from server'));
 
     const confirmButtons = screen.getAllByRole('button', { name: 'Delete from server' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
 
-    expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1));
     expect(useMailStoreMock.getState().purgeSelectedEverywhere).not.toHaveBeenCalled();
   });
 });
@@ -184,6 +191,8 @@ describe('SelectionActionBar refusal reporting', () => {
   beforeEach(() => {
     consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     useMailStoreMock.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [],
+      emails: selectionFixtureRows, sortedEmails: selectionFixtureRows, localEmails: [], sentEmails: [],
       selectedEmailIds: new Set([1, 2]),
       archivedEmailIds: new Set(),
       error: null,

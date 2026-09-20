@@ -24,6 +24,7 @@ vi.mock('../ReplyToAlertIcon', () => ({ ReplyToAlertIcon: () => null, getThreadR
 vi.mock('../TrackerAlertIcon', () => ({ TrackerAlertIcon: () => null, getThreadTrackerInfo: () => null }));
 vi.mock('../RowActionMenu', () => ({ RowActionMenu: () => null }));
 vi.mock('../RowActionMenuItems', () => ({ RowActionMenuItems: () => null }));
+vi.mock('../RowQuickActions', () => ({ RowQuickActions: () => null }));
 vi.mock('../email/MessageStateIcon', () => ({
   ConnectedStateIcon: () => null,
   describeMessageState: () => ({ tone: 'local' }),

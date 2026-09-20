@@ -13,6 +13,7 @@
  *            and later in the DOM, so it paints over its own host
  *   toast    trays and toasts: above any surface, below every dialog
  *   dialog   a modal dialog, including one opened from inside a surface
+ *   dialogPopover an interactive menu owned by a dialog, above its panel
  *   alert    a blocking flow that must outrank a dialog (restore, server change)
  *   tooltip  pointer-following, never interactive, above everything it explains
  *   fatal    app-level interrupts — a failed chunk load, a vault that vanished
@@ -23,6 +24,7 @@ export const Z = {
   popover: 'z-50',
   toast: 'z-[60]',
   dialog: 'z-[100]',
+  dialogPopover: 'z-[110]',
   alert: 'z-[1000]',
   tooltip: 'z-[9999]',
   fatal: 'z-[10000]',

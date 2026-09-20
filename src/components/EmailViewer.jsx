@@ -1,4 +1,3 @@
-import { Button } from './ui/Button';
 import React, { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { useMailStore } from '../stores/mailStore';
 import { useSelectionStore } from '../stores/selectionStore';
@@ -38,7 +37,7 @@ import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { scanTrackers, getCachedTrackers, summarizeTrackers } from '../utils/trackerDetect';
 import { recordTrackerSummary } from '../services/trackerVerdicts';
 import { getCachedAlerts } from '../utils/linkSafety';
-import { emailScopeKey, selectionKey, spansMailboxes, rowKey } from '../stores/slices/unifiedHelpers';
+import { emailScopeKey, selectionKey, spansMailboxes, rowKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
 import { viewportShift } from '../hooks/useViewportShift';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { useThemeStore } from '../stores/themeStore';
@@ -49,6 +48,10 @@ import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
 import { ReadDelayProgress } from './ReadDelayProgress';
+import { LocalMailLabels } from './LocalMailLabels';
+import { DeleteConfirmModal } from './DeleteConfirmModal';
+import { describePurge } from '../utils/custodyCopy';
+import { applyFlagToKeys } from '../services/workflows/messageMutations';
 
 // Re-export AttachmentItem for any external consumers
 export { AttachmentItem } from './email/AttachmentBar';
@@ -66,11 +69,9 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   const loadingEmail = useSelectionStore(s => s.loadingEmail);
   const savedEmailIds = useMessageListStore(s => s.savedEmailIds);
   const archivedEmailIds = useMessageListStore(s => s.archivedEmailIds);
-  const saveEmailLocally = useSelectionStore(s => s.saveEmailLocally);
+  const saveEmailsLocally = useSelectionStore(s => s.saveEmailsLocally);
   const removeLocalEmail = useSelectionStore(s => s.removeLocalEmail);
   const exportEmail = useSelectionStore(s => s.exportEmail);
-  const markEmailReadStatus = useSelectionStore(s => s.markEmailReadStatus);
-  const toggleFlagged = useSelectionStore(s => s.toggleFlagged);
   const selectEmail = useSelectionStore(s => s.selectEmail);
   const deleteEmailFromServer = useSelectionStore(s => s.deleteEmailFromServer);
   const activeAccountId = useAccountStore(s => s.activeAccountId);
@@ -79,6 +80,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // yet" vs "also still on the server"). Gold is decided by custodySource,
   // which never asks a uid set — see stores/slices/custody.js.
   const serverKnown = useMailStore(s => s.serverUids.complete);
+  const backedUpKeys = useMailStore(s => s.backedUpKeys);
 
   const linkSafetyEnabled = useSettingsStore(s => s.linkSafetyEnabled);
   // Effective state, not the raw flag: a stale `true` left behind by a lapsed
@@ -96,8 +98,8 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   const [saving, setSaving] = useState(false);
   const [togglingRead, setTogglingRead] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmUnarchive, setConfirmUnarchive] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingPurge, setPendingPurge] = useState(null);
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
   const [rawError, setRawError] = useState(null);
@@ -108,6 +110,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // Per-email theme override. null = follow app theme; 'light'|'dark' = forced.
   const [emailThemeOverride, setEmailThemeOverride] = useState(null);
   const moveButtonRef = useRef(null);
+  const confirmationReturnRef = useRef(null);
   const iframeRef = useRef(null);
 
   const effectiveEmailTheme = emailThemeOverride ?? theme;
@@ -115,7 +118,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   const emailColors = getEmailColors(effectiveEmailTheme, palette);
 
   const isCached = selectedEmail && savedEmailIds.has(selectedEmail.uid);
-  const isArchived = selectedEmail && archivedEmailIds.has(selectedEmail.uid);
+  const isArchived = selectedEmail && (typeof selectedEmail.isArchived === 'boolean' ? selectedEmail.isArchived : archivedEmailIds.has(selectedEmail.uid));
   const isLocalOnly = selectedEmailSource === 'local-only';
   const isRead = selectedEmail?.flags?.includes('\\Seen');
   // One custody statement per message — and it is the ROW's, not a second
@@ -158,8 +161,6 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     setRawSource(null);
     setRawError(null);
     setLoadingRaw(false);
-    setConfirmDelete(false);
-    setConfirmUnarchive(false);
     setShowInsights(false);
     setEmailThemeOverride(null);
     return () => { ++rawRequest.current; };
@@ -192,24 +193,28 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     if (request === rawRequest.current) setShowRaw(true);
   };
 
-  const handleSave = async () => {
-    if (!selectedEmail) return;
+  const handleSave = async (target = selectedEmail) => {
+    if (!target) return;
     setSaving(true);
     try {
-      await saveEmailLocally(selectedEmail.uid);
+      await saveEmailsLocally([target]);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleRemoveLocal = () => {
-    if (!selectedEmail) return;
-    setConfirmUnarchive(true);
-  };
-
-  const confirmRemoveLocal = async () => {
-    setConfirmUnarchive(false);
-    await removeLocalEmail(selectedEmail.uid);
+  const handleRemoveLocal = (target = selectedEmail) => {
+    if (!target) return;
+    const location = resolveEmailLocation(target, useMailStore.getState());
+    if (!location) return;
+    setPendingDelete({
+      executor: () => removeLocalEmail(target.uid, location),
+      copy: {
+        title: target.source === 'local-only' || target._origin === 'local-only' ? t('viewer.deleteEmail') : t('viewer.unarchiveEmail'),
+        description: target.source === 'local-only' || target._origin === 'local-only' ? t('viewer.emailOnlyExistsLocalArchive') : t('viewer.cachedCopyRemovedEmailStill'),
+        confirmLabel: target.source === 'local-only' || target._origin === 'local-only' ? t('common.delete') : t('rowMenu.unarchive'),
+      },
+    });
   };
 
   const handleExport = async () => {
@@ -237,11 +242,12 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     }
   };
 
-  const handleToggleReadStatus = async () => {
-    if (!selectedEmail || togglingRead) return;
+  const handleToggleReadStatus = async (email = selectedEmail, desired) => {
+    if (!email || togglingRead) return;
     setTogglingRead(true);
     try {
-      await markEmailReadStatus(selectedEmail.uid, !isRead);
+      const read = typeof desired === 'boolean' ? desired : !email.flags?.includes('\\Seen');
+      await applyFlagToKeys([selectionKey(email, useMailStore.getState())], '\\Seen', read);
     } finally {
       setTogglingRead(false);
     }
@@ -250,26 +256,60 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // The open message's own selection key: a merged Sent copy, or a message
   // opened from a branch listing, is not the view's folder's — and a bare uid
   // there names another folder's message just as readily.
-  const handleToggleFlag = () => {
-    if (!selectedEmail) return;
-    toggleFlagged(selectionKey(selectedEmail, useMailStore.getState()));
+  const handleToggleFlag = (target = selectedEmail, desired) => {
+    if (!target) return;
+    const flagged = typeof desired === 'boolean' ? desired : !target.flags?.includes('\\Flagged');
+    return applyFlagToKeys([selectionKey(target, useMailStore.getState())], '\\Flagged', flagged);
   };
 
-  const handleDelete = () => {
-    if (!selectedEmail || deleting) return;
-    setConfirmDelete(true);
+  const handleDelete = (target = selectedEmail) => {
+    if (!target || deleting) return;
+    const location = resolveEmailLocation(target, useMailStore.getState());
+    if (!location) return;
+    setPendingDelete({
+      executor: () => confirmDeleteEmail(target, location),
+      copy: {
+        title: t('viewer.deleteEmail'),
+        description: target.isArchived || archivedEmailIds.has(target.uid) ? t('viewer.emailArchivedLocallyDeletingServer') : t('viewer.emailPermanentlyDeletedServer'),
+        confirmLabel: t('common.delete'),
+      },
+    });
   };
 
-  const confirmDeleteEmail = async () => {
-    setConfirmDelete(false);
+  const handleDeleteEverywhere = target => {
+    if (!target) return;
+    const state = useMailStore.getState();
+    const location = resolveEmailLocation(target, state);
+    if (!location) return;
+    const localOnly = target.source === 'local-only' || target._origin === 'local-only';
+    const archived = !!target.isArchived || archivedEmailIds.has(target.uid) || localOnly;
+    const backup = !!backedUpKeys?.has(`${location.accountId}:${location.mailbox}:${target.uid}`);
+    const copy = describePurge({ server: !localOnly, vault: archived, backup }, 1);
+    if (!copy) return;
+    setPendingPurge({
+      copy: { title: copy.title, description: copy.description, confirmLabel: copy.label },
+      executor: async () => {
+        const current = useMailStore.getState();
+        const previous = [...current.selectedEmailIds];
+        const key = selectionKey(target, current);
+        current.setSelection([key]);
+        try { await current.purgeSelectedEverywhere(); }
+        finally {
+          const selected = useMailStore.getState().selectedEmailIds;
+          if (selected.size === 0) useMailStore.getState().setSelection(previous.filter(item => item !== key));
+        }
+      },
+    });
+  };
+
+  const confirmDeleteEmail = async (target = selectedEmail, location = resolveEmailLocation(target, useMailStore.getState())) => {
     setDeleting(true);
     try {
       // A bare uid names a message only inside one folder of one account: in
       // a list that spans mailboxes it matches whichever row carries that
       // number first, which is another account's mail. Same rule as
       // ThreadView.requestDelete and the row menu.
-      const state = useMailStore.getState();
-      await deleteEmailFromServer(spansMailboxes(state) ? selectionKey(selectedEmail, state) : selectedEmail.uid);
+      await deleteEmailFromServer(target.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox });
     } catch (err) {
       // The workflow removes the row optimistically and puts it back when the
       // server refuses (deleteEmailFromServer's restoreRow). Unreported, that
@@ -290,6 +330,8 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   // `accountId-mailbox-uid`, not the bare uid: the scan cache and the persisted
   // alert map are both shared across accounts and folders.
   const scopeKey = selectedEmail ? emailScopeKey(selectedEmail, useMailStore.getState()) : null;
+  const selectedLocation = selectedEmail ? resolveEmailLocation(selectedEmail, useMailStore.getState()) : null;
+  const isSentEmail = !!selectedEmail && (selectedLocation?.mailbox?.toLowerCase() === 'sent' || selectedEmail.flags?.includes('\\Sent'));
   // The same handoff the row plays, at reading-pane scale: archive the message
   // you are reading and the band above it hands over while you watch, instead
   // of having quietly always said what it now says.
@@ -596,6 +638,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         onToggleInsights={() => setShowInsights(!showInsights)}
         archivedEmailIds={archivedEmailIds}
       />
+      <div className="px-3 pt-1"><LocalMailLabels email={selectedEmail} /></div>
 
       {/* Action Bar — below sender info, above content */}
       <div className="px-3 pb-2 relative">
@@ -605,11 +648,14 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             onReply={(email) => onComposeReply?.('reply', email)}
             onReplyAll={(email) => onComposeReply?.('replyAll', email)}
             onForward={(email) => onComposeReply?.('forward', email)}
-            onArchive={isArchived ? handleRemoveLocal : handleSave}
-            onDelete={isLocalOnly ? handleRemoveLocal : handleDelete}
+            onArchive={(email, entry) => entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
+              ? handleRemoveLocal(email) : handleSave(email)}
+            onDelete={(email, entry) => email.source === 'local-only' || email._origin === 'local-only'
+              ? handleRemoveLocal(email) : handleDelete(email)}
             onMove={() => setShowMoveDropdown(v => !v)}
             onToggleRead={handleToggleReadStatus}
             onToggleFlag={handleToggleFlag}
+            onDeleteEverywhere={handleDeleteEverywhere}
             onOpenInWindow={() => {
               const invoke = window.__TAURI__?.core?.invoke;
               if (!invoke || !selectedEmail?.html) return;
@@ -638,19 +684,27 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             isArchived={isArchived}
             isRead={isRead}
             isLocalOnly={isLocalOnly}
-            isSentEmail={false}
+            isSentEmail={isSentEmail}
             singleRecipient={(selectedEmail.to || []).length <= 1 && !(selectedEmail.cc?.length > 0)}
             disabled={{ delete: deleting, toggleRead: togglingRead, archive: saving }}
             moveDropdownOpen={showMoveDropdown}
             moveButtonRef={moveButtonRef}
+            onActionStart={(_event, trigger, entry) => {
+              if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive', 'archive'].includes(entry?.action)) {
+                confirmationReturnRef.current = trigger;
+              }
+            }}
           />
           {showMoveDropdown && selectedEmail && (
             <MoveToFolderDropdown
               // The open message's own key: a merged Sent copy, or a message
               // opened from a branch listing, is not the view's folder's.
               uids={[selectionKey(selectedEmail, useMailStore.getState())]}
+              accountId={selectedLocation?.accountId}
+              currentMailbox={selectedLocation?.mailbox}
               onClose={() => setShowMoveDropdown(false)}
               anchorRect={moveButtonRef.current?.getBoundingClientRect()}
+              returnFocusRef={moveButtonRef}
             />
           )}
         </div>
@@ -752,87 +806,14 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         })()}
       </div>
 
-      {/* Delete Confirmation */}
-      <AnimatePresence>
-        {confirmDelete && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
-            onClick={() => setConfirmDelete(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={e => e.stopPropagation()}
-              className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
-            >
-              <h3 className="text-lg font-semibold text-mail-text mb-2">{t('viewer.deleteEmail')}</h3>
-              <p className="text-sm text-mail-text-muted mb-4">
-                {isArchived
-                  ? t('viewer.emailArchivedLocallyDeletingServer')
-                  : t('viewer.emailPermanentlyDeletedServer')}
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button variant="secondary" className="bg-mail-bg"
-                  onClick={() => setConfirmDelete(false)}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button variant="danger"
-                  onClick={confirmDeleteEmail}
-                >
-                  {t('common.delete')}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Unarchive / Delete Local Confirmation */}
-      <AnimatePresence>
-        {confirmUnarchive && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
-            onClick={() => setConfirmUnarchive(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              onClick={e => e.stopPropagation()}
-              className="bg-mail-surface border border-mail-border rounded-xl p-6 max-w-sm mx-4"
-            >
-              <h3 className="text-lg font-semibold text-mail-text mb-2">
-                {isLocalOnly ? t('viewer.deleteEmail') : t('viewer.unarchiveEmail')}
-              </h3>
-              <p className="text-sm text-mail-text-muted mb-4">
-                {isLocalOnly
-                  ? t('viewer.emailOnlyExistsLocalArchive')
-                  : t('viewer.cachedCopyRemovedEmailStill')}
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button variant="secondary" className="bg-mail-bg"
-                  onClick={() => setConfirmUnarchive(false)}
-                >
-                  {t('common.cancel')}
-                </Button>
-                <Button variant="danger"
-                  onClick={confirmRemoveLocal}
-                >
-                  {isLocalOnly ? t('common.delete') : t('rowMenu.unarchive')}
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <DeleteConfirmModal pending={pendingDelete} onClose={() => {
+        setPendingDelete(null);
+        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+      }} />
+      <DeleteConfirmModal pending={pendingPurge} onClose={() => {
+        setPendingPurge(null);
+        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+      }} />
 
       <LinkSafetyModal
         alert={linkSafetyAlert}

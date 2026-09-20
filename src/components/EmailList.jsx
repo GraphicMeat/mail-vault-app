@@ -5,7 +5,7 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useUiStore } from '../stores/uiStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
@@ -49,6 +49,8 @@ import { bulkOperationManager } from '../services/BulkOperationManager';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
+import { RowQuickActions } from './RowQuickActions';
+import { LocalMailLabels } from './LocalMailLabels';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
 
@@ -247,6 +249,7 @@ function EmailListComponent({ stacked = false }) {
   // virtualizer's transform stacking context.
   // { executor, copy: { title, description, confirmLabel } } | null
   const [pendingDelete, setPendingDelete] = useState(null);
+  const confirmationReturnRef = useRef(null);
   // Lifted saving state — tracks which rows have active save operations
   const [savingRowIds, setSavingRowIds] = useState(() => new Set());
   const startSaving = useCallback((id) => setSavingRowIds(prev => { const next = new Set(prev); next.add(id); return next; }), []);
@@ -257,6 +260,9 @@ function EmailListComponent({ stacked = false }) {
   // ones each row used to receive as a freshly-minted closure or object.
   const openRowMenu = useCallback((id) => setActiveMenuRowId(id), []);
   const closeRowMenu = useCallback(() => setActiveMenuRowId(null), []);
+  const handleRowActionStart = useCallback((_event, trigger, entry) => {
+    if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) confirmationReturnRef.current = trigger;
+  }, []);
   const requestRowDelete = useCallback((executor, copy) => {
     setActiveMenuRowId(null);
     setPendingDelete({ executor, copy });
@@ -1073,7 +1079,7 @@ function EmailListComponent({ stacked = false }) {
                 actions={{ ...rowActions, saveEmailLocally: () => saveEmailsLocally([email]) }}
                 unifiedInbox={unifiedInbox} accountColors={accountColors}
                 menuOpen={activeMenuRowId === key} onOpenMenu={openRowMenu} onCloseMenu={closeRowMenu}
-                onRequestDelete={requestRowDelete} isSaving={savingRowIds.has(key)} onStartSaving={startSaving} onStopSaving={stopSaving}
+                onRequestDelete={requestRowDelete} onActionStart={handleRowActionStart} isSaving={savingRowIds.has(key)} onStartSaving={startSaving} onStopSaving={stopSaving}
                 derivedFrom={searchActive ? searchResults : sortedEmails} />;
             }} />
         ) : (loading && rowCount === 0) || showSkeleton ? (
@@ -1287,8 +1293,16 @@ function EmailListComponent({ stacked = false }) {
                     )}
 
                     {item.type === 'sender-email' && (
-                      <button
+                      <div className="relative group w-full h-full">
+                      <div role="button" tabIndex={0}
                         data-testid="sender-email-row"
+                        onKeyDown={event => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            event.currentTarget.click();
+                          }
+                        }}
                         onClick={() => {
                           // The message's own tag first — `_fromSentFolder` is a
                           // guess about which folder a Sent row came from, and a
@@ -1300,7 +1314,7 @@ function EmailListComponent({ stacked = false }) {
                             setExpandedEmail(expandedEmail === selKey(item.email) ? null : selKey(item.email));
                           }
                         }}
-                        className={`w-full h-full flex items-center gap-3 pr-4 text-left border-b border-mail-border ${
+                        className={`w-full h-full flex items-center gap-3 pr-4 text-left border-b border-mail-border cursor-pointer ${
                           // pl-[62px], not pl-16: the 2px border eats into the
                           // padding box, so a fixed pl-16 shifted the row's
                           // content 2px right the moment it was marked. The
@@ -1344,12 +1358,24 @@ function EmailListComponent({ stacked = false }) {
                           {item.email.snippet && (
                             <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.snippet}</div>
                           )}
+                          <LocalMailLabels email={item.email} />
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {item.email.has_attachments && <Paperclip size={12} className="text-mail-text-muted" />}
                           <ConnectedStateIcon email={item.email} size={13} />
                         </div>
-                      </button>
+                      </div>
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
+                        <RowQuickActions emails={[item.email]} actions={rowActions} onRequestDelete={requestRowDelete} onActionStart={handleRowActionStart}
+                          onClose={closeRowMenu} identity={emailScopeKey(item.email, useMailStore.getState()) || selKey(item.email)}
+                          onArchive={async event => {
+                            event.stopPropagation();
+                            const id = selKey(item.email);
+                            startSaving(id);
+                            try { await saveEmailsLocally([item.email]); } finally { stopSaving(id); }
+                          }} disabled={savingRowIds.has(selKey(item.email))} display="icon-only" />
+                      </div>
+                      </div>
                     )}
 
                     {item.type === 'email-body' && (
@@ -1423,6 +1449,7 @@ function EmailListComponent({ stacked = false }) {
                       onOpenMenu={openRowMenu}
                       onCloseMenu={closeRowMenu}
                       onRequestDelete={requestRowDelete}
+                      onActionStart={handleRowActionStart}
                       isSaving={savingRowIds.has(rowId)}
                       onStartSaving={startSaving}
                       onStopSaving={stopSaving}
@@ -1466,6 +1493,7 @@ function EmailListComponent({ stacked = false }) {
                     onOpenMenu={openRowMenu}
                     onCloseMenu={closeRowMenu}
                     onRequestDelete={requestRowDelete}
+                    onActionStart={handleRowActionStart}
                     isSaving={savingRowIds.has(item.email.uid)}
                     onStartSaving={startSaving}
                     onStopSaving={stopSaving}
@@ -1504,7 +1532,10 @@ function EmailListComponent({ stacked = false }) {
         onCancel={handleBulkCancel}
         onDismiss={() => setBulkOpProgress(null)}
       />
-      <DeleteConfirmModal pending={pendingDelete} onClose={() => setPendingDelete(null)} />
+      <DeleteConfirmModal pending={pendingDelete} onClose={() => {
+        setPendingDelete(null);
+        requestAnimationFrame(() => confirmationReturnRef.current?.focus?.());
+      }} />
     </div>
   );
 }

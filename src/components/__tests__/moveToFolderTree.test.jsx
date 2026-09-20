@@ -118,4 +118,27 @@ describe('Move to folder, on a nested server', () => {
     open();
     expect(paths()).not.toContain('INBOX.Sammelmappe');
   });
+
+  it('keeps keyboard focus inside the picker and wraps at both ends', () => {
+    const onClose = vi.fn();
+    render(<MoveToFolderDropdown uids={[1]} onClose={onClose} anchorRect={null} />);
+    const input = document.querySelector('[data-testid="move-folder-search"]');
+    const first = options()[0];
+    const last = options().at(-1);
+
+    input.focus();
+    fireEvent.keyDown(input, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(last);
+    expect(onClose).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(last, { key: 'Tab' });
+    expect(document.activeElement).toBe(input);
+    expect(onClose).not.toHaveBeenCalled();
+
+    input.focus();
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    input.dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,3 @@
-import { Button } from './ui/Button';
 import React, { useMemo } from 'react';
 import { displayText } from '../utils/bidiText';
 import { getRowParty, getRowPartyName, threadRowMembers } from '../utils/emailParser';
@@ -11,16 +10,14 @@ import { SenderAlertIcon, getSenderAlertLevel } from './SenderAlertIcon';
 import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { TrackerAlertIcon, getThreadTrackerInfo } from './TrackerAlertIcon';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
-import { RowActionMenu } from './RowActionMenu';
-import { RowActionMenuItems } from './RowActionMenuItems';
+import { RowQuickActions } from './RowQuickActions';
+import { LocalMailLabels } from './LocalMailLabels';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
 import {
-  RefreshCw,
   Paperclip,
-  Archive,
   ChevronRight,
 } from 'lucide-react';
 import { t as tr, useT  } from '../i18n/index.js';
@@ -47,10 +44,8 @@ function ThreadDisclosure({ expandable, expanded, threadId, onToggleExpand }) {
 }
 
 // Thread row for default layout — shows collapsed thread with participant names and count
-export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
   const t = useT();
-  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
-  const { saveEmailsLocally } = actions;
 
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
@@ -79,7 +74,6 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const allArchived = members.every(e => e.isArchived);
 
   // Build participant display: every distinct sender in the thread, the user
   // included — a conversation you replied to shows your name too. In an
@@ -102,7 +96,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
     onStartSaving(rowId);
     try {
       const rows = members.filter(em => !em.isArchived);
-      if (rows.length > 0) await saveEmailsLocally(rows);
+      if (rows.length > 0) await actions.saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);
     }
@@ -158,6 +152,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(thread.subject, '(No subject)')}
         </span>
+        <LocalMailLabels email={members} />
         {thread.messageCount > 1 && (
           <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-text-muted/15 rounded-full
                         text-mail-text-muted text-xs font-medium flex items-center justify-center">
@@ -173,33 +168,16 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
       </div>
 
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
-        {!allArchived && (
-          <Button variant="ghost" icon size="sm" className="press hover:bg-mail-border"
-            onClick={handleArchiveThread}
-            disabled={isSaving}
-            title={t('thread.archiveThread')}
-          >
-            {isSaving ? (
-              <RefreshCw size={14} className="animate-spin text-mail-accent-text" />
-            ) : (
-              <Archive size={14} className="text-mail-text-muted hover:text-mail-local" />
-            )}
-          </Button>
-        )}
-
-        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu}>
-          <RowActionMenuItems emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
-        </RowActionMenu>
+        <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} />
       </div>
     </div>
   );
 });
 
 // Compact thread row for compact layout
-export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, menuOpen, onOpenMenu, onCloseMenu, onRequestDelete, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
+export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, thread, isSelected, onSelectThread, onSetSelection, anyChecked, style, actions, onCloseMenu, onRequestDelete, onActionStart, isSaving, onStartSaving, onStopSaving, expandable, expanded, onToggleExpand }) {
   const t = useT();
-  const handleOpenMenu = React.useCallback(() => onOpenMenu(rowId), [onOpenMenu, rowId]);
-  const { saveEmailsLocally } = actions;
 
   // Hooks stay above the early return: a row that loses its lastEmail must not
   // shift the hook order underneath it. A thread's custody is its newest
@@ -228,7 +206,6 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
   // is the part of the thread that lives in the folder on screen, never the
   // Sent copies an INBOX list merges in for context. See threadRowMembers.
   const members = useMemo(() => threadRowMembers(thread.emails), [thread.emails]);
-  const allArchived = members.every(e => e.isArchived);
 
   const participantNames = useMemo(() => {
     const seen = new Set();
@@ -248,7 +225,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
     onStartSaving(rowId);
     try {
       const rows = members.filter(em => !em.isArchived);
-      if (rows.length > 0) await saveEmailsLocally(rows);
+      if (rows.length > 0) await actions.saveEmailsLocally(rows);
     } finally {
       onStopSaving(rowId);
     }
@@ -302,6 +279,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(thread.subject, '(No subject)')}
           </span>
+          <LocalMailLabels email={members} />
           {latestEmail.hasAttachments && (
             <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
           )}
@@ -310,15 +288,8 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
 
       {/* Hover actions */}
       <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 invisible group-hover:visible group-focus-within:visible bg-mail-surface-hover rounded-md px-1">
-        {!allArchived && (
-          <Button variant="ghost" icon size="xs" className="press hover:bg-mail-border" onClick={handleArchiveThread} disabled={isSaving} title={t('thread.archiveThread')}>
-            {isSaving ? <RefreshCw size={13} className="animate-spin text-mail-accent-text" />
-              : <Archive size={13} className="text-mail-text-muted hover:text-mail-local" />}
-          </Button>
-        )}
-        <RowActionMenu open={menuOpen} onOpen={handleOpenMenu} onClose={onCloseMenu} size={13}>
-          <RowActionMenuItems emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onClose={onCloseMenu} />
-        </RowActionMenu>
+        <RowQuickActions emails={members} exportEmails={thread.emails} actions={actions} onRequestDelete={onRequestDelete} onActionStart={onActionStart}
+          onClose={onCloseMenu} onArchive={handleArchiveThread} disabled={isSaving} identity={scopeKey} display="icon-only" />
       </div>
     </div>
   );

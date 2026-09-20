@@ -222,9 +222,13 @@ export function rowKey(email, spans) {
 // uid let the Sent copy win that collision, and a delete aimed at the folder's
 // own message deleted the Sent one.
 export function selectionKey(email, state) {
-  if (spansMailboxes(state)) return email._accountId ? _selKey(email) : email.uid;
   const loc = resolveEmailLocation(email, state);
-  if (!loc || loc.mailbox === state.activeMailbox) return email.uid;
+  if (spansMailboxes(state)) {
+    if (loc) return _selKey({ _accountId: loc.accountId, _mailbox: loc.mailbox, uid: email.uid });
+    return email._accountId ? _selKey(email) : email.uid;
+  }
+  if (!loc) return email._accountId ? _selKey(email) : email.uid;
+  if (loc.accountId === state.activeAccountId && loc.mailbox === state.activeMailbox) return email.uid;
   return _selKey({ _accountId: loc.accountId, _mailbox: loc.mailbox, uid: email.uid });
 }
 

@@ -110,6 +110,14 @@ const settingSearchGroups = [
     ['settings.appearance.dateFormat', 'date format custom regional'],
     ['settings.appearance.timeFormat', 'time format 12 24 hour clock'],
   ] },
+  { id: 'appearance', section: 'quick-actions', sectionKey: 'quickActions.title', settings: [
+    ['quickActions.layout', 'quick action toolbar button layout inline menu radial favorite order customize appearance'],
+    ['quickActions.surface.row', 'list row message thread actions archive move label star'],
+    ['quickActions.surface.selection', 'selected bulk toolbar actions delete archive move'],
+    ['quickActions.surface.reader', 'reader email toolbar actions reply forward'],
+    ['quickActions.scope', 'mailbox account unified search archive explorer scoped per-view reset'],
+    ['quickActions.palette', 'neutral semantic custom color color palette'],
+  ] },
   { id: 'mail-preferences', section: 'behavior', sectionKey: 'generalSettings.behavior', settings: [
     ['settings.behavior.defaultMail.title', 'default email app mailto links'],
     ['settings.behavior.refreshAppLaunch', 'sync refresh startup launch'],
@@ -216,7 +224,7 @@ export function SettingsPage({ onClose, onAddAccount, onReportBug, initialTab, i
   const hasConfigSubView = accountPillTabIds.has(activeTab);
   const currentTab = allTabs.find(t => t.id === activeTab);
   const sectionKey = activeTab === 'appearance'
-    ? { colors: 'settings.appearance.section.colors', layout: 'settings.appearance.section.layout', reading: 'settings.appearance.section.reading', 'date-time': 'settings.appearance.section.dateTime' }[appearanceSection]
+    ? { colors: 'settings.appearance.section.colors', layout: 'settings.appearance.section.layout', reading: 'settings.appearance.section.reading', 'date-time': 'settings.appearance.section.dateTime', 'quick-actions': 'quickActions.title' }[appearanceSection]
     : activeTab === 'mail-preferences'
       ? { behavior: 'generalSettings.behavior', notifications: 'settings.notifications.notifications', shortcuts: 'shortcuts.keyboardShortcuts' }[generalSubTab]
       : activeTab === 'accounts'

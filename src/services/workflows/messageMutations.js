@@ -402,15 +402,64 @@ export async function saveSelectedLocally() {
 
 // ── removeLocalEmail workflow ──
 
-export async function removeLocalEmail(uid) {
+export async function removeLocalEmail(uidOrKey, location = null) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
   const state = get();
-  const isUnified = spansMailboxes(state);
-  const unified = isUnified ? _resolveUnifiedContext(uid, state) : null;
-  const accountId = unified?.accountId || state.activeAccountId;
-  const mailbox = (unified?.mailbox || state.activeMailbox) === 'UNIFIED' ? 'INBOX' : (unified?.mailbox || state.activeMailbox);
+  const parsed = _parseSelKey(uidOrKey);
+  const explicit = location != null;
+  let context = null;
+
+  if (explicit) {
+    const { accountId, mailbox } = location;
+    if (!accountId || !mailbox || mailbox === 'UNIFIED'
+      || !state.accounts?.some(account => account.id === accountId)
+      || (parsed.accountId && parsed.accountId !== accountId)
+      || (parsed.mailbox && parsed.mailbox !== mailbox)) {
+      console.warn('[removeLocalEmail] refused an incomplete or conflicting location:', uidOrKey, location);
+      return;
+    }
+    context = { uid: parsed.uid, accountId, mailbox };
+  } else if (parsed.accountId && parsed.mailbox) {
+    if (parsed.mailbox !== 'UNIFIED' && state.accounts?.some(account => account.id === parsed.accountId)) {
+      context = { uid: parsed.uid, accountId: parsed.accountId, mailbox: parsed.mailbox };
+    }
+  } else if (spansMailboxes(state)) {
+    // A bare uid is safe in a spanning view only when the loaded rows prove
+    // exactly one location. Repeated copies of the same row across lists are
+    // one candidate; the same uid in another account or mailbox is ambiguous.
+    const rows = [
+      ...(state.emails || []), ...(state.sortedEmails || []), ...(state.localEmails || []),
+      ...(state.sentEmails || []), ...(state.selectedEmail ? [state.selectedEmail] : []),
+    ];
+    const matches = new Map();
+    for (const email of rows) {
+      if (String(email.uid) !== String(parsed.uid)) continue;
+      const resolved = email._accountId ? _resolveUnifiedContext(_selKey(email), state) : null;
+      const loc = resolved || resolveEmailLocation(email, state);
+      const accountId = resolved?.accountId || loc?.accountId;
+      const mailbox = resolved?.mailbox || loc?.mailbox;
+      if (!accountId || !mailbox || mailbox === 'UNIFIED') continue;
+      if (parsed.accountId && accountId !== parsed.accountId) continue;
+      matches.set(JSON.stringify([accountId, mailbox, parsed.uid]), { uid: parsed.uid, accountId, mailbox });
+    }
+    if (matches.size === 1) context = matches.values().next().value;
+  } else if (!parsed.accountId || parsed.accountId === state.activeAccountId) {
+    const mailbox = state.activeMailbox;
+    if (state.activeAccountId && mailbox && mailbox !== 'UNIFIED') {
+      context = { uid: parsed.uid, accountId: state.activeAccountId, mailbox };
+    }
+  }
+
+  if (!context) {
+    console.warn('[removeLocalEmail] refused an unresolved or ambiguous location:', uidOrKey);
+    return;
+  }
+
+  const { uid } = context;
+  const { accountId, mailbox } = context;
+  const account = state.accounts?.find(item => item.id === accountId);
   const localId = `${accountId}-${mailbox}-${uid}`;
 
   await db.deleteLocalEmail(localId);
@@ -423,18 +472,74 @@ export async function removeLocalEmail(uid) {
 
   const savedEmailIds = await db.getSavedEmailIds(accountId, mailbox);
   const rawArchivedEmailIds = await db.getArchivedEmailIds(accountId, mailbox);
-  // I-5: keep the store's current value on a failed read instead of
-  // adopting "nothing is archived".
-  const archivedEmailIds = rawArchivedEmailIds ?? get().archivedEmailIds;
-  const localEmails = await db.getLocalEmails(accountId, mailbox);
+  const storedLocalEmails = await db.getLocalEmails(accountId, mailbox);
+  const targetLocalEmails = storedLocalEmails?.filter(email => String(email.uid) !== String(uid));
   setArchivedGroup(accountId, mailbox, rawArchivedEmailIds);
 
-  if (selectionStillNames(get, { uid: unified?.uid ?? uid, accountId, mailbox })) {
-    useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails, selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null });
-  } else {
-    useMailStore.setState({ savedEmailIds, archivedEmailIds, localEmails });
+  const live = get();
+  const liveSpans = spansMailboxes(live);
+  const liveRows = [
+    ...(live.emails || []), ...(live.sortedEmails || []), ...(live.localEmails || []),
+    ...(live.sentEmails || []), ...(live.selectedEmail ? [live.selectedEmail] : []),
+  ];
+  const rowLocation = email => resolveEmailLocation(email, live);
+  const isTargetRow = email => {
+    const loc = rowLocation(email);
+    return loc?.accountId === accountId && loc?.mailbox === mailbox;
+  };
+  const inSubtree = live.mailboxScope?.paths?.includes(mailbox) && live.activeAccountId === accountId;
+  const inUnifiedFolder = live.activeMailbox === 'UNIFIED'
+    && mailbox === (live.unifiedFolder || 'INBOX')
+    && live.accounts?.some(item => item.id === accountId);
+  const targetInView = liveSpans && (inSubtree || inUnifiedFolder || liveRows.some(isTargetRow));
+  const activeFolder = !liveSpans && live.activeAccountId === accountId && live.activeMailbox === mailbox;
+  const readerStillNames = selectionStillNames(get, { uid, accountId, mailbox });
+
+  if (activeFolder || targetInView) {
+    let nextSavedEmailIds = savedEmailIds ?? live.savedEmailIds;
+    let nextLocalEmails = targetLocalEmails ?? (live.localEmails || []).filter(email => !isTargetRow(email) || String(email.uid) !== String(uid));
+    let viewPairs = [[accountId, mailbox]];
+
+    if (targetInView) {
+      const groups = new Map();
+      if (live.mailboxScope?.paths && live.activeAccountId) {
+        for (const path of live.mailboxScope.paths) groups.set(JSON.stringify([live.activeAccountId, path]), [live.activeAccountId, path]);
+      }
+      for (const email of liveRows) {
+        const loc = rowLocation(email);
+        if (loc?.mailbox && loc.mailbox !== 'UNIFIED') groups.set(JSON.stringify([loc.accountId, loc.mailbox]), [loc.accountId, loc.mailbox]);
+      }
+      groups.set(JSON.stringify([accountId, mailbox]), [accountId, mailbox]);
+      viewPairs = [...groups.values()];
+
+      const otherLocalEmails = (live.localEmails || []).filter(email => !isTargetRow(email));
+      const remainingTargetEmails = targetLocalEmails ?? (live.localEmails || [])
+        .filter(email => isTargetRow(email) && String(email.uid) !== String(uid));
+      nextLocalEmails = [
+        ...otherLocalEmails,
+        ...remainingTargetEmails.map(email => ({ ...email, _accountEmail: account?.email, _accountId: accountId, _mailbox: mailbox })),
+      ];
+      const refreshedSavedEmailIds = savedEmailIds ?? new Set();
+      nextSavedEmailIds = new Set([...(live.savedEmailIds || []), ...refreshedSavedEmailIds]);
+      if (savedEmailIds != null && !refreshedSavedEmailIds.has(uid) && !otherLocalEmails.some(email => String(email.uid) === String(uid))) {
+        nextSavedEmailIds.delete(uid);
+      }
+    }
+
+    const archivedEmailIds = deriveArchivedUnion(live.archivedEmailIds, viewPairs);
+    useMailStore.setState({
+      savedEmailIds: nextSavedEmailIds,
+      archivedEmailIds,
+      localEmails: nextLocalEmails,
+      ...(readerStillNames ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null } : {}),
+    });
+    get().updateSortedEmails();
+    return;
   }
-  get().updateSortedEmails();
+
+  if (readerStillNames) {
+    useMailStore.setState({ selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null });
+  }
 }
 
 
@@ -459,25 +564,32 @@ function _openAfterDelete(state, isOpenRow, isRemoved) {
 
 // ── deleteEmailFromServer workflow ──
 
-export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null } = {}) {
+export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxOverride = null, accountId: explicitAccountId = null } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
   const get = () => useMailStore.getState();
 
   const state = get();
   const isUnified = spansMailboxes(state);
-  const unified = isUnified ? requireUnifiedContext(uid, state) : null;
-  const accountId = unified?.accountId || state.activeAccountId;
+  const explicitScope = explicitAccountId != null;
+  const parsedKey = explicitScope ? _parseSelKey(uid) : null;
+  if (explicitScope && (!mailboxOverride || mailboxOverride === 'UNIFIED'
+    || !state.accounts?.some(account => account.id === explicitAccountId)
+    || (parsedKey.accountId && parsedKey.accountId !== explicitAccountId)
+    || (parsedKey.mailbox && parsedKey.mailbox !== mailboxOverride))) {
+    throw new Error(tr('errors.unresolvedUnifiedRow', { key: uid }));
+  }
+  const unified = !explicitScope && isUnified ? requireUnifiedContext(uid, state) : null;
+  const accountId = explicitAccountId || unified?.accountId || state.activeAccountId;
   const rawMb = mailboxOverride || unified?.mailbox || state.activeMailbox;
   const mailbox = rawMb === 'UNIFIED' ? 'INBOX' : rawMb;
-  let account = unified?.account || state.accounts.find(a => a.id === accountId);
-  const selectedEmailId = state.selectedEmailId;
+  let account = state.accounts.find(a => a.id === accountId);
   if (!account) { console.error('[deleteEmail] No account found for', accountId); return; }
 
   // The uid the server knows. In a spanning view the argument is a whole
   // selection key ("acct:INBOX:7"), and everything below — the row lookup, the
   // journal, the tombstone, the network call, the custody stamp — addresses a
   // message by number inside one (account, mailbox).
-  const realUid = unified?.uid ?? uid;
+  const realUid = parsedKey?.uid ?? unified?.uid ?? uid;
 
   // Local-only short-circuit: if this UID belongs to an email that only
   // exists in Maildir + local-index (never confirmed server-side), route to
@@ -486,8 +598,12 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // Matched on the resolved uid and, in a spanning view, on the account and
   // folder this delete is aimed at: keyed by the raw key it matches no row at
   // all, and a bare uid matches any account's row carrying that number.
-  const candidate = [...(state.emails || []), ...(state.sentEmails || [])].find(e => e.uid === realUid
-    && (!isUnified || (e._accountId === accountId && (e._mailbox == null || e._mailbox === mailbox))));
+  const candidate = [...(state.emails || []), ...(state.sentEmails || []), ...(state.localEmails || [])].find(e => {
+    if (e.uid !== realUid) return false;
+    if (!isUnified && !explicitScope) return true;
+    const location = resolveEmailLocation(e, state);
+    return location?.accountId === accountId && location?.mailbox === mailbox;
+  });
   const isLocalOnly = candidate?.source === 'local-only' || candidate?._localStaged === true;
 
   const invoke = window.__TAURI__?.core?.invoke;
@@ -521,10 +637,16 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // `sameMessage`: a thread and the unified list both merge INBOX with Sent,
   // and the two share uids — without it, deleting the INBOX copy took the Sent
   // row off the list too.
-  const isThisEmail = (e) => (isUnified
-    ? _selKey(e) === String(uid)
-      || (e._accountId === accountId && e.uid === realUid && (e._mailbox == null || e._mailbox === mailbox))
-    : e.uid === uid);
+  const isThisEmail = (e) => {
+    if (explicitScope) {
+      const location = resolveEmailLocation(e, state);
+      return e.uid === realUid && location?.accountId === accountId && location?.mailbox === mailbox;
+    }
+    return isUnified
+      ? _selKey(e) === String(uid)
+        || (e._accountId === accountId && e.uid === realUid && (e._mailbox == null || e._mailbox === mailbox))
+      : e.uid === uid;
+  };
   // The open thread is a snapshot; take the message out of it too, and close
   // the reader only when nothing is left (pruneSelectedThread). Matched by
   // folder wherever the row can say where it lives: a thread merges INBOX with
@@ -545,6 +667,12 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   const threadBeforeDelete = sameView ? liveState.selectedThread : null;
   const selectedEmailIdBeforeDelete = sameView ? liveState.selectedEmailId : null;
   const threadUpdate = sameView ? pruneSelectedThread(liveState, isThisMessage) : null;
+  const selectedLocation = resolveEmailLocation(liveState.selectedEmail, liveState);
+  const selectedMatchesTarget = explicitScope
+    ? (liveState.selectedEmail?.uid === realUid
+      && selectedLocation?.accountId === accountId && selectedLocation?.mailbox === mailbox)
+      || selectionStillNames(() => liveState, { uid: realUid, accountId, mailbox })
+    : liveSelectedEmailId === uid || liveSelectedEmailId === realUid;
   // Keep the ownership of the row removed by the optimistic paint. The
   // completion path runs after more awaits, by which time that paint has
   // already removed the only row that could prove this message belonged to a
@@ -558,16 +686,21 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   } : null;
   // Only a delete that CLOSES the reader hands it a new message: a thread with
   // messages left keeps the one pruneSelectedThread moved to.
-  const closedReader = threadUpdate
-    ? threadUpdate.selectedThread === null
-    : (liveSelectedEmailId === uid || liveSelectedEmailId === realUid);
-  const openNext = closedReader ? _openAfterDelete(liveState, isThisEmail, isThisEmail) : null;
+  const closedReader = threadUpdate ? threadUpdate.selectedThread === null : selectedMatchesTarget;
+  const targetVisible = isUnified
+    ? [...liveState.emails, ...liveState.sentEmails].some(isThisEmail)
+    : liveState.activeAccountId === accountId && liveState.activeMailbox === mailbox;
+  const openNext = closedReader && (!explicitScope || targetVisible)
+    ? _openAfterDelete(liveState, isThisEmail, isThisEmail)
+    : null;
   useMailStore.setState({
     deleteTombstones: new Set(liveState.deleteTombstones).add(tombstone),
     emails: sameView ? liveState.emails.filter(e => !isThisEmail(e)) : liveState.emails,
     sentEmails: sameView ? liveState.sentEmails.filter(e => !isThisEmail(e)) : liveState.sentEmails,
     selectedEmailIds: sameView
-      ? new Set([...liveState.selectedEmailIds].filter(k => k !== uid && k !== realUid))
+      ? new Set([...liveState.selectedEmailIds].filter(k => explicitScope
+        ? ![...liveState.emails, ...liveState.sentEmails].some(e => isThisEmail(e) && selectionKey(e, liveState) === k)
+        : k !== uid && k !== realUid))
       : liveState.selectedEmailIds,
     ...(threadUpdate ?? (closedReader
       ? { selectedEmailId: null, selectedEmail: null, selectedEmailSource: null, selectedThread: null }
@@ -667,7 +800,7 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
     accountId, mailbox, isUnified, skipRefresh,
     optimisticView,
     // Never over a message this delete just opened.
-    clearSelection: sameView && !threadUpdate && selectedEmailId === uid && !openNext,
+    clearSelection: sameView && !threadUpdate && selectedMatchesTarget && !openNext,
     deletedByUs: true,
   });
 

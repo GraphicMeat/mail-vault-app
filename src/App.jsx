@@ -1060,6 +1060,7 @@ function App() {
             mode={w.initialData ? 'new' : (w.mode || 'new')}
             replyTo={w.initialData ? null : (w.replyTo || null)}
             initialData={w.initialData}
+            templateBody={w.templateBody}
             onClose={() => closeCompose(w.id)}
             onMinimize={() => minimizeCompose(w.id)}
             onSaveState={(data) => saveComposeState(w.id, data)}
