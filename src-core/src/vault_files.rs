@@ -756,64 +756,6 @@ pub fn prefetch_attachments(
     Ok(written.len())
 }
 
-// ── Repair inputs ─────────────────────────────────────────────────────────────
-// The repair logic itself (`maildir::repair_generation`, `orphan_stats`,
-// `purge_orphans`) is already core; these feed it from the on-disk sidecars.
-
-/// Message-ID → uid for the mailbox's *current* generation, read from the
-/// sidecar cache the sync engine already maintains.
-pub fn sidecar_message_id_map(root: &Path, account_id: &str, mailbox: &str) -> (HashMap<String, u32>, u64) {
-    let mut map = HashMap::new();
-    let mut sidecars = 0u64;
-    let dir = crate::header_cache::sidecar_dir(root, account_id, mailbox);
-    let entries = match fs::read_dir(&dir) {
-        Ok(e) => e,
-        Err(_) => return (map, 0),
-    };
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        // `_meta.json` and `graph_id_map.json` don't parse as a uid.
-        let uid: u32 = match crate::header_cache::is_header_file(&name) {
-            Some(u) => u,
-            None => continue,
-        };
-        sidecars += 1;
-        let value: serde_json::Value = match fs::read_to_string(entry.path())
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())
-        {
-            Some(v) => v,
-            None => continue,
-        };
-        // Sidecars written by the frontend carry `messageId`; ones serialized
-        // from `EmailHeader` carry `message_id`.
-        let raw = value.get("messageId").or_else(|| value.get("message_id")).and_then(|v| v.as_str());
-        if let Some(raw) = raw {
-            let id = maildir::normalize_message_id(raw);
-            if !id.is_empty() {
-                map.insert(id, uid);
-            }
-        }
-    }
-    (map, sidecars)
-}
-
-/// What the sync engine last recorded for this mailbox: the UIDVALIDITY its
-/// UIDs belong to, and how many messages the server said it holds.
-pub fn cached_sync_meta(root: &Path, account_id: &str, mailbox: &str) -> (Option<u32>, Option<u64>) {
-    let read = || -> Option<serde_json::Value> {
-        let path = crate::header_cache::sidecar_dir(root, account_id, mailbox).join("_meta.json");
-        serde_json::from_str(&fs::read_to_string(path).ok()?).ok()
-    };
-    match read() {
-        Some(meta) => (
-            meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
-            meta.get("totalEmails").and_then(|v| v.as_u64()),
-        ),
-        None => (None, None),
-    }
-}
-
 /// Every `Maildir/{account}/{mailbox}` directory, scoped to one account when
 /// asked. Two levels, not a full walk — the vault below these is large.
 pub fn orphan_mailbox_dirs(base: &Path, account_id: Option<&str>) -> Vec<PathBuf> {

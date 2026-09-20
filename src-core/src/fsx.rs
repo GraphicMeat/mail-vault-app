@@ -30,6 +30,37 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     Ok(())
 }
 
+/// `<name>` → `<name>.pre-db-<stamp>`: how a JSON file that has been imported
+/// into a SQLite store is put beyond every reader's reach without deleting it.
+/// The same convention `custody::import` uses for the vault's legacy files.
+///
+/// `rename` replaces its destination without a word, so the name has to be
+/// free by `symlink_metadata` (`exists()` says false for a broken symlink and
+/// for anything it cannot stat) — this is the one path that could destroy an
+/// already-retired file.
+pub fn retire(path: &Path, stamp: u64) -> std::io::Result<()> {
+    let name = path
+        .file_name()
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "retire: path has no file name"))?
+        .to_string_lossy()
+        .to_string();
+    let mut target = path.with_file_name(format!("{name}.pre-db-{stamp}"));
+    let mut n = 1;
+    while target.symlink_metadata().is_ok() {
+        target = path.with_file_name(format!("{name}.pre-db-{stamp}-{n}"));
+        n += 1;
+    }
+    fs::rename(path, &target)
+}
+
+/// Seconds since the epoch — the stamp `retire` suffixes with.
+pub fn retire_stamp() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
 /// `.<name>.tmp-<pid>-<seq>`. The leading dot matters: Maildir readers parse the
 /// uid off the FRONT of a filename (`<uid>:2,S.eml`, `<uid>.eml`), so a temp
 /// named `<uid>:2,S.eml.tmp-…` left by a kill mid-write would read as "uid

@@ -51,16 +51,19 @@ pub(crate) fn apply_flags(
 ) -> Result<Applied, String> {
     with_vault_write(state, |root| {
         let dirs = vault_flags::dirs_for(root, account_id, mailbox, account_email, mirror_root);
-        Ok(vault_flags::apply_everywhere(&dirs, changes, sidecars, |patch| {
+        Ok(vault_flags::apply_everywhere(&dirs, changes, |patch| {
             match daemon_custody::with_conn(state, |c| {
                 let rows = entries::patch_flags_many(c, account_id, mailbox, patch)?;
-                cache::patch_flags(c, account_id, mailbox, patch)?;
-                Ok(rows)
+                // `sidecars`: the header cache is what the next repaint reads,
+                // so mark read/unread wants it patched; the backup reconcile
+                // hands this every message a folder holds and does not.
+                let headers = if sidecars { cache::patch_flags(c, account_id, mailbox, patch)? } else { 0 };
+                Ok((rows, headers))
             }) {
-                Ok(n) => Ok(n),
+                Ok(counts) => Ok(counts),
                 Err(e) => {
                     warn!("vault_apply_flags: custody patch failed for {}/{}: {}", account_id, mailbox, e);
-                    Ok(0)
+                    Ok((0, 0))
                 }
             }
         }))
@@ -376,10 +379,11 @@ mod tests {
                 // untouched yet — the probe is entirely inside the window
                 // `apply_everywhere` promises to hold WRITER for.
                 let dirs = vault_flags::dirs_for(&vault_path, "acc", "INBOX", None, None);
-                vault_flags::apply_everywhere(&dirs, &[change(1, &["\\Seen"])], false, |patch| {
+                vault_flags::apply_everywhere(&dirs, &[change(1, &["\\Seen"])], |patch| {
                     state_flag.store(1, std::sync::atomic::Ordering::SeqCst);
                     std::thread::sleep(std::time::Duration::from_millis(SLOW_MS));
-                    let r = daemon_custody::with_conn(s, |c| entries::patch_flags_many(c, "acc", "INBOX", patch));
+                    let r = daemon_custody::with_conn(s, |c| entries::patch_flags_many(c, "acc", "INBOX", patch))
+                        .map(|n| (n, 0));
                     state_flag.store(2, std::sync::atomic::Ordering::SeqCst);
                     r
                 });

@@ -47,11 +47,10 @@ const DAEMON_COMMANDS = {
   // maildir_list (daemon {uids, count} vs Tauri MaildirEmailSummary[]),
   // maildir_read/read_light/read_light_batch (different response shapes).
 
-  // Cache — ALL cache operations fall through to Tauri.
-  // Tauri uses sidecar format (per-UID JSON files + _meta.json).
-  // The daemon's mailvault-core uses a different single-file format.
-  // The daemon writes to Tauri's format via sync_engine, but reads
-  // must go through Tauri's load_from_sidecars implementation.
+  // Cache — ALL cache operations fall through to Tauri, which forwards them
+  // to the daemon. The header cache is `custody.db`'s `header_cache` table
+  // (it used to be per-UID JSON files plus `_meta.json`), and the daemon owns
+  // that store, so there is no second format to reconcile.
 
   // Local index, Graph ID map — fall through to Tauri
   // (format compatibility not yet verified)

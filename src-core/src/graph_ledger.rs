@@ -398,6 +398,39 @@ pub fn clear_cache_keeping_ledgers(cache_dir: &Path) {
     }
 }
 
+/// Empty one mailbox's cache directory, keeping its uid ledger **by name**.
+/// The whole-cache sweep above already did this per mailbox; the per-mailbox
+/// clear used to `remove_dir_all` the directory, ledger and all — and a lost
+/// ledger is a uid handed to a second message.
+pub fn clear_mailbox_keeping_ledger(dir: &Path) {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return,
+        Err(e) => {
+            warn!("[email_cache] could not list {}: {}", dir.display(), e);
+            return;
+        }
+    };
+    let mut kept = false;
+    for child in entries.flatten() {
+        // By name, before any type lookup: on a filesystem without d_type the
+        // lookup is a stat that can fail, and a symlinked ledger is still the
+        // file `load` reads.
+        if child.file_name() == LEDGER_FILE {
+            kept = true;
+            continue;
+        }
+        let path = child.path();
+        match child.file_type() {
+            Ok(t) if t.is_dir() => logged(&path, std::fs::remove_dir_all(&path)),
+            _ => logged(&path, std::fs::remove_file(&path)),
+        }
+    }
+    if !kept {
+        logged(dir, std::fs::remove_dir(dir));
+    }
+}
+
 fn logged(path: &Path, result: std::io::Result<()>) {
     if let Err(e) = result {
         warn!("[email_cache] could not remove {}: {}", path.display(), e);

@@ -1,5 +1,5 @@
 //! Read-only, local header snapshots (Task 3.6: moved from
-//! `src-tauri/src/insights.rs` into the daemon). Sidecars and the vault
+//! `src-tauri/src/insights.rs` into the daemon). Cached headers and the vault
 //! Maildir are the source of truth for the files; custody comes from the
 //! store (`<vault>/custody/custody.db`), read in-process now via
 //! `crate::custody::with_conn` instead of the Task 2.9b RPC bridge
@@ -207,7 +207,6 @@ struct Folder {
 }
 #[derive(Clone)]
 enum Record {
-    Sidecar(u32),
     Stored(Value),
     Eml { uid: u32, index: Option<Value> },
 }
@@ -443,6 +442,7 @@ impl InsightsSnapshots {
         &self,
         root: &Path,
         custody_rows: CustodyRows<'_>,
+        cached_headers: CachedHeaders<'_>,
         configured: &[String],
         account_ids: &[String],
         custody_gen: CustodyGen<'_>,
@@ -469,7 +469,7 @@ impl InsightsSnapshots {
         // make this comparison vacuous (it would always equal itself) and
         // miss a write landing mid-walk.
         let before = custody_gen();
-        let mut snapshot = inventory(root, custody_rows, configured, accounts, before)?;
+        let mut snapshot = inventory(root, custody_rows, cached_headers, configured, accounts, before)?;
         if !snapshot.unchanged(custody_gen()) {
             return Err(
                 json!({"code":"snapshotStale","coverage":snapshot.coverage(Some("stale"))}),
@@ -617,12 +617,6 @@ fn file_uid(path: &Path) -> Option<u32> {
         .parse()
         .ok()
 }
-fn json_file(path: &Path) -> Result<Value, String> {
-    serde_json::from_reader(BufReader::new(
-        fs::File::open(path).map_err(|_| "unreadableLocation")?,
-    ))
-    .map_err(|_| "invalidMetadata".into())
-}
 fn metadata(snapshot: &mut Snapshot, location: &mut Location, raw: &Value) {
     location.uid_validity = raw
         .get("uidValidity")
@@ -650,6 +644,16 @@ fn date_value(value: &Value) -> Option<String> {
 /// reports, it is never flattened into "no rows".
 pub(crate) type CustodyRows<'a> = &'a dyn Fn(&str) -> Result<Vec<(String, Value)>, String>;
 
+/// The header cache, per account: the stored folder list (`None` when the
+/// account has none) plus `(mailbox, {meta..., emails: [...]})` for every
+/// mailbox with rows — what `custody::cache::load_mailboxes`/`load_headers`
+/// return. Threaded like `CustodyRows` so this file never opens the store
+/// itself. It was `mailboxes/<account>/mailboxes.json` plus the
+/// `email_cache/<account>_<mailbox>/` directories (`_meta.json` and one
+/// `<uid>.json` per message).
+pub(crate) type CachedHeaders<'a> =
+    &'a dyn Fn(&str) -> Result<(Option<Value>, Vec<(String, Value)>), String>;
+
 /// The daemon's live custody write counter (`crate::custody::generation`),
 /// threaded the same way `CustodyRows` is so this file never touches
 /// `DaemonState` directly. Called fresh at each freshness checkpoint rather
@@ -662,6 +666,7 @@ pub(crate) type CustodyGen<'a> = &'a dyn Fn() -> u64;
 fn inventory(
     root: PathBuf,
     custody_rows_for: CustodyRows<'_>,
+    cached_headers_for: CachedHeaders<'_>,
     configured: &[String],
     accounts: Vec<String>,
     custody_gen: u64,
@@ -692,24 +697,24 @@ fn inventory(
     let cache_paths = snapshot.children(&root.join("email_cache"), "");
     for account in accounts {
         let mut locations = BTreeMap::new();
-        let mailbox_file = root.join("mailboxes").join(&account).join("mailboxes.json");
-        if snapshot.watch(&mailbox_file, &account) && mailbox_file.exists() {
-            match json_file(&mailbox_file) {
-                Ok(v) => {
-                    let tree = if v.is_array() {
-                        &v
-                    } else {
-                        v.get("mailboxes")
-                            .filter(|a| a.as_array().is_some_and(|a| !a.is_empty()))
-                            .or_else(|| v.get("lastKnownGoodMailboxes"))
-                            .unwrap_or(&Value::Null)
-                    };
-                    mailbox_tree(tree, &account, &mut locations);
-                    if !tree.is_array() {
-                        snapshot.problem("invalidMetadata", &account, None);
-                    }
-                }
-                Err(code) => snapshot.problem(&code, &account, None),
+        let cached = cached_headers_for(&account);
+        let mailbox_list = match &cached {
+            Ok((list, _)) => list.clone(),
+            Err(_) => None,
+        };
+        if let Some(v) = mailbox_list {
+            let tree = if v.is_array() {
+                v.clone()
+            } else {
+                v.get("mailboxes")
+                    .filter(|a| a.as_array().is_some_and(|a| !a.is_empty()))
+                    .or_else(|| v.get("lastKnownGoodMailboxes"))
+                    .cloned()
+                    .unwrap_or(Value::Null)
+            };
+            mailbox_tree(&tree, &account, &mut locations);
+            if !tree.is_array() {
+                snapshot.problem("invalidMetadata", &account, None);
             }
         } else {
             snapshot.problem("mailboxInventoryUnavailable", &account, None);
@@ -783,50 +788,11 @@ fn inventory(
                 }
             };
             if path.is_dir() {
-                let meta_path = path.join("_meta.json");
-                let meta = if snapshot.watch(&meta_path, &account) {
-                    json_file(&meta_path)
-                } else {
-                    Err("symlinkSkipped".into())
-                };
-                match meta {
-                    Ok(meta) => {
-                        if location.limitation.is_some()
-                            && meta.get("accountId").and_then(Value::as_str) == Some(&account)
-                        {
-                            if let Some(mailbox) = meta
-                                .get("mailbox")
-                                .and_then(Value::as_str)
-                                .filter(|m| mailvault_core::header_cache::cache_base_name(&account, m) == base)
-                            {
-                                location.mailbox = mailbox.into();
-                                location.limitation = None;
-                            }
-                        }
-                        metadata(&mut snapshot, &mut location, &meta);
-                    }
-                    // An Outlook mailbox only the backup has seen, or one "Clear
-                    // cached emails" emptied, keeps just its uid ledger: no header
-                    // cache, so nothing to report.
-                    Err(_)
-                        if !meta_path.exists()
-                            && path.join(mailvault_core::graph_ledger::LEDGER_FILE).exists() => {}
-                    Err(code) => snapshot.problem(&code, &account, Some(&location.mailbox)),
-                }
-                for file in snapshot.children(path, &account) {
-                    let name = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    let Some(uid) = mailvault_core::header_cache::is_header_file(name) else {
-                        continue;
-                    };
-                    if file.is_file() {
-                        snapshot.add(Item {
-                            path: file,
-                            location: location.clone(),
-                            record: Record::Sidecar(uid),
-                            source: "server-cache",
-                        });
-                    }
-                }
+                // The headers moved into `custody.db` (handled below, per
+                // mailbox); all this directory still holds is the Outlook uid
+                // ledger, and the walk above already reports anything wrong
+                // with reaching it.
+                let _ = &mut location;
             } else {
                 if !snapshot.watch(path, &account) {
                     continue;
@@ -856,6 +822,42 @@ fn inventory(
                     Err(code) => snapshot.problem(code, &account, Some(&location.mailbox)),
                 }
             }
+        }
+        // The header cache itself, from the store. One entry per mailbox that
+        // has rows — including mailboxes whose `email_cache/` directory was
+        // cleared away, which the directory walk above could never see.
+        match cached {
+            Ok((_, rows)) => {
+                for (mailbox, blob) in rows {
+                    // The legacy client-side "all mailboxes" view: its rows
+                    // are copies of other mailboxes' and belong to none.
+                    if mailbox == "UNIFIED" {
+                        continue;
+                    }
+                    let mut location = locations.get(&mailbox).cloned().unwrap_or(Location {
+                        account: account.clone(),
+                        mailbox: mailbox.clone(),
+                        local_mailbox: None,
+                        limitation: Some("server-mailbox-unresolved".into()),
+                        uid_validity: None,
+                        special_use: None,
+                    });
+                    metadata(&mut snapshot, &mut location, &blob);
+                    let emails = blob.get("emails").and_then(Value::as_array).cloned().unwrap_or_default();
+                    for row in emails {
+                        match serde_json::from_value::<CachedHeader>(row) {
+                            Ok(header) => snapshot.add(Item {
+                                path: custody_path.clone(),
+                                location: location.clone(),
+                                record: Record::Stored(header.value()),
+                                source: "server-cache",
+                            }),
+                            Err(_) => snapshot.problem("invalidMetadata", &account, Some(&mailbox)),
+                        }
+                    }
+                }
+            }
+            Err(_) => snapshot.problem("unreadableLocation", &account, None),
         }
         let vault_root = root.join("Maildir").join(&account);
         let vault_files = snapshot.walk(&vault_root, &account);
@@ -943,23 +945,6 @@ fn inventory(
     Ok(snapshot)
 }
 
-fn read_header_files(dir: &Path, uids: &[u32]) -> Result<Vec<Value>, String> {
-    if uids.len() > PAGE_SIZE {
-        return Err("pageTooLarge".into());
-    }
-    uids.iter()
-        .map(|uid| {
-            let file =
-                fs::File::open(dir.join(format!("{uid}.json"))).map_err(|_| "unreadableHeader")?;
-            let row: CachedHeader =
-                serde_json::from_reader(BufReader::new(file)).map_err(|_| "unreadableHeader")?;
-            if row.uid != *uid {
-                return Err("unreadableHeader".into());
-            }
-            Ok(row.value())
-        })
-        .collect()
-}
 fn read_header_block<R: BufRead>(reader: &mut R) -> Result<Vec<u8>, String> {
     let mut bounded = reader.take(HEADER_LIMIT + 1);
     let mut headers = Vec::new();
@@ -1009,10 +994,6 @@ fn read_eml(path: &Path, uid: u32) -> Result<Value, String> {
 }
 fn read_item(item: &Item) -> Result<(Value, bool), String> {
     match &item.record {
-        Record::Sidecar(uid) => Ok((
-            read_header_files(item.path.parent().unwrap(), &[*uid])?.remove(0),
-            false,
-        )),
         Record::Stored(value) => Ok((value.clone(), false)),
         Record::Eml { uid, index } => {
             let mut value = read_eml(&item.path, *uid)?;

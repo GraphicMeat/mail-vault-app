@@ -11,19 +11,20 @@
 //! back, line up with everything else keyed per account.
 //!
 //! Persistence is lock-free across processes: the app and the daemon run their
-//! own pool and write their own file (`{account_id}.app.json` /
-//! `{account_id}.daemon.json`); readers sum the two. Losing the last flush
+//! own rows, tagged with a `source` of `app` or `daemon` (it was one JSON
+//! file each, `{account_id}.app.json` / `{account_id}.daemon.json`); readers
+//! sum the two. Losing the last flush
 //! interval on a crash is fine — these are statistics, not accounting records.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::task::{Context, Poll};
 
-use chrono::{Duration, NaiveDate, Utc};
+use chrono::{Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -133,13 +134,6 @@ impl DayBucket {
     }
 }
 
-/// `<app_data_dir>/transfer_stats/{account_id}.{app|daemon}.json`
-#[derive(Debug, Default, Serialize, Deserialize)]
-pub struct StatsFile {
-    #[serde(default)]
-    pub days: BTreeMap<String, DayBucket>,
-}
-
 /// Merged per-account view returned by the read API.
 #[derive(Debug, Default, Serialize)]
 pub struct AccountStats {
@@ -205,14 +199,16 @@ impl TransferStats {
 
         let ids = account_ids(app_dir);
         let today = today_key();
-        for (email, delta) in deltas {
-            let path = stats_path(app_dir, &resolve_id(&ids, &email), tag);
-            let mut file = read_stats_file(&path);
-            file.days.entry(today.clone()).or_default().add(delta);
-            prune(&mut file);
-            if let Err(e) = write_stats_file(&path, &file) {
-                warn!("[transfer_stats] Failed to write {}: {}", path.display(), e);
+        let cutoff = retain_cutoff();
+        let write = crate::app_db::with(app_dir, |conn| {
+            for (email, delta) in &deltas {
+                crate::app_db::stats::add(conn, &resolve_id(&ids, email), &today, tag, delta.down, delta.up)?;
             }
+            crate::app_db::stats::prune(conn, &cutoff)?;
+            Ok(())
+        });
+        if let Err(e) = write {
+            warn!("[transfer_stats] Failed to write counters: {}", e);
         }
     }
 }
@@ -224,20 +220,11 @@ impl TransferStats {
 pub fn read_all(app_dir: &Path) -> BTreeMap<String, AccountStats> {
     let mut days_by_id: BTreeMap<String, BTreeMap<String, DayBucket>> = BTreeMap::new();
 
-    if let Ok(entries) = fs::read_dir(stats_dir(app_dir)) {
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(id) = name
-                .strip_suffix(".app.json")
-                .or_else(|| name.strip_suffix(".daemon.json"))
-            else {
-                continue;
-            };
-            let file = read_stats_file(&entry.path());
-            let merged = days_by_id.entry(id.to_string()).or_default();
-            for (day, bucket) in file.days {
-                merged.entry(day).or_default().add(bucket);
-            }
+    let stored = crate::app_db::with(app_dir, |conn| Ok(crate::app_db::stats::all(conn))).unwrap_or_default();
+    for (id, days) in stored {
+        let merged = days_by_id.entry(id).or_default();
+        for (day, (down, up)) in days {
+            merged.entry(day).or_default().add(DayBucket { down, up });
         }
     }
 
@@ -265,13 +252,10 @@ pub fn read_all(app_dir: &Path) -> BTreeMap<String, AccountStats> {
 pub fn usage_today(app_dir: &Path, account_id: &str) -> DayBucket {
     let today = today_key();
     let mut total = DayBucket::default();
-    for tag in ["app", "daemon"] {
-        if let Some(b) = read_stats_file(&stats_path(app_dir, account_id, tag))
-            .days
-            .get(&today)
-        {
-            total.add(*b);
-        }
+    if let Ok((down, up)) = crate::app_db::with(app_dir, |conn| {
+        Ok(crate::app_db::stats::day_total(conn, account_id, &today))
+    }) {
+        total.add(DayBucket { down, up });
     }
     if let Some(pending) = global()
         .pending_by_id(&account_ids(app_dir))
@@ -308,38 +292,13 @@ fn aggregate(days: BTreeMap<String, DayBucket>) -> AccountStats {
     stats
 }
 
-// ── Files ───────────────────────────────────────────────────────────────────
+// ── Retention ───────────────────────────────────────────────────────────────
 
-fn stats_dir(app_dir: &Path) -> PathBuf {
-    app_dir.join("transfer_stats")
-}
-
-fn stats_path(app_dir: &Path, account_id: &str, tag: &str) -> PathBuf {
-    stats_dir(app_dir).join(format!("{}.{}.json", sanitize(account_id), tag))
-}
-
-fn read_stats_file(path: &Path) -> StatsFile {
-    fs::read_to_string(path)
-        .ok()
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default()
-}
-
-fn write_stats_file(path: &Path, file: &StatsFile) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(file).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())
-}
-
-fn prune(file: &mut StatsFile) {
-    let cutoff = (Utc::now().date_naive() - Duration::days(RETAIN_DAYS))
+/// The oldest `YYYY-MM-DD` day bucket a flush keeps.
+fn retain_cutoff() -> String {
+    (Utc::now().date_naive() - Duration::days(RETAIN_DAYS))
         .format("%Y-%m-%d")
-        .to_string();
-    file.days.retain(|day, _| {
-        NaiveDate::parse_from_str(day, "%Y-%m-%d").is_ok() && day.as_str() >= cutoff.as_str()
-    });
+        .to_string()
 }
 
 fn today_key() -> String {
@@ -398,23 +357,22 @@ mod tests {
         assert_eq!(counters.pending(), DayBucket::default(), "flushed bytes must not be counted twice");
     }
 
+    fn seed(dir: &Path, account: &str, source: &str, day: &str, down: u64, up: u64) {
+        crate::app_db::with(dir, |conn| crate::app_db::stats::add(conn, account, day, source, down, up)).unwrap();
+    }
+
     #[test]
-    fn merges_both_process_files_and_aggregates() {
+    fn merges_both_sources_and_aggregates() {
         let dir = tempfile::tempdir().unwrap();
         let today = today_key();
 
-        let mut app = StatsFile::default();
-        app.days.insert(today.clone(), DayBucket { down: 100, up: 10 });
-        app.days.insert("2000-01-01".into(), DayBucket { down: 7, up: 7 });
-        write_stats_file(&stats_path(dir.path(), "acc1", "app"), &app).unwrap();
-
-        let mut daemon = StatsFile::default();
-        daemon.days.insert(today.clone(), DayBucket { down: 400, up: 40 });
-        write_stats_file(&stats_path(dir.path(), "acc1", "daemon"), &daemon).unwrap();
+        seed(dir.path(), "acc1", "app", &today, 100, 10);
+        seed(dir.path(), "acc1", "app", "2000-01-01", 7, 7);
+        seed(dir.path(), "acc1", "daemon", &today, 400, 40);
 
         let all = read_all(dir.path());
         let acc = all.get("acc1").expect("acc1 stats");
-        assert_eq!(acc.today, DayBucket { down: 500, up: 50 }, "both files must be summed");
+        assert_eq!(acc.today, DayBucket { down: 500, up: 50 }, "both sources must be summed");
         assert_eq!(acc.week, DayBucket { down: 500, up: 50 });
         assert_eq!(acc.year.down, 500, "the 2000-01-01 bucket is outside this year");
         assert_eq!(acc.days.len(), 2, "raw day buckets are returned as-is");
@@ -429,11 +387,8 @@ mod tests {
         let stats = TransferStats::default();
         let counters = stats.counters("user@example.com");
 
-        // Pre-existing file with an ancient bucket that must be pruned.
-        let mut old = StatsFile::default();
-        old.days.insert("2000-01-01".into(), DayBucket { down: 5, up: 5 });
-        let path = stats_path(dir.path(), "user_example_com", "daemon");
-        write_stats_file(&path, &old).unwrap();
+        // A pre-existing ancient bucket that the flush must prune.
+        seed(dir.path(), "user_example_com", "daemon", "2000-01-01", 5, 5);
 
         counters.down.fetch_add(1_000, Ordering::Relaxed);
         counters.up.fetch_add(100, Ordering::Relaxed);
@@ -441,13 +396,13 @@ mod tests {
         counters.down.fetch_add(500, Ordering::Relaxed);
         stats.flush(dir.path(), "daemon");
 
-        let file = read_stats_file(&path);
-        assert_eq!(file.days.len(), 1, "buckets older than 2 years must be pruned");
-        assert_eq!(file.days[&today_key()], DayBucket { down: 1_500, up: 100 });
+        let days = &read_all(dir.path())["user_example_com"].days;
+        assert_eq!(days.len(), 1, "buckets older than 2 years must be pruned");
+        assert_eq!(days[&today_key()], DayBucket { down: 1_500, up: 100 });
     }
 
     #[test]
-    fn flush_names_the_file_by_the_frontend_account_id() {
+    fn flush_keys_the_rows_by_the_frontend_account_id() {
         let dir = tempfile::tempdir().unwrap();
         fs::write(
             dir.path().join("accounts.json"),
@@ -459,7 +414,39 @@ mod tests {
         stats.counters("user@example.com").down.fetch_add(42, Ordering::Relaxed);
         stats.flush(dir.path(), "app");
 
-        assert!(stats_path(dir.path(), "3f9c-uuid", "app").exists());
         assert_eq!(read_all(dir.path()).get("3f9c-uuid").unwrap().today.down, 42);
+    }
+
+    #[test]
+    fn a_flush_from_each_process_is_summed_not_clobbered() {
+        let dir = tempfile::tempdir().unwrap();
+        let app = TransferStats::default();
+        app.counters("user@example.com").down.fetch_add(100, Ordering::Relaxed);
+        app.flush(dir.path(), "app");
+        let daemon = TransferStats::default();
+        daemon.counters("user@example.com").down.fetch_add(20, Ordering::Relaxed);
+        daemon.flush(dir.path(), "daemon");
+
+        assert_eq!(usage_today(dir.path(), "user_example_com").down, 120);
+    }
+
+    #[test]
+    fn the_legacy_stat_files_are_imported_on_first_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let today = today_key();
+        let stats_dir = dir.path().join("transfer_stats");
+        fs::create_dir_all(&stats_dir).unwrap();
+        fs::write(
+            stats_dir.join("acc1.app.json"),
+            serde_json::json!({"days": {today.clone(): {"down": 100, "up": 10}}}).to_string(),
+        )
+        .unwrap();
+        fs::write(
+            stats_dir.join("acc1.daemon.json"),
+            serde_json::json!({"days": {today.clone(): {"down": 400, "up": 40}}}).to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(usage_today(dir.path(), "acc1"), DayBucket { down: 500, up: 50 });
     }
 }

@@ -529,6 +529,7 @@ impl DaemonState {
         let events = crate::events::EventBus::new(crate::events::CAPACITY);
         let custody = crate::custody::CustodyState::default();
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
+        contacts.attach_db(Arc::clone(&custody.db));
         Arc::new(DaemonState {
             net,
             idle,

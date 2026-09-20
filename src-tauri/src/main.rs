@@ -3236,10 +3236,11 @@ fn probe_backup_scope(h: tauri::AppHandle) {
         }
     };
 
-    let meta_path = data_dir.join(format!("{}-meta.json", external_location::SLOT_EXTERNAL_BACKUP));
-    let display_path = fs::read_to_string(&meta_path).ok()
-        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v.get("displayPath").and_then(|s| s.as_str()).map(str::to_string));
+    let display_path = mailvault_core::app_db::with(&data_dir, |conn| {
+        Ok(mailvault_core::app_db::locations::display_path(conn, external_location::SLOT_EXTERNAL_BACKUP))
+    })
+    .ok()
+    .flatten();
 
     let Some(display_path) = display_path else {
         h.dialog()

@@ -26,7 +26,16 @@ pub const VAULT_DIRS: [&str; 8] = [
 
 /// Marker written at the vault root so a re-selected folder can be recognised
 /// as this app's vault (and told apart from someone else's).
-pub const MARKER_FILE: &str = ".mailvault-vault.json";
+///
+/// A SQLite file since the JSON→SQL move, but deliberately **not** WAL: this
+/// is three rows written once, and `-wal`/`-shm` siblings in the vault root
+/// would travel badly on the network volumes and external drives a vault is
+/// routinely put on. `read_marker` opens it read-only, so probing a folder the
+/// user merely browsed to never creates anything in it.
+pub const MARKER_FILE: &str = ".mailvault-vault.db";
+
+/// The pre-SQL marker. `read_marker` still reads it, once, and retires it.
+pub const LEGACY_MARKER_FILE: &str = ".mailvault-vault.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VaultMarker {
@@ -37,17 +46,65 @@ pub struct VaultMarker {
     pub created_at: u64,
 }
 
+fn read_marker_db(path: &Path) -> Option<VaultMarker> {
+    use rusqlite::OpenFlags;
+    // Read-only and no-create: this runs against whatever folder the user
+    // picked in a native dialog, including ones that are not a vault at all.
+    let conn = rusqlite::Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY).ok()?;
+    let mut stmt = conn.prepare("SELECT key, value FROM marker").ok()?;
+    let rows = stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))).ok()?;
+    let mut app = String::new();
+    let mut vault_id = String::new();
+    let mut created_at = 0u64;
+    for (key, value) in rows.filter_map(Result::ok) {
+        match key.as_str() {
+            "app" => app = value,
+            "vaultId" => vault_id = value,
+            "createdAt" => created_at = value.parse().unwrap_or(0),
+            _ => {}
+        }
+    }
+    (app == "mailvault").then_some(VaultMarker { app, vault_id, created_at })
+}
+
+/// The marker, reading the pre-SQL JSON file when that is all there is — and
+/// moving it into the store on the way, so the next read is a plain one.
 pub fn read_marker(dir: &Path) -> Option<VaultMarker> {
-    let raw = std::fs::read_to_string(dir.join(MARKER_FILE)).ok()?;
-    serde_json::from_str::<VaultMarker>(&raw).ok().filter(|m| m.app == "mailvault")
+    let path = dir.join(MARKER_FILE);
+    if path.is_file() {
+        if let Some(marker) = read_marker_db(&path) {
+            return Some(marker);
+        }
+    }
+    let legacy = dir.join(LEGACY_MARKER_FILE);
+    let raw = std::fs::read_to_string(&legacy).ok()?;
+    let marker = serde_json::from_str::<VaultMarker>(&raw).ok().filter(|m| m.app == "mailvault")?;
+    // Best effort: a read-only vault still reports its marker, it just keeps
+    // reading the JSON copy.
+    if write_marker(dir, &marker).is_ok() {
+        let _ = crate::fsx::retire(&legacy, crate::fsx::retire_stamp());
+    }
+    Some(marker)
 }
 
 /// Phase 6: markers are now written by both processes (the app for its own
 /// data-dir copy, the daemon for `adopt`/`move` destinations), so the writer
-/// moved here next to the reader it must stay compatible with.
+/// lives here next to the reader it must stay compatible with.
 pub fn write_marker(dir: &Path, marker: &VaultMarker) -> Result<(), String> {
-    let data = serde_json::to_string_pretty(marker).map_err(|e| e.to_string())?;
-    std::fs::write(dir.join(MARKER_FILE), data).map_err(|e| format!("Cannot write vault marker: {}", e))
+    let conn = rusqlite::Connection::open(dir.join(MARKER_FILE))
+        .map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    conn.execute_batch("CREATE TABLE IF NOT EXISTS marker (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
+        .map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    let rows = [
+        ("app", marker.app.clone()),
+        ("vaultId", marker.vault_id.clone()),
+        ("createdAt", marker.created_at.to_string()),
+    ];
+    for (key, value) in rows {
+        conn.execute("INSERT OR REPLACE INTO marker(key, value) VALUES (?1, ?2)", [key, value.as_str()])
+            .map_err(|e| format!("Cannot write vault marker: {e}"))?;
+    }
+    Ok(())
 }
 
 pub fn now_millis() -> u64 {
@@ -125,7 +182,7 @@ mod tests {
     #[test]
     fn a_marker_from_another_app_is_not_accepted() {
         let dir = scratch("foreign-marker");
-        std::fs::write(dir.join(MARKER_FILE), br#"{"app":"other","vaultId":"x","createdAt":1}"#).unwrap();
+        write_marker(&dir, &VaultMarker { app: "other".into(), vault_id: "x".into(), created_at: 1 }).unwrap();
         assert!(read_marker(&dir).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -134,7 +191,9 @@ mod tests {
     fn write_marker_round_trips_through_read_marker() {
         let dir = scratch("write-marker");
         write_marker(&dir, &VaultMarker { app: "mailvault".into(), vault_id: "abc".into(), created_at: 1 }).unwrap();
-        assert_eq!(read_marker(&dir).unwrap().vault_id, "abc");
+        let marker = read_marker(&dir).unwrap();
+        assert_eq!(marker.vault_id, "abc");
+        assert_eq!(marker.created_at, 1);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -145,16 +204,42 @@ mod tests {
     }
 
     #[test]
-    fn a_mailvault_marker_round_trips() {
-        let dir = scratch("marker");
+    fn the_pre_sql_json_marker_is_read_once_then_retired() {
+        let dir = scratch("legacy-marker");
         let data = serde_json::to_string(&VaultMarker {
             app: "mailvault".into(),
             vault_id: "abc".into(),
             created_at: 1,
         })
         .unwrap();
-        std::fs::write(dir.join(MARKER_FILE), data).unwrap();
+        std::fs::write(dir.join(LEGACY_MARKER_FILE), data).unwrap();
+
         assert_eq!(read_marker(&dir).unwrap().vault_id, "abc");
+        assert!(dir.join(MARKER_FILE).is_file(), "the marker moved into the store");
+        assert!(!dir.join(LEGACY_MARKER_FILE).exists(), "the JSON copy is retired, never deleted");
+        assert!(std::fs::read_dir(&dir).unwrap().flatten().any(|e| {
+            e.file_name().to_string_lossy().starts_with(&format!("{LEGACY_MARKER_FILE}.pre-db-"))
+        }));
+        assert_eq!(read_marker(&dir).unwrap().vault_id, "abc", "the second read comes from the store");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_folder_with_no_marker_is_not_given_one_by_probing_it() {
+        // `read_marker` runs against whatever the user picked in a native
+        // dialog; it must never write into a folder that is not a vault.
+        let dir = scratch("probe");
+        assert!(read_marker(&dir).is_none());
+        assert!(!dir.join(MARKER_FILE).exists());
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_marker_file_that_is_not_a_database_reads_as_no_marker() {
+        let dir = scratch("garbage-marker");
+        std::fs::write(dir.join(MARKER_FILE), b"not a database").unwrap();
+        assert!(read_marker(&dir).is_none());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

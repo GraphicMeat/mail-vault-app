@@ -3,6 +3,7 @@
 use chrono::DateTime;
 use rusqlite::{params, params_from_iter, Connection};
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 
 fn err(e: rusqlite::Error) -> String { e.to_string() }
 
@@ -107,6 +108,105 @@ pub fn list_uids(conn: &Connection, account: &str, mailbox: &str, since_ms: Opti
     let uids = rows.iter().map(|(uid, _)| *uid).collect::<Vec<_>>();
     let changed: Vec<u32> = since_ms.map(|since| rows.iter().filter(|(_, at)| *at as f64 > since).map(|(uid, _)| *uid).collect()).unwrap_or_default();
     Ok(json!({"uids":uids,"changed":changed}))
+}
+
+/// How many headers this mailbox has cached. Replaces counting `<uid>.json`
+/// files in the sidecar directory — which also had to exclude `_meta.json`
+/// and the Outlook uid ledger that still live there.
+pub fn count(conn: &Connection, account: &str, mailbox: &str) -> Result<usize, String> {
+    conn.query_row(
+        "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2",
+        params![account, mailbox],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n as usize)
+    .map_err(err)
+}
+
+/// Every uid this mailbox has cached. Replaces listing the sidecar directory.
+pub fn uid_set(conn: &Connection, account: &str, mailbox: &str) -> Result<HashSet<u32>, String> {
+    let mut stmt = conn
+        .prepare("SELECT uid FROM header_cache WHERE account_id=?1 AND mailbox_path=?2")
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![account, mailbox], |r| r.get::<_, u32>(0))
+        .map_err(err)?
+        .collect::<Result<HashSet<_>, _>>()
+        .map_err(err)?;
+    Ok(rows)
+}
+
+/// Every cached header of one mailbox, newest first — what a consumer that
+/// used to walk the sidecar directory (the classifier, the contacts cold
+/// build) reads instead.
+pub fn all_headers(conn: &Connection, account: &str, mailbox: &str) -> Result<Vec<Value>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2
+             ORDER BY sort_ms DESC, uid DESC",
+        )
+        .map_err(err)?;
+    let rows = stmt
+        .query_map(params![account, mailbox], |r| r.get::<_, String>(0))
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    Ok(rows.into_iter().filter_map(|s| serde_json::from_str(&s).ok()).collect())
+}
+
+/// Every (account, mailbox) the header cache holds rows for — the listing a
+/// consumer that used to walk `email_cache/` for `<account>_<mailbox>` dirs
+/// needs. `account` narrows it when the caller only wants one.
+pub fn mailboxes_with_headers(conn: &Connection, account: Option<&str>) -> Result<Vec<(String, String)>, String> {
+    let (sql, filter): (&str, Vec<&str>) = match account {
+        Some(a) => (
+            "SELECT DISTINCT account_id, mailbox_path FROM header_cache WHERE account_id=?1 ORDER BY mailbox_path",
+            vec![a],
+        ),
+        None => ("SELECT DISTINCT account_id, mailbox_path FROM header_cache ORDER BY account_id, mailbox_path", vec![]),
+    };
+    let mut stmt = conn.prepare(sql).map_err(err)?;
+    let rows = stmt
+        .query_map(params_from_iter(filter), |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+        .map_err(err)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(err)?;
+    Ok(rows)
+}
+
+/// Message-ID → uid for the mailbox's current generation, plus how many
+/// headers it was built from. The generation repair's input; it read the
+/// sidecar files before the headers moved in here.
+pub fn message_id_map(conn: &Connection, account: &str, mailbox: &str) -> Result<(HashMap<String, u32>, u64), String> {
+    let mut map = HashMap::new();
+    let mut seen = 0u64;
+    for header in all_headers(conn, account, mailbox)? {
+        seen += 1;
+        // Rows written by the frontend carry `messageId`; ones serialized from
+        // `EmailHeader` carry `message_id`.
+        let Some(raw) = header.get("messageId").or_else(|| header.get("message_id")).and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(uid) = header.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else {
+            continue;
+        };
+        let id = crate::maildir::normalize_message_id(raw);
+        if !id.is_empty() {
+            map.insert(id, uid);
+        }
+    }
+    Ok((map, seen))
+}
+
+/// What the sync engine last recorded for this mailbox: the UIDVALIDITY its
+/// uids belong to, and how many messages the server said it holds.
+pub fn sync_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<(Option<u32>, Option<u64>), String> {
+    let Some(text) = load_meta(conn, account, mailbox)? else { return Ok((None, None)) };
+    let meta: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+    Ok((
+        meta.get("uidValidity").and_then(Value::as_u64).map(|v| v as u32),
+        meta.get("totalEmails").and_then(Value::as_u64),
+    ))
 }
 
 pub fn patch_flags(conn: &Connection, account: &str, mailbox: &str, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {

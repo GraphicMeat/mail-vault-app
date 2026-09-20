@@ -92,7 +92,21 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
                     custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
                 };
-                match state.insights.begin_at(&root, &rows, &configured, &account_ids, &gen_fn) {
+                let headers = |account: &str| -> Result<(Option<Value>, Vec<(String, Value)>), String> {
+                    custody::with_conn(&state, |c| {
+                        use mailvault_core::custody::cache;
+                        let list = cache::load_mailboxes(c, account)?
+                            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+                        let mut out = Vec::new();
+                        for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
+                            let Some(blob) = cache::load_headers(c, account, &mailbox, None)? else { continue };
+                            let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
+                            out.push((mailbox, value));
+                        }
+                        Ok((list, out))
+                    })
+                };
+                match state.insights.begin_at(&root, &rows, &headers, &configured, &account_ids, &gen_fn) {
                     Ok(v) => ok(v),
                     Err(e) => err(e),
                 }
@@ -165,14 +179,15 @@ mod tests {
     /// so a test using this genuinely pins "the daemon writes a header
     /// sidecar", not a simulation of it.
     fn seed_account(vault: &Path, account: &str, mailbox: &str, uid: u32) {
-        std::fs::create_dir_all(vault.join("mailboxes").join(account)).unwrap();
-        std::fs::write(
-            vault.join("mailboxes").join(account).join("mailboxes.json"),
-            json!({"mailboxes":[{"path": mailbox}]}).to_string(),
+        let conn = mailvault_core::custody::db::open(vault).unwrap();
+        mailvault_core::custody::cache::save_mailboxes(
+            &conn,
+            account,
+            &json!({"mailboxes":[{"path": mailbox}]}).to_string(),
         )
         .unwrap();
         let data = json!({"emails":[{"uid": uid, "subject": "v1", "from": {"address": "a@example.test"}}]}).to_string();
-        mailvault_core::header_cache::save(vault, account, mailbox, &data).unwrap();
+        mailvault_core::custody::cache::save_headers(&conn, account, mailbox, &data).unwrap();
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
@@ -317,34 +332,35 @@ mod tests {
     // ── Step 5's required mechanism-pinning test ──────────────────────────
 
     /// A snapshot open while the daemon writes a header sidecar under a
-    /// watched path is invalidated. Uses `mailvault_core::header_cache::save`
-    /// (the real function `sync_engine` calls to write a fetched header),
-    /// rather than a raw `fs::write`, so this pins the actual daemon write
-    /// path against silently no longer being seen as a real write by
-    /// Insights, the way inventory-backup-insights fact 11 warns a WAL
-    /// checkpoint now could for custody.
+    /// written path is invalidated. Uses `custody::cache::save_headers` (the
+    /// real function `sync_engine` calls to store a fetched header), rather
+    /// than a raw write, so this pins the actual daemon write path against
+    /// silently no longer being seen as a real write by Insights.
     #[tokio::test]
-    async fn a_snapshot_open_while_the_daemon_writes_a_header_sidecar_is_invalidated() {
+    async fn a_snapshot_open_while_the_daemon_caches_a_header_is_invalidated() {
         let (vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
         seed_account(vault.path(), "acc", "INBOX", 1);
+        custody::open_into(&s).expect("custody opens for a real mail_dir_ok vault");
 
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
-        assert_eq!(begin["ok"], true);
+        assert_eq!(begin["ok"], true, "{begin}");
         let id = begin["snapshotId"].as_str().unwrap().to_string();
 
-        // The daemon writes the same sidecar again, in-process, the way
+        // The daemon caches the same header again, in-process, the way
         // `sync_engine` would on a re-fetch.
-        mailvault_core::header_cache::save(
-            vault.path(),
-            "acc",
-            "INBOX",
-            &json!({"emails":[{"uid":1,"subject":"changed by the daemon"}]}).to_string(),
-        )
+        custody::with_conn(&s, |c| {
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc",
+                "INBOX",
+                &json!({"emails":[{"uid":1,"subject":"changed by the daemon"}]}).to_string(),
+            )
+        })
         .unwrap();
 
         let page = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
-        assert_eq!(page["ok"], false);
+        assert_eq!(page["ok"], false, "{page}");
         assert_eq!(page["error"]["code"], "snapshotStale");
     }
 

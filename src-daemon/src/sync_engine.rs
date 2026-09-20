@@ -8,7 +8,6 @@ use crate::contacts_index::ContactsState;
 use crate::netgate::NetGate;
 use crate::imap::{self, ImapConfig, EmailHeader as ImapEmailHeader};
 use crate::imap::pool::{retry_once_on_dead_socket, ImapPool, PooledSessionGuard};
-use mailvault_core::header_cache;
 use mailvault_core::transfer_stats;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -184,13 +183,19 @@ impl SyncEngine {
         *self.custody_db.lock().unwrap_or_else(|p| p.into_inner()) = Some(db);
     }
 
+    /// The attached store, for tests that assert on what a sync cached.
+    /// `custody.db` opens EXCLUSIVE, so a test must read through this
+    /// connection rather than opening a second one.
+    #[cfg(test)]
+    pub(crate) fn custody_db(&self) -> Option<Arc<mailvault_core::custody::SharedConn>> {
+        self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
     /// One cache step's inputs, cloned into a blocking task (`cache_io`).
     fn cache_ctx(&self, account_id: &str, mailbox: &str) -> CacheCtx {
         CacheCtx {
             vault_closed: Arc::clone(&self.vault_closed),
             vault_gate: Arc::clone(&self.vault_gate),
-            root: self.data_dir.clone(),
-            cache_dir: tauri_cache_dir(&self.data_dir, account_id, mailbox),
             account: account_id.to_string(),
             mailbox: mailbox.to_string(),
             contacts: Arc::clone(&self.contacts),
@@ -1029,8 +1034,6 @@ fn read_transfer_limits(app_dir: &Path, account_id: &str) -> Option<TransferLimi
 struct CacheCtx {
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
-    root: PathBuf,
-    cache_dir: PathBuf,
     account: String,
     mailbox: String,
     contacts: Arc<ContactsState>,
@@ -1045,17 +1048,40 @@ impl CacheCtx {
         f(conn).map(Some)
     }
 
-    /// `_meta.json` plus the sidecar count: two directory reads, one hop.
+    /// Everything a sync step needs to know about what is already cached.
     fn meta_and_count(&self) -> (Option<CachedMeta>, usize) {
-        (read_tauri_cache_meta(&self.cache_dir), count_sidecars(&self.cache_dir))
+        let read = self.with_db(|conn| {
+            let meta = mailvault_core::custody::cache::load_meta(conn, &self.account, &self.mailbox)?;
+            let count = mailvault_core::custody::cache::count(conn, &self.account, &self.mailbox)?;
+            Ok((meta.as_deref().and_then(cached_meta_from_json), count))
+        });
+        read.ok().flatten().unwrap_or((None, 0))
     }
 
     fn cached_uids(&self) -> HashSet<u32> {
-        cached_uids(&self.cache_dir)
+        self.with_db(|conn| mailvault_core::custody::cache::uid_set(conn, &self.account, &self.mailbox))
+            .ok()
+            .flatten()
+            .unwrap_or_default()
     }
 
     fn sidecar_count(&self) -> usize {
-        count_sidecars(&self.cache_dir)
+        self.with_db(|conn| mailvault_core::custody::cache::count(conn, &self.account, &self.mailbox))
+            .ok()
+            .flatten()
+            .unwrap_or(0)
+    }
+
+    /// The header cache is the custody store now, so a step that cannot reach
+    /// it has nowhere to put what it fetched. Failing is the point: the old
+    /// sidecar files were a second place to land, and silently writing to
+    /// neither would leave the mailbox looking uncached forever.
+    fn require_db<T>(
+        &self,
+        f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>,
+    ) -> Result<T, String> {
+        self.with_db(f)?
+            .ok_or_else(|| "custody store is not open — nothing to cache into".to_string())
     }
 
     fn write_meta(
@@ -1066,41 +1092,79 @@ impl CacheCtx {
         highest_modseq: Option<u64>,
         last_reconcile: Option<u64>,
     ) -> Result<(), String> {
-        write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, total, uid_validity, uid_next, highest_modseq, last_reconcile)?;
+        self.vault_open()?;
         let value = serde_json::json!({
             "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
             "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
         });
-        self.with_db(|conn| mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())).map(|_| ())
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
+        })
     }
 
-    /// Sidecars, the SQL mirror and the contacts observation — the three
-    /// things that always follow a header fetch.
+    /// The header rows and the contacts observation — the two things that
+    /// always follow a header fetch.
     fn write_headers(&self, headers: &[ImapEmailHeader]) -> Result<(), String> {
-        write_headers(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, headers)?;
+        self.vault_open()?;
         let value = serde_json::json!({"emails": headers});
-        self.with_db(|conn| mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string()))?;
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
+        })?;
+        info!("[sync] Cache written: {} headers", headers.len());
         self.contacts.observe_headers(&self.account, &self.mailbox, headers);
         Ok(())
     }
 
     fn patch_flags(&self, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
-        let patched = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, changes)?;
-        self.with_db(|conn| mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes))?;
-        Ok(patched)
+        self.vault_open()?;
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::patch_flags(conn, &self.account, &self.mailbox, changes)
+        })
     }
 
     fn prune(&self, live: &[u32]) -> Result<usize, String> {
-        let pruned = prune_sidecars(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir, live)?;
-        self.with_db(|conn| mailvault_core::custody::cache::prune_headers(conn, &self.account, &self.mailbox, live))?;
-        Ok(pruned)
+        self.vault_open()?;
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::prune_headers(conn, &self.account, &self.mailbox, live)
+        })
     }
 
-    /// UIDVALIDITY changed: the whole generation goes, in both stores.
+    /// UIDVALIDITY changed: the whole generation goes. Only the rows — the
+    /// sidecar directory is kept for the Outlook uid ledger that shares it,
+    /// which a uid generation change must never take with it.
     fn wipe(&self) -> Result<(), String> {
-        wipe_generation(&self.vault_closed, &self.vault_gate, &self.root, &self.cache_dir)?;
-        self.with_db(|conn| mailvault_core::custody::cache::clear_headers(conn, Some(&self.account), Some(&self.mailbox))).map(|_| ())
+        self.vault_open()?;
+        self.require_db(|conn| {
+            mailvault_core::custody::cache::clear_headers(conn, Some(&self.account), Some(&self.mailbox))
+        })
     }
+
+    /// The vault-closed / vault-moving barrier the sidecar writes used to take
+    /// through `with_mailbox_write_lock`, reporting the same
+    /// `E_VAULT_UNAVAILABLE:` text every gated RPC route uses. The custody
+    /// connection is closed across a vault switch, so this only has to refuse
+    /// the window before that lands.
+    fn vault_open(&self) -> Result<(), String> {
+        let _gate = self.vault_gate.read().unwrap_or_else(|e| e.into_inner());
+        if self.vault_closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(
+                "E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+/// `CachedMeta` from the stored metadata blob (`load_meta`'s JSON).
+fn cached_meta_from_json(text: &str) -> Option<CachedMeta> {
+    let meta: serde_json::Value = serde_json::from_str(text).ok()?;
+    Some(CachedMeta {
+        uid_validity: meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
+        uid_next: meta.get("uidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
+        highest_modseq: meta.get("highestModseq").and_then(|v| v.as_u64()),
+        total_emails: meta.get("totalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
+        last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
+    })
 }
 
 /// Run one cache step on a blocking thread. Never call the `CacheCtx` methods
@@ -1117,10 +1181,6 @@ async fn cache_io<T: Send + 'static>(
 // Matches the sidecar format used by the app's cache commands
 // (`mailvault_core::header_cache`) so the app reads daemon-written cache
 // natively.
-
-fn tauri_cache_dir(data_dir: &Path, account_id: &str, mailbox: &str) -> PathBuf {
-    header_cache::sidecar_dir(data_dir, account_id, mailbox)
-}
 
 /// Sync metadata read back from the sidecar cache's _meta.json.
 struct CachedMeta {
@@ -1172,178 +1232,6 @@ fn unix_now() -> u64 {
 
 /// Finished tickets kept around so a late `sync.wait` still finds its result.
 const MAX_LIVE_TICKETS: usize = 64;
-
-fn read_tauri_cache_meta(cache_dir: &Path) -> Option<CachedMeta> {
-    let json = fs::read_to_string(cache_dir.join("_meta.json")).ok()?;
-    let meta: serde_json::Value = serde_json::from_str(&json).ok()?;
-    Some(CachedMeta {
-        uid_validity: meta.get("uidValidity").and_then(|v| v.as_u64()).map(|v| v as u32),
-        uid_next: meta.get("uidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
-        highest_modseq: meta.get("highestModseq").and_then(|v| v.as_u64()),
-        total_emails: meta.get("totalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
-        last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
-    })
-}
-
-/// Message sidecars only. `_meta.json` and `graph_id_map.json` sit in the same
-/// directory and are not messages; the old `ends_with(".json") && != "_meta.json"`
-/// rule counted the Outlook uid ledger as a cached message (oddity 3).
-fn count_sidecars(cache_dir: &Path) -> usize {
-    fs::read_dir(cache_dir).ok()
-        .map(|entries| entries.flatten().filter(|e| {
-            header_cache::is_header_file(&e.file_name().to_string_lossy()).is_some()
-        }).count())
-        .unwrap_or(0)
-}
-
-/// UIDs that already have a sidecar on disk.
-fn cached_uids(cache_dir: &Path) -> HashSet<u32> {
-    let Ok(entries) = fs::read_dir(cache_dir) else { return HashSet::new() };
-    entries.flatten()
-        .filter_map(|e| header_cache::is_header_file(&e.file_name().to_string_lossy()))
-        .collect()
-}
-
-/// The mailbox-lock key for a write to `cache_dir` — its own last path
-/// segment, which is `header_cache::cache_base_name(account, mailbox)` for
-/// every real caller (this file's own `tauri_cache_dir`).
-fn mailbox_lock_key(cache_dir: &Path) -> String {
-    cache_dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
-}
-
-/// Task 2.7 (2.5 review I4): the same vault-move barrier
-/// `handlers::common::with_vault_write` gives RPC-handler writes, for sync's
-/// own writes. Takes `vault_gate`'s read side (shared with every other
-/// writer, including `handlers::common::with_vault_write` — same `Arc`) and
-/// re-checks `vault_closed` under it before doing anything else, so
-/// `vault_close`'s drain (which takes the write side) cannot return while a
-/// sync write is still in flight, and a sync write that starts after
-/// `vault_close` sees the moving error immediately instead of writing into a
-/// root the app may already be copying.
-///
-/// Also takes the same tree-read + mailbox lock `header_cache::save`/
-/// `patch_flags` take, so a concurrent `header_cache::clear` can never see a
-/// half-written mailbox. Neither lock is ever held across an `.await` or
-/// network I/O — every caller here is a plain sync fn invoked after the sync
-/// engine's own IMAP round trip (which happens in the `async` caller, not in
-/// here) has already completed.
-fn with_mailbox_write_lock<T>(
-    vault_closed: &AtomicBool,
-    vault_gate: &std::sync::RwLock<()>,
-    root: &Path,
-    cache_dir: &Path,
-    f: impl FnOnce() -> T,
-) -> Result<T, String> {
-    let _gate = vault_gate.read().unwrap_or_else(|p| p.into_inner());
-    if vault_closed.load(std::sync::atomic::Ordering::SeqCst) {
-        return Err("E_VAULT_UNAVAILABLE: Mail storage folder unavailable: the vault is being moved".to_string());
-    }
-    let base = mailbox_lock_key(cache_dir);
-    let tree = header_cache::lock_tree(root);
-    let _tree_read = tree.read().unwrap_or_else(|e| e.into_inner());
-    let mbox = header_cache::lock_mailbox(root, &base);
-    let _mbox_lock = mbox.lock().unwrap_or_else(|e| e.into_inner());
-    Ok(f())
-}
-
-/// The cold path's UIDVALIDITY-change wipe: drop the whole generation under
-/// the same tree-read + mailbox lock `write_headers`/`write_cache_meta_full`
-/// take, so a concurrent backfill chunk-write to the SAME mailbox can never
-/// race it (Task 2.3 review I1). One fn used by both the production call
-/// site and the regression test below, so the test exercises the exact call
-/// `sync_mailbox` makes rather than a hand-rolled copy of the wrap (Task 2.4
-/// review M2).
-fn wipe_generation(vault_closed: &AtomicBool, vault_gate: &std::sync::RwLock<()>, root: &Path, cache_dir: &Path) -> Result<(), String> {
-    with_mailbox_write_lock(vault_closed, vault_gate, root, cache_dir, || {
-        let _ = fs::remove_dir_all(cache_dir);
-    })
-}
-
-fn write_cache_meta_full(
-    vault_closed: &AtomicBool,
-    vault_gate: &std::sync::RwLock<()>,
-    root: &Path,
-    cache_dir: &Path,
-    total_emails: u32,
-    uid_validity: Option<u32>,
-    uid_next: Option<u32>,
-    highest_modseq: Option<u64>,
-    last_reconcile: Option<u64>,
-) -> Result<(), String> {
-    let meta = serde_json::json!({
-        "totalEmails": total_emails,
-        "uidValidity": uid_validity,
-        "uidNext": uid_next,
-        "highestModseq": highest_modseq,
-        "lastReconcile": last_reconcile,
-        // Epoch ms — matches what the Tauri-side save_email_cache writes.
-        "lastSynced": now_ms(),
-    });
-    let meta_json = serde_json::to_string(&meta).map_err(|e| format!("Serialize meta: {}", e))?;
-    // `create_dir_all` has to be inside the lock: a `header_cache::clear`
-    // between this creating the directory and the write below would remove it
-    // out from under this write (see `header_cache::save`'s own fix).
-    with_mailbox_write_lock(vault_closed, vault_gate, root, cache_dir, || {
-        fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
-        mailvault_core::fsx::write_atomic(&cache_dir.join("_meta.json"), meta_json.as_bytes())
-            .map_err(|e| format!("Write meta: {}", e))
-    })?
-}
-
-/// Write per-UID header sidecars, overwriting existing ones — a freshly fetched
-/// header is authoritative, and on servers without CONDSTORE this is the only
-/// thing that refreshes flags on already-cached messages.
-fn write_headers(vault_closed: &AtomicBool, vault_gate: &std::sync::RwLock<()>, root: &Path, cache_dir: &Path, headers: &[ImapEmailHeader]) -> Result<(), String> {
-    with_mailbox_write_lock(vault_closed, vault_gate, root, cache_dir, || {
-        fs::create_dir_all(cache_dir).map_err(|e| format!("Failed to create cache dir: {}", e))?;
-        for header in headers {
-            let email_json = serde_json::to_string(header).map_err(|e| format!("Serialize email {}: {}", header.uid, e))?;
-            mailvault_core::fsx::write_atomic(&cache_dir.join(format!("{}.json", header.uid)), email_json.as_bytes())
-                .map_err(|e| format!("Write email {}: {}", header.uid, e))?;
-        }
-        info!("[sync] Cache written: {} headers", headers.len());
-        Ok(())
-    })?
-}
-
-/// Patch the `flags` field of existing sidecars in place. Returns how many changed.
-/// UIDs without a sidecar are ignored — they arrive via the new-header fetch.
-fn patch_sidecar_flags(vault_closed: &AtomicBool, vault_gate: &std::sync::RwLock<()>, root: &Path, cache_dir: &Path, changes: &[(u32, Vec<String>)]) -> Result<usize, String> {
-    with_mailbox_write_lock(vault_closed, vault_gate, root, cache_dir, || {
-        let mut patched = 0;
-        for (uid, flags) in changes {
-            let path = cache_dir.join(format!("{}.json", uid));
-            let Ok(data) = fs::read_to_string(&path) else { continue };
-            let Ok(mut email) = serde_json::from_str::<serde_json::Value>(&data) else { continue };
-            let new_flags = serde_json::json!(flags);
-            if email.get("flags") == Some(&new_flags) { continue }
-            let Some(obj) = email.as_object_mut() else { continue };
-            obj.insert("flags".to_string(), new_flags);
-            if let Ok(json) = serde_json::to_string(&email) {
-                if mailvault_core::fsx::write_atomic(&path, json.as_bytes()).is_ok() { patched += 1; }
-            }
-        }
-        patched
-    })
-}
-
-/// Delete sidecars whose UID is no longer on the server. Returns how many.
-fn prune_sidecars(vault_closed: &AtomicBool, vault_gate: &std::sync::RwLock<()>, root: &Path, cache_dir: &Path, server_uids: &[u32]) -> Result<usize, String> {
-    with_mailbox_write_lock(vault_closed, vault_gate, root, cache_dir, || {
-        let live: std::collections::HashSet<u32> = server_uids.iter().copied().collect();
-        let Ok(entries) = fs::read_dir(cache_dir) else { return 0 };
-        let mut pruned = 0;
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().to_string();
-            let Some(uid) = header_cache::is_header_file(&name) else { continue };
-            if !live.contains(&uid) && fs::remove_file(entry.path()).is_ok() {
-                pruned += 1;
-            }
-        }
-        pruned
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1372,86 +1260,120 @@ mod tests {
         dir
     }
 
+    /// A `CacheCtx` over a real custody store in `dir`, the way
+    /// `SyncEngine::cache_ctx` builds one.
+    fn ctx(dir: &Path, closed: bool) -> CacheCtx {
+        let conn = mailvault_core::custody::db::open(dir).unwrap();
+        CacheCtx {
+            vault_closed: Arc::new(AtomicBool::new(closed)),
+            vault_gate: Arc::new(std::sync::RwLock::new(())),
+            account: "acc1".into(),
+            mailbox: "INBOX".into(),
+            contacts: ContactsState::new(dir.to_path_buf()),
+            db: Some(Arc::new(std::sync::Mutex::new(Some(conn)))),
+        }
+    }
+
     #[test]
     fn test_delta_cache_helpers() {
         let dir = scratch_dir("delta");
-        let (vc, vg) = open_gate();
+        let c = ctx(&dir, false);
 
         // Meta round-trips, including highestModseq (the daemon used to drop it,
         // which silently disabled the app's CONDSTORE fast path).
-        write_cache_meta_full(&vc, &vg, &dir, &dir, 42, Some(7), Some(101), Some(999), None).unwrap();
-        let meta = read_tauri_cache_meta(&dir).unwrap();
+        c.write_meta(42, Some(7), Some(101), Some(999), None).unwrap();
+        let (meta, count) = c.meta_and_count();
+        let meta = meta.unwrap();
         assert_eq!(meta.total_emails, Some(42));
         assert_eq!(meta.uid_validity, Some(7));
         assert_eq!(meta.uid_next, Some(101));
         assert_eq!(meta.highest_modseq, Some(999));
         // Never reconciled → the timed reconcile must fire on the next delta.
         assert_eq!(meta.last_reconcile, None);
+        assert_eq!(count, 0);
 
-        write_cache_meta_full(&vc, &vg, &dir, &dir, 42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
-        assert_eq!(read_tauri_cache_meta(&dir).unwrap().last_reconcile, Some(1_700_000_000_000));
+        c.write_meta(42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
+        assert_eq!(c.meta_and_count().0.unwrap().last_reconcile, Some(1_700_000_000_000));
 
-        // Two sidecars, one seen and one unseen.
-        fs::write(dir.join("10.json"), r#"{"uid":10,"flags":["\\Seen"],"subject":"a"}"#).unwrap();
-        fs::write(dir.join("11.json"), r#"{"uid":11,"flags":[],"subject":"b"}"#).unwrap();
-        assert_eq!(count_sidecars(&dir), 2);
+        // Two headers, one seen and one unseen.
+        c.write_headers(&[test_header(10), test_header(11)]).unwrap();
+        assert_eq!(c.sidecar_count(), 2);
+        assert_eq!(c.meta_and_count().1, 2, "the counter must not see the meta row as a message");
 
-        // Flag patch: uid 11 changes, uid 10 is already correct, uid 99 has no sidecar.
-        let patched = patch_sidecar_flags(&vc, &vg, &dir, &dir, &[
-            (10, vec!["\\Seen".to_string()]),
-            (11, vec!["\\Seen".to_string(), "\\Flagged".to_string()]),
-            (99, vec!["\\Seen".to_string()]),
-        ]).unwrap();
+        // Flag patch: uid 11 changes, uid 10 is already correct, uid 99 has no row.
+        c.patch_flags(&[(10, vec![])]).unwrap();
+        let patched = c
+            .patch_flags(&[
+                (10, vec![]),
+                (11, vec!["\\Seen".to_string(), "\\Flagged".to_string()]),
+                (99, vec!["\\Seen".to_string()]),
+            ])
+            .unwrap();
         assert_eq!(patched, 1);
-        let uid11: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(dir.join("11.json")).unwrap()).unwrap();
-        assert_eq!(uid11["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
-        assert_eq!(uid11["subject"], "b"); // patch must not clobber other fields
+        let uid11 = c
+            .with_db(|conn| mailvault_core::custody::cache::load_by_uids(conn, "acc1", "INBOX", &[11]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(uid11[0]["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
+        assert_eq!(uid11[0]["subject"], "s", "patch must not clobber other fields");
 
-        // Backfill diff: the cache knows which UIDs it holds, and _meta.json is
-        // never mistaken for one. A mailbox whose sidecar count trails the
-        // server's EXISTS is exactly the case the delta gate cannot see.
-        let have = cached_uids(&dir);
+        // Backfill diff: the cache knows which UIDs it holds. A mailbox whose
+        // cached count trails the server's EXISTS is exactly the case the
+        // delta gate cannot see.
+        let have = c.cached_uids();
         assert_eq!(have.len(), 2);
         assert!(have.contains(&10) && have.contains(&11));
         let missing: Vec<u32> = [9u32, 10, 11, 12].into_iter().filter(|u| !have.contains(u)).collect();
         assert_eq!(missing, vec![9, 12]);
 
-        // Prune: uid 11 was expunged server-side, _meta.json must survive.
-        assert_eq!(prune_sidecars(&vc, &vg, &dir, &dir, &[10]).unwrap(), 1);
-        assert!(dir.join("10.json").exists());
-        assert!(!dir.join("11.json").exists());
-        assert!(dir.join("_meta.json").exists());
+        // Prune: uid 11 was expunged server-side, the metadata must survive.
+        assert_eq!(c.prune(&[10]).unwrap(), 1);
+        assert_eq!(c.cached_uids().into_iter().collect::<Vec<_>>(), vec![10]);
+        assert_eq!(c.meta_and_count().0.unwrap().total_emails, Some(42));
 
+        // UIDVALIDITY changed: the rows go, the metadata row stays.
+        c.wipe().unwrap();
+        assert_eq!(c.sidecar_count(), 0);
+
+        drop(c);
         fs::remove_dir_all(&dir).unwrap();
     }
 
     /// Task 2.7 (2.5 review I4): a sync write attempted while the vault is
     /// closed for a move is refused with the same `E_VAULT_UNAVAILABLE:` text
-    /// every gated RPC route uses, and nothing lands on disk.
+    /// every gated RPC route uses, and nothing is stored.
     #[test]
     fn a_sync_write_while_the_vault_is_closed_for_a_move_is_refused() {
         let dir = scratch_dir("closed_for_move");
-        let vc = AtomicBool::new(true);
-        let vg = std::sync::RwLock::new(());
+        let c = ctx(&dir, true);
 
-        let err = write_cache_meta_full(&vc, &vg, &dir, &dir, 1, None, None, None, None).unwrap_err();
-        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
-        assert!(!dir.join("_meta.json").exists());
+        for err in [
+            c.write_meta(1, None, None, None, None).unwrap_err(),
+            c.write_headers(&[test_header(1)]).unwrap_err(),
+            c.patch_flags(&[(1, vec!["\\Seen".to_string()])]).unwrap_err(),
+            c.prune(&[]).unwrap_err(),
+            c.wipe().unwrap_err(),
+        ] {
+            assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
+        }
+        assert_eq!(c.sidecar_count(), 0);
+        assert!(c.meta_and_count().0.is_none());
 
-        let err = write_headers(&vc, &vg, &dir, &dir, &[test_header(1)]).unwrap_err();
-        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
-        assert!(!dir.join("1.json").exists());
+        drop(c);
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
-        let err = patch_sidecar_flags(&vc, &vg, &dir, &dir, &[(1, vec!["\\Seen".to_string()])]).unwrap_err();
-        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
-
-        let err = prune_sidecars(&vc, &vg, &dir, &dir, &[]).unwrap_err();
-        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
-
-        let err = wipe_generation(&vc, &vg, &dir, &dir).unwrap_err();
-        assert!(err.starts_with("E_VAULT_UNAVAILABLE:"), "{err}");
-
+    /// With no custody store attached there is nowhere to cache into: the old
+    /// sidecar files were a second place to land, and silently writing to
+    /// neither would leave the mailbox looking uncached forever.
+    #[test]
+    fn a_cache_write_with_no_store_attached_fails_rather_than_dropping_the_headers() {
+        let dir = scratch_dir("no_store");
+        let mut c = ctx(&dir, false);
+        c.db = None;
+        let err = c.write_headers(&[test_header(1)]).unwrap_err();
+        assert!(err.contains("custody store is not open"), "{err}");
+        drop(c);
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -1486,48 +1408,40 @@ mod tests {
         }
     }
 
-    /// Task 2.3 review I1: the cold path's `remove_dir_all` used to run with no
-    /// lock at all, so a concurrent backfill chunk-write to the SAME mailbox
-    /// could have its `write_atomic` fail with ENOENT mid-write (the wipe
-    /// pulled the directory out from under it), or the wipe itself could hit
-    /// ENOTEMPTY and silently leave stale sidecars (the exact ghosts it exists
-    /// to prevent). Barrier-synchronized like `header_cache`'s own
-    /// `a_clear_racing_saves_never_leaves_a_half_written_mailbox`, which caught
-    /// the sibling bug the same way: every `write_headers` call below must
-    /// succeed, never race the wipe.
-    ///
-    /// 2.4 review M2: this used to call `with_mailbox_write_lock(&d2, &d2, ...)`
-    /// directly — a hand-rolled copy of the cold path's wrap, with `root ==
-    /// cache_dir`, which production never does. It now calls `wipe_generation`,
-    /// the exact fn the cold path calls, against a real `root/email_cache/<base>`
-    /// layout, so a regression at the call site (not just in the wrap itself)
-    /// would fail this test.
+    /// Task 2.3 review I1: the cold path's wipe used to `remove_dir_all` the
+    /// sidecar directory with no lock at all, so a concurrent backfill
+    /// chunk-write to the SAME mailbox could fail with ENOENT mid-write, or
+    /// the wipe could hit ENOTEMPTY and silently leave stale sidecars — the
+    /// exact ghosts it exists to prevent. Both halves are one store now, but
+    /// the property is unchanged and worth pinning: every write must succeed
+    /// while a wipe runs against the same mailbox, and the store must be
+    /// usable afterwards.
     #[test]
     fn a_cold_wipe_never_races_a_concurrent_mailbox_write() {
         let root = scratch_dir("cold_wipe_race");
-        let cache_dir = root.join("email_cache").join("acct_INBOX");
-        let vc = Arc::new(AtomicBool::new(false));
-        let vg = Arc::new(std::sync::RwLock::new(()));
+        let c = ctx(&root, false);
         for round in 0..20u32 {
-            write_headers(&vc, &vg, &root, &cache_dir, &[test_header(round)]).unwrap();
+            c.write_headers(&[test_header(round)]).unwrap();
 
             let barrier = Arc::new(std::sync::Barrier::new(2));
-            let (r1, c1, b1, vc1, vg1) = (root.clone(), cache_dir.clone(), barrier.clone(), Arc::clone(&vc), Arc::clone(&vg));
+            let (c1, b1) = (c.clone(), barrier.clone());
             let writer = std::thread::spawn(move || {
                 b1.wait();
                 for i in 0..20u32 {
-                    write_headers(&vc1, &vg1, &r1, &c1, &[test_header(1000 + round * 100 + i)]).unwrap();
+                    c1.write_headers(&[test_header(1000 + round * 100 + i)]).unwrap();
                 }
             });
-            let (r2, c2, b2, vc2, vg2) = (root.clone(), cache_dir.clone(), barrier.clone(), Arc::clone(&vc), Arc::clone(&vg));
+            let (c2, b2) = (c.clone(), barrier.clone());
             let remover = std::thread::spawn(move || {
                 b2.wait();
-                // The exact fn the cold path calls.
-                wipe_generation(&vc2, &vg2, &r2, &c2).unwrap();
+                c2.wipe().unwrap();
             });
             writer.join().unwrap();
             remover.join().unwrap();
         }
+        // Still readable: no poisoned lock, no half-applied transaction.
+        c.sidecar_count();
+        drop(c);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1687,7 +1601,7 @@ mod tests {
     }
 
     fn engine_with_net(dir: &Path, net: Arc<NetGate>) -> SyncEngine {
-        SyncEngine::new(
+        let engine = SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.to_path_buf(),
             dir.to_path_buf(),
@@ -1695,14 +1609,51 @@ mod tests {
             net,
             Arc::new(AtomicBool::new(false)),
             Arc::new(std::sync::RwLock::new(())),
-        )
+        );
+        // The header cache is `custody.db`: without one attached every cache
+        // write fails, which is exactly what production does too.
+        engine.attach_custody_db(Arc::new(std::sync::Mutex::new(Some(
+            mailvault_core::custody::db::open(dir).unwrap(),
+        ))));
+        engine
     }
 
-    /// A fresh, open (not closed) vault gate pair for tests that call the
-    /// free `write_*`/`prune_sidecars`/`wipe_generation` functions directly,
-    /// bypassing `SyncEngine` entirely.
-    fn open_gate() -> (AtomicBool, std::sync::RwLock<()>) {
-        (AtomicBool::new(false), std::sync::RwLock::new(()))
+    /// Read through the engine's own connection: `custody.db` opens
+    /// EXCLUSIVE, so a second opener would only ever fail BUSY.
+    fn with_store<T>(
+        engine: &SyncEngine,
+        f: impl FnOnce(&mailvault_core::custody::Connection) -> T,
+    ) -> T {
+        let db = engine.custody_db().expect("engine has a store attached");
+        let guard = db.lock().unwrap_or_else(|p| p.into_inner());
+        f(guard.as_ref().expect("store is open"))
+    }
+
+    /// Every uid one mailbox has cached.
+    fn cached_uid_set(engine: &SyncEngine, mailbox: &str) -> HashSet<u32> {
+        with_store(engine, |c| mailvault_core::custody::cache::uid_set(c, "acc1", mailbox).unwrap())
+    }
+
+    /// Drop cached rows, the way an interrupted load leaves a partial cache.
+    fn drop_cached(engine: &SyncEngine, mailbox: &str, keep: &[u32]) {
+        with_store(engine, |c| {
+            mailvault_core::custody::cache::prune_headers(c, "acc1", mailbox, keep).unwrap()
+        });
+    }
+
+    /// How many headers one mailbox has cached.
+    fn cached_count(engine: &SyncEngine, mailbox: &str) -> usize {
+        with_store(engine, |c| mailvault_core::custody::cache::count(c, "acc1", mailbox).unwrap())
+    }
+
+    /// The sync metadata one mailbox has stored.
+    fn cached_meta(engine: &SyncEngine, mailbox: &str) -> CachedMeta {
+        with_store(engine, |c| {
+            let blob = mailvault_core::custody::cache::load_meta(c, "acc1", mailbox)
+                .unwrap()
+                .expect("meta written");
+            cached_meta_from_json(&blob).expect("meta parses")
+        })
     }
 
     fn account_for(server: &MockImap) -> SyncAccount {
@@ -1718,10 +1669,6 @@ mod tests {
             }
         }))
         .expect("build SyncAccount")
-    }
-
-    fn cache_dir_for(dir: &Path) -> PathBuf {
-        tauri_cache_dir(dir, "acc1", "INBOX")
     }
 
     // ── Connectivity gate ───────────────────────────────────────────────
@@ -1742,7 +1689,7 @@ mod tests {
         assert!(!result.success);
         assert!(result.offline, "must be labelled offline, not a server error");
         assert_eq!(result.error.as_deref(), Some("No internet connection"));
-        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 0, "nothing was fetched");
+        assert_eq!(cached_count(&engine, "INBOX"), 0, "nothing was fetched");
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -1758,7 +1705,7 @@ mod tests {
 
         assert!(result.success, "sync failed: {:?}", result.error);
         assert!(!result.offline);
-        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 3);
+        assert_eq!(cached_count(&engine, "INBOX"), 3);
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -1846,7 +1793,7 @@ mod tests {
         assert_eq!(result.mailbox, "[Google Mail]/Sent Mail");
         assert_eq!(result.new_emails, 4);
         assert_eq!(
-            count_sidecars(&tauri_cache_dir(&dir, "acc1", "[Google Mail]/Sent Mail")),
+            cached_count(&engine, "[Google Mail]/Sent Mail"),
             4
         );
 
@@ -1977,7 +1924,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cold_cache_writes_sidecars_and_meta() {
+    async fn a_cold_sync_caches_every_header_and_its_meta() {
         let dir = scratch_dir("cold_cache");
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 30)));
         let engine = engine_for(&dir);
@@ -1986,9 +1933,8 @@ mod tests {
         assert!(result.success, "sync failed: {:?}", result.error);
         assert_eq!(result.new_emails, 30);
 
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 30);
-        let meta = read_tauri_cache_meta(&cache).expect("meta written");
+        assert_eq!(cached_count(&engine, "INBOX"), 30);
+        let meta = cached_meta(&engine, "INBOX");
         assert_eq!(meta.total_emails, Some(30));
         assert_eq!(meta.uid_next, Some(31));
 
@@ -1997,8 +1943,8 @@ mod tests {
 
     /// Task 2.3: the cold path used to always write `lastReconcile: null`
     /// (`write_cache_meta`, never `_full`), so a mailbox that fell onto the
-    /// cold path for a reason OTHER than a UIDVALIDITY change (here: a meta
-    /// file with no sidecars, so the delta gate's `sidecar_count > 0` check
+    /// cold path for a reason OTHER than a UIDVALIDITY change (here: stored
+    /// metadata with no cached headers, so the delta gate's count check
     /// fails) forgot it had ever reconciled and would immediately reconcile
     /// again on the very next sync.
     #[tokio::test]
@@ -2006,16 +1952,22 @@ mod tests {
         let dir = scratch_dir("cold_preserves_reconcile");
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
         let engine = engine_for(&dir);
-        let cache = cache_dir_for(&dir);
 
-        fs::create_dir_all(&cache).unwrap();
-        let (vc, vg) = open_gate();
-        write_cache_meta_full(&vc, &vg, &dir, &cache, 0, Some(1), Some(1), None, Some(1_700_000_000_000)).unwrap();
+        with_store(&engine, |c| {
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc1",
+                "INBOX",
+                &serde_json::json!({"totalEmails":0,"uidValidity":1,"uidNext":1,"lastReconcile":1_700_000_000_000_u64})
+                    .to_string(),
+            )
+            .unwrap();
+        });
 
         let result = engine.sync_account(&account_for(&server), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
-        let meta = read_tauri_cache_meta(&cache).expect("meta written");
+        let meta = cached_meta(&engine, "INBOX");
         assert_eq!(
             meta.last_reconcile,
             Some(1_700_000_000_000),
@@ -2069,8 +2021,7 @@ mod tests {
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&account_server), "INBOX").await;
 
-        let cache = cache_dir_for(&dir);
-        let before = count_sidecars(&cache);
+        let before = cached_count(&engine, "INBOX");
         assert_eq!(before, 40, "precondition: a warm cache to lose");
         drop(account_server);
 
@@ -2102,7 +2053,7 @@ mod tests {
             poisoned.commands()
         );
         assert_eq!(
-            count_sidecars(&cache),
+            cached_count(&engine, "INBOX"),
             before,
             "a failed UID listing must not delete cached headers"
         );
@@ -2118,8 +2069,7 @@ mod tests {
         let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 40)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 40);
+        assert_eq!(cached_count(&engine, "INBOX"), 40);
         drop(warm);
 
         // Server returns a quarter of the UIDs but still reports EXISTS=40.
@@ -2139,7 +2089,7 @@ mod tests {
             truncating.commands()
         );
         assert_eq!(
-            count_sidecars(&cache),
+            cached_count(&engine, "INBOX"),
             40,
             "a partial UID list must not be mistaken for server-side deletions"
         );
@@ -2155,8 +2105,7 @@ mod tests {
         let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 20);
+        assert_eq!(cached_count(&engine, "INBOX"), 20);
         drop(warm);
 
         // Three messages really are gone — EXISTS agrees with the UID list.
@@ -2166,9 +2115,10 @@ mod tests {
         let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
-        assert_eq!(count_sidecars(&cache), 17, "expunged messages should be pruned");
-        assert!(!cache.join("6.json").exists());
-        assert!(cache.join("8.json").exists());
+        assert_eq!(cached_count(&engine, "INBOX"), 17, "expunged messages should be pruned");
+        let cached = cached_uid_set(&engine, "INBOX");
+        assert!(!cached.contains(&6));
+        assert!(cached.contains(&8));
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -2181,8 +2131,7 @@ mod tests {
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 15)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&first), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 15);
+        assert_eq!(cached_count(&engine, "INBOX"), 15);
         drop(first);
 
         let reissued = MockImap::start(
@@ -2192,7 +2141,7 @@ mod tests {
         assert!(result.success, "sync failed: {:?}", result.error);
 
         assert_eq!(
-            count_sidecars(&cache),
+            cached_count(&engine, "INBOX"),
             4,
             "stale UID generation must be dropped, not merged"
         );
@@ -2209,23 +2158,24 @@ mod tests {
         let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
         let account = account_for(&server);
         let engine = engine_for(&dir);
-        let cache = cache_dir_for(&dir);
 
         // A cache holding 10 of 50 — the partly-cached state after an aborted load.
-        fs::create_dir_all(&cache).unwrap();
-        for uid in 41..=50u32 {
-            fs::write(
-                cache.join(format!("{uid}.json")),
-                format!(r#"{{"uid":{uid},"flags":[],"subject":"Message {uid}"}}"#),
+        with_store(&engine, |c| {
+            let emails: Vec<_> = (41..=50u32)
+                .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
+                .collect();
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc1",
+                "INBOX",
+                &serde_json::json!({"emails":emails,"totalEmails":50,"uidValidity":1,"uidNext":51}).to_string(),
             )
             .unwrap();
-        }
-        let (vc, vg) = open_gate();
-        write_cache_meta_full(&vc, &vg, &dir, &cache, 50, Some(1), Some(51), None, None).unwrap();
+        });
 
         engine.backfill_mailbox(&account, "INBOX").await;
 
-        assert_eq!(count_sidecars(&cache), 50, "backfill should complete the mailbox");
+        assert_eq!(cached_count(&engine, "INBOX"), 50, "backfill should complete the mailbox");
         assert!(!engine.is_backfilling("acc1").await, "in-flight flag must clear");
 
         fs::remove_dir_all(&dir).unwrap();
@@ -2265,15 +2215,13 @@ mod tests {
         let dir = scratch_dir("backfill_poisoned_item");
         let key = format!("acc1\u{1}INBOX");
 
-        // Prime a fully cached 3-message mailbox, then lose two sidecars.
+        // Prime a fully cached 3-message mailbox, then lose two rows.
         let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 3)));
         let engine = engine_for(&dir);
         engine.sync_account(&account_for(&warm), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 3, "precondition: a fully cached mailbox");
+        assert_eq!(cached_count(&engine, "INBOX"), 3, "precondition: a fully cached mailbox");
         drop(warm);
-        fs::remove_file(cache.join("2.json")).unwrap();
-        fs::remove_file(cache.join("3.json")).unwrap();
+        drop_cached(&engine, "INBOX", &[1]);
 
         // Same mailbox on a server whose header line for UID 2 is unreadable,
         // every time.
@@ -2286,7 +2234,7 @@ mod tests {
 
         engine.backfill_mailbox(&account, "INBOX").await;
 
-        assert_eq!(count_sidecars(&cache), 2, "uid 3 must arrive on the first pass; uid 2 is the poison");
+        assert_eq!(cached_count(&engine, "INBOX"), 2, "uid 3 must arrive on the first pass; uid 2 is the poison");
         assert!(
             !engine.backfill_gave_up.lock().await.contains(&key),
             "a pass that wrote headers is progress, not a give-up"
@@ -2301,7 +2249,7 @@ mod tests {
         // Only the poison is missing now. Asking for it yields nothing, and
         // nothing fetched rests the mailbox for the session, as it always has.
         engine.backfill_mailbox(&account, "INBOX").await;
-        assert_eq!(count_sidecars(&cache), 2);
+        assert_eq!(cached_count(&engine, "INBOX"), 2);
         assert!(engine.backfill_gave_up.lock().await.contains(&key));
 
         fs::remove_dir_all(&dir).unwrap();
@@ -2423,7 +2371,7 @@ mod tests {
         let engine = engine_for(&dir);
         let warm = engine.sync_account(&account_for(&healthy), "INBOX").await;
         assert!(warm.success, "precondition: a warm cache to lose: {:?}", warm.error);
-        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 5);
+        assert_eq!(cached_count(&engine, "INBOX"), 5);
         drop(healthy);
 
         let dead = MockImap::start(
@@ -2434,7 +2382,7 @@ mod tests {
         let result = engine.sync_account(&account_for(&dead), "INBOX").await;
 
         assert!(!result.success, "EOF on SELECT is not an empty mailbox");
-        assert_eq!(count_sidecars(&cache_dir_for(&dir)), 5, "a dead socket must not prune the cache");
+        assert_eq!(cached_count(&engine, "INBOX"), 5, "a dead socket must not prune the cache");
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -2666,8 +2614,7 @@ mod tests {
 
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
         engine.sync_account(&account_for(&first), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 10);
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
         drop(first);
 
         // Same ten messages; uid 5 was read and starred since.
@@ -2688,8 +2635,10 @@ mod tests {
             "the flag patch must ride CHANGEDSINCE, not a re-fetch: {:?}",
             second.commands()
         );
-        let uid5: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(cache.join("5.json")).unwrap()).unwrap();
+        let uid5 = with_store(&engine, |c| {
+            mailvault_core::custody::cache::load_by_uids(c, "acc1", "INBOX", &[5]).unwrap()
+        })
+        .remove(0);
         assert_eq!(uid5["flags"], serde_json::json!(["\\Seen", "\\Flagged"]));
 
         fs::remove_dir_all(&dir).unwrap();
@@ -2708,8 +2657,7 @@ mod tests {
                 .without_cap("CONDSTORE"),
         );
         engine.sync_account(&account_for(&first), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 10);
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
         drop(first);
 
         let mut changed = synthetic_mailbox("INBOX", 10);
@@ -2732,8 +2680,10 @@ mod tests {
             "the fallback is a flags-only UID FETCH: {:?}",
             second.commands()
         );
-        let uid5: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(cache.join("5.json")).unwrap()).unwrap();
+        let uid5 = with_store(&engine, |c| {
+            mailvault_core::custody::cache::load_by_uids(c, "acc1", "INBOX", &[5]).unwrap()
+        })
+        .remove(0);
         assert_eq!(uid5["flags"], serde_json::json!(["\\Seen"]));
 
         fs::remove_dir_all(&dir).unwrap();
@@ -2742,22 +2692,21 @@ mod tests {
     /// A mailbox emptied server-side must leave nothing behind — the prune
     /// guard only protects against a *short* UID listing, not an honest zero.
     #[tokio::test]
-    async fn an_emptied_mailbox_prunes_every_sidecar() {
+    async fn an_emptied_mailbox_prunes_every_cached_header() {
         let dir = scratch_dir("emptied_mailbox");
         let engine = engine_for(&dir);
 
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 12)));
         engine.sync_account(&account_for(&first), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 12);
+        assert_eq!(cached_count(&engine, "INBOX"), 12);
         drop(first);
 
         let emptied = MockImap::start(Scenario::new().mailbox(Mailbox::new("INBOX")));
         let result = engine.sync_account(&account_for(&emptied), "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
 
-        assert_eq!(count_sidecars(&cache), 0, "every sidecar must go");
-        assert_eq!(read_tauri_cache_meta(&cache).unwrap().total_emails, Some(0));
+        assert_eq!(cached_count(&engine, "INBOX"), 0, "every sidecar must go");
+        assert_eq!(Some(cached_meta(&engine, "INBOX")).unwrap().total_emails, Some(0));
 
         fs::remove_dir_all(&dir).unwrap();
     }
@@ -2772,8 +2721,7 @@ mod tests {
 
         let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 5)));
         engine.sync_account(&account_for(&first), "INBOX").await;
-        let cache = cache_dir_for(&dir);
-        assert_eq!(count_sidecars(&cache), 5);
+        assert_eq!(cached_count(&engine, "INBOX"), 5);
         drop(first);
 
         let second = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 700)));
@@ -2783,7 +2731,7 @@ mod tests {
         assert_eq!(result.new_emails, 500, "a gap over the limit falls back to one 500-header page");
 
         engine.backfill_mailbox(&account, "INBOX").await;
-        assert_eq!(count_sidecars(&cache), 700, "backfill must finish what the page started");
+        assert_eq!(cached_count(&engine, "INBOX"), 700, "backfill must finish what the page started");
 
         fs::remove_dir_all(&dir).unwrap();
     }
