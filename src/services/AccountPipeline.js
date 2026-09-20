@@ -410,7 +410,7 @@ export class AccountPipeline {
 
     // Refresh saved/archived IDs for this account if it's the active one
     const { activeAccountId, activeMailbox } = useMailStore.getState();
-    if (this.accountId === activeAccountId) {
+    if (this.accountId === activeAccountId && mailbox === activeMailbox) {
       try {
         const [newSavedIds, rawArchivedIds] = await Promise.all([
           db.getSavedEmailIds(activeAccountId, activeMailbox),

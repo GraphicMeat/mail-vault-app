@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock all dependencies
+const mail = vi.hoisted(() => ({ state: {
+  activeAccountId: 'acc-1', activeMailbox: 'INBOX', emails: [], totalEmails: 0,
+  addToCache: vi.fn(), updateSortedEmails: vi.fn(), archivedEmailIds: new Set(),
+} }));
 vi.mock('../../stores/mailStore', () => ({
   useMailStore: {
-    getState: () => ({
-      activeAccountId: 'acc-1',
-      activeMailbox: 'INBOX',
-      addToCache: vi.fn(),
-    }),
+    getState: () => mail.state,
     setState: vi.fn(),
     subscribe: () => () => {},
   },
@@ -21,6 +21,7 @@ vi.mock('../db', () => ({
   getArchivedEmailIds: () => Promise.resolve(new Set()),
   getEmailHeadersMeta: vi.fn(),
   getEmailHeadersPartial: vi.fn(),
+  saveEmailHeaders: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../syncService', () => ({
   syncNow: vi.fn(),
@@ -61,6 +62,13 @@ const tick = () => new Promise(r => setTimeout(r, 0));
 const browserTicks = (n) => new Promise(r => setTimeout(r, n * 50));
 
 describe('AccountPipeline memory cleanup', () => {
+  beforeEach(() => {
+    mail.state.activeAccountId = 'acc-1';
+    mail.state.activeMailbox = 'INBOX';
+    mail.state.emails = [];
+    mail.state.totalEmails = 0;
+  });
+
   it('clears _lastLoadedEmails and _graphIdMap on construction', () => {
     const pipeline = new AccountPipeline(
       { email: 'test@example.com' },
@@ -103,6 +111,19 @@ describe('AccountPipeline memory cleanup', () => {
     pipeline.destroy();
 
     expect(pipeline._destroyed).toBe(true);
+  });
+
+  it('never saves a merged unified list as one account mailbox', async () => {
+    mail.state.activeMailbox = 'UNIFIED';
+    mail.state.emails = [
+      {uid:1,_accountId:'acc-1',from:{address:'inga@fenixera.lt'}},
+      {uid:2,_accountId:'acc-2',to:[{address:'donatas@domasta.lt'}]},
+    ];
+    const pipeline = new AccountPipeline({id:'acc-1',email:'prime@graphicmeat.com'});
+
+    await pipeline._finish('INBOX');
+
+    expect(db.saveEmailHeaders).not.toHaveBeenCalled();
   });
 });
 

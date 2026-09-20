@@ -749,6 +749,9 @@ fn inventory(
             } else {
                 name.trim_end_matches(".json").to_string()
             };
+            if base == mailvault_core::header_cache::cache_base_name(&account, "UNIFIED") {
+                continue;
+            }
             if !path.is_dir() && root.join("email_cache").join(&base).is_dir() {
                 continue;
             }

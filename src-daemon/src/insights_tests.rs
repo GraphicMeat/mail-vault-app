@@ -159,6 +159,31 @@ fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
     assert_eq!(saved["messageId"], "<older-than-reused-uid@test>");
     assert!(saved["uidValidity"].is_null());
 }
+
+#[test]
+fn insights_ignores_a_legacy_unified_cache_poisoned_with_foreign_rows() {
+    let dir = tempfile::tempdir().unwrap();
+    let custody = store(dir.path());
+    write(
+        dir.path(),
+        "mailboxes/account-a/mailboxes.json",
+        json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}]}),
+    );
+    write(
+        dir.path(),
+        "email_cache/account_a_UNIFIED/9.json",
+        json!({"uid":9,"from":{"address":"inga@fenixera.lt"},"to":[{"address":"donatas@domasta.lt"}],"date":"Tue, 08 Sep 2026 23:00:00 +0000"}),
+    );
+    let state = InsightsSnapshots::default();
+    let selected = vec!["account-a".to_string()];
+    let start = state
+        .begin_at(dir.path(), &rows(&custody), &account(), &selected, &|| 0)
+        .unwrap();
+    let page = page(&state, &start, 0);
+
+    assert!(page["rows"].as_array().unwrap().is_empty(), "{page}");
+    assert!(page["coverage"]["folders"].as_array().unwrap().iter().all(|f| f["mailbox"] != "UNIFIED"), "{page}");
+}
 #[test]
 fn insights_corrupt_or_missing_metadata_stays_partial_and_unknown() {
     let dir = tempfile::tempdir().unwrap();
