@@ -7,6 +7,9 @@
 - **Search terms are highlighted in the message you open.** Opening a result now marks every occurrence of what you searched for inside the message body, in the reading pane, in a thread and in the full-window view. The highlight follows the query while you refine it.
 - **A result that only matched inside an attachment says so.** When the term is in an attached file and not in the message itself, the row's paperclip is highlighted instead of leaving you hunting for text that was never in the body.
 
+### Changed
+- **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
+
 ### Fixed
 - **A delete the server refuses is retried instead of quietly coming back.** A failed delete used to put the row back on the list and forget the whole thing, so a dead connection was enough to undo a delete you had confirmed. It is now re-sent straight away, and if that fails too it stays queued and is retried on reconnect, every few minutes, and at the next launch.
 - **Deleting a search result takes it out of the results straight away.** A message deleted from a result list stayed on screen, still clickable, until the search was run again. It now disappears the moment it is deleted, the same way a moved message already did.
