@@ -99,7 +99,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                             .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
                         let mut out = Vec::new();
                         for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
-                            let Some(blob) = cache::load_headers(c, account, &mailbox, None)? else { continue };
+                            let Some(blob) = cache::load_headers(c, account, &mailbox, None, cache::HeaderOrder::Date)? else { continue };
                             let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
                             out.push((mailbox, value));
                         }

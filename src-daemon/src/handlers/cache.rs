@@ -32,6 +32,19 @@ use mailvault_core::custody::cache as sql_cache;
 use serde_json::Value;
 use std::sync::Arc;
 
+/// The order the SQLite header cache hands rows back in, taken from the same
+/// marker the sidecar tree uses (`header_cache::uid_tracks_arrival`): uid for
+/// IMAP, header date for Graph. `9e783f50` moved these reads to SQLite and
+/// ordered every one of them by date, which put a freshly arrived message
+/// with an old INTERNALDATE below months-old mail.
+fn header_order(root: &std::path::Path, account_id: &str, mailbox: &str) -> sql_cache::HeaderOrder {
+    if header_cache::uid_tracks_arrival(root, account_id, mailbox) {
+        sql_cache::HeaderOrder::Arrival
+    } else {
+        sql_cache::HeaderOrder::Date
+    }
+}
+
 macro_rules! req {
     ($result:expr) => {
         match $result {
@@ -66,8 +79,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    vault_root(&state)?;
-                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, None))
+                    let order = header_order(&vault_root(&state)?, &account_id, &mailbox);
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, None, order))
                         .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await
@@ -82,8 +95,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    vault_root(&state)?;
-                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, Some(limit)))
+                    let order = header_order(&vault_root(&state)?, &account_id, &mailbox);
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, Some(limit), order))
                         .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await

@@ -89,7 +89,7 @@ fn cached(
         let list = cache::load_mailboxes(conn, account)?.and_then(|raw| serde_json::from_str(&raw).ok());
         let mut out = Vec::new();
         for (_, mailbox) in cache::mailboxes_with_headers(conn, Some(account))? {
-            let Some(blob) = cache::load_headers(conn, account, &mailbox, None)? else { continue };
+            let Some(blob) = cache::load_headers(conn, account, &mailbox, None, cache::HeaderOrder::Date)? else { continue };
             out.push((mailbox, serde_json::from_str(&blob).map_err(|e| e.to_string())?));
         }
         Ok((list, out))

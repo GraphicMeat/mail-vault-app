@@ -59,7 +59,34 @@ pub fn save_headers_at(conn: &Connection, account: &str, mailbox: &str, data: &s
     tx.commit().map_err(err)
 }
 
-pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Option<usize>) -> Result<Option<String>, String> {
+/// How `load_headers` orders the rows it hands back.
+///
+/// Mirrors `header_cache::load_from_sidecars`, the tree this table replaced.
+/// `Arrival` is uid DESC: an IMAP server issues uids in arrival order, so the
+/// newest message is the highest uid whatever its Date header says — a
+/// migrated copy, an APPEND, or a sender with a skewed clock still reads as
+/// the new arrival it is. `Date` is for Graph, whose uid is a listing
+/// POSITION and carries no age at all.
+///
+/// Dropping this distinction is what let a freshly appended message with an
+/// old INTERNALDATE sort to the bottom, so "the newest header" — the preview
+/// on a new-mail notification — named a message from months ago.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum HeaderOrder {
+    Arrival,
+    Date,
+}
+
+impl HeaderOrder {
+    fn clause(self) -> &'static str {
+        match self {
+            HeaderOrder::Arrival => "uid DESC",
+            HeaderOrder::Date => "sort_ms DESC, uid DESC",
+        }
+    }
+}
+
+pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Option<usize>, order: HeaderOrder) -> Result<Option<String>, String> {
     let meta: Option<String> = conn.query_row(
         "SELECT meta_json FROM header_cache_meta WHERE account_id=?1 AND mailbox_path=?2",
         params![account, mailbox], |r| r.get(0),
@@ -68,9 +95,10 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
         "SELECT count(*) FROM header_cache WHERE account_id=?1 AND mailbox_path=?2", params![account, mailbox], |r| r.get(0)
     ).map_err(err)?;
     if meta.is_none() && count == 0 { return Ok(None); }
-    let mut stmt = conn.prepare(
-        "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 ORDER BY sort_ms DESC, uid DESC LIMIT ?3"
-    ).map_err(err)?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT header_json FROM header_cache WHERE account_id=?1 AND mailbox_path=?2 ORDER BY {} LIMIT ?3",
+        order.clause(),
+    )).map_err(err)?;
     let take = limit.map(|n| n as i64).unwrap_or(-1);
     let rows = stmt.query_map(params![account, mailbox, take], |r| r.get::<_, String>(0)).map_err(err)?
         .collect::<Result<Vec<_>, _>>().map_err(err)?;
@@ -83,7 +111,8 @@ pub fn load_headers(conn: &Connection, account: &str, mailbox: &str, limit: Opti
 }
 
 pub fn load_meta(conn: &Connection, account: &str, mailbox: &str) -> Result<Option<String>, String> {
-    let Some(text) = load_headers(conn, account, mailbox, Some(0))? else { return Ok(None) };
+    // No rows come back at all, so the order is irrelevant here.
+    let Some(text) = load_headers(conn, account, mailbox, Some(0), HeaderOrder::Arrival)? else { return Ok(None) };
     let mut value: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     value.as_object_mut().map(|m| m.remove("emails"));
     serde_json::to_string(&value).map(Some).map_err(|e| e.to_string())

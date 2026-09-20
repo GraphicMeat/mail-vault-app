@@ -40,6 +40,21 @@ pub fn sidecar_dir(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
     root.join("email_cache").join(cache_base_name(account_id, mailbox))
 }
 
+/// Whether this mailbox's uids track arrival order.
+///
+/// True for IMAP, where the server issues uids in arrival order, so the
+/// highest uid is the newest message whatever its Date header says. False for
+/// Graph, whose uid is a listing POSITION handed out by the seed allocator —
+/// there the header date is the only age there is. `graph_id_map.json`'s
+/// presence is the marker; the same allocator writes it.
+///
+/// Reads the sidecar tree, which is also the SQLite header cache's answer
+/// (`custody::cache::load_headers` takes the order from this): if that tree
+/// ever goes away, this silently answers "IMAP" for a Graph mailbox.
+pub fn uid_tracks_arrival(root: &Path, account_id: &str, mailbox: &str) -> bool {
+    !sidecar_dir(root, account_id, mailbox).join(crate::graph_ledger::LEDGER_FILE).exists()
+}
+
 /// `name` is a header sidecar (`<uid>.json`, uid fitting a `u32`) iff this
 /// returns its uid. Neither `_meta.json` nor `graph_id_map.json` parses, so
 /// every counter and lister built on this excludes both without a
