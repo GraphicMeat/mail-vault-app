@@ -4,6 +4,7 @@ import {
   Server, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { PendingActionsSettings } from './PendingActionsSettings';
 
 export function DaemonSettings() {
   const t = useT();
@@ -71,6 +72,9 @@ export function DaemonSettings() {
           {isDemo ? 'Check browser simulation' : checking ? t('settings.daemon.checking') : t('settings.daemon.testConnection')}
         </button>
       </div>
+
+      {/* What the helper still owes the server */}
+      {!isDemo && <PendingActionsSettings />}
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">

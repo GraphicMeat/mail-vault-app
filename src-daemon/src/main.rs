@@ -99,17 +99,14 @@ fn resolve_vault_location(app_dir: &PathBuf) -> VaultLocationInfo {
         is_custom: false,
         last_error: None,
     };
-    let meta = match std::fs::read_to_string(app_dir.join("vault-meta.json")) {
-        Ok(m) => m,
-        Err(_) => return default(),
+    // `app.db`'s `vault` slot — the app writes it when the user relocates the
+    // vault (it was `vault-meta.json`, which `app_db`'s import retires).
+    let path = match mailvault_core::app_db::with(app_dir, |conn| {
+        Ok(mailvault_core::app_db::locations::display_path(conn, "vault"))
+    }) {
+        Ok(Some(p)) => p,
+        _ => return default(),
     };
-    let path = match serde_json::from_str::<serde_json::Value>(&meta) {
-        Ok(v) => v["displayPath"].as_str().unwrap_or("").to_string(),
-        Err(_) => return default(),
-    };
-    if path.is_empty() {
-        return default();
-    }
     let dir = PathBuf::from(&path);
     // Task 2.5 (deviation 6): the same "does this look like a vault" rule the
     // app uses, so the two processes never disagree about a folder that holds
@@ -390,6 +387,7 @@ async fn daemon_main() {
 
     let custody = custody::CustodyState::default();
     sync_eng.attach_custody_db(Arc::clone(&custody.db));
+    contacts.attach_db(Arc::clone(&custody.db));
     let state = Arc::new(server::DaemonState {
         token,
         data_dir: mail_dir.clone(),
@@ -782,8 +780,15 @@ mod tests {
 
         flush_contacts_if_open(&state);
 
-        assert!(
-            !mail.join("contacts_index").join("acc1.json").exists(),
+        let stored = |state: &server::DaemonState| {
+            crate::custody::with_conn(state, |c| {
+                Ok(mailvault_core::custody::contacts::load(c, "acc1").len())
+            })
+            .unwrap_or(0)
+        };
+        assert_eq!(
+            stored(&state),
+            0,
             "a flush while the vault is closed for a move must not write into the old root"
         );
 
@@ -792,7 +797,7 @@ mod tests {
         state.vault_closed.store(false, std::sync::atomic::Ordering::SeqCst);
         state.contacts.seed_dirty_for_test("acc1");
         flush_contacts_if_open(&state);
-        assert!(mail.join("contacts_index").join("acc1.json").exists());
+        assert_eq!(stored(&state), 1);
 
         let _ = std::fs::remove_dir_all(&mail);
         let _ = std::fs::remove_dir_all(&app);

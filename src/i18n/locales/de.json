@@ -2425,5 +2425,14 @@
   "insights.chart.omitted_other": "{{count}} Absender stehen in der Liste unter der Karte.",
   "insights.messageChanged": "Diese Nachricht wurde seit dem Laden der Einblicke geändert. Aktualisiere die Einblicke und versuche es erneut.",
   "insights.messageUnavailable": "Keine lesbare Kopie dieser Nachricht ist verfügbar. Aktualisiere die Einblicke und versuche es erneut.",
-  "searchIndex.recoveryFailed": "Der Suchindex konnte nicht repariert werden. Prüfe, ob der Tresor verfügbar ist, und versuche es erneut."
+  "searchIndex.recoveryFailed": "Der Suchindex konnte nicht repariert werden. Prüfe, ob der Tresor verfügbar ist, und versuche es erneut.",
+  "settings.pendingActions.title": "Nicht abgeschlossene Serveraktionen",
+  "settings.pendingActions.blurb": "Löschungen, Verschiebungen und Markierungsänderungen, die Ihr Server noch nicht angenommen hat. MailVault versucht es weiter; brechen Sie ab, was schon lange fehlschlägt.",
+  "settings.pendingActions.empty": "Es wartet nichts auf den Versand.",
+  "settings.pendingActions.retryNow": "Jetzt erneut versuchen",
+  "settings.pendingActions.queuedAt": "In Warteschlange seit {{date}}",
+  "settings.pendingActions.opDelete": "Vom Server löschen",
+  "settings.pendingActions.opMove": "In anderen Ordner verschieben",
+  "settings.pendingActions.opFlag": "Markierungsänderung",
+  "settings.pendingActions.opOther": "Serveraktion"
 }

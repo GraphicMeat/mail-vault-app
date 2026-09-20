@@ -92,7 +92,21 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 let rows = |account: &str| -> Result<Vec<(String, Value)>, String> {
                     custody::with_conn(&state, |c| mailvault_core::custody::entries::entries_for_account(c, account))
                 };
-                match state.insights.begin_at(&root, &rows, &configured, &account_ids, &gen_fn) {
+                let headers = |account: &str| -> Result<(Option<Value>, Vec<(String, Value)>), String> {
+                    custody::with_conn(&state, |c| {
+                        use mailvault_core::custody::cache;
+                        let list = cache::load_mailboxes(c, account)?
+                            .and_then(|raw| serde_json::from_str::<Value>(&raw).ok());
+                        let mut out = Vec::new();
+                        for (_, mailbox) in cache::mailboxes_with_headers(c, Some(account))? {
+                            let Some(blob) = cache::load_headers(c, account, &mailbox, None)? else { continue };
+                            let value: Value = serde_json::from_str(&blob).map_err(|e| e.to_string())?;
+                            out.push((mailbox, value));
+                        }
+                        Ok((list, out))
+                    })
+                };
+                match state.insights.begin_at(&root, &rows, &headers, &configured, &account_ids, &gen_fn) {
                     Ok(v) => ok(v),
                     Err(e) => err(e),
                 }
@@ -164,15 +178,20 @@ mod tests {
     /// function to write a fetched header), not a hand-rolled `fs::write`,
     /// so a test using this genuinely pins "the daemon writes a header
     /// sidecar", not a simulation of it.
-    fn seed_account(vault: &Path, account: &str, mailbox: &str, uid: u32) {
-        std::fs::create_dir_all(vault.join("mailboxes").join(account)).unwrap();
-        std::fs::write(
-            vault.join("mailboxes").join(account).join("mailboxes.json"),
-            json!({"mailboxes":[{"path": mailbox}]}).to_string(),
-        )
-        .unwrap();
-        let data = json!({"emails":[{"uid": uid, "subject": "v1", "from": {"address": "a@example.test"}}]}).to_string();
-        mailvault_core::header_cache::save(vault, account, mailbox, &data).unwrap();
+    fn seed_account(state: &Arc<DaemonState>, account: &str, mailbox: &str, uid: u32) {
+        // Through the state's own connection: `custody.db` is EXCLUSIVE, so a
+        // second opener in this process would only ever fail BUSY.
+        custody::with_conn(state, |c| {
+            mailvault_core::custody::cache::save_mailboxes(
+                c,
+                account,
+                &json!({"mailboxes":[{"path": mailbox}]}).to_string(),
+            )?;
+            let data =
+                json!({"emails":[{"uid": uid, "subject": "v1", "from": {"address": "a@example.test"}}]}).to_string();
+            mailvault_core::custody::cache::save_headers(c, account, mailbox, &data)
+        })
+        .expect("seed reaches the open custody store");
     }
 
     async fn call(s: &Arc<DaemonState>, method: &str, params: Value) -> RpcResponse {
@@ -187,9 +206,9 @@ mod tests {
 
     #[tokio::test]
     async fn insights_begin_snapshot_reaches_this_router_through_handle_request() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let resp = handle_request_for_test(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await;
         assert_eq!(resp.result.unwrap()["ok"], true);
     }
@@ -198,9 +217,9 @@ mod tests {
 
     #[tokio::test]
     async fn begin_snapshot_success_adds_ok_true_to_todays_shape() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let v = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
         assert_eq!(v["ok"], true);
         assert!(v["snapshotId"].is_string(), "{v}");
@@ -210,9 +229,9 @@ mod tests {
 
     #[tokio::test]
     async fn read_page_success_adds_ok_true_to_todays_shape() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
         let id = begin["snapshotId"].as_str().unwrap().to_string();
         let v = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
@@ -222,9 +241,9 @@ mod tests {
 
     #[tokio::test]
     async fn release_snapshot_success_shape() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
         let id = begin["snapshotId"].as_str().unwrap().to_string();
         let r = call(&s, "insights_release_snapshot", json!({"snapshotId": id})).await;
@@ -277,9 +296,9 @@ mod tests {
 
     #[tokio::test]
     async fn read_page_invalid_cursor_wire_shape() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
         let id = begin["snapshotId"].as_str().unwrap().to_string();
         let first = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
@@ -300,14 +319,14 @@ mod tests {
 
     #[tokio::test]
     async fn read_page_snapshot_stale_wire_shape_carries_coverage() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
         let id = begin["snapshotId"].as_str().unwrap().to_string();
         // Mutate the same watched header sidecar: the file-stamp staleness
         // check must catch this.
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         let v = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
         assert_eq!(v["ok"], false);
         assert_eq!(v["error"]["code"], "snapshotStale");
@@ -317,34 +336,35 @@ mod tests {
     // ── Step 5's required mechanism-pinning test ──────────────────────────
 
     /// A snapshot open while the daemon writes a header sidecar under a
-    /// watched path is invalidated. Uses `mailvault_core::header_cache::save`
-    /// (the real function `sync_engine` calls to write a fetched header),
-    /// rather than a raw `fs::write`, so this pins the actual daemon write
-    /// path against silently no longer being seen as a real write by
-    /// Insights, the way inventory-backup-insights fact 11 warns a WAL
-    /// checkpoint now could for custody.
+    /// written path is invalidated. Uses `custody::cache::save_headers` (the
+    /// real function `sync_engine` calls to store a fetched header), rather
+    /// than a raw write, so this pins the actual daemon write path against
+    /// silently no longer being seen as a real write by Insights.
     #[tokio::test]
-    async fn a_snapshot_open_while_the_daemon_writes_a_header_sidecar_is_invalidated() {
-        let (vault, app_dir, s) = st(true);
+    async fn a_snapshot_open_while_the_daemon_caches_a_header_is_invalidated() {
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
+        custody::open_into(&s).expect("custody opens for a real mail_dir_ok vault");
 
         let begin = call(&s, "insights_begin_snapshot", json!({"accountIds": ["acc"]})).await.result.unwrap();
-        assert_eq!(begin["ok"], true);
+        assert_eq!(begin["ok"], true, "{begin}");
         let id = begin["snapshotId"].as_str().unwrap().to_string();
 
-        // The daemon writes the same sidecar again, in-process, the way
+        // The daemon caches the same header again, in-process, the way
         // `sync_engine` would on a re-fetch.
-        mailvault_core::header_cache::save(
-            vault.path(),
-            "acc",
-            "INBOX",
-            &json!({"emails":[{"uid":1,"subject":"changed by the daemon"}]}).to_string(),
-        )
+        custody::with_conn(&s, |c| {
+            mailvault_core::custody::cache::save_headers(
+                c,
+                "acc",
+                "INBOX",
+                &json!({"emails":[{"uid":1,"subject":"changed by the daemon"}]}).to_string(),
+            )
+        })
         .unwrap();
 
         let page = call(&s, "insights_read_page", json!({"snapshotId": id})).await.result.unwrap();
-        assert_eq!(page["ok"], false);
+        assert_eq!(page["ok"], false, "{page}");
         assert_eq!(page["error"]["code"], "snapshotStale");
     }
 
@@ -361,9 +381,9 @@ mod tests {
     /// paging stale rows.
     #[tokio::test]
     async fn a_route_level_custody_write_after_begin_is_seen_as_stale_through_the_real_store() {
-        let (vault, app_dir, s) = st(true);
+        let (_vault, app_dir, s) = st(true);
         set_accounts(&app_dir, &["acc"]);
-        seed_account(vault.path(), "acc", "INBOX", 1);
+        seed_account(&s, "acc", "INBOX", 1);
         custody::open_into(&s).expect("custody opens for a real mail_dir_ok vault");
         custody::with_conn(&s, |c| {
             mailvault_core::custody::entries::upsert(c, "acc", "Archive", &[json!({"uid": 9, "flags": []})]).map(|_| ())

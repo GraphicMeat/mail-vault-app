@@ -4,7 +4,7 @@ import * as db from '../db';
 import * as api from '../api';
 import { ensureFreshToken } from '../authUtils';
 import { isGraphAccount } from '../graphConfig';
-import { markServerDeleted, isCredentialsProblem } from './messageMutations';
+import { markServerDeleted } from './messageMutations';
 import { useConnectivityStore } from '../../stores/connectivityStore';
 
 /**
@@ -31,12 +31,24 @@ const log = (...args) => {
  * their rows move, vanish or change colour, so finishing the job is the only
  * outcome that matches what they were shown.
  *
- * Entries are cleared once attempted, whether or not the op succeeded: a uid
- * that fails twice will fail forever — the message is already gone, or the
- * mailbox is, or the UID space was reissued — and a journal that never drains
- * would re-attempt it on every launch for the life of the install. The one
- * exception is a credentials failure, which says nothing about the message and
- * everything about when we asked.
+ * Entries are cleared only when the op LANDS. A failure keeps its entry: the
+ * row it belongs to is already gone from the list, so dropping the entry left
+ * the server holding a message the app had shown as deleted with nothing
+ * anywhere to finish the job — a dead pooled socket was enough to lose a
+ * confirmed delete. A journal that never drains is the cost, and Settings ›
+ * Background Daemon is where a user cancels an entry that has been failing for
+ * too long. The reason is kept in memory (db.noteOpFailure) for that list.
+ *
+ * ponytail: unbounded retry, capped only by the user. An attempt counter in
+ * the entry (src-core/src/op_journal.rs) is the upgrade path if launches ever
+ * spend real time on ops that will never land.
+ *
+ * The keep-on-failure rule is applied to every op kind here, deliberately —
+ * a replay cannot tell which live path wrote an entry. The live paths differ:
+ * only delete keeps its row evicted and its entry queued when the server
+ * refuses (messageMutations). A refused move or flag still restores the row
+ * and clears its entry at the call site, so this only ever sees theirs when a
+ * session died before the round trip.
  */
 export async function replayOps({ reason = 'launch' } = {}) {
   const { useMailStore } = await import('../../stores/mailStore');
@@ -150,8 +162,11 @@ export async function replayOps({ reason = 'launch' } = {}) {
         failed++;
         errors.push(`${op} ${mailbox}/${uid}: ${message}`);
         log(`[replayOps] ${account.email} ${op} ${mailbox} uid ${uid} failed:`, message);
-        if (isCredentialsProblem(message)) kept++;
-        else answered.push(uid);
+        // Kept, whatever the reason: see the header. A credentials problem is
+        // simply the case where not even the next launch should read anything
+        // into the failure.
+        db.noteOpFailure({ op, accountId, mailbox, uid }, message);
+        kept++;
       }
     }
     if (answered.length) await db.clearOps({ op, accountId, mailbox, uids: answered, arg });
@@ -188,6 +203,19 @@ export async function replayOps({ reason = 'launch' } = {}) {
   return finish({ attempted, done: ok, failed, kept, errors });
 }
 
+// How often an online session re-attempts whatever is still owed.
+const RETRY_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * May the periodic tick replay right now? Exported because the interval it
+ * guards lives for the life of the process, which no test can hold still.
+ */
+export async function shouldRetryNow() {
+  if (!useConnectivityStore.getState().online) return false;
+  const { useMailStore } = await import('../../stores/mailStore');
+  return !useMailStore.getState().undo;
+}
+
 let _wired = false;
 
 /**
@@ -209,21 +237,37 @@ export function wireReplayOnReconnect() {
   let was = useConnectivityStore.getState().online;
   let timer = null;
   let running = false;
+  const run = async (reason) => {
+    if (running) return;
+    running = true;
+    try {
+      await replayOps({ reason });
+    } catch (e) {
+      log(`[replayOps] ${reason} replay failed:`, String(e?.message || e));
+    } finally {
+      running = false;
+    }
+  };
   useConnectivityStore.subscribe((s) => {
     const now = s.online;
     if (now && !was && !running) {
       clearTimeout(timer);
-      timer = setTimeout(async () => {
-        running = true;
-        try {
-          await replayOps({ reason: 'online' });
-        } catch (e) {
-          log('[replayOps] reconnect replay failed:', String(e?.message || e));
-        } finally {
-          running = false;
-        }
-      }, 2000);
+      timer = setTimeout(() => run('online'), 2000);
     }
     was = now;
   });
+  // A failure now keeps its entry, so "the link came back" is no longer the
+  // only thing that can unstick one: a provider that refused a delete for a
+  // minute would otherwise hold it until the next launch, with the row already
+  // gone from the list. Cheap — the journal is empty in the normal case, and
+  // replayOps returns on the first read.
+  //
+  // Never over a live undo offer. A replay that reads a non-empty journal
+  // withdraws the offer (see the clearUndo call above), and a permanently
+  // stuck entry — the case this whole feature exists to surface — makes the
+  // journal permanently non-empty. Without this guard the tick would take down
+  // the user's undo toast every five minutes for reasons that have nothing to
+  // do with the delete they just made. Skipping the tick is the right half to
+  // give up: the entry is already stuck, five more minutes costs nothing.
+  setInterval(async () => { if (await shouldRetryNow()) run('retry'); }, RETRY_INTERVAL_MS);
 }

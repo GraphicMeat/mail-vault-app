@@ -3,26 +3,24 @@
 use crate::classification;
 use crate::learning;
 use crate::server::DaemonState;
+use mailvault_core::custody::cache;
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 use tracing::{info, warn};
 
 /// Retrain from the current labels, then force-enqueue everything the user has
 /// not overridden. Split out of the handler so a test can await it.
 pub(crate) async fn reclassify_all(state: Arc<DaemonState>, account_id: String) {
-    // 1. Retrain, then read every cached header — both walk `email_cache`
-    // (one directory listing per mailbox plus a read per sidecar: 73k files
-    // on a real vault). This is a spawned task, so doing it inline parked a
-    // tokio worker for the whole walk. One `spawn_blocking` covers both:
-    // labels and the model live in the app dir, only the cached headers come
-    // from the (relocatable) vault.
+    // 1. Retrain, then read every cached header — both read the header cache.
+    // This is a spawned task, so doing it inline parked a tokio worker for
+    // the whole read. One `spawn_blocking` covers both: labels and the model
+    // live in the app dir, the cached headers in the vault's custody store.
     let emails = {
         let state = Arc::clone(&state);
         let account = account_id.clone();
         match tokio::task::spawn_blocking(move || {
-            retrain_model(&state.data_dir, &state.app_dir, &account);
-            load_emails_all_mailboxes(&state.data_dir, &account)
+            retrain_model(&state, &account);
+            load_emails_all_mailboxes(&state, &account)
         })
         .await
         {
@@ -61,9 +59,10 @@ pub(crate) async fn reclassify_all(state: Arc<DaemonState>, account_id: String) 
 }
 
 /// Retrain the Naive Bayes model using user overrides and local rules applied to cached emails.
-fn retrain_model(mail_dir: &Path, app_dir: &Path, account_id: &str) {
+fn retrain_model(state: &Arc<DaemonState>, account_id: &str) {
+    let app_dir = &state.app_dir;
     let classifications = classification::load_classifications(app_dir, account_id);
-    let emails = load_emails_all_mailboxes(mail_dir, account_id);
+    let emails = load_emails_all_mailboxes(state, account_id);
 
     // Build labeled data from user overrides and local rules
     let mut labeled: Vec<(classification::EmailForClassification, String)> = Vec::new();
@@ -121,7 +120,7 @@ pub(crate) async fn enqueue_for_classification(
     let emails = {
         let state = Arc::clone(&state);
         let account = account_id.to_string();
-        match tokio::task::spawn_blocking(move || load_emails_all_mailboxes(&state.data_dir, &account)).await {
+        match tokio::task::spawn_blocking(move || load_emails_all_mailboxes(&state, &account)).await {
             Ok(v) => v,
             Err(e) => {
                 warn!("[classification] cached-header read failed for {account_id}: {e}");
@@ -145,117 +144,78 @@ pub(crate) async fn enqueue_for_classification(
     );
 }
 
-/// Discover all cached mailboxes for an account and load emails from each.
+/// Every cached header this account has, across every mailbox, as
+/// classification input. Read from `custody.db` — it was one directory
+/// listing per mailbox plus a read per sidecar file (73k of them on a real
+/// vault).
 fn load_emails_all_mailboxes(
-    data_dir: &Path,
+    state: &Arc<DaemonState>,
     account_id: &str,
 ) -> Vec<classification::EmailForClassification> {
-    let cache_dir = data_dir.join("email_cache");
-    let prefix = format!(
-        "{}_",
-        account_id.replace(|c: char| !c.is_alphanumeric(), "_"),
-    );
-
-    let entries = match std::fs::read_dir(&cache_dir) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut all_emails = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !name.starts_with(&prefix) || !entry.path().is_dir() {
-            continue;
+    let read = crate::custody::with_conn(state, |conn| {
+        let mut out = Vec::new();
+        for (_, mailbox) in cache::mailboxes_with_headers(conn, Some(account_id))? {
+            for header in cache::all_headers(conn, account_id, &mailbox)? {
+                let mut email = email_from_header(&header);
+                // Tag each email with its mailbox so the snapshot records the
+                // correct folder.
+                email.mailbox = mailbox.clone();
+                out.push(email);
+            }
         }
-        // Extract mailbox name from dir name: {sanitized_account}_{sanitized_mailbox}
-        let mailbox = &name[prefix.len()..];
-        let mut emails = load_emails_for_classification(data_dir, account_id, mailbox);
-        // Tag each email with its mailbox so the snapshot records the correct folder
-        for email in &mut emails {
-            email.mailbox = mailbox.to_string();
+        Ok(out)
+    });
+    match read {
+        Ok(emails) => emails,
+        Err(e) => {
+            warn!("[classification] cached-header read failed for {account_id}: {e}");
+            Vec::new()
         }
-        all_emails.append(&mut emails);
     }
-
-    all_emails
 }
 
-/// Read cached email JSON files and convert to EmailForClassification.
-fn load_emails_for_classification(
-    data_dir: &Path,
-    account_id: &str,
-    mailbox: &str,
-) -> Vec<classification::EmailForClassification> {
-    let cache_dir = mailvault_core::header_cache::sidecar_dir(data_dir, account_id, mailbox);
+/// One cached header row → classification input.
+fn email_from_header(val: &serde_json::Value) -> classification::EmailForClassification {
+    let uid = val.get("uid").and_then(|v| v.as_u64()).unwrap_or(0);
+    let message_id = val.get("messageId").and_then(|v| v.as_str()).map(String::from);
+    let subject = val.get("subject").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    let date = val.get("date").and_then(|v| v.as_str()).unwrap_or("").to_string();
 
-    let entries = match std::fs::read_dir(&cache_dir) {
-        Ok(e) => e,
-        Err(_) => return Vec::new(),
-    };
+    // from is an object { name, address }
+    let from_addr = val.get("from").and_then(|f| f.get("address")).and_then(|v| v.as_str()).unwrap_or("");
+    let from_name = val.get("from").and_then(|f| f.get("name")).and_then(|v| v.as_str()).unwrap_or("");
+    let from = if from_name.is_empty() { from_addr.to_string() } else { format!("{} <{}>", from_name, from_addr) };
 
-    let mut emails = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        // `is_header_file` also excludes `graph_id_map.json` (the old
-        // `ends_with(".json") && != "_meta.json"` rule fed the Outlook uid
-        // ledger to the classifier as a uid-0 message — Task 2.3 review M7).
-        if mailvault_core::header_cache::is_header_file(&name).is_none() {
-            continue;
-        }
+    // reply_to is an object { name, address } — check if it differs from from
+    let reply_to_addr = val.get("replyTo").and_then(|r| r.get("address")).and_then(|v| v.as_str()).unwrap_or("");
+    let reply_to_differs = !reply_to_addr.is_empty() && !reply_to_addr.eq_ignore_ascii_case(from_addr);
 
-        let json = match std::fs::read_to_string(entry.path()) {
-            Ok(j) => j,
-            Err(_) => continue,
-        };
+    let to_count = val.get("to").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
+    let has_attachments = val.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false);
+    let size = val.get("size").and_then(|v| v.as_u64()).map(|s| s as u32);
+    let in_reply_to = val.get("inReplyTo").and_then(|v| v.as_str()).map(String::from);
+    let list_unsubscribe_val = val.get("listUnsubscribe").and_then(|v| v.as_str()).unwrap_or("");
+    let list_unsubscribe = !list_unsubscribe_val.is_empty();
+    let list_id = val.get("listId").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
+    let precedence = val.get("precedence").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
 
-        let val: serde_json::Value = match serde_json::from_str(&json) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-
-        let uid = val.get("uid").and_then(|v| v.as_u64()).unwrap_or(0);
-        let message_id = val.get("messageId").and_then(|v| v.as_str()).map(String::from);
-        let subject = val.get("subject").and_then(|v| v.as_str()).unwrap_or("").to_string();
-        let date = val.get("date").and_then(|v| v.as_str()).unwrap_or("").to_string();
-
-        // from is an object { name, address }
-        let from_addr = val.get("from").and_then(|f| f.get("address")).and_then(|v| v.as_str()).unwrap_or("");
-        let from_name = val.get("from").and_then(|f| f.get("name")).and_then(|v| v.as_str()).unwrap_or("");
-        let from = if from_name.is_empty() { from_addr.to_string() } else { format!("{} <{}>", from_name, from_addr) };
-
-        // reply_to is an object { name, address } — check if it differs from from
-        let reply_to_addr = val.get("replyTo").and_then(|r| r.get("address")).and_then(|v| v.as_str()).unwrap_or("");
-        let reply_to_differs = !reply_to_addr.is_empty() && !reply_to_addr.eq_ignore_ascii_case(from_addr);
-
-        let to_count = val.get("to").and_then(|v| v.as_array()).map(|a| a.len()).unwrap_or(0);
-        let has_attachments = val.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false);
-        let size = val.get("size").and_then(|v| v.as_u64()).map(|s| s as u32);
-        let in_reply_to = val.get("inReplyTo").and_then(|v| v.as_str()).map(String::from);
-        let list_unsubscribe_val = val.get("listUnsubscribe").and_then(|v| v.as_str()).unwrap_or("");
-        let list_unsubscribe = !list_unsubscribe_val.is_empty();
-        let list_id = val.get("listId").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
-        let precedence = val.get("precedence").and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(String::from);
-
-        emails.push(classification::EmailForClassification {
-            uid,
-            message_id,
-            subject,
-            from,
-            date,
-            body_preview: String::new(),
-            mailbox: String::new(),
-            to_count,
-            has_attachments,
-            size,
-            in_reply_to,
-            list_unsubscribe,
-            list_id,
-            precedence,
-            reply_to_differs,
-        });
+    classification::EmailForClassification {
+        uid,
+        message_id,
+        subject,
+        from,
+        date,
+        body_preview: String::new(),
+        mailbox: String::new(),
+        to_count,
+        has_attachments,
+        size,
+        in_reply_to,
+        list_unsubscribe,
+        list_id,
+        precedence,
+        reply_to_differs,
     }
-
-    emails
 }
 
 // ── Classification Worker ─────────────────────────────────────────────────
@@ -477,31 +437,38 @@ mod tests {
         Arc::new(|_| Vec::new())
     }
 
-    /// Task 2.3 review M7: this reader used to filter sidecars with
-    /// `ends_with(".json") && name != "_meta.json"`, which fed the Outlook uid
-    /// ledger to the classifier as a fabricated uid-0 message.
-    /// `header_cache::is_header_file` excludes both `graph_id_map.json` and
-    /// `_meta.json` without a name-literal special case.
+    /// The Outlook uid ledger used to sit beside the header sidecars and was
+    /// fed to the classifier as a fabricated uid-0 message (Task 2.3 review
+    /// M7). The headers are rows in `custody.db` now, so nothing in that
+    /// directory can be mistaken for one — and the reader takes only what the
+    /// header cache holds.
     #[test]
-    fn graph_id_map_and_meta_are_never_fed_to_the_classifier_as_a_message() {
-        let dir = scratch("classifier-graph-ledger");
-        let cache = dir.join("email_cache").join("acc1_INBOX");
-        std::fs::create_dir_all(&cache).unwrap();
-        std::fs::write(
-            cache.join("7.json"),
-            json!({
+    fn only_cached_headers_are_fed_to_the_classifier() {
+        let dir = scratch("classifier-rows");
+        let conn = mailvault_core::custody::db::open(&dir).unwrap();
+        mailvault_core::custody::cache::save_headers(
+            &conn,
+            "acc1",
+            "INBOX",
+            &json!({"totalEmails": 1, "emails": [{
                 "uid": 7, "subject": "real", "from": {"address": "a@b.test"},
                 "date": "2026-08-01T00:00:00Z", "to": [], "hasAttachments": false,
-            })
+            }]})
             .to_string(),
         )
         .unwrap();
+        // The ledger still lives in the sidecar directory; it is not a message.
+        let cache = dir.join("email_cache").join("acc1_INBOX");
+        std::fs::create_dir_all(&cache).unwrap();
         std::fs::write(cache.join("graph_id_map.json"), json!({"7": "g-1"}).to_string()).unwrap();
-        std::fs::write(cache.join("_meta.json"), json!({"totalEmails": 1}).to_string()).unwrap();
 
-        let emails = load_emails_for_classification(&dir, "acc1", "INBOX");
+        let emails: Vec<_> = mailvault_core::custody::cache::all_headers(&conn, "acc1", "INBOX")
+            .unwrap()
+            .iter()
+            .map(email_from_header)
+            .collect();
 
-        assert_eq!(emails.len(), 1, "only the real sidecar is a message");
+        assert_eq!(emails.len(), 1, "only the cached header is a message");
         assert_eq!(emails[0].uid, 7);
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -563,9 +530,14 @@ mod tests {
     async fn a_failed_flush_keeps_its_messages_until_a_later_one_succeeds() {
         let mail_dir = scratch("flush-fail-mail");
         let app_dir = scratch("flush-fail-app");
-        // A FILE where the classifications directory belongs: create_dir_all,
-        // and so every save, fails.
-        std::fs::write(app_dir.join("classifications"), b"not a directory").unwrap();
+        // A read-only app dir: `app.db` cannot be created, so every save fails.
+        // Set before the state is built, or the store would already be open.
+        let mut perms = std::fs::metadata(&app_dir).unwrap().permissions();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o500);
+            std::fs::set_permissions(&app_dir, perms.clone()).unwrap();
+        }
 
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
         let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), no_rules()));
@@ -588,7 +560,11 @@ mod tests {
         );
 
         // Give the directory back and hand the worker one more message.
-        std::fs::remove_file(app_dir.join("classifications")).unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o700);
+            std::fs::set_permissions(&app_dir, perms).unwrap();
+        }
         state
             .classification
             .enqueue("acc1", vec![header(3)], classification::QueueTier::New)
@@ -614,9 +590,9 @@ mod tests {
     }
 
     /// The "already classified?" check used to re-read and re-parse the whole
-    /// account file for every popped item. Proof that it now reads once: make
-    /// the file unreadable after the worker has warmed its copy, then hand it a
-    /// message it has already seen. A worker that re-reads sees an empty file
+    /// account's records for every popped item. Proof that it now reads once:
+    /// empty the account after the worker has warmed its copy, then hand it a
+    /// message it has already seen. A worker that re-reads sees nothing stored
     /// and classifies the message again — from the new, differently-classified
     /// body — and its flush writes only what it just did.
     #[tokio::test]
@@ -639,13 +615,12 @@ mod tests {
         assert_eq!(saved.len(), 3);
         assert_eq!(saved["<m1@t>"].category, "personal");
 
-        // Corrupt the file. load_classifications answers "nothing classified"
-        // for it (unwrap_or_default), so it also defeats the enqueue-side dedup
-        // and <m1@t> reaches the worker a second time.
-        std::fs::write(
-            app_dir.join("classifications").join("acc1.json"),
-            b"{not json",
-        )
+        // Drop the stored rows. `load_classifications` answers "nothing
+        // classified" for the account, which defeats the enqueue-side dedup
+        // and lets <m1@t> reach the worker a second time.
+        mailvault_core::app_db::with(&app_dir, |c| {
+            mailvault_core::app_db::classify::replace_account(c, "acc1", &[])
+        })
         .unwrap();
 
         let promotional = classification::EmailForClassification {
@@ -664,7 +639,7 @@ mod tests {
                 classification::QueueTier::New,
             )
             .await;
-        assert_eq!(queued, 3, "the corrupt file hides all three from the enqueue check");
+        assert_eq!(queued, 3, "the emptied account hides all three from the enqueue check");
 
         let progress = wait_for(&state, |p| {
             p.classified == 6 && p.status == classification::PipelineStatus::Complete
@@ -675,12 +650,12 @@ mod tests {
         let saved = classification::load_classifications(&app_dir, "acc1");
         assert_eq!(
             saved["<m1@t>"].category, "personal",
-            "the worker knew <m1@t> was classified without re-reading the file"
+            "the worker knew <m1@t> was classified without re-reading the store"
         );
         assert_eq!(
             saved.len(),
             5,
-            "the flush writes what the worker knows, so the corrupt file loses nothing"
+            "the flush writes what the worker knows, so the emptied account loses nothing"
         );
         assert!(saved.contains_key("<m4@t>") && saved.contains_key("<m5@t>"));
 
@@ -745,24 +720,27 @@ mod tests {
         let app_dir = scratch("reclassify-app");
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
 
-        // Eight cached headers in the vault, every one of them a newsletter by
-        // header cues so bootstrap labelling would also fire.
-        let cache = mail_dir.join("email_cache").join("acc1_INBOX");
-        std::fs::create_dir_all(&cache).unwrap();
-        for uid in 1..=8u64 {
-            let sidecar = json!({
-                "uid": uid,
-                "messageId": format!("<m{uid}@t>"),
-                "subject": format!("Weekly digest {uid}"),
-                "from": {"name": "List", "address": "news@list.test"},
-                "date": format!("2026-08-0{uid}T00:00:00Z"),
-                "to": [{"address": "me@t"}],
-                "hasAttachments": false,
-                "listUnsubscribe": "<mailto:u@list.test>",
-                "listId": "<digest.list.test>",
-            });
-            std::fs::write(cache.join(format!("{uid}.json")), sidecar.to_string()).unwrap();
-        }
+        // Eight cached headers in the vault's store, every one of them a
+        // newsletter by header cues so bootstrap labelling would also fire.
+        let emails: Vec<_> = (1..=8u64)
+            .map(|uid| {
+                json!({
+                    "uid": uid,
+                    "messageId": format!("<m{uid}@t>"),
+                    "subject": format!("Weekly digest {uid}"),
+                    "from": {"name": "List", "address": "news@list.test"},
+                    "date": format!("2026-08-0{uid}T00:00:00Z"),
+                    "to": [{"address": "me@t"}],
+                    "hasAttachments": false,
+                    "listUnsubscribe": "<mailto:u@list.test>",
+                    "listId": "<digest.list.test>",
+                })
+            })
+            .collect();
+        crate::custody::with_conn(&state, |c| {
+            mailvault_core::custody::cache::save_headers(c, "acc1", "INBOX", &json!({"emails": emails}).to_string())
+        })
+        .unwrap();
 
         // Five user overrides in the APP dir — both the label source for the
         // retrain and the set that must survive the reclassify.
@@ -787,11 +765,11 @@ mod tests {
         reclassify_all(Arc::clone(&state), "acc1".to_string()).await;
 
         assert!(
-            app_dir.join("classification_models").join("acc1.json").exists(),
-            "the retrained model must land in the app dir, where the worker loads it"
+            classification::load_model(&app_dir, "acc1").is_some(),
+            "the retrained model must land in the app store, where the worker loads it"
         );
         assert!(
-            !mail_dir.join("classification_models").exists(),
+            !mail_dir.join("app.db").exists(),
             "nothing about the model belongs in the relocatable vault"
         );
         assert_eq!(

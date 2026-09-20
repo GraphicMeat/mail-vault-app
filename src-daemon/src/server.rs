@@ -528,7 +528,18 @@ impl DaemonState {
         );
         let events = crate::events::EventBus::new(crate::events::CAPACITY);
         let custody = crate::custody::CustodyState::default();
+        // Production opens custody at startup, before the socket is bound, and
+        // the header cache lives in it — a state with it closed cannot cache a
+        // sync or report one. `open_into` drops whatever is installed before
+        // it opens, so a test that calls it later still gets a clean open.
+        if mail_dir_ok {
+            if let Ok(conn) = mailvault_core::custody::db::open(&mail_dir) {
+                *mailvault_core::custody::lock(&custody.db) = Some(conn);
+                *custody.root.lock().unwrap_or_else(|p| p.into_inner()) = Some(mail_dir.clone());
+            }
+        }
         sync_engine.attach_custody_db(Arc::clone(&custody.db));
+        contacts.attach_db(Arc::clone(&custody.db));
         Arc::new(DaemonState {
             net,
             idle,

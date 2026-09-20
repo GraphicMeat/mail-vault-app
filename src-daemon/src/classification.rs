@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::fs;
 use std::path::{Path, PathBuf};
 use tokio::sync::{Mutex, Notify};
 use tracing::{info, warn};
@@ -75,31 +74,33 @@ pub struct EmailForClassification {
 
 // ── Classification Storage ─────────────────────────────────────────────────
 
-fn classifications_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("classifications")
-}
-
-fn classifications_path(data_dir: &Path, account_id: &str) -> PathBuf {
-    classifications_dir(data_dir).join(format!("{}.json", account_id))
-}
+use mailvault_core::app_db::{classify as store, with as with_app_db};
 
 /// Load all classifications for an account.
 pub fn load_classifications(
     data_dir: &Path,
     account_id: &str,
 ) -> HashMap<String, EmailClassification> {
-    let path = classifications_path(data_dir, account_id);
-    if !path.exists() {
-        return HashMap::new();
-    }
-
-    match fs::read_to_string(&path) {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
+    match with_app_db(data_dir, |conn| store::load(conn, account_id)) {
+        Ok(rows) => rows
+            .into_iter()
+            .filter_map(|(key, json)| serde_json::from_str(&json).ok().map(|v| (key, v)))
+            .collect(),
         Err(e) => {
             warn!("Failed to read classifications for {}: {}", account_id, e);
             HashMap::new()
         }
     }
+}
+
+fn encode(all: &HashMap<String, EmailClassification>) -> Result<Vec<(String, String)>, String> {
+    all.iter()
+        .map(|(key, entry)| {
+            serde_json::to_string(entry)
+                .map(|json| (key.clone(), json))
+                .map_err(|e| format!("Failed to serialize: {}", e))
+        })
+        .collect()
 }
 
 /// Save classifications for an account (merges with existing).
@@ -108,14 +109,11 @@ pub fn save_classifications(
     account_id: &str,
     new_entries: &HashMap<String, EmailClassification>,
 ) -> Result<(), String> {
-    let dir = classifications_dir(data_dir);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-
     let mut existing = load_classifications(data_dir, account_id);
-    // A user override in the file outranks anything automatic arriving after
-    // it: the worker batches its saves, so a batch that classified the message
-    // before the override landed would otherwise undo it on flush. An incoming
-    // override still replaces whatever is there.
+    // A user override already stored outranks anything automatic arriving
+    // after it: the worker batches its saves, so a batch that classified the
+    // message before the override landed would otherwise undo it on flush. An
+    // incoming override still replaces whatever is there.
     let incoming: Vec<(String, EmailClassification)> = new_entries
         .iter()
         .filter(|(mid, entry)| {
@@ -126,11 +124,8 @@ pub fn save_classifications(
         .collect();
     existing.extend(incoming);
 
-    let json = serde_json::to_string_pretty(&existing)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-
-    let path = classifications_path(data_dir, account_id);
-    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
+    let rows = encode(&existing)?;
+    with_app_db(data_dir, |conn| store::replace_account(conn, account_id, &rows))?;
 
     info!(
         "Saved {} classifications for {} (total: {})",
@@ -141,25 +136,15 @@ pub fn save_classifications(
     Ok(())
 }
 
-/// Save a single classification result (append to existing file).
+/// Save a single classification result.
 pub fn save_single_classification(
     data_dir: &Path,
     account_id: &str,
     message_id: &str,
     classification: &EmailClassification,
 ) -> Result<(), String> {
-    let dir = classifications_dir(data_dir);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-
-    let mut existing = load_classifications(data_dir, account_id);
-    existing.insert(message_id.to_string(), classification.clone());
-
-    let json = serde_json::to_string_pretty(&existing)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-
-    let path = classifications_path(data_dir, account_id);
-    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
-    Ok(())
+    let json = serde_json::to_string(classification).map_err(|e| format!("Failed to serialize: {}", e))?;
+    with_app_db(data_dir, |conn| store::put(conn, account_id, message_id, &json))
 }
 
 /// Build summary from pre-loaded classifications (avoids double read).
@@ -227,12 +212,8 @@ pub fn override_classification(
 
     all.insert(message_id.to_string(), updated.clone());
 
-    let dir = classifications_dir(data_dir);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create dir: {}", e))?;
-    let json = serde_json::to_string_pretty(&all)
-        .map_err(|e| format!("Failed to serialize: {}", e))?;
-    let path = classifications_path(data_dir, account_id);
-    mailvault_core::fsx::write_atomic(&path, json.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
+    let rows = encode(&all)?;
+    with_app_db(data_dir, |conn| store::replace_account(conn, account_id, &rows))?;
 
     Ok(updated)
 }
@@ -255,20 +236,6 @@ pub struct QueueItem {
     pub message_id: String,
     pub tier: QueueTier,
     pub email: EmailForClassification,
-}
-
-/// Persistent on-disk representation of the queue.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-struct PersistedQueue {
-    items: Vec<QueueItem>,
-}
-
-fn queue_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("classification_queue")
-}
-
-fn queue_path(data_dir: &Path) -> PathBuf {
-    queue_dir(data_dir).join("queue.json")
 }
 
 // ── Classification Pipeline State ──────────────────────────────────────────
@@ -484,41 +451,29 @@ impl ClassificationState {
     }
 
     pub fn persist_queue_locked(&self, queue: &VecDeque<QueueItem>) {
-        let persisted = PersistedQueue {
-            items: queue.iter().cloned().collect(),
-        };
-        let dir = queue_dir(&self.data_dir);
-        if fs::create_dir_all(&dir).is_err() {
-            return;
-        }
-        let path = queue_path(&self.data_dir);
-        if let Ok(json) = serde_json::to_string(&persisted) {
-            let _ = mailvault_core::fsx::write_atomic(&path, json.as_bytes());
-        }
+        let rows: Vec<(String, String)> = queue
+            .iter()
+            .filter_map(|item| serde_json::to_string(item).ok().map(|json| (item.message_id.clone(), json)))
+            .collect();
+        let _ = with_app_db(&self.data_dir, |conn| store::queue_replace(conn, &rows));
     }
 }
 
 fn load_persisted_queue(data_dir: &Path) -> (VecDeque<QueueItem>, HashSet<String>) {
-    let path = queue_path(data_dir);
-    if !path.exists() {
+    let Ok(rows) = with_app_db(data_dir, |conn| Ok(store::queue_load(conn))) else {
         return (VecDeque::new(), HashSet::new());
+    };
+    let mut queue = VecDeque::new();
+    let mut ids = HashSet::new();
+    for (key, json) in rows {
+        let Ok(item) = serde_json::from_str::<QueueItem>(&json) else { continue };
+        ids.insert(key);
+        queue.push_back(item);
     }
-    match fs::read_to_string(&path) {
-        Ok(json) => {
-            if let Ok(persisted) = serde_json::from_str::<PersistedQueue>(&json) {
-                let ids: HashSet<String> = persisted
-                    .items
-                    .iter()
-                    .map(|item| item.message_id.clone())
-                    .collect();
-                let queue: VecDeque<QueueItem> = persisted.items.into();
-                info!("[queue] Restored {} items from persisted queue", queue.len());
-                return (queue, ids);
-            }
-            (VecDeque::new(), HashSet::new())
-        }
-        Err(_) => (VecDeque::new(), HashSet::new()),
+    if !queue.is_empty() {
+        info!("[queue] Restored {} items from the persisted queue", queue.len());
     }
+    (queue, ids)
 }
 
 // ── Background Worker ─────────────────────────────────────────────────────
@@ -848,26 +803,14 @@ pub struct NaiveBayesModel {
     pub correction_count_at_last_train: usize,
 }
 
-fn models_dir(data_dir: &Path) -> PathBuf {
-    data_dir.join("classification_models")
-}
-
-fn model_path(data_dir: &Path, account_id: &str) -> PathBuf {
-    models_dir(data_dir).join(format!("{}.json", account_id))
-}
-
 pub fn load_model(data_dir: &Path, account_id: &str) -> Option<NaiveBayesModel> {
-    let path = model_path(data_dir, account_id);
-    let json = fs::read_to_string(&path).ok()?;
+    let json = with_app_db(data_dir, |conn| Ok(store::load_model(conn, account_id))).ok()??;
     serde_json::from_str(&json).ok()
 }
 
 pub fn save_model(data_dir: &Path, account_id: &str, model: &NaiveBayesModel) -> Result<(), String> {
-    let dir = models_dir(data_dir);
-    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create models dir: {}", e))?;
     let json = serde_json::to_string(model).map_err(|e| format!("Failed to serialize model: {}", e))?;
-    mailvault_core::fsx::write_atomic(&model_path(data_dir, account_id), json.as_bytes())
-        .map_err(|e| format!("Failed to write model: {}", e))
+    with_app_db(data_dir, |conn| store::save_model(conn, account_id, &json))
 }
 
 /// Tokenize an email into prefixed feature tokens for Naive Bayes.
@@ -1194,6 +1137,7 @@ fn match_pattern(pattern: &RulePattern, email: &EmailForClassification) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn test_dir(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("mailvault-test-classify-{}-{}", name, uuid::Uuid::new_v4()))

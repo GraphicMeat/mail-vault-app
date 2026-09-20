@@ -51,9 +51,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| {
-                        daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))?;
-                        header_cache::save(root, &account_id, &mailbox, &data)
+                    with_vault_write(&state, |_root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))
                     }).map(|_| Value::Null)
                 })
                 .await
@@ -163,9 +162,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| {
-                        daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))?;
-                        header_cache::save_mailbox_cache(root, &account_id, &data)
+                    with_vault_write(&state, |_root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))
                     }).map(|_| Value::Null)
                 })
                 .await
@@ -178,9 +176,16 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    vault_root(&state)?;
-                    daemon_custody::with_conn(&state, |c| sql_cache::load_mailboxes(c, &account_id))
-                        .map(|v| v.map_or(Value::Null, Value::String))
+                    let root = vault_root(&state)?;
+                    if let Some(data) = daemon_custody::with_conn(&state, |c| sql_cache::load_mailboxes(c, &account_id))? {
+                        return Ok(Value::String(data));
+                    }
+                    // Nothing stored: move the pre-SQL `mailboxes.json` in, once.
+                    let Some(data) = header_cache::take_legacy_mailbox_cache(&root, &account_id) else {
+                        return Ok(Value::Null);
+                    };
+                    daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))?;
+                    Ok(Value::String(data))
                 })
                 .await
                 .and_then(|r| r),
@@ -194,7 +199,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 blocking(move || -> Result<Value, String> {
                     with_vault_write(&state, |root| {
                         daemon_custody::with_conn(&state, |c| sql_cache::delete_mailboxes(c, &account_id))?;
-                        header_cache::delete_mailbox_cache(root, &account_id)
+                        header_cache::delete_legacy_mailbox_cache(root, &account_id)
                     }).map(|_| Value::Null)
                 })
                 .await
@@ -337,10 +342,10 @@ mod tests {
 
     #[tokio::test]
     async fn clear_email_cache_removes_a_saved_mailbox() {
-        let (t, s) = st(true);
+        let (_t, s) = st(true);
         let data = json!({"emails": [{"uid": 1}], "totalEmails": 1}).to_string();
         call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": data})).await;
-        assert!(t.path().join("email_cache").exists());
+        assert!(call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await.result.unwrap().is_string());
         assert_eq!(call(&s, "clear_email_cache", json!({"accountId": Value::Null, "mailbox": Value::Null})).await.result, Some(Value::Null));
         assert_eq!(call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await.result, Some(Value::Null));
     }

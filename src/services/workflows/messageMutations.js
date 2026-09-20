@@ -9,6 +9,7 @@ import { isGraphAccount, graphMessageToEmail } from '../graphConfig';
 import { resolveGraphMessageId } from '../cacheManager';
 import { _resolveUnifiedContext, requireUnifiedContext, _selKey, _parseSelKey, spansMailboxes, resolveEmailLocation, emailKey, emailScopeKey, selectionKey, pruneSelectedThread, nextAfterRemoval } from '../../stores/slices/unifiedHelpers';
 import { filterUnread } from '../../utils/emailParser';
+import { retryOnce } from './mailboxTree';
 import {
   bumpFlagChangeCounter, addArchivedGroupUid, setArchivedGroup, deriveArchivedUnion, mergeArchivedGroup,
 } from '../../stores/slices/messageListSlice';
@@ -21,13 +22,12 @@ import { t as tr } from '../../i18n/index.js';
 
 
 /**
- * A failure that says "try again later", not "this mutation cannot be applied".
- *
- * The journal replay clears an entry once attempted — a uid that fails twice
- * fails forever — so this is the one class of failure that has to keep it.
+ * How long to wait before the one immediate re-send of a refused server
+ * mutation. A dead pooled socket is the common case here and it fails fast, so
+ * a short wait catches most of them inside the click the user already made.
+ * Everything that survives it is the journal's problem (see replayOps).
  */
-export const isCredentialsProblem = (message) =>
-  /password missing|no password|authentication|auth failed|login failed|credential/i.test(message || '');
+export const SERVER_RETRY_MS = 1500;
 
 
 /**
@@ -630,8 +630,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // that sits there unchanged while a modal spins is the same UI the bulk
   // paths already refuse to show (deleteSelectedFromServer, purgeEverywhere).
   // The tombstone stops a stale header cache re-rendering the row in the
-  // meantime; a failed delete lifts it again and reloads, which puts the row
-  // back — exactly the contract the bulk paths use.
+  // meantime. A failed delete only lifts it again where nothing was journalled
+  // (Graph, local-only); a journalled one keeps the row gone and leaves the
+  // entry for replayOps — see the catch below.
   const tombstone = `${accountId}|${mailbox}|${realUid}`;
   // The folder is part of the identity, exactly as in applyServerRemoval's
   // `sameMessage`: a thread and the unified list both merge INBOX with Sent,
@@ -718,6 +719,11 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
   // Put the row back and let the reconcile re-derive it. `totalEmails` is
   // untouched above — applyServerRemoval owns that decrement on the success
   // path, so a failure has nothing to restore there.
+  //
+  // ponytail: the search result evicted at the optimistic paint is NOT put
+  // back — `pruneSearchResults` is one-way for the run, same as the move path.
+  // Only the two unjournalled callers reach this now (Graph, local-only), and
+  // re-running the query brings the hit back.
   const restoreRow = () => {
     const ts = new Set(get().deleteTombstones);
     ts.delete(tombstone);
@@ -772,9 +778,9 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
           row: candidate, token: account.oauth2AccessToken,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdDelete'));
-        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId), { delayMs: SERVER_RETRY_MS });
       } else {
-        const res = await api.deleteEmail(account, realUid, mailbox);
+        const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         // Where it went, so a caller can offer an undo instead of a SEARCH:
         // both null for a permanent delete, and for a server that reported no
         // COPYUID — never a guessed uid.
@@ -789,6 +795,24 @@ export async function deleteEmailFromServer(uid, { skipRefresh = false, mailboxO
       console.log(`[deleteEmail] Successfully deleted UID ${realUid} from "${mailbox}"`);
     } catch (err) {
       console.error(`[deleteEmail] FAILED to delete UID ${realUid} from "${mailbox}":`, err);
+      // A journalled delete is not lost when the server refuses it. The entry
+      // is still on disk, so this takes the same shape as a delete made
+      // offline: the row stays gone — which is what the user was shown and
+      // what the search results already assume — and replayOps re-sends it on
+      // the next reconnect, retry tick or launch. Restoring the row instead
+      // threw away a confirmed delete over a dead socket, and left the evicted
+      // search hit disagreeing with the list for the rest of the run.
+      //
+      // Only where there IS an entry: a Graph delete is addressed by a
+      // per-session message id and a local-only row has no server copy, so
+      // neither journals anything a later launch could finish. Those keep the
+      // restore-and-throw contract, or the row would vanish for good with
+      // nothing anywhere owed.
+      if (journalled) {
+        db.noteOpFailure({ op: 'delete', accountId, mailbox, uid: realUid }, String(err?.message || err));
+        console.log(`[deleteEmail] UID ${realUid} stays queued — replayOps will retry it`);
+        return undefined;
+      }
       restoreRow();
       throw err;
     }
@@ -1778,6 +1802,9 @@ export async function deleteSelectedFromServer() {
   // Where each deleted message went, so a caller can offer an undo instead of
   // a SEARCH per uid. Same record shape as deleteEmailFromServer's.
   const deleted = [];
+  // `accountId|mailbox|uid` for every message the server refused. Their journal
+  // entries survive the clear below — they are the delete now.
+  const stillQueued = new Set();
 
   const invoke = window.__TAURI__?.core?.invoke;
 
@@ -1825,9 +1852,9 @@ export async function deleteSelectedFromServer() {
           row: emailObj, token: account.oauth2AccessToken,
         });
         if (!graphId) throw new Error(tr('errors.noGraphIdForUid', { uid: realUid }));
-        await api.graphDeleteMessage(account.oauth2AccessToken, graphId);
+        await retryOnce(() => api.graphDeleteMessage(account.oauth2AccessToken, graphId), { delayMs: SERVER_RETRY_MS });
       } else {
-        const res = await api.deleteEmail(account, realUid, mailbox);
+        const res = await retryOnce(() => api.deleteEmail(account, realUid, mailbox), { delayMs: SERVER_RETRY_MS });
         deleted.push({
           account, accountId, mailbox, uid: realUid,
           trash: res?.trash ?? null, trashUid: res?.trashUid ?? null,
@@ -1845,9 +1872,19 @@ export async function deleteSelectedFromServer() {
       await markServerDeleted(accountId, mailbox, realUid);
     } catch (e) {
       console.error(`Failed to delete email ${key}:`, e);
-      // Lift the tombstone so the reconcile below can restore this email.
+      const { uid: failedUid, accountId: failedAccountId, mailbox: failedMailbox, account: failedAccount, emailObj: failedRow, tombstone } = contextOf(key);
+      const wasLocalOnly = failedRow?.source === 'local-only' || failedRow?._localStaged === true;
+      // Same bargain as the single-row path: where a journal entry exists the
+      // row stays gone and replayOps owns the retry. Where one does not
+      // (Graph, local-only) the tombstone comes off and the reconcile below
+      // restores the row.
+      if (failedAccount && !isGraphAccount(failedAccount) && !wasLocalOnly) {
+        db.noteOpFailure({ op: 'delete', accountId: failedAccountId, mailbox: failedMailbox, uid: failedUid }, String(e?.message || e));
+        stillQueued.add(`${failedAccountId}|${failedMailbox}|${failedUid}`);
+        continue;
+      }
       const ts = new Set(get().deleteTombstones);
-      ts.delete(contextOf(key).tombstone);
+      ts.delete(tombstone);
       useMailStore.setState({ deleteTombstones: ts });
     }
   }
@@ -1861,9 +1898,15 @@ export async function deleteSelectedFromServer() {
   // Offline nothing was attempted, so nothing may be cleared: the entries are
   // the whole delete until replayOps sends them.
   if (!offline) {
-    await Promise.all([...journalGroups.values()].map(
-      (g) => db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: g.uids, arg: {} }),
-    ));
+    await Promise.all([...journalGroups.values()].map((g) => {
+      // Minus whatever the server refused: those entries ARE the delete now,
+      // and clearing them would drop a confirmed delete whose row is already
+      // gone from the list.
+      const landed = g.uids.filter((uid) => !stillQueued.has(`${g.accountId}|${g.mailbox}|${uid}`));
+      return landed.length
+        ? db.clearOps({ op: 'delete', accountId: g.accountId, mailbox: g.mailbox, uids: landed, arg: {} })
+        : null;
+    }));
   }
 
   // Prune the header sidecar for the rows just deleted.

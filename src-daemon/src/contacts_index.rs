@@ -2,16 +2,23 @@
 //!
 //! Observes every email header the sync engine writes to cache, extracts
 //! from/to/cc/bcc/reply-to addresses, maintains a per-account in-memory map of
-//! `address → {name, count, last_seen, folders}`, and persists to
-//! `{data_dir}/contacts_index/{account_id}.json` on a debounced schedule.
+//! `address → {name, count, last_seen, folders}`, and persists to the
+//! `contacts` table of the vault's `custody.db` on a debounced schedule (it
+//! was `{vault}/contacts_index/{account_id}.json`).
+//!
+//! The store is the daemon's own custody connection, handed over with
+//! `attach_db` — `custody.db` is opened EXCLUSIVE, so a second opener in this
+//! process would only ever fail BUSY. With no connection attached (the vault
+//! is unreachable, or custody would not open) the index still works in
+//! memory; it just does not survive the process.
 //!
 //! The app queries this index via the `contacts_index.get` RPC instead of
 //! walking cached maildir sidecars at compose-open time.
 
 use crate::imap::{EmailAddress, EmailHeader};
+use mailvault_core::custody::contacts as contacts_db;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{info, warn};
@@ -68,6 +75,26 @@ impl From<&CachedAddress> for EmailAddress {
     }
 }
 
+fn from_row(row: contacts_db::Row) -> ContactEntry {
+    ContactEntry {
+        address: row.address,
+        name: row.name,
+        count: row.count,
+        last_seen: row.last_seen,
+        folders: serde_json::from_str(&row.folders_json).unwrap_or_default(),
+    }
+}
+
+fn to_row(entry: &ContactEntry) -> contacts_db::Row {
+    contacts_db::Row {
+        address: entry.address.clone(),
+        name: entry.name.clone(),
+        count: entry.count,
+        last_seen: entry.last_seen,
+        folders_json: serde_json::to_string(&entry.folders).unwrap_or_else(|_| "[]".into()),
+    }
+}
+
 struct InnerState {
     per_account: HashMap<String, HashMap<String, ContactEntry>>,
     dirty: HashSet<String>,
@@ -78,6 +105,7 @@ struct InnerState {
 pub struct ContactsState {
     inner: Mutex<InnerState>,
     data_dir: PathBuf,
+    db: Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
 }
 
 impl ContactsState {
@@ -90,16 +118,21 @@ impl ContactsState {
                 cold_built_accounts: HashSet::new(),
             }),
             data_dir,
+            db: Mutex::new(None),
         })
     }
 
-    fn contacts_dir(&self) -> PathBuf {
-        self.data_dir.join("contacts_index")
+    /// Hand over the daemon's custody connection. Called once at startup and
+    /// again after a vault switch, the same way `sync_engine` gets it.
+    pub fn attach_db(&self, db: Arc<mailvault_core::custody::SharedConn>) {
+        *self.db.lock().unwrap_or_else(|p| p.into_inner()) = Some(db);
     }
 
-    fn path_for(&self, account_id: &str) -> PathBuf {
-        let safe = sanitize(account_id);
-        self.contacts_dir().join(format!("{}.json", safe))
+    /// Run `f` against the custody store, or `None` when none is attached.
+    fn with_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> T) -> Option<T> {
+        let attached = self.db.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
+        let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
+        guard.as_ref().map(f)
     }
 
     /// Load the persisted index for one account into memory. Idempotent.
@@ -111,21 +144,20 @@ impl ContactsState {
             }
         }
 
-        let path = self.path_for(account_id);
         let mut entries: HashMap<String, ContactEntry> = HashMap::new();
-        if path.exists() {
-            match fs::read_to_string(&path) {
-                Ok(json) => match serde_json::from_str::<Vec<ContactEntry>>(&json) {
-                    Ok(list) => {
-                        for e in list {
-                            entries.insert(e.address.clone(), e);
-                        }
-                    }
-                    Err(e) => warn!("[contacts_index] parse {}: {}", account_id, e),
-                },
-                Err(e) => warn!("[contacts_index] read {}: {}", account_id, e),
+        self.with_db(|conn| {
+            // The pre-SQL file is imported on the first load that finds no
+            // rows; `import_legacy` retires it, so this costs one `is_file`
+            // afterwards.
+            let mut rows = contacts_db::load(conn, account_id);
+            if rows.is_empty() {
+                contacts_db::import_legacy(conn, &self.data_dir, account_id);
+                rows = contacts_db::load(conn, account_id);
             }
-        }
+            for row in rows {
+                entries.insert(row.address.clone(), from_row(row));
+            }
+        });
 
         let mut g = self.inner.lock().unwrap();
         g.per_account.insert(account_id.to_string(), entries);
@@ -220,26 +252,25 @@ impl ContactsState {
         if to_write.is_empty() {
             return;
         }
-        if let Err(e) = fs::create_dir_all(self.contacts_dir()) {
-            warn!("[contacts_index] create dir: {}", e);
-            return;
-        }
-        for (account_id, entries) in to_write {
-            let path = self.path_for(&account_id);
-            match serde_json::to_string(&entries) {
-                Ok(json) => {
-                    if let Err(e) = mailvault_core::fsx::write_atomic(&path, json.as_bytes()) {
-                        warn!("[contacts_index] write {}: {}", path.display(), e);
-                    }
+        let wrote = self.with_db(|conn| {
+            for (account_id, entries) in &to_write {
+                let rows: Vec<contacts_db::Row> = entries.iter().map(to_row).collect();
+                if let Err(e) = contacts_db::replace_account(conn, account_id, &rows) {
+                    warn!("[contacts_index] write {}: {}", account_id, e);
                 }
-                Err(e) => warn!("[contacts_index] serialize {}: {}", account_id, e),
             }
+        });
+        if wrote.is_none() {
+            warn!("[contacts_index] no custody store attached — {} account(s) stay in memory", to_write.len());
         }
     }
 
     /// Scan `email_cache/{account_id_sanitized}_*` directories, parse every
     /// `{uid}.json`, and feed through `observe_headers` to seed the index.
     /// Runs once per account lifetime — gated by `cold_built_accounts`.
+    /// Seed the index from every cached header the account has, once per
+    /// account lifetime — gated by `cold_built_accounts`. Reads `custody.db`;
+    /// it used to walk `email_cache/<account>_*` and open every `<uid>.json`.
     pub fn cold_build_account(&self, account_id: &str) {
         {
             let mut g = self.inner.lock().unwrap();
@@ -249,53 +280,33 @@ impl ContactsState {
             g.cold_built_accounts.insert(account_id.to_string());
         }
 
-        let cache_root = self.data_dir.join("email_cache");
-        let read_dir = match fs::read_dir(&cache_root) {
-            Ok(r) => r,
-            Err(_) => return,
-        };
-
-        let prefix = format!("{}_", sanitize(account_id));
         let mut total = 0usize;
-
-        for entry in read_dir.flatten() {
-            let dir_name = entry.file_name().to_string_lossy().to_string();
-            if !dir_name.starts_with(&prefix) {
-                continue;
-            }
-            let mailbox_part = &dir_name[prefix.len()..];
-            let dir_path = entry.path();
-            if !dir_path.is_dir() {
-                continue;
-            }
-
-            let files = match fs::read_dir(&dir_path) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            let mut batch: Vec<CachedHeader> = Vec::new();
-            for f in files.flatten() {
-                let name = f.file_name().to_string_lossy().to_string();
-                if name == "_meta.json" || !name.ends_with(".json") {
+        let read = self.with_db(|conn| -> Result<Vec<(String, Vec<CachedHeader>)>, String> {
+            let mailboxes = mailvault_core::custody::cache::mailboxes_with_headers(conn, Some(account_id))?;
+            let mut by_mailbox: Vec<(String, Vec<CachedHeader>)> = Vec::new();
+            for (_, mailbox) in mailboxes {
+                if is_excluded_mailbox(&mailbox) {
                     continue;
                 }
-                match fs::read_to_string(f.path()) {
-                    Ok(json) => match serde_json::from_str::<CachedHeader>(&json) {
-                        Ok(h) => batch.push(h),
-                        Err(_) => continue,
-                    },
-                    Err(_) => continue,
-                }
-                if batch.len() >= 200 {
-                    self.observe_cached_headers(account_id, mailbox_part, &batch);
-                    total += batch.len();
-                    batch.clear();
+                let headers = mailvault_core::custody::cache::all_headers(conn, account_id, &mailbox)?
+                    .into_iter()
+                    .filter_map(|v| serde_json::from_value::<CachedHeader>(v).ok())
+                    .collect::<Vec<_>>();
+                by_mailbox.push((mailbox, headers));
+            }
+            Ok(by_mailbox)
+        });
+        // Ingesting takes `inner`, which `with_db` must not be holding when it
+        // does — the read above finishes first for that reason.
+        match read {
+            Some(Ok(by_mailbox)) => {
+                for (mailbox, headers) in by_mailbox {
+                    total += headers.len();
+                    self.observe_cached_headers(account_id, &mailbox, &headers);
                 }
             }
-            if !batch.is_empty() {
-                total += batch.len();
-                self.observe_cached_headers(account_id, mailbox_part, &batch);
-            }
+            Some(Err(e)) => warn!("[contacts_index] cold-build read failed for {}: {}", account_id, e),
+            None => return,
         }
 
         info!(
@@ -349,10 +360,6 @@ impl ContactsState {
         );
         g.dirty.insert(account_id.to_string());
     }
-}
-
-fn sanitize(s: &str) -> String {
-    s.replace(|c: char| !c.is_alphanumeric(), "_")
 }
 
 fn is_excluded_mailbox(mailbox: &str) -> bool {
@@ -496,17 +503,35 @@ mod tests {
     #[test]
     fn flush_and_reload_roundtrip() {
         let tmp = tempdir();
+        // The store outlives both states, the way the daemon's custody
+        // connection outlives a vault switch.
+        let db: Arc<mailvault_core::custody::SharedConn> = Arc::new(std::sync::Mutex::new(Some(
+            mailvault_core::custody::db::open(&tmp).unwrap(),
+        )));
         {
             let state = ContactsState::new(tmp.clone());
+            state.attach_db(Arc::clone(&db));
             let h = header(1, addr("Alice", "alice@ex.com"), vec![]);
             state.observe_headers("acc1", "INBOX", &[h]);
             state.flush_dirty();
         }
         let state2 = ContactsState::new(tmp.clone());
+        state2.attach_db(db);
         state2.load_account("acc1");
         let snap = state2.get_snapshot(&["acc1".to_string()]);
         assert_eq!(snap["acc1"].len(), 1);
         assert_eq!(snap["acc1"][0].address, "alice@ex.com");
+    }
+
+    /// With no store attached the index still works in memory — it just does
+    /// not survive the process, and says so rather than failing a flush.
+    #[test]
+    fn a_flush_with_no_store_attached_is_not_a_panic() {
+        let tmp = tempdir();
+        let state = ContactsState::new(tmp.clone());
+        state.observe_headers("acc1", "INBOX", &[header(1, addr("Alice", "alice@ex.com"), vec![])]);
+        state.flush_dirty();
+        assert_eq!(state.get_snapshot(&["acc1".to_string()])["acc1"].len(), 1);
     }
 
     fn tempdir() -> PathBuf {

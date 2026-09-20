@@ -11,9 +11,10 @@
 //!
 //! Split into units (`legacy_units` + `import_unit`) so the daemon can scan
 //! the vault without the custody lock and then take it once per mailbox,
-//! never once around the whole import. The header sidecars are *snapshotted*,
-//! not retired — their JSON is still a live mirror — so a `meta` marker row
-//! per imported mailbox is what stops start 2..N from re-walking them.
+//! never once around the whole import. The header sidecars are *snapshotted*
+//! rather than renamed — a 30k-file directory is expensive to rename one file
+//! at a time, and nothing writes them any more — so a `meta` marker row per
+//! imported mailbox is what stops start 2..N from re-walking them.
 
 use super::entries::uid_of;
 use rusqlite::{params, Connection};

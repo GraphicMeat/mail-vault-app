@@ -4,6 +4,13 @@
 //! security-scoped bookmarks so the app can re-access them after restart.
 //! On Linux, plain paths are sufficient.
 //!
+//! Both halves live in `app.db`'s `external_locations` table (they were
+//! `<slot>-bookmark` and `<slot>-meta.json`, the vault slot's metadata file
+//! being the one the daemon knew as `vault-meta.json`). The app opens that
+//! store directly rather than going through the daemon: the bookmark is what
+//! grants the daemon access to the vault in the first place, so it has to be
+//! readable before the daemon exists.
+//!
 //! All macOS Objective-C calls are wrapped in catch_unwind so selector
 //! mistakes or malformed bookmark data cannot crash the app.
 
@@ -31,12 +38,27 @@ pub struct ExternalLocation {
 pub const SLOT_EXTERNAL_BACKUP: &str = "external-backup";
 pub const SLOT_VAULT: &str = "vault";
 
-fn bookmark_file(app_data_dir: &std::path::Path, slot: &str) -> PathBuf {
-    app_data_dir.join(format!("{}-bookmark", slot))
+use mailvault_core::app_db::{locations, with as with_app_db};
+
+/// The stored metadata for a slot, or `None` when nothing is configured.
+fn saved(app_data_dir: &std::path::Path, slot: &str) -> Option<locations::Saved> {
+    with_app_db(app_data_dir, |conn| Ok(locations::get(conn, slot))).ok().flatten()
 }
 
-fn meta_file(app_data_dir: &std::path::Path, slot: &str) -> PathBuf {
-    app_data_dir.join(format!("{}-meta.json", slot))
+fn saved_bookmark(app_data_dir: &std::path::Path, slot: &str) -> Option<Vec<u8>> {
+    with_app_db(app_data_dir, |conn| Ok(locations::bookmark(conn, slot))).ok().flatten()
+}
+
+fn put_meta(app_data_dir: &std::path::Path, slot: &str, display_path: &str, platform: &str, legacy: bool) {
+    if let Err(e) = with_app_db(app_data_dir, |conn| {
+        locations::save_meta(conn, slot, display_path, platform, now_millis(), legacy)
+    }) {
+        warn!("[external_location] Failed to save {} metadata: {}", slot, e);
+    }
+}
+
+fn put_bookmark(app_data_dir: &std::path::Path, slot: &str, bytes: &[u8]) -> Result<(), String> {
+    with_app_db(app_data_dir, |conn| locations::save_bookmark(conn, slot, bytes))
 }
 
 fn now_millis() -> u64 {
@@ -305,19 +327,14 @@ pub fn save_external_location(app_data_dir: &std::path::Path, slot: &str, path: 
     {
         match macos::create_bookmark(path) {
             Ok(bookmark) => {
-                fs::write(bookmark_file(app_data_dir, slot), &bookmark)
+                put_bookmark(app_data_dir, slot, &bookmark)
                     .map_err(|e| format!("Failed to save bookmark: {}", e))?;
                 info!("[external_location] Saved macOS security-scoped bookmark for {}", path);
             }
             Err(e) => {
                 warn!("[external_location] Failed to create bookmark for {}: {}", path, e);
                 // Save metadata anyway so user sees the path in UI
-                let meta = serde_json::json!({
-                    "displayPath": path,
-                    "platform": "macos",
-                    "savedAt": now_millis(),
-                });
-                let _ = fs::write(meta_file(app_data_dir, slot), meta.to_string());
+                put_meta(app_data_dir, slot, path, "macos", false);
                 return Ok(needs_reauth_location(path.to_string(), e));
             }
         }
@@ -325,17 +342,12 @@ pub fn save_external_location(app_data_dir: &std::path::Path, slot: &str, path: 
 
     #[cfg(not(target_os = "macos"))]
     {
-        fs::write(bookmark_file(app_data_dir, slot), path.as_bytes())
+        put_bookmark(app_data_dir, slot, path.as_bytes())
             .map_err(|e| format!("Failed to save path: {}", e))?;
         info!("[external_location] Saved path for {}", path);
     }
 
-    let meta = serde_json::json!({
-        "displayPath": path,
-        "platform": std::env::consts::OS,
-        "savedAt": now_millis(),
-    });
-    let _ = fs::write(meta_file(app_data_dir, slot), meta.to_string());
+    put_meta(app_data_dir, slot, path, std::env::consts::OS, false);
 
     // Return success without full validation to avoid crash-prone resolution chain
     Ok(ExternalLocation {
@@ -351,28 +363,14 @@ pub fn save_external_location(app_data_dir: &std::path::Path, slot: &str, path: 
 /// On macOS: resolves the bookmark, starts access. Failures become needs_reauth.
 /// Returns (resolved_path, location_status).
 pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> Result<(String, ExternalLocation), String> {
-    let bf = bookmark_file(app_data_dir, slot);
-    if !bf.exists() {
+    let Some(stored) = saved_bookmark(app_data_dir, slot) else {
         return Err("No external backup location configured".to_string());
-    }
-
-    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
-    let display_path = meta["displayPath"].as_str().unwrap_or("").to_string();
+    };
+    let display_path = saved(app_data_dir, slot).map(|s| s.display_path).unwrap_or_default();
 
     #[cfg(target_os = "macos")]
     {
-        let bookmark_bytes = match fs::read(&bf) {
-            Ok(b) => b,
-            Err(e) => {
-                let msg = format!("Failed to read bookmark file: {}", e);
-                warn!("[external_location] {}", msg);
-                let loc = needs_reauth_location(display_path, msg.clone());
-                return Err(serde_json::to_string(&loc).unwrap_or(msg));
-            }
-        };
+        let bookmark_bytes = stored;
 
         if bookmark_bytes.is_empty() {
             let msg = "Bookmark file is empty".to_string();
@@ -395,7 +393,7 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> 
         if is_stale {
             warn!("[external_location] Bookmark is stale for {}, attempting re-creation", resolved_path);
             match macos::create_bookmark(&resolved_path) {
-                Ok(new_bookmark) => { let _ = fs::write(&bf, &new_bookmark); }
+                Ok(new_bookmark) => { let _ = put_bookmark(app_data_dir, slot, &new_bookmark); }
                 Err(e) => { warn!("[external_location] Stale bookmark re-creation failed: {}", e); }
             }
         }
@@ -422,9 +420,10 @@ pub fn resolve_external_location(app_data_dir: &std::path::Path, slot: &str) -> 
 
     #[cfg(not(target_os = "macos"))]
     {
-        let path = fs::read_to_string(&bf)
-            .map_err(|e| format!("Failed to read path: {}", e))?;
-        let path = path.trim().to_string();
+        let path = String::from_utf8(stored)
+            .map_err(|e| format!("Failed to read path: {}", e))?
+            .trim()
+            .to_string();
         let dp = if display_path.is_empty() { path.clone() } else { display_path };
         let snap = is_snap_confined();
         let packaging = if snap { "snap" } else { "deb" };
@@ -485,14 +484,11 @@ pub fn release_external_access(path: &str) {
 #[cfg(target_os = "macos")]
 pub fn open_in_finder(app_data_dir: &std::path::Path, path: &str, reveal: bool) -> Result<(), String> {
     let bookmark = [SLOT_EXTERNAL_BACKUP, SLOT_VAULT].iter().find_map(|slot| {
-        let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
-            .ok()
-            .and_then(|s| serde_json::from_str(&s).ok())?;
-        let display_path = meta["displayPath"].as_str()?;
-        if display_path.is_empty() || !std::path::Path::new(path).starts_with(display_path) {
+        let stored = saved(app_data_dir, slot)?;
+        if stored.display_path.is_empty() || !std::path::Path::new(path).starts_with(&stored.display_path) {
             return None;
         }
-        fs::read(bookmark_file(app_data_dir, slot)).ok()
+        saved_bookmark(app_data_dir, slot)
     });
     macos::open_in_finder(path, bookmark, reveal)
 }
@@ -537,27 +533,24 @@ pub fn validate_external_location(app_data_dir: &std::path::Path, slot: &str) ->
 
 /// Get the current external location status without starting access.
 pub fn get_external_location(app_data_dir: &std::path::Path, slot: &str) -> ExternalLocation {
-    let bf = bookmark_file(app_data_dir, slot);
-    if !bf.exists() {
-        return ExternalLocation {
-            display_path: String::new(),
-            platform: std::env::consts::OS.to_string(),
-            status: "not_configured".to_string(),
-            last_validated_at: None,
-            last_error: None,
-        };
-    }
-
-    let meta: serde_json::Value = fs::read_to_string(meta_file(app_data_dir, slot))
-        .ok()
-        .and_then(|s| serde_json::from_str(&s).ok())
-        .unwrap_or_default();
+    let not_configured = || ExternalLocation {
+        display_path: String::new(),
+        platform: std::env::consts::OS.to_string(),
+        status: "not_configured".to_string(),
+        last_validated_at: None,
+        last_error: None,
+    };
+    // No bookmark is what "no `<slot>-bookmark` file" used to mean: metadata
+    // alone is a location the user still has to re-authorize.
+    let Some(stored) = saved(app_data_dir, slot).filter(|s| s.has_bookmark) else {
+        return not_configured();
+    };
 
     ExternalLocation {
-        display_path: meta["displayPath"].as_str().unwrap_or("").to_string(),
+        display_path: stored.display_path,
         platform: std::env::consts::OS.to_string(),
         status: "unknown".to_string(),
-        last_validated_at: meta["savedAt"].as_u64(),
+        last_validated_at: Some(stored.saved_at),
         last_error: None,
     }
 }
@@ -572,8 +565,7 @@ fn is_snap_confined() -> bool {
 
 /// Clear the saved external location.
 pub fn clear_external_location(app_data_dir: &std::path::Path, slot: &str) -> Result<(), String> {
-    let _ = fs::remove_file(bookmark_file(app_data_dir, slot));
-    let _ = fs::remove_file(meta_file(app_data_dir, slot));
+    let _ = with_app_db(app_data_dir, |conn| locations::clear(conn, slot));
     info!("[external_location] Cleared external backup location");
     Ok(())
 }
@@ -584,19 +576,13 @@ pub fn migrate_legacy_path(app_data_dir: &std::path::Path, legacy_path: &str) ->
         return Err("No legacy path to migrate".to_string());
     }
 
-    if bookmark_file(app_data_dir, SLOT_EXTERNAL_BACKUP).exists() {
+    if saved_bookmark(app_data_dir, SLOT_EXTERNAL_BACKUP).is_some() {
         return validate_external_location(app_data_dir, SLOT_EXTERNAL_BACKUP);
     }
 
     #[cfg(target_os = "macos")]
     {
-        let meta = serde_json::json!({
-            "displayPath": legacy_path,
-            "platform": "macos",
-            "savedAt": now_millis(),
-            "legacy": true,
-        });
-        let _ = fs::write(meta_file(app_data_dir, SLOT_EXTERNAL_BACKUP), meta.to_string());
+        put_meta(app_data_dir, SLOT_EXTERNAL_BACKUP, legacy_path, "macos", true);
 
         warn!("[external_location] Legacy path {} needs reauthorization on macOS", legacy_path);
         return Ok(ExternalLocation {

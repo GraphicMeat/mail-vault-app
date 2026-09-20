@@ -30,7 +30,7 @@ use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, u32_arg, with_vault_write};
 use crate::ipc::{self, RpcResponse};
 use crate::server::DaemonState;
-use mailvault_core::custody::entries;
+use mailvault_core::custody::{cache, entries};
 use mailvault_core::{maildir, vault_files};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -147,7 +147,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 id,
                 blocking(move || -> Result<Value, String> {
                     let report = with_vault_write(&state, |root| -> Result<maildir::GenerationRepair, String> {
-                        let (cached_uv, cached_total) = vault_files::cached_sync_meta(root, &account_id, &mailbox);
+                        let (cached_uv, cached_total) =
+                            daemon_custody::with_conn(&state, |c| cache::sync_meta(c, &account_id, &mailbox))
+                                .unwrap_or((None, None));
                         let Some(uid_validity) = cached_uv else {
                             return Ok(maildir::GenerationRepair::default());
                         };
@@ -158,12 +160,14 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                         if maildir::read_generation(&mailbox_dir) == Some(uid_validity) {
                             return Ok(maildir::GenerationRepair { generation: uid_validity, ..Default::default() });
                         }
-                        let (id_to_uid, sidecars) = vault_files::sidecar_message_id_map(root, &account_id, &mailbox);
+                        let (id_to_uid, cached) =
+                            daemon_custody::with_conn(&state, |c| cache::message_id_map(c, &account_id, &mailbox))
+                                .unwrap_or_default();
                         let total = cached_total.unwrap_or(0);
-                        if total == 0 || sidecars < total {
+                        if total == 0 || cached < total {
                             info!(
                                 "maildir_repair_generation: {}/{} — cache covers {}/{}, waiting for a fuller sync",
-                                account_id, mailbox, sidecars, total,
+                                account_id, mailbox, cached, total,
                             );
                             return Ok(maildir::GenerationRepair::default());
                         }
@@ -272,7 +276,8 @@ mod tests {
 
     #[tokio::test]
     async fn local_index_read_while_closed_answers_the_verbatim_custody_error() {
-        let (_v, s) = st(true); // never opened
+        let (_v, s) = st(true);
+        daemon_custody::close(&s); // as a vault move does, mid-run
         let r = call(&s, "local_index_read", json!({"accountId": "acc", "mailbox": "INBOX"})).await;
         assert_eq!(r.error.unwrap().message, "custody store unavailable: closed");
     }

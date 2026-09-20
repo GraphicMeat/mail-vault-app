@@ -25,12 +25,14 @@ const mockUpdateEmailFlags = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockMarkServerDeleted = vi.fn().mockResolvedValue(true);
 const mockLoadEmails = vi.fn();
+const mockNoteOpFailure = vi.fn();
 
 vi.mock('../../db', () => ({
   readOps: (...a) => mockReadOps(...a),
   clearOps: (...a) => mockClearOps(...a),
   getAccounts: (...a) => mockGetAccounts(...a),
   saveEmailHeaders: (...a) => mockSaveEmailHeaders(...a),
+  noteOpFailure: (...a) => mockNoteOpFailure(...a),
   startKeychainLoad: () => {},
   onKeychainReady: (cb) => cb(),
 }));
@@ -44,15 +46,13 @@ vi.mock('../../api', () => ({
 vi.mock('../../authUtils', () => ({ ensureFreshToken: async (a) => a }));
 vi.mock('../../graphConfig', () => ({ isGraphAccount: () => false }));
 
-// The real `isCredentialsProblem` — it is the predicate under test in the
-// "keeps the entry" case, so a stub would make that case prove nothing.
 vi.mock('../messageMutations', async (importOriginal) => ({
   ...(await importOriginal()),
   markServerDeleted: (...a) => mockMarkServerDeleted(...a),
 }));
 
 const mockClearUndo = vi.fn();
-const mailState = { activeAccountId: 'acct1', activeMailbox: 'INBOX', loadEmails: (...a) => mockLoadEmails(...a), clearUndo: (...a) => mockClearUndo(...a) };
+const mailState = { undo: null, activeAccountId: 'acct1', activeMailbox: 'INBOX', loadEmails: (...a) => mockLoadEmails(...a), clearUndo: (...a) => mockClearUndo(...a) };
 vi.mock('../../../stores/mailStore', () => ({
   useMailStore: {
     getState: () => mailState,
@@ -64,7 +64,7 @@ vi.mock('../../../stores/mailStore', () => ({
 // to it, and a hand-rolled subscribe would test the fake's semantics.
 vi.mock('../../daemonClient', () => ({ daemonCall: async () => ({ online: true }) }));
 
-import { replayOps, wireReplayOnReconnect } from '../replayOps';
+import { replayOps, shouldRetryNow, wireReplayOnReconnect } from '../replayOps';
 import { useConnectivityStore } from '../../../stores/connectivityStore';
 
 const entry = (over) => ({ id: 1, op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {}, at: 1, ...over });
@@ -120,26 +120,32 @@ describe('replayOps', () => {
     expect(mockMarkServerDeleted).not.toHaveBeenCalled();
   });
 
-  // A uid that fails twice fails forever, so a failure normally drains the
-  // journal. Credentials say nothing about the message and everything about
-  // when we asked — dropping those turns a locked keychain into lost intent.
-  it('keeps an entry whose failure is about credentials, and clears any other failure', async () => {
+  // A failed op is not a dropped op. The journal is the user's confirmed
+  // intent, and the row is already gone from the list — draining the entry on
+  // failure left the server holding a message the app had shown as deleted,
+  // with nothing anywhere to finish the job. It stays queued; Settings is
+  // where a user cancels one that has been failing for too long.
+  it('keeps an entry whose op failed, whatever the reason, and records why', async () => {
     mockReadOps.mockResolvedValue([entry({ uids: [7] })]);
     mockDeleteEmail.mockRejectedValueOnce(new Error('Password missing for account'));
 
-    const kept = await replayOps();
+    const creds = await replayOps();
 
     expect(mockClearOps).not.toHaveBeenCalled();
-    expect(kept).toMatchObject({ attempted: 1, done: 0, failed: 1, kept: 1 });
+    expect(creds).toMatchObject({ attempted: 1, done: 0, failed: 1, kept: 1 });
 
     vi.clearAllMocks();
     mockReadOps.mockResolvedValue([entry({ uids: [7] })]);
     mockDeleteEmail.mockRejectedValueOnce(new Error('UID 7 not found'));
 
-    const dropped = await replayOps();
+    const other = await replayOps();
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [7], arg: {} });
-    expect(dropped).toMatchObject({ failed: 1, kept: 0 });
+    expect(mockClearOps).not.toHaveBeenCalled();
+    expect(other).toMatchObject({ failed: 1, kept: 1 });
+    expect(mockNoteOpFailure).toHaveBeenCalledWith(
+      { op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uid: 7 },
+      expect.stringContaining('UID 7 not found'),
+    );
   });
 
   // An offline move's undo works by forgetting its journal entry. Once this
@@ -196,5 +202,23 @@ describe('wireReplayOnReconnect', () => {
     expect(mockReadOps).toHaveBeenCalledTimes(1);
 
     vi.useRealTimers();
+  });
+
+  // A stuck entry keeps the journal non-empty for good, and a replay that
+  // reads a non-empty journal withdraws the undo offer. Without this guard the
+  // five-minute tick would take the user's undo toast down again and again for
+  // reasons that have nothing to do with the delete they just made.
+  it('holds the retry tick while an undo offer is live, or offline', async () => {
+    useConnectivityStore.getState().setOnline(true);
+    mailState.undo = null;
+    expect(await shouldRetryNow()).toBe(true);
+
+    mailState.undo = { kind: 'delete' };
+    expect(await shouldRetryNow()).toBe(false);
+
+    mailState.undo = null;
+    useConnectivityStore.getState().setOnline(false);
+    expect(await shouldRetryNow()).toBe(false);
+    useConnectivityStore.getState().setOnline(true);
   });
 });

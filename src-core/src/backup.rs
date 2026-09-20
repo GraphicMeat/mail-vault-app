@@ -1584,22 +1584,14 @@ fn flatten_mailboxes(mailboxes: &[imap::MailboxInfo]) -> Vec<&imap::MailboxInfo>
 // and `purge_uids` (the full `backup_purge_uids` decision: purge now vs queue
 // for later vs no-op when nothing is configured) below `purge_backup_files`.
 
-fn purge_queue_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("pending_backup_purge.json")
-}
-
 fn read_purge_queue(data_dir: &Path) -> std::collections::BTreeMap<String, Vec<u32>> {
-    let path = purge_queue_path(data_dir);
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Default::default();
-    };
-    // A corrupt queue must not brick delete-everywhere; start over rather than error.
-    serde_json::from_str(&content).unwrap_or_default()
+    // A store that will not open must not brick delete-everywhere; start over
+    // rather than error, the same thing the JSON reader did with a corrupt file.
+    crate::app_db::with(data_dir, |conn| Ok(crate::app_db::ops::purge_read(conn))).unwrap_or_default()
 }
 
 fn write_purge_queue(data_dir: &Path, q: &std::collections::BTreeMap<String, Vec<u32>>) -> Result<(), String> {
-    let data = serde_json::to_string(q).map_err(|e| format!("serialize purge queue: {}", e))?;
-    std::fs::write(purge_queue_path(data_dir), data).map_err(|e| format!("write purge queue: {}", e))
+    crate::app_db::with(data_dir, |conn| crate::app_db::ops::purge_write(conn, q))
 }
 
 /// Delete every mirror file under `<root>/<email>/<mailbox>/cur/` whose uid is
@@ -2409,9 +2401,9 @@ mod tests {
     }
 
     #[test]
-    fn corrupt_queue_file_reads_as_empty() {
+    fn a_corrupt_legacy_queue_file_reads_as_empty() {
         let tmp = tempfile::tempdir().unwrap();
-        std::fs::write(purge_queue_path(tmp.path()), b"{ not json").unwrap();
+        std::fs::write(tmp.path().join("pending_backup_purge.json"), b"{ not json").unwrap();
         assert!(read_purge_queue(tmp.path()).is_empty());
     }
 

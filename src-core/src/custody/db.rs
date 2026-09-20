@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 pub const DB_DIR: &str = "custody";
 pub const DB_FILE: &str = "custody.db";
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE vault_entries (
@@ -35,6 +35,18 @@ CREATE TABLE header_cache_meta (
 );
 CREATE TABLE mailbox_cache (
   account_id TEXT PRIMARY KEY, cache_json TEXT NOT NULL
+);
+";
+
+const SCHEMA_V3: &str = "
+CREATE TABLE contacts (
+  account_id   TEXT NOT NULL,
+  address      TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  count        INTEGER NOT NULL,
+  last_seen    INTEGER NOT NULL,
+  folders_json TEXT NOT NULL,
+  PRIMARY KEY (account_id, address)
 );
 ";
 
@@ -108,6 +120,11 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             "BEGIN; {SCHEMA_V2} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2'); COMMIT;"
         )).map_err(sql)?;
     }
+    if version < 3 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V3} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3'); COMMIT;"
+        )).map_err(sql)?;
+    }
     Ok(())
 }
 
@@ -133,11 +150,11 @@ mod tests {
         assert_eq!(mode.to_lowercase(), "wal");
         let locking: String = conn.query_row("PRAGMA locking_mode", [], |r| r.get(0)).unwrap();
         assert_eq!(locking.to_lowercase(), "exclusive");
-        for table in ["meta", "vault_entries", "header_cache", "header_cache_meta", "mailbox_cache"] {
+        for table in ["meta", "vault_entries", "header_cache", "header_cache_meta", "mailbox_cache", "contacts"] {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some(SCHEMA_VERSION.to_string().as_str()));
         assert_eq!(db_path(tmp.path()), tmp.path().join("custody/custody.db"));
         assert!(db_path(tmp.path()).exists());
         assert!(!tmp.path().join("custody/custody.db-shm").exists(), "exclusive mode must not create a shared-memory file");

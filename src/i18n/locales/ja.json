@@ -2425,5 +2425,14 @@
   "insights.chart.omitted_other": "マップの下のリストに {{count}} 人の送信者が表示されています。",
   "insights.messageChanged": "分析の読み込み後にこのメッセージが変更されました。分析を更新して再試行してください。",
   "insights.messageUnavailable": "このメッセージの読み取り可能なコピーがありません。分析を更新して再試行してください。",
-  "searchIndex.recoveryFailed": "検索インデックスを修復できませんでした。保管庫が利用可能か確認して、もう一度お試しください。"
+  "searchIndex.recoveryFailed": "検索インデックスを修復できませんでした。保管庫が利用可能か確認して、もう一度お試しください。",
+  "settings.pendingActions.title": "未完了のサーバー操作",
+  "settings.pendingActions.blurb": "サーバーがまだ受け付けていない削除・移動・フラグ変更です。MailVault は再試行を続けます。長く失敗し続けているものはキャンセルしてください。",
+  "settings.pendingActions.empty": "送信待ちの操作はありません。",
+  "settings.pendingActions.retryNow": "今すぐ再試行",
+  "settings.pendingActions.queuedAt": "{{date}} から待機中",
+  "settings.pendingActions.opDelete": "サーバーから削除",
+  "settings.pendingActions.opMove": "別のフォルダーに移動",
+  "settings.pendingActions.opFlag": "フラグの変更",
+  "settings.pendingActions.opOther": "サーバー操作"
 }

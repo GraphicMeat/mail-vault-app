@@ -19,8 +19,7 @@
 //! entry — replaying a uid against the wrong one hits a stranger's mail.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OpEntry {
@@ -39,21 +38,6 @@ pub struct OpEntry {
     pub at: u64,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-struct Journal {
-    next_id: u64,
-    ops: Vec<OpEntry>,
-}
-
-pub fn journal_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("pending_ops.json")
-}
-
-/// The pre-2026-09-05 delete-only journal: `{"<accountId>|<mailbox>": [uids]}`.
-fn legacy_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("pending_server_delete.json")
-}
-
 fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -61,77 +45,37 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// Turn the old delete-only journal into delete ops, once. Returns what it
-/// imported; leaves the old file alone if the new one could not be written, so
-/// a failed import retries rather than losing the user's confirmed deletes.
-fn import_legacy(data_dir: &Path) -> Journal {
-    let Ok(content) = std::fs::read_to_string(legacy_path(data_dir)) else {
-        return Journal::default();
-    };
-    let old: BTreeMap<String, Vec<u32>> = serde_json::from_str(&content).unwrap_or_default();
-    let mut journal = Journal::default();
-    for (k, uids) in old {
-        // A malformed key names no mailbox, and a uid without a mailbox is not
-        // a message — drop it rather than guess at one.
-        let Some((account_id, mailbox)) = k.split_once('|') else { continue };
-        if uids.is_empty() {
-            continue;
-        }
-        journal.ops.push(OpEntry {
-            id: journal.next_id,
-            op: "delete".into(),
-            account_id: account_id.to_string(),
-            mailbox: mailbox.to_string(),
-            uids,
-            arg: serde_json::json!({}),
-            at: now_ms(),
-        });
-        journal.next_id += 1;
+fn row_to_entry(row: crate::app_db::ops::Row) -> OpEntry {
+    let (id, op, account_id, mailbox, uids_json, arg_json, at) = row;
+    OpEntry {
+        id,
+        op,
+        account_id,
+        mailbox,
+        uids: serde_json::from_str(&uids_json).unwrap_or_default(),
+        arg: serde_json::from_str(&arg_json).unwrap_or_else(|_| serde_json::json!({})),
+        at,
     }
-    if journal.ops.is_empty() {
-        let _ = std::fs::remove_file(legacy_path(data_dir));
-        return journal;
-    }
-    if write(data_dir, &journal).is_ok() {
-        let _ = std::fs::remove_file(legacy_path(data_dir));
-    }
-    journal
 }
 
-fn load(data_dir: &Path) -> Journal {
-    let Ok(content) = std::fs::read_to_string(journal_path(data_dir)) else {
-        return import_legacy(data_dir);
-    };
-    // A corrupt journal must not brick mutating mail. Starting over loses a
-    // retry; erroring here would block the delete the user is asking for now.
-    serde_json::from_str(&content).unwrap_or_default()
-}
-
-fn write(data_dir: &Path, journal: &Journal) -> Result<(), String> {
-    if journal.ops.is_empty() {
-        // Remove rather than write an empty journal — absence is the common
-        // case, and it makes the launch check one failed open, not a parse.
-        let _ = std::fs::remove_file(journal_path(data_dir));
-        return Ok(());
-    }
-    let data = serde_json::to_string(journal).map_err(|e| format!("serialize op journal: {}", e))?;
-    crate::fsx::write_atomic(&journal_path(data_dir), data.as_bytes())
-        .map_err(|e| format!("write op journal: {}", e))
-}
-
-/// Every unfinished op, oldest first.
+/// Every unfinished op, oldest first. A store that will not open reads as
+/// empty for the same reason a corrupt journal used to: erroring here would
+/// block the mutation the user is asking for now.
 pub fn read(data_dir: &Path) -> Vec<OpEntry> {
-    load(data_dir).ops
+    crate::app_db::with(data_dir, |conn| Ok(crate::app_db::ops::read(conn)))
+        .unwrap_or_default()
+        .into_iter()
+        .map(row_to_entry)
+        .collect()
 }
 
 /// Record an intent. `entry.id` and `entry.at` are assigned here.
 pub fn queue(data_dir: &Path, entry: OpEntry) -> Result<u64, String> {
-    let mut journal = load(data_dir);
-    let id = journal.next_id;
-    journal.next_id += 1;
-    journal.ops.push(OpEntry { id, at: now_ms(), ..entry });
-    write(data_dir, &journal)?;
-    Ok(id)
+    let uids = serde_json::to_string(&entry.uids).map_err(|e| e.to_string())?;
+    let arg = entry.arg.to_string();
+    crate::app_db::with(data_dir, |conn| {
+        crate::app_db::ops::queue(conn, &entry.op, &entry.account_id, &entry.mailbox, &uids, &arg, now_ms())
+    })
 }
 
 /// Forget these uids wherever this op/account/mailbox/arg owns them; drop
@@ -148,57 +92,52 @@ pub fn clear(
     uids: &[u32],
     arg: &serde_json::Value,
 ) -> Result<(), String> {
-    let mut journal = load(data_dir);
-    for entry in journal.ops.iter_mut() {
-        if entry.op == op && entry.account_id == account_id && entry.mailbox == mailbox && entry.arg == *arg {
-            entry.uids.retain(|uid| !uids.contains(uid));
+    crate::app_db::with(data_dir, |conn| {
+        for row in crate::app_db::ops::read(conn) {
+            let entry = row_to_entry(row);
+            if entry.op != op || entry.account_id != account_id || entry.mailbox != mailbox || entry.arg != *arg {
+                continue;
+            }
+            let kept: Vec<u32> = entry.uids.iter().copied().filter(|uid| !uids.contains(uid)).collect();
+            if kept.len() == entry.uids.len() {
+                continue;
+            }
+            let json = serde_json::to_string(&kept).map_err(|e| e.to_string())?;
+            crate::app_db::ops::set_uids(conn, entry.id, &json, kept.is_empty())?;
         }
-    }
-    journal.ops.retain(|e| !e.uids.is_empty());
-    write(data_dir, &journal)
+        Ok(())
+    })
 }
 
-// ── Pending operation persistence ───────────────────────────────────────────
+// ── Pending operation persistence ──────────────────────────────
 //
 // A single in-flight bulk operation the UI is mid-way through (separate from
 // the op journal above, which is confirmed-but-unconfirmed server mutations).
 // Lives in the app data dir for the same reason the journal does: it has to
 // be readable before a relocatable vault is necessarily present.
 
-fn pending_operation_path(data_dir: &Path) -> PathBuf {
-    data_dir.join("pending_operations.json")
-}
-
-/// `None` when there is no pending operation. An unparseable file is an
-/// error, same as today — swallowing it here would silently drop the one
-/// piece of state that lets the UI resume.
+/// `None` when there is no pending operation. An unreadable store is an
+/// error, same as an unparseable file was — swallowing it would silently drop
+/// the one piece of state that lets the UI resume.
 pub fn pending_operation_read(data_dir: &Path) -> Result<Option<serde_json::Value>, String> {
-    let path = pending_operation_path(data_dir);
-    if !path.exists() {
-        return Ok(None);
-    }
-    let data = std::fs::read_to_string(&path).map_err(|e| format!("read pending_operations.json: {}", e))?;
-    let val: serde_json::Value =
-        serde_json::from_str(&data).map_err(|e| format!("parse pending_operations.json: {}", e))?;
-    Ok(Some(val))
+    crate::app_db::with(data_dir, |conn| {
+        let Some(raw) = crate::app_db::db::meta_get(conn, crate::app_db::ops::PENDING_OPERATION_KEY) else {
+            return Ok(None);
+        };
+        serde_json::from_str(&raw).map(Some).map_err(|e| format!("parse pending operation: {}", e))
+    })
 }
 
-/// Unlike the old command body, this creates the data directory first: the
-/// old one had no `create_dir_all` and relied on it already existing from an
-/// earlier launch (oddity: harmless in practice, but a gap this port closes).
 pub fn pending_operation_save(data_dir: &Path, operation: &serde_json::Value) -> Result<(), String> {
-    std::fs::create_dir_all(data_dir).map_err(|e| format!("create data directory: {}", e))?;
-    let json = serde_json::to_string_pretty(operation).map_err(|e| format!("serialize: {}", e))?;
-    crate::fsx::write_atomic(&pending_operation_path(data_dir), json.as_bytes())
-        .map_err(|e| format!("write pending_operations.json: {}", e))
+    crate::app_db::with(data_dir, |conn| {
+        crate::app_db::db::meta_set(conn, crate::app_db::ops::PENDING_OPERATION_KEY, &operation.to_string())
+    })
 }
 
 pub fn pending_operation_clear(data_dir: &Path) -> Result<(), String> {
-    let path = pending_operation_path(data_dir);
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("remove pending_operations.json: {}", e))?;
-    }
-    Ok(())
+    crate::app_db::with(data_dir, |conn| {
+        crate::app_db::db::meta_clear(conn, crate::app_db::ops::PENDING_OPERATION_KEY)
+    })
 }
 
 #[cfg(test)]
@@ -210,10 +149,16 @@ mod tests {
     }
 
     #[test]
-    fn missing_and_corrupt_journals_read_as_empty() {
+    fn a_missing_store_reads_as_empty() {
         let d = tmp();
         assert!(read(d.path()).is_empty());
-        std::fs::write(journal_path(d.path()), "{ not json").unwrap();
+    }
+
+    #[test]
+    fn a_corrupt_legacy_journal_reads_as_empty() {
+        // Written before the first read: the import runs on the first open.
+        let d = tmp();
+        std::fs::write(d.path().join("pending_ops.json"), "{ not json").unwrap();
         assert!(read(d.path()).is_empty());
     }
 
@@ -242,8 +187,7 @@ mod tests {
         clear(d.path(), "delete", "acct", "INBOX", &[1], &serde_json::json!({})).unwrap();
         assert_eq!(read(d.path()).len(), 1);
         clear(d.path(), "flag", "acct", "INBOX", &[2], &seen).unwrap();
-        assert!(read(d.path()).is_empty());
-        assert!(!journal_path(d.path()).exists(), "empty journal is removed, not written as []");
+        assert!(read(d.path()).is_empty(), "an emptied entry is deleted, not kept with no uids");
     }
 
     // Two flag entries for one uid differ only in their `arg` — the live path
@@ -278,8 +222,7 @@ mod tests {
         assert_eq!(ops.len(), 2);
         assert!(ops.iter().all(|e| e.op == "delete"));
         assert!(ops.iter().any(|e| e.mailbox == "INBOX" && e.uids == vec![4, 9]));
-        assert!(!d.path().join("pending_server_delete.json").exists(), "imported file is removed");
-        assert!(journal_path(d.path()).exists());
+        assert!(!d.path().join("pending_server_delete.json").exists(), "imported file is retired");
         assert_eq!(read(d.path()).len(), 2, "second read does not import twice");
     }
 
@@ -294,7 +237,7 @@ mod tests {
 
         pending_operation_clear(d.path()).unwrap();
         assert_eq!(pending_operation_read(d.path()).unwrap(), None);
-        // Clearing an already-absent file is not an error.
+        // Clearing an already-absent operation is not an error.
         pending_operation_clear(d.path()).unwrap();
     }
 
@@ -308,9 +251,11 @@ mod tests {
     }
 
     #[test]
-    fn an_unparseable_pending_operation_file_is_an_error() {
+    fn an_unparseable_legacy_pending_operation_file_does_not_resurrect() {
+        // The old reader errored on it forever; the import retires it instead,
+        // so the UI starts clean rather than failing every launch.
         let d = tmp();
-        std::fs::write(pending_operation_path(d.path()), "{ not json").unwrap();
-        assert!(pending_operation_read(d.path()).is_err());
+        std::fs::write(d.path().join("pending_operations.json"), "{ not json").unwrap();
+        assert_eq!(pending_operation_read(d.path()).unwrap(), None);
     }
 }

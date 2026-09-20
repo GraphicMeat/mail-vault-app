@@ -14,7 +14,8 @@
 //! mirror never learned about a change at all.
 //!
 //! `apply_files` is the one writer for the files: the name (app dir and mirror)
-//! and the header sidecar (via `header_cache::patch_flags`). `apply_everywhere`
+//! and the cached header (in `custody.db`, through the caller's closure).
+//! `apply_everywhere`
 //! is that call plus the custody entry's flags, both under `WRITER` — the
 //! app's mark read/unread and the backup run's reconcile both go through it.
 
@@ -95,16 +96,13 @@ pub struct Dirs {
     /// `<backup root>/<email>/<mailbox>/cur/`, when an external location is
     /// configured and reachable.
     pub mirror_cur: Option<PathBuf>,
-    /// `email_cache/<account>_<mailbox>/`
+    /// `email_cache/<account>_<mailbox>/` — the directory a mailbox rename
+    /// still has to carry, because the Outlook uid ledger lives in it.
     pub sidecar_dir: PathBuf,
-    // What `header_cache::patch_flags` needs to find and lock the right
-    // sidecar and mailbox lock key. It recomputes `sidecar_dir` from these
-    // itself rather than trusting the (sanitized, one-way) path above — kept
-    // private, since only this module's own `apply_files` needs them; a
-    // caller only ever gets a `Dirs` back from `dirs_for`.
+    /// The vault root, for `header_cache`'s tree lock: a `clear` must not run
+    /// while this module is moving a sidecar directory. Private — a caller
+    /// only ever gets a `Dirs` back from `dirs_for`.
     root: PathBuf,
-    account_id: String,
-    mailbox: String,
 }
 
 pub fn dirs_for(
@@ -124,8 +122,6 @@ pub fn dirs_for(
         mirror_cur,
         sidecar_dir: header_cache::sidecar_dir(root, account_id, mailbox),
         root: root.to_path_buf(),
-        account_id: account_id.to_string(),
-        mailbox: mailbox.to_string(),
     }
 }
 
@@ -145,21 +141,16 @@ static WRITER: std::sync::Mutex<()> = std::sync::Mutex::new(());
 /// The test seam for the locked file half: `apply_files` under `WRITER`, which
 /// is what `apply_everywhere` does before it also patches custody.
 #[cfg(test)]
-pub fn apply_in(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
+pub fn apply_in(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
     let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    apply_files(dirs, changes, sidecars)
+    apply_files(dirs, changes)
 }
 
 /// Land `changes` on every copy under `dirs`. Silent about a message the vault
 /// does not hold — there is nothing to rename or patch, and the counts say so.
 /// No lock of its own: the caller holds `WRITER`.
 ///
-/// `sidecars`: also patch the header cache. The app's own mark read/unread
-/// wants that (the next repaint from cache reads it, and a server-only message
-/// has no other copy). The backup reconcile does not: the sync engine owns
-/// those files, and a 14k-message folder would open 14k of them to change
-/// nothing.
-fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
+fn apply_files(dirs: &Dirs, changes: &[FlagChange]) -> Applied {
     let mut out = Applied::default();
     if changes.is_empty() {
         return out;
@@ -193,18 +184,18 @@ fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
             }
         }
 
-        if sidecars && header_cache::patch_flags(&dirs.root, &dirs.account_id, &dirs.mailbox, change.uid, imap) {
-            out.sidecars_patched += 1;
-        }
     }
 
     out
 }
 
 /// `apply_files` plus the custody entry's flags: the one call the app's mark
-/// read/unread and the backup's catch-up both make. `sidecars` as for
-/// `apply_files`. `patch_custody` receives `(uid, flags)` pairs for every
-/// change and returns how many rows it touched; it is called under `WRITER`,
+/// read/unread and the backup's catch-up both make. `patch_custody` receives
+/// `(uid, flags)` pairs for every change and returns `(custody entries,
+/// cached headers)` touched — whether it patches the header cache at all is
+/// the caller's call: the app's mark read/unread wants it (the next repaint
+/// reads from there, and a server-only message has no other copy), the backup
+/// reconcile does not. It is called under `WRITER`,
 /// so a caller building it from an `AppHandle` (the app's own shim) or a
 /// daemon connection (Task 2.9a) never sees the lock released between the
 /// file rename and the custody write.
@@ -217,17 +208,19 @@ fn apply_files(dirs: &Dirs, changes: &[FlagChange], sidecars: bool) -> Applied {
 pub fn apply_everywhere(
     dirs: &Dirs,
     changes: &[FlagChange],
-    sidecars: bool,
-    patch_custody: impl FnOnce(&[(u32, Vec<String>)]) -> Result<usize, String>,
+    patch_custody: impl FnOnce(&[(u32, Vec<String>)]) -> Result<(usize, usize), String>,
 ) -> Applied {
     if changes.is_empty() {
         return Applied::default();
     }
     let _one_writer = WRITER.lock().unwrap_or_else(|e| e.into_inner());
-    let mut applied = apply_files(dirs, changes, sidecars);
+    let mut applied = apply_files(dirs, changes);
     let patch: Vec<(u32, Vec<String>)> = changes.iter().map(|c| (c.uid, c.flags.clone())).collect();
     match patch_custody(&patch) {
-        Ok(n) => applied.index_patched = n,
+        Ok((entries, headers)) => {
+            applied.index_patched = entries;
+            applied.sidecars_patched = headers;
+        }
         Err(e) => warn!("vault_flags: custody patch failed: {}", e),
     }
     applied
@@ -303,11 +296,10 @@ pub fn rename_dirs(from: &Dirs, to: &Dirs) -> (usize, Vec<String>) {
     }
 
     // M-3 (final fix wave): the sidecar dir MOVE also needs the header-cache
-    // tree lock, not just the ledger lock — a concurrent `header_cache::save`
-    // for the OLD mailbox name takes only the tree(read)+mailbox lock, so
-    // without this both it and `rename_dirs` are `vault_gate(read)` holders
-    // that run in parallel, and `save`'s own `create_dir_all` can recreate
-    // the just-moved-away directory. Tree lock taken WRITE and OUTSIDE
+    // tree lock, not just the ledger lock — `header_cache::clear` is the
+    // other holder of it, and both it and `rename_dirs` are `vault_gate(read)`
+    // holders that can otherwise run in parallel over the same directory.
+    // Tree lock taken WRITE and OUTSIDE
     // (before) the ledger lock, keeping the same `L3a < L5a` order every read
     // path already uses (`with_ledger_lock` inside `lock_tree`, never the
     // reverse — that ordering is what keeps the whole lock graph acyclic).
@@ -536,8 +528,6 @@ mod tests {
                 mirror_cur: Some(mirror),
                 sidecar_dir,
                 root: base.to_path_buf(),
-                account_id: "acct".to_string(),
-                mailbox: "INBOX".to_string(),
             },
             _tmp: tmp,
         }
@@ -553,20 +543,6 @@ mod tests {
         v
     }
 
-    /// `flags` of `uid` in a header sidecar: ONE object, because a sidecar
-    /// holds a single message.
-    fn flags_of(path: &Path, uid: u32) -> Option<Vec<String>> {
-        let v: serde_json::Value = serde_json::from_str(&fs::read_to_string(path).ok()?).ok()?;
-        let entries = match &v {
-            serde_json::Value::Array(a) => a.clone(),
-            other if other.get("uid").is_some() => vec![other.clone()],
-            other => other.get("emails")?.as_array()?.clone(),
-        };
-        entries
-            .iter()
-            .find(|e| e.get("uid").and_then(|u| u.as_u64()) == Some(uid as u64))
-            .and_then(|e| serde_json::from_value(e.get("flags")?.clone()).ok())
-    }
 
     fn change(uid: u32, flags: &[&str]) -> FlagChange {
         FlagChange { uid, flags: s(flags) }
@@ -584,8 +560,8 @@ mod tests {
         fs::write(d.cur.join("2:2,.eml"), b"body").unwrap();
 
         let (first, second) = std::thread::scope(|scope| {
-            let a = scope.spawn(|| apply_in(d, &[change(1, &["\\Seen"])], false));
-            let b = scope.spawn(|| apply_in(d, &[change(2, &["\\Seen"])], false));
+            let a = scope.spawn(|| apply_in(d, &[change(1, &["\\Seen"])]));
+            let b = scope.spawn(|| apply_in(d, &[change(2, &["\\Seen"])]));
             (a.join().unwrap(), b.join().unwrap())
         });
 
@@ -595,20 +571,20 @@ mod tests {
     }
 
     #[test]
-    fn marking_read_renames_the_file_its_mirror_copy_and_patches_every_record() {
+    fn marking_read_renames_the_file_and_its_mirror_copy() {
         let f = fixture();
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,A"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,A.eml"), b"body").unwrap();
-        fs::write(d.sidecar_dir.join("7.json"), r#"{"uid":7,"flags":[],"subject":"s"}"#).unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
+        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
 
-        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 1 });
+        // The cached header is the caller's closure now (custody.db), so
+        // `apply_files` itself only ever touches the two file copies.
+        assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The legacy extension-less name converges on the current one.
         assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
         assert_eq!(names(d.mirror_cur.as_ref().unwrap()), vec!["7:2,AS.eml"]);
-        assert_eq!(flags_of(&d.sidecar_dir.join("7.json"), 7), Some(s(&["\\Seen"])));
     }
 
     /// The backup's catch-up over a copy the app auto-cached when the message
@@ -621,7 +597,7 @@ mod tests {
         fs::write(d.cur.join("9:2,.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("9.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(9, &["\\Seen", "archived"])], false);
+        let applied = apply_in(d, &[change(9, &["\\Seen", "archived"])]);
 
         assert_eq!(applied.renamed, 1);
         assert_eq!(applied.mirrored, 1);
@@ -636,7 +612,7 @@ mod tests {
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
         fs::write(d.mirror_cur.as_ref().unwrap().join("7:2,AS.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &[])], true);
+        let applied = apply_in(d, &[change(7, &[])]);
 
         assert_eq!(applied, Applied { renamed: 1, mirrored: 1, index_patched: 0, sidecars_patched: 0 });
         // The .eml suffix the file had is kept.
@@ -650,7 +626,7 @@ mod tests {
         let d = &f.dirs;
         fs::write(d.cur.join("7:2,AS.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
+        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied, Applied::default());
         assert_eq!(names(&d.cur), vec!["7:2,AS.eml"]);
@@ -660,12 +636,10 @@ mod tests {
     fn a_message_the_vault_does_not_hold_changes_nothing_and_says_so() {
         let f = fixture();
         let d = &f.dirs;
-        // A sidecar exists for every synced message; only that gets patched.
-        fs::write(d.sidecar_dir.join("9.json"), r#"{"uid":9,"flags":[]}"#).unwrap();
 
-        let applied = apply_in(d, &[change(9, &["\\Seen"]), change(10, &["\\Seen"])], true);
+        let applied = apply_in(d, &[change(9, &["\\Seen"]), change(10, &["\\Seen"])]);
 
-        assert_eq!(applied, Applied { renamed: 0, mirrored: 0, index_patched: 0, sidecars_patched: 1 });
+        assert_eq!(applied, Applied::default());
     }
 
     #[test]
@@ -675,7 +649,7 @@ mod tests {
         let mirror = d.mirror_cur.as_ref().unwrap();
         fs::write(mirror.join("7.eml"), b"body").unwrap();
 
-        let applied = apply_in(d, &[change(7, &["\\Seen"])], true);
+        let applied = apply_in(d, &[change(7, &["\\Seen"])]);
 
         assert_eq!(applied.mirrored, 1);
         assert_eq!(names(mirror), vec!["7:2,S.eml"]);
@@ -689,14 +663,10 @@ mod tests {
         fs::write(d.cur.join("2:2,AS.eml"), b"b").unwrap();
         fs::write(d.cur.join("3:2,AS.eml"), b"c").unwrap();
 
-        // A sidecar the reconcile must leave to the sync engine.
-        fs::write(d.sidecar_dir.join("1.json"), r#"{"uid":1,"flags":[]}"#).unwrap();
-
         // The server: 1 was read elsewhere, 2 is as stored, 3 was marked unread.
-        let applied = apply_in(d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])], false);
+        let applied = apply_in(d, &[change(1, &["\\Seen"]), change(2, &["\\Seen"]), change(3, &[])]);
 
         assert_eq!(applied, Applied { renamed: 2, mirrored: 0, index_patched: 0, sidecars_patched: 0 });
-        assert_eq!(flags_of(&d.sidecar_dir.join("1.json"), 1), Some(s(&[])));
         assert_eq!(names(&d.cur), vec!["1:2,AS.eml", "2:2,AS.eml", "3:2,A.eml"]);
     }
 
@@ -727,11 +697,11 @@ mod tests {
         let state = &state;
         std::thread::scope(|scope| {
             scope.spawn(|| {
-                apply_everywhere(d, &[change(1, &["\\Seen"])], false, |_patch| {
+                apply_everywhere(d, &[change(1, &["\\Seen"])], |_patch| {
                     state.store(1, std::sync::atomic::Ordering::SeqCst);
                     std::thread::sleep(std::time::Duration::from_millis(SLOW_MS));
                     state.store(2, std::sync::atomic::Ordering::SeqCst);
-                    Ok(1)
+                    Ok((1, 0))
                 })
             });
 
@@ -744,13 +714,13 @@ mod tests {
             }
 
             scope.spawn(|| {
-                apply_everywhere(d, &[change(2, &["\\Seen"])], false, |_patch| {
+                apply_everywhere(d, &[change(2, &["\\Seen"])], |_patch| {
                     assert_eq!(
                         state.load(std::sync::atomic::Ordering::SeqCst),
                         2,
                         "B's callback must not start until A's callback has returned"
                     );
-                    Ok(1)
+                    Ok((1, 0))
                 })
             });
         });
@@ -764,8 +734,6 @@ mod tests {
             mirror_cur: Some(base.join("mirror").join("me@x").join(mailbox).join("cur")),
             sidecar_dir: base.join("email_cache").join(sidecar),
             root: base.to_path_buf(),
-            account_id: "a".to_string(),
-            mailbox: mailbox.to_string(),
         }
     }
 

@@ -127,9 +127,18 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::path::Path;
 
     fn st() -> (tempfile::TempDir, Arc<DaemonState>) {
+        st_with(|_| {})
+    }
+
+    /// `seed` runs against the app dir BEFORE the state is built: the app
+    /// store's one-time import of the legacy JSON runs on its first open, and
+    /// `DaemonState::for_test` is what opens it.
+    fn st_with(seed: impl FnOnce(&Path)) -> (tempfile::TempDir, Arc<DaemonState>) {
         let tmp = tempfile::tempdir().unwrap();
+        seed(tmp.path());
         // mail_dir_ok = false: these routes must work even when the vault
         // itself is unreachable — they are rooted at app_dir, never the vault.
         let s = DaemonState::for_test(tmp.path().join("vault"), tmp.path().to_path_buf(), false);
@@ -155,7 +164,7 @@ mod tests {
     async fn queue_then_read_then_clear_round_trips() {
         let (_t, s) = st();
         let id1 = call(&s, "op_journal_queue", json!({"entry": entry(&[1, 2])})).await.result.unwrap();
-        assert_eq!(id1, json!(0));
+        assert!(id1.as_u64().unwrap() >= 1, "the store assigns the id: {id1}");
         let read = call(&s, "op_journal_read", json!({})).await.result.unwrap();
         assert_eq!(read.as_array().unwrap().len(), 1);
         assert_eq!(read[0]["uids"], json!([1, 2]));
@@ -204,12 +213,13 @@ mod tests {
     /// the read arm's lock line removed — see task-2.8-report.md Step 0).
     #[tokio::test]
     async fn a_legacy_import_race_between_read_and_queue_keeps_every_entry() {
-        let (_t, s) = st();
-        std::fs::write(
-            s.app_dir.join("pending_server_delete.json"),
-            r#"{"legacy-acc|INBOX": [999]}"#,
-        )
-        .unwrap();
+        let (_t, s) = st_with(|app_dir| {
+            std::fs::write(
+                app_dir.join("pending_server_delete.json"),
+                r#"{"legacy-acc|INBOX": [999]}"#,
+            )
+            .unwrap();
+        });
 
         let mut tasks = Vec::new();
         for uid in 0..20u32 {

@@ -13,21 +13,41 @@ fn account() -> Vec<String> {
 fn header(uid: u32) -> Value {
     json!({"uid":uid,"messageId":format!("<m{uid}@test>"),"from":{"address":"ana@example.test"},"subject":"fixture","date":"Tue, 08 Sep 2026 23:00:00 +0000","internalDate":"2026-09-09T00:30:00Z"})
 }
-fn folder(root: &Path) -> PathBuf {
-    write(
-        root,
-        "mailboxes/account-a/mailboxes.json",
-        json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}],"fetchedAt":1720000000000_i64}),
-    );
-    write(
-        root,
-        "email_cache/account_a_INBOX/_meta.json",
-        json!({"totalEmails":1500,"uidValidity":4,"lastSynced":1720000000000_i64}),
-    );
-    root.join("email_cache/account_a_INBOX")
-}
 fn store(root: &Path) -> mailvault_core::custody::SharedConn {
     std::sync::Mutex::new(Some(mailvault_core::custody::db::open(root).unwrap()))
+}
+/// The header cache's own writer: `save_email_cache`'s payload, straight into
+/// `custody.db`. Meta keys the caller leaves out keep whatever is stored.
+fn cache_save(custody: &mailvault_core::custody::SharedConn, account: &str, mailbox: &str, data: Value) {
+    let guard = mailvault_core::custody::lock(custody);
+    mailvault_core::custody::cache::save_headers(guard.as_ref().unwrap(), account, mailbox, &data.to_string())
+        .unwrap();
+}
+fn cache_headers(custody: &mailvault_core::custody::SharedConn, account: &str, mailbox: &str, rows: Vec<Value>) {
+    cache_save(custody, account, mailbox, json!({ "emails": rows }));
+}
+fn cache_mailboxes(custody: &mailvault_core::custody::SharedConn, account: &str, list: Value) {
+    let guard = mailvault_core::custody::lock(custody);
+    mailvault_core::custody::cache::save_mailboxes(guard.as_ref().unwrap(), account, &list.to_string())
+        .unwrap();
+}
+/// One configured INBOX with sync metadata, and the directory that still
+/// carries its Outlook uid ledger.
+fn folder(root: &Path, custody: &mailvault_core::custody::SharedConn) -> PathBuf {
+    cache_mailboxes(
+        custody,
+        "account-a",
+        json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}],"fetchedAt":1720000000000_i64}),
+    );
+    cache_save(
+        custody,
+        "account-a",
+        "INBOX",
+        json!({"totalEmails":1500,"uidValidity":4,"lastSynced":1720000000000_i64}),
+    );
+    let dir = root.join("email_cache/account_a_INBOX");
+    fs::create_dir_all(&dir).unwrap();
+    dir
 }
 fn seed(
     custody: &mailvault_core::custody::SharedConn,
@@ -54,6 +74,26 @@ fn rows(custody: &mailvault_core::custody::SharedConn) -> impl Fn(&str) -> Resul
         }
     }
 }
+/// The same stand-in for the header cache half: the folder list plus every
+/// mailbox that has cached headers.
+fn cached(
+    custody: &mailvault_core::custody::SharedConn,
+) -> impl Fn(&str) -> Result<(Option<Value>, Vec<(String, Value)>), String> + '_ {
+    move |account: &str| {
+        use mailvault_core::custody::cache;
+        let guard = mailvault_core::custody::lock(custody);
+        let Some(conn) = guard.as_ref() else {
+            return Err("custody store unavailable: closed".to_string());
+        };
+        let list = cache::load_mailboxes(conn, account)?.and_then(|raw| serde_json::from_str(&raw).ok());
+        let mut out = Vec::new();
+        for (_, mailbox) in cache::mailboxes_with_headers(conn, Some(account))? {
+            let Some(blob) = cache::load_headers(conn, account, &mailbox, None)? else { continue };
+            out.push((mailbox, serde_json::from_str(&blob).map_err(|e| e.to_string())?));
+        }
+        Ok((list, out))
+    }
+}
 /// `gen` stands in for the daemon's live custody write counter (Task 3.6
 /// Step 4, `crate::custody::generation`): production reads it fresh at
 /// every `begin`/`read` call, so these tests pass it explicitly instead of
@@ -67,7 +107,9 @@ fn begin(
     custody: &mailvault_core::custody::SharedConn,
     gen: u64,
 ) -> Value {
-    state.begin_at(root, &rows(custody), &account(), &account(), &|| gen).unwrap()
+    state
+        .begin_at(root, &rows(custody), &cached(custody), &account(), &account(), &|| gen)
+        .unwrap()
 }
 fn page(state: &InsightsSnapshots, start: &Value, gen: u64) -> Value {
     state
@@ -78,19 +120,8 @@ fn page(state: &InsightsSnapshots, start: &Value, gen: u64) -> Value {
 fn insights_pages_cover_headers_beyond_the_mailbox_window() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    for uid in 1..=1201 {
-        write(&cache, &format!("{uid}.json"), header(uid));
-    }
-    assert_eq!(
-        read_header_files(&cache, &(1..=1000).collect::<Vec<_>>())
-            .unwrap()
-            .len(),
-        1000
-    );
-    let tail = read_header_files(&cache, &(1001..=1201).collect::<Vec<_>>()).unwrap();
-    assert_eq!(tail.len(), 201);
-    assert_eq!(tail.last().unwrap()["uid"], 1201);
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", (1..=1201).map(header).collect());
     let state = InsightsSnapshots::default();
     let start = begin(&state, dir.path(), &custody, 0);
     assert_eq!(start["inventoryCount"], 1201);
@@ -119,8 +150,8 @@ fn insights_pages_cover_headers_beyond_the_mailbox_window() {
 fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(&cache, "7.json", header(7));
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", vec![header(7)]);
     seed(
         &custody,
         "account-b",
@@ -149,9 +180,9 @@ fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
     assert_eq!(sent["mailbox"], "Projects/2026");
     assert_eq!(sent["origin"], "local_sent");
     assert_eq!(sent["serverAbsent"], true);
-    let cache = rows.iter().find(|r| r["source"] == "server-cache").unwrap();
-    assert_eq!(cache["messageId"], "<m7@test>");
-    assert_eq!(cache["uidValidity"], 4);
+    let cached_row = rows.iter().find(|r| r["source"] == "server-cache").unwrap();
+    assert_eq!(cached_row["messageId"], "<m7@test>");
+    assert_eq!(cached_row["uidValidity"], 4);
     let saved = rows
         .iter()
         .find(|r| r["uid"] == 7 && r["source"] == "vault")
@@ -164,20 +195,21 @@ fn insights_includes_nested_and_unselected_accounts_preserving_copy_identity() {
 fn insights_ignores_a_legacy_unified_cache_poisoned_with_foreign_rows() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    write(
-        dir.path(),
-        "mailboxes/account-a/mailboxes.json",
+    cache_mailboxes(
+        &custody,
+        "account-a",
         json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}]}),
     );
-    write(
-        dir.path(),
-        "email_cache/account_a_UNIFIED/9.json",
-        json!({"uid":9,"from":{"address":"inga@fenixera.lt"},"to":[{"address":"donatas@domasta.lt"}],"date":"Tue, 08 Sep 2026 23:00:00 +0000"}),
+    cache_headers(
+        &custody,
+        "account-a",
+        "UNIFIED",
+        vec![json!({"uid":9,"from":{"address":"inga@fenixera.lt"},"to":[{"address":"donatas@domasta.lt"}],"date":"Tue, 08 Sep 2026 23:00:00 +0000"})],
     );
     let state = InsightsSnapshots::default();
     let selected = vec!["account-a".to_string()];
     let start = state
-        .begin_at(dir.path(), &rows(&custody), &account(), &selected, &|| 0)
+        .begin_at(dir.path(), &rows(&custody), &cached(&custody), &account(), &selected, &|| 0)
         .unwrap();
     let page = page(&state, &start, 0);
 
@@ -185,35 +217,28 @@ fn insights_ignores_a_legacy_unified_cache_poisoned_with_foreign_rows() {
     assert!(page["coverage"]["folders"].as_array().unwrap().iter().all(|f| f["mailbox"] != "UNIFIED"), "{page}");
 }
 #[test]
-fn insights_corrupt_or_missing_metadata_stays_partial_and_unknown() {
+fn insights_a_mailbox_that_never_recorded_a_server_total_stays_partial_and_unknown() {
+    // A mailbox cached before the sync engine ever learned how many messages
+    // the server holds: the rows are real, the denominator is not known.
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(&cache, "1.json", header(1));
-    fs::write(cache.join("_meta.json"), "broken").unwrap();
-    fs::write(cache.join("2.json"), "broken").unwrap();
+    cache_mailboxes(
+        &custody,
+        "account-a",
+        json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}]}),
+    );
+    cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"].as_array().unwrap().len(), 1);
     assert_eq!(p["coverage"]["status"], "partial");
-    assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
-    assert!(
-        p["coverage"]["warnings"]["unreadableFiles"]
-            .as_u64()
-            .unwrap()
-            > 0
-    );
-    assert!(!p["coverage"]["errors"].as_array().unwrap().is_empty());
-    fs::remove_file(cache.join("_meta.json")).unwrap();
-    let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(p["coverage"]["folders"][0]["knownServerMessages"].is_null());
 }
 #[test]
 fn insights_a_mailbox_cache_holding_only_its_uid_ledger_is_not_a_problem() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    fs::remove_file(cache.join("_meta.json")).unwrap();
+    let cache = folder(dir.path(), &custody);
     fs::write(cache.join("graph_id_map.json"), r#"{"1":"g-a"}"#).unwrap();
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
@@ -231,13 +256,13 @@ fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
     let state = InsightsSnapshots::default();
     assert_eq!(
         state
-            .begin_at(&dir.path().join("missing"), &rows(&custody), &account(), &account(), &|| 0)
+            .begin_at(&dir.path().join("missing"), &rows(&custody), &cached(&custody), &account(), &account(), &|| 0)
             .unwrap_err()["code"],
         "vaultUnavailable"
     );
     assert_eq!(
         state
-            .begin_at(dir.path(), &rows(&custody), &account(), &["../../outside".into()], &|| 0)
+            .begin_at(dir.path(), &rows(&custody), &cached(&custody), &account(), &["../../outside".into()], &|| 0)
             .unwrap_err()["code"],
         "invalidAccountScope"
     );
@@ -246,10 +271,8 @@ fn insights_missing_vault_and_unconfigured_scope_fail_explicitly() {
 fn insights_release_invalidates_snapshot_and_cursor_cannot_cross_snapshots() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    for uid in 1..=1001 {
-        write(&cache, &format!("{uid}.json"), header(uid));
-    }
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", (1..=1001).map(header).collect());
     let state = InsightsSnapshots::default();
     let a = begin(&state, dir.path(), &custody, 0);
     let p = page(&state, &a, 0);
@@ -273,17 +296,18 @@ fn insights_included_file_mutation_deletion_and_replacement_make_snapshot_stale(
     for change in ["mutate", "delete", "replace"] {
         let dir = tempfile::tempdir().unwrap();
         let custody = store(dir.path());
-        let cache = folder(dir.path());
-        let path = write(&cache, "1.json", header(1));
+        folder(dir.path(), &custody);
+        let path = eml(dir.path(), "account-a", 1);
         let state = InsightsSnapshots::default();
         let a = begin(&state, dir.path(), &custody, 0);
         match change {
             "mutate" => {
-                write(&cache, "1.json", header(9));
+                fs::write(&path, "From: other@example.test\r\nMessage-ID: <m9@test>\r\n\r\nbody").unwrap();
             }
             "delete" => fs::remove_file(path).unwrap(),
             _ => {
-                let replacement = write(&cache, "replacement.tmp", header(1));
+                let replacement = dir.path().join("replacement.tmp");
+                fs::write(&replacement, "From: ana@example.test\r\nMessage-ID: <m1@test>\r\n\r\nbody").unwrap();
                 fs::rename(replacement, path).unwrap();
             }
         }
@@ -309,10 +333,8 @@ fn eml(root: &Path, account: &str, uid: u32) -> PathBuf {
 fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    for uid in 1..=1001 {
-        write(&cache, &format!("{uid}.json"), header(uid));
-    }
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", (1..=1001).map(header).collect());
     eml(dir.path(), "account-a", 1);
     let state = InsightsSnapshots::default();
     let mut gen = 0u64;
@@ -321,10 +343,11 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
     let first = page(&state, &start, gen);
     assert_eq!(first["rows"].as_array().unwrap().len(), 1000);
 
-    // A normal light body fetch adds only a new cur/ file. New sidecars and
-    // inventory directories likewise belong to the next explicit refresh.
+    // A normal light body fetch adds only a new cur/ file. New cached
+    // headers and inventory directories likewise belong to the next explicit
+    // refresh.
     eml(dir.path(), "account-a", 2);
-    write(&cache, "1002.json", header(1002));
+    cache_headers(&custody, "account-a", "INBOX", (1..=1002).map(header).collect());
     eml(dir.path(), "account-b", 3);
     // Custody is the exception: a write for any mailbox of any account bumps
     // the daemon's write counter (Task 3.6 Step 4) instead of touching
@@ -349,8 +372,8 @@ fn insights_append_only_downloads_stay_outside_the_paged_inventory_cutoff() {
 fn insights_ignored_temporary_files_do_not_invalidate_included_headers() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(&cache, "1.json", header(1));
+    let cache = folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
     eml(dir.path(), "account-a", 1);
     let cache_temp = write(&cache, "in-flight.tmp", json!("old"));
     let vault_temp = write(
@@ -368,17 +391,11 @@ fn insights_ignored_temporary_files_do_not_invalidate_included_headers() {
 
 #[test]
 fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale() {
-    for change in [
-        "metadata",
-        "index",
-        "generation",
-        "missing-metadata",
-        "missing-generation",
-    ] {
+    for change in ["metadata", "index", "generation", "missing-generation"] {
         let dir = tempfile::tempdir().unwrap();
         let custody = store(dir.path());
-        let cache = folder(dir.path());
-        write(&cache, "1.json", header(1));
+        folder(dir.path(), &custody);
+        cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
         let saved = eml(dir.path(), "account-a", 1);
         let generation = saved
             .parent()
@@ -387,9 +404,6 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
             .unwrap()
             .join(".uidvalidity");
         seed(&custody, "account-a", "INBOX", vec![header(1)]);
-        if change == "missing-metadata" {
-            fs::remove_file(cache.join("_meta.json")).unwrap();
-        }
         if change != "missing-generation" {
             fs::write(&generation, "4").unwrap();
         }
@@ -397,12 +411,11 @@ fn insights_metadata_index_and_uid_generation_changes_still_make_snapshot_stale(
         let mut gen = 0u64;
         let start = begin(&state, dir.path(), &custody, gen);
         match change {
-            "metadata" | "missing-metadata" => {
-                write(
-                    &cache,
-                    "_meta.json",
-                    json!({"totalEmails":1500,"uidValidity":5}),
-                );
+            "metadata" => {
+                // Sync metadata lives in the store now, so changing it is a
+                // custody write like any other.
+                cache_save(&custody, "account-a", "INBOX", json!({"totalEmails":1500,"uidValidity":5}));
+                gen += 1;
             }
             "index" => {
                 // A real custody write after `begin` (Task 3.6 Step 4: this
@@ -428,8 +441,8 @@ fn insights_inventory_directory_removal_replacement_and_symlinks_still_make_snap
     for change in ["remove", "replace", "symlink"] {
         let dir = tempfile::tempdir().unwrap();
         let custody = store(dir.path());
-        let cache = folder(dir.path());
-        write(&cache, "1.json", header(1));
+        folder(dir.path(), &custody);
+        cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
         // Watch an empty traversed directory as well: no included file stamp
         // can detect this directory's replacement on our behalf.
         let empty = dir.path().join("Maildir/account-a/INBOX/cur");
@@ -457,11 +470,7 @@ fn insights_inventory_directory_removal_replacement_and_symlinks_still_make_snap
 fn insights_legacy_cache_and_unresolved_vault_folder_are_readable_without_guessing() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    write(
-        dir.path(),
-        "mailboxes/account-a/mailboxes.json",
-        json!([{"path":"A/B"}]),
-    );
+    cache_mailboxes(&custody, "account-a", json!([{"path":"A/B"}]));
     write(
         dir.path(),
         "email_cache/account_a_A_B.json",
@@ -503,9 +512,12 @@ fn insights_skips_symlink_escapes() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
     let outside = tempfile::tempdir().unwrap();
-    let cache = folder(dir.path());
-    write(outside.path(), "1.json", header(1));
-    std::os::unix::fs::symlink(outside.path().join("1.json"), cache.join("1.json")).unwrap();
+    folder(dir.path(), &custody);
+    let outside_eml = outside.path().join("1:2,S");
+    fs::write(&outside_eml, "From: ana@example.test\r\nMessage-ID: <m1@test>\r\n\r\nbody").unwrap();
+    let inside = dir.path().join("Maildir/account-a/INBOX/cur/1:2,S");
+    fs::create_dir_all(inside.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&outside_eml, &inside).unwrap();
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert!(p["rows"].as_array().unwrap().is_empty());
@@ -529,11 +541,12 @@ fn insights_abandoned_snapshots_expire_after_five_minutes() {
 fn insights_only_returns_header_fields_and_never_uses_file_dates() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(
-        &cache,
-        "4.json",
-        json!({"uid":4,"messageId":"<private@test>","date":"not-a-date","from":{"address":"ana@example.test","password":"secret"},"html":"secret html","text":"secret body","attachments":[{"content":"secret attachment"}],"password":"secret password","credentials":{"accessToken":"secret token"}}),
+    folder(dir.path(), &custody);
+    cache_headers(
+        &custody,
+        "account-a",
+        "INBOX",
+        vec![json!({"uid":4,"messageId":"<private@test>","date":"not-a-date","from":{"address":"ana@example.test","password":"secret"},"html":"secret html","text":"secret body","attachments":[{"content":"secret attachment"}],"password":"secret password","credentials":{"accessToken":"secret token"}})],
     );
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
@@ -553,11 +566,7 @@ fn insights_only_returns_header_fields_and_never_uses_file_dates() {
 fn insights_unmapped_cache_headers_remain_visible_with_location_limit() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    write(
-        dir.path(),
-        "email_cache/account_a_Ambiguous_Name/8.json",
-        header(8),
-    );
+    cache_headers(&custody, "account-a", "Ambiguous_Name", vec![header(8)]);
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
     assert_eq!(p["rows"].as_array().unwrap().len(), 1);
@@ -616,19 +625,17 @@ fn insights_vault_uses_index_original_date_when_raw_header_has_none() {
 
 #[cfg(unix)]
 #[test]
-fn insights_does_not_read_symlinked_metadata_or_generation() {
+fn insights_does_not_read_a_symlinked_uid_generation() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
     let outside = tempfile::tempdir().unwrap();
-    let cache = folder(dir.path());
-    write(&cache, "1.json", header(1));
-    fs::remove_file(cache.join("_meta.json")).unwrap();
-    write(
-        outside.path(),
-        "meta.json",
-        json!({"totalEmails":987,"uidValidity":404}),
+    // A mailbox with cached rows but no recorded server total.
+    cache_mailboxes(
+        &custody,
+        "account-a",
+        json!({"mailboxes":[{"path":"INBOX","specialUse":"\\Inbox","children":[]}]}),
     );
-    std::os::unix::fs::symlink(outside.path().join("meta.json"), cache.join("_meta.json")).unwrap();
+    cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
     let folder = dir.path().join("Maildir/account-a/INBOX");
     fs::create_dir_all(folder.join("cur")).unwrap();
     fs::write(folder.join("cur/1:2,AS"), "From: a@test\r\n\r\nbody").unwrap();
@@ -652,12 +659,13 @@ fn insights_does_not_read_symlinked_metadata_or_generation() {
 fn insights_recognizes_graph_date_provenance_after_javascript_mapping() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(
-        &cache,
-        "17.json",
-        json!({"uid":17,"source":"server","provider":"graph","date":"2026-09-09T00:30:00Z","messageDate":null,
-        "receivedAt":"2026-09-09T00:30:00Z","sentAt":"2026-09-08T23:30:00Z"}),
+    folder(dir.path(), &custody);
+    cache_headers(
+        &custody,
+        "account-a",
+        "INBOX",
+        vec![json!({"uid":17,"source":"server","provider":"graph","date":"2026-09-09T00:30:00Z","messageDate":null,
+        "receivedAt":"2026-09-09T00:30:00Z","sentAt":"2026-09-08T23:30:00Z"})],
     );
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &custody, 0), 0);
@@ -726,15 +734,15 @@ fn insights_rejects_conflicting_index_identity_even_when_message_id_matches() {
 #[test]
 fn a_closed_custody_store_is_an_unreadable_location_not_an_empty_one() {
     let dir = tempfile::tempdir().unwrap();
-    let cache = folder(dir.path());
-    write(&cache, "1.json", header(1));
+    // The vault's own files are readable without the store; the store is not.
+    eml(dir.path(), "account-a", 1);
     let closed: mailvault_core::custody::SharedConn = std::sync::Mutex::new(None);
     let state = InsightsSnapshots::default();
     let p = page(&state, &begin(&state, dir.path(), &closed, 0), 0);
     assert_eq!(
         p["rows"].as_array().unwrap().len(),
         1,
-        "the cache still reads"
+        "the vault copies still read"
     );
     assert!(
         p["coverage"]["errors"]
@@ -767,7 +775,7 @@ fn insights_begin_detects_a_custody_write_landing_during_the_inventory_walk() {
     };
     let state = InsightsSnapshots::default();
     let err = state
-        .begin_at(dir.path(), &rows(&custody), &account(), &account(), &gen_fn)
+        .begin_at(dir.path(), &rows(&custody), &cached(&custody), &account(), &account(), &gen_fn)
         .unwrap_err();
     assert_eq!(err["code"], "snapshotStale", "{err}");
 }
@@ -783,8 +791,8 @@ fn insights_begin_detects_a_custody_write_landing_during_the_inventory_walk() {
 fn insights_read_detects_a_custody_write_landing_during_the_page_parse() {
     let dir = tempfile::tempdir().unwrap();
     let custody = store(dir.path());
-    let cache = folder(dir.path());
-    write(&cache, "1.json", header(1));
+    folder(dir.path(), &custody);
+    cache_headers(&custody, "account-a", "INBOX", vec![header(1)]);
     let state = InsightsSnapshots::default();
     let start = begin(&state, dir.path(), &custody, 0);
     let calls = std::cell::Cell::new(0u64);
