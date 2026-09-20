@@ -503,17 +503,35 @@ mod tests {
     #[test]
     fn flush_and_reload_roundtrip() {
         let tmp = tempdir();
+        // The store outlives both states, the way the daemon's custody
+        // connection outlives a vault switch.
+        let db: Arc<mailvault_core::custody::SharedConn> = Arc::new(std::sync::Mutex::new(Some(
+            mailvault_core::custody::db::open(&tmp).unwrap(),
+        )));
         {
             let state = ContactsState::new(tmp.clone());
+            state.attach_db(Arc::clone(&db));
             let h = header(1, addr("Alice", "alice@ex.com"), vec![]);
             state.observe_headers("acc1", "INBOX", &[h]);
             state.flush_dirty();
         }
         let state2 = ContactsState::new(tmp.clone());
+        state2.attach_db(db);
         state2.load_account("acc1");
         let snap = state2.get_snapshot(&["acc1".to_string()]);
         assert_eq!(snap["acc1"].len(), 1);
         assert_eq!(snap["acc1"][0].address, "alice@ex.com");
+    }
+
+    /// With no store attached the index still works in memory — it just does
+    /// not survive the process, and says so rather than failing a flush.
+    #[test]
+    fn a_flush_with_no_store_attached_is_not_a_panic() {
+        let tmp = tempdir();
+        let state = ContactsState::new(tmp.clone());
+        state.observe_headers("acc1", "INBOX", &[header(1, addr("Alice", "alice@ex.com"), vec![])]);
+        state.flush_dirty();
+        assert_eq!(state.get_snapshot(&["acc1".to_string()])["acc1"].len(), 1);
     }
 
     fn tempdir() -> PathBuf {

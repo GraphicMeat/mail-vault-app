@@ -24,18 +24,17 @@ pub fn load(conn: &Connection, account_id: &str) -> Result<Vec<(String, String)>
 /// Replace everything this account has. The JSON file was rewritten whole on
 /// every save, so a key the caller dropped has to disappear here too.
 pub fn replace_account(conn: &Connection, account_id: &str, entries: &[(String, String)]) -> Result<(), String> {
-    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM classifications WHERE account_id = ?1", [account_id])
-        .map_err(|e| e.to_string())?;
-    {
-        let mut stmt = tx
+    crate::app_db::db::in_txn(conn, || {
+        conn.execute("DELETE FROM classifications WHERE account_id = ?1", [account_id])
+            .map_err(|e| e.to_string())?;
+        let mut stmt = conn
             .prepare_cached("INSERT OR REPLACE INTO classifications(account_id, email_key, entry_json) VALUES (?1,?2,?3)")
             .map_err(|e| e.to_string())?;
         for (key, json) in entries {
             stmt.execute(params![account_id, key, json]).map_err(|e| e.to_string())?;
         }
-    }
-    tx.commit().map_err(|e| e.to_string())
+        Ok(())
+    })
 }
 
 /// One result, leaving every other key alone.
@@ -79,17 +78,16 @@ pub fn queue_load(conn: &Connection) -> Vec<(String, String)> {
 /// The whole queue, replacing what is stored. Matches the old
 /// `persist_queue_locked`, which serialized the live `VecDeque` every time.
 pub fn queue_replace(conn: &Connection, items: &[(String, String)]) -> Result<(), String> {
-    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM classification_queue", []).map_err(|e| e.to_string())?;
-    {
-        let mut stmt = tx
+    crate::app_db::db::in_txn(conn, || {
+        conn.execute("DELETE FROM classification_queue", []).map_err(|e| e.to_string())?;
+        let mut stmt = conn
             .prepare_cached("INSERT INTO classification_queue(dedupe_key, item_json) VALUES (?1,?2)")
             .map_err(|e| e.to_string())?;
         for (key, json) in items {
             stmt.execute(params![key, json]).map_err(|e| e.to_string())?;
         }
-    }
-    tx.commit().map_err(|e| e.to_string())
+        Ok(())
+    })
 }
 
 #[cfg(test)]

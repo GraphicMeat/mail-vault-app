@@ -86,12 +86,16 @@ pub fn lock_mailbox(root: &Path, base: &str) -> Arc<Mutex<()>> {
 
 // ── Save / load headers ──────────────────────────────────────────────────
 
-/// Delete cached headers. `(Some(account), Some(mailbox))` clears one
+/// Empty the cache directories. `(Some(account), Some(mailbox))` clears one
 /// mailbox; `(Some(account), None)` clears every entry belonging to that
 /// account (exact sanitized-id match or `<id>_` prefix — never a bare prefix,
 /// so clearing `acc1` cannot also delete `acc10`'s cache); `(None, None)`
-/// clears everything except the Outlook uid ledgers (the vault and the app's
-/// memory still use those numbers).
+/// clears everything. **Every** branch keeps the Outlook uid ledgers, by
+/// name: the vault and the app's memory still use those numbers, and a lost
+/// ledger hands a live uid to a second message.
+///
+/// The cached headers themselves are rows in `custody.db` and are cleared by
+/// the caller alongside this (`handlers::cache`'s `clear_email_cache`).
 pub fn clear(root: &Path, account_id: Option<&str>, mailbox: Option<&str>) -> Result<(), String> {
     let cache_dir = root.join("email_cache");
     if !cache_dir.exists() {
@@ -121,8 +125,12 @@ pub fn clear(root: &Path, account_id: Option<&str>, mailbox: Option<&str>) -> Re
                 if name == sanitized || name.starts_with(&prefix) {
                     let path = entry.path();
                     if path.is_dir() {
-                        let _ = fs::remove_dir_all(&path);
+                        // Same rule as the per-mailbox and whole-cache
+                        // branches: the uid ledger shares this directory and
+                        // is not derived from anything.
+                        crate::graph_ledger::clear_mailbox_keeping_ledger(&path);
                     } else {
+                        // The legacy monolithic `<base>.json` cache file.
                         let _ = fs::remove_file(&path);
                     }
                     info!("Removed cache entry: {:?}", path);
@@ -229,8 +237,12 @@ mod tests {
         seed(&root, "acc1", "INBOX");
         seed(&root, "acc10", "INBOX");
         clear(&root, Some("acc1"), None).unwrap();
-        assert!(!sidecar_dir(&root, "acc1", "INBOX").exists(), "acc1 must be cleared");
-        assert!(sidecar_dir(&root, "acc10", "INBOX").exists(), "acc10 must survive clearing acc1");
+        assert!(
+            sidecar_dir(&root, "acc1", "INBOX").join(GRAPH_ID_MAP_FILE).exists(),
+            "an account-wide clear keeps the ledger too"
+        );
+        assert!(!sidecar_dir(&root, "acc1", "INBOX").join("7.json").exists(), "acc1 must be cleared");
+        assert!(sidecar_dir(&root, "acc10", "INBOX").join("7.json").exists(), "acc10 must survive clearing acc1");
         let _ = fs::remove_dir_all(&root);
     }
 

@@ -530,9 +530,14 @@ mod tests {
     async fn a_failed_flush_keeps_its_messages_until_a_later_one_succeeds() {
         let mail_dir = scratch("flush-fail-mail");
         let app_dir = scratch("flush-fail-app");
-        // A FILE where the classifications directory belongs: create_dir_all,
-        // and so every save, fails.
-        std::fs::write(app_dir.join("classifications"), b"not a directory").unwrap();
+        // A read-only app dir: `app.db` cannot be created, so every save fails.
+        // Set before the state is built, or the store would already be open.
+        let mut perms = std::fs::metadata(&app_dir).unwrap().permissions();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o500);
+            std::fs::set_permissions(&app_dir, perms.clone()).unwrap();
+        }
 
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
         let worker = tokio::spawn(run_classification_worker(Arc::clone(&state), no_rules()));
@@ -555,7 +560,11 @@ mod tests {
         );
 
         // Give the directory back and hand the worker one more message.
-        std::fs::remove_file(app_dir.join("classifications")).unwrap();
+        {
+            use std::os::unix::fs::PermissionsExt;
+            perms.set_mode(0o700);
+            std::fs::set_permissions(&app_dir, perms).unwrap();
+        }
         state
             .classification
             .enqueue("acc1", vec![header(3)], classification::QueueTier::New)
@@ -581,9 +590,9 @@ mod tests {
     }
 
     /// The "already classified?" check used to re-read and re-parse the whole
-    /// account file for every popped item. Proof that it now reads once: make
-    /// the file unreadable after the worker has warmed its copy, then hand it a
-    /// message it has already seen. A worker that re-reads sees an empty file
+    /// account's records for every popped item. Proof that it now reads once:
+    /// empty the account after the worker has warmed its copy, then hand it a
+    /// message it has already seen. A worker that re-reads sees nothing stored
     /// and classifies the message again — from the new, differently-classified
     /// body — and its flush writes only what it just did.
     #[tokio::test]
@@ -606,13 +615,12 @@ mod tests {
         assert_eq!(saved.len(), 3);
         assert_eq!(saved["<m1@t>"].category, "personal");
 
-        // Corrupt the file. load_classifications answers "nothing classified"
-        // for it (unwrap_or_default), so it also defeats the enqueue-side dedup
-        // and <m1@t> reaches the worker a second time.
-        std::fs::write(
-            app_dir.join("classifications").join("acc1.json"),
-            b"{not json",
-        )
+        // Drop the stored rows. `load_classifications` answers "nothing
+        // classified" for the account, which defeats the enqueue-side dedup
+        // and lets <m1@t> reach the worker a second time.
+        mailvault_core::app_db::with(&app_dir, |c| {
+            mailvault_core::app_db::classify::replace_account(c, "acc1", &[])
+        })
         .unwrap();
 
         let promotional = classification::EmailForClassification {
@@ -631,7 +639,7 @@ mod tests {
                 classification::QueueTier::New,
             )
             .await;
-        assert_eq!(queued, 3, "the corrupt file hides all three from the enqueue check");
+        assert_eq!(queued, 3, "the emptied account hides all three from the enqueue check");
 
         let progress = wait_for(&state, |p| {
             p.classified == 6 && p.status == classification::PipelineStatus::Complete
@@ -642,12 +650,12 @@ mod tests {
         let saved = classification::load_classifications(&app_dir, "acc1");
         assert_eq!(
             saved["<m1@t>"].category, "personal",
-            "the worker knew <m1@t> was classified without re-reading the file"
+            "the worker knew <m1@t> was classified without re-reading the store"
         );
         assert_eq!(
             saved.len(),
             5,
-            "the flush writes what the worker knows, so the corrupt file loses nothing"
+            "the flush writes what the worker knows, so the emptied account loses nothing"
         );
         assert!(saved.contains_key("<m4@t>") && saved.contains_key("<m5@t>"));
 
@@ -712,24 +720,27 @@ mod tests {
         let app_dir = scratch("reclassify-app");
         let state = DaemonState::for_test(mail_dir.clone(), app_dir.clone(), true);
 
-        // Eight cached headers in the vault, every one of them a newsletter by
-        // header cues so bootstrap labelling would also fire.
-        let cache = mail_dir.join("email_cache").join("acc1_INBOX");
-        std::fs::create_dir_all(&cache).unwrap();
-        for uid in 1..=8u64 {
-            let sidecar = json!({
-                "uid": uid,
-                "messageId": format!("<m{uid}@t>"),
-                "subject": format!("Weekly digest {uid}"),
-                "from": {"name": "List", "address": "news@list.test"},
-                "date": format!("2026-08-0{uid}T00:00:00Z"),
-                "to": [{"address": "me@t"}],
-                "hasAttachments": false,
-                "listUnsubscribe": "<mailto:u@list.test>",
-                "listId": "<digest.list.test>",
-            });
-            std::fs::write(cache.join(format!("{uid}.json")), sidecar.to_string()).unwrap();
-        }
+        // Eight cached headers in the vault's store, every one of them a
+        // newsletter by header cues so bootstrap labelling would also fire.
+        let emails: Vec<_> = (1..=8u64)
+            .map(|uid| {
+                json!({
+                    "uid": uid,
+                    "messageId": format!("<m{uid}@t>"),
+                    "subject": format!("Weekly digest {uid}"),
+                    "from": {"name": "List", "address": "news@list.test"},
+                    "date": format!("2026-08-0{uid}T00:00:00Z"),
+                    "to": [{"address": "me@t"}],
+                    "hasAttachments": false,
+                    "listUnsubscribe": "<mailto:u@list.test>",
+                    "listId": "<digest.list.test>",
+                })
+            })
+            .collect();
+        crate::custody::with_conn(&state, |c| {
+            mailvault_core::custody::cache::save_headers(c, "acc1", "INBOX", &json!({"emails": emails}).to_string())
+        })
+        .unwrap();
 
         // Five user overrides in the APP dir — both the label source for the
         // retrain and the set that must survive the reclassify.
@@ -754,11 +765,11 @@ mod tests {
         reclassify_all(Arc::clone(&state), "acc1".to_string()).await;
 
         assert!(
-            app_dir.join("classification_models").join("acc1.json").exists(),
-            "the retrained model must land in the app dir, where the worker loads it"
+            classification::load_model(&app_dir, "acc1").is_some(),
+            "the retrained model must land in the app store, where the worker loads it"
         );
         assert!(
-            !mail_dir.join("classification_models").exists(),
+            !mail_dir.join("app.db").exists(),
             "nothing about the model belongs in the relocatable vault"
         );
         assert_eq!(

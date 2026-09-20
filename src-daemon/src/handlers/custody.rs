@@ -276,7 +276,8 @@ mod tests {
 
     #[tokio::test]
     async fn local_index_read_while_closed_answers_the_verbatim_custody_error() {
-        let (_v, s) = st(true); // never opened
+        let (_v, s) = st(true);
+        daemon_custody::close(&s); // as a vault move does, mid-run
         let r = call(&s, "local_index_read", json!({"accountId": "acc", "mailbox": "INBOX"})).await;
         assert_eq!(r.error.unwrap().message, "custody store unavailable: closed");
     }

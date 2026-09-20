@@ -342,10 +342,10 @@ mod tests {
 
     #[tokio::test]
     async fn clear_email_cache_removes_a_saved_mailbox() {
-        let (t, s) = st(true);
+        let (_t, s) = st(true);
         let data = json!({"emails": [{"uid": 1}], "totalEmails": 1}).to_string();
         call(&s, "save_email_cache", json!({"accountId": "a", "mailbox": "INBOX", "data": data})).await;
-        assert!(t.path().join("email_cache").exists());
+        assert!(call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await.result.unwrap().is_string());
         assert_eq!(call(&s, "clear_email_cache", json!({"accountId": Value::Null, "mailbox": Value::Null})).await.result, Some(Value::Null));
         assert_eq!(call(&s, "load_email_cache", json!({"accountId": "a", "mailbox": "INBOX"})).await.result, Some(Value::Null));
     }

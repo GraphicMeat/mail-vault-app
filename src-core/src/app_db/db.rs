@@ -18,7 +18,6 @@
 //! silently is worse than reporting an unreadable store.
 
 use rusqlite::{Connection, ErrorCode, OptionalExtension};
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
@@ -97,27 +96,45 @@ fn sql(e: rusqlite::Error) -> OpenError {
     }
 }
 
-/// One connection per app data dir, per process. Keyed by path so a test with
-/// its own temp dir never shares the production handle.
-static HANDLES: LazyLock<Mutex<HashMap<PathBuf, Arc<Mutex<Connection>>>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
+/// **One** connection, for one app data dir. A process has exactly one app
+/// data dir, so this is a cache of size one rather than a map: a map would
+/// hold a connection open for every directory ever asked for, which in a test
+/// binary is one per temp dir and runs the process out of file descriptors.
+/// A different directory replaces the entry; the old connection closes as
+/// soon as its last holder drops it.
+static HANDLE: LazyLock<Mutex<Option<(PathBuf, Arc<Mutex<Connection>>)>>> =
+    LazyLock::new(|| Mutex::new(None));
 
 /// The process-wide handle for `app_dir`, opening (and migrating, and
 /// importing the legacy JSON) on first use.
 pub fn handle(app_dir: &Path) -> Result<Arc<Mutex<Connection>>, OpenError> {
     let key = app_dir.to_path_buf();
-    if let Some(existing) = HANDLES.lock().unwrap_or_else(|p| p.into_inner()).get(&key) {
-        return Ok(Arc::clone(existing));
+    if let Some((path, conn)) = HANDLE.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        if *path == key {
+            return Ok(Arc::clone(conn));
+        }
     }
     let conn = open(app_dir)?;
     super::import::run(&conn, app_dir);
-    let shared = Arc::new(Mutex::new(conn));
-    HANDLES
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .entry(key)
-        .or_insert_with(|| Arc::clone(&shared));
-    Ok(shared)
+    Ok(install(key, Arc::new(Mutex::new(conn))))
+}
+
+/// Put `opened` in the slot and hand it back — unless another caller already
+/// installed one for the same directory while this one was opening, in which
+/// case `opened` is dropped and theirs is returned. Two threads can both miss
+/// the slot, and the loser has to give back the winner's connection or this
+/// process ends up with two and the per-process `Mutex` serializes nothing.
+/// Reachable at daemon startup, where the op journal, the stats flush and the
+/// classification worker all land here from different blocking threads.
+fn install(key: PathBuf, opened: Arc<Mutex<Connection>>) -> Arc<Mutex<Connection>> {
+    let mut slot = HANDLE.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some((path, conn)) = slot.as_ref() {
+        if *path == key {
+            return Arc::clone(conn);
+        }
+    }
+    *slot = Some((key, Arc::clone(&opened)));
+    opened
 }
 
 /// Run `f` against the app store. `Err` carries the open failure's message;
@@ -149,20 +166,58 @@ pub fn open(app_dir: &Path) -> Result<Connection, OpenError> {
 
 /// Schema changes go through `meta.schema_version` with ordered steps here;
 /// each new step gets a test from the previous version's DDL.
+///
+/// Two processes open this store, so the first open of a fresh file can be a
+/// race: the steps run under `BEGIN IMMEDIATE` and the version is re-read
+/// inside that lock, so the loser waits out its `busy_timeout`, sees the
+/// schema already there and does nothing (rather than failing with "table
+/// external_locations already exists").
 fn migrate(conn: &Connection) -> Result<(), OpenError> {
     conn.execute_batch("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);")
         .map_err(sql)?;
+    if schema_version(conn)? >= SCHEMA_VERSION {
+        return Ok(());
+    }
+    conn.execute_batch("BEGIN IMMEDIATE;").map_err(sql)?;
+    let stepped = (|| {
+        let version = schema_version(conn)?;
+        if version < 1 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V1} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1');"
+            ))
+            .map_err(sql)?;
+        }
+        Ok(())
+    })();
+    match stepped {
+        Ok(()) => conn.execute_batch("COMMIT;").map_err(sql),
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK;");
+            Err(e)
+        }
+    }
+}
+
+/// The stored schema version, refusing one this build cannot read.
+fn schema_version(conn: &Connection) -> Result<i64, OpenError> {
     let version = meta_get(conn, "schema_version").and_then(|v| v.parse::<i64>().ok()).unwrap_or(0);
     if version > SCHEMA_VERSION {
         return Err(OpenError::Newer(version));
     }
-    if version < 1 {
-        conn.execute_batch(&format!(
-            "BEGIN; {SCHEMA_V1} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '1'); COMMIT;"
-        ))
-        .map_err(sql)?;
+    Ok(version)
+}
+
+/// Run `f` inside a transaction, or inline when the caller already opened
+/// one. SQLite has no nested `BEGIN`, and the legacy import wraps every store
+/// in one transaction while each store's own writer wants one too.
+pub fn in_txn<T>(conn: &Connection, f: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    if !conn.is_autocommit() {
+        return f();
     }
-    Ok(())
+    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
+    let out = f()?;
+    tx.commit().map_err(|e| e.to_string())?;
+    Ok(out)
 }
 
 pub fn meta_get(conn: &Connection, key: &str) -> Option<String> {
@@ -227,11 +282,43 @@ mod tests {
     }
 
     #[test]
+    fn a_second_directory_replaces_the_first_rather_than_holding_both_open() {
+        // A process has one app data dir; a test binary has hundreds, and
+        // keeping a connection per directory exhausts its file descriptors.
+        let a = scratch("slot-a");
+        let b = scratch("slot-b");
+        let first = handle(&a).unwrap();
+        let second = handle(&b).unwrap();
+        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(Arc::ptr_eq(&handle(&b).unwrap(), &second), "the newest dir is the cached one");
+        assert!(!Arc::ptr_eq(&handle(&a).unwrap(), &first), "the old one was let go");
+        let _ = std::fs::remove_dir_all(&a);
+        let _ = std::fs::remove_dir_all(&b);
+    }
+
+    #[test]
     fn two_opens_of_one_dir_share_one_handle() {
         let dir = scratch("handle");
         let a = handle(&dir).unwrap();
         let b = handle(&dir).unwrap();
         assert!(Arc::ptr_eq(&a, &b));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The loser of a race between two openers has to give back the winner's
+    /// connection, not keep its own. Driven through `install` rather than
+    /// through real threads: `HANDLE` is one global slot, so a second test
+    /// running in parallel on a different directory would evict this one
+    /// mid-race and the assertion would be about the scheduler, not the code.
+    #[test]
+    fn the_loser_of_a_race_hands_back_the_winners_connection() {
+        let dir = scratch("handle-race");
+        let winner = Arc::new(Mutex::new(open(&dir).unwrap()));
+        let loser = Arc::new(Mutex::new(open(&dir).unwrap()));
+        let installed = install(dir.clone(), Arc::clone(&winner));
+        assert!(Arc::ptr_eq(&installed, &winner));
+        let second = install(dir.clone(), loser);
+        assert!(Arc::ptr_eq(&second, &winner), "the loser kept its own connection");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

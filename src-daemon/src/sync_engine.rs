@@ -1481,13 +1481,11 @@ mod tests {
         // No settings file at all → cap off.
         assert!(engine.transfer_cap_reached(&account).await.is_none());
 
-        // 200 MB down already spent today, per the daemon's own stat file.
+        // 200 MB down already spent today, in the daemon's own rows.
         let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        fs::create_dir_all(dir.join("transfer_stats")).unwrap();
-        fs::write(
-            dir.join("transfer_stats").join("acc1.daemon.json"),
-            format!(r#"{{"days":{{"{}":{{"down":209715200,"up":0}}}}}}"#, today),
-        )
+        mailvault_core::app_db::with(&dir, |c| {
+            mailvault_core::app_db::stats::add(c, "acc1", &today, "daemon", 209_715_200, 0)
+        })
         .unwrap();
 
         let settings = |cap_enabled: bool, limit_mb: u64| {

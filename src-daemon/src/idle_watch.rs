@@ -287,7 +287,7 @@ mod tests {
     }
 
     fn engine_for(dir: &Path) -> SyncEngine {
-        SyncEngine::new(
+        let engine = SyncEngine::new(
             Arc::new(imap::ImapPool::new()),
             dir.to_path_buf(),
             dir.to_path_buf(),
@@ -295,7 +295,13 @@ mod tests {
             gate(true),
             Arc::new(std::sync::atomic::AtomicBool::new(false)),
             Arc::new(std::sync::RwLock::new(())),
-        )
+        );
+        // The header cache is `custody.db`: without one attached every cache
+        // write fails, which is what production does too.
+        engine.attach_custody_db(Arc::new(std::sync::Mutex::new(Some(
+            mailvault_core::custody::db::open(dir).unwrap(),
+        ))));
+        engine
     }
 
     fn account_for(server: &MockImap) -> SyncAccount {
@@ -314,17 +320,12 @@ mod tests {
     }
 
     /// Sidecars written under `<dir>/email_cache/<account-mailbox>/`.
-    fn sidecars(dir: &Path) -> usize {
-        let mut n = 0;
-        for cache in std::fs::read_dir(dir.join("email_cache")).into_iter().flatten().flatten() {
-            for f in std::fs::read_dir(cache.path()).into_iter().flatten().flatten() {
-                let name = f.file_name().to_string_lossy().to_string();
-                if name.ends_with(".json") && name != "_meta.json" {
-                    n += 1;
-                }
-            }
-        }
-        n
+    /// How many headers the vault has cached, read through the engine's own
+    /// connection (`custody.db` is EXCLUSIVE — a second opener fails BUSY).
+    fn cached(engine: &SyncEngine) -> usize {
+        let db = engine.custody_db().expect("engine has a store attached");
+        let guard = db.lock().unwrap_or_else(|p| p.into_inner());
+        mailvault_core::custody::cache::count(guard.as_ref().expect("store is open"), "acc1", "INBOX").unwrap()
     }
 
     async fn wait_until(mut cond: impl FnMut() -> bool, timeout_ms: u64, what: &str) {
@@ -347,7 +348,7 @@ mod tests {
         // Prime the cache, so the wake-up sync reports the ONE new message
         // rather than the whole mailbox.
         engine.sync_account(&account, "INBOX").await;
-        assert_eq!(sidecars(&dir), 2);
+        assert_eq!(cached(&engine), 2);
 
         let watchers = IdleWatchers::new(
             Arc::clone(&engine),
@@ -369,7 +370,7 @@ mod tests {
         assert!(g > g0);
         assert_eq!(recs[0].new_emails, 1);
         assert_eq!(recs[0].mailbox, "INBOX");
-        assert_eq!(sidecars(&dir), 3, "the wake-up sync wrote the new sidecar");
+        assert_eq!(cached(&engine), 3, "the wake-up sync cached the new header");
 
         // Re-entered IDLE after the sync — one wake-up must not end the watch.
         wait_until(|| server.count_commands("IDLE") >= 2, 5_000, "IDLE re-issued").await;

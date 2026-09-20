@@ -780,8 +780,15 @@ mod tests {
 
         flush_contacts_if_open(&state);
 
-        assert!(
-            !mail.join("contacts_index").join("acc1.json").exists(),
+        let stored = |state: &server::DaemonState| {
+            crate::custody::with_conn(state, |c| {
+                Ok(mailvault_core::custody::contacts::load(c, "acc1").len())
+            })
+            .unwrap_or(0)
+        };
+        assert_eq!(
+            stored(&state),
+            0,
             "a flush while the vault is closed for a move must not write into the old root"
         );
 
@@ -790,7 +797,7 @@ mod tests {
         state.vault_closed.store(false, std::sync::atomic::Ordering::SeqCst);
         state.contacts.seed_dirty_for_test("acc1");
         flush_contacts_if_open(&state);
-        assert!(mail.join("contacts_index").join("acc1.json").exists());
+        assert_eq!(stored(&state), 1);
 
         let _ = std::fs::remove_dir_all(&mail);
         let _ = std::fs::remove_dir_all(&app);

@@ -340,6 +340,9 @@ mod tests {
     #[test]
     fn a_store_that_will_not_open_still_reports_the_file_it_could_not_open() {
         let (vault, _app, s) = state(true);
+        // `DaemonState::for_test` opens custody the way startup does; drop
+        // that connection before replacing the file underneath it.
+        *lock(&s.custody.db) = None;
         let file = db::db_path(vault.path());
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, b"this is not a database").unwrap();
@@ -363,6 +366,9 @@ mod tests {
     #[test]
     fn a_default_state_before_any_open_reports_closed_with_no_error() {
         let (_vault, _app, s) = state(true);
+        // The state under test is the one before startup's open lands.
+        *lock(&s.custody.db) = None;
+        *g(&s.custody.root) = None;
         let status = status_json(&s);
         assert_eq!((status["available"].as_bool(), status["error"].is_null(), status["path"].is_null()), (Some(false), true, true));
         let err = with_conn(&s, |c| entries::read(c, "acct", "INBOX")).unwrap_err();

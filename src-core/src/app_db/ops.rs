@@ -84,10 +84,9 @@ pub fn purge_read(conn: &Connection) -> BTreeMap<String, Vec<u32>> {
 
 /// Replace the whole queue — the JSON writer rewrote the map every time.
 pub fn purge_write(conn: &Connection, queue: &BTreeMap<String, Vec<u32>>) -> Result<(), String> {
-    let tx = conn.unchecked_transaction().map_err(|e| e.to_string())?;
-    tx.execute("DELETE FROM pending_backup_purge", []).map_err(|e| e.to_string())?;
-    {
-        let mut stmt = tx
+    crate::app_db::db::in_txn(conn, || {
+        conn.execute("DELETE FROM pending_backup_purge", []).map_err(|e| e.to_string())?;
+        let mut stmt = conn
             .prepare_cached("INSERT OR REPLACE INTO pending_backup_purge(scope, uid) VALUES (?1,?2)")
             .map_err(|e| e.to_string())?;
         for (scope, uids) in queue {
@@ -95,8 +94,8 @@ pub fn purge_write(conn: &Connection, queue: &BTreeMap<String, Vec<u32>>) -> Res
                 stmt.execute(params![scope, *uid as i64]).map_err(|e| e.to_string())?;
             }
         }
-    }
-    tx.commit().map_err(|e| e.to_string())
+        Ok(())
+    })
 }
 
 #[cfg(test)]
