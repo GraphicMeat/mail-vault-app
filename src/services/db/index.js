@@ -63,4 +63,4 @@ export {
   loadGraphIdMap,
 } from './caches.js';
 
-export { queueOp, clearOps, readOps } from './opJournal.js';
+export { queueOp, clearOps, readOps, noteOpFailure, opFailures, failureKey } from './opJournal.js';

@@ -154,6 +154,9 @@ const settingSearchGroups = [
     ['settings.accounts.accountVisible', 'account visible visibility hidden hide'],
     ['settings.accounts.removeAccount', 'account remove delete disconnect'],
   ] },
+  { id: 'daemon', settings: [
+    ['settings.pendingActions.title', 'pending queued unfinished actions delete move flag retry stuck offline queue'],
+  ] },
   // Storage has no sections to switch: a result opens the page.
   { id: 'storage', section: 'search-index', sectionKey: 'settings.searchIndex.title', settings: [
     ['settings.searchIndex.bodies', 'search index body bodies message text words find offline'],

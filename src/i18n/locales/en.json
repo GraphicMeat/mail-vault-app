@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "{{count}} senders are available in the list below the map.",
   "insights.messageChanged": "This message has changed since Insights was loaded. Refresh Insights and try again.",
   "insights.messageUnavailable": "No readable copy of this message is available. Refresh Insights and try again.",
-  "searchIndex.recoveryFailed": "The search index could not be repaired. Check that the vault is available and try again."
+  "searchIndex.recoveryFailed": "The search index could not be repaired. Check that the vault is available and try again.",
+  "settings.pendingActions.title": "Unfinished server actions",
+  "settings.pendingActions.blurb": "Deletes, moves and flag changes your server has not accepted yet. MailVault keeps retrying them; cancel one that has been failing for a long time.",
+  "settings.pendingActions.empty": "Nothing is waiting to be sent.",
+  "settings.pendingActions.retryNow": "Retry now",
+  "settings.pendingActions.queuedAt": "Queued {{date}}",
+  "settings.pendingActions.opDelete": "Delete from server",
+  "settings.pendingActions.opMove": "Move to another folder",
+  "settings.pendingActions.opFlag": "Flag change",
+  "settings.pendingActions.opOther": "Server action"
 }

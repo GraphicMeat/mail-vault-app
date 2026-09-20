@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "{{count}} mittenti sono disponibili nell’elenco sotto la mappa.",
   "insights.messageChanged": "Questo messaggio è cambiato da quando sono state caricate le statistiche. Aggiorna le statistiche e riprova.",
   "insights.messageUnavailable": "Non è disponibile alcuna copia leggibile di questo messaggio. Aggiorna le statistiche e riprova.",
-  "searchIndex.recoveryFailed": "Impossibile riparare l’indice di ricerca. Verifica che il vault sia accessibile e riprova."
+  "searchIndex.recoveryFailed": "Impossibile riparare l’indice di ricerca. Verifica che il vault sia accessibile e riprova.",
+  "settings.pendingActions.title": "Azioni sul server non completate",
+  "settings.pendingActions.blurb": "Eliminazioni, spostamenti e modifiche ai contrassegni che il server non ha ancora accettato. MailVault continua a riprovare; annulla quella che fallisce da tempo.",
+  "settings.pendingActions.empty": "Non c’è nulla in attesa di invio.",
+  "settings.pendingActions.retryNow": "Riprova ora",
+  "settings.pendingActions.queuedAt": "In coda dal {{date}}",
+  "settings.pendingActions.opDelete": "Elimina dal server",
+  "settings.pendingActions.opMove": "Sposta in un’altra cartella",
+  "settings.pendingActions.opFlag": "Modifica del contrassegno",
+  "settings.pendingActions.opOther": "Azione sul server"
 }

@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "{{count}} expéditeurs figurent dans la liste sous la carte.",
   "insights.messageChanged": "Ce message a changé depuis le chargement des statistiques. Actualisez-les et réessayez.",
   "insights.messageUnavailable": "Aucune copie lisible de ce message n’est disponible. Actualisez les statistiques et réessayez.",
-  "searchIndex.recoveryFailed": "L’index de recherche n’a pas pu être réparé. Vérifiez que le coffre est accessible, puis réessayez."
+  "searchIndex.recoveryFailed": "L’index de recherche n’a pas pu être réparé. Vérifiez que le coffre est accessible, puis réessayez.",
+  "settings.pendingActions.title": "Actions serveur inachevées",
+  "settings.pendingActions.blurb": "Suppressions, déplacements et changements de marqueur que votre serveur n'a pas encore acceptés. MailVault continue de réessayer ; annulez celle qui échoue depuis longtemps.",
+  "settings.pendingActions.empty": "Rien n'attend d'être envoyé.",
+  "settings.pendingActions.retryNow": "Réessayer maintenant",
+  "settings.pendingActions.queuedAt": "En file depuis le {{date}}",
+  "settings.pendingActions.opDelete": "Supprimer du serveur",
+  "settings.pendingActions.opMove": "Déplacer vers un autre dossier",
+  "settings.pendingActions.opFlag": "Changement de marqueur",
+  "settings.pendingActions.opOther": "Action serveur"
 }

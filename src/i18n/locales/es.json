@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "Hay {{count}} remitentes en la lista bajo el mapa.",
   "insights.messageChanged": "Este mensaje ha cambiado desde que se cargaron las estadísticas. Actualízalas y vuelve a intentarlo.",
   "insights.messageUnavailable": "No hay ninguna copia legible de este mensaje. Actualiza las estadísticas y vuelve a intentarlo.",
-  "searchIndex.recoveryFailed": "No se pudo reparar el índice de búsqueda. Comprueba que la bóveda esté disponible y vuelve a intentarlo."
+  "searchIndex.recoveryFailed": "No se pudo reparar el índice de búsqueda. Comprueba que la bóveda esté disponible y vuelve a intentarlo.",
+  "settings.pendingActions.title": "Acciones del servidor pendientes",
+  "settings.pendingActions.blurb": "Eliminaciones, movimientos y cambios de marca que tu servidor aún no ha aceptado. MailVault sigue reintentándolos; cancela el que lleve mucho tiempo fallando.",
+  "settings.pendingActions.empty": "No hay nada pendiente de enviar.",
+  "settings.pendingActions.retryNow": "Reintentar ahora",
+  "settings.pendingActions.queuedAt": "En cola desde {{date}}",
+  "settings.pendingActions.opDelete": "Eliminar del servidor",
+  "settings.pendingActions.opMove": "Mover a otra carpeta",
+  "settings.pendingActions.opFlag": "Cambio de marca",
+  "settings.pendingActions.opOther": "Acción del servidor"
 }

@@ -22,6 +22,7 @@ const mockDeleteLocalEmail = vi.fn().mockResolvedValue(undefined);
 const mockMoveEmails = vi.fn().mockResolvedValue(undefined);
 const mockSaveEmailHeaders = vi.fn().mockResolvedValue(undefined);
 const mockQueueOp = vi.fn().mockResolvedValue(undefined);
+const mockNoteOpFailure = vi.fn();
 const mockClearOps = vi.fn().mockResolvedValue(undefined);
 const mockSetUnreadForAccount = vi.fn();
 const mockGetGraphMessageId = vi.fn().mockReturnValue(null);
@@ -61,6 +62,7 @@ vi.mock('../../db', () => ({
   getLocalIndexEntry: (...a) => mockGetLocalIndexEntry(...a),
   queueOp: (...a) => mockQueueOp(...a),
   clearOps: (...a) => mockClearOps(...a),
+  noteOpFailure: (...a) => mockNoteOpFailure(...a),
   initDB: vi.fn().mockResolvedValue(undefined),
   getAccounts: vi.fn().mockResolvedValue([]),
   ensureAccountsInFile: vi.fn().mockResolvedValue(undefined),
@@ -375,14 +377,18 @@ describe('deleteSelectedFromServer', () => {
     expect(useMailStore.getState().sentEmails.map(e => e.uid)).toEqual([1]);
   });
 
-  it('keeps the row when the server delete fails', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+  // A refused delete is not an undone one: the journal entry is still on disk,
+  // so this behaves exactly like a delete made offline — the row stays gone and
+  // replayOps re-sends it. Restoring the row instead threw a confirmed delete
+  // away over a dead socket.
+  it('keeps the row evicted and the entry queued when the server delete fails', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), [1]);
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    // The tombstone is lifted so the loadEmails() reconcile can restore it.
-    expect(useMailStore.getState().deleteTombstones.size).toBe(0);
+    expect(useMailStore.getState().deleteTombstones.size).toBe(1);
+    expect(mockClearOps).not.toHaveBeenCalled();
   });
 
   // Custody's gold claim — "the vault copy is the only one left because WE
@@ -406,7 +412,7 @@ describe('deleteSelectedFromServer', () => {
   });
 
   it('writes no such stamp when the server delete failed', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), [1]);
 
     await useMailStore.getState().deleteSelectedFromServer();
@@ -503,15 +509,16 @@ describe('deleteSelectedFromServer', () => {
     expect(order.filter(o => o[0] === 'delete')).toHaveLength(2);
   });
 
-  // A delete that failed is still a delete that was attempted. Leaving it
-  // journalled would re-issue it on every launch for the life of the install.
-  it('clears the journal even when the server delete failed', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+  // The entry IS the delete once the server has refused it: the row is already
+  // gone from the list, so clearing it would leave the message on the server
+  // with nothing anywhere to finish the job. Settings lists what is still owed.
+  it('keeps the journal entry when the server delete failed', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), [1]);
 
     await useMailStore.getState().deleteSelectedFromServer();
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: ACCOUNT.id, mailbox: 'INBOX', uids: [1], arg: {} });
+    expect(mockClearOps).not.toHaveBeenCalled();
   });
 
   // Same fact the single-row delete brings back, once per message: where each
@@ -545,7 +552,7 @@ describe('deleteSelectedFromServer', () => {
   });
 
   it('does not prune a uid whose server delete failed', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), [1]);
 
     await useMailStore.getState().deleteSelectedFromServer();
@@ -811,16 +818,19 @@ describe('deleteEmailFromServer', () => {
     expect(useMailStore.getState().emails).toEqual([other]);
   });
 
-  it('restores the live thread snapshot after a failed delete', async () => {
+  // A reader opened during the journal write is still open when the optimistic
+  // paint runs, so the message leaves it — and a refusal no longer puts it
+  // back: the entry is queued, so the message stays gone until the replay says
+  // otherwise. What must NOT happen is the reader jumping to another message.
+  it('leaves the mid-delete thread pruned when the server refuses', async () => {
     let release;
     mockQueueOp.mockImplementationOnce(() => new Promise(resolve => { release = resolve; }));
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     const rows = seedThread();
     primeStore(rows, []);
     useMailStore.setState({ selectedEmailId: 1, selectedEmail: rows[0] });
 
     const pending = useMailStore.getState().deleteEmailFromServer(1);
-    const rejected = expect(pending).rejects.toThrow('nope');
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     const thread = {
       threadId: 'a@mock', subject: 'General', emails: rows,
@@ -828,9 +838,9 @@ describe('deleteEmailFromServer', () => {
     };
     useMailStore.setState({ selectedThread: thread, selectedEmailId: 2, selectedEmail: null });
     release();
-    await rejected;
+    await pending;
 
-    expect(useMailStore.getState().selectedThread).toEqual(thread);
+    expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([2]);
     expect(useMailStore.getState().selectedEmailId).toBe(2);
   });
 
@@ -850,16 +860,31 @@ describe('deleteEmailFromServer', () => {
     await pending;
   });
 
-  it('puts the row back when the server refuses', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+  // Only where nothing was journalled. A Graph delete is addressed by a
+  // per-session message id, so there is no entry a later launch could finish —
+  // keeping the row hidden there would lose the message from the list while it
+  // sat on the server. IMAP keeps the row gone instead (see below).
+  it('puts the row back when a Graph delete is refused', async () => {
+    mockIsGraphAccount.mockReturnValue(true);
+    mockGetGraphMessageId.mockReturnValue('graph-1');
+    mockGraphDeleteMessage.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), []);
 
     await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
 
-    // Tombstone lifted and a reconcile asked for — the same contract the bulk
-    // path uses to restore a row whose delete failed.
     expect(useMailStore.getState().deleteTombstones.size).toBe(0);
     expect(useMailStore.getState().loadEmails).toHaveBeenCalled();
+    expect(mockQueueOp).not.toHaveBeenCalled();
+  });
+
+  it('keeps the row evicted and queued when an IMAP delete is refused', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
+    primeStore(seedThread(), []);
+
+    await expect(useMailStore.getState().deleteEmailFromServer(1)).resolves.toBeUndefined();
+
+    expect(useMailStore.getState().deleteTombstones.size).toBe(1);
+    expect(useMailStore.getState().sortedEmails.map(e => e.uid)).toEqual([2]);
   });
 
   // The row vanishes before the server answers, so a reload in that window has
@@ -874,13 +899,13 @@ describe('deleteEmailFromServer', () => {
     expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1], arg: {} });
   });
 
-  it('clears the journal when the delete fails, so no replay deletes a restored row', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+  it('keeps the journal when the delete fails, so the replay can finish it', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), []);
 
-    await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
+    await useMailStore.getState().deleteEmailFromServer(1);
 
-    expect(mockClearOps).toHaveBeenCalledWith({ op: 'delete', accountId: 'acct1', mailbox: 'INBOX', uids: [1], arg: {} });
+    expect(mockClearOps).not.toHaveBeenCalled();
   });
 
   // The bulk path stamps at its own call site; this one goes through
@@ -898,10 +923,10 @@ describe('deleteEmailFromServer', () => {
   });
 
   it('leaves the vault entry unstamped when the server refuses', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     primeStore(seedThread(), []);
 
-    await expect(useMailStore.getState().deleteEmailFromServer(1)).rejects.toThrow('nope');
+    await useMailStore.getState().deleteEmailFromServer(1);
 
     expect(mockAppendLocalIndex).not.toHaveBeenCalled();
   });
@@ -1434,30 +1459,35 @@ describe('deleteEmailFromServer with a thread open', () => {
     expect(useMailStore.getState().selectedEmailId).toBe(_selKey(sentCopy));
   });
 
-  it('puts the message back in the open thread when the server refuses', async () => {
-    mockDeleteEmail.mockRejectedValueOnce(new Error('nope'));
+  // The optimistic prune stands: the entry is queued, so the message is gone
+  // as far as the user is concerned until the replay says otherwise.
+  it('leaves the message out of the open thread when the server refuses', async () => {
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     const emails = seedThread();
     primeStore(emails, []);
     openThread(emails);
 
-    await expect(useMailStore.getState().deleteEmailFromServer(2)).rejects.toThrow('nope');
+    await useMailStore.getState().deleteEmailFromServer(2);
 
-    expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([1, 2]);
-    expect(useMailStore.getState().selectedEmailId).toBe(2);
+    expect(useMailStore.getState().selectedThread.emails.map(e => e.uid)).toEqual([1]);
+    expect(mockClearOps).not.toHaveBeenCalled();
   });
 
   it('does not reopen a thread the user has already left when the server refuses', async () => {
     let reject;
+    // Once: the workflow re-sends a refused delete, and a second hanging
+    // promise would never settle. The retry fails outright.
     mockDeleteEmail.mockImplementationOnce(() => new Promise((_, r) => { reject = r; }));
+    mockDeleteEmail.mockRejectedValue(new Error('nope'));
     const emails = seedThread();
     primeStore(emails, []);
     openThread(emails);
 
     const pending = useMailStore.getState().deleteEmailFromServer(2);
-    await new Promise(r => setTimeout(r, 0));
+    await vi.waitFor(() => expect(reject).toBeTypeOf('function'));
     useMailStore.getState().closeEmail();
     reject(new Error('nope'));
-    await expect(pending).rejects.toThrow('nope');
+    await pending;
 
     expect(useMailStore.getState().selectedThread).toBeNull();
     expect(useMailStore.getState().selectedEmailId).toBeNull();

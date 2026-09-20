@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "{{count}} remetentes estão disponíveis na lista abaixo do mapa.",
   "insights.messageChanged": "Esta mensagem mudou desde que as estatísticas foram carregadas. Atualize as estatísticas e tente novamente.",
   "insights.messageUnavailable": "Nenhuma cópia legível desta mensagem está disponível. Atualize as estatísticas e tente novamente.",
-  "searchIndex.recoveryFailed": "Não foi possível reparar o índice de busca. Verifique se o cofre está disponível e tente novamente."
+  "searchIndex.recoveryFailed": "Não foi possível reparar o índice de busca. Verifique se o cofre está disponível e tente novamente.",
+  "settings.pendingActions.title": "Ações no servidor não concluídas",
+  "settings.pendingActions.blurb": "Exclusões, movimentações e mudanças de marcação que seu servidor ainda não aceitou. O MailVault continua tentando; cancele a que falha há muito tempo.",
+  "settings.pendingActions.empty": "Nada aguardando envio.",
+  "settings.pendingActions.retryNow": "Tentar agora",
+  "settings.pendingActions.queuedAt": "Na fila desde {{date}}",
+  "settings.pendingActions.opDelete": "Excluir do servidor",
+  "settings.pendingActions.opMove": "Mover para outra pasta",
+  "settings.pendingActions.opFlag": "Mudança de marcação",
+  "settings.pendingActions.opOther": "Ação no servidor"
 }

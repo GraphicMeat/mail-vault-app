@@ -271,12 +271,11 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
       const state = useMailStore.getState();
       await deleteEmailFromServer(spansMailboxes(state) ? selectionKey(selectedEmail, state) : selectedEmail.uid);
     } catch (err) {
-      // The workflow removes the row optimistically and puts it back when the
-      // server refuses (deleteEmailFromServer's restoreRow). Unreported, that
-      // reads as "I deleted it and it came back on its own" — which is exactly
-      // what a dead pooled socket produced here. The row menu's delete has
-      // toasted this since it was written (DeleteConfirmModal);
-      // the reading pane swallowed it.
+      // Only the paths with nothing journalled still throw: a Graph delete and
+      // a local-only row, which the workflow restores (deleteEmailFromServer's
+      // restoreRow). An IMAP delete the server refuses no longer reaches here
+      // at all — it stays queued and the row stays gone. Unreported, a restore
+      // reads as "I deleted it and it came back on its own".
       console.error('[EmailViewer] delete failed:', err);
       useMailStore.setState({ error: t('list.deleteFailed', { err: err?.message || err }) });
     } finally {

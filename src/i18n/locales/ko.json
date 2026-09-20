@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "지도 아래 목록에서 발신자 {{count}}명을 볼 수 있습니다.",
   "insights.messageChanged": "분석을 불러온 이후 이 메시지가 변경되었습니다. 분석을 새로 고침한 후 다시 시도하세요.",
   "insights.messageUnavailable": "이 메시지의 읽을 수 있는 사본이 없습니다. 분석을 새로 고침한 후 다시 시도하세요.",
-  "searchIndex.recoveryFailed": "검색 색인을 복구할 수 없습니다. 보관함을 사용할 수 있는지 확인한 후 다시 시도하세요."
+  "searchIndex.recoveryFailed": "검색 색인을 복구할 수 없습니다. 보관함을 사용할 수 있는지 확인한 후 다시 시도하세요.",
+  "settings.pendingActions.title": "완료되지 않은 서버 작업",
+  "settings.pendingActions.blurb": "서버가 아직 수락하지 않은 삭제, 이동, 플래그 변경입니다. MailVault가 계속 재시도합니다. 오랫동안 실패하는 작업은 취소하세요.",
+  "settings.pendingActions.empty": "전송 대기 중인 작업이 없습니다.",
+  "settings.pendingActions.retryNow": "지금 다시 시도",
+  "settings.pendingActions.queuedAt": "{{date}}부터 대기 중",
+  "settings.pendingActions.opDelete": "서버에서 삭제",
+  "settings.pendingActions.opMove": "다른 폴더로 이동",
+  "settings.pendingActions.opFlag": "플래그 변경",
+  "settings.pendingActions.opOther": "서버 작업"
 }

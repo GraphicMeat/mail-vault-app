@@ -2361,5 +2361,14 @@
   "insights.chart.omitted_other": "地图下方的列表中有 {{count}} 位发件人。",
   "insights.messageChanged": "此邮件自分析加载后已发生变化。请刷新分析后重试。",
   "insights.messageUnavailable": "此邮件没有可读取的副本。请刷新分析后重试。",
-  "searchIndex.recoveryFailed": "无法修复搜索索引。请检查保险库是否可用，然后重试。"
+  "searchIndex.recoveryFailed": "无法修复搜索索引。请检查保险库是否可用，然后重试。",
+  "settings.pendingActions.title": "未完成的服务器操作",
+  "settings.pendingActions.blurb": "服务器尚未接受的删除、移动和标记变更。MailVault 会持续重试；可取消长期失败的操作。",
+  "settings.pendingActions.empty": "没有等待发送的操作。",
+  "settings.pendingActions.retryNow": "立即重试",
+  "settings.pendingActions.queuedAt": "自 {{date}} 起排队",
+  "settings.pendingActions.opDelete": "从服务器删除",
+  "settings.pendingActions.opMove": "移动到其他文件夹",
+  "settings.pendingActions.opFlag": "标记变更",
+  "settings.pendingActions.opOther": "服务器操作"
 }

@@ -41,6 +41,7 @@ export async function queueOp({ op, accountId, mailbox, uids, arg = {} }) {
  */
 export async function clearOps({ op, accountId, mailbox, uids, arg = {} }) {
   if (!op || !accountId || !mailbox || !uids?.length) return;
+  for (const uid of uids) _failures.delete(failureKey({ op, accountId, mailbox, uid }));
   try {
     await send('op_journal_clear', { op, accountId, mailbox, uids, arg });
   } catch (e) {
@@ -57,4 +58,27 @@ export async function readOps() {
     console.warn('[db] Could not read the op journal:', e);
     return [];
   }
+}
+
+// ── why a queued op last failed ──
+//
+// Session-only, deliberately. The durable part of "this delete never landed"
+// is the journal entry itself, and `entry.at` already answers "failing for how
+// long". The error text is worth showing and worth nothing to persist: every
+// launch replays the entry and writes the current reason, which is the only
+// one that can still be acted on.
+
+const _failures = new Map();
+
+export const failureKey = ({ op, accountId, mailbox, uid }) => `${op}|${accountId}|${mailbox}|${uid}`;
+
+/** Record why this uid's op did not land. */
+export function noteOpFailure({ op, accountId, mailbox, uid }, message) {
+  if (!op || !accountId || !mailbox || uid == null) return;
+  _failures.set(failureKey({ op, accountId, mailbox, uid }), { message: String(message || ''), at: Date.now() });
+}
+
+/** The map the pending-actions list reads, keyed by `failureKey`. */
+export function opFailures() {
+  return _failures;
 }
