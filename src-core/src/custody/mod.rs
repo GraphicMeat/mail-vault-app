@@ -7,6 +7,7 @@
 //! Spec: docs/superpowers/specs/2026-09-13-offline-search-index-design.md §7.
 
 pub mod db;
+pub mod cache;
 pub mod entries;
 pub mod import;
 

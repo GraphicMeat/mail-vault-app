@@ -143,6 +143,7 @@ pub struct SyncEngine {
     /// the enclosing future `!Send`.
     vault_closed: Arc<AtomicBool>,
     vault_gate: Arc<std::sync::RwLock<()>>,
+    custody_db: std::sync::Mutex<Option<Arc<mailvault_core::custody::SharedConn>>>,
 }
 
 impl SyncEngine {
@@ -175,7 +176,45 @@ impl SyncEngine {
             sync_locks: Mutex::new(HashMap::new()),
             vault_closed,
             vault_gate,
+            custody_db: std::sync::Mutex::new(None),
         }
+    }
+
+    pub fn attach_custody_db(&self, db: Arc<mailvault_core::custody::SharedConn>) {
+        *self.custody_db.lock().unwrap_or_else(|p| p.into_inner()) = Some(db);
+    }
+
+    fn with_cache_db<T>(&self, f: impl FnOnce(&mailvault_core::custody::Connection) -> Result<T, String>) -> Result<Option<T>, String> {
+        let attached = self.custody_db.lock().unwrap_or_else(|p| p.into_inner()).clone();
+        let Some(attached) = attached else { return Ok(None) };
+        let guard = attached.lock().unwrap_or_else(|p| p.into_inner());
+        let Some(conn) = guard.as_ref() else { return Ok(None) };
+        f(conn).map(Some)
+    }
+
+    fn sql_write_meta(&self, account: &str, mailbox: &str, total: u32, uid_validity: Option<u32>, uid_next: Option<u32>, highest_modseq: Option<u64>, last_reconcile: Option<u64>) -> Result<(), String> {
+        let value = serde_json::json!({
+            "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
+            "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
+        });
+        self.with_cache_db(|conn| mailvault_core::custody::cache::save_headers(conn, account, mailbox, &value.to_string())).map(|_| ())
+    }
+
+    fn sql_write_headers(&self, account: &str, mailbox: &str, headers: &[ImapEmailHeader]) -> Result<(), String> {
+        let value = serde_json::json!({"emails": headers});
+        self.with_cache_db(|conn| mailvault_core::custody::cache::save_headers(conn, account, mailbox, &value.to_string())).map(|_| ())
+    }
+
+    fn sql_patch_flags(&self, account: &str, mailbox: &str, changes: &[(u32, Vec<String>)]) -> Result<(), String> {
+        self.with_cache_db(|conn| mailvault_core::custody::cache::patch_flags(conn, account, mailbox, changes)).map(|_| ())
+    }
+
+    fn sql_prune(&self, account: &str, mailbox: &str, live: &[u32]) -> Result<(), String> {
+        self.with_cache_db(|conn| mailvault_core::custody::cache::prune_headers(conn, account, mailbox, live)).map(|_| ())
+    }
+
+    fn sql_clear(&self, account: &str, mailbox: &str) -> Result<(), String> {
+        self.with_cache_db(|conn| mailvault_core::custody::cache::clear_headers(conn, Some(account), Some(mailbox))).map(|_| ())
     }
 
     /// The vault root this engine writes into — Task 2.7 (2.3 review F1)
@@ -642,6 +681,7 @@ impl SyncEngine {
                     account.email, mailbox, sidecar_count
                 );
                 wipe_generation(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir)?;
+                self.sql_clear(account_id, mailbox)?;
                 None
             };
             let (headers, _total, _has_more, _skipped) =
@@ -649,6 +689,8 @@ impl SyncEngine {
             let new_emails = headers.len();
             write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
             write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &headers)?;
+            self.sql_write_meta(account_id, mailbox, total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
+            self.sql_write_headers(account_id, mailbox, &headers)?;
             self.contacts.observe_headers(account_id, mailbox, &headers);
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
             return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total, session_dirty: false });
@@ -682,7 +724,10 @@ impl SyncEngine {
         match (cached_modseq, highest_modseq) {
             (Some(cached_modseq), Some(server_modseq)) if server_modseq != cached_modseq => {
                 match imap::fetch_changed_flags(session, mailbox, cached_modseq).await {
-                    Ok(changes) => updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &changes)?,
+                    Ok(changes) => {
+                        updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &changes)?;
+                        self.sql_patch_flags(account_id, mailbox, &changes)?;
+                    }
                     Err(e) => warn!("[sync] CHANGEDSINCE failed for {}: {}", account.email, e),
                 }
             }
@@ -693,7 +738,10 @@ impl SyncEngine {
                 // recent window instead — one command, ~40 bytes per message.
                 let from_uid = cached_uid_next.saturating_sub(FLAG_REFRESH_WINDOW).max(1);
                 match imap::fetch_flags_from(session, mailbox, from_uid).await {
-                    Ok(flags) => updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &flags)?,
+                    Ok(flags) => {
+                        updated_flags = patch_sidecar_flags(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &flags)?;
+                        self.sql_patch_flags(account_id, mailbox, &flags)?;
+                    }
                     Err(e) => warn!("[sync] Flag refresh failed for {}: {}", account.email, e),
                 }
             }
@@ -726,6 +774,7 @@ impl SyncEngine {
                 }
                 Ok(uids) => {
                     let pruned = prune_sidecars(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &uids)?;
+                    self.sql_prune(account_id, mailbox, &uids)?;
                     reconciled_at = Some(now_ms());
                     info!(
                         "[sync] Reconciled {} ({}): {} server UIDs, {} pruned (counts_disagree={}, due={})",
@@ -740,8 +789,10 @@ impl SyncEngine {
         }
 
         write_cache_meta_full(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
+        self.sql_write_meta(account_id, mailbox, total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
         if !new_headers.is_empty() {
             write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &new_headers)?;
+            self.sql_write_headers(account_id, mailbox, &new_headers)?;
             self.contacts.observe_headers(account_id, mailbox, &new_headers);
         }
 
@@ -914,6 +965,7 @@ impl SyncEngine {
                 break;
             }
             write_headers(&self.vault_closed, &self.vault_gate, &self.data_dir, &cache_dir, &headers)?;
+            self.sql_write_headers(account.id.as_str(), mailbox, &headers)?;
             self.contacts.observe_headers(account.id.as_str(), mailbox, &headers);
             written += headers.len();
             info!(

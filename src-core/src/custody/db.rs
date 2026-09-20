@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 pub const DB_DIR: &str = "custody";
 pub const DB_FILE: &str = "custody.db";
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE vault_entries (
@@ -19,6 +19,22 @@ CREATE TABLE vault_entries (
   uid          INTEGER NOT NULL,
   entry_json   TEXT NOT NULL,
   PRIMARY KEY (account_id, mailbox_path, uid)
+);
+";
+
+const SCHEMA_V2: &str = "
+CREATE TABLE header_cache (
+  account_id TEXT NOT NULL, mailbox_path TEXT NOT NULL, uid INTEGER NOT NULL,
+  sort_ms INTEGER NOT NULL, updated_ms INTEGER NOT NULL, header_json TEXT NOT NULL,
+  PRIMARY KEY (account_id, mailbox_path, uid)
+);
+CREATE INDEX header_cache_order ON header_cache(account_id, mailbox_path, sort_ms DESC, uid DESC);
+CREATE TABLE header_cache_meta (
+  account_id TEXT NOT NULL, mailbox_path TEXT NOT NULL, meta_json TEXT NOT NULL,
+  PRIMARY KEY (account_id, mailbox_path)
+);
+CREATE TABLE mailbox_cache (
+  account_id TEXT PRIMARY KEY, cache_json TEXT NOT NULL
 );
 ";
 
@@ -87,6 +103,11 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
         ))
         .map_err(sql)?;
     }
+    if version < 2 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V2} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2'); COMMIT;"
+        )).map_err(sql)?;
+    }
     Ok(())
 }
 
@@ -112,11 +133,11 @@ mod tests {
         assert_eq!(mode.to_lowercase(), "wal");
         let locking: String = conn.query_row("PRAGMA locking_mode", [], |r| r.get(0)).unwrap();
         assert_eq!(locking.to_lowercase(), "exclusive");
-        for table in ["meta", "vault_entries"] {
+        for table in ["meta", "vault_entries", "header_cache", "header_cache_meta", "mailbox_cache"] {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
         assert_eq!(db_path(tmp.path()), tmp.path().join("custody/custody.db"));
         assert!(db_path(tmp.path()).exists());
         assert!(!tmp.path().join("custody/custody.db-shm").exists(), "exclusive mode must not create a shared-memory file");

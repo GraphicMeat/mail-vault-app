@@ -19,7 +19,7 @@ use crate::custody as daemon_custody;
 use crate::handlers::common::{blocking, done, opt_str_arg, str_arg, vec_arg, with_vault_write};
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
-use mailvault_core::custody::entries;
+use mailvault_core::custody::{cache, entries};
 use mailvault_core::vault_flags::{self, AdoptReport, Applied, FlagChange, RenamePair};
 use serde_json::Value;
 use std::sync::Arc;
@@ -52,7 +52,11 @@ pub(crate) fn apply_flags(
     with_vault_write(state, |root| {
         let dirs = vault_flags::dirs_for(root, account_id, mailbox, account_email, mirror_root);
         Ok(vault_flags::apply_everywhere(&dirs, changes, sidecars, |patch| {
-            match daemon_custody::with_conn(state, |c| entries::patch_flags_many(c, account_id, mailbox, patch)) {
+            match daemon_custody::with_conn(state, |c| {
+                let rows = entries::patch_flags_many(c, account_id, mailbox, patch)?;
+                cache::patch_flags(c, account_id, mailbox, patch)?;
+                Ok(rows)
+            }) {
                 Ok(n) => Ok(n),
                 Err(e) => {
                     warn!("vault_apply_flags: custody patch failed for {}/{}: {}", account_id, mailbox, e);
@@ -91,6 +95,9 @@ pub(crate) fn rename_mailbox(
                 Ok(rows) => moved += usize::from(rows > 0),
                 Err(e) => failed.push(format!("custody {} -> {} ({})", p.from, p.to, e)),
             }
+            if let Err(e) = daemon_custody::with_conn(state, |c| cache::rename_mailbox(c, account_id, &p.from, &p.to)) {
+                failed.push(format!("header cache {} -> {} ({})", p.from, p.to, e));
+            }
         }
         if failed.is_empty() {
             Ok(())
@@ -126,6 +133,9 @@ pub(crate) fn adopt_mailbox_dirs(
             if out.app_moved > 0 {
                 if let Err(e) = daemon_custody::with_conn(state, |c| entries::rename_mailbox(c, account_id, &p.from, &p.to)) {
                     report.failed.push(format!("custody {} -> {} ({})", p.from, p.to, e));
+                }
+                if let Err(e) = daemon_custody::with_conn(state, |c| cache::rename_mailbox(c, account_id, &p.from, &p.to)) {
+                    report.failed.push(format!("header cache {} -> {} ({})", p.from, p.to, e));
                 }
             }
             if !out.failed.is_empty() {

@@ -9,7 +9,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
-import { appDataDir, LEGACY_CUSTODY_UID, LEGACY_CUSTODY_ENTRY, LEGACY_NESTED_ENTRY } from './mockImap.js';
+import {
+  appDataDir, LEGACY_CUSTODY_UID, LEGACY_CUSTODY_ENTRY, LEGACY_NESTED_ENTRY,
+  LEGACY_HEADER_UID, LEGACY_HEADER, LEGACY_HEADER_MAILBOX,
+} from './mockImap.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -109,6 +112,45 @@ describe('Custody store: migration', function () {
     expect(nestedRead.entries).toEqual([LEGACY_NESTED_ENTRY]);
     const status = await invoke('daemon_rpc', { method: 'custody_status', params: {} });
     expect(status.ok.available).toBe(true);
+  });
+
+  it('imports mailbox and email-list JSON into SQL and snapshots compatibility mirrors', async function () {
+    const mailboxDir = join(data, 'mailboxes', luke.id);
+    const cacheBase = `${luke.id.replace(/[^a-z0-9]/gi, '_')}_${LEGACY_HEADER_MAILBOX.replace(/[^a-z0-9]/gi, '_')}`;
+    const cacheDir = join(data, 'email_cache', cacheBase);
+    await browser.waitUntil(async () => retired(mailboxDir, 'mailboxes.json').length === 1, {
+      timeout: 60_000, interval: 300, timeoutMsg: 'mailboxes.json was never retired',
+    });
+    expect(retired(cacheDir, '_meta.json').length).toBe(1);
+    expect(retired(cacheDir, `${LEGACY_HEADER_UID}.json`).length).toBe(1);
+    expect(existsSync(join(cacheDir, `${LEGACY_HEADER_UID}.json`))).toBe(true);
+
+    const boxes = await invoke('daemon_rpc', { method: 'load_mailbox_cache', params: { accountId: luke.id } });
+    expect(boxes.failed).toBeUndefined();
+    expect(JSON.parse(boxes.ok).mailboxes[0].path).toBe('INBOX');
+    const headers = await invoke('daemon_rpc', {
+      method: 'load_email_cache_by_uids',
+      params: { accountId: luke.id, mailbox: LEGACY_HEADER_MAILBOX, uids: [LEGACY_HEADER_UID] },
+    });
+    expect(headers.failed).toBeUndefined();
+    expect(headers.ok).toEqual([LEGACY_HEADER]);
+  });
+
+  it('removes a cached UID in SQL so it cannot return on the next mailbox read', async function () {
+    const removed = await invoke('daemon_rpc', {
+      method: 'save_email_cache',
+      params: {
+        accountId: luke.id,
+        mailbox: LEGACY_HEADER_MAILBOX,
+        data: JSON.stringify({ emails: [], totalEmails: 0, removedUids: [LEGACY_HEADER_UID] }),
+      },
+    });
+    expect(removed.failed).toBeUndefined();
+    const after = await invoke('daemon_rpc', {
+      method: 'load_email_cache_by_uids',
+      params: { accountId: luke.id, mailbox: LEGACY_HEADER_MAILBOX, uids: [LEGACY_HEADER_UID] },
+    });
+    expect(after.ok).toEqual([]);
   });
 
   it('the imported record reaches the row: the message shows as the only copy', async function () {

@@ -19,6 +19,8 @@ const {
   _mergePersistedSettings,
   effectiveSearchMailboxConcurrency,
   normalizeSearchMailboxConcurrency,
+  effectiveBackupMailboxConcurrency,
+  normalizeBackupMailboxConcurrency,
 } = await import('../settingsStore');
 
 describe('settingsStore defaults', () => {
@@ -71,6 +73,29 @@ describe('Premium search mailbox concurrency', () => {
     useSettingsStore.setState({ searchMailboxConcurrency: 4, billingProfile: null });
     useSettingsStore.getState().setSearchMailboxConcurrency(2);
     expect(useSettingsStore.getState().searchMailboxConcurrency).toBe(4);
+  });
+});
+
+describe('Backup mailbox concurrency', () => {
+  it('normalizes persisted values to 1..5 with premium default 3', () => {
+    expect([undefined, 'x', 0, 2, 9].map(normalizeBackupMailboxConcurrency)).toEqual([3, 3, 1, 2, 5]);
+    const merged = _mergePersistedSettings({ backupMailboxConcurrency: 9 }, { backupMailboxConcurrency: 3 });
+    expect(merged.backupMailboxConcurrency).toBe(5);
+  });
+
+  it('forces free accounts to one without discarding their premium preference', () => {
+    useSettingsStore.setState({ backupMailboxConcurrency: 4, billingProfile: null });
+    expect(effectiveBackupMailboxConcurrency()).toBe(1);
+    useSettingsStore.getState().setBackupMailboxConcurrency(2);
+    expect(useSettingsStore.getState().backupMailboxConcurrency).toBe(4);
+    useSettingsStore.setState({ billingProfile: { hasSubscription: true, status: 'active' } });
+    expect(effectiveBackupMailboxConcurrency()).toBe(4);
+  });
+
+  it('resetSettings restores backup mailbox concurrency to 3', () => {
+    useSettingsStore.setState({ backupMailboxConcurrency: 5 });
+    useSettingsStore.getState().resetSettings();
+    expect(useSettingsStore.getState().backupMailboxConcurrency).toBe(3);
   });
 });
 

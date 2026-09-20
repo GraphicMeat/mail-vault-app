@@ -21,6 +21,10 @@ use mailvault_core::imap::ImapConfig;
 use serde_json::Value;
 use std::sync::Arc;
 
+fn mailbox_concurrency(params: &Value) -> usize {
+    params.get("mailboxConcurrency").and_then(Value::as_u64).unwrap_or(1).clamp(1, 5) as usize
+}
+
 macro_rules! req {
     ($result:expr) => {
         match $result {
@@ -36,6 +40,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let account = req!(str_arg(&id, params, "account"));
             let account_id = req!(str_arg(&id, params, "accountId"));
             let folders = req!(vec_arg::<String>(&id, params, "folders"));
+            let mailbox_concurrency = mailbox_concurrency(params);
             let config: ImapConfig = match serde_json::from_str(&account) {
                 Ok(c) => c,
                 Err(e) => return Some(RpcResponse::error(id, ipc::INVALID_PARAMS, format!("Bad account JSON: {e}"))),
@@ -46,7 +51,7 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             let state = Arc::clone(state);
             tokio::spawn(async move {
                 let _guard = guard;
-                if let Err(e) = restore::run_restore(state, config, account_id, folders, cancel).await {
+                if let Err(e) = restore::run_restore(state, config, account_id, folders, cancel, mailbox_concurrency).await {
                     tracing::error!("[restore] run_restore failed: {}", e);
                 }
             });
@@ -248,3 +253,10 @@ mod tests {
         assert!(uploaded.unwrap() < 25, "cancel must stop the run before all 25 messages upload, got {uploaded:?}");
     }
 }
+    #[test]
+    fn mailbox_concurrency_clamps_to_one_through_five() {
+        assert_eq!(mailbox_concurrency(&serde_json::json!({})), 1);
+        assert_eq!(mailbox_concurrency(&serde_json::json!({"mailboxConcurrency": 0})), 1);
+        assert_eq!(mailbox_concurrency(&serde_json::json!({"mailboxConcurrency": 3})), 3);
+        assert_eq!(mailbox_concurrency(&serde_json::json!({"mailboxConcurrency": 9})), 5);
+    }

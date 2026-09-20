@@ -31,6 +31,8 @@ pub struct ImportReport {
     pub kept_existing: usize,
     pub skipped_no_uid: usize,
     pub renamed_caches: usize,
+    pub imported_header_rows: usize,
+    pub imported_mailbox_caches: usize,
     /// Files left in place, with why: unparseable, wrong shape, or unrenamable.
     pub errors: Vec<(PathBuf, String)>,
 }
@@ -75,7 +77,136 @@ pub fn import_legacy(conn: &Connection, vault_root: &Path) -> ImportReport {
             }
         }
     }
+    import_list_caches(conn, vault_root, stamp, &mut report);
     report
+}
+
+fn mailbox_paths(value: &Value, out: &mut Vec<String>) {
+    let rows = value.get("mailboxes").and_then(Value::as_array).or_else(|| value.as_array());
+    let Some(rows) = rows else { return };
+    fn walk(rows: &[Value], out: &mut Vec<String>) {
+        for row in rows {
+            if let Some(path) = row.get("path").and_then(Value::as_str) { out.push(path.to_string()); }
+            if let Some(children) = row.get("children").and_then(Value::as_array) { walk(children, out); }
+        }
+    }
+    walk(rows, out);
+}
+
+fn import_list_caches(conn: &Connection, root: &Path, stamp: u64, report: &mut ImportReport) {
+    for (account, account_dir) in account_dirs(&root.join("mailboxes")) {
+        let file = account_dir.join("mailboxes.json");
+        if !file.is_file() { continue; }
+        let text = match std::fs::read_to_string(&file) {
+            Ok(v) => v,
+            Err(e) => { report.errors.push((file, format!("read: {e}"))); continue; }
+        };
+        let value: Value = match serde_json::from_str(&text) {
+            Ok(v) => v,
+            Err(e) => { report.errors.push((file, format!("not JSON: {e}"))); continue; }
+        };
+        match conn.execute("INSERT OR IGNORE INTO mailbox_cache(account_id,cache_json) VALUES (?1,?2)", params![account, text]) {
+            Ok(n) => report.imported_mailbox_caches += n,
+            Err(e) => { report.errors.push((file, e.to_string())); continue; }
+        }
+
+        let mut paths = Vec::new();
+        mailbox_paths(&value, &mut paths);
+        for mailbox in paths {
+            import_header_dir(conn, root, &account, &mailbox, stamp, report);
+            import_monolithic_header_cache(conn, root, &account, &mailbox, stamp, report);
+        }
+        if let Err(e) = snapshot_legacy(&file, stamp) { report.errors.push((file, format!("snapshot: {e}"))); }
+    }
+}
+
+fn import_monolithic_header_cache(conn: &Connection, root: &Path, account: &str, mailbox: &str, stamp: u64, report: &mut ImportReport) {
+    let path = root.join("email_cache").join(format!("{}.json", crate::header_cache::cache_base_name(account, mailbox)));
+    if !path.is_file() { return; }
+    let text = match std::fs::read_to_string(&path) {
+        Ok(v) => v,
+        Err(e) => { report.errors.push((path, e.to_string())); return; }
+    };
+    let value: Value = match serde_json::from_str::<Value>(&text) {
+        Ok(v) if v.is_object() => v,
+        Ok(_) => { report.errors.push((path, "cache JSON is not an object".into())); return; }
+        Err(e) => { report.errors.push((path, e.to_string())); return; }
+    };
+    let tx = match conn.unchecked_transaction() {
+        Ok(v) => v,
+        Err(e) => { report.errors.push((path, e.to_string())); return; }
+    };
+    let mut meta = value.clone();
+    if let Some(map) = meta.as_object_mut() {
+        map.remove("emails");
+        map.remove("removedUids");
+    }
+    let result = (|| -> Result<usize, String> {
+        tx.execute(
+            "INSERT OR IGNORE INTO header_cache_meta(account_id,mailbox_path,meta_json) VALUES (?1,?2,?3)",
+            params![account, mailbox, serde_json::to_string(&meta).map_err(|e| e.to_string())?],
+        ).map_err(|e| e.to_string())?;
+        let mut imported = 0;
+        let mut stmt = tx.prepare_cached(
+            "INSERT OR IGNORE INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,0,?5)"
+        ).map_err(|e| e.to_string())?;
+        for row in value.get("emails").and_then(Value::as_array).into_iter().flatten() {
+            let Some(uid) = row.get("uid").and_then(Value::as_u64).and_then(|u| u32::try_from(u).ok()) else { continue };
+            let sort = ["internalDate", "date"].iter().filter_map(|k| row.get(*k).and_then(Value::as_str))
+                .find_map(|s| chrono::DateTime::parse_from_rfc3339(s).or_else(|_| chrono::DateTime::parse_from_rfc2822(s)).ok())
+                .map(|d| d.timestamp_millis()).unwrap_or(i64::MIN + i64::from(uid));
+            imported += stmt.execute(params![account, mailbox, uid, sort, serde_json::to_string(row).map_err(|e| e.to_string())?])
+                .map_err(|e| e.to_string())?;
+        }
+        drop(stmt);
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(imported)
+    })();
+    match result {
+        Ok(n) => {
+            report.imported_header_rows += n;
+            if let Err(e) = snapshot_legacy(&path, stamp) { report.errors.push((path, format!("snapshot: {e}"))); }
+        }
+        Err(e) => report.errors.push((path, e)),
+    }
+}
+
+fn import_header_dir(conn: &Connection, root: &Path, account: &str, mailbox: &str, stamp: u64, report: &mut ImportReport) {
+    let dir = crate::header_cache::sidecar_dir(root, account, mailbox);
+    if !dir.is_dir() { return; }
+    let meta = dir.join("_meta.json");
+    if meta.is_file() {
+        match std::fs::read_to_string(&meta).and_then(|s| {
+            serde_json::from_str::<Value>(&s).map_err(std::io::Error::other)?;
+            conn.execute("INSERT OR IGNORE INTO header_cache_meta(account_id,mailbox_path,meta_json) VALUES (?1,?2,?3)", params![account,mailbox,s])
+                .map_err(std::io::Error::other)?;
+            Ok(())
+        }) {
+            Ok(()) => if let Err(e) = snapshot_legacy(&meta, stamp) { report.errors.push((meta, format!("snapshot: {e}"))); },
+            Err(e) => report.errors.push((meta, e.to_string())),
+        }
+    }
+    let Ok(entries) = std::fs::read_dir(&dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let Some(uid) = crate::header_cache::is_header_file(&name) else { continue };
+        let text = match std::fs::read_to_string(&path) { Ok(v) => v, Err(e) => { report.errors.push((path, e.to_string())); continue; } };
+        let row: Value = match serde_json::from_str(&text) { Ok(v) => v, Err(e) => { report.errors.push((path, e.to_string())); continue; } };
+        let sort = ["internalDate", "date"].iter().filter_map(|k| row.get(*k).and_then(Value::as_str))
+            .find_map(|s| chrono::DateTime::parse_from_rfc3339(s).or_else(|_| chrono::DateTime::parse_from_rfc2822(s)).ok())
+            .map(|d| d.timestamp_millis()).unwrap_or(i64::MIN + i64::from(uid));
+        match conn.execute(
+            "INSERT OR IGNORE INTO header_cache(account_id,mailbox_path,uid,sort_ms,updated_ms,header_json) VALUES (?1,?2,?3,?4,?5,?6)",
+            params![account,mailbox,uid,sort,0,text],
+        ) {
+            Ok(n) => {
+                report.imported_header_rows += n;
+                if let Err(e) = snapshot_legacy(&path, stamp) { report.errors.push((path, format!("snapshot: {e}"))); }
+            }
+            Err(e) => report.errors.push((path, e.to_string())),
+        }
+    }
 }
 
 /// Parse one bare-array file and upsert its entries, keeping any row the
@@ -172,6 +303,21 @@ fn retire(path: &Path, stamp: u64) -> Result<(), String> {
         n += 1;
     }
     std::fs::rename(path, &target).map_err(|e| e.to_string())
+}
+
+/// Cache JSON remains as a compatibility mirror for readers not moved yet.
+/// Keep one byte-for-byte pre-DB snapshot, then let SQLite be authoritative.
+fn snapshot_legacy(path: &Path, stamp: u64) -> Result<(), String> {
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).ok_or("no file name")?;
+    if let Some(parent) = path.parent() {
+        if std::fs::read_dir(parent).ok().into_iter().flatten().flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with(&format!("{name}.pre-db-")))
+        {
+            return Ok(());
+        }
+    }
+    std::fs::copy(path, path.with_file_name(format!("{name}.pre-db-{stamp}")))
+        .map(|_| ()).map_err(|e| e.to_string())
 }
 
 
@@ -333,6 +479,30 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
         assert_eq!(import_legacy(&conn, tmp.path()), ImportReport::default());
+    }
+
+    #[test]
+    fn imports_mailbox_and_header_caches_then_retires_only_successful_json() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        write(root, "mailboxes/acct/mailboxes.json", &json!({
+            "mailboxes": [{"path":"INBOX"}, {"path":"Projects","children":[{"path":"Projects/2026"}]}],
+            "fetchedAt": 123
+        }).to_string());
+        let inbox = crate::header_cache::sidecar_dir(root, "acct", "INBOX");
+        write(&inbox, "_meta.json", &json!({"totalEmails":2,"uidValidity":9}).to_string());
+        write(&inbox, "1.json", &json!({"uid":1,"subject":"one","date":"2026-09-19T00:00:00Z"}).to_string());
+        write(&inbox, "2.json", "{broken");
+
+        let conn = open(root).unwrap();
+        let report = import_legacy(&conn, root);
+        assert_eq!(report.imported_header_rows, 1);
+        assert!(super::super::cache::load_mailboxes(&conn, "acct").unwrap().unwrap().contains("INBOX"));
+        let rows = super::super::cache::load_by_uids(&conn, "acct", "INBOX", &[1]).unwrap();
+        assert_eq!(rows[0]["subject"], "one");
+        assert!(root.join("mailboxes/acct/mailboxes.json").exists());
+        assert!(inbox.join("1.json").exists());
+        assert!(inbox.join("2.json").exists(), "malformed cache must remain recoverable");
     }
 
     #[cfg(unix)]

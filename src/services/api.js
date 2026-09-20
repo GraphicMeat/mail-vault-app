@@ -655,8 +655,8 @@ export async function getTransferStats(accountId = null) {
 
 // ── Backup ────────────────────────────────────────────────────────────────────
 
-export async function backupRunAccount(accountId, accountJson, backupPath = null, skipFolders = 0) {
-  return tauriInvoke('backup_run_account', { accountId, accountJson, backupPath, skipFolders: skipFolders || null });
+export async function backupRunAccount(accountId, accountJson, backupPath = null, skipFolders = 0, mailboxConcurrency = 1) {
+  return tauriInvoke('backup_run_account', { accountId, accountJson, backupPath, skipFolders: skipFolders || null, mailboxConcurrency });
 }
 
 export async function backupStatus(accountId, accountJson, backupPath = null) {
@@ -692,11 +692,12 @@ export async function cancelMigration() {
 
 // ── Restore (local → server) ────────────────────────────────────────────────
 
-export async function startRestore(account, accountId, folders) {
+export async function startRestore(account, accountId, folders, mailboxConcurrency = 1) {
   return await tauriInvoke('start_restore', {
     account: typeof account === 'string' ? account : JSON.stringify(account),
     accountId,
     folders,
+    mailboxConcurrency,
   });
 }
 

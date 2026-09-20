@@ -1140,6 +1140,17 @@ export const LEGACY_NESTED_ENTRY = {
   flags: ['\\Seen'],
 };
 export const CORRUPT_CUSTODY_BYTES = 'this is not a database, and it must not be deleted';
+export const LEGACY_HEADER_UID = 990021;
+export const LEGACY_HEADER_MAILBOX = 'Legacy Cache';
+export const LEGACY_HEADER = {
+  uid: LEGACY_HEADER_UID,
+  subject: 'Imported header cache row',
+  from: { address: 'cached@mock.test', name: 'Cached' },
+  to: [{ address: 'luke@mock.test', name: null }],
+  date: 'Sat, 19 Sep 2026 10:00:00 +0000',
+  flags: [],
+  messageId: '<legacy-header-cache@mock.test>',
+};
 
 /**
  * A vault as every build before the custody store left it: the per-mailbox
@@ -1162,6 +1173,21 @@ export function seedLegacyCustody(home, accountId) {
     'From: Legacy <legacy@mock.test>\r\nTo: luke@mock.test\r\nSubject: Recorded by the JSON index\r\n'
     + 'Date: Mon, 01 Sep 2026 10:00:00 +0000\r\nMessage-ID: <legacy-custody@mock.test>\r\n\r\n'
     + 'A message the old index vouched for.\r\n');
+
+  const mailboxDir = join(data, 'mailboxes', accountId);
+  mkdirSync(mailboxDir, { recursive: true });
+  writeFileSync(join(mailboxDir, 'mailboxes.json'), JSON.stringify({
+    mailboxes: [
+      { path: 'INBOX', name: 'Inbox', children: [] },
+      { path: LEGACY_HEADER_MAILBOX, name: LEGACY_HEADER_MAILBOX, children: [] },
+    ],
+    fetchedAt: 123,
+  }));
+  const cacheBase = `${accountId.replace(/[^a-z0-9]/gi, '_')}_${LEGACY_HEADER_MAILBOX.replace(/[^a-z0-9]/gi, '_')}`;
+  const cacheDir = join(data, 'email_cache', cacheBase);
+  mkdirSync(cacheDir, { recursive: true });
+  writeFileSync(join(cacheDir, '_meta.json'), JSON.stringify({ totalEmails: 1, uidValidity: 77, lastSynced: 123 }));
+  writeFileSync(join(cacheDir, `${LEGACY_HEADER_UID}.json`), JSON.stringify(LEGACY_HEADER));
 }
 
 /** A custody store no build can read. Planted BEFORE the app launches. */

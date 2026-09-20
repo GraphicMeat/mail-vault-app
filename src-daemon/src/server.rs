@@ -494,6 +494,8 @@ impl DaemonState {
             std::time::Duration::from_millis(50),
         );
         let events = crate::events::EventBus::new(crate::events::CAPACITY);
+        let custody = crate::custody::CustodyState::default();
+        sync_engine.attach_custody_db(Arc::clone(&custody.db));
         Arc::new(DaemonState {
             net,
             idle,
@@ -522,7 +524,7 @@ impl DaemonState {
             prefetch_lock: std::sync::Mutex::new(()),
             prefetch_high_water: std::sync::Mutex::new(Vec::new()),
             journal: std::sync::Mutex::new(()),
-            custody: crate::custody::CustodyState::default(),
+            custody,
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),

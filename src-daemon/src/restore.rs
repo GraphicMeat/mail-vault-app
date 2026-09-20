@@ -140,8 +140,8 @@ pub async fn run_restore(
     account_id: String,
     folders: Vec<String>,
     cancel: Arc<AtomicBool>,
+    mailbox_concurrency: usize,
 ) -> Result<(), String> {
-    let pool = &state.imap_pool;
     let email = account.email.clone();
 
     let mut per_folder: Vec<(String, Vec<LocalMsg>)> = Vec::new();
@@ -153,17 +153,7 @@ pub async fn run_restore(
     }
     let total_emails: u32 = per_folder.iter().map(|(_, m)| m.len() as u32).sum();
 
-    let mut uploaded: u32 = 0;
-    let mut skipped: u32 = 0;
-    let mut failed: u32 = 0;
-
-    let emit = |state: &Arc<DaemonState>,
-                status: &str,
-                current_folder: Option<String>,
-                folder_progress: Option<String>,
-                uploaded: u32,
-                skipped: u32,
-                failed: u32| {
+    let emit = |status: &str, current_folder: Option<String>, uploaded: u32, skipped: u32, failed: u32| {
         let payload = RestoreProgress {
             account_id: account_id.clone(),
             email: email.clone(),
@@ -172,109 +162,94 @@ pub async fn run_restore(
             skipped_emails: skipped,
             failed_emails: failed,
             current_folder,
-            folder_progress,
+            folder_progress: None,
             status: status.to_string(),
         };
         state.events.emit("restore-progress", serde_json::to_value(&payload).unwrap_or_default());
     };
 
-    emit(&state, "running", None, None, 0, 0, 0);
+    emit("running", None, 0, 0, 0);
+    let permit = Arc::new(tokio::sync::Semaphore::new(mailbox_concurrency.clamp(1, 5)));
+    let mut tasks = tokio::task::JoinSet::new();
+    for (folder, msgs) in per_folder {
+        let state = Arc::clone(&state);
+        let account = account.clone();
+        let cancel = Arc::clone(&cancel);
+        let permit = Arc::clone(&permit);
+        tasks.spawn(async move {
+            let _permit = permit.acquire_owned().await.map_err(|e| e.to_string())?;
+            let counts = restore_folder(&state, &account, &folder, &msgs, &cancel).await;
+            Ok::<_, String>((folder, counts))
+        });
+    }
 
-    for (folder, msgs) in &per_folder {
-        if cancel.load(Ordering::Relaxed) {
-            emit(&state, "cancelled", Some(folder.clone()), None, uploaded, skipped, failed);
-            return Ok(());
-        }
+    let (mut uploaded, mut skipped, mut failed) = (0, 0, 0);
+    while let Some(result) = tasks.join_next().await {
+        let (folder, (u, s, f)) = result.map_err(|e| format!("restore worker panicked: {e}"))??;
+        uploaded += u;
+        skipped += s;
+        failed += f;
+        emit("running", Some(folder), uploaded, skipped, failed);
+    }
 
-        let mut guard = match pool.get_priority(&account).await {
-            Ok(g) => g,
-            Err(e) => {
-                warn!("[restore] pool checkout failed for {}: {}", folder, e);
-                failed += msgs.len() as u32;
-                emit(&state, "running", Some(folder.clone()), None, uploaded, skipped, failed);
-                continue;
-            }
-        };
-
-        if let Err(e) = migration::ensure_dest_folder_imap(&mut guard.session, folder).await {
-            warn!("[restore] CREATE {} failed, skipping folder: {}", folder, e);
-            failed += msgs.len() as u32;
-            pool.return_priority(&account, guard).await;
-            emit(&state, "running", Some(folder.clone()), None, uploaded, skipped, failed);
-            continue;
-        }
-
-        let dest_ids = migration::fetch_dest_message_ids_imap(&mut guard.session, folder)
-            .await
-            .unwrap_or_default();
-
-        let folder_total = msgs.len();
-        for (idx, msg) in msgs.iter().enumerate() {
-            if cancel.load(Ordering::Relaxed) {
-                pool.return_priority(&account, guard).await;
-                emit(&state, "cancelled", Some(folder.clone()), None, uploaded, skipped, failed);
-                return Ok(());
-            }
-
-            let raw = match std::fs::read(&msg.path) {
-                Ok(b) => b,
-                Err(e) => {
-                    warn!("[restore] read {:?} failed: {}", msg.path, e);
-                    failed += 1;
-                    continue;
-                }
-            };
-
-            if let Some(mid) = migration::extract_message_id(&raw) {
-                if dest_ids.contains(&mid) {
-                    skipped += 1;
-                    continue;
-                }
-            }
-
-            // Keep the message's own date: a restored backup must not arrive dated today.
-            let internal_date = imap::internal_date_from_raw(&raw);
-            let append = imap::append_email(
-                &mut guard.session,
-                folder,
-                &raw,
-                &msg.imap_flags,
-                internal_date.as_deref(),
-            );
-            match tokio::time::timeout(std::time::Duration::from_secs(30), append).await {
-                Ok(Ok(())) => uploaded += 1,
-                Ok(Err(e)) => {
-                    warn!("[restore] APPEND uid {} to {} failed: {}", msg.uid, folder, e);
-                    failed += 1;
-                }
-                Err(_) => {
-                    warn!("[restore] APPEND uid {} to {} timed out", msg.uid, folder);
-                    failed += 1;
-                }
-            }
-
-            if idx % 10 == 0 || idx + 1 == folder_total {
-                emit(
-                    &state,
-                    "running",
-                    Some(folder.clone()),
-                    Some(format!("{}/{}", idx + 1, folder_total)),
-                    uploaded,
-                    skipped,
-                    failed,
-                );
-            }
-        }
-
-        pool.return_priority(&account, guard).await;
+    if cancel.load(Ordering::Relaxed) {
+        emit("cancelled", None, uploaded, skipped, failed);
+        return Ok(());
     }
 
     info!(
         "[restore] done account={} uploaded={} skipped={} failed={}",
         account_id, uploaded, skipped, failed
     );
-    emit(&state, "completed", None, None, uploaded, skipped, failed);
+    emit("completed", None, uploaded, skipped, failed);
     Ok(())
+}
+
+async fn restore_folder(
+    state: &Arc<DaemonState>,
+    account: &ImapConfig,
+    folder: &str,
+    msgs: &[LocalMsg],
+    cancel: &AtomicBool,
+) -> (u32, u32, u32) {
+    if cancel.load(Ordering::Relaxed) { return (0, 0, 0); }
+    let pool = &state.imap_pool;
+    let mut guard = match pool.get_priority(account).await {
+        Ok(g) => g,
+        Err(e) => {
+            warn!("[restore] pool checkout failed for {}: {}", folder, e);
+            return (0, 0, msgs.len() as u32);
+        }
+    };
+    if let Err(e) = migration::ensure_dest_folder_imap(&mut guard.session, folder).await {
+        warn!("[restore] CREATE {} failed, skipping folder: {}", folder, e);
+        pool.return_priority(account, guard).await;
+        return (0, 0, msgs.len() as u32);
+    }
+    let dest_ids = migration::fetch_dest_message_ids_imap(&mut guard.session, folder).await.unwrap_or_default();
+    let (mut uploaded, mut skipped, mut failed) = (0, 0, 0);
+    for msg in msgs {
+        if cancel.load(Ordering::Relaxed) { break; }
+        let raw = match std::fs::read(&msg.path) {
+            Ok(b) => b,
+            Err(e) => { warn!("[restore] read {:?} failed: {}", msg.path, e); failed += 1; continue; }
+        };
+        if migration::extract_message_id(&raw).is_some_and(|mid| dest_ids.contains(&mid)) {
+            skipped += 1;
+            continue;
+        }
+        let internal_date = imap::internal_date_from_raw(&raw);
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            imap::append_email(&mut guard.session, folder, &raw, &msg.imap_flags, internal_date.as_deref()),
+        ).await {
+            Ok(Ok(())) => uploaded += 1,
+            Ok(Err(e)) => { warn!("[restore] APPEND uid {} to {} failed: {}", msg.uid, folder, e); failed += 1; }
+            Err(_) => { warn!("[restore] APPEND uid {} to {} timed out", msg.uid, folder); failed += 1; }
+        }
+    }
+    pool.return_priority(account, guard).await;
+    (uploaded, skipped, failed)
 }
 
 #[cfg(test)]

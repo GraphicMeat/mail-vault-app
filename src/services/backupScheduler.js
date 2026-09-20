@@ -445,7 +445,14 @@ class BackupCoordinator {
       // `src-tauri/src/backup.rs`'s `hold_backup_path`).
       const done = new Promise((resolve) => { this._terminalWaiters.set(accountId, resolve); });
       try {
-        await api.backupRunAccount(accountId, JSON.stringify(freshAccount), null, skipFolders);
+        const settings = useSettingsStore.getState();
+        const requestedConcurrency = Number(settings.backupMailboxConcurrency ?? 3);
+        const concurrency = hasPremiumAccess(settings.billingProfile)
+          ? Math.min(5, Math.max(1, Number.isFinite(requestedConcurrency) ? Math.trunc(requestedConcurrency) : 3))
+          : 1;
+        const args = [accountId, JSON.stringify(freshAccount), null, skipFolders];
+        if (concurrency > 1) args.push(concurrency);
+        await api.backupRunAccount(...args);
       } catch (err) {
         // The run never started, so no frame is ever coming for it. Drop the
         // waiter here rather than park this account on an event that cannot

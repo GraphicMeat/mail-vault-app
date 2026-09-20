@@ -43,6 +43,10 @@ use crate::server::DaemonState;
 use mailvault_core::backup::{self, BackupProgress, BackupRunContext};
 use mailvault_core::vault_flags::{Applied, FlagChange};
 use serde_json::Value;
+
+fn mailbox_concurrency(params: &Value) -> usize {
+    params.get("mailboxConcurrency").and_then(Value::as_u64).unwrap_or(1).clamp(1, 5) as usize
+}
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -84,6 +88,7 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
     let account_json = params.get("accountJson").and_then(Value::as_str).ok_or("Missing accountJson")?.to_string();
     let mirror_root = params.get("mirrorRoot").and_then(Value::as_str).map(str::to_string);
     let skip_folders = params.get("skipFolders").and_then(Value::as_u64).unwrap_or(0) as usize;
+    let mailbox_concurrency = mailbox_concurrency(&params);
 
     let account: mailvault_core::imap::ImapConfig =
         serde_json::from_str(&account_json).map_err(|e| format!("Bad account JSON: {}", e))?;
@@ -126,6 +131,7 @@ pub(crate) async fn backup_run_account(state: &Arc<DaemonState>, params: Value) 
         mirror_root,
         cancel: Arc::clone(&cancel),
         skip_folders,
+        mailbox_concurrency,
         archive_ctx,
         on_progress,
         apply_flags,

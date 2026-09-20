@@ -24,9 +24,11 @@
 //! `header_cache::clear` itself already has (walking every entry under one
 //! root) — there is no smaller unit to gate it by.
 use crate::handlers::common::{blocking, done, opt_f64_arg, opt_str_arg, str_arg, u32_arg, vault_root, vec_arg, with_vault_write};
+use crate::custody as daemon_custody;
 use crate::ipc::RpcResponse;
 use crate::server::DaemonState;
 use mailvault_core::{graph_ledger, header_cache, vault_files};
+use mailvault_core::custody::cache as sql_cache;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -49,7 +51,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| header_cache::save(root, &account_id, &mailbox, &data)).map(|_| Value::Null)
+                    with_vault_write(&state, |root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::save_headers(c, &account_id, &mailbox, &data))?;
+                        header_cache::save(root, &account_id, &mailbox, &data)
+                    }).map(|_| Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -62,8 +67,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    header_cache::load(&root, &account_id, &mailbox).map(|v| v.map_or(Value::Null, Value::String))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, None))
+                        .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await
                 .and_then(|r| r),
@@ -77,8 +83,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    header_cache::load_partial(&root, &account_id, &mailbox, limit).map(|v| v.map_or(Value::Null, Value::String))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_headers(c, &account_id, &mailbox, Some(limit)))
+                        .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await
                 .and_then(|r| r),
@@ -91,8 +98,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    header_cache::load_meta(&root, &account_id, &mailbox).map(|v| v.map_or(Value::Null, Value::String))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_meta(c, &account_id, &mailbox))
+                        .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await
                 .and_then(|r| r),
@@ -106,8 +114,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    Ok(Value::Array(header_cache::load_by_uids(&root, &account_id, &mailbox, &uids)))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_by_uids(c, &account_id, &mailbox, &uids)).map(Value::Array)
                 })
                 .await
                 .and_then(|r| r),
@@ -121,8 +129,8 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    Ok(header_cache::list_uids(&root, &account_id, &mailbox, since_ms))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::list_uids(c, &account_id, &mailbox, since_ms))
                 })
                 .await
                 .and_then(|r| r),
@@ -139,7 +147,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| header_cache::clear(root, account_id.as_deref(), mailbox.as_deref())).map(|_| Value::Null)
+                    with_vault_write(&state, |root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::clear_headers(c, account_id.as_deref(), mailbox.as_deref()))?;
+                        header_cache::clear(root, account_id.as_deref(), mailbox.as_deref())
+                    }).map(|_| Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -152,7 +163,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| header_cache::save_mailbox_cache(root, &account_id, &data)).map(|_| Value::Null)
+                    with_vault_write(&state, |root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::save_mailboxes(c, &account_id, &data))?;
+                        header_cache::save_mailbox_cache(root, &account_id, &data)
+                    }).map(|_| Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -164,8 +178,9 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    let root = vault_root(&state)?;
-                    header_cache::load_mailbox_cache(&root, &account_id).map(|v| v.map_or(Value::Null, Value::String))
+                    vault_root(&state)?;
+                    daemon_custody::with_conn(&state, |c| sql_cache::load_mailboxes(c, &account_id))
+                        .map(|v| v.map_or(Value::Null, Value::String))
                 })
                 .await
                 .and_then(|r| r),
@@ -177,7 +192,10 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
             done(
                 id,
                 blocking(move || -> Result<Value, String> {
-                    with_vault_write(&state, |root| header_cache::delete_mailbox_cache(root, &account_id)).map(|_| Value::Null)
+                    with_vault_write(&state, |root| {
+                        daemon_custody::with_conn(&state, |c| sql_cache::delete_mailboxes(c, &account_id))?;
+                        header_cache::delete_mailbox_cache(root, &account_id)
+                    }).map(|_| Value::Null)
                 })
                 .await
                 .and_then(|r| r),
@@ -252,6 +270,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let app_dir = tempfile::tempdir().unwrap().keep();
         let s = DaemonState::for_test(tmp.path().to_path_buf(), app_dir, mail_dir_ok);
+        if mail_dir_ok { let _ = crate::custody::open_into(&s); }
         (tmp, s)
     }
 

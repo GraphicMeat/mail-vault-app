@@ -209,6 +209,7 @@ pub(crate) fn run_account(
     account_json: String,
     caller_path: Option<String>,
     skip_folders: usize,
+    mailbox_concurrency: usize,
 ) -> Result<Value, String> {
     let (root, needs_release) = resolve_backup_path(app, caller_path);
     // Park the path BEFORE the call, not after it. The daemon spawns the run
@@ -230,6 +231,7 @@ pub(crate) fn run_account(
         "accountJson": account_json,
         "mirrorRoot": root,
         "skipFolders": skip_folders,
+        "mailboxConcurrency": mailbox_concurrency.clamp(1, 5),
     });
     let result = crate::daemon_call_blocking(app, "backup_run_account", params, RUN_ACK_BUDGET);
     // An `Ok` leaves it parked for the run. An `Err` means nothing started,

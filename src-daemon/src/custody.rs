@@ -24,11 +24,11 @@ use mailvault_core::search_index::slot::{install_if_current, SwitchGuard};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard};
 use tracing::{error, info, warn};
 
 pub struct CustodyState {
-    pub db: SharedConn,
+    pub db: Arc<SharedConn>,
     pub root: Mutex<Option<PathBuf>>,
     /// Why the store is closed, when an open failed. Cleared by a successful open.
     pub error: Mutex<Option<String>>,
@@ -53,7 +53,7 @@ pub struct CustodyState {
 impl Default for CustodyState {
     fn default() -> Self {
         Self {
-            db: Mutex::new(None),
+            db: Arc::new(Mutex::new(None)),
             root: Mutex::new(None),
             error: Mutex::new(None),
             switch: SwitchGuard::default(),
@@ -91,7 +91,12 @@ pub fn open_into(state: &DaemonState) -> Result<(), String> {
     let outcome = match db::open(&root) {
         Ok(conn) => {
             let report = import::import_legacy(&conn, &root);
-            if report.files > 0 || report.renamed_caches > 0 || !report.errors.is_empty() {
+            if report.files > 0
+                || report.renamed_caches > 0
+                || report.imported_header_rows > 0
+                || report.imported_mailbox_caches > 0
+                || !report.errors.is_empty()
+            {
                 info!("custody import: {report:?}");
             }
             for (path, why) in &report.errors {

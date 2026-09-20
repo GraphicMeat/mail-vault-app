@@ -114,9 +114,17 @@ pub async fn backup_run_account(
     account_json: String,
     backup_path: Option<String>,
     skip_folders: Option<usize>,
+    mailbox_concurrency: Option<usize>,
 ) -> Result<serde_json::Value, String> {
     tokio::task::spawn_blocking(move || {
-        backup::run_account(&app_handle, account_id, account_json, backup_path, skip_folders.unwrap_or(0))
+        backup::run_account(
+            &app_handle,
+            account_id,
+            account_json,
+            backup_path,
+            skip_folders.unwrap_or(0),
+            mailbox_concurrency.unwrap_or(1),
+        )
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

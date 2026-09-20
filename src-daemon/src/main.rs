@@ -388,6 +388,8 @@ async fn daemon_main() {
     let events = events::EventBus::new(events::CAPACITY);
     let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), mail_dir_ok, events.clone());
 
+    let custody = custody::CustodyState::default();
+    sync_eng.attach_custody_db(Arc::clone(&custody.db));
     let state = Arc::new(server::DaemonState {
         token,
         data_dir: mail_dir.clone(),
@@ -416,7 +418,7 @@ async fn daemon_main() {
         prefetch_lock: std::sync::Mutex::new(()),
         prefetch_high_water: std::sync::Mutex::new(Vec::new()),
         journal: std::sync::Mutex::new(()),
-        custody: custody::CustodyState::default(),
+        custody,
         run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),

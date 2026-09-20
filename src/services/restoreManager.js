@@ -1,6 +1,6 @@
 import { listen } from '@tauri-apps/api/event';
 import * as api from './api.js';
-import { useSettingsStore } from '../stores/settingsStore.js';
+import { useSettingsStore, effectiveBackupMailboxConcurrency } from '../stores/settingsStore.js';
 
 class RestoreManager {
     constructor() {
@@ -39,7 +39,10 @@ class RestoreManager {
             folder_progress: null,
             status: 'running',
         });
-        await api.startRestore(account, accountId, folders);
+        const concurrency = effectiveBackupMailboxConcurrency();
+        await api.startRestore(...(concurrency > 1
+            ? [account, accountId, folders, concurrency]
+            : [account, accountId, folders]));
     }
 
     async cancel() {

@@ -97,6 +97,10 @@ export const normalizeSearchMailboxConcurrency = value => {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
 };
+export const normalizeBackupMailboxConcurrency = value => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.min(5, Math.max(1, Math.trunc(parsed))) : 3;
+};
 const normalizeExplorerPaths = value => Object.fromEntries(
   Object.entries(value && typeof value === 'object' && !Array.isArray(value) ? value : {})
     .filter(([key, path]) => key.length <= 2048 && Array.isArray(path) && path.length <= 6
@@ -121,6 +125,7 @@ export const _mergePersistedSettings = (persisted, current) => ({
   explorerPaths: normalizeExplorerPaths(persisted?.explorerPaths ?? current.explorerPaths),
   insightsPreferences: normalizeInsightsPreferences(persisted?.insightsPreferences ?? current.insightsPreferences),
   searchMailboxConcurrency: normalizeSearchMailboxConcurrency(persisted?.searchMailboxConcurrency ?? current.searchMailboxConcurrency),
+  backupMailboxConcurrency: normalizeBackupMailboxConcurrency(persisted?.backupMailboxConcurrency ?? current.backupMailboxConcurrency),
   keyboardShortcuts: { ...DEFAULT_SHORTCUTS, ...(persisted?.keyboardShortcuts || {}) },
 });
 
@@ -440,6 +445,7 @@ export const useSettingsStore = create(
 
       // Global backup configuration
       backupGlobalEnabled: false,    // Master switch: true = all accounts use global schedule
+      backupMailboxConcurrency: 3,
       // interval: 'hourly' | 'daily' | 'weekly' | 'hours' (top of each hour in `hours`)
       backupGlobalConfig: { interval: 'daily', hourlyInterval: 1, timeOfDay: '03:00', dayOfWeek: 1, hours: [] },
       backupScope: 'archived',       // 'archived' = only locally archived emails, 'all' = everything from server
@@ -550,6 +556,10 @@ export const useSettingsStore = create(
 
       // Global backup actions
       setBackupGlobalEnabled: (val) => set({ backupGlobalEnabled: val }),
+      setBackupMailboxConcurrency: value => {
+        if (!hasPremiumAccess(get().billingProfile)) return;
+        set({ backupMailboxConcurrency: normalizeBackupMailboxConcurrency(value) });
+      },
       setBackupGlobalConfig: (config) => set(state => ({
         backupGlobalConfig: { ...state.backupGlobalConfig, ...config }
       })),
@@ -1047,6 +1057,7 @@ export const useSettingsStore = create(
           onboardingComplete: false,
           searchHistoryLimit: 20,
           searchMailboxConcurrency: 3,
+          backupMailboxConcurrency: 3,
           searchHistory: [],
           filterHistoryPeriodDays: 30,
           topFiltersLimit: 20,
@@ -1173,5 +1184,11 @@ export function hasPremiumAccess(billingProfile) {
 export function effectiveSearchMailboxConcurrency(state = useSettingsStore.getState()) {
   return hasPremiumAccess(state?.billingProfile)
     ? normalizeSearchMailboxConcurrency(state?.searchMailboxConcurrency)
+    : 1;
+}
+
+export function effectiveBackupMailboxConcurrency(state = useSettingsStore.getState()) {
+  return hasPremiumAccess(state?.billingProfile)
+    ? normalizeBackupMailboxConcurrency(state?.backupMailboxConcurrency)
     : 1;
 }

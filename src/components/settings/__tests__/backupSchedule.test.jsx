@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 
 vi.mock('../../../services/backupScheduler', () => ({
   backupScheduler: { triggerManualBackup: vi.fn() },
@@ -42,6 +42,7 @@ beforeEach(() => {
   useSettingsStore.setState({
     hiddenAccounts: {}, accountOrder: [], backupGlobalEnabled: false,
     backupGlobalConfig: { interval: 'daily', timeOfDay: '03:00', dayOfWeek: 1 },
+    backupMailboxConcurrency: 3,
     billingProfile: { premiumAccess: true, clientAccessGranted: true, hasSubscription: true, status: 'active' },
   });
   useBackupStore.setState({ activeBackup: null, queue: [] });
@@ -54,6 +55,23 @@ afterEach(() => {
 });
 
 describe('BackupSchedule - the Back up all panel', () => {
+  it('lets premium users select 1 to 5 concurrent mailboxes', () => {
+    render(<BackupSchedule />);
+    const picker = screen.getByTestId('backup-mailbox-concurrency');
+    expect([...picker.options].map(option => option.value)).toEqual(['1', '2', '3', '4', '5']);
+    expect(picker.value).toBe('3');
+    fireEvent.change(picker, { target: { value: '5' } });
+    expect(useSettingsStore.getState().backupMailboxConcurrency).toBe(5);
+  });
+
+  it('shows and enforces one mailbox for free users', () => {
+    useSettingsStore.setState({ billingProfile: null, backupMailboxConcurrency: 4 });
+    render(<BackupSchedule />);
+    const picker = screen.getByTestId('backup-mailbox-concurrency');
+    expect(picker.value).toBe('1');
+    expect(picker.disabled).toBe(true);
+  });
+
   it('keeps a bar on screen for the window before Rust reports any totals', () => {
     useBackupStore.setState({
       activeBackup: {

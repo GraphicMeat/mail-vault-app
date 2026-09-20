@@ -1,4 +1,12 @@
 use super::*;
+
+#[test]
+fn mailbox_concurrency_clamps_to_one_through_five() {
+    assert_eq!(mailbox_concurrency(&json!({})), 1);
+    assert_eq!(mailbox_concurrency(&json!({"mailboxConcurrency": 0})), 1);
+    assert_eq!(mailbox_concurrency(&json!({"mailboxConcurrency": 3})), 3);
+    assert_eq!(mailbox_concurrency(&json!({"mailboxConcurrency": 9})), 5);
+}
 use crate::server::handle_request_for_test;
 use serde_json::json;
 

@@ -30,6 +30,9 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
   const backupGlobalConfig = useSettingsStore(s => s.backupGlobalConfig);
   const setBackupGlobalEnabled = useSettingsStore(s => s.setBackupGlobalEnabled);
   const setBackupGlobalConfig = useSettingsStore(s => s.setBackupGlobalConfig);
+  const savedMailboxConcurrency = useSettingsStore(s => s.backupMailboxConcurrency);
+  const setBackupMailboxConcurrency = useSettingsStore(s => s.setBackupMailboxConcurrency);
+  const mailboxConcurrency = isPaidUser ? savedMailboxConcurrency : 1;
 
   const activeBackup = useBackupStore(s => s.activeBackup);
   const queue = useBackupStore(s => s.queue);
@@ -133,6 +136,24 @@ export default function BackupSchedule({ initialAccountId, onUpgrade }) {
 
         {/* Back up all now button + live progress */}
         <div className={`${isPaidUser && backupGlobalEnabled ? 'pt-3 border-t border-mail-border mt-3' : 'pt-3'} space-y-2`}>
+          <div className="flex items-center justify-between gap-4 rounded-lg bg-mail-bg p-3">
+            <div>
+              <div className="text-sm text-mail-text">{t('settings.backup.schedule.mailboxConcurrency')}</div>
+              <div className="text-xs text-mail-text-muted">
+                {t(isPaidUser ? 'settings.backup.schedule.mailboxConcurrencyPremium' : 'settings.backup.schedule.mailboxConcurrencyFree')}
+              </div>
+            </div>
+            <select
+              data-testid="backup-mailbox-concurrency"
+              aria-label={t('settings.backup.schedule.mailboxConcurrency')}
+              value={mailboxConcurrency}
+              disabled={!isPaidUser}
+              onChange={e => setBackupMailboxConcurrency(Number(e.target.value))}
+              className="rounded-lg border border-mail-border bg-mail-surface px-3 py-1.5 text-sm text-mail-text disabled:opacity-70"
+            >
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
           {activeBackup && activeBackup.active && (
             <div className="bg-mail-bg rounded-lg p-3 space-y-2" data-testid="backup-all-progress">
               <div className="flex items-center gap-2">

@@ -208,6 +208,7 @@ fn terminal_backup_progress(
 /// - `account_id`/`account_json`: `archive::run_with_backup` takes the raw
 ///   JSON string and reparses it itself; re-serializing `account` here would
 ///   risk not round-tripping identically (e.g. post credential-resolution).
+#[derive(Clone)]
 pub struct BackupRunContext {
     pub account_id: String,
     pub account_json: String,
@@ -223,6 +224,7 @@ pub struct BackupRunContext {
     /// Folders already completed in a previous (cancelled or bandwidth
     /// limited) run — skipped again without re-listing them.
     pub skip_folders: usize,
+    pub mailbox_concurrency: usize,
     /// The per-message fetch-and-store step (`archive::run_with_backup`)
     /// reuses this wholesale: same pool, vault root, write gate and sinks a
     /// manual archive run would use.
@@ -275,7 +277,7 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     let selectable: Vec<_> = all_flat.into_iter().filter(|m| !m.noselect).collect();
 
     let total_folders = selectable.len();
-    let mut completed_folders = 0usize;
+    let mut completed_folders = ctx.skip_folders.min(total_folders);
     let mut total_backed_up = 0usize;
     let mut total_errors = 0usize;
     let mut total_ext_failures = 0usize;
@@ -288,181 +290,35 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     let mut cancelled = false;
     let mut bandwidth_limited = false;
 
-    for (folder_idx, mbox) in selectable.iter().enumerate() {
-        if ctx.cancel.load(Ordering::Relaxed) {
-            warn!("backup: cancelled for {} at folder {}/{}", account.email, completed_folders, total_folders);
-            cancelled = true;
-            break;
+    let work = selectable.into_iter().enumerate().skip(completed_folders)
+        .map(|(index, mailbox)| (index, mailbox.path.clone())).collect::<Vec<_>>();
+    let mut done = vec![false; work.len()];
+    for batch in work.chunks(ctx.mailbox_concurrency.clamp(1, 5)) {
+        if ctx.cancel.load(Ordering::Relaxed) { cancelled = true; break; }
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, mailbox) in batch.iter().cloned() {
+            let ctx = ctx.clone();
+            tasks.spawn(async move { backup_imap_folder(ctx, index, mailbox).await });
         }
-
-        // Skip folders already completed in a previous run (resume support)
-        if folder_idx < ctx.skip_folders {
-            completed_folders += 1;
-            continue;
-        }
-
-        let mailbox_path = &mbox.path;
-
-        // Every 5 folders, drop pooled sessions to force re-auth on next use.
-        // This prevents OAuth2 token expiry during long backups (tokens last ~1 hour).
-        if folder_idx > 0 && folder_idx % 5 == 0 {
-            pool.clear_background(account).await;
-            info!("backup: cleared pool sessions at folder {} to refresh auth", folder_idx);
-        }
-
-        // Get server UIDs. Neither SEARCH variant is safe here: ESEARCH and the
-        // one-long-line `* SEARCH` reply both hit parser limits on large
-        // mailboxes, and a corrupted session makes every later command return 0
-        // results — search_all_uids uses UID FETCH instead. Still discard the
-        // session if it fails, so nothing inherits a dirty read buffer.
-        let server_flags = {
-            let mut guard = pool.get_background(account).await?;
-            // Generous: a 1:* listing of a 40k folder is a big response. Bounded
-            // all the same — a session the server dropped answers no faster than
-            // never, and the discard path below is exactly what should happen.
-            let result = imap::bounded(
-                &format!("UID FETCH 1:* {}", mailbox_path),
-                600,
-                imap::search_all_uid_flags(&mut guard.session, mailbox_path),
-            )
-            .await;
-            match &result {
-                Ok(_) => pool.return_background(account, guard).await,
-                Err(_) => pool.discard(account, guard).await,
-            }
-            result?
-        };
-        let server_uids: Vec<u32> = server_flags.iter().map(|(uid, _)| *uid).collect();
-
-        // Get local UIDs, after the pre-sync with the mirror (see
-        // vault_uids_after_presync). Directory scans and file copies, some on
-        // an external drive: a read_dir of a folder on a drive another process
-        // is hammering can stall for seconds, and on a runtime worker that
-        // stall is paid by every IMAP socket the runtime is meant to be polling.
-        let local_uids = {
-            let vault_cur_dir = crate::vault_files::cur_path(&ctx.archive_ctx.root, account_id, mailbox_path);
-            let mirror_dir = ctx.mirror_root.as_ref().map(|root| {
-                std::path::PathBuf::from(root).join(&account.email).join(mailbox_path).join("cur")
-            });
-            tokio::task::spawn_blocking(move || vault_uids_after_presync(&vault_cur_dir, mirror_dir.as_deref()))
-                .await
-                .map_err(|e| format!("pre-sync panicked: {}", e))??
-        };
-
-        // Compute delta
-        let missing: Vec<u32> = server_uids.iter().filter(|uid| !local_uids.contains(uid)).copied().collect();
-
-        info!(
-            "backup: {} — server={} uids, local={} uids, missing={} to back up",
-            mailbox_path,
-            server_uids.len(),
-            local_uids.len(),
-            missing.len()
-        );
-
-        // Only emit progress at 25%, 50%, 75% and completion — not every folder
-        // This prevents flooding the JS event loop with re-renders
-        let progress_pct = if total_folders > 0 { (folder_idx * 100) / total_folders } else { 0 };
-        let should_emit = folder_idx == 0 || progress_pct % 25 == 0 || !missing.is_empty();
-        if should_emit {
+        while let Some(result) = tasks.join_next().await {
+            let outcome = result.map_err(|e| format!("backup folder worker panicked: {e}"))??;
+            let slot = outcome.index.saturating_sub(ctx.skip_folders);
+            if slot < done.len() { done[slot] = outcome.completed; }
+            total_backed_up += outcome.backed_up;
+            total_errors += outcome.errors;
+            total_ext_failures += outcome.external_failures;
+            bandwidth_limited |= outcome.bandwidth_limited;
+            if outcome.last_error.is_some() { last_message_error = outcome.last_error; }
+            completed_folders = contiguous_completed_checkpoint(ctx.skip_folders, &done).min(total_folders);
             (ctx.on_progress)(BackupProgress {
-                account_id: account_id.clone(),
-                folder: mailbox_path.clone(),
-                total_folders,
-                completed_folders,
-                total_emails: total_backed_up + total_errors,
-                completed_emails: total_backed_up,
-                errors: total_errors,
-                active: true,
-                last_error: None,
-                missing_in_folder: missing.len(),
-                cancelled: false,
-                // Mid-run: nothing has failed the run yet. Only the terminal
-                // frame's value is ever read for completion.
-                success: true,
-                external_copy_ok: total_ext_failures == 0,
-                external_copy_error: None,
+                account_id: account_id.clone(), folder: outcome.mailbox, total_folders, completed_folders,
+                total_emails: total_backed_up + total_errors, completed_emails: total_backed_up, errors: total_errors,
+                active: true, last_error: None, missing_in_folder: 0, cancelled: false, success: true,
+                external_copy_ok: total_ext_failures == 0, external_copy_error: None,
                 external_copy_failed_count: total_ext_failures,
             });
         }
-
-        if !missing.is_empty() {
-            // Fetch and store to BOTH the vault and the mirror simultaneously
-            let archive_result = archive::run_with_backup(
-                Arc::clone(&ctx.archive_ctx),
-                account_id.clone(),
-                ctx.account_json.clone(),
-                mailbox_path.clone(),
-                missing,
-                Arc::clone(&ctx.cancel),
-                ctx.mirror_root.clone(),
-                Some(account.email.clone()),
-                false,
-                "backup",
-            )
-            .await?;
-
-            total_backed_up += archive_result.completed;
-            total_errors += archive_result.errors;
-            total_ext_failures += archive_result.external_copy_failures;
-            if archive_result.errors > 0 && !archive_result.bandwidth_limited {
-                if let Some(ref e) = archive_result.last_error {
-                    last_message_error = Some(e.clone());
-                }
-            }
-            if archive_result.bandwidth_limited {
-                // archive already set the shared cancel flag — the folder loop
-                // breaks on the next iteration and the checkpoint allows resume
-                bandwidth_limited = true;
-            }
-        }
-
-        // The top-of-loop check only catches a cancel that landed between
-        // folders. One that landed mid-folder used to fall through to
-        // `completed_folders += 1`, and the checkpoint then told the next run to
-        // skip a folder it had half finished. The bandwidth-limit stop sets
-        // this same flag, so it re-scans its partial folder too.
-        if ctx.cancel.load(Ordering::Relaxed) {
-            warn!(
-                "backup: cancelled for {} inside {} ({}/{} folders done)",
-                account.email, mailbox_path, completed_folders, total_folders
-            );
-            cancelled = true;
-            break;
-        }
-
-        // A copy that predates a change made on the server — read on the
-        // phone, starred elsewhere — carries the state it was stored with, and
-        // that state is what restore uploads and the mirror keeps. The listing
-        // above already has every flag, so catching up is one directory pass
-        // with nothing more to fetch. Only the copies that were already here,
-        // restored ones included (a legacy `<uid>.eml` comes back flagless):
-        // the ones just stored carry the server's flags already. Every copy the
-        // run counts as backed up is marked archived here, which is what heals
-        // an auto-cached `<uid>:2,.eml` once a backup vouches for it.
-        let changes = catch_up_changes(&server_flags, &local_uids);
-        if !changes.is_empty() {
-            // In-process now (backup.rs:850-886's daemon RPC bridge is gone):
-            // the injected closure is `handlers::vault_flags::apply_flags`
-            // itself on the daemon side. Still off the runtime worker — that
-            // function takes `with_vault_write`'s gate, which must never be
-            // held across a tokio `.await`. A closure failure here (unlike a
-            // panic in the blocking task itself) must not abort this
-            // account's folder loop — see `map_flag_catchup_outcome`.
-            let apply_flags = Arc::clone(&ctx.apply_flags);
-            let (mbx, chgs) = (mailbox_path.clone(), changes);
-            let outcome: Result<Applied, String> =
-                tokio::task::spawn_blocking(move || (apply_flags)(&mbx, &chgs)).await.map_err(|e| format!("flag catch-up panicked: {}", e))?;
-            let applied = map_flag_catchup_outcome(outcome, account_id, mailbox_path);
-            if applied.total() > 0 {
-                info!(
-                    "backup: {} — read state caught up on {} vault files, {} mirror files, {} custody entries",
-                    mailbox_path, applied.renamed, applied.mirrored, applied.index_patched
-                );
-            }
-        }
-
-        completed_folders += 1;
+        if ctx.cancel.load(Ordering::Relaxed) { cancelled = true; break; }
     }
 
     // Built here rather than inline in the `BackupResult` below, so the
@@ -527,6 +383,79 @@ async fn run_imap_backup_inner(ctx: BackupRunContext, start: std::time::Instant)
     })
 }
 
+fn contiguous_completed_checkpoint(start: usize, completed: &[bool]) -> usize {
+    start + completed.iter().take_while(|done| **done).count()
+}
+
+struct ImapFolderOutcome {
+    index: usize,
+    mailbox: String,
+    completed: bool,
+    backed_up: usize,
+    errors: usize,
+    external_failures: usize,
+    bandwidth_limited: bool,
+    last_error: Option<String>,
+}
+
+async fn backup_imap_folder(ctx: BackupRunContext, index: usize, mailbox: String) -> Result<ImapFolderOutcome, String> {
+    let pool = &ctx.archive_ctx.pool;
+    let account = &ctx.account;
+    if ctx.cancel.load(Ordering::Relaxed) {
+        return Ok(ImapFolderOutcome { index, mailbox, completed: false, backed_up: 0, errors: 0, external_failures: 0, bandwidth_limited: false, last_error: None });
+    }
+    let server_flags = {
+        let mut guard = pool.get_background(account).await?;
+        let result = imap::bounded(
+            &format!("UID FETCH 1:* {mailbox}"), 600,
+            imap::search_all_uid_flags(&mut guard.session, &mailbox),
+        ).await;
+        match &result {
+            Ok(_) => pool.return_background(account, guard).await,
+            Err(_) => pool.discard(account, guard).await,
+        }
+        result?
+    };
+    let server_uids = server_flags.iter().map(|(uid, _)| *uid).collect::<Vec<_>>();
+    let local_uids = {
+        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let mirror = ctx.mirror_root.as_ref().map(|root| PathBuf::from(root).join(&account.email).join(&mailbox).join("cur"));
+        tokio::task::spawn_blocking(move || vault_uids_after_presync(&cur, mirror.as_deref()))
+            .await.map_err(|e| format!("pre-sync panicked: {e}"))??
+    };
+    let missing = server_uids.iter().filter(|uid| !local_uids.contains(uid)).copied().collect::<Vec<_>>();
+    info!("backup: {} — server={} local={} missing={}", mailbox, server_uids.len(), local_uids.len(), missing.len());
+    let mut out = ImapFolderOutcome {
+        index, mailbox: mailbox.clone(), completed: false, backed_up: 0, errors: 0,
+        external_failures: 0, bandwidth_limited: false, last_error: None,
+    };
+    if !missing.is_empty() {
+        let archived = archive::run_with_backup(
+            Arc::clone(&ctx.archive_ctx), ctx.account_id.clone(), ctx.account_json.clone(), mailbox.clone(), missing,
+            Arc::clone(&ctx.cancel), ctx.mirror_root.clone(), Some(account.email.clone()), false, "backup",
+        ).await?;
+        out.backed_up = archived.completed;
+        out.errors = archived.errors;
+        out.external_failures = archived.external_copy_failures;
+        out.bandwidth_limited = archived.bandwidth_limited;
+        if archived.errors > 0 && !archived.bandwidth_limited { out.last_error = archived.last_error; }
+    }
+    if ctx.cancel.load(Ordering::Relaxed) { return Ok(out); }
+    let changes = catch_up_changes(&server_flags, &local_uids);
+    if !changes.is_empty() {
+        let apply = Arc::clone(&ctx.apply_flags);
+        let name = mailbox.clone();
+        let result = tokio::task::spawn_blocking(move || (apply)(&name, &changes))
+            .await.map_err(|e| format!("flag catch-up panicked: {e}"))?;
+        let applied = map_flag_catchup_outcome(result, &ctx.account_id, &mailbox);
+        if applied.total() > 0 {
+            info!("backup: {} — flags caught up on {} vault, {} mirror, {} custody", mailbox, applied.renamed, applied.mirrored, applied.index_patched);
+        }
+    }
+    out.completed = true;
+    Ok(out)
+}
+
 // ── Graph (Outlook) backup runner ────────────────────────────────────────────
 //
 // Ported from `src-tauri/src/backup.rs:1131-1404`'s `run_graph_backup`,
@@ -578,6 +507,10 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
 
     // List folders
     let folders = client.list_folders().await?;
+    if ctx.mailbox_concurrency > 1 {
+        drop(client);
+        return run_graph_backup_parallel(ctx, start, folders).await;
+    }
     let total_folders = folders.len();
     let mut completed_folders = 0usize;
     let mut total_backed_up = 0usize;
@@ -887,6 +820,167 @@ async fn run_graph_backup_inner(ctx: BackupRunContext, start: std::time::Instant
         },
         external_copy_failed_count: total_ext_failures,
     })
+}
+
+struct GraphFolderOutcome {
+    index: usize,
+    mailbox: String,
+    completed: bool,
+    backed_up: usize,
+    errors: usize,
+    external_failures: usize,
+    last_error: Option<String>,
+    refused: Option<String>,
+}
+
+async fn run_graph_backup_parallel(
+    ctx: BackupRunContext,
+    start: std::time::Instant,
+    folders: Vec<crate::graph::GraphMailFolder>,
+) -> Result<BackupResult, String> {
+    let total_folders = folders.len();
+    let skip = ctx.skip_folders.min(total_folders);
+    let work = folders.into_iter().enumerate().skip(skip).collect::<Vec<_>>();
+    let mut done = vec![false; work.len()];
+    let (mut backed, mut errors, mut external_failures) = (0, 0, 0);
+    let mut last_error = None;
+    let mut refused: Option<(usize, String)> = None;
+    for batch in work.chunks(ctx.mailbox_concurrency.clamp(1, 5)) {
+        if ctx.cancel.load(Ordering::Relaxed) { break; }
+        let mut tasks = tokio::task::JoinSet::new();
+        for (index, folder) in batch {
+            let folder = crate::graph::GraphMailFolder {
+                id: folder.id.clone(), display_name: folder.display_name.clone(), total_item_count: folder.total_item_count,
+                unread_item_count: folder.unread_item_count, child_folder_count: folder.child_folder_count,
+                well_known_name: folder.well_known_name.clone(), storage_key: folder.storage_key.clone(),
+            };
+            let ctx = ctx.clone();
+            let index = *index;
+            tasks.spawn(async move { backup_graph_folder(ctx, index, folder).await });
+        }
+        while let Some(result) = tasks.join_next().await {
+            let out = result.map_err(|e| format!("graph backup worker panicked: {e}"))??;
+            if let Some(why) = out.refused.clone() { refused.get_or_insert((out.index, why)); }
+            let slot = out.index.saturating_sub(skip);
+            if slot < done.len() { done[slot] = out.completed; }
+            backed += out.backed_up;
+            errors += out.errors;
+            external_failures += out.external_failures;
+            if out.last_error.is_some() { last_error = out.last_error; }
+            let completed = contiguous_completed_checkpoint(skip, &done).min(total_folders);
+            (ctx.on_progress)(BackupProgress {
+                account_id: ctx.account_id.clone(), folder: out.mailbox, total_folders, completed_folders: completed,
+                total_emails: backed + errors, completed_emails: backed, errors, active: true, last_error: None,
+                missing_in_folder: 0, cancelled: false, success: true, external_copy_ok: external_failures == 0,
+                external_copy_error: None, external_copy_failed_count: external_failures,
+            });
+        }
+    }
+    let cancelled = ctx.cancel.load(Ordering::Relaxed);
+    let completed = contiguous_completed_checkpoint(skip, &done).min(total_folders);
+    let checkpoint = graph_completed_folders_checkpoint(completed, refused.as_ref(), cancelled);
+    let error_message = refused.as_ref().map(|(_, why)| why.clone())
+        .or_else(|| partial_error_message(errors, backed, last_error.as_deref()));
+    (ctx.on_progress)(terminal_backup_progress(
+        &ctx.account_id, cancelled, total_folders, checkpoint, backed, errors, external_failures, error_message.clone(),
+    ));
+    let duration = start.elapsed().as_secs_f64();
+    Ok(BackupResult {
+        emails_backed_up: backed, errors, duration_secs: duration, success: !cancelled, error_message, cancelled,
+        completed_folders: checkpoint, external_copy_ok: external_failures == 0,
+        external_copy_error: (external_failures > 0).then(|| format!("{} emails failed to copy to external backup", external_failures)),
+        external_copy_failed_count: external_failures,
+    })
+}
+
+async fn backup_graph_folder(
+    ctx: BackupRunContext,
+    index: usize,
+    folder: crate::graph::GraphMailFolder,
+) -> Result<GraphFolderOutcome, String> {
+    use crate::maildir::{copies_to_write, mirror_file_map, uid_file_map, CopiesToWrite};
+    let token = ctx.account.access_token.as_deref().ok_or("Missing OAuth2 access token for Graph account")?;
+    let client = crate::graph::GraphClient::new(token);
+    let mailbox = folder.storage_key;
+    let mirror_dir = ctx.mirror_root.as_ref().map(|root| PathBuf::from(root).join(&ctx.account.email).join(&mailbox).join("cur"));
+    let mut listed = Vec::new();
+    let mut offset = 0;
+    loop {
+        if ctx.cancel.load(Ordering::Relaxed) { break; }
+        let (messages, next) = client.list_messages(&folder.id, 100, offset).await?;
+        let len = messages.len();
+        listed.extend(messages);
+        if len == 0 || next.is_none() || len < 100 { break; }
+        offset += 100;
+    }
+    let local_uids = {
+        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let mirror = mirror_dir.clone();
+        tokio::task::spawn_blocking(move || vault_uids_after_presync(&cur, mirror.as_deref()))
+            .await.map_err(|e| format!("pre-sync panicked: {e}"))??
+    };
+    let (mut in_vault, mut in_mirror) = {
+        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let mirror = mirror_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            (uid_file_map(&cur).into_keys().collect::<HashSet<_>>(), mirror.map(|d| mirror_file_map(&d).into_keys().collect::<HashSet<_>>()))
+        }).await.map_err(|e| format!("folder listing panicked: {e}"))?
+    };
+    let mut out = GraphFolderOutcome { index, mailbox: mailbox.clone(), completed: false, backed_up: 0, errors: 0, external_failures: 0, last_error: None, refused: None };
+    if !listed.is_empty() && !ctx.cancel.load(Ordering::Relaxed) {
+        let entries = listed.iter().map(|m| (m.id.clone(), m.internet_message_id.clone())).collect::<Vec<_>>();
+        let ledger = ctx.archive_ctx.root.join("email_cache")
+            .join(crate::header_cache::cache_base_name(&ctx.account_id, &mailbox)).join(crate::graph_ledger::LEDGER_FILE);
+        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+        let local = local_uids.clone();
+        let gate = Arc::clone(&ctx.archive_ctx.gate);
+        let plan = tokio::task::spawn_blocking(move || {
+            let mut planned = Ok(Vec::new());
+            gate(&mut || { planned = crate::graph_ledger::plan_fetch(&ledger, &cur, &entries, &local); Ok(()) })?;
+            planned
+        }).await.map_err(|e| format!("graph ledger panicked: {e}"))?;
+        match plan {
+            Err(e) => { out.errors += 1; out.refused = Some(format!("{} was not backed up: {}", mailbox, e)); }
+            Ok(plan) => for (message_index, uid) in plan {
+                if ctx.cancel.load(Ordering::Relaxed) { break; }
+                let message = &listed[message_index];
+                match client.get_mime_content(&message.id).await {
+                    Err(e) => { out.errors += 1; out.last_error = Some(e); }
+                    Ok(raw) => {
+                        let mirror_to = match copies_to_write(uid, &in_vault, in_mirror.as_ref()) {
+                            CopiesToWrite::Nothing => continue,
+                            CopiesToWrite::Vault => None,
+                            CopiesToWrite::VaultAndMirror => mirror_dir.clone(),
+                        };
+                        let cur = crate::vault_files::cur_path(&ctx.archive_ctx.root, &ctx.account_id, &mailbox);
+                        let filename = crate::vault_files::build_maildir_filename(uid, &["archived".to_string()]);
+                        let gate = Arc::clone(&ctx.archive_ctx.gate);
+                        let mirror_write = tokio::task::spawn_blocking(move || -> Result<Option<Result<(), String>>, String> {
+                            let mut mirror_result = None;
+                            gate(&mut || {
+                                std::fs::create_dir_all(&cur).map_err(|e| format!("mkdir: {e}"))?;
+                                std::fs::write(cur.join(&filename), &raw).map_err(|e| format!("write .eml: {e}"))?;
+                                mirror_result = mirror_to.clone().map(|dir| std::fs::create_dir_all(&dir)
+                                    .map_err(|e| format!("external mkdir failed: {e}"))
+                                    .and_then(|()| std::fs::write(dir.join(&filename), &raw).map_err(|e| format!("external write failed: {e}"))));
+                                Ok(())
+                            })?;
+                            Ok(mirror_result)
+                        }).await.map_err(|e| format!("message write panicked: {e}"))??;
+                        in_vault.insert(uid);
+                        match mirror_write {
+                            Some(Ok(())) => if let Some(ref mut mirrored) = in_mirror { mirrored.insert(uid); },
+                            Some(Err(_)) => out.external_failures += 1,
+                            None => {}
+                        }
+                        out.backed_up += 1;
+                    }
+                }
+            },
+        }
+    }
+    out.completed = !ctx.cancel.load(Ordering::Relaxed);
+    Ok(out)
 }
 
 /// The resume checkpoint a Graph run reports: `completed_folders`, clamped to
@@ -1934,6 +2028,12 @@ mod tests {
     fn graph_completed_folders_checkpoint_passes_through_with_no_refused_folder() {
         assert_eq!(graph_completed_folders_checkpoint(5, None, true), 5);
         assert_eq!(graph_completed_folders_checkpoint(5, None, false), 5);
+    }
+
+    #[test]
+    fn parallel_checkpoint_stops_before_the_first_incomplete_folder() {
+        assert_eq!(contiguous_completed_checkpoint(4, &[true, true, false, true, true]), 6);
+        assert_eq!(contiguous_completed_checkpoint(4, &[true, true, true]), 7);
     }
 
     // ── sync_locations / scan_external_uids / purge_backup_files /
