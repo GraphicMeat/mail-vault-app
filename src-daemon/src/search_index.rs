@@ -256,6 +256,12 @@ pub fn assemble_rows(page: &core::query::SearchPage) -> Vec<serde_json::Value> {
             if h.body_matched {
                 matched_in.push("body");
             }
+            // The only match the reader cannot show: the term is in a file, not
+            // in the message. The row says so rather than leaving the user to
+            // hunt for text that is not there.
+            if h.attach_matched {
+                matched_in.push("attachment");
+            }
             let flags = parse_flags_from_filename(&h.filename);
             let obj = row.as_object_mut()?;
             obj.insert("uid".into(), h.uid.into());
@@ -1292,6 +1298,7 @@ mod tests {
                 message_id: Some("<seven@example>".into()),
                 row_json: r#"{"uid":7,"messageId":"<seven@example>","subject":"Indexed only"}"#.into(),
                 body_matched: true,
+                attach_matched: true,
                 date_utc: 1,
                 row_id: 7,
             }],
@@ -1302,7 +1309,7 @@ mod tests {
         assert_eq!(rows[0]["subject"], "Indexed only");
         assert_eq!(rows[0]["flags"], serde_json::json!(["archived", "seen", "\\Seen"]));
         assert_eq!(rows[0]["vaultDir"], "INBOX");
-        assert_eq!(rows[0]["matchedIn"], serde_json::json!(["subject", "body"]));
+        assert_eq!(rows[0]["matchedIn"], serde_json::json!(["subject", "body", "attachment"]));
     }
 
     #[test]
@@ -1316,6 +1323,7 @@ mod tests {
                 message_id: Some("<indexed@x.test>".into()),
                 row_json: r#"{"uid":5,"messageId":"<indexed@x.test>","subject":"Indexed budget"}"#.into(),
                 body_matched: false,
+                attach_matched: false,
                 date_utc: 1,
                 row_id: 5,
             }],

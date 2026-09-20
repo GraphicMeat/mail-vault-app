@@ -19,6 +19,7 @@ import { recordTrackerVerdict } from '../../services/trackerVerdicts';
 import { LinkSafetyModal } from '../LinkSafetyModal';
 import { openMailtoCompose, plainTextBodyHtml } from '../../utils/mailto';
 import { buildEmailIframeHtml, getEmailBodyContent, emailScriptNonce } from '../../utils/emailIframeTemplate';
+import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { getSelectionGeneration } from '../../services/workflows/selectEmail';
 
@@ -145,6 +146,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   }, [email, trackerBlocking, theme, palette]);
 
   // Intercept links and prevent native context menu in full-view iframe
+  // The full-view window is a third reader of the same body — the highlight
+  // follows the message, not the pane it is drawn in.
+  useSearchHighlight(iframeRef, iframeContent);
+
   useEffect(() => {
     if (!iframeRef.current) return;
     const iframe = iframeRef.current;

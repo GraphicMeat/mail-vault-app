@@ -1931,6 +1931,7 @@
   "bulk.progress.completedOfTotalEmails": "{{total}} 件中 {{completed}} 件",
   "bulk.progress.completedOfTotal": "{{total}} 件中 {{completed}} 件",
   "search.foundResults": "<0>{{count}}</0> 件見つかりました",
+  "search.matchInAttachment": "添付ファイル内で一致しました",
   "search.inFolder": "（{{folder}} 内）",
   "search.inAllFolders": "（すべてのフォルダー）",
   "email.viaList": "{{listName}} 経由",

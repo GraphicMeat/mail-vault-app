@@ -1931,6 +1931,7 @@
   "bulk.progress.completedOfTotalEmails": "{{total}}개 중 {{completed}}개",
   "bulk.progress.completedOfTotal": "{{total}}개 중 {{completed}}개",
   "search.foundResults": "<0>{{count}}</0>건을 찾았습니다",
+  "search.matchInAttachment": "첨부 파일에서 일치 항목을 찾았습니다",
   "search.inFolder": " ({{folder}} 내)",
   "search.inAllFolders": " (모든 폴더)",
   "email.viaList": "{{listName}} 경유",

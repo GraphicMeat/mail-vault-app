@@ -20,6 +20,7 @@ import * as db from '../services/db';
 import { describeMessageState, useBackedUp } from './email/MessageStateIcon';
 import { custodyRowFor } from '../stores/slices/custody';
 import { useCustodyLanding } from '../hooks/useCustodyLanding';
+import { useSearchHighlight } from '../hooks/useSearchHighlight';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { SenderInsightsPanel } from './SenderInsightsPanel';
 import { ThreadView } from './email/ThreadView';
@@ -329,6 +330,9 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [selectedEmail?.html, scopeKey, linkSafetyEnabled, trackerBlocking, effectiveEmailTheme, palette, signatureDisplay]);
+
+  // Terms from the open search, painted into the body the results list opened.
+  useSearchHighlight(iframeRef, iframeContent);
 
   // Persist link alert to store + settings (outside render, in useEffect)
   useEffect(() => {

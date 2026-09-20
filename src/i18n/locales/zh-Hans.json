@@ -1931,6 +1931,7 @@
   "bulk.progress.completedOfTotalEmails": "{{total}} 封中的 {{completed}} 封",
   "bulk.progress.completedOfTotal": "{{total}} 中的 {{completed}}",
   "search.foundResults": "找到 <0>{{count}}</0> 条结果",
+  "search.matchInAttachment": "在附件中找到匹配内容",
   "search.inFolder": "（在 {{folder}} 中）",
   "search.inAllFolders": "（在所有文件夹中）",
   "email.viaList": "经由 {{listName}}",

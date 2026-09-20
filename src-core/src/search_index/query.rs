@@ -52,6 +52,10 @@ pub struct SearchHit {
     pub row_json: String,
     /// Whether any matched query term appears in the indexed body column.
     pub body_matched: bool,
+    /// Same, for the indexed attachment-text column. A hit the attachment
+    /// alone carries is invisible in the message the reader opens, so the row
+    /// has to say where the match actually lives.
+    pub attach_matched: bool,
     /// Internal merge keys preserving SQLite's existing newest-first order across mailbox batches.
     pub date_utc: i64,
     pub row_id: i64,
@@ -101,6 +105,36 @@ pub fn plan_query(query: &str) -> MatchPlan {
 
 fn like_pattern(s: &str) -> String {
     format!("%{}%", s.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"))
+}
+
+/// The FTS probes that say whether one column carries a matched term.
+/// Column names are literals from this file, never request text.
+fn column_queries(plan: &MatchPlan, column: &str) -> Vec<(&'static str, String)> {
+    let mut queries: Vec<(&'static str, String)> = Vec::new();
+    if let Some(whole) = &plan.whole {
+        queries.push(("msg_fts", format!("{column} : {whole}")));
+    }
+    for needle in plan.needles.iter().skip(1).filter(|needle| needle.chars().count() >= 3) {
+        let query = format!("{column} : {}", fts_string(needle));
+        if !queries.iter().any(|(table, existing)| *table == "msg_fts" && *existing == query) {
+            queries.push(("msg_fts", query));
+        }
+    }
+    for cjk in &plan.cjk {
+        queries.push(("msg_cjk", format!("{column} : {cjk}")));
+    }
+    queries
+}
+
+fn column_match_sql(queries: &[(&'static str, String)]) -> String {
+    if queries.is_empty() {
+        return "0".to_string();
+    }
+    queries
+        .iter()
+        .map(|(table, _)| format!("EXISTS (SELECT 1 FROM {table} WHERE rowid = m.id AND {table} MATCH ?)"))
+        .collect::<Vec<_>>()
+        .join(" OR ")
 }
 
 pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<SearchPage, String> {
@@ -170,38 +204,26 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
 
     // Formatted from the clamped usize only, never from request text.
     let limit = req.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let mut body_queries: Vec<(&str, String)> = Vec::new();
-    if let Some(whole) = &plan.whole {
-        body_queries.push(("msg_fts", format!("body : {whole}")));
-    }
-    for needle in plan.needles.iter().skip(1).filter(|needle| needle.chars().count() >= 3) {
-        let query = format!("body : {}", fts_string(needle));
-        if !body_queries.iter().any(|(table, existing)| *table == "msg_fts" && *existing == query) {
-            body_queries.push(("msg_fts", query));
-        }
-    }
-    for cjk in &plan.cjk {
-        body_queries.push(("msg_cjk", format!("body : {cjk}")));
-    }
-    let body_match_sql = if body_queries.is_empty() {
-        "0".to_string()
-    } else {
-        body_queries
-            .iter()
-            .map(|(table, _)| format!("EXISTS (SELECT 1 FROM {table} WHERE rowid = m.id AND {table} MATCH ?)") )
-            .collect::<Vec<_>>()
-            .join(" OR ")
-    };
-    let mut select_args: Vec<Value> = body_queries.iter().map(|(_, query)| Value::Text(query.clone())).collect();
+    let body_queries = column_queries(&plan, "body");
+    let attach_queries = column_queries(&plan, "attach");
+    let body_match_sql = column_match_sql(&body_queries);
+    let attach_match_sql = column_match_sql(&attach_queries);
+    // Bound in the same order the SQL names them: the two column probes in the
+    // SELECT list first, then the WHERE clause's own values.
+    let mut select_args: Vec<Value> = body_queries
+        .iter()
+        .chain(attach_queries.iter())
+        .map(|(_, query)| Value::Text(query.clone()))
+        .collect();
     select_args.extend(args.iter().cloned());
     let mut st = conn
         .prepare(&format!(
-            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
+            "SELECT m.vault_dir, m.uid, m.filename, m.message_id, m.row_json, ({body_match_sql}), ({attach_match_sql}), m.date_utc, m.id FROM messages m WHERE {where_sql} ORDER BY m.date_utc DESC, m.id DESC LIMIT {limit}"
         ))
         .map_err(|e| e.to_string())?;
     let hits = st
         .query_map(rusqlite::params_from_iter(select_args.iter()), |r| {
-            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, date_utc: r.get(6)?, row_id: r.get(7)? })
+            Ok(SearchHit { vault_dir: r.get(0)?, uid: r.get(1)?, filename: r.get(2)?, message_id: r.get(3)?, row_json: r.get(4)?, body_matched: r.get(5)?, attach_matched: r.get(6)?, date_utc: r.get(7)?, row_id: r.get(8)? })
         })
         .map_err(|e| e.to_string())?
         // ponytail: a row that fails to decode (uid out of u32 range) is skipped, not fatal to the page.
@@ -354,6 +376,34 @@ mod tests {
         let subject = search(g.as_ref().unwrap(), &req("luke", "invoice")).unwrap();
         assert_eq!(subject.hits.len(), 1);
         assert!(!subject.hits[0].body_matched);
+    }
+
+    #[test]
+    fn reports_attachment_matches_separately_from_body() {
+        let (_t, db) = fixture();
+        let g = crate::search_index::lock(&db);
+        let conn = g.as_ref().unwrap();
+        // What the extraction pass leaves behind: the FTS row rewritten with
+        // the attachment's text in the `attach` column.
+        let id: i64 = conn
+            .query_row("SELECT id FROM messages WHERE account_id='luke' AND vault_dir='INBOX' AND uid=2", [], |r| r.get(0))
+            .unwrap();
+        conn.execute("DELETE FROM msg_fts WHERE rowid = ?1", [id]).unwrap();
+        conn.execute(
+            "INSERT INTO msg_fts(rowid, subject, addrs, body, attach) VALUES (?1, 'invoice po 4471', '', 'please find attached', 'quarterly fondue budget')",
+            [id],
+        )
+        .unwrap();
+
+        let attach = search(conn, &req("luke", "fondue")).unwrap();
+        assert_eq!(attach.hits.len(), 1);
+        assert!(attach.hits[0].attach_matched, "a term only the attachment carries must be reported as an attachment match");
+        assert!(!attach.hits[0].body_matched);
+
+        let body = search(conn, &req("luke", "attached")).unwrap();
+        assert_eq!(body.hits.len(), 1);
+        assert!(body.hits[0].body_matched);
+        assert!(!body.hits[0].attach_matched, "a body-only term must not claim the attachment");
     }
 
     #[test]

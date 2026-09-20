@@ -25,6 +25,21 @@ import {
 } from 'lucide-react';
 import { useT } from '../i18n/index.js';
 
+// A search hit whose term lives only in an attachment shows nothing in the
+// message itself. `matchedIn` comes back from the offline index; the row's own
+// paperclip is where it is cheapest to say so.
+function AttachmentGlyph({ email, size }) {
+  const t = useT();
+  if (!email.hasAttachments) return null;
+  const inAttachment = email.matchedIn?.includes('attachment');
+  return inAttachment ? (
+    <Paperclip data-testid="attachment-match" size={size} title={t('search.matchInAttachment')}
+      className="text-mail-accent-text flex-shrink-0" />
+  ) : (
+    <Paperclip size={size} className="text-mail-text-muted flex-shrink-0" />
+  );
+}
+
 /**
  * The star, in both row variants.
  *
@@ -182,9 +197,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(email.subject, '(No subject)')}
         </span>
-        {email.hasAttachments && (
-          <Paperclip size={14} className="text-mail-text-muted flex-shrink-0" />
-        )}
+        <AttachmentGlyph email={email} size={14} />
         <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
           {formatEmailDate(email.date)}
         </span>
@@ -300,9 +313,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(email.subject, '(No subject)')}
           </span>
-          {email.hasAttachments && (
-            <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
-          )}
+          <AttachmentGlyph email={email} size={12} />
         </div>
       </div>
 

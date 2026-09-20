@@ -1931,6 +1931,7 @@
   "bulk.progress.completedOfTotalEmails": "{{completed}} di {{total}} email",
   "bulk.progress.completedOfTotal": "{{completed}} di {{total}}",
   "search.foundResults": "Trovati <0>{{count}}</0> risultati",
+  "search.matchInAttachment": "Corrispondenza trovata in un allegato",
   "search.inFolder": " in {{folder}}",
   "search.inAllFolders": " in tutte le cartelle",
   "email.viaList": "tramite {{listName}}",

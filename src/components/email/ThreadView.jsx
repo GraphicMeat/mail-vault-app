@@ -8,6 +8,7 @@ import { useChatBodyLoader, emailKey } from '../../hooks/useChatBodyLoader';
 import * as db from '../../services/db';
 import { resolveEmailLocation, selectionKey, spansMailboxes } from '../../stores/slices/unifiedHelpers';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../../utils/iframeQuoteFolding';
+import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { splitQuotedContent } from '../../utils/quoteFolding';
 import { splitSignature, hashSignature } from '../../utils/signatureFolding';
 import { useSettingsStore, isTrackerBlockingActive } from '../../stores/settingsStore';
@@ -114,6 +115,10 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
     });
     return { iframeContent: html, scanAlertLevel: alertLevel, trackerSummary: summarizeTrackers(trackerScan.trackers) };
   }, [loadedEmail?.html, scopeKey, signatureDisplay, linkSafetyEnabled, trackerBlocking, theme, palette]);
+
+  // The thread is a second reader of the same body — including for the search
+  // highlight, or a hit opened in thread mode is marked nowhere.
+  useSearchHighlight(iframeRef, iframeContent);
 
   // The thread is a second reader of the same body: what it finds has to reach
   // the row, or the glyph means "you opened this in the reading pane".

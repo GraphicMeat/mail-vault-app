@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- **Search terms are highlighted in the message you open.** Opening a result now marks every occurrence of what you searched for inside the message body, in the reading pane, in a thread and in the full-window view. The highlight follows the query while you refine it.
+- **A result that only matched inside an attachment says so.** When the term is in an attached file and not in the message itself, the row's paperclip is highlighted instead of leaving you hunting for text that was never in the body.
+
+### Fixed
+- **Deleting a search result takes it out of the results straight away.** A message deleted from a result list stayed on screen, still clickable, until the search was run again. It now disappears the moment it is deleted, the same way a moved message already did.
+- **Marking the open message unread no longer closes it.** Only deleting it, moving it, or closing the reader yourself takes a message off the screen now.
+- **A selection made while a delete, purge or move is still running is no longer cleared.** Ticking more rows while a bulk action was talking to the server wiped those ticks when it finished, so they had to be made again. Only the rows the action actually handled are now cleared.
+
 ## [2.15.0] - 2026-09-20
 
 ### Added
