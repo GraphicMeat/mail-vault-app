@@ -3,6 +3,7 @@ import { useSettingsStore, hasPremiumAccess } from '../stores/settingsStore';
 import { configure, onDaemonReconnected } from '../services/searchIndex';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent || '');
+const RETRY_MS = 1000;
 
 /** What the index should actually do: the switches, gated by plan and platform. */
 export function effectiveSearchIndexConfig(state, { isMac = IS_MAC } = {}) {
@@ -15,6 +16,8 @@ export function effectiveSearchIndexConfig(state, { isMac = IS_MAC } = {}) {
 export function useSearchIndexConfig() {
   useEffect(() => {
     let last = '';
+    let retry = null;
+    let alive = true;
     const push = () => {
       // Settings hydrate from disk through a Promise. Pushing the defaults
       // first would start a body sweep the user's saved `false` then undoes.
@@ -22,17 +25,19 @@ export function useSearchIndexConfig() {
       const next = effectiveSearchIndexConfig(useSettingsStore.getState());
       const key = JSON.stringify(next);
       if (key === last) return; // the store changes often; the config rarely
+      clearTimeout(retry);
       last = key;
-      // A failed push leaves the daemon unconfigured for this key: clear the
-      // dedupe key so the next store change (or reconnect) retries it.
-      configure(next).then((ok) => { if (!ok && last === key) last = ''; });
+      configure(next).then((ok) => {
+        if (!alive || last !== key || ok) return;
+        last = '';
+        retry = setTimeout(push, RETRY_MS);
+      });
     };
     const unsubHydrate = useSettingsStore.persist?.onFinishHydration?.(push);
     push();
     const unsub = useSettingsStore.subscribe(push);
     let unlistenReconnect = null;
-    let alive = true;
-    onDaemonReconnected(() => { last = ''; push(); }).then((un) => { if (alive) unlistenReconnect = un; else un?.(); });
-    return () => { alive = false; unsubHydrate?.(); unsub(); unlistenReconnect?.(); };
+    onDaemonReconnected(() => { clearTimeout(retry); last = ''; push(); }).then((un) => { if (alive) unlistenReconnect = un; else un?.(); });
+    return () => { alive = false; clearTimeout(retry); unsubHydrate?.(); unsub(); unlistenReconnect?.(); };
   }, []);
 }

@@ -121,6 +121,27 @@ describe('Search index settings', () => {
     expect(screen.queryByTestId('search-index-status')).toBeNull();
   });
 
+  it('keeps rebuild and delete available when the index is unavailable', async () => {
+    statusReply = { available: false, state: 'unavailable' };
+    render(<SearchIndexSettings />);
+    expect(await screen.findByText(/The index is not available right now/)).toBeTruthy();
+
+    const rebuildButton = screen.getByTestId('search-index-rebuild');
+    const deleteButton = screen.getByTestId('search-index-delete');
+    expect(rebuildButton.disabled).toBe(false);
+    expect(deleteButton.disabled).toBe(false);
+
+    fireEvent.click(rebuildButton);
+    expect(rebuild).toHaveBeenCalledOnce();
+    fireEvent.click(deleteButton);
+    const dialog = await screen.findByRole('alertdialog');
+    await act(async () => {
+      const buttons = dialog.querySelectorAll('button');
+      fireEvent.click(buttons[buttons.length - 1]);
+    });
+    expect(destroy).toHaveBeenCalledOnce();
+  });
+
   it('shows the outdated background service message when status carries that error', async () => {
     statusReply = { available: false, state: 'unavailable', error: 'errors.daemonOutdated' };
     render(<SearchIndexSettings />);
