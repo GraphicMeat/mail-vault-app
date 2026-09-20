@@ -27,7 +27,6 @@ export function SearchIndexSettings({ onUpgrade }) {
   const setSearchIndexEnabled = useSettingsStore(s => s.setSearchIndexEnabled);
   const [info, setInfo] = useState(null);
   const [confirming, setConfirming] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
   const lifecycleRef = useRef(null);
   const deleteInFlight = useRef(false);
@@ -130,33 +129,34 @@ export function SearchIndexSettings({ onUpgrade }) {
     }
   };
 
-  const deleteIndex = async () => {
+  // The daemon's destroy is a background job: its worker finishes the current
+  // batch or compaction first (up to two minutes). Waiting on that reply is
+  // what the user saw as an endless loader, so the modal closes on the click
+  // and the outcome arrives as status/error afterwards.
+  const deleteIndex = () => {
+    setConfirming(false);
     if (deleteInFlight.current) return;
     const lifecycle = lifecycleRef.current;
     if (!isCurrentLifecycle(lifecycle)) return;
     deleteInFlight.current = true;
     lifecycle.statusSequence += 1;
-    setDeleting(true);
     setError(null);
     const wasEnabled = useSettingsStore.getState().searchIndexEnabled !== false;
     setSearchIndexEnabled(false);
-    try {
-      const reply = await destroy();
-      if (!reply?.ok) {
+    destroy().then(
+      reply => {
+        if (reply?.ok) return;
         if (reply?.error === 'searchIndex.busy') setSearchIndexEnabled(wasEnabled);
         if (isCurrentLifecycle(lifecycle)) setError(reply?.error || 'searchIndex.destroyFailed');
-      }
-    } catch (e) {
-      setSearchIndexEnabled(wasEnabled);
-      if (isCurrentLifecycle(lifecycle)) setError(e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : (e?.message || 'errors.daemonUnavailable'));
-    } finally {
+      },
+      e => {
+        setSearchIndexEnabled(wasEnabled);
+        if (isCurrentLifecycle(lifecycle)) setError(e?.code === 'DAEMON_OUTDATED' ? 'errors.daemonOutdated' : (e?.message || 'errors.daemonUnavailable'));
+      },
+    ).then(() => {
       refreshStatus(lifecycle, { preserveActionError: true });
-      if (isCurrentLifecycle(lifecycle)) {
-        setDeleting(false);
-        setConfirming(false);
-      }
       deleteInFlight.current = false;
-    }
+    });
   };
 
   const statusErrorKey = info?.errorKey || info?.error;
@@ -184,7 +184,7 @@ export function SearchIndexSettings({ onUpgrade }) {
             <div className="text-sm text-mail-text">{t('settings.searchIndex.bodies')}</div>
             <div className="text-xs text-mail-text-muted">{t('settings.searchIndex.bodiesHint')}</div>
           </div>
-          <ToggleSwitch active={bodies} onClick={() => setSearchIndexBodies(!bodies)}
+          <ToggleSwitch active={enabled && bodies} disabled={!enabled} onClick={() => setSearchIndexBodies(!bodies)}
             testId="search-index-bodies" label={t('settings.searchIndex.bodies')} />
         </div>
 
@@ -193,7 +193,7 @@ export function SearchIndexSettings({ onUpgrade }) {
             <div className="text-sm text-mail-text">{t('settings.searchIndex.attachments')}</div>
             <div className="text-xs text-mail-text-muted">{renderPremiumHint('settings.searchIndex.attachmentsHint')}</div>
           </div>
-          <ToggleSwitch active={attachments} onClick={() => setSearchIndexAttachments(!attachments)}
+          <ToggleSwitch active={enabled && attachments} disabled={!enabled} onClick={() => setSearchIndexAttachments(!attachments)}
             testId="search-index-attachments" label={t('settings.searchIndex.attachments')} />
         </div>
 
@@ -202,7 +202,7 @@ export function SearchIndexSettings({ onUpgrade }) {
             <div className="text-sm text-mail-text">{t('settings.searchIndex.imageText')}</div>
             <div className="text-xs text-mail-text-muted">{renderPremiumHint('settings.searchIndex.imageTextHint')}</div>
           </div>
-          <ToggleSwitch active={imageText} onClick={() => setSearchIndexImageText(!imageText)}
+          <ToggleSwitch active={enabled && imageText} disabled={!enabled} onClick={() => setSearchIndexImageText(!imageText)}
             testId="search-index-image-text" label={t('settings.searchIndex.imageText')} />
         </div>
 
@@ -292,14 +292,13 @@ export function SearchIndexSettings({ onUpgrade }) {
 
       <ConfirmDialog
         isOpen={confirming}
-        onClose={() => !deleting && setConfirming(false)}
+        onClose={() => setConfirming(false)}
         onConfirm={deleteIndex}
         title={t('settings.searchIndex.deleteConfirmTitle')}
         description={t('settings.searchIndex.deleteConfirmBody', { size: formatBytes(info?.sizeBytes || 0) })}
         confirmLabel={t('settings.searchIndex.deleteConfirm')}
         cancelLabel={t('common.cancel')}
         destructive
-        loading={deleting}
       />
     </div>
   );

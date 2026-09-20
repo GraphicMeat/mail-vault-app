@@ -17,6 +17,13 @@
 //! (Task 2.9b), and again by `vault_reopen` after a vault switch. Nothing in
 //! the app opens `custody.db` any more: the file is EXCLUSIVE, so a second
 //! opener would only ever fail BUSY.
+//!
+//! The legacy JSON import is NOT part of that open any more
+//! (`run_legacy_import`, 2026-09-20): it ran inside `open_into`, awaited
+//! before the socket existed, and on a vault whose header sidecars are still
+//! on disk it took 416 s — no mail, and "Helper Not Running" in settings, for
+//! seven minutes. It now runs on its own thread once the socket is up, taking
+//! the custody lock one mailbox at a time.
 
 use crate::server::DaemonState;
 use mailvault_core::custody::{db, import, lock, Connection, SharedConn};
@@ -66,9 +73,8 @@ fn g<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
-/// Open the store for the current vault root and import any legacy records —
-/// synchronous, so a route that reads custody right after this returns never
-/// races the import. Gated on `mail_dir_ok` only (never `state.app_dir`: an
+/// Open the store for the current vault root. The legacy import is a
+/// separate, backgrounded pass (`run_legacy_import`). Gated on `mail_dir_ok` only (never `state.app_dir`: an
 /// ungated open there would create a second, divergent custody store —
 /// inventory-custody-plumbing headline 4).
 pub fn open_into(state: &DaemonState) -> Result<(), String> {
@@ -90,27 +96,15 @@ pub fn open_into(state: &DaemonState) -> Result<(), String> {
     *g(&st.root) = Some(root.clone());
     let outcome = match db::open(&root) {
         Ok(conn) => {
-            let report = import::import_legacy(&conn, &root);
-            if report.files > 0
-                || report.renamed_caches > 0
-                || report.imported_header_rows > 0
-                || report.imported_mailbox_caches > 0
-                || !report.errors.is_empty()
-            {
-                info!("custody import: {report:?}");
-            }
-            for (path, why) in &report.errors {
-                warn!("custody import: {} left in place: {why}", path.display());
-            }
             if !install_if_current(&st.db, &st.switch, gen, conn) {
                 // A close() started while this opened: the connection is
                 // dropped, and `close` already cleared root/error.
                 return Ok(());
             }
-            // Fix F2: `import_legacy` above and `migrate`'s meta insert
-            // (inside `db::open`) both write to custody.db on the raw
-            // connection, before it is ever installed behind `with_conn`,
-            // and neither bumps the counter on its own. A successful open bumps
+            // Fix F2: `migrate`'s meta insert (inside `db::open`) writes to
+            // custody.db on the raw connection, before it is ever installed
+            // behind `with_conn`, and does not bump the counter on its own.
+            // A successful open bumps
             // it here instead, which also covers custody.db being replaced
             // wholesale on disk while the vault root stays the same: only a
             // fresh open can see that, and now it does.
@@ -126,6 +120,71 @@ pub fn open_into(state: &DaemonState) -> Result<(), String> {
     };
     emit(state);
     outcome
+}
+
+/// The one-time move of legacy JSON records into the store, one custody lock
+/// per unit. The scan is filesystem-only and runs before the first lock, then
+/// each mailbox is imported under its own `with_conn` — the same
+/// per-mailbox-batch rule `handlers::common::with_vault_write` documents, so
+/// a `load_email_cache` landing mid-import waits for one mailbox, never for
+/// the whole vault. Stops early when the store closes under it (a vault move).
+pub fn run_legacy_import(state: &DaemonState) {
+    if !state.mail_dir_ok {
+        return;
+    }
+    let root = state.data_dir.clone();
+    let units = import::legacy_units(&root);
+    if units.is_empty() {
+        return;
+    }
+    let started = std::time::Instant::now();
+    let stamp = import::stamp_now();
+    let mut report = import::ImportReport::default();
+    for unit in &units {
+        let mut one = import::ImportReport::default();
+        if let Err(e) = with_conn(state, |c| {
+            import::import_unit(c, &root, unit, stamp, &mut one);
+            Ok(())
+        }) {
+            warn!("custody import: stopped after {:?} — {e}", started.elapsed());
+            return;
+        }
+        merge(&mut report, one);
+    }
+    for (path, why) in &report.errors {
+        warn!("custody import: {} left in place: {why}", path.display());
+    }
+    if report.files > 0
+        || report.renamed_caches > 0
+        || report.imported_header_rows > 0
+        || report.imported_mailbox_caches > 0
+        || !report.errors.is_empty()
+    {
+        info!("custody import: {report:?} in {:?}", started.elapsed());
+    }
+}
+
+fn merge(into: &mut import::ImportReport, from: import::ImportReport) {
+    into.files += from.files;
+    into.imported += from.imported;
+    into.kept_existing += from.kept_existing;
+    into.skipped_no_uid += from.skipped_no_uid;
+    into.renamed_caches += from.renamed_caches;
+    into.imported_header_rows += from.imported_header_rows;
+    into.imported_mailbox_caches += from.imported_mailbox_caches;
+    into.skipped_imported += from.skipped_imported;
+    into.errors.extend(from.errors);
+}
+
+/// `run_legacy_import` on its own thread: the daemon must answer RPCs while
+/// it runs. Named, like the search index worker, so a sample names it.
+pub fn spawn_legacy_import(state: Arc<DaemonState>) {
+    if let Err(e) = std::thread::Builder::new()
+        .name("custody-import".into())
+        .spawn(move || run_legacy_import(&state))
+    {
+        warn!("custody import: thread did not start: {e}");
+    }
 }
 
 /// Before a vault operation: release the file. Drop = checkpoint, so the
@@ -231,6 +290,38 @@ mod tests {
         assert!(db::db_path(vault.path()).exists());
     }
 
+    /// 2026-09-20: the import used to run inside `open_into`, which the
+    /// daemon awaited before binding its socket — 416 s of no mail and no
+    /// helper on a real vault. The open must be fast and legacy-free; the
+    /// rows arrive from the backgrounded pass.
+    #[test]
+    fn the_open_imports_nothing_and_the_background_pass_does() {
+        let (vault, _app, s) = state(true);
+        let root = vault.path();
+        std::fs::create_dir_all(root.join("mailboxes/acct")).unwrap();
+        std::fs::write(
+            root.join("mailboxes/acct/mailboxes.json"),
+            serde_json::json!({"mailboxes": [{"path": "INBOX"}]}).to_string(),
+        )
+        .unwrap();
+        let sidecar = mailvault_core::header_cache::sidecar_dir(root, "acct", "INBOX");
+        std::fs::create_dir_all(&sidecar).unwrap();
+        std::fs::write(sidecar.join("1.json"), serde_json::json!({"uid": 1, "subject": "one"}).to_string()).unwrap();
+
+        open_into(&s).unwrap();
+        let before = with_conn(&s, |c| mailvault_core::custody::cache::load_by_uids(c, "acct", "INBOX", &[1])).unwrap();
+        assert!(before.is_empty(), "the open must not import");
+
+        run_legacy_import(&s);
+        let after = with_conn(&s, |c| mailvault_core::custody::cache::load_by_uids(c, "acct", "INBOX", &[1])).unwrap();
+        assert_eq!(after.len(), 1, "the background pass imports the legacy rows");
+
+        // And a second pass reads nothing: the marker row, not the files.
+        run_legacy_import(&s);
+        let again = with_conn(&s, |c| mailvault_core::custody::cache::load_by_uids(c, "acct", "INBOX", &[1])).unwrap();
+        assert_eq!(again.len(), 1);
+    }
+
     #[test]
     fn open_into_refuses_and_touches_nothing_under_app_dir_when_the_folder_is_not_ok() {
         let (_vault, app, s) = state(false);
@@ -278,10 +369,13 @@ mod tests {
         assert_eq!(err, "custody store unavailable: closed");
     }
 
-    /// Inventory-custody-plumbing headline 3 / plan Step 1: a read must never
-    /// answer before the legacy `local-index.json` import has run.
+    /// Inventory-custody-plumbing headline 3 / plan Step 1 said a read must
+    /// never answer before the legacy `local-index.json` import has run. That
+    /// invariant cost 416 s of blocked socket on a real vault (2026-09-20)
+    /// and is deliberately gone: the import is a background pass, and a
+    /// mailbox it has not reached yet reads as empty, never as wrong.
     #[test]
-    fn legacy_import_runs_before_the_first_read() {
+    fn the_legacy_index_import_runs_in_the_background_pass() {
         let (vault, _app, s) = state(true);
         let index_dir = vault.path().join("maildir").join("acct").join("INBOX");
         std::fs::create_dir_all(&index_dir).unwrap();
@@ -292,6 +386,10 @@ mod tests {
         .unwrap();
 
         let _ = open_into(&s);
+        assert!(with_conn(&s, |c| entries::read(c, "acct", "INBOX")).unwrap().is_none(), "the open imports nothing");
+        assert!(index_dir.join("local-index.json").exists(), "and retires nothing");
+
+        run_legacy_import(&s);
 
         let text = with_conn(&s, |c| entries::read(c, "acct", "INBOX")).unwrap().expect("imported row");
         let parsed: Value = serde_json::from_str(&text).unwrap();

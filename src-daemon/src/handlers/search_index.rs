@@ -87,7 +87,13 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                     // reachable — they must not be refused for being called
                     // then.
                     match crate::custody::reopen(&reopen_state) {
-                        Ok(()) => Ok(Value::Null),
+                        Ok(()) => {
+                            // A different vault root can carry legacy JSON of
+                            // its own; the pass is a no-op (one marker read
+                            // per mailbox) when it does not.
+                            crate::custody::spawn_legacy_import(Arc::clone(&reopen_state));
+                            Ok(Value::Null)
+                        }
                         Err(_) if !reopen_state.mail_dir_ok => Ok(Value::Null),
                         Err(e) => Err(format!("custody reopen failed: {e}")),
                     }

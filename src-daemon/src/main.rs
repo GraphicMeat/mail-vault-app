@@ -424,17 +424,18 @@ async fn daemon_main() {
         insights: insights::InsightsSnapshots::default(),
     });
 
-    // Custody, before the socket exists (Task 2.9b Step 1): the legacy JSON
-    // import runs inside `open_into`, so a route that reads an entry can never
-    // be served before the import that would have produced it. The app no
-    // longer opens this file at all — `custody.db` is EXCLUSIVE, and two
-    // openers would simply make the second one fail BUSY.
+    // Custody, before the socket exists (Task 2.9b Step 1): a route that
+    // reads an entry must never be served by a store that is not open yet.
+    // Only the OPEN is awaited here — schema migration, a few milliseconds.
     //
-    // On a blocking thread and awaited: the import walks the vault's legacy
-    // per-mailbox record files, which is disk work that must not sit on a
-    // tokio worker, and `server::run` below must not start accepting until it
-    // has finished. The app waits 3 s for the socket to appear, so an import
-    // slower than 2 s is worth a warn.
+    // The legacy JSON import is not (2026-09-20): it used to run inside
+    // `open_into`, and on a vault whose header sidecars are still on disk it
+    // took 416 s, during which the socket did not exist at all — the app
+    // showed an endless mail loader and "Helper Not Running" while the daemon
+    // process was plainly there. It runs on its own thread below, once the
+    // socket is up, taking the custody lock one mailbox at a time. A mailbox
+    // not imported yet reads as "no cached headers", never as wrong headers:
+    // the import only ever INSERTs rows the store does not have.
     {
         let custody_state = Arc::clone(&state);
         let started = std::time::Instant::now();
@@ -463,6 +464,9 @@ async fn daemon_main() {
             }
         }
     }
+
+    // The one-time legacy import, off the startup path (see above).
+    custody::spawn_legacy_import(Arc::clone(&state));
 
     // Start background classification queue worker
     classification_worker::start_classification_worker(Arc::clone(&state));

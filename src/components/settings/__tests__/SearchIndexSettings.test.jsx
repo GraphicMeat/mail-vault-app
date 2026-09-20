@@ -431,23 +431,62 @@ describe('Search index settings', () => {
     expect(screen.getByTestId('search-index-error')).toBeTruthy();
   });
 
-  it('coalesces repeated Delete confirms while restoring the modal loading guard', async () => {
+  /// The daemon's delete is a background job (its worker finishes the current
+  /// batch first, up to two minutes). Holding the modal on that reply is what
+  /// the user saw as an endless loader.
+  it('closes the confirm the instant it is confirmed, without waiting for the daemon', async () => {
     let resolveDestroy;
     destroy.mockImplementation(() => new Promise(resolve => { resolveDestroy = resolve; }));
     render(<SearchIndexSettings />);
     await waitFor(() => screen.getByTestId('search-index-status'));
     fireEvent.click(screen.getByTestId('search-index-delete'));
-    let dialog = await screen.findByRole('alertdialog');
+    const dialog = await screen.findByRole('alertdialog');
     const confirm = dialog.querySelectorAll('button')[dialog.querySelectorAll('button').length - 1];
     fireEvent.click(confirm);
-    expect(screen.getByTestId('search-index-delete').disabled).toBe(false);
-    fireEvent.click(screen.getByTestId('search-index-delete'));
-    dialog = await screen.findByRole('alertdialog');
-    const repeatedConfirm = dialog.querySelectorAll('button')[dialog.querySelectorAll('button').length - 1];
-    expect(repeatedConfirm.disabled).toBe(true);
+
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(destroy).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState().searchIndexEnabled).toBe(false);
+    expect(screen.getByTestId('search-index-delete').disabled).toBe(false);
 
     await act(async () => { resolveDestroy({ ok: true }); });
+  });
+
+  it('coalesces a repeated Delete confirm while the first one is still running', async () => {
+    let resolveDestroy;
+    destroy.mockImplementation(() => new Promise(resolve => { resolveDestroy = resolve; }));
+    render(<SearchIndexSettings />);
+    await waitFor(() => screen.getByTestId('search-index-status'));
+    const confirmOnce = async () => {
+      fireEvent.click(screen.getByTestId('search-index-delete'));
+      const dialog = await screen.findByRole('alertdialog');
+      fireEvent.click(dialog.querySelectorAll('button')[dialog.querySelectorAll('button').length - 1]);
+    };
+    await confirmOnce();
+    await confirmOnce();
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+
+    await act(async () => { resolveDestroy({ ok: true }); });
+  });
+
+  it('reads every switch off while indexing is off, and keeps the saved preferences', async () => {
+    useSettingsStore.setState({ searchIndexEnabled: false, billingProfile: { plan: 'premium', status: 'active' } });
+    statusReply = { available: false, state: 'off', indexed: 0, total: 0, sizeBytes: 0 };
+    render(<SearchIndexSettings />);
+    await screen.findByTestId('search-index-off');
+    for (const id of ['search-index-bodies', 'search-index-attachments', 'search-index-image-text']) {
+      const toggle = screen.getByTestId(id);
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+      expect(toggle.disabled).toBe(true);
+    }
+    expect(useSettingsStore.getState().searchIndexBodies).toBe(true);
+    expect(useSettingsStore.getState().searchIndexAttachments).toBe(true);
+
+    // Build turns indexing on again: the saved switches come back as they were.
+    fireEvent.click(screen.getByTestId('search-index-build'));
+    await waitFor(() => expect(screen.getByTestId('search-index-bodies').getAttribute('aria-checked')).toBe('true'));
+    expect(screen.getByTestId('search-index-attachments').getAttribute('aria-checked')).toBe('true');
   });
 
   it('links every visible Premium hint to the Billing callback for free users', () => {

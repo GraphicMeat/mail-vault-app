@@ -2227,6 +2227,13 @@ fn reply_timeout(method: &str) -> Option<std::time::Duration> {
     match method {
         "search_index_destroy" => Some(Duration::from_secs(150)),
 
+        // The helper card's own probe (`isDaemonAvailable` -> `ping`).
+        // Unbounded, a daemon that accepts the socket but never answers left
+        // Settings on "Checking..." forever; a bounded failure at least says
+        // "Helper Not Running" honestly. The dotted lifecycle methods stay
+        // unbounded, like every other legacy dotted name.
+        "ping" => Some(Duration::from_secs(10)),
+
         "vault_search" | "vault_rows" | "search_index_status" | "search_index_configure" | "search_index_rebuild"
         | "maildir_read" | "maildir_read_light" | "maildir_read_attachment"
         | "maildir_read_raw_source" | "maildir_exists" | "maildir_store" | "maildir_delete"
@@ -3484,6 +3491,11 @@ mod tests {
     // -----------------------------------------------------------------------
     // Task 1.6b: daemon_rpc hardening — reply_timeout (C8)
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn reply_timeout_bounds_the_helper_probe_so_settings_never_hangs_on_checking() {
+        assert_eq!(crate::reply_timeout("ping"), Some(std::time::Duration::from_secs(10)));
+    }
 
     #[test]
     fn reply_timeout_gives_search_index_destroy_the_longest_budget() {
