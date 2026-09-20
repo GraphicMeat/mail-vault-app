@@ -11,12 +11,28 @@ use tracing::{info, warn};
 /// Retrain from the current labels, then force-enqueue everything the user has
 /// not overridden. Split out of the handler so a test can await it.
 pub(crate) async fn reclassify_all(state: Arc<DaemonState>, account_id: String) {
-    // 1. Retrain model with current labeled data. Labels and the model live in
-    // the app dir; only the cached headers come from the (relocatable) vault.
-    retrain_model(&state.data_dir, &state.app_dir, &account_id);
-
-    // 2. Force-enqueue all emails (bypasses "already classified" check)
-    let emails = load_emails_all_mailboxes(&state.data_dir, &account_id);
+    // 1. Retrain, then read every cached header — both walk `email_cache`
+    // (one directory listing per mailbox plus a read per sidecar: 73k files
+    // on a real vault). This is a spawned task, so doing it inline parked a
+    // tokio worker for the whole walk. One `spawn_blocking` covers both:
+    // labels and the model live in the app dir, only the cached headers come
+    // from the (relocatable) vault.
+    let emails = {
+        let state = Arc::clone(&state);
+        let account = account_id.clone();
+        match tokio::task::spawn_blocking(move || {
+            retrain_model(&state.data_dir, &state.app_dir, &account);
+            load_emails_all_mailboxes(&state.data_dir, &account)
+        })
+        .await
+        {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("[reclassify] cached-header read failed for {account_id}: {e}");
+                return;
+            }
+        }
+    };
     if emails.is_empty() {
         info!("[reclassify] No emails to reclassify for {}", account_id);
         return;
@@ -101,7 +117,18 @@ pub(crate) async fn enqueue_for_classification(
     account_id: &str,
     tier: classification::QueueTier,
 ) {
-    let emails = load_emails_all_mailboxes(&state.data_dir, account_id);
+    // Same walk, same reason (see `reclassify_all`): never on a tokio worker.
+    let emails = {
+        let state = Arc::clone(&state);
+        let account = account_id.to_string();
+        match tokio::task::spawn_blocking(move || load_emails_all_mailboxes(&state.data_dir, &account)).await {
+            Ok(v) => v,
+            Err(e) => {
+                warn!("[classification] cached-header read failed for {account_id}: {e}");
+                return;
+            }
+        }
+    };
     if emails.is_empty() {
         info!("[classification] No emails to enqueue for {}", account_id);
         return;

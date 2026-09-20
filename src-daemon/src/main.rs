@@ -563,12 +563,30 @@ async fn daemon_main() {
         std::process::exit(0);
     });
 
-    // Start the socket server
-    if let Err(e) = server::run(state, &socket_path).await {
-        error!("Daemon server failed: {}", e);
-        cleanup_pid_file(&data_dir);
-        std::process::exit(1);
+    // The socket server gets its OWN OS thread and its OWN tokio runtime
+    // (`server::spawn_on_own_thread`), so accepting a connection and
+    // answering an RPC can never wait behind the runtime this function has
+    // been using. Spawned HERE, at the line the old `server::run(...).await`
+    // occupied, not earlier: everything above (the search index worker's
+    // signal sender, the classification worker, the insights sweeper) must be
+    // installed before the first request can land.
+    {
+        let thread_data_dir = data_dir.clone();
+        let spawned = server::spawn_on_own_thread(state, socket_path.clone(), move |why| {
+            error!("Daemon {why}");
+            cleanup_pid_file(&thread_data_dir);
+            std::process::exit(1);
+        });
+        if let Err(e) = spawned {
+            error!("Daemon server thread did not start: {}", e);
+            cleanup_pid_file(&data_dir);
+            std::process::exit(1);
+        }
     }
+
+    // Nothing left to await here: the shutdown task above owns exiting the
+    // process, and the server runs on its own thread until it does.
+    std::future::pending::<()>().await
 }
 
 #[cfg(test)]

@@ -229,6 +229,39 @@ pub async fn run(state: Arc<DaemonState>, socket_path: &Path) -> std::io::Result
     }
 }
 
+/// Run the socket server on its OWN OS thread, with its OWN tokio runtime.
+///
+/// Nothing else lives on that runtime: the sync engine, the IDLE watchers, the
+/// classification worker and the timers all stay on the runtime `daemon_main`
+/// built, so no amount of work over there can delay an accept or an RPC reply.
+/// (2026-09-20: a startup import awaited before the socket was bound left the
+/// app with no mail and a "Helper Not Running" card for seven minutes. The
+/// import moved to its own thread; this makes the socket structurally immune
+/// to the next thing that forgets.)
+///
+/// Default worker width, not a narrow pool: handlers spawn their long jobs
+/// (restore, migration, backup, reclassify, `mail_search`) onto this runtime
+/// too. `enable_all` is not optional — without the IO driver a `UnixListener`
+/// cannot be driven at all.
+///
+/// `on_failure` runs on that thread if the runtime or the server dies; the
+/// caller decides what a dead socket means (the daemon exits).
+pub fn spawn_on_own_thread(
+    state: Arc<DaemonState>,
+    socket_path: PathBuf,
+    on_failure: impl FnOnce(String) + Send + 'static,
+) -> std::io::Result<std::thread::JoinHandle<()>> {
+    std::thread::Builder::new().name("ipc-server".into()).spawn(move || {
+        let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
+            Ok(rt) => rt,
+            Err(e) => return on_failure(format!("server runtime failed to start: {e}")),
+        };
+        if let Err(e) = runtime.block_on(run(state, &socket_path)) {
+            on_failure(format!("server failed: {e}"));
+        }
+    })
+}
+
 /// Handle a single client connection: authenticate, then process requests.
 async fn handle_connection(
     state: Arc<DaemonState>,
@@ -903,6 +936,54 @@ mod tests {
         assert_eq!(resp["result"], json!({"pong": true}));
         assert_eq!(resp["id"], json!(7));
         served.stop();
+    }
+
+    /// The socket is on its own thread and its own runtime: a ping is answered
+    /// even when the runtime that started the server cannot run a single task.
+    /// `#[tokio::test]` is `current_thread`, so a plain `std::thread::sleep`
+    /// in the test body parks it completely; the client is a blocking
+    /// `std::os::unix::net::UnixStream` on a plain thread, touching no runtime
+    /// at all. Before `spawn_on_own_thread` this could only hang.
+    #[tokio::test]
+    async fn the_server_answers_while_the_runtime_that_started_it_is_parked() {
+        use std::io::{BufRead, Write};
+
+        let dir = sock_dir();
+        let path = dir.join("s.sock");
+        let state = DaemonState::for_test(dir.clone(), dir.clone(), true);
+        let token = state.token.clone();
+        super::spawn_on_own_thread(Arc::clone(&state), path.clone(), |why| panic!("server died: {why}")).unwrap();
+        for _ in 0..200 {
+            if path.exists() { break }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        assert!(path.exists(), "server never bound {path:?}");
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        let socket = path.clone();
+        let client = std::thread::spawn(move || {
+            let mut write = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+            let mut read = std::io::BufReader::new(write.try_clone().unwrap());
+            writeln!(write, "{{\"token\":\"{token}\"}}").unwrap();
+            let mut auth = String::new();
+            read.read_line(&mut auth).unwrap();
+            writeln!(write, "{{\"jsonrpc\":\"2.0\",\"method\":\"ping\",\"id\":1}}").unwrap();
+            let mut reply = String::new();
+            read.read_line(&mut reply).unwrap();
+            tx.send((auth, reply)).unwrap();
+        });
+
+        // The starting runtime is now dead to the world for 300ms.
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
+        let (auth, reply) = rx.recv_timeout(std::time::Duration::from_secs(5))
+            .expect("the server must answer while the runtime that started it is parked");
+        assert!(auth.contains("\"authenticated\":true"), "{auth}");
+        assert!(reply.contains("\"pong\":true"), "{reply}");
+        client.join().unwrap();
+        // The server thread has no stop: it owns its runtime until the process
+        // exits. Only its directory is ours to clean up.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

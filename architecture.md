@@ -73,7 +73,7 @@ The daemon owns:
 - Archive, restore, import/export, account migration, cleanup, and classification — and, as of the Phase 3 remainder, backup: the IMAP and Graph account runs, the bidirectional mirror pre-sync, the pending-purge queue, the status comparison and the read-state catch-up all live in `mailvault_core::backup`, driven by `src-daemon/src/handlers/backup.rs` under the same write gate a manual archive run takes. A run is fire-and-forget (`backup_run_account` returns a `runId`; progress and the outcome arrive as `backup-progress` events) with cancellation held per account in `DaemonState.backup_runs`. The shell contributes only the resolved mirror path — see the bookmark forwarders above.
 - Vault-location file work (Phase 6): folder classification, the copy/verify/marker pipeline behind `vault_get_status`/`vault_adopt`/`vault_move_to`/`vault_move_to_default` (`mailvault_core::vault_ops`, `src-daemon/src/handlers/vault.rs`). The four Tauri commands (plus `vault_reset`, which has no file work to move — clearing a bookmark is its entire body) stay registered as thin forwarders: the app still owns the security-scoped bookmark (spec §3.4) and the `vault_close`/`vault_reopen`/`stop_daemon` restart choreography around each call, unchanged in shape from before Phase 6. A move is two RPCs, not one — `vault_move_to`/`vault_move_to_default` copy and verify but never delete, because the app cannot know whether to delete the source until it has saved the new bookmark and confirmed it actually resolves; `vault_move_finalize` (internal, never called from JS) commits (deletes source) or aborts, guarded by a `moveId` so a stale or mismatched finalize can never commit a move it wasn't answering.
 
-Every long-running job runs on its own thread or worker, never on the RPC handling path, so one slow account, drive, or index pass cannot stall other requests. Jobs are resumable where practical (level-triggered reconciles, batched commits) and report progress as events; the frontend renders that progress and never computes it.
+Every long-running job runs on its own thread or worker, never inline on the RPC handling path, so one slow account, drive, or index pass cannot stall other requests. Which thread owns what is set out under Process and Thread Model below; the socket itself has a thread and a runtime of its own. Jobs are resumable where practical (level-triggered reconciles, batched commits) and report progress as events; the frontend renders that progress and never computes it.
 
 Daemon RPCs should expose cohesive operations. Prefer a small number of meaningful operations over many thin wrappers around internal functions.
 
@@ -83,6 +83,28 @@ The website is a separate surface area.
 
 - Desktop app changes should not automatically force website changes.
 - Website SEO, navigation, and generated changelog behavior belong to website-specific docs and scripts, not core application architecture.
+
+## Process and Thread Model
+
+One box, one thread. Every separate action runs on a thread of its own, and nothing that can be slow shares a thread with the socket.
+
+**App process (Tauri shell).** The webview owns the UI thread and never does file work. Each `daemon_rpc` call opens its own Unix socket connection on the app's runtime, so one slow reply cannot queue behind another; the long-lived event channel (`daemon_channel`) is a separate connection with its own pump. Spawning, build-checking and token reads for the daemon go through `spawn_blocking`, never the UI thread.
+
+**Daemon process.** Four owners, each with its own thread:
+
+- **`ipc-server` thread, its own tokio runtime** (`server::spawn_on_own_thread`) — the socket: bind, accept, per-connection framing, RPC dispatch, and the long jobs handlers spawn (restore, migration, backup, `mail_search`, reclassify). Nothing else is on this runtime, so no background work anywhere else in the daemon can delay an accept or a reply.
+- **Startup runtime** (`daemon_main`) — the periodic and long-lived workers: the sync engine, the IDLE watchers, the classification queue worker, the contacts flush, transfer stats and the Insights snapshot sweeper. It binds nothing and answers nothing.
+- **`search-index` OS thread** — the index worker, sole owner of the search index's SQLite connection: level-triggered reconciles, rebuilds, destroys and compaction, coalescing signals rather than blocking a caller.
+- **`custody-import` OS thread** — the one-time legacy JSON import, taking the custody lock one mailbox at a time.
+
+**Blocking pools.** Each runtime has its own, reached through `spawn_blocking` (`handlers::common::blocking`). Everything that touches disk goes there and nowhere else: directory listings, file reads and writes, SQLite queries, MIME parsing, ZIP and mbox passes, attachment extraction (with PDF text extraction in a separate process again, for crash isolation).
+
+Rules this model exists to keep:
+
+- Nothing is awaited between process start and the socket being bound. A migration or import that must run at startup runs on its own thread afterwards, and a store it has not reached yet reads as empty, never as wrong.
+- No directory listing, file read or write, or SQLite call on a tokio worker thread. A walk over `email_cache` is tens of thousands of files; parking a worker on it stalls unrelated work on the same runtime.
+- A job spanning many files or mailboxes takes its lock per file or per mailbox batch, never once around the whole job, so a concurrent read waits for one unit rather than the whole run.
+- Long jobs answer their RPC immediately and report progress as events; the RPC path itself stays request/response.
 
 ## Core Data Model
 

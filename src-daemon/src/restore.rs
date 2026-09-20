@@ -144,13 +144,26 @@ pub async fn run_restore(
 ) -> Result<(), String> {
     let email = account.email.clone();
 
-    let mut per_folder: Vec<(String, Vec<LocalMsg>)> = Vec::new();
-    for folder in &folders {
-        let msgs = list_local_messages(&state, &account_id, folder)?;
-        if !msgs.is_empty() {
-            per_folder.push((folder.clone(), msgs));
-        }
-    }
+    // One directory listing per folder, each reading every message file in it:
+    // `run_restore` is a spawned task, so this belongs on a blocking thread,
+    // not on a tokio worker. One hop for the whole scan, folder by folder.
+    let per_folder: Vec<(String, Vec<LocalMsg>)> = {
+        let state = Arc::clone(&state);
+        let account = account_id.clone();
+        let folders = folders.clone();
+        tokio::task::spawn_blocking(move || -> Result<Vec<(String, Vec<LocalMsg>)>, String> {
+            let mut out = Vec::new();
+            for folder in &folders {
+                let msgs = list_local_messages(&state, &account, folder)?;
+                if !msgs.is_empty() {
+                    out.push((folder.clone(), msgs));
+                }
+            }
+            Ok(out)
+        })
+        .await
+        .map_err(|e| format!("local message scan failed: {e}"))??
+    };
     let total_emails: u32 = per_folder.iter().map(|(_, m)| m.len() as u32).sum();
 
     let emit = |status: &str, current_folder: Option<String>, uploaded: u32, skipped: u32, failed: u32| {
