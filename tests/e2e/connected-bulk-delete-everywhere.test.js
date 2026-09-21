@@ -41,6 +41,7 @@
  */
 
 import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 describe('Bulk delete everywhere', function () {
   this.timeout(180_000);
@@ -158,14 +159,6 @@ describe('Bulk delete everywhere', function () {
   }, testid);
 
   /** SelectionActionBar button — same pattern as connected-selection-actions.test.js. */
-  function clickBarButton(title) {
-    return browser.execute((btnTitle) => {
-      const btn = document.querySelector(`button[title="${btnTitle}"]`);
-      if (!btn || btn.offsetHeight === 0) return false;
-      btn.click();
-      return true;
-    }, title);
-  }
 
   function toggleRow(subject) {
     return browser.execute((needle, re) => {
@@ -337,7 +330,7 @@ describe('Bulk delete everywhere', function () {
     expect(localOnlySubject).toBeTruthy();
 
     expect(await toggleRow(localOnlySubject)).toBe(true);
-    expect(await clickBarButton('Delete from server')).toBe(true);
+    expect(await clickSelectionAction('deleteServer')).toBe(true);
     // This row is archived, so the vault holds a copy and the confirmation
     // deliberately does NOT say "cannot be undone" — over-warning about the
     // safe case is the bug the custody copy pass fixed. The permanent wording

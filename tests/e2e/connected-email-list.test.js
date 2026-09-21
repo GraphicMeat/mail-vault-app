@@ -7,6 +7,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { clickSelectionAction, selectionActionReady, selectionBarGone } from './selectionBar.js';
 
 describe('Email List Selection & Action Bar', function () {
   this.timeout(60_000);
@@ -26,7 +27,7 @@ describe('Email List Selection & Action Bar', function () {
   async function selectUnarchivedRow() {
     return browser.execute(() => {
       for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
-        if (!row.querySelector('button[title="Archive"]')) continue;
+        if (!row.querySelector('[data-quick-action="archive"]')) continue;
         const checkbox = row.querySelector('input[type="checkbox"], .custom-checkbox');
         if (!checkbox) continue;
         checkbox.click();
@@ -58,10 +59,8 @@ describe('Email List Selection & Action Bar', function () {
   });
 
   it('should have mark as read button in action bar', async function () {
-    const hasButton = await browser.execute(() => {
-      return document.querySelector('button[title="Mark as read"]') !== null ||
-             document.querySelector('button[title="Mark as unread"]') !== null;
-    });
+    const hasButton = await selectionActionReady('markRead') ||
+      await selectionActionReady('markUnread');
 
     expect(hasButton).toBe(true);
   });
@@ -70,8 +69,7 @@ describe('Email List Selection & Action Bar', function () {
     // Background sync can archive the selected message mid-run, which drops the
     // Archive button. Re-select another unarchived row instead of failing.
     await browser.waitUntil(async () => {
-      const present = await browser.execute(() =>
-        document.querySelector('button[title="Archive selected"]') !== null);
+      const present = await selectionActionReady('archive');
       if (present) return true;
       await selectUnarchivedRow();
       return false;
@@ -83,23 +81,14 @@ describe('Email List Selection & Action Bar', function () {
   });
 
   it('should have delete button in action bar', async function () {
-    const hasButton = await browser.execute(() => {
-      return document.querySelector('button[title="Delete from server"]') !== null;
-    });
+    const hasButton = await selectionActionReady('deleteServer');
 
     expect(hasButton).toBe(true);
   });
 
   it('should show delete confirmation when clicking delete, then cancel', async function () {
     // Click the delete button
-    const clicked = await browser.execute(() => {
-      const btn = document.querySelector('button[title="Delete from server"]');
-      if (btn && btn.offsetHeight > 0) {
-        btn.click();
-        return true;
-      }
-      return false;
-    });
+    const clicked = await clickSelectionAction('deleteServer');
 
     expect(clicked).toBe(true);
     await browser.pause(500);
@@ -143,10 +132,7 @@ describe('Email List Selection & Action Bar', function () {
     // The bar animates out (AnimatePresence), so its nodes outlive the click —
     // wait for them to leave the DOM instead of guessing at the duration.
     await browser.waitUntil(
-      async () => browser.execute(() => (
-        document.querySelector('button[title="Clear selection"]') === null &&
-        document.querySelector('button[title="Archive selected"]') === null
-      )),
+      async () => selectionBarGone(),
       { timeout: 5000, interval: 200, timeoutMsg: 'Selection action bar still present after clearing selection' },
     );
   });

@@ -30,6 +30,7 @@
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 // Mock subjects, matched whole. `visibleRowSubjects()` returns the WHOLE row
 // flattened ("Sender 1 | Luke message 40 | Jan 2"), which is not a handle you
@@ -175,12 +176,7 @@ describe('Message state icons', function () {
       }, subject);
       expect(toggled).toBe(true);
 
-      const clicked = await browser.execute(() => {
-        const btn = document.querySelector('button[title="Archive selected"]');
-        if (!btn || btn.offsetHeight === 0) return false;
-        btn.click();
-        return true;
-      });
+      const clicked = await clickSelectionAction('archive');
       expect(clicked).toBe(true);
 
       await browser.waitUntil(async () => {

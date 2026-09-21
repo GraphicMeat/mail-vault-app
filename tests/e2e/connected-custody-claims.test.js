@@ -30,6 +30,7 @@
 import { ImapFlow } from 'imapflow';
 import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
 import { MOCK_PASSWORD } from './mockImap.js';
+import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
 
 describe('Custody claims', function () {
   this.timeout(240000);
@@ -132,12 +133,6 @@ describe('Custody claims', function () {
     return false;
   }, subject);
 
-  const clickBarButton = (title) => browser.execute((t) => {
-    const btn = document.querySelector(`button[title="${t}"]`);
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  }, title);
 
   /**
    * Archive ONE row through its own hover button — a different workflow from
@@ -156,7 +151,7 @@ describe('Custody claims', function () {
     const clicked = await browser.execute((needle) => {
       for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
         if (!(row.innerText || '').includes(needle)) continue;
-        const btn = row.querySelector('button[title="Archive"]');
+        const btn = row.querySelector('[data-quick-action="archive"]');
         if (!btn) return false;
         btn.click();
         return true;
@@ -173,7 +168,7 @@ describe('Custody claims', function () {
   /** Archive the named row through the selection bar, and wait for the vault glyph. */
   async function archive(subject) {
     expect(await clickRowCheckbox(subject)).toBe(true);
-    expect(await clickBarButton('Archive selected')).toBe(true);
+    expect(await clickSelectionAction('archive')).toBe(true);
     await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('archived'), {
       timeout: 60_000, interval: 300,
       timeoutMsg: `"${subject}" never became an archived row`,
@@ -183,7 +178,7 @@ describe('Custody claims', function () {
   /** Move the named row to the Bin — still on the server, just not in INBOX. */
   async function moveToBin(subject) {
     expect(await clickRowCheckbox(subject)).toBe(true);
-    expect(await clickBarButton('Move to folder')).toBe(true);
+    expect(await clickSelectionAction('move')).toBe(true);
     await browser.waitUntil(async () => browser.execute(() =>
       !!document.querySelector('[data-testid="move-to-folder-dropdown"]')), {
       timeout: 10_000, interval: 200, timeoutMsg: 'Move-to-folder dropdown never opened',
@@ -305,7 +300,7 @@ describe('Custody claims', function () {
       await archive(subject);
 
       expect(await clickRowCheckbox(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       // The confirmation's own button, told apart from the bar's by the title
       // the bar buttons carry and the popover's do not.
       const confirmed = await browser.execute(() => {
@@ -538,7 +533,9 @@ describe('Custody claims', function () {
       const victimSubject = subjectOf(victim);
 
       expect(await clickRowCheckbox(victimSubject)).toBe(true);
-      expect(await clickBarButton('Unarchive selected')).toBe(true);
+      // Bulk unarchive asks first now — it removes the vault copy.
+      expect(await clickSelectionAction('unarchive')).toBe(true);
+      expect(await confirmSelectionDialog()).toBe(true);
       await browser.waitUntil(async () => {
         const r = await rowFor(victimSubject);
         return !!r && !r.icon?.startsWith('archived');
@@ -573,7 +570,7 @@ describe('Custody claims', function () {
      *
      * Bar → "Delete everywhere" → the popover's own confirm. Two buttons carry
      * that same label, so the confirm is matched as the one WITHOUT a `title`
-     * — the bar's has `title="Delete everywhere"`, the popover's has none.
+     * — every quick action carries a title, the popover's confirm has none.
      *
      * Runs last, and archives its own victim first: the cases above have spent
      * most of yoda's healthy messages, and 907/908/909 are the fault fixtures.
@@ -598,7 +595,7 @@ describe('Custody claims', function () {
       }
 
       expect(await clickRowCheckbox(victimSubject)).toBe(true);
-      expect(await clickBarButton('Delete everywhere')).toBe(true);
+      expect(await clickSelectionAction('deleteEverywhere')).toBe(true);
       const confirmed = await browser.waitUntil(async () => browser.execute(() => {
         for (const btn of document.querySelectorAll('button:not([title])')) {
           if ((btn.textContent || '').trim() !== 'Delete everywhere') continue;

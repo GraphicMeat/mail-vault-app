@@ -14,6 +14,7 @@
  */
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 describe('All inboxes — acting on a vault-only row', function () {
   this.timeout(240_000);
@@ -66,12 +67,6 @@ describe('All inboxes — acting on a vault-only row', function () {
     return false;
   }, subject);
 
-  const clickBarButton = (title) => browser.execute((t) => {
-    const btn = document.querySelector(`button[title="${t}"]`);
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  }, title);
 
   const clickAllInboxes = () => browser.execute(() => {
     const btn = document.querySelector('[data-testid="all-inboxes-btn"]');
@@ -160,7 +155,7 @@ describe('All inboxes — acting on a vault-only row', function () {
     vaultOnlySubject = candidates[candidates.length - 1].text.match(/Luke message \d+/)[0];
 
     expect(await clickRowCheckbox(vaultOnlySubject)).toBe(true);
-    expect(await clickBarButton('Archive selected')).toBe(true);
+    expect(await clickSelectionAction('archive')).toBe(true);
     await browser.waitUntil(async () => !!(await rowFor(vaultOnlySubject))?.icon?.startsWith('archived'), {
       timeout: 60_000, interval: 300,
       timeoutMsg: `"${vaultOnlySubject}" never became an archived row`,
@@ -184,7 +179,7 @@ describe('All inboxes — acting on a vault-only row', function () {
     expect(await localFlagsFor(vaultOnlySubject)).not.toContain('\\Seen');
 
     expect(await clickRowCheckbox(vaultOnlySubject)).toBe(true);
-    expect(await clickBarButton('Mark as read')).toBe(true);
+    expect(await clickSelectionAction('markRead')).toBe(true);
 
     try {
       await browser.waitUntil(async () => (await rowFor(vaultOnlySubject))?.unread === false,

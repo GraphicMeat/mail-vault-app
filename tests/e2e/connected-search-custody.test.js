@@ -26,6 +26,7 @@
  */
 
 import { waitForApp, reloadApp, waitForEmails, switchToFolder } from './helpers.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const LUKE = 'luke@mock.test';
 
@@ -56,16 +57,10 @@ describe('Search results carry their custody proof', function () {
     return false;
   }, subject);
 
-  const clickBarButton = (title) => browser.execute((t) => {
-    const btn = document.querySelector(`button[title="${t}"]`);
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  }, title);
 
   async function archive(subject) {
     expect(await clickRowCheckbox(subject)).toBe(true);
-    expect(await clickBarButton('Archive selected')).toBe(true);
+    expect(await clickSelectionAction('archive')).toBe(true);
     await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('archived'), {
       timeout: 60_000, interval: 300,
       timeoutMsg: `"${subject}" never became an archived row`,
@@ -76,7 +71,7 @@ describe('Search results carry their custody proof', function () {
   async function archiveAndDeleteFromServer(subject) {
     await archive(subject);
     expect(await clickRowCheckbox(subject)).toBe(true);
-    expect(await clickBarButton('Delete from server')).toBe(true);
+    expect(await clickSelectionAction('deleteServer')).toBe(true);
     // The confirmation's own button, told apart from the bar's by the title the
     // bar buttons carry and the popover's do not.
     const confirmed = await browser.execute(() => {

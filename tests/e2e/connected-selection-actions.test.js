@@ -14,6 +14,7 @@
  */
 
 import { waitForApp, waitForEmails } from './helpers.js';
+import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
 
 describe('Selection Action Bar effects', function () {
   this.timeout(120_000);
@@ -111,14 +112,6 @@ describe('Selection Action Bar effects', function () {
     }, subject, SUBJECT_RE);
   }
 
-  function clickBarButton(title) {
-    return browser.execute((btnTitle) => {
-      const btn = document.querySelector(`button[title="${btnTitle}"]`);
-      if (!btn || btn.offsetHeight === 0) return false;
-      btn.click();
-      return true;
-    }, title);
-  }
 
   const waitForRow = (subject, predicate, msg) => browser.waitUntil(
     async () => {
@@ -162,7 +155,7 @@ describe('Selection Action Bar effects', function () {
     expect(subject).toBeDefined();
 
     expect(await toggleRow(subject)).toBe(true);
-    expect(await clickBarButton('Mark as read')).toBe(true);
+    expect(await clickSelectionAction('markRead')).toBe(true);
 
     await waitForRow(subject, r => !r.unread, `Row "${subject}" still styled unread after Mark as read`);
     await waitForNothingSelected();
@@ -173,7 +166,7 @@ describe('Selection Action Bar effects', function () {
     expect(subject).toBeDefined();
 
     expect(await toggleRow(subject)).toBe(true);
-    expect(await clickBarButton('Mark as unread')).toBe(true);
+    expect(await clickSelectionAction('markUnread')).toBe(true);
 
     await waitForRow(subject, r => r.unread, `Row "${subject}" never returned to unread styling`);
     await waitForNothingSelected();
@@ -184,7 +177,7 @@ describe('Selection Action Bar effects', function () {
     expect(subjects.length).toBe(2);
 
     for (const s of subjects) expect(await toggleRow(s)).toBe(true);
-    expect(await clickBarButton('Mark as read')).toBe(true);
+    expect(await clickSelectionAction('markRead')).toBe(true);
 
     for (const s of subjects) {
       await waitForRow(s, r => !r.unread, `Row "${s}" still styled unread after bulk Mark as read`);
@@ -199,7 +192,7 @@ describe('Selection Action Bar effects', function () {
     expect(subject).toBeDefined();
 
     expect(await toggleRow(subject)).toBe(true);
-    expect(await clickBarButton('Archive selected')).toBe(true);
+    expect(await clickSelectionAction('archive')).toBe(true);
 
     await waitForRow(subject, r => r.archived, `Row "${subject}" never showed the archived icon`);
     // The icon flips on the first progress event, before the download finishes.
@@ -212,7 +205,9 @@ describe('Selection Action Bar effects', function () {
     expect(subject).toBeDefined();
 
     expect(await toggleRow(subject)).toBe(true);
-    expect(await clickBarButton('Unarchive selected')).toBe(true);
+    // Bulk unarchive asks first now — it removes the vault copy.
+    expect(await clickSelectionAction('unarchive')).toBe(true);
+    expect(await confirmSelectionDialog()).toBe(true);
 
     await waitForRow(subject, r => !r.archived, `Row "${subject}" still shows as archived after Unarchive`);
   });
@@ -226,7 +221,7 @@ describe('Selection Action Bar effects', function () {
     expect(subjects.length).toBe(2);
 
     for (const s of subjects) expect(await toggleRow(s)).toBe(true);
-    expect(await clickBarButton('Move to folder')).toBe(true);
+    expect(await clickSelectionAction('move')).toBe(true);
     await browser.waitUntil(
       async () => browser.execute(() =>
         document.querySelector('[data-testid="move-to-folder-dropdown"]')?.offsetHeight > 0),
@@ -287,7 +282,7 @@ describe('Selection Action Bar effects', function () {
     expect(subject).toBeDefined();
 
     expect(await toggleRow(subject)).toBe(true);
-    expect(await clickBarButton('Delete from server')).toBe(true);
+    expect(await clickSelectionAction('deleteServer')).toBe(true);
     await waitForText('No copy is in your vault', 'Delete confirmation never appeared');
 
     // The bar's own trigger carries a title; the popover's confirm button does not.

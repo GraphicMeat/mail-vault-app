@@ -83,6 +83,7 @@ import {
   clickSidebarItem, folderHeaderText, switchToFolder, churnAccounts,
 } from './helpers.js';
 import { appDataDir } from './mockImap.js';
+import { clickSelectionAction, confirmSelectionDialog } from './selectionBar.js';
 
 describe('Storage matrix diagnostics', function () {
   this.timeout(600_000);
@@ -345,14 +346,6 @@ describe('Storage matrix diagnostics', function () {
     }, subject);
   }
 
-  function clickBarButton(title) {
-    return browser.execute((btnTitle) => {
-      const btn = document.querySelector(`button[title="${btnTitle}"]`);
-      if (!btn || btn.offsetHeight === 0) return false;
-      btn.click();
-      return true;
-    }, title);
-  }
 
   /** Confirm popover shared by "Delete from server" and "Delete everywhere". */
   function confirmDeletePopover() {
@@ -611,7 +604,9 @@ describe('Storage matrix diagnostics', function () {
       });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Unarchive selected')).toBe(true);
+      // Bulk unarchive asks first now — it removes the vault copy.
+      expect(await clickSelectionAction('unarchive')).toBe(true);
+      expect(await confirmSelectionDialog()).toBe(true);
 
       await browser.waitUntil(async () => {
         const r = await rowFor(subject);
@@ -635,7 +630,7 @@ describe('Storage matrix diagnostics', function () {
       });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       // This row is archived, so the vault holds a copy and the confirmation
       // deliberately does NOT say "cannot be undone" — over-warning about the
       // safe case is the bug the custody copy pass fixed.
@@ -665,14 +660,16 @@ describe('Storage matrix diagnostics', function () {
       });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Unarchive selected')).toBe(true);
+      // Bulk unarchive asks first now — it removes the vault copy.
+      expect(await clickSelectionAction('unarchive')).toBe(true);
+      expect(await confirmSelectionDialog()).toBe(true);
       await browser.waitUntil(async () => {
         const r = await rowFor(subject);
         return r && !r.archived;
       }, { timeout: 15_000, interval: 300, timeoutMsg: `"${subject}" still archived after Unarchive` });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('cannot be undone', 'Delete-from-server confirmation never appeared');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -707,7 +704,7 @@ describe('Storage matrix diagnostics', function () {
       const subject = 'Luke archive 2';
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Archive selected')).toBe(true);
+      expect(await clickSelectionAction('archive')).toBe(true);
       // Same settle condition as row 1: `archived` is also true for the
       // `-server-unknown` variant this row shows until the uid set is proven.
       //
@@ -739,13 +736,13 @@ describe('Storage matrix diagnostics', function () {
       const subject = 'Luke archive 3';
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Archive selected')).toBe(true);
+      expect(await clickSelectionAction('archive')).toBe(true);
       await browser.waitUntil(async () => (await rowFor(subject))?.archived === true, {
         timeout: 20_000, interval: 500, timeoutMsg: `"${subject}" never showed the Archived badge`,
       });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       // This row is archived, so the vault holds a copy and the confirmation
       // deliberately does NOT say "cannot be undone" — over-warning about the
       // safe case is the bug the custody copy pass fixed.
@@ -784,7 +781,7 @@ describe('Storage matrix diagnostics', function () {
       console.log(`[reload-root-cause] sidecar for uid ${uid} before delete:`, sidecarBefore);
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete everywhere')).toBe(true);
+      expect(await clickSelectionAction('deleteEverywhere')).toBe(true);
       await waitForBodyText('cannot be undone', 'Delete-everywhere confirmation never appeared');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -844,7 +841,7 @@ describe('Storage matrix diagnostics', function () {
       await switchToFolder(VADER, 'Matrix');
       const vaderSubject = 'Vader matrix 6';
       expect(await toggleRowExact(vaderSubject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (vader)');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -871,7 +868,7 @@ describe('Storage matrix diagnostics', function () {
       }
 
       expect(await toggleRowExact(lukeSubject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (luke)');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -988,7 +985,7 @@ describe('Storage matrix diagnostics', function () {
       const vaderBefore = before.find((s) => s.email === VADER).subjects;
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (yoda)');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -1055,7 +1052,7 @@ describe('Storage matrix diagnostics', function () {
 
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (yoda reload)');
       expect(await confirmDeletePopover()).toBe(true);
 
@@ -1159,7 +1156,7 @@ describe('Storage matrix diagnostics', function () {
       });
 
       expect(await toggleRowExact(subject)).toBe(true);
-      expect(await clickBarButton('Delete from server')).toBe(true);
+      expect(await clickSelectionAction('deleteServer')).toBe(true);
       await waitForBodyText('from the server?', 'Delete-from-server confirmation never appeared (unified)');
       expect(await confirmDeletePopover()).toBe(true);
 

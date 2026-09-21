@@ -83,7 +83,7 @@ const unarchivedRows = () => browser.execute(() => {
 const clickRowArchive = (subject) => browser.execute((needle) => {
   for (const row of document.querySelectorAll('[data-testid="email-row"]')) {
     if (!(row.innerText || '').includes(needle)) continue;
-    const btn = row.querySelector('button[title="Archive"]');
+    const btn = row.querySelector('[data-quick-action="archive"]');
     if (!btn) return false;
     btn.click();
     return true;

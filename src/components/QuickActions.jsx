@@ -305,8 +305,9 @@ function QuickActionsConfigured({
             ? "quick-action-destructive"
             : "",
         ].filter(Boolean).join(" ")}
-        title={descriptor.label}
-        aria-label={descriptor.label}
+        data-quick-action={saved.action}
+        title={descriptor.titleLabel || descriptor.label}
+        aria-label={descriptor.titleLabel || descriptor.label}
         aria-expanded={descriptor.expanded}
         disabled={!!descriptor.disabled}
         style={color ? { "--quick-action-color": color } : undefined}
@@ -332,7 +333,8 @@ function QuickActionsConfigured({
         type="button"
         role="menuitem"
         className="quick-action-radial-item"
-        aria-label={descriptor.label}
+        data-quick-action={saved.action}
+        aria-label={descriptor.titleLabel || descriptor.label}
         aria-expanded={descriptor.expanded}
         aria-current={activeRadial?.entry.id === saved.id ? "true" : undefined}
         disabled={!!descriptor.disabled}
@@ -471,6 +473,7 @@ function QuickActionsConfigured({
         role="menu"
         aria-label={triggerText}
         onKeyDown={onMenuKeyDown}
+        data-surface={surface}
         className={radial ? "quick-actions-radial" : "quick-actions-menu"}
         style={panelStyle}
       >

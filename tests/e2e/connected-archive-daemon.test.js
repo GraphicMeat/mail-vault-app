@@ -67,6 +67,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { appDataDir, MOCK_PASSWORD } from './mockImap.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const YODA = 'yoda@mock.test';
 const YODA_SERVER = 2; // MOCK_ACCOUNTS order: luke, vader, yoda
@@ -290,12 +291,6 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
 
   const selectedCount = () => browser.execute(() => window.__MAIL_STORE__?.getState?.().selectedEmailIds?.size ?? 0);
 
-  const clickByTitle = (title) => browser.execute((t) => {
-    const btn = document.querySelector(`button[title="${t}"]`);
-    if (!btn || btn.offsetHeight === 0) return false;
-    btn.click();
-    return true;
-  }, title);
 
   const clickByText = (selector, text) => browser.execute((sel, needle) => {
     for (const el of document.querySelectorAll(sel)) {
@@ -315,8 +310,8 @@ describe('Archive and bulk delete through the daemon (Task 3.10)', function () {
    *  selected" button - `saveEmailsLocally`/`_archiveGroup`, one
    *  `archive_emails` call for the whole selection. */
   async function clickArchiveSelected() {
-    await browser.waitUntil(() => clickByTitle('Archive selected'), {
-      timeout: 15_000, interval: 300, timeoutMsg: 'SelectionActionBar never offered "Archive selected"',
+    await browser.waitUntil(() => clickSelectionAction('archive'), {
+      timeout: 15_000, interval: 300, timeoutMsg: 'SelectionActionBar never offered its archive action',
     });
   }
 

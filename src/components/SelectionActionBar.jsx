@@ -419,6 +419,11 @@ export function SelectionActionBar() {
       id: entry.id,
       action: entry.action,
       label,
+      titleLabel: entry.action === "archive"
+        ? t("selection.archiveSelected")
+        : entry.action === "unarchive"
+        ? t("selection.unarchiveSelected")
+        : undefined,
       Icon,
       disabled: !!disabledAction,
       tone:
@@ -491,6 +496,7 @@ export function SelectionActionBar() {
         <motion.div
           key="selection-bar"
           ref={barRef}
+          data-testid="selection-action-bar"
           initial={{ y: 80, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}

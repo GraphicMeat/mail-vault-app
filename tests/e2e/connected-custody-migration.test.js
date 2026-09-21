@@ -13,6 +13,7 @@ import {
   appDataDir, LEGACY_CUSTODY_UID, LEGACY_CUSTODY_ENTRY, LEGACY_NESTED_ENTRY,
   LEGACY_HEADER_UID, LEGACY_HEADER, LEGACY_HEADER_MAILBOX,
 } from './mockImap.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -57,16 +58,10 @@ const clickRowCheckbox = (subject) => browser.execute((needle) => {
   return false;
 }, subject);
 
-const clickBarButton = (title) => browser.execute((t) => {
-  const btn = document.querySelector(`button[title="${t}"]`);
-  if (!btn || btn.offsetHeight === 0) return false;
-  btn.click();
-  return true;
-}, title);
 
 async function archive(subject) {
   expect(await clickRowCheckbox(subject)).toBe(true);
-  expect(await clickBarButton('Archive selected')).toBe(true);
+  expect(await clickSelectionAction('archive')).toBe(true);
   await browser.waitUntil(async () => !!(await rowFor(subject))?.icon?.startsWith('archived'), {
     timeout: 60_000, interval: 300,
     timeoutMsg: `"${subject}" never became an archived row`,

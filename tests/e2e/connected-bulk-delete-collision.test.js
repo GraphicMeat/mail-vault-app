@@ -24,6 +24,7 @@
 
 import { waitForApp, waitForEmails, switchToFolder } from './helpers.js';
 import { serverFlags } from './rawImap.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const LUKE = 'luke@mock.test';
 const UID = 6;
@@ -52,12 +53,6 @@ const tickInboxRow = (uid) => browser.execute((n) => {
 
 const selectionSize = () => browser.execute(() => window.__MAIL_STORE__?.getState?.().selectedEmailIds?.size ?? 0);
 
-const clickBarButton = (title) => browser.execute((t) => {
-  const btn = document.querySelector(`button[title="${t}"]`);
-  if (!btn || btn.offsetHeight === 0) return false;
-  btn.click();
-  return true;
-}, title);
 
 /** The confirmation's own button: same words as the bar button, no title, rendered after it. */
 const confirmDelete = (label) => browser.execute((needle) => {
@@ -99,7 +94,7 @@ describe('Bulk delete — a ticked INBOX row, not the Sent copy sharing its uid'
     expect(await tickInboxRow(UID)).toBe(true);
     await waitFor(async () => (await selectionSize()) === 1, 'the tick never reached the selection');
 
-    expect(await clickBarButton('Delete from server')).toBe(true);
+    expect(await clickSelectionAction('deleteServer')).toBe(true);
     await waitFor(() => confirmDelete('Delete from server'), 'the delete confirmation never offered its button', 10_000);
 
     await waitFor(async () => (await serverFlags(port, 'INBOX', UID)) === null,

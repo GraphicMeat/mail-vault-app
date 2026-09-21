@@ -34,6 +34,7 @@ import { join } from 'node:path';
 import { waitForApp, waitForEmails, switchToFolder, runBackupAndWait } from './helpers.js';
 import { appDataDir } from './mockImap.js';
 import { serverFlags, storeFlag } from './rawImap.js';
+import { clickSelectionAction } from './selectionBar.js';
 
 const LUKE = 'luke@mock.test';
 const VADER = 'vader@mock.test';
@@ -153,12 +154,6 @@ const clickRowCheckbox = (subject) => browser.execute((needle) => {
   return false;
 }, subject);
 
-const clickBarButton = (title) => browser.execute((t) => {
-  const btn = document.querySelector(`button[title="${t}"]`);
-  if (!btn || btn.offsetHeight === 0) return false;
-  btn.click();
-  return true;
-}, title);
 
 describe('Read state — what the app does reaches every copy the vault keeps', function () {
   this.timeout(300_000);
@@ -248,7 +243,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     expect(isUnseenName(nameOf(mirror, unreadUid), unreadUid)).toBe(true);
 
     expect(await clickRowCheckbox(unreadSubject)).toBe(true);
-    expect(await clickBarButton('Mark as read')).toBe(true);
+    expect(await clickSelectionAction('markRead')).toBe(true);
 
     await waitFor(async () => (await rowFor(unreadSubject))?.unread === false, `"${unreadSubject}" stayed unread on screen`);
     await waitFor(async () => (await serverFlags(account.imapPort, 'INBOX', unreadUid))?.includes('\\Seen'),
@@ -265,7 +260,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
 
   it('marking it unread takes it back off every copy', async function () {
     expect(await clickRowCheckbox(unreadSubject)).toBe(true);
-    expect(await clickBarButton('Mark as unread')).toBe(true);
+    expect(await clickSelectionAction('markUnread')).toBe(true);
 
     await waitFor(async () => (await rowFor(unreadSubject))?.unread === true, `"${unreadSubject}" stayed read on screen`);
     await waitFor(async () => !(await serverFlags(account.imapPort, 'INBOX', unreadUid))?.includes('\\Seen'),
@@ -284,7 +279,7 @@ describe('Read state — what the app does reaches every copy the vault keeps', 
     // Read again. The vault's own file has to say so — that is the copy a
     // vault-only row, a restore and the mirror are built from.
     expect(await clickRowCheckbox(unreadSubject)).toBe(true);
-    expect(await clickBarButton('Mark as read')).toBe(true);
+    expect(await clickSelectionAction('markRead')).toBe(true);
     await waitFor(async () => (await vaultFlags(account.id, 'INBOX', unreadUid) || []).includes('\\Seen'),
       'the vault file never said read');
     await waitFor(() => (jsonFlags(join(sidecarDir, `${unreadUid}.json`), unreadUid) || []).includes('\\Seen'),
