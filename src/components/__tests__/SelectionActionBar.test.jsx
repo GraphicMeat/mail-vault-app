@@ -84,6 +84,14 @@ vi.mock('../../stores/exportStore', () => ({
 
 import { SelectionActionBar } from '../SelectionActionBar';
 
+function quickAction(title) {
+  const visible = screen.queryByTitle(title);
+  if (visible) return visible;
+  const more = screen.getByRole('button', { name: 'Quick actions' });
+  if (more.getAttribute('aria-expanded') !== 'true') fireEvent.click(more);
+  return screen.getByTitle(title);
+}
+
 describe('SelectionActionBar delete confirmation', () => {
   beforeEach(() => {
     useMailStoreMock.setState({
@@ -105,13 +113,13 @@ describe('SelectionActionBar delete confirmation', () => {
 
   it('renders both a server-only Delete and a Delete everywhere trigger', () => {
     render(<SelectionActionBar />);
-    expect(screen.getByTitle('Delete from server')).toBeTruthy();
-    expect(screen.getByTitle('Delete everywhere')).toBeTruthy();
+    expect(quickAction('Delete from server')).toBeTruthy();
+    expect(quickAction('Delete everywhere')).toBeTruthy();
   });
 
   it('Delete shows server-only confirmation copy, no backup/vault-destroying mention', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete from server'));
+    fireEvent.click(quickAction('Delete from server'));
 
     const copy = screen.getByText(/Delete 2 emails from the server\?/);
     expect(copy).toBeTruthy();
@@ -123,14 +131,14 @@ describe('SelectionActionBar delete confirmation', () => {
   // "This cannot be undone" for every server delete, archived or not.
   it('says a server delete is permanent only when the vault has no copy', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete from server'));
+    fireEvent.click(quickAction('Delete from server'));
     expect(screen.getByText(/No copy is in your vault, so this cannot be undone\./)).toBeTruthy();
   });
 
   it('promises the vault copy survives when every selected message is archived', () => {
     useMailStoreMock.setState({ archivedEmailIds: new Set([1, 2]) });
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete from server'));
+    fireEvent.click(quickAction('Delete from server'));
 
     const copy = screen.getByText(/Delete 2 emails from the server\?/);
     expect(copy.textContent).toMatch(/Your vault keeps the copies/);
@@ -139,7 +147,7 @@ describe('SelectionActionBar delete confirmation', () => {
 
   it('Delete everywhere shows the everywhere confirmation copy', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete everywhere'));
+    fireEvent.click(quickAction('Delete everywhere'));
 
     const copy = screen.getByText(/No copy will be left anywhere/);
     expect(copy.textContent).toMatch(/server, your vault, and your backup drive/);
@@ -152,14 +160,14 @@ describe('SelectionActionBar delete confirmation', () => {
     useMailStoreMock.setState({ getSelectionSummary: vi.fn(() => ({ threads: 2, emails: 11 })) });
     render(<SelectionActionBar />);
 
-    fireEvent.click(screen.getByTitle('Delete everywhere'));
+    fireEvent.click(quickAction('Delete everywhere'));
 
     expect(screen.getByText(/Delete 11 emails in 2 conversations from the server/)).toBeTruthy();
   });
 
   it('confirming after Delete everywhere calls purgeSelectedEverywhere, not deleteSelectedFromServer', async () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete everywhere'));
+    fireEvent.click(quickAction('Delete everywhere'));
 
     const confirmButtons = screen.getAllByRole('button', { name: 'Delete everywhere' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
@@ -170,7 +178,7 @@ describe('SelectionActionBar delete confirmation', () => {
 
   it('confirming after Delete (server-only) calls deleteSelectedFromServer, not purgeSelectedEverywhere', async () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Delete from server'));
+    fireEvent.click(quickAction('Delete from server'));
 
     const confirmButtons = screen.getAllByRole('button', { name: 'Delete from server' });
     fireEvent.click(confirmButtons[confirmButtons.length - 1]);
@@ -209,7 +217,7 @@ describe('SelectionActionBar refusal reporting', () => {
   afterEach(() => { consoleError.mockRestore(); cleanup(); });
 
   const confirmVia = (trigger, confirmLabel) => {
-    fireEvent.click(screen.getByTitle(trigger));
+    fireEvent.click(quickAction(trigger));
     const buttons = screen.getAllByRole('button', { name: confirmLabel });
     fireEvent.click(buttons[buttons.length - 1]);
   };
@@ -288,7 +296,7 @@ describe('SelectionActionBar move dropdown', () => {
 
   it('opens the dropdown outside the bar\'s horizontal scroller', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Move to folder'));
+    fireEvent.click(quickAction('Move to folder'));
 
     const dropdown = screen.getByTestId('move-dropdown');
     expect(dropdown.closest('[class*="overflow-x"]')).toBe(null);
@@ -296,10 +304,10 @@ describe('SelectionActionBar move dropdown', () => {
 
   it('closes again on a second click', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Move to folder'));
+    fireEvent.click(quickAction('Move to folder'));
     expect(screen.queryByTestId('move-dropdown')).not.toBe(null);
 
-    fireEvent.click(screen.getByTitle('Move to folder'));
+    fireEvent.click(quickAction('Move to folder'));
     expect(screen.queryByTestId('move-dropdown')).toBe(null);
   });
 });
@@ -328,12 +336,12 @@ describe('SelectionActionBar export', () => {
 
   it('offers an export button while a selection is live', () => {
     render(<SelectionActionBar />);
-    expect(screen.getByTitle('Export selected')).toBeTruthy();
+    expect(quickAction('Export selected')).toBeTruthy();
   });
 
   it('hands over only the selected rows', () => {
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Export selected'));
+    fireEvent.click(quickAction('Export selected'));
     expect(openExport).toHaveBeenCalledTimes(1);
     expect(openExport.mock.calls[0][0].messages.map(m => m.uid)).toEqual([1, 2]);
   });
@@ -350,7 +358,7 @@ describe('SelectionActionBar export', () => {
       sortedEmails: [row(1, 'acct-1'), row(1, 'acct-2'), row(1, 'acct-1', 'Sent')],
     });
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Export selected'));
+    fireEvent.click(quickAction('Export selected'));
     const sent = openExport.mock.calls[0][0].messages;
     expect(sent).toHaveLength(1);
     expect(sent[0]._accountId).toBe('acct-1');
@@ -360,7 +368,7 @@ describe('SelectionActionBar export', () => {
   it('opens nothing when no selected key resolves to a loaded row', () => {
     useMailStoreMock.setState({ selectedEmailIds: new Set([99]), sortedEmails: [row(1), row(2)] });
     render(<SelectionActionBar />);
-    fireEvent.click(screen.getByTitle('Export selected'));
+    fireEvent.click(quickAction('Export selected'));
     expect(openExport).not.toHaveBeenCalled();
   });
 });

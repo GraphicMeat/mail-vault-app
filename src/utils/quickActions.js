@@ -18,19 +18,20 @@ export const DEFAULT_QUICK_ACTIONS = {
         entry('reply'), entry('replyAll'), entry('forward'), entry('newMessage'), entry('move'),
         entry('spam'), entry('deleteServer'), entry('deleteEverywhere'), entry('export'),
       ],
-      favoriteId: 'archive', palette: 'neutral',
+      favoriteId: 'archive', palette: 'semantic', radialPagination: false,
     },
     selection: {
       mode: 'inline',
       entries: ['markRead', 'markUnread', 'archive', 'unarchive', 'move', 'deleteServer', 'deleteEverywhere', 'export']
         .map(action => entry(action)),
-      favoriteId: 'archive', palette: 'neutral',
+      favoriteId: 'archive', palette: 'semantic', radialPagination: false,
+      selectionDisplay: 'icon-label', selectionActionLimit: 3,
     },
     reader: {
       mode: 'inline',
       entries: ['reply', 'replyAll', 'forward', 'archive', 'delete', 'move', 'toggleRead', 'star', 'export', 'open', 'source', 'theme']
         .map(action => entry(action)),
-      favoriteId: 'reply', palette: 'neutral',
+      favoriteId: 'reply', palette: 'semantic', radialPagination: false,
     },
   },
   overrides: {},
@@ -91,7 +92,15 @@ function normalizeSurface(value, fallback) {
     mode: QUICK_ACTION_MODES.includes(value.mode) ? value.mode : fallback.mode,
     entries: unique,
     favoriteId,
-    palette: QUICK_ACTION_PALETTES.includes(value.palette) ? value.palette : 'neutral',
+    // Keep an explicitly selected neutral/custom palette. Older settings that
+    // omit a palette inherit the surface default, which is now colored.
+    palette: QUICK_ACTION_PALETTES.includes(value.palette) ? value.palette : fallback.palette,
+    radialPagination: typeof value.radialPagination === 'boolean' ? value.radialPagination : !!fallback.radialPagination,
+    ...(fallback.selectionDisplay ? {
+      selectionDisplay: ['icon-label', 'icon-only'].includes(value.selectionDisplay) ? value.selectionDisplay : fallback.selectionDisplay,
+      selectionActionLimit: Number.isInteger(value.selectionActionLimit)
+        ? Math.max(1, Math.min(6, value.selectionActionLimit)) : fallback.selectionActionLimit,
+    } : {}),
   };
 }
 

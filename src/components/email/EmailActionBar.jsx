@@ -33,7 +33,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   onDeleteEverywhere, onMove, onToggleRead, onToggleFlag, onSpam, onApplyLocalLabel,
   onReplyTemplate, onOpenInWindow, onViewSource, onExport, onToggleEmailTheme,
   emailThemeDark, isArchived, isRead, isLocalOnly, isSentEmail, singleRecipient,
-  configOverride, onActionPreview,
+  configOverride, onActionPreview, preview = false,
   disabled = {}, moveButtonRef, moveDropdownOpen = false, onMenuOpenChange, onActionStart,
 }) {
   const t = useT();
@@ -178,9 +178,9 @@ export const EmailActionBar = memo(function EmailActionBar({
     </div>
   </div>;
   if (variant === 'chat') return <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={{ duration: .15 }} className="email-action-bar email-action-chat">
-    <QuickActions surface="reader" config={config} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} onActionStart={onActionStart} />
+    <QuickActions surface="reader" config={config} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} onActionStart={onActionStart} />
   </motion.div>;
   return <div className="email-action-bar">
-    <QuickActions surface="reader" config={config} descriptors={descriptors} display={display} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} onActionStart={onActionStart} />
+    <QuickActions surface="reader" config={config} descriptors={descriptors} display={display} preview={preview} buttonClassName="email-action-button" identity={`${email?._accountId}:${email?._mailbox}:${email?.uid}`} onOpenChange={onMenuOpenChange} onActionStart={onActionStart} />
   </div>;
 });

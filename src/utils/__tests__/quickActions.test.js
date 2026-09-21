@@ -45,6 +45,18 @@ describe('quick action settings', () => {
     expect(tags.defaults.row.entries.map(entry => entry.id)).toEqual(['tag:label-a', 'tag:label-b']);
   });
 
+  it('normalizes radial pagination and bounded selection display settings without changing other surfaces', () => {
+    const result = normalizeQuickActions({ defaults: {
+      selection: { radialPagination: 'yes', selectionDisplay: 'text-only', selectionActionLimit: 99 },
+      row: { radialPagination: true },
+    } });
+    expect(result.defaults.row.radialPagination).toBe(true);
+    expect(result.defaults.selection.radialPagination).toBe(false);
+    expect(result.defaults.selection.selectionDisplay).toBe('icon-label');
+    expect(result.defaults.selection.selectionActionLimit).toBe(6);
+    expect(result.defaults.reader.selectionActionLimit).toBeUndefined();
+  });
+
   it('inherits global configuration until a scoped override is set or reset', () => {
     const scope = { kind: 'mailbox', accountId: 'a:1', mailbox: 'INBOX/Work' };
     const key = quickActionScopeKey(scope);
