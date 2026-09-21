@@ -38,6 +38,7 @@
 
 use crate::handlers::common;
 use crate::server::DaemonState;
+use mailvault_core::maildir::{has_info, info_flags};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -168,11 +169,11 @@ pub fn export(
                         if let Ok(files) = std::fs::read_dir(&cur_dir) {
                             for file_entry in files.flatten() {
                                 let fname = file_entry.file_name().to_string_lossy().to_string();
-                                if !fname.contains(":2,") {
+                                if !has_info(&fname) {
                                     continue;
                                 }
                                 if archived_only {
-                                    if let Some(flags_part) = fname.split(":2,").nth(1) {
+                                    if let Some(flags_part) = info_flags(&fname) {
                                         if !flags_part.contains('A') {
                                             continue;
                                         }
@@ -225,12 +226,12 @@ pub fn export(
                         if let Ok(files) = std::fs::read_dir(&cur_dir) {
                             for file_entry in files.flatten() {
                                 let filename = file_entry.file_name().to_string_lossy().to_string();
-                                if !filename.contains(":2,") {
+                                if !has_info(&filename) {
                                     continue;
                                 }
 
                                 if archived_only {
-                                    if let Some(flags_part) = filename.split(":2,").nth(1) {
+                                    if let Some(flags_part) = info_flags(&filename) {
                                         if !flags_part.contains('A') {
                                             continue;
                                         }
@@ -362,7 +363,7 @@ pub fn import(
         .filter(|&i| {
             if let Ok(entry) = archive.by_index(i) {
                 let name = entry.name().to_string();
-                name.starts_with(email_prefix) && !entry.is_dir() && name.contains(":2,")
+                name.starts_with(email_prefix) && !entry.is_dir() && has_info(&name)
             } else {
                 false
             }
@@ -398,7 +399,7 @@ pub fn import(
         // this position must not be allowed to escape the account/mailbox
         // directory it's about to be joined under.
         if filename.is_empty()
-            || !filename.contains(":2,")
+            || !has_info(filename)
             || filename.contains('/')
             || filename.contains('\\')
             || filename.contains("..")
@@ -498,6 +499,15 @@ mod tests {
         std::fs::write(cur.join(mailvault_core::vault_files::build_maildir_filename(uid, &flags)), body).unwrap();
     }
 
+    /// Writes a file under an exact, caller-chosen name -- `seed_file` always
+    /// goes through `build_maildir_filename`, which on darwin only ever
+    /// emits `:`, so it cannot produce a `;`-spelled (Windows) fixture.
+    fn seed_file_named(root: &std::path::Path, account: &str, mailbox: &str, filename: &str, body: &[u8]) {
+        let cur = mailvault_core::vault_files::cur_path(root, account, mailbox);
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(filename), body).unwrap();
+    }
+
     fn build_zip(dir: &std::path::Path, name: &str, entries: &[(&str, &[u8])], manifest: &BackupManifest) -> PathBuf {
         let path = dir.join(name);
         let file = std::fs::File::create(&path).unwrap();
@@ -565,6 +575,22 @@ mod tests {
         assert_eq!(result.email_count, 1, "only the archived file should be exported");
     }
 
+    /// Task 1b: a `;2,`-spelled (Windows) vault file must be recognized both
+    /// as a vault message at all (`has_info`, was a bare `contains(":2,")`)
+    /// and for its flags (`info_flags`, was `split(":2,").nth(1)`). Two
+    /// fixtures, one spelling each, so a vacuous pass (filter skipped
+    /// entirely) would show up as exporting 2 rather than the expected 1.
+    #[test]
+    fn export_reads_files_under_either_info_separator() {
+        let (v, s) = state(true);
+        seed_file_named(v.path(), "acct1", "INBOX", "1;2,A.eml", b"archived, semicolon");
+        seed_file_named(v.path(), "acct1", "INBOX", "2;2,.eml", b"not archived, semicolon");
+        let entries = vec![AccountsJsonEntry { id: "acct1".into(), email: Some("a@test.com".into()), imap_server: None, smtp_server: None, created_at: None }];
+        let dest = tempfile::tempdir().unwrap().keep().join("out.zip");
+        let result = export(&s, dest, &entries, vec![], None, true, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1, "only the archived ';2,' file should be exported");
+    }
+
     /// Decision 10 (b): the export walk performs zero gate acquisitions.
     /// Holding the write side of `vault_gate` before calling export proves
     /// this: if export ever called `with_vault_write`, it would block
@@ -593,6 +619,31 @@ mod tests {
     }
 
     // ── import ───────────────────────────────────────────────────────────
+
+    /// Task 1b: a `;2,`-spelled zip entry name (produced by a backup taken
+    /// on Windows) must import the same as the `:2,` spelling -- both the
+    /// progress-total count (line ~365, `has_info` over the archive entry
+    /// name) and the unsafe-filename guard (line ~401, `!has_info` inside a
+    /// larger `||` chain) hardcoded `:2,` before this fix.
+    #[test]
+    fn import_reads_a_zip_entry_under_the_semicolon_info_separator() {
+        let (v, s) = state(true);
+        let dir = tempfile::tempdir().unwrap();
+        let zip_path = build_zip(
+            dir.path(),
+            "in.zip",
+            &[("mailvault-backup/emails/new@test.com/INBOX/1;2,A.eml", b"body")],
+            &manifest_for(vec![BackupAccount { email: "new@test.com".into(), imap_server: Some("imap.test".into()), smtp_server: None }]),
+        );
+
+        let result = import(&s, zip_path, vec![], |_, _| {}).unwrap();
+
+        assert_eq!(result.email_count, 1, "the ';2,' spelled entry must be imported, not skipped as unsafe");
+        let new_account = &result.new_accounts[0];
+        let cur = mailvault_core::vault_files::cur_path(v.path(), &new_account.id, "INBOX");
+        let written: Vec<_> = std::fs::read_dir(&cur).unwrap().collect();
+        assert_eq!(written.len(), 1);
+    }
 
     #[test]
     fn import_extracts_under_the_gate_and_returns_new_account_descriptors() {

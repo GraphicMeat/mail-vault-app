@@ -12,6 +12,7 @@ use tracing::{info, warn};
 use crate::imap::{self, ImapConfig};
 use crate::migration;
 use crate::server::DaemonState;
+use mailvault_core::maildir::{info_flags, is_info_sep};
 
 #[derive(Clone, Debug, Serialize)]
 pub struct RestoreProgress {
@@ -53,8 +54,8 @@ pub fn parse_local_flags(filename: &str) -> String {
         }
     };
 
-    if let Some(letters) = name.split(":2,").nth(1) {
-        let letters = letters.split(':').next().unwrap_or("");
+    if let Some(letters) = info_flags(name) {
+        let letters = letters.split(is_info_sep).next().unwrap_or("");
         for c in letters.chars() {
             match c {
                 'S' => push(&mut out, "\\Seen"),
@@ -65,7 +66,7 @@ pub fn parse_local_flags(filename: &str) -> String {
             }
         }
     } else {
-        let parts: Vec<&str> = name.splitn(3, ':').collect();
+        let parts: Vec<&str> = name.splitn(3, is_info_sep).collect();
         if let Some(words) = parts.get(1) {
             for w in words.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()) {
                 match w.to_lowercase().as_str() {
@@ -94,14 +95,14 @@ pub fn list_messages_in_dir(cur_dir: &std::path::Path) -> Vec<LocalMsg> {
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        let uid = match name.split(|c| c == ':' || c == '.').next().and_then(|s| s.parse::<u32>().ok()) {
+        let uid = match name.split(|c| is_info_sep(c) || c == '.').next().and_then(|s| s.parse::<u32>().ok()) {
             Some(u) => u,
             None => continue,
         };
-        let is_trashed = name.split(":2,").nth(1)
-            .map(|l| l.split(':').next().unwrap_or("").contains('T'))
+        let is_trashed = info_flags(&name)
+            .map(|l| l.split(is_info_sep).next().unwrap_or("").contains('T'))
             .unwrap_or(false)
-            || name.split(':').nth(1).map(|w| w.split(',').any(|x| x.trim() == "trashed")).unwrap_or(false);
+            || name.split(is_info_sep).nth(1).map(|w| w.split(',').any(|x| x.trim() == "trashed")).unwrap_or(false);
         if is_trashed {
             continue;
         }
@@ -277,11 +278,34 @@ mod tests {
         assert_eq!(parse_local_flags("9:2,.eml"), "");
     }
 
+    /// Task 1b: the `;2,` (Windows) spelling of the same Tauri-format names
+    /// above must parse identically -- `info_flags` in place of the old
+    /// `split(":2,")`.
+    #[test]
+    fn test_parse_local_flags_tauri_format_semicolon() {
+        assert_eq!(parse_local_flags("123;2,FS.eml"), "\\Flagged \\Seen");
+        assert_eq!(parse_local_flags("9;2,R.eml"), "\\Answered");
+        assert_eq!(parse_local_flags("9;2,AS.eml"), "\\Seen");
+        assert_eq!(parse_local_flags("9;2,.eml"), "");
+    }
+
     #[test]
     fn test_parse_local_flags_core_format() {
         assert_eq!(parse_local_flags("123:seen,flagged:1700000000.eml"), "\\Seen \\Flagged");
         assert_eq!(parse_local_flags("123:replied:1700000000.eml"), "\\Answered");
         assert_eq!(parse_local_flags("123::1700000000.eml"), "");
+    }
+
+    /// Task 1b: not in the brief's enumeration, but the same defect --
+    /// `maildir.rs`'s `with_uid` doc confirms the legacy `{uid}:{flags}:{ts}`
+    /// name also ships with `;` on Windows, and the `else` branch here
+    /// (`splitn(3, ':')`) hardcoded the colon exactly like the sites the
+    /// brief lists. Fixed alongside them with `splitn(3, is_info_sep)`.
+    #[test]
+    fn test_parse_local_flags_core_format_semicolon() {
+        assert_eq!(parse_local_flags("123;seen,flagged;1700000000.eml"), "\\Seen \\Flagged");
+        assert_eq!(parse_local_flags("123;replied;1700000000.eml"), "\\Answered");
+        assert_eq!(parse_local_flags("123;;1700000000.eml"), "");
     }
 
     #[test]
@@ -304,6 +328,33 @@ mod tests {
         let msgs = list_messages_in_dir(&dir);
         let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
         assert_eq!(uids, vec![2, 10, 30]);
+        let m30 = msgs.iter().find(|m| m.uid == 30).unwrap();
+        assert_eq!(m30.imap_flags, "\\Seen \\Flagged");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Task 1b: the `;`-spelled sibling of `test_list_messages_in_dir`,
+    /// covering three sites at once: the uid-prefix split (line ~97, was
+    /// `split(|c| c == ':' || c == '.')` -- not in the brief's enumeration,
+    /// but the same defect, since a `;`-named file's uid would otherwise
+    /// fail to parse and the whole message would be silently dropped), and
+    /// the trashed-flag filter (lines ~101-104, both the Tauri-format and
+    /// legacy-Core-format spellings, which the brief does list).
+    #[test]
+    fn test_list_messages_in_dir_semicolon() {
+        let dir = std::env::temp_dir().join("mailvault-test-restore-list-semicolon");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("10;2,S.eml"), b"a").unwrap();
+        std::fs::write(dir.join("2;2,.eml"), b"b").unwrap();
+        std::fs::write(dir.join("30;seen,flagged;1700000000.eml"), b"c").unwrap();
+        std::fs::write(dir.join("40;2,T.eml"), b"d").unwrap();
+        std::fs::write(dir.join("local-index.json"), b"{}").unwrap();
+
+        let msgs = list_messages_in_dir(&dir);
+        let uids: Vec<u32> = msgs.iter().map(|m| m.uid).collect();
+        assert_eq!(uids, vec![2, 10, 30], "uid 40 (trashed) must still be excluded, and every uid must parse");
         let m30 = msgs.iter().find(|m| m.uid == 30).unwrap();
         assert_eq!(m30.imap_flags, "\\Seen \\Flagged");
 

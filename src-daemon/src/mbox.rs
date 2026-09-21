@@ -22,6 +22,7 @@
 
 use crate::handlers::common;
 use crate::server::DaemonState;
+use mailvault_core::maildir::{has_info, info_flags, is_info_sep};
 use mailvault_core::vault_files::build_maildir_filename;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -214,10 +215,10 @@ pub fn export_mbox_all(
                     if let Ok(files) = std::fs::read_dir(&cur_dir) {
                         for file_entry in files.flatten() {
                             let fname = file_entry.file_name().to_string_lossy().to_string();
-                            if !fname.contains(":2,") {
+                            if !has_info(&fname) {
                                 continue;
                             }
-                            if archived_only && !fname.split(":2,").nth(1).map(|f| f.contains('A')).unwrap_or(false) {
+                            if archived_only && !info_flags(&fname).map(|f| f.contains('A')).unwrap_or(false) {
                                 continue;
                             }
 
@@ -288,7 +289,7 @@ pub fn import_mbox(
     if let Ok(files) = std::fs::read_dir(&cur_dir) {
         for f in files.flatten() {
             let fname = f.file_name().to_string_lossy().to_string();
-            if let Some(uid_str) = fname.split(':').next() {
+            if let Some(uid_str) = fname.split(is_info_sep).next() {
                 if let Ok(uid) = uid_str.parse::<u32>() {
                     if uid > max_uid {
                         max_uid = uid;
@@ -374,6 +375,15 @@ mod tests {
         std::fs::write(cur.join(build_maildir_filename(uid, &flags)), body).unwrap();
     }
 
+    /// Writes a file under an exact, caller-chosen name -- `seed_file` always
+    /// goes through `build_maildir_filename`, which on darwin only ever
+    /// emits `:`, so it cannot produce a `;`-spelled (Windows) fixture.
+    fn seed_file_named(root: &std::path::Path, account: &str, mailbox: &str, filename: &str, body: &[u8]) {
+        let cur = mailvault_core::vault_files::cur_path(root, account, mailbox);
+        std::fs::create_dir_all(&cur).unwrap();
+        std::fs::write(cur.join(filename), body).unwrap();
+    }
+
     fn write_mbox(dir: &std::path::Path, name: &str, messages: &[&str]) -> PathBuf {
         let path = dir.join(name);
         let mut content = String::new();
@@ -437,6 +447,42 @@ mod tests {
         let dest = tempfile::tempdir().unwrap().keep().join("out.mbox");
         let result = export_mbox_all(&s, dest, true, |_, _| {}).unwrap();
         assert_eq!(result.email_count, 1, "only the archived file should be exported");
+    }
+
+    /// Task 1b: a `;2,`-spelled (Windows) vault file must be recognized both
+    /// as a vault message at all (`has_info`, was a bare `contains(":2,")`)
+    /// and for its flags (`info_flags`, was `split(":2,").nth(1)`). Two
+    /// fixtures, one spelling each, so a test that vacuously passes on both
+    /// (e.g. because the filter was skipped entirely) would show up as
+    /// exporting 2 rather than the expected 1.
+    #[test]
+    fn export_reads_files_under_either_info_separator() {
+        let (v, s) = state(true);
+        seed_file_named(v.path(), "acct1", "INBOX", "1;2,A.eml", b"archived, semicolon");
+        seed_file_named(v.path(), "acct1", "INBOX", "2;2,.eml", b"not archived, semicolon");
+        let dest = tempfile::tempdir().unwrap().keep().join("out.mbox");
+        let result = export_mbox_all(&s, dest, true, |_, _| {}).unwrap();
+        assert_eq!(result.email_count, 1, "only the archived ';2,' file should be exported");
+    }
+
+    /// Not in the task brief's enumeration: `import_mbox`'s own scan for the
+    /// mailbox's current max uid (line ~291) also hardcoded `:` as the only
+    /// separator. A `;`-spelled existing file was invisible to it, so a new
+    /// import would start back at uid 1 instead of continuing past the
+    /// existing files -- silently risking a uid collision on a Windows
+    /// vault. Same defect class as the brief's sites; fixed alongside them.
+    #[test]
+    fn import_continues_the_uid_sequence_past_semicolon_named_files() {
+        let (v, s) = state(true);
+        seed_file_named(v.path(), "acct1", "INBOX", "50;2,S.eml", b"existing, semicolon");
+        let dir = tempfile::tempdir().unwrap();
+        let mbox_path = write_mbox(dir.path(), "in.mbox", &["Subject: new\r\n\r\nbody"]);
+
+        import_mbox(&s, mbox_path, "acct1".to_string(), "INBOX".to_string(), |_, _| {}).unwrap();
+
+        let cur = mailvault_core::vault_files::cur_path(v.path(), "acct1", "INBOX");
+        let names: Vec<String> = std::fs::read_dir(&cur).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+        assert!(names.iter().any(|n| n.starts_with("51")), "expected uid 51 (past the existing 50), got {:?}", names);
     }
 
     /// Decision 10: the export walk performs zero gate acquisitions. Holding
