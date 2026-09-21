@@ -281,6 +281,11 @@ export const useSettingsStore = create(
       // persisted file at startup, before any window exists.
       updateTrack: null, // null = follow the build (nightly build -> nightly feed), 'stable' | 'nightly'
 
+      // Keep the background daemon running after the app quits, and bring it
+      // back at login. Rust reads this out of the persisted file at exit,
+      // when the webview is already gone, so it has to live at the top level.
+      daemonAlwaysOn: false,
+
       // After a mailbox's bodies are cached, write its attachments to the
       // attachment cache newest-first so they open without a round trip.
       autoDownloadAttachments: false,
@@ -823,6 +828,8 @@ export const useSettingsStore = create(
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
       setUpdateTrack: (track) => set({ updateTrack: track }),
+
+      setDaemonAlwaysOn: (on) => set({ daemonAlwaysOn: !!on }),
       setAutoDownloadAttachments: (on) => set({ autoDownloadAttachments: on }),
 
       // Layout settings
@@ -1060,6 +1067,7 @@ export const useSettingsStore = create(
           confirmBeforeDelete: true,
           afterDeleteSelect: 'none',
           updateTrack: null,
+          daemonAlwaysOn: false,
           layoutMode: 'three-column',
           viewStyle: 'list',
           emailListStyle: 'compact',

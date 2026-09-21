@@ -4,10 +4,13 @@ import {
   Server, CheckCircle2, XCircle, Loader,
 } from 'lucide-react';
 import { t, useT  } from '../../i18n/index.js';
+import { useSettingsStore } from '../../stores/settingsStore';
 import { PendingActionsSettings } from './PendingActionsSettings';
+import { DaemonAlwaysOn } from './DaemonAlwaysOn';
 
 export function DaemonSettings() {
   const t = useT();
+  const alwaysOn = useSettingsStore((s) => s.daemonAlwaysOn);
   const isDemo = typeof window !== 'undefined' && !!window.__MAILVAULT_DEMO__;
   const [status, setStatus] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -73,12 +76,15 @@ export function DaemonSettings() {
         </button>
       </div>
 
+      {/* Keep running in the background */}
+      {!isDemo && <DaemonAlwaysOn />}
+
       {/* What the helper still owes the server */}
       {!isDemo && <PendingActionsSettings />}
 
       {/* About */}
       <div className="text-xs text-mail-text-muted space-y-1">
-        {isDemo ? <><p>All demo mail, vault and chart work stays in this browser tab.</p><p>No helper process, network account or native storage is used.</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t('settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
+        {isDemo ? <><p>All demo mail, vault and chart work stays in this browser tab.</p><p>No helper process, network account or native storage is used.</p></> : <><p>{t('settings.daemon.backgroundHelperLightweightProcessHandles')}</p><p>{t(alwaysOn ? 'settings.daemon.alwaysOn.aboutRunsAtLogin' : 'settings.daemon.startsAutomaticallyWhenOpenMailvault')}</p></>}
       </div>
     </div>
   );

@@ -79,6 +79,7 @@ use tracing::{info, warn, error, Level};
 use tracing_subscriber::fmt::writer::MakeWriterExt;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 
+mod autostart;
 mod backup;
 mod commands;
 mod daemon_channel;
@@ -1385,6 +1386,18 @@ fn update_feed_override(track: Option<&str>, app_version: &str) -> Option<String
     }
 }
 
+/// Whether the user asked for the daemon to keep running after the app quits.
+///
+/// Read off disk rather than asked of the frontend: this runs inside
+/// `RunEvent::Exit`, when the webview is already gone. Any problem reads as
+/// "off", so a corrupt settings file costs a background daemon, never a
+/// stray one the user cannot see or stop.
+fn daemon_always_on(handle: &tauri::AppHandle) -> bool {
+    let Ok(dir) = handle.path().app_data_dir() else { return false };
+    let Ok(raw) = fs::read_to_string(dir.join("frontend-settings.json")) else { return false };
+    mailvault_core::autostart::always_on_from_settings(&raw)
+}
+
 /// The frontend's persisted `updateTrack`, read straight off disk — this runs in
 /// `setup()`, long before a window could be asked. Any problem reads as "unset".
 fn persisted_update_track(handle: &tauri::AppHandle) -> Option<String> {
@@ -1791,6 +1804,46 @@ fn find_daemon_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     }
 
     None
+}
+
+/// The `--daemon-only` launcher: start the sidecar and return, leaving it
+/// running as an orphan that init adopts.
+///
+/// No `AppHandle` exists yet at this point, so this cannot reuse
+/// `find_daemon_binary`; the sidecar always sits next to the app binary in
+/// every shipped layout, and in a dev tree the workspace `target/` dirs are
+/// the fallback.
+///
+/// Doing nothing when a daemon is already up matters: on Linux the desktop
+/// runs autostart entries again on every login, and a session that was never
+/// fully torn down can leave the previous daemon alive.
+fn spawn_detached_daemon() -> Result<(), String> {
+    #[cfg(unix)]
+    if let Ok((sock, _)) = daemon_ipc_paths() {
+        if std::os::unix::net::UnixStream::connect(&sock).is_ok() {
+            return Ok(());
+        }
+    }
+
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let dir = exe.parent().ok_or_else(|| "app binary has no parent directory".to_string())?;
+    let candidates = [
+        dir.join("mailvault-daemon"),
+        dir.join("mailvault-daemon.exe"),
+        dir.join("../target/debug/mailvault-daemon"),
+        dir.join("../target/release/mailvault-daemon"),
+    ];
+    let bin = candidates
+        .iter()
+        .find(|c| c.exists())
+        .ok_or_else(|| format!("mailvault-daemon not found next to {}", exe.display()))?;
+
+    Command::new(bin)
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("could not start {}: {e}", bin.display()))
 }
 
 /// Spawn daemon as a child process (on-demand mode). Waits for socket to appear.
@@ -2582,6 +2635,21 @@ fn daemon_channel_notify(method: String, params: serde_json::Value) {
 }
 
 fn main() {
+    // Autostart on Linux and Windows points at *this* binary rather than at
+    // the sidecar, because the sidecar's path depends on the packaging (an
+    // AppImage's mount root is gone by the next login). Started that way the
+    // app is only a launcher: hand over to the daemon and leave, before a
+    // window, a single-instance lock or a tray icon exists.
+    if std::env::args().any(|a| a == mailvault_core::autostart::DAEMON_ONLY_FLAG) {
+        std::process::exit(match spawn_detached_daemon() {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("{e}");
+                1
+            }
+        });
+    }
+
     // Log panics before abort — set_hook fires even with panic = "abort"
     std::panic::set_hook(Box::new(|info| {
         let location = info.location()
@@ -2737,6 +2805,8 @@ fn main() {
             get_app_data_dir,
             read_settings_json,
             write_settings_json,
+            autostart::autostart_state,
+            autostart::set_autostart,
             store_credentials,
             get_credentials,
             store_password,
@@ -3185,7 +3255,17 @@ fn main() {
                     // runners moved to the daemon (Phase 3 remainder, Task
                     // 5), which owns the only pool and shuts it down itself.
                     daemon_channel::stop();
-                    shutdown_daemon_child();
+                    // "Keep the daemon running in the background": leave the
+                    // child alive and let init adopt it. Its stdio is already
+                    // null and it holds no handle on us, so nothing here is
+                    // keeping it alive — only this SIGTERM would end it.
+                    // `stop_daemon()` (vault moves, restarts) still stops it;
+                    // this is the app-quit path alone.
+                    if daemon_always_on(app_handle) {
+                        info!("daemon left running in the background at app exit (always-on is on)");
+                    } else {
+                        shutdown_daemon_child();
+                    }
                 }
                 #[cfg(target_os = "linux")]
                 tauri::RunEvent::MainEventsCleared => {

@@ -58,7 +58,8 @@
     "macOS": {
       "entitlements": "entitlements.plist",
       "files": {
-        "Helpers/MailVault Default Mail Helper.app": "helpers/MailVault Default Mail Helper.app"
+        "Helpers/MailVault Default Mail Helper.app": "helpers/MailVault Default Mail Helper.app",
+        "Library/LaunchAgents/com.mailvault.daemon.plist": "LaunchAgents/com.mailvault.daemon.plist"
       },
       "exceptionDomain": "",
       "frameworks": [
