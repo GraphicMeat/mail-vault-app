@@ -97,6 +97,16 @@ fn run(
     method: &str,
     params: &Value,
 ) -> Result<Value, String> {
+    // The index reads happen BEFORE the app.db lock is taken: `app_db::with`
+    // holds a process-wide mutex for its whole closure, and taking the index
+    // lock inside it would be the one path in the daemon that holds app.db
+    // and then waits on the index. Nothing else needs to know the order if no
+    // one ever holds both.
+    if method == "tags.migrate_legacy" {
+        let legacy: Legacy = serde_json::from_value(params.clone()).map_err(|e| e.to_string())?;
+        let known = resolve_legacy(index, &legacy)?;
+        return app_db::with(app_dir, |conn| migrate_legacy(conn, &legacy, &known));
+    }
     app_db::with(app_dir, |conn| match method {
         "tags.list" => json_of(tags::list(conn)?),
         "tags.ensure" => json_of(tags::ensure(conn, &arg(params, "name")?, params.get("color").and_then(Value::as_str).unwrap_or(""))?),
@@ -135,65 +145,68 @@ fn run(
                 .collect();
             Ok(serde_json::json!({ "tags": rows }))
         }
-        "tags.migrate_legacy" => migrate_legacy(conn, index, params),
         _ => Err(format!("Unknown method: {method}")),
     })
 }
 
-/// Re-key the app's old `localMailLabels` onto stable identities.
-///
-/// The legacy key is `[accountId, mailbox, uid]`, so every assignment has to
-/// be looked up in the index to learn the message's `Message-ID`. A uid the
-/// index has no row for is **dropped**, never guessed at: writing the uid
-/// fallback for a message that does have a Message-ID would attach the tag to
-/// a key nothing else ever computes.
+/// What the app hands over from `frontend-settings.json`.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Legacy {
+    #[serde(default)]
+    labels: Vec<LegacyLabel>,
+    #[serde(default)]
+    assignments: Vec<LegacyAssignment>,
+}
+
+/// The `Message-ID` the index holds per `(account, mailbox, uid)` the legacy
+/// assignments name. A uid absent here is one the index has no row for.
+type Known = HashMap<(String, String), HashMap<u32, Option<String>>>;
+
 fn not_ready(why: impl std::fmt::Display) -> String {
     format!("search index is not ready: {why}")
 }
 
-fn migrate_legacy(
-    conn: &app_db::Connection,
-    index: &Arc<crate::search_index::SearchIndexState>,
-    params: &Value,
-) -> Result<Value, String> {
-    let labels: Vec<LegacyLabel> =
-        serde_json::from_value(params.get("labels").cloned().unwrap_or(Value::Null)).map_err(|e| format!("labels: {e}"))?;
-    let assignments: Vec<LegacyAssignment> = serde_json::from_value(params.get("assignments").cloned().unwrap_or(Value::Null))
-        .map_err(|e| format!("assignments: {e}"))?;
-
+/// Look every legacy assignment up in the index. Index locks only, no app.db.
+fn resolve_legacy(index: &Arc<crate::search_index::SearchIndexState>, legacy: &Legacy) -> Result<Known, String> {
     // An index that holds nothing for an account cannot tell "this message is
     // gone" from "this account has not been indexed yet", and the app clears
     // its legacy store on a success reply. Refuse; the next launch retries.
-    for account_id in assignments.iter().map(|a| &a.account_id).collect::<std::collections::BTreeSet<_>>() {
-        // One prefix for every "ask me again later" case here, closed index
-        // included, so the app can tell it apart from a real failure.
+    for account_id in legacy.assignments.iter().map(|a| &a.account_id).collect::<std::collections::BTreeSet<_>>() {
         let holds = crate::search_index::holds_account(index, account_id).map_err(not_ready)?;
         if !holds {
             return Err(not_ready(format!("no rows for account {account_id} yet")));
         }
     }
+    let mut by_folder: HashMap<(String, String), Vec<u32>> = HashMap::new();
+    for a in &legacy.assignments {
+        by_folder.entry((a.account_id.clone(), a.mailbox.clone())).or_default().push(a.uid);
+    }
+    let mut known: Known = HashMap::new();
+    for ((account_id, mailbox), uids) in by_folder {
+        let found = crate::search_index::known_message_ids(index, &account_id, &mailbox, &uids).map_err(not_ready)?;
+        known.insert((account_id, mailbox), found);
+    }
+    Ok(known)
+}
 
+/// Re-key the app's old `localMailLabels` onto stable identities.
+///
+/// A uid the index has no row for is **dropped**, never guessed at: writing
+/// the uid fallback for a message that does have a Message-ID would attach the
+/// tag to a key nothing else ever computes.
+fn migrate_legacy(conn: &app_db::Connection, legacy: &Legacy, known: &Known) -> Result<Value, String> {
     let mut tag_of_label: HashMap<String, String> = HashMap::new();
-    for label in &labels {
+    for label in &legacy.labels {
         // Case-insensitive duplicates in the legacy store merge here rather
         // than failing on the unique index.
         let tag = tags::ensure(conn, &label.name, &label.color)?;
         tag_of_label.insert(label.id.clone(), tag.id);
     }
 
-    let mut by_folder: HashMap<(String, String), Vec<u32>> = HashMap::new();
-    for a in &assignments {
-        by_folder.entry((a.account_id.clone(), a.mailbox.clone())).or_default().push(a.uid);
-    }
-    let mut known: HashMap<(String, String), HashMap<u32, Option<String>>> = HashMap::new();
-    for ((account_id, mailbox), uids) in by_folder {
-        let found = crate::search_index::known_message_ids(index, &account_id, &mailbox, &uids).map_err(not_ready)?;
-        known.insert((account_id, mailbox), found);
-    }
-
     let mut per_tag: HashMap<String, Vec<Target>> = HashMap::new();
     let mut dropped = 0usize;
-    for a in &assignments {
+    for a in &legacy.assignments {
         let Some(tag_id) = tag_of_label.get(&a.label_id) else {
             dropped += 1;
             continue;
@@ -250,6 +263,16 @@ mod tests {
         )
         .unwrap();
         *lock(&s.search_index.db) = Some(conn);
+    }
+
+    /// Registration guard, not a behaviour test: the routes are reached through
+    /// `server::handle_request`, and a module that is never wired in answers
+    /// "Unknown method" to an app that looks entirely healthy otherwise.
+    #[tokio::test]
+    async fn the_routes_are_reachable_through_the_servers_dispatch() {
+        let s = st();
+        let resp = crate::server::handle_request_for_test(&s, "tags.list", json!({})).await;
+        assert!(resp.result.is_some(), "tags.list is not routed: {:?}", resp.error);
     }
 
     #[tokio::test]
