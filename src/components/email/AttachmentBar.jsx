@@ -771,7 +771,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
       // The folder's own name, not "Downloaded": when Finder refuses to open
       // (a sandbox scope it does not hold), this is the only thing that says
       // where the files went.
-      setDone(result?.dir ? result.dir.split('/').pop() : t('email.attachments.downloaded'));
+      setDone(isTauri && result?.dir ? result.dir.split('/').pop() : t('email.attachments.downloaded'));
       setTimeout(() => setDone(null), 6000);
       if (isTauri && result?.dir) {
         await window.__TAURI__.core.invoke('show_in_folder', { path: result.dir }).catch(() => {});
