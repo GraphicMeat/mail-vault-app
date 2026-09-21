@@ -4,7 +4,7 @@
 
 ### Added
 - **Keep the conversation beside your reply.** Compose has a remembered toggle for reading the original message, or the thread you replied from, beside the message you are writing.
-- **You can turn off the confirmation that appears when you delete.** Settings → Behavior → Deleting, and the Reading tab of first-time setup, choose between asking every time (the default) and deleting on the click. Delete everywhere, and removing a message the vault holds the only copy of, still ask: neither can be undone.
+- **You can turn off the confirmation that appears when you delete.** Settings → Mail preferences → Behavior → Deleting, and the Reading tab of first-time setup, choose between asking every time (the default) and deleting on the click. Delete everywhere, and removing a message the vault holds the only copy of, still ask: neither can be undone.
 - **Settings now lists the server actions MailVault still owes.** Background Daemon shows every delete, move or flag change your server has not accepted yet, with the reason it last failed, a Retry now button, and a Cancel for one that has been failing for too long.
 - **Search terms are highlighted in the message you open.** Opening a result now marks every occurrence of what you searched for inside the message body, in the reading pane, in a thread and in the full-window view. The highlight follows the query while you refine it.
 - **A result that only matched inside an attachment says so.** When the term is in an attached file and not in the message itself, the row's paperclip is highlighted instead of leaving you hunting for text that was never in the body.
