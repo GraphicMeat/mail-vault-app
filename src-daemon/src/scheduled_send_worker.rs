@@ -71,10 +71,6 @@ fn backoff_ms(attempt: i64) -> i64 {
 /// credential one extra retry is the cheaper mistake.
 static STARTED_AT: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 const CREDENTIAL_GRACE: Duration = Duration::from_secs(120);
-/// How long the keychain gets to answer before the read is abandoned. Long
-/// enough that a slow unlock is not mistaken for a hang, short enough that a
-/// prompt nobody will ever answer cannot hold the queue.
-const CREDENTIAL_TIMEOUT: Duration = Duration::from_secs(20);
 
 fn within_credential_grace() -> bool {
     STARTED_AT.get().is_some_and(|t| t.elapsed() < CREDENTIAL_GRACE)
@@ -254,13 +250,7 @@ fn is_terminal_smtp_error(msg: &str) -> bool {
 /// timeout that is not a failure the ladder can classify; it is a worker that
 /// never comes back and takes the rest of the queue with it.
 async fn resolve_credentials(account_id: &str) -> Result<ImapConfig, String> {
-    let account_id = account_id.to_string();
-    let read = tokio::task::spawn_blocking(move || crate::credentials::resolve_account_credentials(&account_id));
-    match tokio::time::timeout(CREDENTIAL_TIMEOUT, read).await {
-        Ok(Ok(result)) => result,
-        Ok(Err(e)) => Err(format!("the credential read panicked: {e}")),
-        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
-    }
+    crate::credentials::resolve_account_credentials_guarded(account_id).await
 }
 
 async fn send_one(state: &Arc<DaemonState>, row: &scheduled::ScheduledSend) -> Outcome {

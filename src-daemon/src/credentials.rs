@@ -65,6 +65,26 @@ pub fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, Strin
         .map_err(|e| format!("failed to parse credentials for account {account_id}: {e}"))
 }
 
+/// `resolve_account_credentials` off the caller's async thread and under a
+/// clock. Every async caller must use this one.
+///
+/// The read is blocking, so inline in an `async fn` it parks a runtime worker
+/// rather than a task — and `sync.watch` is called once per account on every
+/// reconnect, so a slow keychain parks several at once and RPC handling
+/// wedges, not just sync. Worse, a keychain item whose ACL decides to prompt
+/// blocks until somebody answers the dialog; with the daemon started at login
+/// nobody is there to, and the wait has no end. A timeout turns that into an
+/// error the caller can report instead of a daemon that stopped answering.
+pub async fn resolve_account_credentials_guarded(account_id: &str) -> Result<ImapConfig, String> {
+    let account_id = account_id.to_string();
+    let read = tokio::task::spawn_blocking(move || resolve_account_credentials(&account_id));
+    match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(format!("the credential read panicked: {e}")),
+        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+    }
+}
+
 /// Guards every test (in this module or elsewhere in the crate, e.g.
 /// `server.rs`'s RPC-level sync.now test) that sets a process-global test env
 /// var this file reads (`MAILVAULT_TEST_CREDENTIALS`, `MAILVAULT_TEST_AI_KEY`
@@ -87,6 +107,9 @@ pub(crate) fn test_env_lock() -> &'static std::sync::Mutex<()> {
 // an error).
 
 const AI_ENDPOINT_KEY_ENTRY: &str = "ai_endpoint_api_key";
+/// How long any keychain read or write gets before it is abandoned: long
+/// enough for a slow unlock, short enough that a prompt nobody will answer
+/// cannot hold a runtime worker for the rest of the session.
 const AI_KEY_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// Same debug-only file bypass as `test_credentials_path` above, so tests

@@ -75,7 +75,7 @@ pub(crate) async fn handle_sync_now(state: Arc<DaemonState>, params: Value, id: 
     // Task 5.2: the payload no longer carries `password`/`oauth2AccessToken`
     // (toSyncAccount stopped sending them) — resolve them ourselves instead
     // of trusting whatever the JS side put in `imapConfig`.
-    match credentials::resolve_account_credentials(&account.id) {
+    match credentials::resolve_account_credentials_guarded(&account.id).await {
         Ok(resolved) => {
             account.imap_config.password = resolved.password;
             account.imap_config.access_token = resolved.access_token;
@@ -162,7 +162,7 @@ pub(crate) async fn handle_sync_watch(state: Arc<DaemonState>, params: Value, id
     // watcher for the life of its task (idle_watch.rs `run`), including every
     // reconnect, so it must carry the real password/token before it gets
     // there — the watcher itself never re-resolves per-connection.
-    match credentials::resolve_account_credentials(&account.id) {
+    match credentials::resolve_account_credentials_guarded(&account.id).await {
         Ok(resolved) => {
             account.imap_config.password = resolved.password;
             account.imap_config.access_token = resolved.access_token;
