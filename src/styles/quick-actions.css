@@ -595,3 +595,32 @@
   justify-content: center;
   padding: 8px;
 }
+
+.sidebar-view-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--mail-text-muted);
+}
+
+.sidebar-view-save:hover {
+  color: var(--mail-text);
+}
+
+.sidebar-view-save-form {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+}
+
+.sidebar-view-save-form input {
+  padding: 2px 6px;
+  border: 1px solid var(--mail-border);
+  border-radius: 4px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font-size: 11px;
+}

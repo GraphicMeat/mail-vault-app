@@ -1,6 +1,7 @@
 import { Button } from './ui/Button';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useAccountStore } from '../stores/accountStore';
+import { SaveSearchAsView } from './SaveSearchAsView';
 import { useSearchStore } from '../stores/searchStore';
 import { effectiveSearchMailboxConcurrency, hasPremiumAccess, useSettingsStore } from '../stores/settingsStore';
 import { useMailStore } from '../stores/mailStore';
@@ -621,6 +622,7 @@ export function SearchBar({ autoFocus = false }) {
               {scopedToBranch && t('search.inFolderAndSubfolders', {
                 folder: decodeImapUtf7(pickedFolder === 'current' ? activeMailbox : pickedFolder),
               })}
+              {searchResults.length > 0 && <SaveSearchAsView />}
               {searchResults.length > 0 && (
                 <span className="ml-2 text-[10px]">
                   {t('search.localServerCounts', { local: searchResults.filter(e => e.source === 'local' || e.source === 'local-only').length, server: searchResults.filter(e => e.source === 'server' || e.source === 'server-search').length })}

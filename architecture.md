@@ -156,6 +156,37 @@ that file — and the daemon refuses the whole migration while its index cannot
 place an assignment for an account, because the app clears its legacy store on
 a success reply.
 
+### Saved views
+
+A view is a stored `ViewDef` (`app_db::views`) plus an evaluation, never a
+stored set of messages. `views.evaluate` builds one `SearchRequest` per account
+from the definition, runs it through the same `search_index::query::search` the
+search bar uses, and returns rows stamped by `mail_search::stamp_local_row` —
+the same shape the search's index lane produces, so the list renders them with
+no second path. The app never evaluates a view itself: a set difference against
+a partly loaded list is a guess, not a view.
+
+Two rules the definitions follow, both learned from bugs of the same shape:
+
+- **A starter stores no name.** "Needs reply" written into `views.name` would
+  pin English into the database for every locale, and a later language change
+  could not undo it. Starters carry a `builtin` id and the app translates it;
+  only a name someone typed is stored.
+- **Folders are excluded by special-use, never by name.** A mailbox's name is a
+  per-mailbox word (a German account's bin is `Papierkorb`), so `exclude_special`
+  names IMAP attributes (`\Trash`, `\Junk`, `\Archive`) and the app resolves
+  them to server paths per account when it runs the view.
+
+The index gained a `flags` column for this (schema v3): the Maildir letters live
+in the file name and `index_doc_from_light` strips them from `row_json`, so
+Starred and unread were not answerable before. The migration reads them back out
+of the file names the index already holds — no re-read of the vault — and a
+rename (which is what starring a message *is*) updates the column.
+
+A tag-filtered view resolves its identities from `app.db` first and passes them
+to the index as a whitelist through a temp table; every `app.db` read happens
+before the index lock is taken, so no path holds both.
+
 The one-time move of the pre-SQL JSON files runs on the first open of each store and retires each file to `<name>.pre-db-<stamp>` (never deletes it). `app.db`'s import runs entirely inside one `BEGIN IMMEDIATE` with a `legacy_import` marker set in the same transaction, because the app and the daemon can both reach it at the same launch and `transfer_stats` rows accumulate rather than replace.
 
 Two files deliberately stay outside both stores: `accounts.json` (the frontend owns it, and a second writer would turn a same-process race into a cross-process one) and `email_cache/<account>_<mailbox>/graph_id_map.json` (the Outlook uid ledger, which needs a cross-process file lock and must travel with the vault). Those sidecar directories therefore still exist; they just hold nothing but the ledger.
