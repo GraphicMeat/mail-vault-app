@@ -22,6 +22,32 @@ pub(crate) async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + '
     tokio::task::spawn_blocking(f).await.map_err(|e| format!("Task join error: {e}"))
 }
 
+/// One list row, as the app already holds it. Every per-message store here is
+/// keyed by `app_db::identity::msg_key`, and that key is derived in one place:
+/// the app sends what its rows carry and never computes it itself.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MessageRef {
+    pub account_id: String,
+    #[serde(default)]
+    pub mailbox: String,
+    #[serde(default)]
+    pub uid: u32,
+    #[serde(default)]
+    pub message_id: Option<String>,
+}
+
+impl MessageRef {
+    pub fn msg_key(&self) -> String {
+        let vault_dir = mailvault_core::search_index::text::vault_dir_name(&self.mailbox);
+        mailvault_core::app_db::identity::msg_key(self.message_id.as_deref(), &vault_dir, self.uid)
+    }
+
+    pub fn target(&self) -> mailvault_core::app_db::tags::Target {
+        mailvault_core::app_db::tags::Target { account_id: self.account_id.clone(), msg_key: self.msg_key() }
+    }
+}
+
 pub(crate) fn done(id: Value, r: Result<Value, String>) -> RpcResponse {
     match r {
         Ok(v) => RpcResponse::success(id, v),

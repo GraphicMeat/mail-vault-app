@@ -12,6 +12,7 @@
 pub mod classify;
 pub mod db;
 pub mod identity;
+pub mod fields;
 pub mod import;
 pub mod locations;
 pub mod ops;

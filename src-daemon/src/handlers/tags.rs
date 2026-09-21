@@ -11,31 +11,9 @@ use mailvault_core::app_db;
 use serde_json::Value;
 use std::sync::Arc;
 
+use crate::handlers::common::MessageRef as Item;
 use app_db::tags::{self, Target};
 use std::collections::HashMap;
-
-/// One list row, as the app already holds it.
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Item {
-    account_id: String,
-    #[serde(default)]
-    mailbox: String,
-    #[serde(default)]
-    uid: u32,
-    #[serde(default)]
-    message_id: Option<String>,
-}
-
-impl Item {
-    fn target(&self) -> Target {
-        let vault_dir = mailvault_core::search_index::text::vault_dir_name(&self.mailbox);
-        Target {
-            account_id: self.account_id.clone(),
-            msg_key: app_db::identity::msg_key(self.message_id.as_deref(), &vault_dir, self.uid),
-        }
-    }
-}
 
 /// A label the app is handing over from `frontend-settings.json`. The app
 /// reads its own settings file and sends the contents; the daemon never opens

@@ -49,6 +49,9 @@ pub struct ViewDef {
     pub not_from_me: bool,
     /// Tag ids a message must carry, all of them.
     pub tags: Vec<String>,
+    /// Custom field conditions a message must satisfy, all of them. Combined
+    /// with `tags` as an AND: a view narrows, it never piles up.
+    pub fields: Vec<crate::app_db::fields::FieldFilter>,
     /// `null`, `sender`, `date`, `tag` or `field:<id>`.
     pub group: Option<String>,
     /// `date`, `sender` or `subject`.

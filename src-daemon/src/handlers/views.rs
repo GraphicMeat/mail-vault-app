@@ -78,7 +78,7 @@ fn run(
             // Every app.db read happens here, before the index lock is taken.
             let (def, keys) = app_db::with(app_dir, |conn| {
                 let def = definition(conn, params)?;
-                Ok((def.clone(), tag_keys(conn, &def, &accounts)?))
+                Ok((def.clone(), filter_keys(conn, &def, &accounts)?))
             })?;
             evaluate(index, &def, &accounts, &keys, limit)
         }
@@ -89,7 +89,7 @@ fn run(
                 let all = views::list(conn)?;
                 let mut keys = HashMap::new();
                 for view in &all {
-                    keys.insert(view.id.clone(), tag_keys(conn, &view.def, &accounts)?);
+                    keys.insert(view.id.clone(), filter_keys(conn, &view.def, &accounts)?);
                 }
                 Ok((all, keys))
             })?;
@@ -121,24 +121,41 @@ fn definition(conn: &app_db::Connection, params: &Value) -> Result<ViewDef, Stri
     serde_json::from_value(params.get("def").cloned().unwrap_or(Value::Null)).map_err(|e| format!("def: {e}"))
 }
 
-/// Per account, the identities carrying every tag the view names. Absent when
-/// the view has no tag filter — which is not the same as an empty list.
-fn tag_keys(
+/// Per account, the identities that satisfy every tag and every field
+/// condition the view names. Absent when the view narrows on neither — which
+/// is not the same as an empty list, and the difference is "show everything"
+/// against "show nothing".
+fn filter_keys(
     conn: &app_db::Connection,
     def: &ViewDef,
     accounts: &[Account],
 ) -> Result<HashMap<String, Vec<String>>, String> {
     let mut keys = HashMap::new();
-    if def.tags.is_empty() {
+    if !narrows_by_metadata(def) {
         return Ok(keys);
     }
     for account in accounts {
-        keys.insert(
-            account.account_id.clone(),
-            app_db::tags::messages_with_every_tag(conn, &account.account_id, &def.tags)?,
-        );
+        let mut allowed: Option<std::collections::BTreeSet<String>> = None;
+        if !def.tags.is_empty() {
+            let carried = app_db::tags::messages_with_every_tag(conn, &account.account_id, &def.tags)?;
+            allowed = Some(carried.into_iter().collect());
+        }
+        for filter in &def.fields {
+            let matched: std::collections::BTreeSet<String> =
+                app_db::fields::messages_matching(conn, &account.account_id, filter)?.into_iter().collect();
+            allowed = Some(match allowed {
+                Some(existing) => existing.intersection(&matched).cloned().collect(),
+                None => matched,
+            });
+        }
+        keys.insert(account.account_id.clone(), allowed.unwrap_or_default().into_iter().collect());
     }
     Ok(keys)
+}
+
+/// Whether the view narrows on anything `app.db` holds rather than the index.
+fn narrows_by_metadata(def: &ViewDef) -> bool {
+    !def.tags.is_empty() || !def.fields.is_empty()
 }
 
 fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<String>>, now: i64) -> SearchRequest {
@@ -163,9 +180,9 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         answered: def.answered,
         to_any: (def.to_me && !address.is_empty()).then(|| vec![address.clone()]).unwrap_or_default(),
         from_none: (def.not_from_me && !address.is_empty()).then(|| vec![address]).unwrap_or_default(),
-        // A tag filter with no identities behind it matches nothing, which is
-        // the correct answer for a tag nobody has used.
-        msg_keys: (!def.tags.is_empty()).then(|| keys.get(&account.account_id).cloned().unwrap_or_default()),
+        // A tag or field filter with no identities behind it matches nothing,
+        // which is the correct answer for a tag nobody has used.
+        msg_keys: narrows_by_metadata(def).then(|| keys.get(&account.account_id).cloned().unwrap_or_default()),
         limit: None,
     }
 }
@@ -408,6 +425,97 @@ mod tests {
         let out = evaluate(&s, json!({ "tags": [tag_id] })).await;
         let uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
         assert_eq!(uids, vec![2]);
+    }
+
+    /// Custom fields narrow a view the same way tags do: the identities come
+    /// from `app.db`, the rows from the index.
+    #[tokio::test]
+    async fn a_view_filtered_by_a_custom_field_returns_only_the_messages_holding_that_value() {
+        let s = st();
+        index(&s);
+        crate::handlers::fields::route(
+            &s,
+            "fields.save",
+            &json!({"field": {"id": "f1", "scope": "a", "name": "Priority", "kind": "select",
+                              "options": [{"id": "hi", "label": "High"}]}}),
+            json!(1),
+        )
+        .await
+        .expect("routed")
+        .result
+        .expect("save");
+        crate::handlers::fields::route(
+            &s,
+            "fields.set",
+            &json!({"item": {"accountId": "a", "mailbox": "INBOX", "uid": 3, "messageId": "<three@x.test>"},
+                    "fieldId": "f1", "value": "hi"}),
+            json!(1),
+        )
+        .await
+        .expect("routed")
+        .result
+        .expect("set");
+
+        let out = evaluate(&s, json!({ "fields": [{"fieldId": "f1", "op": "is", "value": "hi"}] })).await;
+        let uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+        assert_eq!(uids, vec![3]);
+    }
+
+    /// Two filters are an AND, not a pile: a message has to satisfy both.
+    #[tokio::test]
+    async fn a_tag_and_a_field_together_narrow_to_what_carries_both() {
+        let s = st();
+        index(&s);
+        let tag = crate::handlers::tags::route(&s, "tags.ensure", &json!({"name": "Clients"}), json!(1))
+            .await
+            .expect("routed")
+            .result
+            .expect("ensure")["id"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        crate::handlers::tags::route(
+            &s,
+            "tags.assign",
+            &json!({"tagId": tag, "items": [
+                {"accountId": "a", "mailbox": "INBOX", "uid": 2, "messageId": "<two@x.test>"},
+                {"accountId": "a", "mailbox": "INBOX", "uid": 3, "messageId": "<three@x.test>"}
+            ]}),
+            json!(1),
+        )
+        .await
+        .expect("routed")
+        .result
+        .expect("assign");
+        crate::handlers::fields::route(
+            &s,
+            "fields.save",
+            &json!({"field": {"id": "f1", "scope": "a", "name": "Priority", "kind": "text"}}),
+            json!(1),
+        )
+        .await
+        .expect("routed")
+        .result
+        .expect("save");
+        crate::handlers::fields::route(
+            &s,
+            "fields.set",
+            &json!({"item": {"accountId": "a", "mailbox": "INBOX", "uid": 3, "messageId": "<three@x.test>"},
+                    "fieldId": "f1", "value": "urgent"}),
+            json!(1),
+        )
+        .await
+        .expect("routed")
+        .result
+        .expect("set");
+
+        let out = evaluate(&s, json!({
+            "tags": [tag],
+            "fields": [{"fieldId": "f1", "op": "is", "value": "urgent"}]
+        }))
+        .await;
+        let uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+        assert_eq!(uids, vec![3]);
     }
 
     #[tokio::test]
