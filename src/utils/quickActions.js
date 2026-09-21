@@ -57,19 +57,24 @@ const normalizeColor = value => {
 function normalizeEntry(value) {
   if (!object(value) || !QUICK_ACTION_TYPES.includes(value.action)) return null;
   const params = object(value.params) ? value.params : {};
-  if (value.action === 'tag' && !nonEmptyString(params.labelId)) return null;
+  // Tags moved from the settings file into the daemon's store, so an entry
+  // configured before that move still names `labelId`. The migration repoints
+  // it; this keeps it working in the meantime rather than rendering as the
+  // generic "Tag" entry.
+  const tagId = nonEmptyString(params.tagId) ? params.tagId : nonEmptyString(params.labelId) ? params.labelId : null;
+  if (value.action === 'tag' && !tagId) return null;
   if (value.action === 'move' && params.mailbox != null && !nonEmptyString(params.mailbox)) return null;
   if (value.action === 'replyTemplate' && !nonEmptyString(params.templateId)) return null;
   const id = nonEmptyString(value.id)
     ? value.id.trim()
-    : value.action === 'tag' ? `tag:${params.labelId}`
+    : value.action === 'tag' ? `tag:${tagId.trim()}`
       : value.action === 'move' ? `move:${params.mailbox}`
         : value.action === 'replyTemplate' ? `replyTemplate:${params.templateId}` : value.action;
   const color = normalizeColor(value.color);
   return {
     id,
     action: value.action,
-    ...(value.action === 'tag' ? { params: { labelId: params.labelId.trim() } } : {}),
+    ...(value.action === 'tag' ? { params: { tagId: tagId.trim() } } : {}),
     ...(value.action === 'move' ? { params: { ...(nonEmptyString(params.mailbox) ? { mailbox: params.mailbox.trim() } : {}), ...(nonEmptyString(params.accountId) ? { accountId: params.accountId.trim() } : {}) } } : {}),
     ...(value.action === 'replyTemplate' ? { params: { templateId: params.templateId.trim() } } : {}),
     ...(color ? { color } : {}),
@@ -288,11 +293,6 @@ export function resetQuickActionScope(value, scope, surface) {
     normalized.styleLinks = { ...normalized.styleLinks, overrides: remainingLinks };
   }
   return normalized;
-}
-
-export function localMailLabelKey(email, location) {
-  if (!email || !location?.accountId || !location?.mailbox || email.uid == null) return null;
-  return JSON.stringify([String(location.accountId), String(location.mailbox), String(email.uid)]);
 }
 
 function actionLocation(email, state) {

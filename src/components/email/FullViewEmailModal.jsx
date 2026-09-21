@@ -24,7 +24,7 @@ import { useSearchHighlight } from '../../hooks/useSearchHighlight';
 import { t as tr, useT  } from '../../i18n/index.js';
 import { getSelectionGeneration } from '../../services/workflows/selectEmail';
 import { EmailActionBar } from './EmailActionBar';
-import { LocalMailLabels } from '../LocalMailLabels';
+import { TagChips } from '../TagChips';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { describePurge } from '../../utils/custodyCopy';
@@ -300,7 +300,7 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         </div>
 
         <div className="px-3 py-2 border-b border-mail-border bg-mail-bg shrink-0">
-          <LocalMailLabels email={email} />
+          <TagChips email={email} />
           <EmailActionBar email={email} variant="single"
             onReply={async target => openCompose({ mode: 'reply', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
             onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}

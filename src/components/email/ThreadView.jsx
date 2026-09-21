@@ -25,7 +25,7 @@ import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUti
 import { SenderInsightsPanel } from '../SenderInsightsPanel';
 import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
-import { LocalMailLabels } from '../LocalMailLabels';
+import { TagChips } from '../TagChips';
 import { useExportStore } from '../../stores/exportStore';
 import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
@@ -415,7 +415,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           </p>
         )}
       </div>
-      <div className="pl-12 pb-1"><LocalMailLabels email={email} /></div>
+      <div className="pl-12 pb-1"><TagChips email={email} /></div>
 
       {/* Action bar — below sender info, above content */}
       {expanded && (

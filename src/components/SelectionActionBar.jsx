@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { MoveToFolderDropdown } from "./MoveToFolderDropdown";
 import { vaultClause } from "../utils/custodyCopy";
+import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from "../stores/mailStore";
 import { useExportStore } from "../stores/exportStore";
 import { QuickActions } from "./QuickActions";
@@ -54,8 +55,8 @@ export function SelectionActionBar() {
   );
   const removeLocalEmail = useSelectionStore((s) => s.removeLocalEmail);
   const getSelectionSummary = useSelectionStore((s) => s.getSelectionSummary);
-  const localLabels = useSettingsStore((s) => s.localMailLabels) || EMPTY_ARRAY;
-  const applyLocalMailLabel = useSettingsStore((s) => s.applyLocalMailLabel);
+  const localLabels = useTagStore((s) => s.tags) || EMPTY_ARRAY;
+  const applyTagToRows = useTagStore((s) => s.applyTagToRows);
   const sortedEmails = useMailStore((s) => s.sortedEmails);
   const serverEmails = useMailStore((s) => s.emails);
   const localEmails = useMailStore((s) => s.localEmails);
@@ -329,7 +330,7 @@ export function SelectionActionBar() {
   const selectionKeys = [...selectedEmailIds];
   const selectionDescriptors = config.entries.map((entry) => {
     const label = entry.action === "tag"
-      ? localLabels.find((item) => item.id === entry.params?.labelId)?.name ||
+      ? localLabels.find((item) => item.id === entry.params?.tagId)?.name ||
         t("quickActions.action.tag")
       : entry.action === "move" && entry.params?.mailbox
       ? `${t("selection.move")}: ${entry.params.mailbox}`
@@ -405,7 +406,7 @@ export function SelectionActionBar() {
         ))) ||
       entry.action === "spam" && (!allServerBacked || !selectionJunkPath) ||
       entry.action === "tag" &&
-        (!localLabels.some((item) => item.id === entry.params?.labelId) ||
+        (!localLabels.some((item) => item.id === entry.params?.tagId) ||
           !resolved);
     const Icon = {
       archive: Archive,
@@ -489,9 +490,9 @@ export function SelectionActionBar() {
             useMailStore.getState().setSelectedFlagged(entry.action === "star")
           );
         } else if (entry.action === "tag") {
-          selectedRows.forEach((email, index) =>
-            locations[index] &&
-            applyLocalMailLabel(email, locations[index], entry.params.labelId)
+          await applyTagToRows(
+            selectedRows.map((email, index) => ({ email, location: locations[index] })),
+            entry.params.tagId,
           );
         }
       },

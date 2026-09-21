@@ -3,6 +3,7 @@ import {
   Archive, ArchiveRestore, Forward, FolderInput, ImageDown, Mail, MailOpen,
   MailPlus, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Tag, Trash2,
 } from 'lucide-react';
+import { useTagStore } from '../stores/tagStore';
 import { useMailStore } from '../stores/mailStore';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useQuickActionConfiguration } from '../hooks/useQuickActionConfiguration';
@@ -47,9 +48,9 @@ function folderPath(folder) { return folder?.path || folder?.name || null; }
 export function RowQuickActions({ emails, exportEmails = emails, actions, onRequestDelete, onClose, onArchive, onActionStart, disabled = false, identity }) {
   const t = useT();
   const { config } = useQuickActionConfiguration('row');
-  const localLabels = useSettingsStore(state => state.localMailLabels) || EMPTY_ARRAY;
+  const localLabels = useTagStore(state => state.tags) || EMPTY_ARRAY;
   const templates = useSettingsStore(state => state.emailTemplates) || EMPTY_ARRAY;
-  const addLabel = useSettingsStore(state => state.applyLocalMailLabel);
+  const applyTagToRows = useTagStore(state => state.applyTagToRows);
   const markRead = useMailStore(state => state.markSelectedAsRead);
   const markUnread = useMailStore(state => state.markSelectedAsUnread);
   const setSelectedFlagged = useMailStore(state => state.setSelectedFlagged);
@@ -141,7 +142,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   const openReply = async mode => openCompose({ mode, replyTo: await replyTarget(newest, null, useMailStore.getState()) });
   const openNewMessage = () => openCompose({ initialData: { to: senderAddress, _prefill: true, ...(newest._accountId ? { _accountId: newest._accountId } : {}) } });
   const actionLabel = entry => {
-    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.labelId)?.name || t('quickActions.action.tag');
+    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.tagId)?.name || t('quickActions.action.tag');
     if (entry.action === 'move' && entry.params?.mailbox) return `${t('quickActions.action.move')}: ${entry.params.mailbox}`;
     if (entry.action === 'replyTemplate') return templates.find(template => template.id === entry.params?.templateId)?.name || t('quickActions.action.replyTemplate');
     if (entry.action === 'toggleRead') return hasUnread ? t('rowMenu.markRead') : t('rowMenu.markUnread');
@@ -165,7 +166,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
   };
   const descriptors = config.entries.filter(entry => !['open', 'source', 'theme'].includes(entry.action)).map(entry => {
     const template = templates.find(item => item.id === entry.params?.templateId);
-    const label = localLabels.find(item => item.id === entry.params?.labelId);
+    const label = localLabels.find(item => item.id === entry.params?.tagId);
     const savedTargetAccount = entry.params?.accountId || (oneAccount ? locs[0].accountId : null);
     const destination = savedTargetAccount && savedMailboxes(state, savedTargetAccount)
       .some(folder => folderPath(folder) === entry.params?.mailbox);
@@ -204,7 +205,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
         else if (entry.action === 'star') { await runScoped(() => setSelectedFlagged(true)); onClose?.(); }
         else if (entry.action === 'unstar') { await runScoped(() => setSelectedFlagged(false)); onClose?.(); }
         else if (entry.action === 'tag') {
-          for (let index = 0; index < emails.length; index++) if (locs[index]) addLabel(emails[index], locs[index], entry.params.labelId);
+          await applyTagToRows(emails.map((email, index) => ({ email, location: locs[index] })), entry.params.tagId);
           onClose?.();
         } else if (entry.action === 'move' && entry.params?.mailbox) {
           await useMailStore.getState().moveEmails(keys, entry.params.mailbox); onClose?.();

@@ -511,6 +511,13 @@
   white-space: nowrap;
 }
 
+/* A tag that carries a colour tints its own border and text; the rest keep the
+   neutral chip. */
+.local-mail-label[style*="--tag-color"] {
+  border-color: var(--tag-color);
+  color: var(--tag-color);
+}
+
 .local-mail-label > span {
   overflow: hidden;
   text-overflow: ellipsis;

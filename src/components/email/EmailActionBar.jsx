@@ -5,6 +5,7 @@ import {
   Code, Sun, Moon, ImageDown, Star, ShieldAlert, ShieldX, Tag, MailPlus,
 } from 'lucide-react';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useTagStore } from '../../stores/tagStore';
 import { useMailStore } from '../../stores/mailStore';
 import { selectionKey, resolveEmailLocation } from '../../stores/slices/unifiedHelpers';
 import { getAccountCacheMailboxes } from '../../services/cacheManager';
@@ -38,9 +39,9 @@ export const EmailActionBar = memo(function EmailActionBar({
 }) {
   const t = useT();
   const display = useSettingsStore(s => s.actionButtonDisplay);
-  const localLabels = useSettingsStore(s => s.localMailLabels) || EMPTY_ARRAY;
+  const localLabels = useTagStore(s => s.tags) || EMPTY_ARRAY;
   const templates = useSettingsStore(s => s.emailTemplates) || EMPTY_ARRAY;
-  const applyLocalMailLabel = useSettingsStore(s => s.applyLocalMailLabel);
+  const applyTag = useTagStore(s => s.applyTag);
   const { config: storedConfig } = useQuickActionConfiguration('reader');
   const config = configOverride || storedConfig;
   const state = useMailStore.getState();
@@ -53,7 +54,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   const sender = email?.from?.address;
 
   const labelFor = entry => {
-    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.labelId)?.name || t('quickActions.action.tag');
+    if (entry.action === 'tag') return localLabels.find(label => label.id === entry.params?.tagId)?.name || t('quickActions.action.tag');
     if (entry.action === 'replyTemplate') return templates.find(template => template.id === entry.params?.templateId)?.name || t('quickActions.action.replyTemplate');
     if (entry.action === 'archive') return isArchived ? t('rowMenu.unarchive') : t('common.archive');
     if (entry.action === 'unarchive') return t('rowMenu.unarchive');
@@ -91,7 +92,7 @@ export const EmailActionBar = memo(function EmailActionBar({
   const descriptors = config.entries.map(entry => {
     const callback = callbacks[entry.action];
     const template = templates.find(item => item.id === entry.params?.templateId);
-    const label = localLabels.find(item => item.id === entry.params?.labelId);
+    const label = localLabels.find(item => item.id === entry.params?.tagId);
     const folder = entry.params?.mailbox && accountId && foldersFor(entry.params.accountId || accountId, state)
       .some(item => (item.path || item.name) === entry.params.mailbox);
     const hidden = !email || readOnly && ['archive', 'unarchive', 'delete', 'deleteServer', 'deleteEverywhere', 'move', 'toggleRead', 'markRead', 'markUnread', 'star', 'unstar', 'spam'].includes(entry.action)
@@ -106,7 +107,7 @@ export const EmailActionBar = memo(function EmailActionBar({
       || entry.action === 'spam' && (!onSpam && (!junk || !location) || isLocalOnly)
       || ['toggleRead', 'markRead', 'markUnread'].includes(entry.action) && (!onToggleRead || isLocalOnly || (entry.action === 'markRead' && read) || (entry.action === 'markUnread' && !read))
       || ['star', 'unstar'].includes(entry.action) && (!onToggleFlag || isLocalOnly || (hasExplicitStarModes && ((entry.action === 'star' && flagged) || (entry.action === 'unstar' && !flagged))))
-      || entry.action === 'tag' && (!onApplyLocalLabel && !applyLocalMailLabel || !location)
+      || entry.action === 'tag' && (!onApplyLocalLabel && !applyTag || !location)
       || entry.action === 'export' && !onExport
       || entry.action === 'open' && !onOpenInWindow
       || entry.action === 'source' && !onViewSource
@@ -135,8 +136,8 @@ export const EmailActionBar = memo(function EmailActionBar({
       onActivate: async () => {
         if (onActionPreview) return onActionPreview(entry, email);
         if (entry.action === 'tag') {
-          if (onApplyLocalLabel) onApplyLocalLabel(email, entry.params.labelId);
-          else applyLocalMailLabel(email, location, entry.params.labelId);
+          if (onApplyLocalLabel) onApplyLocalLabel(email, entry.params.tagId);
+          else applyTag(email, location, entry.params.tagId);
         } else if (entry.action === 'replyTemplate') {
           if (onReplyTemplate) onReplyTemplate(email, template);
           else openCompose({ mode: 'reply', replyTo: await replyTarget(email, null, useMailStore.getState()), templateBody: template.body });

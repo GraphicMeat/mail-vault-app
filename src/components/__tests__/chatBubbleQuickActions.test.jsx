@@ -49,7 +49,7 @@ vi.mock('../MoveToFolderDropdown', () => ({
 vi.mock('../EmailViewer', () => ({ AttachmentItem: () => null }));
 vi.mock('../email/SenderInfoPopover', () => ({ SenderInfoPopover: () => null }));
 vi.mock('../email/FullViewEmailModal', () => ({ FullViewEmailModal: () => null }));
-vi.mock('../LocalMailLabels', () => ({ LocalMailLabels: () => null }));
+vi.mock('../TagChips', () => ({ TagChips: () => null }));
 vi.mock('../LinkSafetyModal', () => ({ LinkSafetyModal: () => null }));
 vi.mock('../../i18n/index.js', () => ({ t: key => key, tErr: key => key, getLocale: () => 'en', useT: () => key => key }));
 vi.mock('../../utils/trackerDetect', () => ({ scanTrackers: () => ({ trackers: [], cleanedBodyHtml: '' }), summarizeTrackers: () => null }));

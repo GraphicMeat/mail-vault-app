@@ -11,7 +11,7 @@ import { ReplyToAlertIcon, getThreadReplyToMismatch } from './ReplyToAlertIcon';
 import { TrackerAlertIcon, getThreadTrackerInfo } from './TrackerAlertIcon';
 import { useSettingsStore, isTrackerBlockingActive } from '../stores/settingsStore';
 import { RowQuickActions } from './RowQuickActions';
-import { LocalMailLabels } from './LocalMailLabels';
+import { TagChips } from './TagChips';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import { emailScopeKey } from '../stores/slices/unifiedHelpers';
@@ -152,7 +152,7 @@ export const ThreadRow = React.memo(function ThreadRow({ rowId, thread, isSelect
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(thread.subject, '(No subject)')}
         </span>
-        <LocalMailLabels email={members} />
+        <TagChips email={members} />
         {thread.messageCount > 1 && (
           <span className="flex-shrink-0 min-w-[20px] h-5 px-1.5 bg-mail-text-muted/15 rounded-full
                         text-mail-text-muted text-xs font-medium flex items-center justify-center">
@@ -279,7 +279,7 @@ export const CompactThreadRow = React.memo(function CompactThreadRow({ rowId, th
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${hasUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(thread.subject, '(No subject)')}
           </span>
-          <LocalMailLabels email={members} />
+          <TagChips email={members} />
           {latestEmail.hasAttachments && (
             <Paperclip size={12} className="text-mail-text-muted flex-shrink-0" />
           )}

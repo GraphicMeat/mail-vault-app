@@ -26,6 +26,7 @@ import { EmailActionBar } from "../email/EmailActionBar";
 import { SettingsTabs } from "./SettingsTabs";
 import { SegmentedChoice } from "../ui/SegmentedChoice";
 import { useMailStore } from "../../stores/mailStore";
+import { useTagStore } from "../../stores/tagStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useQuickActionConfiguration } from "../../hooks/useQuickActionConfiguration";
 import {
@@ -116,7 +117,7 @@ const SURFACE_ACTIONS = {
 };
 const newEntry = (action, params = {}) => ({
   id: action === "tag"
-    ? `tag:${params.labelId}`
+    ? `tag:${params.tagId}`
     : action === "replyTemplate"
     ? `replyTemplate:${params.templateId}`
     : action === "move" && params.mailbox
@@ -174,10 +175,9 @@ export function QuickActionsSettings() {
   const setStyle = useSettingsStore((state) => state.setQuickActionStyle);
   const setStyleLink = useSettingsStore((state) => state.setQuickActionStyleLink);
   const resetScope = useSettingsStore((state) => state.resetQuickActionScope);
-  const labels = useSettingsStore((state) => state.localMailLabels) ||
-    EMPTY_ARRAY;
-  const addLabel = useSettingsStore((state) => state.addLocalMailLabel);
-  const removeLabel = useSettingsStore((state) => state.removeLocalMailLabel);
+  const labels = useTagStore((state) => state.tags) || EMPTY_ARRAY;
+  const createTag = useTagStore((state) => state.createTag);
+  const deleteTag = useTagStore((state) => state.deleteTag);
   const templates = useSettingsStore((state) => state.emailTemplates) ||
     EMPTY_ARRAY;
   const mailboxes = useMailStore((state) => state.mailboxes) || EMPTY_ARRAY;
@@ -259,13 +259,13 @@ export function QuickActionsSettings() {
     persist({ ...config, entries });
   };
 
-  const addAction = () => {
+  const addAction = async () => {
     let params = {};
     if (addType === "tag") {
       let label = labels.find((item) => item.id === tagId);
-      if (!label && newLabelName.trim()) label = addLabel(newLabelName.trim());
+      if (!label && newLabelName.trim()) label = await createTag(newLabelName.trim()).catch(() => null);
       if (!label) return;
-      params = { labelId: label.id };
+      params = { tagId: label.id };
       setTagId(label.id);
       setNewLabelName("");
     } else if (addType === "move" && folder) {
@@ -281,7 +281,7 @@ export function QuickActionsSettings() {
 
   const getLabel = (entry) => {
     if (entry.action === "tag") {
-      return labels.find((item) => item.id === entry.params?.labelId)?.name ||
+      return labels.find((item) => item.id === entry.params?.tagId)?.name ||
         t("quickActions.action.tag");
     }
     if (entry.action === "move" && entry.params?.mailbox) {
@@ -653,7 +653,7 @@ export function QuickActionsSettings() {
                   label: label.name,
                 })}
                 onClick={() =>
-                  removeLabel(label.id)}
+                  deleteTag(label.id)}
               >
                 ×
               </button>

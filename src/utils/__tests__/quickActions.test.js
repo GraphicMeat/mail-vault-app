@@ -137,3 +137,23 @@ describe('quick action settings', () => {
     expect(resolveQuickActionSelectionTarget(['a:INBOX:1', 'b:INBOX:2'], [visibleA], state)).toBeNull();
   });
 });
+
+describe('tag entries after the move to daemon-owned tags', () => {
+  it('normalizes a tag entry onto the tag id', () => {
+    const { entries } = normalizeQuickActions({ defaults: { row: { entries: [{ action: 'tag', params: { tagId: 't1' } }] } } }).defaults.row;
+    const entry = entries.find(item => item.action === 'tag');
+    expect(entry.params).toEqual({ tagId: 't1' });
+    expect(entry.id).toBe('tag:t1');
+  });
+
+  it('keeps a quick action configured before the move working', () => {
+    const { entries } = normalizeQuickActions({ defaults: { row: { entries: [{ action: 'tag', params: { labelId: 'L2' } }] } } }).defaults.row;
+    const entry = entries.find(item => item.action === 'tag');
+    expect(entry.params).toEqual({ tagId: 'L2' });
+  });
+
+  it('drops a tag entry that names nothing', () => {
+    const { entries } = normalizeQuickActions({ defaults: { row: { entries: [{ action: 'tag', params: {} }] } } }).defaults.row;
+    expect(entries.some(entry => entry.action === 'tag')).toBe(false);
+  });
+});

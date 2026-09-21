@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
+import { bootstrapTags } from './services/tagMigration';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
@@ -916,6 +917,10 @@ function App() {
             state.emails.length, state.sortedEmails.length, state.loading, state.mailboxes.length);
           clearTimeout(failsafe);
           setInitialized(true);
+          // Tags live in the daemon now. The legacy hand-over refuses while
+          // the search index cannot place an assignment, and retries on the
+          // next launch rather than clearing anything on a blind lookup.
+          bootstrapTags();
         }).catch((err) => {
           console.error('[App] Full init failed:', err);
           clearTimeout(failsafe);

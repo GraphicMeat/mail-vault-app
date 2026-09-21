@@ -58,6 +58,7 @@ const ACCOUNT_B = { id: 'acct-b', email: 'b@example.test' };
 
 let useMailStoreMock;
 let useSettingsStoreMock;
+let useTagStoreMock;
 
 function mailState(overrides = {}) {
   const state = {
@@ -87,9 +88,15 @@ function mailState(overrides = {}) {
 
 function settingsState(overrides = {}) {
   return {
-    localMailLabels: [],
     emailTemplates: [],
-    applyLocalMailLabel: vi.fn(),
+    ...overrides,
+  };
+}
+
+function tagState(overrides = {}) {
+  return {
+    tags: [],
+    applyTagToRows: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -102,6 +109,11 @@ vi.mock('../../stores/mailStore', () => ({ useMailStore }));
 useSettingsStoreMock = create(() => settingsState());
 function useSettingsStore(selector) { return useSettingsStoreMock(selector); }
 vi.mock('../../stores/settingsStore', () => ({ useSettingsStore }));
+
+useTagStoreMock = create(() => tagState());
+function useTagStore(selector) { return useTagStoreMock(selector); }
+useTagStore.getState = () => useTagStoreMock.getState();
+vi.mock('../../stores/tagStore', () => ({ useTagStore }));
 
 import { RowQuickActions } from '../RowQuickActions';
 
@@ -255,18 +267,19 @@ describe('RowQuickActions', () => {
     expect(mocks.openCompose).toHaveBeenCalledWith({ mode: 'reply', replyTo, templateBody: '<p>Thank you</p>' });
   });
 
-  it('applies a local label to the exact account, mailbox, and row', () => {
+  it('tags the exact account, mailbox, and row', () => {
     const target = email({ uid: 13, _accountId: ACCOUNT_B.id, _mailbox: 'Sent' });
-    const label = { id: 'follow-up', name: 'Follow up' };
-    setActions(action('tag', { labelId: label.id }));
-    useSettingsStoreMock.setState({ localMailLabels: [label] });
+    const tag = { id: 'follow-up', name: 'Follow up' };
+    setActions(action('tag', { tagId: tag.id }));
+    useTagStoreMock.setState({ tags: [tag] });
     renderActions({ emails: [target] });
 
     fireEvent.click(screen.getByTestId('quick-action-tag'));
 
-    expect(useSettingsStoreMock.getState().applyLocalMailLabel).toHaveBeenCalledWith(target, {
-      accountId: ACCOUNT_B.id, mailbox: 'Sent',
-    }, label.id);
+    expect(useTagStoreMock.getState().applyTagToRows).toHaveBeenCalledWith(
+      [{ email: target, location: { accountId: ACCOUNT_B.id, mailbox: 'Sent' } }],
+      tag.id,
+    );
   });
 
   it('gates server deletes but permits a confirmed purge of a local-only vault copy', async () => {

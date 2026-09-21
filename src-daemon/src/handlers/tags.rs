@@ -214,7 +214,9 @@ fn migrate_legacy(
         migrated += tags::assign(conn, &tag_id, &targets)?;
     }
     tracing::info!("tags.migrate_legacy: migrated {migrated}, dropped {dropped}");
-    Ok(serde_json::json!({ "migrated": migrated, "dropped": dropped }))
+    // The app rewrites its own quick-action config (`params.labelId`) off this
+    // map, so a configured tag action keeps working after the swap.
+    Ok(serde_json::json!({ "migrated": migrated, "dropped": dropped, "tagOfLabel": tag_of_label }))
 }
 
 #[cfg(test)]
@@ -329,6 +331,28 @@ mod tests {
         let got = call(&s, "tags.for_messages", json!({"items": [moved]})).await;
         let tag_id = call(&s, "tags.list", json!({})).await[0]["id"].as_str().unwrap().to_string();
         assert_eq!(got["tags"], json!([[tag_id]]));
+    }
+
+    /// The app rewrites its own quick-action config off this map: a `tag`
+    /// quick action stores the label id, and without the mapping every
+    /// configured one would point at a label that no longer exists.
+    #[tokio::test]
+    async fn the_migration_says_which_tag_each_legacy_label_became() {
+        let s = st();
+        seed_index(&s, "a", "INBOX", 7, "<abc@example.com>");
+        let out = call(
+            &s,
+            "tags.migrate_legacy",
+            json!({
+                "labels": [{"id": "L1", "name": "Receipts", "color": ""}, {"id": "L2", "name": "Clients", "color": ""}],
+                "assignments": []
+            }),
+        )
+        .await;
+        let listed = call(&s, "tags.list", json!({})).await;
+        let receipts = listed.as_array().unwrap().iter().find(|t| t["name"] == "Receipts").unwrap()["id"].clone();
+        assert_eq!(out["tagOfLabel"]["L1"], receipts);
+        assert!(out["tagOfLabel"]["L2"].is_string());
     }
 
     #[tokio::test]

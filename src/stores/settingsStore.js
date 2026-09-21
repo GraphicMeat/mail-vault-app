@@ -4,7 +4,7 @@ import { safeStorage } from './safeStorage';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 import {
-  DEFAULT_QUICK_ACTIONS, localMailLabelKey, normalizeQuickActions,
+  DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
   resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
 } from '../utils/quickActions';
 
@@ -348,7 +348,9 @@ export const useSettingsStore = create(
       // Email templates
       emailTemplates: [], // Each: { id: string, name: string, body: string, createdAt: string (ISO) }
       quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS),
-      localMailLabels: [], // User-defined labels applied only to MailVault's local view state
+      // Retired: tags live in app.db behind the daemon. Kept only until
+      // `migrateLocalMailLabels` has handed these two over.
+      localMailLabels: [],
       localMailLabelAssignments: {}, // JSON [accountId, mailbox, uid] -> label ids
 
       // Keyboard shortcuts
@@ -871,46 +873,6 @@ export const useSettingsStore = create(
         quickActions: resetQuickActionScope(state.quickActions, scope, surface),
       })),
       resetQuickActions: () => set({ quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS) }),
-      addLocalMailLabel: name => {
-        const trimmed = typeof name === 'string' ? name.trim().slice(0, 80) : '';
-        if (!trimmed) return null;
-        const existing = get().localMailLabels.find(label => label.name.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
-        if (existing) return existing;
-        const id = globalThis.crypto?.randomUUID?.() || `label-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const label = { id, name: trimmed };
-        set(state => ({ localMailLabels: [...state.localMailLabels, label] }));
-        return label;
-      },
-      removeLocalMailLabel: labelId => set(state => {
-        const assignments = Object.fromEntries(Object.entries(state.localMailLabelAssignments || {}).map(([key, ids]) => [
-          key, ids.filter(id => id !== labelId),
-        ]).filter(([, ids]) => ids.length));
-        return {
-          localMailLabels: state.localMailLabels.filter(label => label.id !== labelId),
-          localMailLabelAssignments: assignments,
-        };
-      }),
-      applyLocalMailLabel: (email, location, labelId) => {
-        const key = localMailLabelKey(email, location);
-        if (!key || !get().localMailLabels.some(label => label.id === labelId)) return false;
-        set(state => {
-          const ids = state.localMailLabelAssignments[key] || [];
-          if (ids.includes(labelId)) return {};
-          return { localMailLabelAssignments: { ...state.localMailLabelAssignments, [key]: [...ids, labelId] } };
-        });
-        return true;
-      },
-      removeLocalMailLabelFromEmail: (email, location, labelId) => {
-        const key = localMailLabelKey(email, location);
-        if (!key) return;
-        set(state => {
-          const ids = (state.localMailLabelAssignments[key] || []).filter(id => id !== labelId);
-          const assignments = { ...state.localMailLabelAssignments };
-          if (ids.length) assignments[key] = ids;
-          else delete assignments[key];
-          return { localMailLabelAssignments: assignments };
-        });
-      },
       setListPaneSize: (size) => set({ listPaneSize: size }),
       setListPaneHeight: (size) => set({ listPaneHeight: size }),
       setViewerPaneSize: (size) => set({ viewerPaneSize: size }),

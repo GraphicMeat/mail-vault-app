@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Archive, ArchiveRestore, ArrowRight, Code, ExternalLink, FileText, FolderInput, Forward, ImageDown, Mail, MailOpen, MailPlus, Moon, Reply, ReplyAll, ShieldAlert, ShieldX, Star, StarOff, Sun, Tag, Trash2 } from 'lucide-react';
+import { useTagStore } from '../../stores/tagStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useThemeStore } from '../../stores/themeStore';
 import { useT } from '../../i18n/index.js';
@@ -26,6 +27,7 @@ export function AppearanceStep({ onContinue }) {
   const [section, setSection] = useState('colors');
   const { theme, setTheme, palette, setPalette } = useThemeStore();
   const settings = useSettingsStore();
+  const tags = useTagStore(state => state.tags) || [];
   const [quickSurface, setQuickSurface] = useState('row');
   const chat = settings.viewStyle === 'chat';
   const tabs = ['colors', 'layout', 'reading', 'quick-actions'].map(id => ({ id, label: id === 'quick-actions' ? t('quickActions.title') : t(`settings.appearance.section.${id}`) }));
@@ -33,7 +35,7 @@ export function AppearanceStep({ onContinue }) {
   const quickConfig = quickActions.defaults[quickSurface];
   const quickStyleLinked = isQuickActionStyleLinked(quickActions);
   const quickActionLabel = entry => {
-    if (entry.action === 'tag') return settings.localMailLabels?.find(label => label.id === entry.params?.labelId)?.name || t(QUICK_ACTION_LABELS.tag);
+    if (entry.action === 'tag') return tags.find(tag => tag.id === entry.params?.tagId)?.name || t(QUICK_ACTION_LABELS.tag);
     if (entry.action === 'move' && entry.params?.mailbox) return `${t(QUICK_ACTION_LABELS.move)}: ${entry.params.mailbox}`;
     if (entry.action === 'replyTemplate') return settings.emailTemplates?.find(template => template.id === entry.params?.templateId)?.name || t(QUICK_ACTION_LABELS.replyTemplate);
     return t(QUICK_ACTION_LABELS[entry.action] || 'quickActions.title');

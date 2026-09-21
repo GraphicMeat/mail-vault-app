@@ -50,7 +50,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { EmailRow, CompactEmailRow } from './EmailRow';
 import { ThreadRow, CompactThreadRow } from './ThreadRow';
 import { RowQuickActions } from './RowQuickActions';
-import { LocalMailLabels } from './LocalMailLabels';
+import { TagChips } from './TagChips';
 import { ConnectedStateIcon, StateTooltip } from './email/MessageStateIcon';
 import { t, useT } from '../i18n/index.js';
 
@@ -1383,7 +1383,7 @@ function EmailListComponent({ stacked = false }) {
                           {item.email.snippet && (
                             <div className="text-xs text-mail-text-muted truncate mt-0.5">{item.email.snippet}</div>
                           )}
-                          <LocalMailLabels email={item.email} />
+                          <TagChips email={item.email} />
                         </div>
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {item.email.has_attachments && <Paperclip size={12} className="text-mail-text-muted" />}

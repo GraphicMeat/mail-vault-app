@@ -42,7 +42,7 @@ import { getEmailColors } from '../utils/mailChrome';
 import { neutralizeEmailDarkScheme, emailScriptNonce } from '../utils/emailIframeTemplate';
 import { openMailtoCompose } from '../utils/mailto';
 import { AddressText } from './email/AddressText';
-import { LocalMailLabels } from './LocalMailLabels';
+import { TagChips } from './TagChips';
 import { MoveToFolderDropdown } from './MoveToFolderDropdown';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { useExportStore } from '../stores/exportStore';
@@ -875,7 +875,7 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
           <span className="text-[10px] text-mail-text-muted">
             {formatMessageTime(email.date)}
           </span>
-          <LocalMailLabels email={email} />
+          <TagChips email={email} />
 
           {/* View original toggle (for text messages or to see full HTML) */}
           {(wasStripped || hasHtml) && (

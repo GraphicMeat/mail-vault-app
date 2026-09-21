@@ -13,7 +13,7 @@ import { SenderAlertIcon } from './SenderAlertIcon';
 import { ReplyToAlertIcon } from './ReplyToAlertIcon';
 import { TrackerAlertIcon } from './TrackerAlertIcon';
 import { RowQuickActions } from './RowQuickActions';
-import { LocalMailLabels } from './LocalMailLabels';
+import { TagChips } from './TagChips';
 import { formatEmailDate } from '../utils/dateFormat';
 import { ConnectedStateIcon, describeMessageState } from './email/MessageStateIcon';
 import {
@@ -192,7 +192,7 @@ export const EmailRow = React.memo(function EmailRow({ rowId, email, isSelected,
         <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
           {displayText(email.subject, '(No subject)')}
         </span>
-        <LocalMailLabels email={email} />
+        <TagChips email={email} />
         <AttachmentGlyph email={email} size={14} />
         <span className="ml-auto text-xs text-mail-text-muted whitespace-nowrap flex-shrink-0">
           {formatEmailDate(email.date)}
@@ -292,7 +292,7 @@ export const CompactEmailRow = React.memo(function CompactEmailRow({ rowId, emai
           <span data-testid="row-subject" dir="auto" className={`flex-1 min-w-0 truncate text-sm leading-snug ${isUnread ? 'font-semibold text-mail-text' : 'text-mail-text'}`}>
             {displayText(email.subject, '(No subject)')}
           </span>
-          <LocalMailLabels email={email} />
+          <TagChips email={email} />
           <AttachmentGlyph email={email} size={12} />
         </div>
       </div>

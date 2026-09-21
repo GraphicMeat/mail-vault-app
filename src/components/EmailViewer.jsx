@@ -50,7 +50,7 @@ import { replySelection } from '../utils/replySelection';
 import { registerActiveReply } from '../utils/composeOpener';
 import { AddressText } from './email/AddressText';
 import { ReadDelayProgress } from './ReadDelayProgress';
-import { LocalMailLabels } from './LocalMailLabels';
+import { TagChips } from './TagChips';
 import { DeleteConfirmModal } from './DeleteConfirmModal';
 import { describePurge } from '../utils/custodyCopy';
 import { applyFlagToKeys } from '../services/workflows/messageMutations';
@@ -657,7 +657,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         onToggleInsights={() => setShowInsights(!showInsights)}
         archivedEmailIds={archivedEmailIds}
       />
-      <div className="px-3 pt-1"><LocalMailLabels email={selectedEmail} /></div>
+      <div className="px-3 pt-1"><TagChips email={selectedEmail} /></div>
 
       {/* Action Bar — below sender info, above content */}
       <div className="px-3 pb-2 relative">
