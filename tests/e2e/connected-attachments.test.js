@@ -345,6 +345,10 @@ describe('Connected Attachments', function () {
 
       // Not the app's private cache — that is the defect this replaced.
       expect(exported).not.toContain('attachment_cache');
+      // The daemon wrote them, not the app's sandbox fallback: seeing
+      // save_attachment_to here would mean the daemon route failed and the
+      // per-file retry quietly covered for it.
+      expect(await invokedCommands()).not.toContain('save_attachment_to');
 
       const names = await browser.executeAsync((dir, done) => {
         window.__TAURI__.core.invoke('plugin:fs|read_dir', { path: dir, options: {} })
