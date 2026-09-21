@@ -24,11 +24,43 @@ pub fn find_by_uid(cur_dir: &Path, uid: u32) -> Option<PathBuf> {
     None
 }
 
+/// The Maildir info separator. `:` everywhere except Windows, where Win32
+/// reads a colon in a filename as the alternate-data-stream marker and rejects
+/// the name outright. `;` is Dovecot's own substitute on such filesystems.
+///
+/// Writers use this constant. **Readers must accept both spellings on every
+/// platform** (`is_info_sep`, `info_flags`, `has_info`): a vault written on one
+/// OS is routinely read on another, and existing mac and Linux vaults are full
+/// of colons that no migration is going to rewrite.
+pub const INFO_SEP: char = if cfg!(windows) { ';' } else { ':' };
+
+/// `INFO_SEP` followed by the Maildir version marker: what a vault filename
+/// carries between the uid and its flag letters.
+pub const INFO_PREFIX: &str = if cfg!(windows) { ";2," } else { ":2," };
+
+/// Either spelling of the info separator, on any platform.
+pub fn is_info_sep(c: char) -> bool {
+    c == ':' || c == ';'
+}
+
+/// The part of a vault filename after `<sep>2,` — the flag letters and the
+/// extension — under either spelling. `None` when the name carries no info
+/// part at all (a legacy `12.eml` / `12_S.eml` name, or a stray file).
+pub fn info_flags(name: &str) -> Option<&str> {
+    name.split_once(":2,").or_else(|| name.split_once(";2,")).map(|(_, rest)| rest)
+}
+
+/// Whether the name carries an info part under either spelling. The test every
+/// vault scan uses to tell a vault row from a stray file.
+pub fn has_info(name: &str) -> bool {
+    info_flags(name).is_some()
+}
+
 /// The uid a vault filename carries, by `find_by_uid`'s exact rule: the name
 /// starts with the canonical decimal uid and a `:`. `u32::parse` alone would
 /// also take `07:` and `+7:`, which `find_by_uid(7)` never matches.
 pub fn vault_filename_uid(name: &str) -> Option<u32> {
-    let (digits, _) = name.split_once(':')?;
+    let (digits, _) = name.split_once(is_info_sep)?;
     let canonical = !digits.is_empty()
         && digits.bytes().all(|b| b.is_ascii_digit())
         && (digits == "0" || !digits.starts_with('0'));
@@ -199,10 +231,10 @@ fn rename_dir_add_eml(dir: &Path, stats: &mut EmlMigrationStats) {
         }
         let name = entry.file_name().to_string_lossy().to_string();
 
-        // Heuristic: Maildir message filenames start with `{uid}:`.
+        // Heuristic: Maildir message filenames start with `{uid}` and an info separator.
         // Anything else (a stray JSON file, hidden files, etc.) is left alone.
         let looks_like_message = name
-            .split(':')
+            .split(is_info_sep)
             .next()
             .and_then(|s| s.parse::<u64>().ok())
             .is_some();
@@ -450,9 +482,10 @@ pub fn write_generation(mailbox_dir: &Path, uid_validity: u32) -> Result<(), Str
 
 /// Swap the uid on a Maildir filename, leaving the rest — flags, timestamp,
 /// `.eml` — exactly as it was. Both shipped filename formats (`{uid}:2,{flags}`
-/// and `{uid}:{flags}:{ts}`) put the uid first and a `:` right after it.
+/// and `{uid}:{flags}:{ts}`) put the uid first and an info separator right
+/// after it (`:`, or `;` on Windows).
 fn with_uid(name: &str, new_uid: u32) -> String {
-    match name.find(':') {
+    match name.find(is_info_sep) {
         Some(i) => format!("{}{}", new_uid, &name[i..]),
         None => new_uid.to_string(),
     }
@@ -729,6 +762,38 @@ pub fn purge_orphans(mailbox_dir: &Path) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn both_info_separators_parse_on_every_platform() {
+        for name in ["7:2,S.eml", "7;2,S.eml"] {
+            assert_eq!(vault_filename_uid(name), Some(7), "{name}");
+            assert!(has_info(name), "{name}");
+            assert_eq!(info_flags(name), Some("S.eml"), "{name}");
+        }
+        // The rules vault_filename_uid already enforces hold for ';' too.
+        assert_eq!(vault_filename_uid("07;2,.eml"), None);
+        assert_eq!(vault_filename_uid("+7;2,.eml"), None);
+        assert_eq!(vault_filename_uid("7a;2,.eml"), None);
+        assert_eq!(vault_filename_uid(";2,.eml"), None);
+        // A name with no info part is not a vault row under either spelling.
+        assert!(!has_info("7.eml"));
+        assert_eq!(info_flags("7.eml"), None);
+    }
+
+    #[test]
+    fn info_sep_is_the_platform_separator() {
+        assert_eq!(INFO_SEP, if cfg!(windows) { ';' } else { ':' });
+        assert_eq!(INFO_PREFIX, if cfg!(windows) { ";2," } else { ":2," });
+        assert!(is_info_sep(':') && is_info_sep(';') && !is_info_sep('.'));
+    }
+
+    #[test]
+    fn with_uid_swaps_the_uid_under_both_separators() {
+        assert_eq!(with_uid("7:2,S.eml", 9), "9:2,S.eml");
+        assert_eq!(with_uid("7;2,S.eml", 9), "9;2,S.eml");
+        assert_eq!(with_uid("7:S:1700000000.eml", 9), "9:S:1700000000.eml");
+        assert_eq!(with_uid("7", 9), "9");
+    }
 
     #[test]
     fn test_migrate_add_eml_extension_renames_and_is_idempotent() {

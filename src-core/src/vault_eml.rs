@@ -51,7 +51,7 @@ pub struct LightEmail {
 /// The words stay, because `build_maildir_filename` and the archived checks
 /// read them; the names are what the rest of the app reads.
 pub fn parse_flags_from_filename(filename: &str) -> Vec<String> {
-    let Some(flags_part) = filename.split(":2,").nth(1) else { return Vec::new() };
+    let Some(flags_part) = crate::maildir::info_flags(filename) else { return Vec::new() };
     let mut flags = Vec::new();
     for c in flags_part.chars() {
         match c {

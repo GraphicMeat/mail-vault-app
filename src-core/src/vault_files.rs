@@ -49,8 +49,8 @@ pub fn cur_path(root: &Path, account_id: &str, mailbox: &str) -> PathBuf {
     root.join("Maildir").join(account_id).join(&safe_mailbox).join("cur")
 }
 
-/// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml`, letters
-/// sorted and deduped (A D F R S T).
+/// Build a vault filename from UID and flags: `{uid}:2,{letters}.eml` (`;2,`
+/// on Windows, see `maildir::INFO_SEP`), letters sorted and deduped (A D F R S T).
 pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     let mut flag_chars: Vec<char> = Vec::new();
     for f in flags {
@@ -67,7 +67,7 @@ pub fn build_maildir_filename(uid: u32, flags: &[String]) -> String {
     flag_chars.sort();
     flag_chars.dedup();
     let flag_str: String = flag_chars.into_iter().collect();
-    format!("{}:2,{}.eml", uid, flag_str)
+    format!("{}{}{}.eml", uid, crate::maildir::INFO_PREFIX, flag_str)
 }
 
 /// Delete every vault file in `cur_dir` whose uid is in `uids`. One directory
@@ -333,7 +333,7 @@ pub fn storage_stats(root: &Path, account_id: Option<&str>) -> MaildirStorageSta
     for entry in walkdir::WalkDir::new(&scan_dir).into_iter().flatten() {
         if entry.file_type().is_file() {
             let name = entry.file_name().to_string_lossy();
-            if name.contains(":2,") {
+            if crate::maildir::has_info(&name) {
                 if let Ok(meta) = entry.metadata() {
                     total_bytes += meta.len();
                     email_count += 1;
@@ -388,7 +388,7 @@ pub fn clear_cache(
             continue;
         }
         let name = entry.file_name().to_string_lossy().to_string();
-        if !name.contains(":2,") {
+        if !crate::maildir::has_info(&name) {
             continue;
         }
         let flags = parse_flags_from_filename(&name);
@@ -919,6 +919,28 @@ mod tests {
         assert_eq!(win32_safe("Re: invoice.pdf"), "Re_ invoice.pdf");
         assert_eq!(win32_safe("<a>|\"b\"?*\u{1}.txt"), "_a___b____.txt");
         assert_eq!(win32_safe("Rechnung März.pdf"), "Rechnung März.pdf");
+    }
+
+    #[test]
+    fn a_built_name_round_trips_through_the_readers() {
+        let name = build_maildir_filename(12, &["seen".into(), "archived".into()]);
+        assert!(name.starts_with("12"), "{name}");
+        assert!(name.ends_with("2,AS.eml"), "{name}");
+        assert_eq!(crate::maildir::vault_filename_uid(&name), Some(12));
+        // parse_flags_from_filename also appends the IMAP alias for `seen`
+        // (`\Seen`) — pre-existing behavior this task's separator refactor
+        // does not touch; see the brief-defect note in the task report.
+        assert_eq!(
+            parse_flags_from_filename(&name),
+            vec!["archived".to_string(), "seen".to_string(), "\\Seen".to_string()]
+        );
+    }
+
+    #[test]
+    fn flags_parse_under_both_separators() {
+        let expected = vec!["archived".to_string(), "seen".to_string(), "\\Seen".to_string()];
+        assert_eq!(parse_flags_from_filename("12:2,AS.eml"), expected);
+        assert_eq!(parse_flags_from_filename("12;2,AS.eml"), expected);
     }
 
     #[test]
