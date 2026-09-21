@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -62,6 +62,58 @@ CREATE TABLE pending_ops (
 CREATE TABLE pending_backup_purge (
   scope TEXT NOT NULL, uid INTEGER NOT NULL,
   PRIMARY KEY (scope, uid)
+);
+";
+
+/// The metadata layer: tags, custom fields and saved views. It lives here and
+/// not in `search_index`, because that index is rebuildable by design and a
+/// rebuild would take user-authored data with it. Nothing here touches an
+/// `.eml`, a server or a flag.
+///
+/// `msg_key` is `app_db::identity::msg_key` — the Message-ID where there is
+/// one, so an assignment survives a move, a flag rename and a Graph resync.
+const SCHEMA_V2: &str = "
+CREATE TABLE tags (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  color      TEXT NOT NULL DEFAULT '',
+  position   INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX tags_name ON tags (name COLLATE NOCASE);
+CREATE TABLE tag_assignments (
+  tag_id     TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL,
+  msg_key    TEXT NOT NULL,
+  at         INTEGER NOT NULL,
+  PRIMARY KEY (tag_id, account_id, msg_key)
+);
+CREATE INDEX tag_assignments_msg ON tag_assignments (account_id, msg_key);
+CREATE TABLE fields (
+  id           TEXT PRIMARY KEY,
+  scope        TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  kind         TEXT NOT NULL,
+  options_json TEXT NOT NULL DEFAULT '[]',
+  position     INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX fields_scope_name ON fields (scope, name COLLATE NOCASE);
+CREATE TABLE field_values (
+  field_id   TEXT NOT NULL REFERENCES fields(id) ON DELETE CASCADE,
+  account_id TEXT NOT NULL,
+  msg_key    TEXT NOT NULL,
+  value_json TEXT NOT NULL,
+  at         INTEGER NOT NULL,
+  PRIMARY KEY (field_id, account_id, msg_key)
+);
+CREATE INDEX field_values_msg ON field_values (account_id, msg_key);
+CREATE TABLE views (
+  id       TEXT PRIMARY KEY,
+  name     TEXT NOT NULL,
+  icon     TEXT NOT NULL DEFAULT '',
+  position INTEGER NOT NULL,
+  builtin  TEXT,
+  def_json TEXT NOT NULL
 );
 ";
 
@@ -187,6 +239,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 2 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V2} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '2');"
+            ))
+            .map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -251,10 +309,39 @@ mod tests {
     fn open_creates_the_schema_and_is_idempotent() {
         let dir = scratch("create");
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("1"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("1"));
+        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("2"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Everything the metadata layer (tags, custom fields, saved views) owns
+    /// lives here rather than in the rebuildable search index, so a v1 store
+    /// has to gain the tables without losing a row it already held.
+    #[test]
+    fn a_v1_store_gains_the_metadata_tables_and_keeps_its_rows() {
+        let dir = scratch("v1");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '1');
+                 INSERT INTO classifications(account_id, email_key, entry_json) VALUES ('a', 'k', '{{}}');"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM classifications", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1);
+        for table in ["tags", "tag_assignments", "fields", "field_values", "views"] {
+            let found: i64 = conn
+                .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
+                .unwrap();
+            assert_eq!(found, 1, "{table} is missing after the migration");
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

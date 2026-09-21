@@ -37,6 +37,7 @@ pub(crate) mod oauth2;
 pub(crate) mod restore;
 pub(crate) mod search_index;
 pub(crate) mod smtp;
+pub(crate) mod tags;
 pub(crate) mod vault;
 pub(crate) mod vault_files;
 pub(crate) mod vault_flags;

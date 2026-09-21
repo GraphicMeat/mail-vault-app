@@ -11,10 +11,12 @@
 
 pub mod classify;
 pub mod db;
+pub mod identity;
 pub mod import;
 pub mod locations;
 pub mod ops;
 pub mod stats;
+pub mod tags;
 
 pub use db::{handle, with};
 pub use rusqlite::Connection;

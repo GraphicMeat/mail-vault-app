@@ -409,6 +409,48 @@ pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest)
     }))
 }
 
+/// What the index holds for `uids` of one folder: the row's `Message-ID`, or
+/// `None` for a row that has none. A uid absent from the map is one the index
+/// has no row for at all — the caller must not invent a key for it.
+///
+/// `Err` while the index is closed, so a caller that would otherwise read
+/// "nothing is indexed" as "nothing exists" stops instead.
+pub fn known_message_ids(
+    st: &SearchIndexState,
+    account_id: &str,
+    mailbox: &str,
+    uids: &[u32],
+) -> Result<std::collections::HashMap<u32, Option<String>>, String> {
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+    let vault_dir = core::text::vault_dir_name(mailbox);
+    let mut stmt = conn
+        .prepare_cached("SELECT message_id FROM messages WHERE account_id = ?1 AND vault_dir = ?2 AND uid = ?3")
+        .map_err(|e| e.to_string())?;
+    let mut out = std::collections::HashMap::new();
+    for uid in uids {
+        let found: Option<Option<String>> = stmt
+            .query_row((account_id, vault_dir.as_str(), *uid), |r| r.get::<_, Option<String>>(0))
+            .optional()
+            .map_err(|e| e.to_string())?;
+        if let Some(message_id) = found {
+            out.insert(*uid, message_id);
+        }
+    }
+    Ok(out)
+}
+
+/// Whether the index holds any row at all for an account. An account it knows
+/// nothing about is one whose folders have not been indexed yet, which is not
+/// the same answer as "these messages are gone".
+pub fn holds_account(st: &SearchIndexState, account_id: &str) -> Result<bool, String> {
+    let guard = lock(&st.db);
+    let Some(conn) = guard.as_ref() else { return Err("search index is not open".into()) };
+    conn.query_row("SELECT EXISTS(SELECT 1 FROM messages WHERE account_id = ?1)", [account_id], |r| r.get::<_, i64>(0))
+        .map(|n| n == 1)
+        .map_err(|e| e.to_string())
+}
+
 /// The index's list rows for `uids` of one folder: `row_json` (headers,
 /// attachments list, no body) with `flags` and `isArchived` read off the
 /// CURRENT filename, so a flag rename since the last sweep is not stale here.
