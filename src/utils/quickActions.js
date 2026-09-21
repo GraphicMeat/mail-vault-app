@@ -35,6 +35,10 @@ export const DEFAULT_QUICK_ACTIONS = {
     },
   },
   overrides: {},
+  // Existing configurations stay independent until a person explicitly links
+  // the present scope. Scoped keys may opt in without changing the global
+  // choice or any other view.
+  styleLinks: { global: false, overrides: {} },
 };
 
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
@@ -121,7 +125,17 @@ export function normalizeQuickActions(value) {
     }
     if (Object.keys(normalized).length) overrides[key] = normalized;
   });
-  return { defaults, overrides };
+  const linksInput = object(input.styleLinks) ? input.styleLinks : {};
+  const linkedOverrides = {};
+  const candidateLinks = object(linksInput.overrides) ? linksInput.overrides : {};
+  Object.entries(candidateLinks).slice(-100).forEach(([key, linked]) => {
+    if (key && key.length <= 2048 && key in overrides && typeof linked === 'boolean') linkedOverrides[key] = linked;
+  });
+  return {
+    defaults,
+    overrides,
+    styleLinks: { global: linksInput.global === true, overrides: linkedOverrides },
+  };
 }
 
 export function quickActionScopeKey(scope) {
@@ -171,6 +185,86 @@ export function setQuickActionSurface(value, surface, scope, config) {
   return normalizeQuickActions({ ...normalized, overrides });
 }
 
+const STYLE_FIELDS = ['mode', 'palette', 'radialPagination'];
+const copyStyle = (config, source) => ({
+  ...config,
+  ...Object.fromEntries(STYLE_FIELDS.map(field => [field, source[field]])),
+});
+
+export function isQuickActionStyleLinked(value, scope = null) {
+  const normalized = normalizeQuickActions(value);
+  const key = quickActionScopeKey(scope);
+  return key ? normalized.styleLinks.overrides[key] === true : normalized.styleLinks.global;
+}
+
+export function setQuickActionStyleLink(value, scope, linked, sourceSurface = 'row') {
+  const normalized = normalizeQuickActions(value);
+  if (!QUICK_ACTION_SURFACES.includes(sourceSurface)) return normalized;
+  const key = quickActionScopeKey(scope);
+  const source = key && normalized.overrides[key]?.[sourceSurface]
+    ? normalized.overrides[key][sourceSurface]
+    : normalized.defaults[sourceSurface];
+  const styleLinks = {
+    ...normalized.styleLinks,
+    ...(key
+      ? { overrides: { ...normalized.styleLinks.overrides, [key]: linked === true } }
+      : { global: linked === true }),
+  };
+  if (!linked) return normalizeQuickActions({ ...normalized, styleLinks });
+  if (!key) {
+    return normalizeQuickActions({
+      ...normalized,
+      styleLinks,
+      defaults: Object.fromEntries(QUICK_ACTION_SURFACES.map(surface => [
+        surface, copyStyle(normalized.defaults[surface], source),
+      ])),
+    });
+  }
+  const scoped = normalized.overrides[key] || {};
+  return normalizeQuickActions({
+    ...normalized,
+    styleLinks,
+    overrides: {
+      ...normalized.overrides,
+      [key]: Object.fromEntries(QUICK_ACTION_SURFACES.map(surface => [
+        surface,
+        copyStyle(scoped[surface] || normalized.defaults[surface], source),
+      ])),
+    },
+  });
+}
+
+export function setQuickActionStyle(value, surface, scope, updates) {
+  const normalized = normalizeQuickActions(value);
+  if (!QUICK_ACTION_SURFACES.includes(surface)) return normalized;
+  const key = quickActionScopeKey(scope);
+  const current = key && normalized.overrides[key]?.[surface]
+    ? normalized.overrides[key][surface]
+    : normalized.defaults[surface];
+  const source = normalizeSurface({ ...current, ...updates }, normalized.defaults[surface]);
+  if (!isQuickActionStyleLinked(normalized, scope)) {
+    return setQuickActionSurface(normalized, surface, scope, source);
+  }
+  if (!key) {
+    return normalizeQuickActions({
+      ...normalized,
+      defaults: Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [
+        name, copyStyle(normalized.defaults[name], source),
+      ])),
+    });
+  }
+  const scoped = normalized.overrides[key] || {};
+  return normalizeQuickActions({
+    ...normalized,
+    overrides: {
+      ...normalized.overrides,
+      [key]: Object.fromEntries(QUICK_ACTION_SURFACES.map(name => [
+        name, copyStyle(scoped[name] || normalized.defaults[name], source),
+      ])),
+    },
+  });
+}
+
 export function resetQuickActionScope(value, scope, surface) {
   const normalized = normalizeQuickActions(value);
   const key = quickActionScopeKey(scope);
@@ -180,6 +274,19 @@ export function resetQuickActionScope(value, scope, surface) {
   else for (const name of QUICK_ACTION_SURFACES) delete scoped[name];
   if (!Object.keys(scoped).length) delete normalized.overrides[key];
   else normalized.overrides[key] = scoped;
+  // Resetting only one linked surface intentionally restores its inherited
+  // behavior. Keep the link indicator truthful by unlinking this scope.
+  if (surface && normalized.styleLinks.overrides[key]) {
+    normalized.styleLinks = {
+      ...normalized.styleLinks,
+      overrides: { ...normalized.styleLinks.overrides, [key]: false },
+    };
+  }
+  if (!surface) {
+    const remainingLinks = { ...normalized.styleLinks.overrides };
+    delete remainingLinks[key];
+    normalized.styleLinks = { ...normalized.styleLinks, overrides: remainingLinks };
+  }
   return normalized;
 }
 

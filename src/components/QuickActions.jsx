@@ -11,43 +11,12 @@ import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 import { Popover } from "./ui/Popover";
 import { useQuickActionConfiguration } from "../hooks/useQuickActionConfiguration";
 import { useT } from "../i18n/index.js";
+import { quickActionColorFor } from "../utils/quickActionColors";
 import "../styles/quick-actions.css";
 
 const DESTRUCTIVE = new Set(["delete", "deleteServer", "deleteEverywhere"]);
 const UNSAFE_FAVORITE = new Set([...DESTRUCTIVE, "unarchive"]);
 const PAGE_SIZE = 8;
-const ACTION_COLORS = {
-  archive: "var(--quick-action-archive)",
-  unarchive: "var(--quick-action-unarchive)",
-  delete: "var(--quick-action-delete)",
-  deleteServer: "var(--quick-action-delete-server)",
-  deleteEverywhere: "var(--quick-action-delete-everywhere)",
-  toggleRead: "var(--quick-action-toggle-read)",
-  markRead: "var(--quick-action-mark-read)",
-  markUnread: "var(--quick-action-mark-unread)",
-  star: "var(--quick-action-star)",
-  unstar: "var(--quick-action-unstar)",
-  tag: "var(--quick-action-tag)",
-  move: "var(--quick-action-move)",
-  spam: "var(--quick-action-spam)",
-  reply: "var(--quick-action-reply)",
-  replyAll: "var(--quick-action-reply-all)",
-  forward: "var(--quick-action-forward)",
-  replyTemplate: "var(--quick-action-reply-template)",
-  export: "var(--quick-action-export)",
-  newMessage: "var(--quick-action-new-message)",
-  open: "var(--quick-action-open)",
-  source: "var(--quick-action-source)",
-  theme: "var(--quick-action-theme)",
-};
-
-function colorFor(item, palette) {
-  const defaultColor = ACTION_COLORS[item.entry.action] || "var(--mail-accent)";
-  if (palette === "custom") return item.entry.color || defaultColor;
-  if (palette !== "semantic") return undefined;
-  return defaultColor;
-}
-
 function wedgeClip(index, count) {
   const gap = Math.min(1.3, 10 / Math.max(count, 1));
   const start = -90 + index * 360 / count + gap;
@@ -321,7 +290,7 @@ function QuickActionsConfigured({
   const regularButton = (item, menuEntry = false, index = 0) => {
     const { descriptor, entry: saved } = item;
     const Icon = descriptor.Icon;
-    const color = colorFor(item, config.palette);
+    const color = quickActionColorFor(item.entry, config.palette);
     return (
       <button
         key={saved.id}
@@ -355,7 +324,7 @@ function QuickActionsConfigured({
   const radialButton = (item, index, count) => {
     const { descriptor, entry: saved } = item;
     const Icon = descriptor.Icon;
-    const color = colorFor(item, config.palette);
+    const color = quickActionColorFor(item.entry, config.palette);
     return (
       <button
         key={saved.id}

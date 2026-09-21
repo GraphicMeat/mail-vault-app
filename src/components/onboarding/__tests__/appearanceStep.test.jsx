@@ -6,10 +6,11 @@ import { useSettingsStore } from '../../../stores/settingsStore';
 import { useThemeStore } from '../../../stores/themeStore';
 import { t } from '../../../i18n';
 import { AppearanceStep } from '../AppearanceStep';
+import { DEFAULT_QUICK_ACTIONS, normalizeQuickActions } from '../../../utils/quickActions';
 
 beforeEach(() => {
   useThemeStore.setState({ theme: 'dark', palette: 'indigo' });
-  useSettingsStore.setState({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'grouped', afterDeleteSelect: 'none', emailRowHighlight: 'hover', emailViewerTheme: 'system', actionButtonDisplay: 'icon-label' });
+  useSettingsStore.setState({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'grouped', afterDeleteSelect: 'none', emailRowHighlight: 'hover', emailViewerTheme: 'system', actionButtonDisplay: 'icon-label', quickActions: normalizeQuickActions(DEFAULT_QUICK_ACTIONS) });
 });
 afterEach(cleanup);
 const tab = name => screen.getByRole('tab', { name: t(`settings.appearance.section.${name}`) });
@@ -17,7 +18,7 @@ const tab = name => screen.getByRole('tab', { name: t(`settings.appearance.secti
 describe('appearance step', () => {
   it('shows two color choices groups, with secondary preferences kept out of initial setup', () => {
     render(<AppearanceStep onContinue={() => {}} />);
-    expect(screen.getAllByRole('tab')).toHaveLength(3);
+    expect(screen.getAllByRole('tab')).toHaveLength(4);
     expect(screen.getAllByTestId(/^appearance-control-/)).toHaveLength(2);
     expect(screen.getByTestId('appearance-control-palette')).toBeTruthy();
     expect(screen.queryByTestId('appearance-control-after-delete')).toBeNull();
@@ -31,8 +32,8 @@ describe('appearance step', () => {
     expect(screen.getByTestId('appearance-control-layout')).toBeTruthy();
     expect(screen.queryByTestId('appearance-control-theme')).toBeNull();
     fireEvent.keyDown(tab('layout'), { key: 'End' });
-    expect(screen.getByTestId('appearance-control-threads')).toBeTruthy();
-    expect(screen.getAllByTestId('appearance-preview')).toHaveLength(1);
+    expect(screen.getByTestId('appearance-control-quick-layout')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Preview' })).toBeTruthy();
   });
 
   it('updates the sample and persisted choices across tabs', () => {
@@ -73,6 +74,23 @@ describe('appearance step', () => {
     fireEvent.click(screen.getByTestId('appearance-recommended'));
     expect(useThemeStore.getState()).toMatchObject({ theme: 'dark', palette: 'graphite' });
     expect(useSettingsStore.getState()).toMatchObject({ layoutMode: 'three-column', sidebarStyle: 'list', sidebarLayout: 'stacked', viewStyle: 'list', emailListStyle: 'compact', threadMode: 'expandable', afterDeleteSelect: 'none', emailRowHighlight: 'hover' });
+    expect(useSettingsStore.getState().quickActions.styleLinks.global).toBe(false);
+  });
+
+  it('persists linked radial pagination through the quick-actions tab and Continue', () => {
+    const onContinue = vi.fn();
+    render(<AppearanceStep onContinue={onContinue} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Use everywhere' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Radial' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Pages' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Email reader' }));
+    expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
+    fireEvent.click(tab('colors'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Quick actions' }));
+    fireEvent.click(screen.getByTestId('onboarding-continue'));
+    expect(onContinue).toHaveBeenCalledOnce();
+    expect(useSettingsStore.getState().quickActions.defaults.reader).toMatchObject({ mode: 'radial', radialPagination: true });
   });
 
   it('can continue from any tab without resetting existing preferences', () => {

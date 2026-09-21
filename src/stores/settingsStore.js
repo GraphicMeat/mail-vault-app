@@ -5,7 +5,7 @@ import { normalizeNotificationSound } from '../utils/notificationSounds';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 import {
   DEFAULT_QUICK_ACTIONS, localMailLabelKey, normalizeQuickActions,
-  resetQuickActionScope, setQuickActionSurface,
+  resetQuickActionScope, setQuickActionStyle, setQuickActionStyleLink, setQuickActionSurface,
 } from '../utils/quickActions';
 
 // Palette of visually distinct avatar colors
@@ -850,6 +850,12 @@ export const useSettingsStore = create(
       setEmailViewerTheme: (mode) => set({ emailViewerTheme: mode }),
       setQuickActionSurface: (surface, scope, config) => set(state => ({
         quickActions: setQuickActionSurface(state.quickActions, surface, scope, config),
+      })),
+      setQuickActionStyle: (surface, scope, updates) => set(state => ({
+        quickActions: setQuickActionStyle(state.quickActions, surface, scope, updates),
+      })),
+      setQuickActionStyleLink: (scope, linked, sourceSurface) => set(state => ({
+        quickActions: setQuickActionStyleLink(state.quickActions, scope, linked, sourceSurface),
       })),
       resetQuickActionScope: (scope, surface) => set(state => ({
         quickActions: resetQuickActionScope(state.quickActions, scope, surface),

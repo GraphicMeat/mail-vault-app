@@ -24,18 +24,21 @@ import {
 import { QuickActions } from "../QuickActions";
 import { EmailActionBar } from "../email/EmailActionBar";
 import { SettingsTabs } from "./SettingsTabs";
+import { SegmentedChoice } from "../ui/SegmentedChoice";
 import { useMailStore } from "../../stores/mailStore";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { useQuickActionConfiguration } from "../../hooks/useQuickActionConfiguration";
 import {
   DEFAULT_QUICK_ACTIONS,
   normalizeQuickActions,
+  isQuickActionStyleLinked,
   QUICK_ACTION_MODES,
   QUICK_ACTION_SURFACES,
   QUICK_ACTION_TYPES,
   quickActionScopeKey,
   resolveQuickActions,
 } from "../../utils/quickActions";
+import { quickActionColorFor } from "../../utils/quickActionColors";
 import { useT } from "../../i18n/index.js";
 import "../../styles/settings-usability.css";
 
@@ -123,10 +126,53 @@ const newEntry = (action, params = {}) => ({
   ...(Object.keys(params).length ? { params } : {}),
 });
 
+function QuickActionsSettingsPreview({
+  preview, isRadialPreview, surface, scopeChoice, config,
+  activeAccountId, activeMailbox, onPreview, status,
+}) {
+  const t = useT();
+  const identity = `${surface}:${scopeChoice}:${config.mode}`;
+  return <section className="quick-actions-preview" aria-labelledby="quick-actions-preview-title">
+    <h5 id="quick-actions-preview-title">{t("quickActions.preview")}</h5>
+    <p className="text-xs text-mail-text-muted">{t("quickActions.previewDescription")}</p>
+    <div className="quick-actions-preview-surface" role="group"
+      aria-label={t(`quickActions.surface.${preview.name}`)}>
+      {preview.name === "row" && <div className="quick-actions-preview-row" data-radial={isRadialPreview}>
+        <div className="quick-actions-preview-copy">
+          <span><strong>{t("quickActions.sample.sender")}</strong><small>{t("quickActions.sample.subject")}</small></span>
+          <time>10:42</time>
+        </div>
+        <QuickActions surface="row" config={preview.config} descriptors={preview.descriptors} preview identity={identity} />
+      </div>}
+      {preview.name === "selection" && <div className="quick-actions-preview-selection selection-action-bar-inner" data-radial={isRadialPreview}>
+        <div className="quick-actions-preview-copy"><span>{t("quickActions.sample.selected")}</span></div>
+        <QuickActions surface="selection" config={preview.config} descriptors={preview.descriptors}
+          display={config.selectionDisplay || "icon-label"}
+          inlineLimit={config.selectionDisplay === "icon-only" ? undefined : config.selectionActionLimit || 3}
+          className="quick-actions-selection" preview identity={identity} />
+      </div>}
+      {preview.name === "reader" && <div className="quick-actions-preview-reader" data-radial={isRadialPreview}>
+        <div className="quick-actions-preview-copy"><header><strong>{t("quickActions.sample.reader")}</strong><span>{t("quickActions.sample.sender")}</span></header></div>
+        <EmailActionBar
+          email={{ uid: -1, _accountId: activeAccountId, _mailbox: activeMailbox || "INBOX", subject: t("quickActions.sample.reader"), from: { name: t("quickActions.sample.sender"), address: "mira@example.test" }, to: [{ address: "you@example.test" }], flags: [] }}
+          variant="single" configOverride={preview.config} preview onActionPreview={onPreview}
+          onReply={() => {}} onReplyAll={() => {}} onForward={() => {}} onArchive={() => {}} onDelete={() => {}} onDeleteEverywhere={() => {}}
+          onMove={() => {}} onToggleRead={() => {}} onToggleFlag={() => {}} onSpam={() => {}} onApplyLocalLabel={() => {}} onReplyTemplate={() => {}}
+          onOpenInWindow={() => {}} onViewSource={() => {}} onExport={() => {}} onToggleEmailTheme={() => {}}
+          isArchived={false} isRead={false} isLocalOnly={false} isSentEmail={false} singleRecipient={false}
+        />
+      </div>}
+    </div>
+    <p role="status" className="text-xs text-mail-text-muted">{status || t("quickActions.sample.previewStatus")}</p>
+  </section>;
+}
+
 export function QuickActionsSettings() {
   const t = useT();
   const quickActions = useSettingsStore((state) => state.quickActions);
   const setSurface = useSettingsStore((state) => state.setQuickActionSurface);
+  const setStyle = useSettingsStore((state) => state.setQuickActionStyle);
+  const setStyleLink = useSettingsStore((state) => state.setQuickActionStyleLink);
   const resetScope = useSettingsStore((state) => state.resetQuickActionScope);
   const labels = useSettingsStore((state) => state.localMailLabels) ||
     EMPTY_ARRAY;
@@ -169,6 +215,7 @@ export function QuickActionsSettings() {
     ? { config: normalized.defaults[surface], inherited: false }
     : resolveQuickActions(normalized, surface, scope);
   const config = resolved.config;
+  const linkedStyle = isQuickActionStyleLinked(normalized, isGlobal ? null : scope);
 
   useEffect(() => {
     if (!SURFACE_ACTIONS[surface].includes(addType)) {
@@ -178,8 +225,17 @@ export function QuickActionsSettings() {
   }, [surface, addType]);
 
   const persist = (next) => setSurface(surface, isGlobal ? null : scope, next);
-  const resetSurface = () => persist(DEFAULT_QUICK_ACTIONS.defaults[surface]);
-  const setMode = (mode) => persist({ ...config, mode });
+  const persistStyle = (updates) => setStyle(surface, isGlobal ? null : scope, updates);
+  const resetSurface = () => {
+    const defaults = DEFAULT_QUICK_ACTIONS.defaults[surface];
+    persist(defaults);
+    if (linkedStyle) persistStyle({
+      mode: defaults.mode,
+      palette: defaults.palette,
+      radialPagination: defaults.radialPagination,
+    });
+  };
+  const setMode = (mode) => persistStyle({ mode });
   const updateEntry = (index, updates) =>
     persist({
       ...config,
@@ -286,208 +342,56 @@ export function QuickActionsSettings() {
         onChange={setSurfaceId}
         label={t("quickActions.surface")}
       >
-        <section
-          className="quick-actions-preview"
-          aria-labelledby="quick-actions-preview-title"
-        >
-          <h5 id="quick-actions-preview-title">{t("quickActions.preview")}</h5>
-          <p className="text-xs text-mail-text-muted">
-            {t("quickActions.previewDescription")}
-          </p>
-          <div
-            className="quick-actions-preview-surface"
-            role="group"
-            aria-label={t(`quickActions.surface.${preview.name}`)}
-          >
-            {preview.name === "row" && (
-              <div
-                className="quick-actions-preview-row"
-                data-radial={isRadialPreview}
-              >
-                <div className="quick-actions-preview-copy">
-                  <span>
-                    <strong>{t("quickActions.sample.sender")}</strong>
-                    <small>{t("quickActions.sample.subject")}</small>
-                  </span>
-                  <time>10:42</time>
-                </div>
-                <QuickActions
-                  surface="row"
-                  config={preview.config}
-                  descriptors={preview.descriptors}
-                  preview
-                  identity={`${surface}:${scopeChoice}:${config.mode}`}
-                />
-              </div>
-            )}
-            {preview.name === "selection" && (
-              <div
-                className="quick-actions-preview-selection selection-action-bar-inner"
-                data-radial={isRadialPreview}
-              >
-                <div className="quick-actions-preview-copy">
-                  <span>{t("quickActions.sample.selected")}</span>
-                </div>
-                <QuickActions
-                  surface="selection"
-                  config={preview.config}
-                  descriptors={preview.descriptors}
-                  display={config.selectionDisplay || "icon-label"}
-                  inlineLimit={config.selectionDisplay === "icon-only"
-                    ? undefined
-                    : config.selectionActionLimit || 3}
-                  className="quick-actions-selection"
-                  preview
-                  identity={`${surface}:${scopeChoice}:${config.mode}`}
-                />
-              </div>
-            )}
-            {preview.name === "reader" && (
-              <div
-                className="quick-actions-preview-reader"
-                data-radial={isRadialPreview}
-              >
-                <div className="quick-actions-preview-copy">
-                  <header>
-                    <strong>{t("quickActions.sample.reader")}</strong>
-                    <span>{t("quickActions.sample.sender")}</span>
-                  </header>
-                </div>
-                <EmailActionBar
-                  email={{
-                    uid: -1,
-                    _accountId: activeAccountId,
-                    _mailbox: activeMailbox || "INBOX",
-                    subject: t("quickActions.sample.reader"),
-                    from: {
-                      name: t("quickActions.sample.sender"),
-                      address: "mira@example.test",
-                    },
-                    to: [{ address: "you@example.test" }],
-                    flags: [],
-                  }}
-                  variant="single"
-                  configOverride={preview.config}
-                  preview
-                  onActionPreview={() =>
-                    setPreviewStatus(t("quickActions.previewResult"))}
-                  onReply={() => {}}
-                  onReplyAll={() => {}}
-                  onForward={() => {}}
-                  onArchive={() => {}}
-                  onDelete={() => {}}
-                  onDeleteEverywhere={() => {}}
-                  onMove={() => {}}
-                  onToggleRead={() => {}}
-                  onToggleFlag={() => {}}
-                  onSpam={() => {}}
-                  onApplyLocalLabel={() => {}}
-                  onReplyTemplate={() => {}}
-                  onOpenInWindow={() => {}}
-                  onViewSource={() => {}}
-                  onExport={() => {}}
-                  onToggleEmailTheme={() => {}}
-                  isArchived={false}
-                  isRead={false}
-                  isLocalOnly={false}
-                  isSentEmail={false}
-                  singleRecipient={false}
-                />
-              </div>
-            )}
-          </div>
-          <p role="status" className="text-xs text-mail-text-muted">
-            {previewStatus || t("quickActions.sample.previewStatus")}
-          </p>
-        </section>
-
-        <div className="quick-actions-editor-controls">
-          <label>
-            {t("quickActions.scope")}
-            <select
-              aria-label={t("quickActions.scope")}
+        <div className="quick-actions-editor-controls quick-actions-choice-controls">
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.scope")}</span>
+            <SegmentedChoice
+              label={t("quickActions.scope")}
               value={scopeChoice}
-              onChange={(event) =>
-                setScopeChoices((choices) => ({
-                  ...choices,
-                  [surface]: event.target.value,
-                }))}
-            >
-              <option value="global">{t("quickActions.scope.global")}</option>
-              <option value="current" disabled={!scopeKey}>
-                {t("quickActions.scope.current")}
-                {scopeKey ? ` · ${scopeDescription}` : ""}
-              </option>
-            </select>
-          </label>
-          <label>
-            {t("quickActions.layout")}
-            <select
-              aria-label={t("quickActions.layout")}
+              onChange={(choice) => setScopeChoices((choices) => ({ ...choices, [surface]: choice }))}
+              options={[
+                { value: "global", label: t("quickActions.scope.global") },
+                { value: "current", label: t("quickActions.scope.current"), disabled: !scopeKey },
+              ]}
+            />
+            {scopeKey && <span className="quick-actions-choice-hint">{scopeDescription}</span>}
+          </div>
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.layout")}</span>
+            <SegmentedChoice
+              label={t("quickActions.layout")}
               value={config.mode}
-              onChange={(event) => setMode(event.target.value)}
-            >
-              {QUICK_ACTION_MODES.map((mode) => (
-                <option key={mode} value={mode}>
-                  {t(
-                    `quickActions.layout.${
-                      mode === "favorite-menu" ? "favoriteMenu" : mode
-                    }`,
-                  )}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={setMode}
+              options={QUICK_ACTION_MODES.map((mode) => ({
+                value: mode,
+                label: t(`quickActions.layout.${mode === "favorite-menu" ? "favoriteMenu" : mode}`),
+              }))}
+            />
+          </div>
         </div>
 
-        {!isGlobal && (
-          <div className="flex items-center gap-3 text-xs text-mail-text-muted">
-            <span role="status">
-              {resolved.inherited
-                ? t("quickActions.scope.inherited")
-                : t("quickActions.scope.current")}
-            </span>
-            {resolved.inherited
-              ? (
-                <button
-                  type="button"
-                  onClick={() => persist(config)}
-                >
-                  {t("quickActions.customizeScope")}
-                </button>
-              )
-              : (
-                <button
-                  type="button"
-                  onClick={() => resetScope(scope, surface)}
-                >
-                  {t("quickActions.inherit")}
-                </button>
-              )}
-          </div>
-        )}
-        {isGlobal && (
-          <button type="button" onClick={resetSurface}>
-            {t("common.resetToDefault")}
-          </button>
-        )}
-
-        <div className="quick-actions-editor-controls">
-          <label>
-            {t("quickActions.palette")}
-            <select
-              aria-label={t("quickActions.palette")}
+        <div className="quick-actions-editor-controls quick-actions-choice-controls">
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.palette")}</span>
+            <SegmentedChoice
+              label={t("quickActions.palette")}
               value={config.palette}
-              onChange={(event) =>
-                persist({ ...config, palette: event.target.value })}
-            >
-              {["neutral", "semantic", "custom"].map((palette) => (
-                <option key={palette} value={palette}>
-                  {t(`quickActions.palette.${palette}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+              onChange={(palette) => persistStyle({ palette })}
+              options={["neutral", "semantic", "custom"].map((palette) => ({ value: palette, label: t(`quickActions.palette.${palette}`) }))}
+            />
+          </div>
+          <div className="quick-actions-choice-field">
+            <span>{t("quickActions.styleAcrossSurfaces")}</span>
+            <SegmentedChoice
+              label={t("quickActions.styleAcrossSurfaces")}
+              value={linkedStyle ? "linked" : "separate"}
+              onChange={(choice) => setStyleLink(isGlobal ? null : scope, choice === "linked", surface)}
+              options={[
+                { value: "separate", label: t("quickActions.styleSeparate") },
+                { value: "linked", label: t("quickActions.styleLinked") },
+              ]}
+            />
+          </div>
           {config.mode === "favorite-menu" && (
             <label>
               {t("quickActions.favorite")}
@@ -510,18 +414,18 @@ export function QuickActionsSettings() {
             </label>
           )}
           {config.mode === "radial" && (
-            <label className="quick-actions-checkbox">
-              <input
-                type="checkbox"
-                checked={!!config.radialPagination}
-                onChange={(event) =>
-                  persist({
-                    ...config,
-                    radialPagination: event.target.checked,
-                  })}
+            <div className="quick-actions-choice-field">
+              <span>{t("quickActions.radialPagination")}</span>
+              <SegmentedChoice
+                label={t("quickActions.radialPagination")}
+                value={config.radialPagination ? "pages" : "all"}
+                onChange={(value) => persistStyle({ radialPagination: value === "pages" })}
+                options={[
+                  { value: "all", label: t("quickActions.radialPagination.all") },
+                  { value: "pages", label: t("quickActions.radialPagination.pages") },
+                ]}
               />
-              {t("quickActions.radialPagination")}
-            </label>
+            </div>
           )}
           {surface === "selection" &&
             ["inline", "favorite-menu"].includes(config.mode) && (
@@ -567,9 +471,33 @@ export function QuickActionsSettings() {
           )}
         </div>
 
+        <div className="quick-actions-scope-status text-xs text-mail-text-muted">
+          {!isGlobal && <>
+            <span role="status">{resolved.inherited ? t("quickActions.scope.inherited") : t("quickActions.scope.current")}</span>
+            <button type="button" onClick={() => resolved.inherited ? persist(config) : resetScope(scope, surface)}>
+              {resolved.inherited ? t("quickActions.customizeScope") : t("quickActions.inherit")}
+            </button>
+          </>}
+          {isGlobal && <button type="button" onClick={resetSurface}>{t("common.resetToDefault")}</button>}
+        </div>
+
+        <QuickActionsSettingsPreview
+          preview={preview}
+          isRadialPreview={isRadialPreview}
+          surface={surface}
+          scopeChoice={scopeChoice}
+          config={config}
+          activeAccountId={activeAccountId}
+          activeMailbox={activeMailbox}
+          onPreview={() => setPreviewStatus(t("quickActions.previewResult"))}
+          status={previewStatus}
+        />
+
         <ol className="quick-actions-entry-list">
-          {config.entries.map((entry, index) => (
-            <li key={entry.id}>
+          {config.entries.map((entry, index) => {
+            const entryColor = quickActionColorFor(entry, config.palette);
+            return <li key={entry.id} data-colored={!!entryColor}
+              style={entryColor ? { "--quick-action-editor-color": entryColor } : undefined}>
               <span className="quick-actions-entry-name">
                 {getLabel(entry)}
               </span>
@@ -589,32 +517,6 @@ export function QuickActionsSettings() {
               >
                 ↓
               </button>
-              {config.palette === "custom" && (
-                <label className="quick-actions-color-control">
-                  {t("quickActions.color")}
-                  <input
-                    type="color"
-                    aria-label={`${t("quickActions.color")} ${getLabel(entry)}`}
-                    value={entry.color || "#a0a0b6"}
-                    onChange={(event) =>
-                      updateEntry(index, { color: event.target.value })}
-                  />
-                  {!entry.color && (
-                    <span>{t("quickActions.colorDefault")}</span>
-                  )}
-                  {entry.color && (
-                    <button
-                      type="button"
-                      aria-label={`${t("quickActions.resetColor")} ${
-                        getLabel(entry)
-                      }`}
-                      onClick={() => updateEntry(index, { color: undefined })}
-                    >
-                      {t("quickActions.resetColor")}
-                    </button>
-                  )}
-                </label>
-              )}
               <button
                 type="button"
                 aria-label={`${t("quickActions.removeAction")} ${
@@ -624,11 +526,29 @@ export function QuickActionsSettings() {
               >
                 {t("quickActions.removeAction")}
               </button>
-            </li>
-          ))}
+              {config.palette === "custom" && (
+                <label className="quick-actions-color-control">
+                  {t("quickActions.color")}
+                  <input
+                    type="color"
+                    aria-label={`${t("quickActions.color")} ${getLabel(entry)}`}
+                    value={entry.color || "#a0a0b6"}
+                    onChange={(event) => updateEntry(index, { color: event.target.value })}
+                  />
+                  {!entry.color && <span>{t("quickActions.colorDefault")}</span>}
+                  {entry.color && <button
+                    type="button"
+                    aria-label={`${t("quickActions.resetColor")} ${getLabel(entry)}`}
+                    onClick={() => updateEntry(index, { color: undefined })}
+                  >{t("quickActions.resetColor")}</button>}
+                </label>
+              )}
+            </li>;
+          })}
         </ol>
 
-        <div className="quick-actions-add-row">
+        <div className="quick-actions-add-row" data-colored={!!quickActionColorFor(newEntry(addType), config.palette)}
+          style={quickActionColorFor(newEntry(addType), config.palette) ? { "--quick-action-editor-color": quickActionColorFor(newEntry(addType), config.palette) } : undefined}>
           <label>
             {t("quickActions.action")}
             <select

@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   quickActions: null,
   setQuickActions: vi.fn(),
   setQuickActionSurface: vi.fn(),
+  setQuickActionStyle: vi.fn(),
+  setQuickActionStyleLink: vi.fn(),
   resetQuickActions: vi.fn(),
 }));
 vi.mock('../../../stores/settingsStore', () => ({
@@ -29,6 +31,12 @@ state.setQuickActionSurface.mockImplementation((surface, _scope, config) => {
   state.quickActions = {
     ...state.quickActions,
     defaults: { ...state.quickActions.defaults, [surface]: config },
+  };
+});
+state.setQuickActionStyle.mockImplementation((surface, _scope, updates) => {
+  state.quickActions = {
+    ...state.quickActions,
+    defaults: { ...state.quickActions.defaults, [surface]: { ...state.quickActions.defaults[surface], ...updates } },
   };
 });
 
@@ -91,8 +99,29 @@ describe('QuickActionsSettings', () => {
     expect(state.quickActions.defaults.row.entries[0].color).toBe('#ff9900');
 
     view.rerender(<QuickActionsSettings />);
-    fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'menu' } });
+    fireEvent.click(screen.getByRole('radio', { name: 'Menu' }));
     expect(state.quickActions.defaults.row.entries[0].color).toBe('#ff9900');
+  });
+
+  it('uses keyboard-operable radio tabs and colors editor rows only for action palettes', () => {
+    state.quickActions = {
+      defaults: { row: { mode: 'inline', entries: [{ id: 'archive', action: 'archive' }], favoriteId: 'archive', palette: 'semantic' } },
+      overrides: {},
+    };
+    const view = render(<QuickActionsSettings />);
+    const row = document.querySelector('.quick-actions-entry-name').closest('li');
+    expect(row.dataset.colored).toBe('true');
+    const inline = screen.getByRole('radio', { name: 'Inline' });
+    fireEvent.keyDown(inline, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Menu' }));
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Neutral' }));
+    view.rerender(<QuickActionsSettings />);
+    expect(document.querySelector('.quick-actions-entry-name').closest('li').dataset.colored).toBe('false');
+    fireEvent.click(screen.getByRole('radio', { name: 'Custom colors' }));
+    view.rerender(<QuickActionsSettings />);
+    expect(document.querySelector('.quick-actions-entry-name').closest('li').dataset.colored).toBe('true');
+    expect(screen.getByText('Default action color')).toBeTruthy();
   });
 
   it('resets only the active surface', () => {

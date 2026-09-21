@@ -6,6 +6,10 @@ import {
   quickActionScopeKey,
   resolveQuickActionSelectionTarget,
   resolveQuickActions,
+  isQuickActionStyleLinked,
+  resetQuickActionScope,
+  setQuickActionStyle,
+  setQuickActionStyleLink,
 } from '../quickActions';
 
 describe('quick action settings', () => {
@@ -75,6 +79,35 @@ describe('quick action settings', () => {
     expect(resolveQuickActions(overridden, 'row', scope).inherited).toBe(false);
     expect(resolveQuickActions(overridden, 'row', scope).config.entries).toEqual([]);
     expect(resolveQuickActions({ ...overridden, overrides: {} }, 'row', scope).inherited).toBe(true);
+  });
+
+  it('links only style fields across surfaces while preserving entries and scoped isolation', () => {
+    const scope = { kind: 'mailbox', accountId: 'a', mailbox: 'INBOX' };
+    const initial = normalizeQuickActions({
+      defaults: {
+        row: { mode: 'inline', entries: [{ id: 'archive', action: 'archive' }], palette: 'neutral' },
+        selection: { mode: 'menu', entries: [{ id: 'export', action: 'export' }], palette: 'custom' },
+      },
+    });
+    const linked = setQuickActionStyleLink(initial, null, true, 'row');
+    const updated = setQuickActionStyle(linked, 'reader', null, { mode: 'radial', palette: 'semantic', radialPagination: true });
+    expect(updated.defaults.row).toMatchObject({ mode: 'radial', palette: 'semantic', radialPagination: true });
+    expect(updated.defaults.selection).toMatchObject({ mode: 'radial', palette: 'semantic', radialPagination: true });
+    expect(updated.defaults.selection.entries).toEqual([{ id: 'export', action: 'export' }]);
+
+    const scoped = setQuickActionStyleLink(updated, scope, true, 'selection');
+    const scopedUpdated = setQuickActionStyle(scoped, 'row', scope, { mode: 'menu' });
+    expect(resolveQuickActions(scopedUpdated, 'row', scope).config.mode).toBe('menu');
+    expect(resolveQuickActions(scopedUpdated, 'reader', scope).config.mode).toBe('menu');
+    expect(scopedUpdated.defaults.row.mode).toBe('radial');
+    expect(isQuickActionStyleLinked(scopedUpdated, scope)).toBe(true);
+    const unlinked = setQuickActionStyleLink(scopedUpdated, scope, false, 'row');
+    const independentlyUpdated = setQuickActionStyle(unlinked, 'reader', scope, { mode: 'inline' });
+    expect(resolveQuickActions(independentlyUpdated, 'row', scope).config.mode).toBe('menu');
+    expect(resolveQuickActions(independentlyUpdated, 'reader', scope).config.mode).toBe('inline');
+    const relinked = setQuickActionStyleLink(independentlyUpdated, scope, true, 'row');
+    const reset = resetQuickActionScope(relinked, scope, 'row');
+    expect(isQuickActionStyleLinked(reset, scope)).toBe(false);
   });
 
   it('keeps same mailbox names distinct across accounts and view kinds', () => {
