@@ -379,9 +379,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
                 </div>
               )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {modalAttachments.map((att) => (
+                {modalAttachments.map((att, i) => (
                   <AttachmentItem
                     key={att._originalIndex}
+                    listIndex={i}
                     attachment={att}
                     attachmentIndex={att._originalIndex}
                     emailUid={email.uid}

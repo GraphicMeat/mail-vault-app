@@ -515,6 +515,7 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
                 {realAttachments.map((attachment, index) => (
                   <AttachmentItem
                     key={index}
+                    listIndex={index}
                     attachment={attachment}
                     attachmentIndex={attachment._originalIndex}
                     emailUid={email.uid}

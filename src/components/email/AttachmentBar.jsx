@@ -59,6 +59,11 @@ function mimeOf(attachment) {
  * video told the user nothing the filename did not already say.
  */
 const THUMB_MAX_BYTES = 4 * 1024 * 1024;
+// A photo album arrives as twenty images; reading them all on mount would
+// hold twenty full base64 copies in the webview for twenty 40px squares. The
+// rows past this one keep their icon — and a thread renders a row per
+// message, so the cap is per message list, not per window.
+const THUMB_MAX_COUNT = 8;
 
 // A 1x1 transparent PNG. `start_drag` requires a drag image and rejects
 // anything that is not PNG data; this stands in when rendering the row fails.
@@ -93,11 +98,15 @@ export function attachmentIcon({ contentType, filename } = {}) {
  * keeps spaces rather than replacing them with underscores.
  */
 export function exportFolderName(subject, fallback) {
-  const clean = String(subject || '')
+  const sanitized = String(subject || '')
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[/\\:*?"<>|]/g, '-')
-    .replace(/\s+/g, ' ')
+    .replace(/\s+/g, ' ');
+  // By code point: a plain `slice` can cut an emoji in half and leave a lone
+  // surrogate in a folder name.
+  const clean = [...sanitized]
     .slice(0, 60)
+    .join('')
     // A leading dot hides the folder; a leading or trailing dash is what a
     // subject that began with a path separator leaves behind.
     .replace(/^[.\-\s]+|[.\-\s]+$/g, '');
@@ -333,7 +342,7 @@ function AttachmentPreviewDialog({ attachment, kind, loadContent, downloadedPath
  * view says `UNIFIED`, which is not a Maildir folder, and reading there is
  * what "Failed to download" was.
  */
-export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountId, mailbox, compact }) {
+export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountId, mailbox, compact, listIndex = 0 }) {
   const t = useT();
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState(null);
@@ -372,13 +381,14 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   useEffect(() => {
     if (kind !== 'image') return undefined;
     if (attachment.size && attachment.size > THUMB_MAX_BYTES) return undefined;
+    if (listIndex >= THUMB_MAX_COUNT) return undefined;
     let cancelled = false;
     ensureContent()
       .then((b64) => { if (!cancelled) setThumb(`data:${mimeOf(attachment)};base64,${getCleanBase64(b64)}`); })
       .catch(() => {}); // no bytes yet is not an error worth showing: the icon stands in
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, mailbox, emailUid, attachmentIndex, kind]);
+  }, [accountId, mailbox, emailUid, attachmentIndex, kind, listIndex]);
 
   const flashDownloaded = (path) => {
     setDownloadedPath(path);
@@ -735,7 +745,7 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, subject }) {
   const t = useT();
   const [downloading, setDownloading] = useState(false);
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(null);
   const [error, setError] = useState(null);
   const isDemo = !!window.__MAILVAULT_DEMO__;
   const isTauri = !!window.__TAURI__ && !isDemo;
@@ -758,10 +768,12 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
         indices: attachments.map((a) => a._originalIndex),
         destDir,
       });
-      setDone(true);
-      setTimeout(() => setDone(false), 3000);
+      // The folder's own name, not "Downloaded": when Finder refuses to open
+      // (a sandbox scope it does not hold), this is the only thing that says
+      // where the files went.
+      setDone(result?.dir ? result.dir.split('/').pop() : t('email.attachments.downloaded'));
+      setTimeout(() => setDone(null), 6000);
       if (isTauri && result?.dir) {
-        // Showing the folder is the whole point of exporting into one.
         await window.__TAURI__.core.invoke('show_in_folder', { path: result.dir }).catch(() => {});
       }
     } catch (err) {
@@ -792,7 +804,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
       ) : done ? (
         <>
           <Check size={14} />
-          <span>{t('email.attachments.downloaded')}</span>
+          <span className="max-w-[16rem] truncate">{done}</span>
         </>
       ) : (
         <>

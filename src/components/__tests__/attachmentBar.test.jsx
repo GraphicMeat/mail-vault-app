@@ -337,6 +337,8 @@ describe('DownloadAllButton', () => {
     });
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
     await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(true));
+    // The folder's own name, so a refused reveal still says where it went.
+    await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
   });
 
   it('says so when the export fails instead of claiming a download', async () => {

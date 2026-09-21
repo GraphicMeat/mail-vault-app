@@ -8,6 +8,9 @@
 - **Settings now lists the server actions MailVault still owes.** Background Daemon shows every delete, move or flag change your server has not accepted yet, with the reason it last failed, a Retry now button, and a Cancel for one that has been failing for too long.
 - **Search terms are highlighted in the message you open.** Opening a result now marks every occurrence of what you searched for inside the message body, in the reading pane, in a thread and in the full-window view. The highlight follows the query while you refine it.
 - **A result that only matched inside an attachment says so.** When the term is in an attached file and not in the message itself, the row's paperclip is highlighted instead of leaving you hunting for text that was never in the body.
+- **Attachments show themselves instead of a paper icon.** Attached images appear as their own thumbnail in the message; everything else gets the icon of its kind, so a zip, a spreadsheet and a video are no longer three copies of the same picture.
+- **Save As sits on every attachment.** It used to be right-click only, which meant it could not be reached from the keyboard at all.
+- **Drag an attachment out to the Desktop or any app.** Dragging a row hands over the real file, not a web link to it.
 
 ### Changed
 - **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
@@ -26,6 +29,7 @@
 - **Marking the open message unread no longer closes it.** Only deleting it, moving it, or closing the reader yourself takes a message off the screen now.
 - **A message you read with the unread filter on stays in the list.** Opening an unread message marks it read, which took its row out of the filtered list the moment you moved to the next one. Messages read while the filter is on now stay on screen until you switch the filter off and on again.
 - **Refreshing the list no longer closes the message you are reading.** Refresh, the automatic reconnect and the periodic sync all closed the reading pane, in a single folder and in All Inboxes. Only moving to another account or folder does now.
+- **Download All puts the files in a folder you can find.** It wrote them into MailVault's own cache, where nothing pointed you. They now go into a new folder under Downloads named after the message, and that folder opens when the export finishes. A folder of that name already there is left alone and a second one is made beside it.
 - **Attachments download straight to your Downloads folder.** The Download button used to put the file in MailVault's own cache, so saving it where you expected still needed a right-click and a save dialog. It goes to Downloads on the first click, and a file already there with the same name is never overwritten.
 - **Select messages selects the search results while you are searching.** It opened the date-range picker for the whole mailbox instead, which could not see the search at all.
 - **Search results you tick can be deleted and marked read again.** Delete from server, Delete everywhere and Mark read/unread were greyed out for a message found only by search, because the selection bar could not match it to a loaded row.

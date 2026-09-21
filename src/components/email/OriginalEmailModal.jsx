@@ -66,7 +66,7 @@ export function OriginalEmailModal({ email, onClose }) {
               <h4 className="text-sm font-medium text-mail-text mb-2">{t('email.original.attachments')}</h4>
               <div className="flex flex-wrap gap-2">
                 {email.attachments.map((att, i) => (
-                  <AttachmentItem key={i} compact attachment={att} attachmentIndex={att._originalIndex ?? i}
+                  <AttachmentItem key={i} compact listIndex={i} attachment={att} attachmentIndex={att._originalIndex ?? i}
                     emailUid={email.uid} accountId={email._accountId} mailbox={email._mailbox} />
                 ))}
               </div>
