@@ -27,6 +27,14 @@ vi.mock('@tauri-apps/api/path', () => ({
   join: async (...parts) => parts.join('/'),
 }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ exists: async (p) => existing.has(p) }));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ save: vi.fn() }));
+
+// Dragging out is a native AppKit/Win32/GTK drag session behind a plugin
+// command; jsdom can only prove the seam — the right path, a PNG drag image.
+class FakeChannel {}
+vi.mock('@tauri-apps/api/core', () => ({ Channel: FakeChannel }));
+vi.mock('modern-screenshot', () => ({ domToPng: async () => 'data:image/png;base64,ROW' }));
+const dragCalls = () => invoke.mock.calls.filter(([cmd]) => cmd === 'plugin:drag|start_drag');
 
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
@@ -47,7 +55,7 @@ vi.mock('../../stores/accountStore', () => ({
   useAccountStore: (selector) => selector({ activeAccountId: 'acct-active', activeMailbox: 'UNIFIED' }),
 }));
 
-const { AttachmentItem } = await import('../email/AttachmentBar');
+const { AttachmentItem, DownloadAllButton, attachmentIcon, exportFolderName } = await import('../email/AttachmentBar');
 
 const PNG_B64 = 'iVBORw0KGgo=';
 const PDF = { filename: 'invoice.pdf', contentType: 'application/pdf', size: 1200 };
@@ -76,6 +84,7 @@ beforeEach(() => {
     if (cmd === 'cache_attachment') return '/cache/acct-1_INBOX_7_0_invoice.pdf';
     if (cmd === 'save_attachment_to') return args?.destPath;
     if (cmd === 'open_file') return null;
+    if (cmd === 'plugin:drag|start_drag') return null;
     throw new Error(`unexpected command ${cmd}`);
   });
   existing.clear();
@@ -213,5 +222,140 @@ describe('AttachmentItem open externally', () => {
 
     await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
     expect(invoke.mock.calls.some(([cmd]) => cmd === 'open_file')).toBe(false);
+  });
+});
+
+describe('AttachmentItem tile', () => {
+  it('shows the image itself instead of a generic file icon', async () => {
+    renderItem(PNG);
+    const thumb = await screen.findByTestId('attachment-thumb');
+    expect(thumb.getAttribute('src')).toBe(`data:image/png;base64,${PNG_B64}`);
+  });
+
+  // A 40px square is not worth pulling a camera original over IPC.
+  it('leaves a huge image on its icon rather than reading it for a thumbnail', async () => {
+    renderItem({ ...PNG, size: 20 * 1024 * 1024 });
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'cached_attachment_path')).toBe(true));
+    expect(screen.queryByTestId('attachment-thumb')).toBeNull();
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'maildir_read_attachment')).toBe(false);
+  });
+
+  it('gives each kind its own icon', () => {
+    const name = (att) => attachmentIcon(att)({})?.props?.['data-icon'];
+    expect(name(ZIP)).toBe('FileArchive');
+    expect(name({ filename: 'q3.xlsx' })).toBe('FileSpreadsheet');
+    expect(name({ filename: 'clip.mov', contentType: 'video/quicktime' })).toBe('FileVideo');
+    expect(name(PDF)).toBe('FileText');
+    expect(name(ZIP)).not.toBe(name(PDF));
+  });
+});
+
+describe('AttachmentItem save as', () => {
+  it('offers Save As without a right-click', async () => {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    save.mockResolvedValue('/Users/test/Desktop/invoice.pdf');
+    renderItem(PDF);
+
+    fireEvent.click(screen.getByTestId('attachment-save-as'));
+
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(true));
+    const call = invoke.mock.calls.find(([cmd]) => cmd === 'save_attachment_to');
+    expect(call[1].destPath).toBe('/Users/test/Desktop/invoice.pdf');
+  });
+
+  // A fourth icon button crushes the filename in the compact row.
+  it('keeps the compact row to its three buttons', () => {
+    renderItem(PDF, { compact: true });
+    expect(screen.queryByTestId('attachment-save-as')).toBeNull();
+  });
+});
+
+describe('AttachmentItem drag out', () => {
+  it('cancels the browser drag and starts a native one on the cached file', async () => {
+    renderItem(PDF);
+    const row = screen.getByTestId('attachment-item');
+    expect(row.getAttribute('draggable')).toBe('true');
+
+    // fireEvent returns false when the handler called preventDefault — which
+    // it must: WebKit's own drag hands the Desktop a .webloc, not the file.
+    const notPrevented = fireEvent.dragStart(row, { dataTransfer: {} });
+    expect(notPrevented).toBe(false);
+    await waitFor(() => expect(dragCalls()).toHaveLength(1));
+
+    const args = dragCalls()[0][1];
+    expect(args.item).toEqual(['/cache/acct-1_INBOX_7_0_invoice.pdf']);
+    expect(args.image.startsWith('data:image/png;base64,')).toBe(true);
+    expect(args.onEvent).toBeInstanceOf(FakeChannel);
+  });
+
+  it('drags the file that is already cached without caching it twice', async () => {
+    invoke.mockImplementation(async (cmd) =>
+      (cmd === 'cached_attachment_path' ? '/cache/ready.pdf' : null));
+    renderItem(PDF);
+    await waitFor(() => expect(screen.getByText('Click to open')).toBeTruthy());
+
+    fireEvent.dragStart(screen.getByTestId('attachment-item'), { dataTransfer: {} });
+
+    await waitFor(() => expect(dragCalls()).toHaveLength(1));
+    expect(dragCalls()[0][1].item).toEqual(['/cache/ready.pdf']);
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
+  });
+});
+
+describe('DownloadAllButton', () => {
+  const ATTACHMENTS = [{ ...PDF, _originalIndex: 0 }, { ...ZIP, _originalIndex: 3 }];
+
+  const renderAll = (props = {}) => render(
+    <DownloadAllButton
+      attachments={ATTACHMENTS}
+      emailUid={7}
+      accountId="acct-1"
+      mailbox="INBOX"
+      subject="Q3 report"
+      {...props}
+    />,
+  );
+
+  // The old loop called cache_attachment, which writes into the app's PRIVATE
+  // cache: "Download All" put the files where the user could not find them.
+  it('exports into a folder under Downloads and reveals it', async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === 'export_attachments') return { dir: '/Users/test/Downloads/Q3 report - Attachments', files: ['invoice.pdf', 'bundle.zip'] };
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'export_attachments')).toBe(true));
+    const call = invoke.mock.calls.find(([cmd]) => cmd === 'export_attachments');
+    expect(call[1]).toEqual({
+      accountId: 'acct-1',
+      mailbox: 'INBOX',
+      uid: 7,
+      indices: [0, 3],
+      destDir: '/Users/test/Downloads/Q3 report - Attachments',
+    });
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(true));
+  });
+
+  it('says so when the export fails instead of claiming a download', async () => {
+    invoke.mockImplementation(async (cmd) => {
+      if (cmd === 'export_attachments') throw new Error('disk full');
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+
+    await waitFor(() => expect(screen.getByText('Failed to download')).toBeTruthy());
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'show_in_folder')).toBe(false);
+  });
+
+  // A subject is not a path component.
+  it('keeps a hostile subject inside one folder name', () => {
+    expect(exportFolderName('../../etc/passwd', 'Attachments')).toBe('etc-passwd - Attachments');
+    expect(exportFolderName('   ', 'Attachments')).toBe('Attachments');
+    expect(exportFolderName('a'.repeat(200), 'Attachments').length).toBeLessThan(80);
+    expect(exportFolderName('Re: budget\nQ3', 'Attachments')).toBe('Re- budget Q3 - Attachments');
   });
 });

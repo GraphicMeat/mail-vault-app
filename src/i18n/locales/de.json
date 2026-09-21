@@ -283,6 +283,7 @@
   "email.attachments.clickOpen": "Zum Öffnen klicken",
   "email.attachments.download": "Herunterladen",
   "email.attachments.downloadAll": "Alle herunterladen",
+  "email.attachments.folderName": "Anhänge",
   "email.attachments.downloaded": "Heruntergeladen",
   "email.attachments.failedDownload": "Herunterladen fehlgeschlagen",
   "email.attachments.failedSave": "Speichern fehlgeschlagen",

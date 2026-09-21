@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "Clicca per aprire",
   "email.attachments.download": "Scarica",
   "email.attachments.downloadAll": "Scarica tutto",
+  "email.attachments.folderName": "Allegati",
   "email.attachments.downloaded": "Scaricato",
   "email.attachments.failedDownload": "Download non riuscito",
   "email.attachments.failedSave": "Salvataggio non riuscito",

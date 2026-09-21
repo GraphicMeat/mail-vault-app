@@ -187,6 +187,31 @@ pub(crate) async fn route(state: &Arc<DaemonState>, method: &str, params: &Value
                 .and_then(|r| r),
             )
         }
+        // Reads the .eml and writes N files OUTSIDE the vault (a folder the
+        // app named under ~/Downloads). Not a vault write, so no
+        // `with_vault_write`: the gate guards the vault's own files, and the
+        // daemon inherits the app's sandbox (`com.apple.security.inherit`),
+        // which is what lets it reach Downloads at all.
+        "export_attachments" => {
+            let account_id = req!(str_arg(&id, params, "accountId"));
+            let mailbox = req!(str_arg(&id, params, "mailbox"));
+            let uid = req!(u32_arg(&id, params, "uid"));
+            let indices = req!(vec_arg::<usize>(&id, params, "indices"));
+            let dest_dir = req!(str_arg(&id, params, "destDir"));
+            let state = Arc::clone(state);
+            done(
+                id,
+                blocking(move || -> Result<Value, String> {
+                    let root = vault_root(&state)?;
+                    let out = vault_files::export_attachments(
+                        &root, &account_id, &mailbox, uid, &indices, std::path::Path::new(&dest_dir),
+                    )?;
+                    serde_json::to_value(out).map_err(|e| e.to_string())
+                })
+                .await
+                .and_then(|r| r),
+            )
+        }
         // Writes one file under <root>/attachment_cache: with_vault_write,
         // scoped to this one call (one file), per the Global constraint that
         // a write never spans more than one file/mailbox batch per gate check.
@@ -523,6 +548,42 @@ mod tests {
             r.result.unwrap(),
             json!("RnJvbTogYUBiLmNvbQ0KVG86IGNAZC5jb20NClN1YmplY3Q6IGhpDQpDb250ZW50LVR5cGU6IG11bHRpcGFydC9taXhlZDsgYm91bmRhcnk9WA0KDQotLVgNCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbg0KDQpib2R5DQotLVgNCkNvbnRlbnQtVHlwZTogYXBwbGljYXRpb24vb2N0ZXQtc3RyZWFtOyBuYW1lPXBpeGVsLnBuZw0KQ29udGVudC1EaXNwb3NpdGlvbjogYXR0YWNobWVudDsgZmlsZW5hbWU9cGl4ZWwucG5nDQoNCmRhdGENCi0tWC0tDQo=")
         );
+    }
+
+    #[tokio::test]
+    async fn export_attachments_writes_the_folder_the_app_named() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("hi - Attachments");
+
+        let r = call(&s, "export_attachments", json!({
+            "accountId": "acc", "mailbox": "INBOX", "uid": 7,
+            "indices": [0], "destDir": dest.to_string_lossy(),
+        })).await;
+
+        let v = r.result.expect("export_attachments must succeed");
+        assert_eq!(v["dir"], json!(dest.to_string_lossy()));
+        assert_eq!(v["files"], json!(["pixel.png"]));
+        assert!(dest.join("pixel.png").exists());
+        // The export is the user's folder, not the app's private cache.
+        assert!(!t.path().join("attachment_cache").exists());
+    }
+
+    #[tokio::test]
+    async fn export_attachments_without_indices_is_a_bad_request_not_an_empty_folder() {
+        let (t, s) = st(true);
+        seed_email(t.path(), "acc", "INBOX", 7);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("empty");
+
+        let r = call(&s, "export_attachments", json!({
+            "accountId": "acc", "mailbox": "INBOX", "uid": 7,
+            "indices": [], "destDir": dest.to_string_lossy(),
+        })).await;
+
+        assert!(r.error.is_some());
+        assert!(!dest.exists());
     }
 
     #[tokio::test]

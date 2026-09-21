@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "Cliquer pour ouvrir",
   "email.attachments.download": "Télécharger",
   "email.attachments.downloadAll": "Tout télécharger",
+  "email.attachments.folderName": "Pièces jointes",
   "email.attachments.downloaded": "Téléchargé",
   "email.attachments.failedDownload": "Échec du téléchargement",
   "email.attachments.failedSave": "Échec de l'enregistrement",

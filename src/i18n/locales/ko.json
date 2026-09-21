@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "클릭하여 열기",
   "email.attachments.download": "다운로드",
   "email.attachments.downloadAll": "모두 다운로드",
+  "email.attachments.folderName": "첨부 파일",
   "email.attachments.downloaded": "다운로드됨",
   "email.attachments.failedDownload": "다운로드에 실패했습니다",
   "email.attachments.failedSave": "저장에 실패했습니다",

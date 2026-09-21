@@ -10,7 +10,14 @@ import {
   Save,
   ExternalLink,
   Eye,
+  File,
+  FileArchive,
+  FileAudio,
+  FileCode,
+  FileSpreadsheet,
   FileText,
+  FileVideo,
+  FolderDown,
   FolderOpen,
   AppWindow,
   Check,
@@ -41,6 +48,60 @@ function base64ToBytes(base64) {
 
 function mimeOf(attachment) {
   return (attachment.contentType || 'application/octet-stream').split(';')[0].trim();
+}
+
+/**
+ * The tile shows what the file IS, not that it is a file.
+ *
+ * Images get their own bytes as a thumbnail (`THUMB_MAX_BYTES` keeps a 40px
+ * square from pulling a 30MB camera original over IPC); everything else gets
+ * the icon of its kind, because one `FileText` for a zip, a spreadsheet and a
+ * video told the user nothing the filename did not already say.
+ */
+const THUMB_MAX_BYTES = 4 * 1024 * 1024;
+
+// A 1x1 transparent PNG. `start_drag` requires a drag image and rejects
+// anything that is not PNG data; this stands in when rendering the row fails.
+const DRAG_FALLBACK_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+const ICON_BY_EXT = {
+  zip: FileArchive, rar: FileArchive, '7z': FileArchive, gz: FileArchive, tar: FileArchive,
+  csv: FileSpreadsheet, xls: FileSpreadsheet, xlsx: FileSpreadsheet, numbers: FileSpreadsheet,
+  mp3: FileAudio, wav: FileAudio, m4a: FileAudio, aac: FileAudio, flac: FileAudio, ogg: FileAudio,
+  mp4: FileVideo, mov: FileVideo, avi: FileVideo, mkv: FileVideo, webm: FileVideo,
+  json: FileCode, xml: FileCode, html: FileCode, js: FileCode, ics: FileCode,
+};
+
+export function attachmentIcon({ contentType, filename } = {}) {
+  const type = (contentType || '').split(';')[0].trim().toLowerCase();
+  const ext = (filename || '').toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  if (ICON_BY_EXT[ext]) return ICON_BY_EXT[ext];
+  if (type.startsWith('audio/')) return FileAudio;
+  if (type.startsWith('video/')) return FileVideo;
+  if (type === 'application/zip' || type === 'application/x-tar') return FileArchive;
+  if (type.startsWith('text/') || type === 'application/pdf' || ext === 'pdf') return FileText;
+  if (type.startsWith('application/') || !type) return File;
+  return FileText;
+}
+
+/**
+ * Where the export folder for one message goes, from its subject.
+ *
+ * A subject is not a filename: it carries `/`, `:`, newlines, and runs past
+ * any sane path component. `vault_files::fs_safe` does the same job for the
+ * attachment cache; this is its JS twin for a folder the USER sees, so it
+ * keeps spaces rather than replacing them with underscores.
+ */
+export function exportFolderName(subject, fallback) {
+  const clean = String(subject || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[/\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .slice(0, 60)
+    // A leading dot hides the folder; a leading or trailing dash is what a
+    // subject that began with a path separator leaves behind.
+    .replace(/^[.\-\s]+|[.\-\s]+$/g, '');
+  return clean ? `${clean} - ${fallback}` : fallback;
 }
 
 function browserDownload(attachment) {
@@ -280,6 +341,8 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   const [justDownloaded, setJustDownloaded] = useState(false);
   const [contextMenu, setContextMenu] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [thumb, setThumb] = useState(null);
+  const rowRef = useRef(null);
   const contentRef = useRef(attachment.content || null);
   const isDemo = !!window.__MAILVAULT_DEMO__;
   const isTauri = !!window.__TAURI__ && !isDemo;
@@ -303,6 +366,19 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     contentRef.current = await readAttachment(location);
     return contentRef.current;
   };
+
+  // The thumbnail shares `contentRef` with the preview and the download, so
+  // an image is read from the .eml once however many of the three run.
+  useEffect(() => {
+    if (kind !== 'image') return undefined;
+    if (attachment.size && attachment.size > THUMB_MAX_BYTES) return undefined;
+    let cancelled = false;
+    ensureContent()
+      .then((b64) => { if (!cancelled) setThumb(`data:${mimeOf(attachment)};base64,${getCleanBase64(b64)}`); })
+      .catch(() => {}); // no bytes yet is not an error worth showing: the icon stands in
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, mailbox, emailUid, attachmentIndex, kind]);
 
   const flashDownloaded = (path) => {
     setDownloadedPath(path);
@@ -431,6 +507,60 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     }
   };
 
+  /**
+   * The cached path, caching it first when nothing is cached yet.
+   *
+   * A drag needs a real file on disk, and `dragstart` is the only place that
+   * caches one: doing it on `mousedown` would write a cache copy on every
+   * plain click of a row, including the Download button's, which is exactly
+   * the private-cache write Download was changed to stop making.
+   */
+  const pathPromiseRef = useRef(null);
+  const ensurePath = () => {
+    if (downloadedPath) return Promise.resolve(downloadedPath);
+    if (!pathPromiseRef.current) {
+      pathPromiseRef.current = send('cache_attachment', location)
+        .then((path) => { setDownloadedPath(path); return path; })
+        .catch((err) => { pathPromiseRef.current = null; throw err; });
+    }
+    return pathPromiseRef.current;
+  };
+
+  /**
+   * Drag the file out to Finder (or any other app).
+   *
+   * WebKit's own HTML5 drag hands a WKWebView page's `DownloadURL` to nobody:
+   * dropping it on the Desktop produces a `.webloc`, not the file. So the
+   * browser drag is cancelled and a real AppKit/Win32/GTK drag session is
+   * started from the file already on disk, with a picture of this row as the
+   * drag image.
+   */
+  const handleDragStart = async (e) => {
+    if (!isTauri) return;
+    e.preventDefault();
+    try {
+      const path = await ensurePath();
+      const [{ Channel }, { domToPng }] = await Promise.all([
+        import('@tauri-apps/api/core'),
+        import('modern-screenshot'),
+      ]);
+      const image = await domToPng(rowRef.current, { scale: 1 }).catch(() => DRAG_FALLBACK_PNG);
+      // The LIVE global bridge, like every other invoke in this file: the
+      // module's copy talks to `__TAURI_INTERNALS__` directly, which no e2e
+      // fixture can swap — and an unstubbed start_drag on the runner opens a
+      // real drag session.
+      await window.__TAURI__.core.invoke('plugin:drag|start_drag', {
+        item: [path],
+        image,
+        // The plugin's callback is not optional; nothing here needs the drop
+        // result, so it is drained.
+        onEvent: new Channel(),
+      });
+    } catch (err) {
+      console.error('[Attachment] Drag failed:', err);
+    }
+  };
+
   const openPreview = (e) => {
     if (e?.stopPropagation) e.stopPropagation();
     setContextMenu(null);
@@ -448,13 +578,17 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 
   const iconSize = compact ? 14 : 20;
   const badgeIconSize = compact ? 12 : 16;
+  const KindIcon = attachmentIcon(attachment);
   const iconButton = 'p-1 min-w-7 min-h-7 inline-flex items-center justify-center rounded-md text-mail-text-muted hover:text-mail-accent-text hover:bg-mail-accent/10 transition-colors';
 
   return (
     <>
       <div
+        ref={rowRef}
         className={`flex items-center gap-${compact ? '2' : '3'} ${compact ? 'px-2.5 py-1.5' : 'p-3'} bg-mail-bg rounded-lg border transition-all group cursor-pointer
                    ${error ? 'border-mail-danger' : justDownloaded ? 'border-mail-success/50' : 'border-mail-border hover:border-mail-accent/50'}`}
+        draggable={isTauri}
+        onDragStart={isTauri ? handleDragStart : undefined}
         onClick={handleRowClick}
         onKeyDown={event => {
           if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
@@ -466,11 +600,18 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
         tabIndex={0}
         data-testid="attachment-item"
       >
-        <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} rounded-lg flex items-center justify-center ${justDownloaded ? 'bg-mail-success-tint' : 'bg-mail-accent/10'}`}>
+        <div className={`${compact ? 'w-7 h-7' : 'w-10 h-10'} shrink-0 rounded-lg overflow-hidden flex items-center justify-center ${justDownloaded ? 'bg-mail-success-tint' : 'bg-mail-accent/10'}`}>
           {justDownloaded ? (
             <Check size={iconSize} className="text-mail-success" />
+          ) : thumb ? (
+            <img
+              src={thumb}
+              alt=""
+              className="w-full h-full object-cover"
+              data-testid="attachment-thumb"
+            />
           ) : (
-            <FileText size={iconSize} className="text-mail-accent-text" />
+            <KindIcon size={iconSize} className="text-mail-accent-text" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -512,6 +653,22 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
               data-testid="attachment-open-external"
             >
               <ExternalLink size={badgeIconSize} />
+            </button>
+          )}
+          {/* Save As was right-click only, which is not discoverable and not
+              reachable at all without a mouse. Hidden in `compact` rows
+              (OriginalEmailModal) — a fourth button there crushes the
+              filename; the context menu still has it. */}
+          {(isTauri || isDemo) && !compact && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleSaveAs(); }}
+              className={iconButton}
+              title={t('email.attachments.save')}
+              aria-label={t('email.attachments.save')}
+              data-testid="attachment-save-as"
+            >
+              <Save size={badgeIconSize} />
             </button>
           )}
           {downloading ? (
@@ -566,40 +723,53 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
   );
 }
 
-export function DownloadAllButton({ attachments, emailUid, accountId, mailbox }) {
+/**
+ * Export every attachment of one message into a folder of its own.
+ *
+ * It used to loop `cache_attachment`, which writes into the app's PRIVATE
+ * attachment cache — the files were "downloaded" somewhere the user could
+ * not find. The daemon now writes them into `~/Downloads/<subject> -
+ * Attachments` (a `(n)` sibling when that folder is taken, so two messages
+ * never merge) and the folder is revealed when it lands.
+ */
+export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, subject }) {
   const t = useT();
   const [downloading, setDownloading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const isTauri = !!window.__TAURI__;
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState(null);
+  const isDemo = !!window.__MAILVAULT_DEMO__;
+  const isTauri = !!window.__TAURI__ && !isDemo;
 
   const handleDownloadAll = async () => {
     if (attachments.length === 0) return;
-
     setDownloading(true);
-    setProgress({ current: 0, total: attachments.length });
-
+    setError(null);
     try {
-      for (let i = 0; i < attachments.length; i++) {
-        const attachment = attachments[i];
-        setProgress({ current: i + 1, total: attachments.length });
-        const location = { accountId, mailbox, uid: emailUid, attachmentIndex: attachment._originalIndex };
-
-        try {
-          if (isTauri) {
-            await send('cache_attachment', location);
-          } else if (attachment.content) {
-            browserDownload(attachment);
-            if (i < attachments.length - 1) {
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-          }
-        } catch (err) {
-          console.error(`Failed to download attachment ${i + 1}:`, err);
-        }
+      const destDir = isTauri
+        ? await (async () => {
+            const { downloadDir, join } = await import('@tauri-apps/api/path');
+            return join(await downloadDir(), exportFolderName(subject, t('email.attachments.folderName')));
+          })()
+        : '';
+      const result = await send('export_attachments', {
+        accountId,
+        mailbox,
+        uid: emailUid,
+        indices: attachments.map((a) => a._originalIndex),
+        destDir,
+      });
+      setDone(true);
+      setTimeout(() => setDone(false), 3000);
+      if (isTauri && result?.dir) {
+        // Showing the folder is the whole point of exporting into one.
+        await window.__TAURI__.core.invoke('show_in_folder', { path: result.dir }).catch(() => {});
       }
+    } catch (err) {
+      console.error('[Attachment] Download all failed:', err);
+      setError(t('email.attachments.failedDownload'));
+      setTimeout(() => setError(null), 3000);
     } finally {
       setDownloading(false);
-      setProgress({ current: 0, total: 0 });
     }
   };
 
@@ -607,6 +777,7 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox })
     <button
       onClick={handleDownloadAll}
       disabled={downloading}
+      data-testid="attachment-download-all"
       className="flex items-center gap-1.5 px-3 py-1.5 bg-mail-accent/10
                 text-mail-accent-text hover:bg-mail-accent/20 rounded-lg text-sm
                 font-medium transition-colors disabled:opacity-70"
@@ -614,11 +785,18 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox })
       {downloading ? (
         <>
           <div className="w-3.5 h-3.5 border-2 border-mail-accent border-t-transparent rounded-full animate-spin" />
-          <span>{progress.current}/{progress.total}</span>
+          <span>{t('email.attachments.downloadAll')}</span>
+        </>
+      ) : error ? (
+        <span className="text-mail-danger">{error}</span>
+      ) : done ? (
+        <>
+          <Check size={14} />
+          <span>{t('email.attachments.downloaded')}</span>
         </>
       ) : (
         <>
-          <Download size={14} />
+          <FolderDown size={14} />
           <span>{t('email.attachments.downloadAll')}</span>
         </>
       )}

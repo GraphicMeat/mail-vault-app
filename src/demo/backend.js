@@ -832,6 +832,23 @@ export function createDemoBackend({ initialSettings = {} } = {}) {
       case 'maildir_read_light_batch': return (args.uids || []).map(uid => { const row = find({ accountId, mailbox, uid }); return row && row.vaultPresent ? header(row) : null; });
       case 'maildir_read_raw_source': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.rawSourceBase64 || null; }
       case 'maildir_read_attachment': { const row = find({ accountId, mailbox, uid: args.uid }); return row?.attachments?.[args.attachmentIndex]?.content || null; }
+      // The demo has no filesystem: the folder export degrades to the same
+      // per-file browser download the single Download button uses.
+      case 'export_attachments': {
+        const row = find({ accountId, mailbox, uid: args.uid });
+        const files = [];
+        for (const index of args.indices || []) {
+          const attachment = row?.attachments?.[index];
+          if (!attachment?.content) continue;
+          const filename = attachment.filename || attachment.name || 'mailvault-demo-attachment';
+          if (typeof document !== 'undefined') {
+            const bytes = Uint8Array.from(atob(String(attachment.content).replace(/^data:[^;]+;base64,/, '')), char => char.charCodeAt(0));
+            downloadBrowserFile(filename, bytes, attachment.contentType || 'application/octet-stream');
+          }
+          files.push(filename);
+        }
+        return { dir: 'browser-downloads', files };
+      }
       case 'cache_attachment': {
         const row = find({ accountId, mailbox, uid: args.uid });
         const attachment = row?.attachments?.[args.attachmentIndex];

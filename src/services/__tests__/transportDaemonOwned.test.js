@@ -33,6 +33,9 @@ describe('daemon-owned commands', () => {
       'custody_status',
       'delete_mailbox_cache',
       'dns_mail_health',
+      // The folder export of one message's attachments (2026-09-21): a
+      // read of the .eml plus N writes, all of it daemon work.
+      'export_attachments',
       'export_backup',
       'export_mbox_all',
       'fetch_remote_asset',

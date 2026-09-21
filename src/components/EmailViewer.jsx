@@ -813,7 +813,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
                   <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
                 </div>
                 {realAttachments.length > 1 && (
-                  <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} accountId={selectedEmail._accountId || activeAccountId} mailbox={selectedEmail._mailbox} />
+                  <DownloadAllButton attachments={realAttachments} emailUid={selectedEmail.uid} accountId={selectedEmail._accountId || activeAccountId} mailbox={selectedEmail._mailbox} subject={selectedEmail.subject} />
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">

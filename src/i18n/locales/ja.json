@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "クリックして開く",
   "email.attachments.download": "ダウンロード",
   "email.attachments.downloadAll": "すべてダウンロード",
+  "email.attachments.folderName": "添付ファイル",
   "email.attachments.downloaded": "ダウンロード済み",
   "email.attachments.failedDownload": "ダウンロードに失敗しました",
   "email.attachments.failedSave": "保存に失敗しました",

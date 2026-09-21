@@ -597,13 +597,22 @@ pub fn fs_safe(s: &str) -> String {
     s.chars().map(|c| if c.is_alphanumeric() || c == '.' || c == '-' || c == '_' { c } else { '_' }).collect()
 }
 
-pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
-    // A sender picks the filename; only its last component may name a file here.
-    let leaf = Path::new(filename)
+/// The one component of a sender-supplied filename that may name a file.
+///
+/// A MIME `filename` is attacker-controlled: `../../x` or an absolute path
+/// would escape the directory it is being written into. Only the last
+/// component survives, and a component that names a directory instead of a
+/// file (empty, `.`, `..`) falls back.
+pub fn safe_leaf(filename: &str) -> String {
+    Path::new(filename)
         .file_name()
         .map(|f| f.to_string_lossy().to_string())
         .filter(|f| !f.is_empty() && f != "." && f != "..")
-        .unwrap_or_else(|| "attachment".to_string());
+        .unwrap_or_else(|| "attachment".to_string())
+}
+
+pub fn attachment_cache_path(cache_dir: &Path, account_id: &str, mailbox: &str, uid: u32, index: usize, filename: &str) -> PathBuf {
+    let leaf = safe_leaf(filename);
     cache_dir.join(format!("{}_{}_{}_{}_{}", fs_safe(account_id), fs_safe(mailbox), uid, index, leaf))
 }
 
@@ -663,6 +672,92 @@ pub fn cached_attachment_path(root: &Path, account_id: &str, mailbox: &str, uid:
     let cur_dir = cur_path(root, account_id, mailbox);
     Ok(cached_attachment_in(&cache_dir, &cur_dir, account_id, mailbox, uid, index)?
         .map(|p| p.to_string_lossy().to_string()))
+}
+
+/// What `export_attachments` wrote: the folder it created, and the file names
+/// inside it (already de-duplicated, so they are what is on disk).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExportedAttachments {
+    pub dir: String,
+    pub files: Vec<String>,
+}
+
+/// The first free name at `path`, adding ` (1)`, ` (2)`, ... before the
+/// extension — the same rule a browser download uses. Nothing here overwrites
+/// anything: an unrelated `invoice.pdf` in the export folder is not ours to
+/// destroy, and two `image.png` on one forwarded message are both wanted.
+fn next_free(path: &Path) -> PathBuf {
+    if !path.exists() {
+        return path.to_path_buf();
+    }
+    let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    // `.gitignore` is a name, not an extension: a leading dot never splits.
+    let dot = name.rfind('.').filter(|&i| i > 0);
+    let (base, ext) = match dot {
+        Some(i) => (&name[..i], &name[i..]),
+        None => (name.as_str(), ""),
+    };
+    // ponytail: a linear probe, capped — the same shape as the Downloads
+    // probe in the viewer, and the cap keeps a pathological folder finite.
+    for n in 1..1000 {
+        let candidate = path.with_file_name(format!("{} ({}){}", base, n, ext));
+        if !candidate.exists() {
+            return candidate;
+        }
+    }
+    path.with_file_name(format!("{} ({}){}", base, std::process::id(), ext))
+}
+
+/// Write a message's attachments into a folder of their own.
+///
+/// `indices` are positions in `collect_attachment_parts` order — the same
+/// index `read_attachment` and `cache_attachment` take, which is what the
+/// viewer's `_originalIndex` carries — so the export holds exactly the files
+/// the viewer listed, never the inline images it filtered out.
+///
+/// `dest_dir` is where the app wants the folder; an existing folder of that
+/// name is never written into, a `(n)` sibling is created instead, so two
+/// exports of two messages never merge.
+pub fn export_attachments(
+    root: &Path,
+    account_id: &str,
+    mailbox: &str,
+    uid: u32,
+    indices: &[usize],
+    dest_dir: &Path,
+) -> Result<ExportedAttachments, String> {
+    export_attachments_in(&cur_path(root, account_id, mailbox), uid, indices, dest_dir)
+}
+
+fn export_attachments_in(
+    cur_dir: &Path,
+    uid: u32,
+    indices: &[usize],
+    dest_dir: &Path,
+) -> Result<ExportedAttachments, String> {
+    if indices.is_empty() {
+        return Err("No attachments to export".to_string());
+    }
+    let raw = read_eml(cur_dir, uid)?;
+    let parsed = mailparse::parse_mail(&raw).map_err(|e| format!("Failed to parse email: {}", e))?;
+    let mut parts = Vec::new();
+    collect_attachment_parts(&parsed, &mut parts);
+
+    let dir = next_free(dest_dir);
+    fs::create_dir_all(&dir).map_err(|e| format!("Failed to create export folder: {}", e))?;
+
+    let mut files = Vec::new();
+    for &index in indices {
+        let part = parts.get(index)
+            .ok_or_else(|| format!("Attachment index {} out of range (total: {})", index, parts.len()))?;
+        let body = part.get_body_raw().map_err(|e| format!("Failed to read attachment body: {}", e))?;
+        let dest = next_free(&dir.join(safe_leaf(&part_filename(part))));
+        write_atomic(&dest, &body).map_err(|e| format!("Failed to write {}: {}", dest.display(), e))?;
+        files.push(dest.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+    }
+
+    info!("Exported {} attachment(s) of uid {} to {}", files.len(), uid, dir.display());
+    Ok(ExportedAttachments { dir: dir.to_string_lossy().to_string(), files })
 }
 
 /// Sweep a mailbox's cached .eml files newest-first (uid order) and write
@@ -1097,6 +1192,74 @@ R0lGODlhAQABAAAAACw=\r\n\
         assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), None);
         let path = cache_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap();
         assert_eq!(cached_attachment_in(&cache, &cur, "acct", "INBOX", 7, 0).unwrap(), Some(path));
+    }
+
+    #[test]
+    fn export_writes_the_listed_parts_into_a_folder_of_their_own() {
+        let (_d, cur, _c) = maildir_with(&[(9, &photo_with_inline_and_pixel())]);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Photo attachments");
+
+        // Index 0 is the photo; 1 and 2 are the inline logo and the tracking
+        // pixel the viewer filters out and therefore never asks for.
+        let r = export_attachments_in(&cur, 9, &[0], &dest).unwrap();
+
+        assert_eq!(r.files, vec!["photo.png".to_string()]);
+        assert_eq!(Path::new(&r.dir), dest);
+        assert_eq!(fs::read_dir(&dest).unwrap().count(), 1);
+        assert_eq!(fs::read(dest.join("photo.png")).unwrap(), b"\x89PNG\r\n\x1a\n".to_vec());
+    }
+
+    #[test]
+    fn a_second_export_never_writes_into_the_first_ones_folder() {
+        let (_d, cur, _c) = maildir_with(&[(7, &multipart_with_attachment())]);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Attachments");
+
+        let first = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
+        let second = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
+
+        assert_eq!(Path::new(&first.dir), dest);
+        assert_eq!(leaf(Path::new(&second.dir)), "Attachments (1)");
+        assert!(dest.join("report.pdf").exists());
+        assert!(Path::new(&second.dir).join("report.pdf").exists());
+    }
+
+    #[test]
+    fn two_parts_sharing_one_name_both_survive() {
+        let raw = String::from_utf8(photo_with_inline_and_pixel()).unwrap()
+            .replace("Content-ID: <logo123>\r\nContent-Disposition: inline",
+                     "Content-Disposition: attachment; filename=\"photo.png\"");
+        let (_d, cur, _c) = maildir_with(&[(9, raw.as_bytes())]);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Photo");
+
+        let r = export_attachments_in(&cur, 9, &[0, 1], &dest).unwrap();
+
+        assert_eq!(r.files, vec!["photo.png".to_string(), "photo (1).png".to_string()]);
+    }
+
+    #[test]
+    fn a_hostile_filename_cannot_escape_the_export_folder() {
+        let raw = String::from_utf8(multipart_with_attachment()).unwrap()
+            .replace("filename=\"report.pdf\"", "filename=\"../../escape.pdf\"");
+        let (_d, cur, _c) = maildir_with(&[(7, raw.as_bytes())]);
+        let out = tempfile::tempdir().unwrap();
+        let dest = out.path().join("Attachments");
+
+        let r = export_attachments_in(&cur, 7, &[0], &dest).unwrap();
+
+        assert_eq!(r.files, vec!["escape.pdf".to_string()]);
+        assert!(dest.join("escape.pdf").exists());
+        assert!(!out.path().parent().unwrap().join("escape.pdf").exists());
+    }
+
+    #[test]
+    fn export_refuses_an_index_the_message_does_not_have() {
+        let (_d, cur, _c) = maildir_with(&[(7, &multipart_with_attachment())]);
+        let out = tempfile::tempdir().unwrap();
+        let err = export_attachments_in(&cur, 7, &[5], &out.path().join("A")).unwrap_err();
+        assert!(err.contains("out of range"), "{err}");
     }
 
     #[test]

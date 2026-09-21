@@ -30,6 +30,7 @@
         { "path": "$HOME/**" }
       ]
     },
+    "drag:default",
     "shell:default",
     "shell:allow-open",
     {

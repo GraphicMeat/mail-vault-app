@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "Clique para abrir",
   "email.attachments.download": "Baixar",
   "email.attachments.downloadAll": "Baixar tudo",
+  "email.attachments.folderName": "Anexos",
   "email.attachments.downloaded": "Baixado",
   "email.attachments.failedDownload": "Falha ao baixar",
   "email.attachments.failedSave": "Falha ao salvar",

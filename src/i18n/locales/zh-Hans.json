@@ -280,6 +280,7 @@
   "email.attachments.clickOpen": "点击打开",
   "email.attachments.download": "下载",
   "email.attachments.downloadAll": "全部下载",
+  "email.attachments.folderName": "附件",
   "email.attachments.downloaded": "已下载",
   "email.attachments.failedDownload": "下载失败",
   "email.attachments.failedSave": "保存失败",

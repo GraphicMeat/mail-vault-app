@@ -12,6 +12,7 @@ import { getDarkReaderInlineScripts } from '../../utils/darkReaderInject';
 import { formatDateTime } from '../../utils/dateFormat';
 import { X, Loader } from 'lucide-react';
 import { AttachmentItem } from '../EmailViewer';
+import { DownloadAllButton } from './AttachmentBar';
 import { getRealAttachments, replaceCidUrls } from '../../services/attachmentUtils';
 import { checkLinkAlert } from '../../utils/linkSafety';
 import { scanTrackers } from '../../utils/trackerDetect';
@@ -366,6 +367,17 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
           const modalMailbox = emailLocation?.mailbox;
           return modalAttachments.length > 0 ? (
             <div className="px-4 py-3 border-t border-mail-border bg-mail-bg shrink-0 max-h-36 overflow-y-auto">
+              {modalAttachments.length > 1 && (
+                <div className="flex justify-end mb-2">
+                  <DownloadAllButton
+                    attachments={modalAttachments}
+                    emailUid={email.uid}
+                    accountId={emailLocation?.accountId || activeAccountId}
+                    mailbox={modalMailbox}
+                    subject={email.subject}
+                  />
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {modalAttachments.map((att) => (
                   <AttachmentItem

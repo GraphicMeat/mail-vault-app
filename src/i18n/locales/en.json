@@ -719,6 +719,7 @@
   "email.attachments.downloaded": "Downloaded",
   "email.attachments.clickOpen": "Click to open",
   "email.attachments.downloadAll": "Download All",
+  "email.attachments.folderName": "Attachments",
   "viewer.emailContent": "Email content",
   "viewer.selectEmailRead": "Select an email to read",
   "viewer.couldnTLoadMessage": "Couldn’t load this message",

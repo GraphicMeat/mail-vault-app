@@ -27,7 +27,7 @@ import { EmailSenderInfo } from './EmailSenderInfo';
 import { EmailActionBar } from './EmailActionBar';
 import { LocalMailLabels } from '../LocalMailLabels';
 import { useExportStore } from '../../stores/exportStore';
-import { AttachmentItem } from './AttachmentBar';
+import { AttachmentItem, DownloadAllButton } from './AttachmentBar';
 import { CloseViewerButton } from './CloseViewerButton';
 import { DeleteConfirmModal } from '../DeleteConfirmModal';
 import { scanEmailLinks, checkLinkAlert } from '../../utils/linkSafety';
@@ -496,9 +496,20 @@ function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListe
           {/* Attachments */}
           {realAttachments.length > 0 && (
             <div className="mt-3 pl-9">
-              <div className="flex items-center gap-2 text-xs text-mail-text-muted mb-2">
-                <Paperclip size={12} />
-                <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 text-xs text-mail-text-muted">
+                  <Paperclip size={12} />
+                  <span>{t('common.attachmentCountCap', { count: realAttachments.length })}</span>
+                </div>
+                {realAttachments.length > 1 && (
+                  <DownloadAllButton
+                    attachments={realAttachments}
+                    emailUid={email.uid}
+                    accountId={location?.accountId}
+                    mailbox={location?.mailbox}
+                    subject={email.subject}
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {realAttachments.map((attachment, index) => (

@@ -2687,7 +2687,11 @@ fn main() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_notification::init());
+        .plugin(tauri_plugin_notification::init())
+        // Dragging an attachment OUT to Finder: WKWebView's own HTML5 drag
+        // hands the Desktop a .webloc, not the file, so the page cancels it
+        // and this starts a real AppKit/Win32/GTK drag session instead.
+        .plugin(tauri_plugin_drag::init());
 
     #[cfg(feature = "webdriver")]
     let builder = builder.plugin(tauri_plugin_webdriver_automation::init());
