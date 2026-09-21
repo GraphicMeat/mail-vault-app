@@ -38,6 +38,7 @@ vi.mock('../../services/api', () => ({ searchEmails: async () => ({ emails: [], 
 
 const { useSearchStore } = await import('../searchStore.js');
 const { useTagStore } = await import('../tagStore');
+const { useFieldStore } = await import('../fieldStore');
 
 const DEFAULT_FILTERS = {
   location: 'all', folder: 'current', sender: '', dateFrom: null, dateTo: null, hasAttachments: false,
@@ -433,6 +434,47 @@ describe('narrowing a search by tag', () => {
   it('drops every row when the tag names nothing', async () => {
     const run = await startSearch('invoice tag:Nothing');
     await progress(run, 1, { rows: [tagged(1)], terminal: 'complete' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(useSearchStore.getState().searchResults).toEqual([]);
+  });
+});
+
+describe('narrowing a search by a custom field', () => {
+  const row = (uid) => result(uid, `subject ${uid}`, {
+    _accountId: 'acct-1', _mailbox: 'INBOX', messageId: `<${uid}@x.test>`,
+  });
+
+  beforeEach(() => {
+    useFieldStore.setState({
+      fields: { 'acct-1': [{ id: 'f1', scope: 'acct-1', name: 'Priority', kind: 'select', options: [], position: 0 }] },
+      byRow: {},
+    });
+  });
+
+  it('sends the daemon the text without the field term', async () => {
+    const run = await startSearch('invoice field:Priority=hi');
+    expect(run.request.query).toBe('invoice');
+  });
+
+  it('keeps only the rows holding that value', async () => {
+    const run = await startSearch('invoice field:Priority=hi');
+    harness.daemonCall.mockResolvedValueOnce({ values: [{ f1: 'hi' }, { f1: 'lo' }] });
+    await progress(run, 1, { rows: [row(1), row(2)], terminal: 'complete' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([1]);
+  });
+
+  it('a field named alone keeps whatever has any value for it', async () => {
+    const run = await startSearch('invoice field:Priority');
+    harness.daemonCall.mockResolvedValueOnce({ values: [{ f1: 'lo' }, {}] });
+    await progress(run, 1, { rows: [row(1), row(2)], terminal: 'complete' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([1]);
+  });
+
+  it('drops every row when no field has that name', async () => {
+    const run = await startSearch('invoice field:Nothing=hi');
+    await progress(run, 1, { rows: [row(1)], terminal: 'complete' });
     await new Promise(resolve => setTimeout(resolve, 5));
     expect(useSearchStore.getState().searchResults).toEqual([]);
   });

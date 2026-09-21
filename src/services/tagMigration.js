@@ -2,6 +2,8 @@ import { daemonCall } from './daemonClient';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTagStore } from '../stores/tagStore';
 import { useViewStore } from '../stores/viewStore';
+import { useFieldStore } from '../stores/fieldStore';
+import { useMailStore } from '../stores/mailStore';
 
 /// Hand the settings-file labels (`localMailLabels`) to the daemon once.
 ///
@@ -25,6 +27,12 @@ export async function bootstrapTags() {
     await useViewStore.getState().refreshCounts();
   } catch (error) {
     console.warn('[views] could not load the saved views:', error?.message || error);
+  }
+  try {
+    const accountId = useMailStore.getState().activeAccountId;
+    if (accountId) await useFieldStore.getState().loadFields(accountId);
+  } catch (error) {
+    console.warn('[fields] could not load the custom fields:', error?.message || error);
   }
   return migrateLocalMailLabels();
 }

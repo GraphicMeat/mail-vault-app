@@ -2469,5 +2469,29 @@
       "error": "Diese Ansicht konnte nicht ermittelt werden."
     },
     "saveSearch": "Diese Suche als Ansicht speichern"
+  },
+  "fields": {
+    "section": "Felder",
+    "explainer": "Felder sind Ihre eigenen Notizen zu einer Nachricht. Sie liegen auf diesem Mac und werden weder in die Nachricht geschrieben noch an Ihren Mailserver gesendet.",
+    "noValue": "—",
+    "newName": "Feldname",
+    "newKind": "Art",
+    "add": "Feld hinzufügen",
+    "deleteConfirm": "Löschen, samt aller Werte",
+    "scope": {
+      "global": "Alle Konten",
+      "account": "Dieses Konto",
+      "makeGlobal": "Mit allen Konten teilen",
+      "makeAccount": "Nur für dieses Konto"
+    },
+    "copyFrom": "Felder kopieren von…",
+    "copyRun": "Kopieren",
+    "kind": {
+      "select": "Auswahl",
+      "multi_select": "Mehrfachauswahl",
+      "date": "Datum",
+      "checkbox": "Kästchen",
+      "text": "Text"
+    }
   }
 }

@@ -2469,5 +2469,29 @@
       "error": "Cette vue n’a pas pu être calculée."
     },
     "saveSearch": "Enregistrer cette recherche comme vue"
+  },
+  "fields": {
+    "section": "Champs",
+    "explainer": "Les champs sont vos propres notes sur un message. Ils restent sur ce Mac : rien n’est écrit dans le message ni envoyé à votre serveur de messagerie.",
+    "noValue": "—",
+    "newName": "Nom du champ",
+    "newKind": "Type",
+    "add": "Ajouter un champ",
+    "deleteConfirm": "Supprimer, avec toutes ses valeurs",
+    "scope": {
+      "global": "Tous les comptes",
+      "account": "Ce compte",
+      "makeGlobal": "Partager avec tous les comptes",
+      "makeAccount": "Réserver à ce compte"
+    },
+    "copyFrom": "Copier les champs de…",
+    "copyRun": "Copier",
+    "kind": {
+      "select": "Choix",
+      "multi_select": "Plusieurs choix",
+      "date": "Date",
+      "checkbox": "Case à cocher",
+      "text": "Texte"
+    }
   }
 }

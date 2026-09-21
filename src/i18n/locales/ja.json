@@ -2469,5 +2469,29 @@
       "error": "このビューを計算できませんでした。"
     },
     "saveSearch": "この検索をビューとして保存"
+  },
+  "fields": {
+    "section": "フィールド",
+    "explainer": "フィールドはメッセージについてのあなた自身のメモです。この Mac に保存され、メッセージに書き込まれることも、メールサーバーに送信されることもありません。",
+    "noValue": "—",
+    "newName": "フィールド名",
+    "newKind": "種類",
+    "add": "フィールドを追加",
+    "deleteConfirm": "値ごと削除",
+    "scope": {
+      "global": "すべてのアカウント",
+      "account": "このアカウント",
+      "makeGlobal": "すべてのアカウントで共有",
+      "makeAccount": "このアカウントだけにする"
+    },
+    "copyFrom": "フィールドのコピー元…",
+    "copyRun": "コピー",
+    "kind": {
+      "select": "選択",
+      "multi_select": "複数選択",
+      "date": "日付",
+      "checkbox": "チェックボックス",
+      "text": "テキスト"
+    }
   }
 }

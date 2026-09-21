@@ -2469,5 +2469,29 @@
       "error": "This view could not be worked out."
     },
     "saveSearch": "Save this search as a view"
+  },
+  "fields": {
+    "section": "Fields",
+    "explainer": "Fields are your own notes about a message. They are stored on this Mac and never written to the message or sent to your mail server.",
+    "noValue": "—",
+    "newName": "Field name",
+    "newKind": "Kind",
+    "add": "Add field",
+    "deleteConfirm": "Delete, with every value",
+    "scope": {
+      "global": "All accounts",
+      "account": "This account",
+      "makeGlobal": "Share with every account",
+      "makeAccount": "Keep to this account"
+    },
+    "copyFrom": "Copy fields from…",
+    "copyRun": "Copy",
+    "kind": {
+      "select": "Choice",
+      "multi_select": "Several choices",
+      "date": "Date",
+      "checkbox": "Tick box",
+      "text": "Text"
+    }
   }
 }

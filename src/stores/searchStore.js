@@ -6,6 +6,7 @@ import { effectiveSearchMailboxConcurrency, useSettingsStore } from './settingsS
 import { emailKey } from './slices/unifiedHelpers';
 import { parseSearchQuery } from '../utils/searchQuery';
 import { useTagStore } from './tagStore';
+import { useFieldStore } from './fieldStore';
 import { daemonCall } from '../services/daemonClient';
 import { normalizeMessageId } from '../utils/emailParser';
 import { isBackedUp } from '../components/email/MessageStateIcon';
@@ -13,19 +14,53 @@ import { isBackedUp } from '../components/email/MessageStateIcon';
 /// A `tag:` term that names no tag. It can match nothing, which is the point.
 const MISSING_TAG = '\u0000none';
 
+/// The rows a message must be identified by for the daemon to answer about it.
+function askable(rows) {
+    const items = [];
+    const positions = [];
+    rows.forEach((row, index) => {
+      const accountId = row?._accountId || row?._srcAccountId;
+      const mailbox = row?._mailbox;
+      if (!accountId || !mailbox || row.uid == null) return;
+      positions.push(index);
+      items.push({ accountId, mailbox, uid: row.uid, ...(row.messageId ? { messageId: row.messageId } : {}) });
+    });
+    return { items, positions };
+}
+
+/// Which of these rows hold every named field condition. `value: null` asks
+/// only that the field has been given some answer.
+async function keepRowsWithFields(rows, conditions) {
+  if (conditions.some(condition => !condition.fieldId)) return [];
+  const { items, positions } = askable(rows);
+  if (!items.length) return [];
+  let lists = [];
+  try {
+    const reply = await daemonCall('fields.values', { items });
+    lists = Array.isArray(reply?.values) ? reply.values : [];
+  } catch {
+    return [];
+  }
+  const keep = new Set();
+  positions.forEach((rowIndex, askIndex) => {
+    const values = lists[askIndex] || {};
+    const matches = conditions.every(({ fieldId, value }) => {
+      const held = values[fieldId];
+      if (held === undefined) return false;
+      if (value === null) return true;
+      if (Array.isArray(held)) return held.some(entry => String(entry).toLocaleLowerCase() === value.toLocaleLowerCase());
+      return String(held).toLocaleLowerCase() === value.toLocaleLowerCase();
+    });
+    if (matches) keep.add(rowIndex);
+  });
+  return rows.filter((_row, index) => keep.has(index));
+}
+
 /// Which of these rows carry every named tag. The daemon answers for the rows
 /// it is handed, in order, so the key an assignment is stored under stays in
 /// one place instead of being re-derived here.
 async function keepRowsWithTags(rows, tagIds) {
-  const items = [];
-  const positions = [];
-  rows.forEach((row, index) => {
-    const accountId = row?._accountId || row?._srcAccountId;
-    const mailbox = row?._mailbox;
-    if (!accountId || !mailbox || row.uid == null) return;
-    positions.push(index);
-    items.push({ accountId, mailbox, uid: row.uid, ...(row.messageId ? { messageId: row.messageId } : {}) });
-  });
+  const { items, positions } = askable(rows);
   if (!items.length) return [];
   if (tagIds.includes(MISSING_TAG)) return [];
   let lists = [];
@@ -112,6 +147,12 @@ function toEpochSeconds(value, inclusiveEnd = false) {
     date.setUTCHours(23, 59, 59, 0);
   }
   return Math.floor(date.getTime() / 1000);
+}
+
+/// Read through a function so the field lookup does not pin a store import
+/// order at module load.
+function mailStateForFields() {
+  return useMailStore.getState();
 }
 
 function newSearchId(searchGeneration) {
@@ -327,7 +368,7 @@ export const useSearchStore = create((set, get) => ({
       activeAccountId: mail.activeAccountId,
       activeMailbox: mail.activeMailbox,
     };
-    const { text: queryText, tags: tagNames } = parseSearchQuery(query);
+    const { text: queryText, tags: tagNames, fields: fieldTerms } = parseSearchQuery(query);
     // A name nobody has a tag for resolves to nothing, and a search for it
     // must return nothing rather than silently ignoring the filter.
     const tagIds = tagNames.map(name => {
@@ -335,7 +376,14 @@ export const useSearchStore = create((set, get) => ({
         .find(item => item.name.toLocaleLowerCase() === name.toLocaleLowerCase());
       return tag ? tag.id : MISSING_TAG;
     });
-    const hasCriteria = !!(queryText || tagIds.length || filters.sender || filters.dateFrom
+    // A field name nobody has resolves to nothing, and a search for it must
+    // return nothing rather than quietly dropping the condition.
+    const schema = useFieldStore.getState().fieldsFor(mailStateForFields().activeAccountId) || [];
+    const fieldConditions = fieldTerms.map(term => ({
+      fieldId: schema.find(field => field.name.toLocaleLowerCase() === term.name.toLocaleLowerCase())?.id || null,
+      value: term.value,
+    }));
+    const hasCriteria = !!(queryText || tagIds.length || fieldConditions.length || filters.sender || filters.dateFrom
       || filters.dateTo || filters.hasAttachments);
 
     set({
@@ -377,12 +425,16 @@ export const useSearchStore = create((set, get) => ({
       set({ activeSearchId: searchId });
 
       let ordered = Promise.resolve();
+      const narrows = tagIds.length || fieldConditions.length;
       const onFrame = frame => {
-        if (!tagIds.length) return get().handleSearchProgress(frame);
+        if (!narrows) return get().handleSearchProgress(frame);
         // Frames are sequenced and a later one is dropped once an earlier
         // sequence has landed, so the awaited filtering has to stay in order.
         ordered = ordered.then(async () => {
-          const rows = await keepRowsWithTags(Array.isArray(frame.rows) ? frame.rows : [], tagIds);
+          let rows = Array.isArray(frame.rows) ? frame.rows : [];
+          if (tagIds.length) rows = await keepRowsWithTags(rows, tagIds);
+          if (fieldConditions.length && rows.length) rows = await keepRowsWithFields(rows, fieldConditions);
+          else if (fieldConditions.length) rows = [];
           get().handleSearchProgress({ ...frame, rows });
         }).catch(() => {});
         return ordered;

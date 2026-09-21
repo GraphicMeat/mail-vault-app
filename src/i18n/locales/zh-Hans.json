@@ -2469,5 +2469,29 @@
       "error": "无法计算此视图。"
     },
     "saveSearch": "将此搜索保存为视图"
+  },
+  "fields": {
+    "section": "字段",
+    "explainer": "字段是你对邮件的私人备注。它们保存在这台 Mac 上，不会写入邮件，也不会发送到邮件服务器。",
+    "noValue": "—",
+    "newName": "字段名称",
+    "newKind": "类型",
+    "add": "添加字段",
+    "deleteConfirm": "连同所有值一起删除",
+    "scope": {
+      "global": "所有账户",
+      "account": "此账户",
+      "makeGlobal": "与所有账户共享",
+      "makeAccount": "仅保留在此账户"
+    },
+    "copyFrom": "从以下账户复制字段…",
+    "copyRun": "复制",
+    "kind": {
+      "select": "单选",
+      "multi_select": "多选",
+      "date": "日期",
+      "checkbox": "勾选框",
+      "text": "文本"
+    }
   }
 }

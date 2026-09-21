@@ -2469,5 +2469,29 @@
       "error": "No se ha podido calcular esta vista."
     },
     "saveSearch": "Guardar esta búsqueda como vista"
+  },
+  "fields": {
+    "section": "Campos",
+    "explainer": "Los campos son tus propias notas sobre un mensaje. Se guardan en este Mac y nunca se escriben en el mensaje ni se envían a tu servidor de correo.",
+    "noValue": "—",
+    "newName": "Nombre del campo",
+    "newKind": "Tipo",
+    "add": "Añadir campo",
+    "deleteConfirm": "Eliminar, con todos sus valores",
+    "scope": {
+      "global": "Todas las cuentas",
+      "account": "Esta cuenta",
+      "makeGlobal": "Compartir con todas las cuentas",
+      "makeAccount": "Solo para esta cuenta"
+    },
+    "copyFrom": "Copiar campos de…",
+    "copyRun": "Copiar",
+    "kind": {
+      "select": "Opción",
+      "multi_select": "Varias opciones",
+      "date": "Fecha",
+      "checkbox": "Casilla",
+      "text": "Texto"
+    }
   }
 }

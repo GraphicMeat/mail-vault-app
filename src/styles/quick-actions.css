@@ -624,3 +624,89 @@
   color: var(--mail-text);
   font-size: 11px;
 }
+
+/* ── Custom fields ───────────────────────────────────────────────────────── */
+
+.field-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 4px;
+  font-size: 11px;
+  color: var(--mail-text-muted);
+}
+
+.field-strip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.field-strip-name {
+  color: var(--mail-text-muted);
+}
+
+.field-strip input[type="text"],
+.field-strip input[type="date"],
+.field-strip select {
+  padding: 1px 4px;
+  border: 1px solid var(--mail-border);
+  border-radius: 4px;
+  background: var(--mail-surface);
+  color: var(--mail-text);
+  font-size: 11px;
+  max-width: 180px;
+}
+
+.field-multi {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.field-multi label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.field-multi label.is-chosen {
+  color: var(--mail-text);
+}
+
+.fields-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.fields-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid var(--mail-border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.fields-row-name {
+  flex: 1 1 auto;
+  color: var(--mail-text);
+}
+
+.fields-row-kind {
+  color: var(--mail-text-muted);
+  font-size: 11px;
+}
+
+.fields-add,
+.fields-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}

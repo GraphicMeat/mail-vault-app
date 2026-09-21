@@ -2469,5 +2469,29 @@
       "error": "Não foi possível calcular esta visão."
     },
     "saveSearch": "Salvar esta busca como visão"
+  },
+  "fields": {
+    "section": "Campos",
+    "explainer": "Campos são suas próprias anotações sobre uma mensagem. Ficam neste Mac e nunca são gravados na mensagem nem enviados ao seu servidor de e-mail.",
+    "noValue": "—",
+    "newName": "Nome do campo",
+    "newKind": "Tipo",
+    "add": "Adicionar campo",
+    "deleteConfirm": "Excluir, com todos os valores",
+    "scope": {
+      "global": "Todas as contas",
+      "account": "Esta conta",
+      "makeGlobal": "Compartilhar com todas as contas",
+      "makeAccount": "Manter só nesta conta"
+    },
+    "copyFrom": "Copiar campos de…",
+    "copyRun": "Copiar",
+    "kind": {
+      "select": "Escolha",
+      "multi_select": "Várias escolhas",
+      "date": "Data",
+      "checkbox": "Caixa de seleção",
+      "text": "Texto"
+    }
   }
 }
