@@ -32,19 +32,18 @@ export function useEmailScheduler() {
   const hasReplayedOps = useRef(false);
   const lastBadgeCount = useRef(-1);
 
-  // Dispatch per-account notifications using shouldNotify + showPreview
+  // Dispatch per-account notifications; notify() itself runs the notification
+  // policy (utils/notificationPolicy.decide) and decides whether each one is
+  // actually shown — this is the only way a suppressed one still lands in the
+  // decision log ("why didn't I get this").
   const dispatchNotifications = (perAccountResults) => {
     if (!invoke || !perAccountResults || perAccountResults.length === 0) return;
 
-    const { shouldNotify } = useSettingsStore.getState();
     const { showPreview, sound } = useSettingsStore.getState().notificationSettings;
     const selectedSound = normalizeNotificationSound(sound);
 
     for (const result of perAccountResults) {
-      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid } = result;
-
-      // Per-account per-folder filtering
-      if (!shouldNotify(accountId, folder)) continue;
+      const { accountId, accountEmail, folder, newCount, newestSender, newestSubject, newestUid, newestFromAddress } = result;
 
       // A click opens the message the banner shows, in the folder it arrived
       // in. Without a preview the banner names no message, so it opens the folder.
@@ -54,9 +53,18 @@ export function useEmailScheduler() {
         mailbox: folder,
         ...(showPreview && Number.isSafeInteger(uid) && uid > 0 ? { uid } : {}),
       };
+      const from = newestFromAddress || '';
+      const domain = from.includes('@') ? from.slice(from.indexOf('@') + 1) : '';
+      // A view is an index query the daemon answers, and an arriving message
+      // is not in the index yet -- so nothing here can say which views it
+      // belongs to, and the mute would miss the very notification it was set
+      // for. `decide` implements view-muted and is tested for it; the control
+      // stays out of Settings until arrival-time matching exists, because a
+      // switch that silently never fires is worse than no switch.
+      const mailCtx = { accountId, folder, from, domain, viewIds: [] };
       const notifyEmail = (title, body) => selectedSound === 'none'
-        ? notify(title, body, undefined, target)
-        : notify(title, body, selectedSound, target);
+        ? notify(title, body, undefined, target, mailCtx)
+        : notify(title, body, selectedSound, target, mailCtx);
 
       if (newCount === 1) {
         // Single new email
@@ -138,6 +146,7 @@ export function useEmailScheduler() {
         newestSender: newest?.from?.name || newest?.from?.address,
         newestSubject: newest?.subject,
         newestUid: newest?.uid,
+        newestFromAddress: typeof newest?.from === 'string' ? newest.from : (newest?.from?.address || ''),
       }]);
     }
     return onScreen;

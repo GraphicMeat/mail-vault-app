@@ -4,6 +4,8 @@ import { safeStorage } from './safeStorage';
 import { t } from '../i18n/index.js';
 import { sendNotification } from '../services/api';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
+import { decide } from '../utils/notificationPolicy.js';
+import { useSettingsStore } from './settingsStore';
 
 /**
  * A focus session: a countdown that covers the whole window while it runs.
@@ -146,6 +148,25 @@ export const useFocusStore = create(
   )
 );
 
+// The last 200 notification-policy decisions, newest last. In-memory only —
+// // ponytail: lost on restart; persist to app.db if users need it to survive one.
+const MAX_DECISIONS = 200;
+let decisionLog = [];
+
+function recordDecision(entry) {
+  decisionLog.push(entry);
+  if (decisionLog.length > MAX_DECISIONS) decisionLog.shift();
+}
+
+/** A copy, so a settings panel holding this snapshot never sees it grow underfoot. */
+export function getNotificationDecisions() {
+  return decisionLog.slice();
+}
+
+export function clearNotificationDecisions() {
+  decisionLog = [];
+}
+
 /**
  * THE chokepoint for every native notification in the app.
  *
@@ -154,12 +175,29 @@ export const useFocusStore = create(
  * is a banner that fires through the lock — `notifyChokepoint.test.js` fails on
  * one. Never rejects: a notification that could not be shown is not worth
  * failing a backup or a sync over.
+ *
+ * `mailCtx` is optional and only ever set for mail-arrival banners
+ * (`{ accountId, folder, from, domain, viewIds }`) — backup/billing/focus
+ * notifications pass none of it and are always delivered as before. When
+ * present, the notification policy (`utils/notificationPolicy.decide`)
+ * decides whether this actually goes out, and the outcome is recorded in the
+ * decision log either way — that's the only way a suppressed notification
+ * ever shows up in "why didn't I get this".
  */
-export function notify(title, body, sound, target) {
+export function notify(title, body, sound, target, mailCtx) {
   const selectedSound = normalizeNotificationSound(sound);
   const audible = selectedSound !== 'none';
   const s = useFocusStore.getState();
-  if (s.endsAt) {
+  const focusHeld = !!s.endsAt;
+
+  if (mailCtx) {
+    const policy = useSettingsStore.getState().notificationSettings;
+    const decision = decide({ ...mailCtx, focusHeld, now: Date.now() }, policy);
+    recordDecision({ ts: Date.now(), subject: title, from: mailCtx.from || '', deliver: decision.deliver, reason: decision.reason });
+    if (!decision.deliver && decision.reason !== 'focus-hold') return Promise.resolve();
+  }
+
+  if (focusHeld) {
     s.hold({ title, body, ...(audible ? { sound: selectedSound } : {}), ...(target ? { target } : {}) });
     return Promise.resolve();
   }

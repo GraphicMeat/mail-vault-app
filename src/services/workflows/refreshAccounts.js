@@ -43,6 +43,14 @@ function senderLabel(email) {
   return from?.name || from?.address || email?.sender || '';
 }
 
+// The address alone, for the notification policy (allowlist/domain match) —
+// a display name is not something anyone types into an allowlist.
+function senderAddress(email) {
+  const from = email?.from;
+  if (typeof from === 'string') return from.includes('@') ? from : '';
+  return from?.address || '';
+}
+
 
 // ── refreshCurrentView workflow ──
 
@@ -153,6 +161,7 @@ export async function refreshAllAccounts(options = {}) {
             newestSender: senderLabel(newest),
             newestSubject: newest.subject || '',
             newestUid: newest.uid,
+            newestFromAddress: senderAddress(newest),
           });
         }
       } else if (isGraphAccount(account)) {
@@ -186,6 +195,7 @@ export async function refreshAllAccounts(options = {}) {
                 newestSender: senderLabel(newest),
                 newestSubject: newest.subject || '',
                 newestUid: newest.uid,
+                newestFromAddress: senderAddress(newest),
               });
             }
           }
@@ -235,6 +245,7 @@ export async function refreshAllAccounts(options = {}) {
               newestSender: senderLabel(newest),
               newestSubject: newest.subject || '',
               newestUid: newest.uid,
+              newestFromAddress: senderAddress(newest),
             });
           }
         } catch (e) {

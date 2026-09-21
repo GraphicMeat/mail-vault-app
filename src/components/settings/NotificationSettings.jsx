@@ -1,11 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSettingsStore, getAccountInitial, getAccountColor } from '../../stores/settingsStore';
+import { getNotificationDecisions, clearNotificationDecisions } from '../../stores/focusStore';
+import { reasonI18nKey } from '../../utils/notificationPolicy.js';
 import { ToggleSwitch } from './ToggleSwitch';
-import { Bell, ChevronUp, ChevronDown, HardDrive, Mail, Volume2 } from 'lucide-react';
+import { Bell, ChevronUp, ChevronDown, HardDrive, Mail, Volume2, Star, History, Trash2 } from 'lucide-react';
 import { decodeImapUtf7 } from '../../utils/imapUtf7';
 import { useT } from '../../i18n/index.js';
 import { NOTIFICATION_SOUNDS, normalizeNotificationSound } from '../../utils/notificationSounds';
 import { previewNotificationSound } from '../../services/api';
+
+const DEFAULT_QUIET_HOURS = { enabled: false, start: '22:00', end: '07:00' };
 
 export function NotificationSettings({ accounts }) {
   const t = useT();
@@ -16,6 +20,10 @@ export function NotificationSettings({ accounts }) {
     setNotificationSound,
     setAccountNotificationEnabled,
     setAccountNotificationFolders,
+    setAccountQuietHours,
+    addImportantSender,
+    removeImportantSender,
+    setImportantSenderThroughQuietHours,
     badgeEnabled,
     setBadgeEnabled,
     badgeMode,
@@ -33,8 +41,23 @@ export function NotificationSettings({ accounts }) {
   const [expandedNotifAccounts, setExpandedNotifAccounts] = useState({});
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState(false);
+  const [newSender, setNewSender] = useState('');
+  const [decisions, setDecisions] = useState([]);
   const isMac = typeof navigator !== 'undefined' && navigator.platform?.startsWith('Mac');
   const selectedSound = normalizeNotificationSound(notificationSettings.sound);
+  const importantSenders = notificationSettings.importantSenders || [];
+
+  // The log is a plain in-memory ring, not a store — refresh on open and on
+  // demand. // ponytail: not live-updating; good enough for a settings panel.
+  const refreshDecisions = () => setDecisions(getNotificationDecisions().slice().reverse());
+  useEffect(() => { refreshDecisions(); }, []);
+
+  const addSender = (e) => {
+    e.preventDefault();
+    if (!newSender.trim()) return;
+    addImportantSender(newSender.trim());
+    setNewSender('');
+  };
 
   const previewSound = async () => {
     setPreviewing(true);
@@ -215,6 +238,42 @@ export function NotificationSettings({ accounts }) {
                                 );
                               })}
                             </div>
+
+                            {/* Per-account quiet hours */}
+                            <div className="mt-3 pt-3 border-t border-mail-border">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-mail-text-muted">{t('notifyPolicy.quietHours.title')}</span>
+                                <ToggleSwitch
+                                  label={t('notifyPolicy.quietHours.title')}
+                                  active={!!acctConfig.quietHours?.enabled}
+                                  onClick={() => setAccountQuietHours(account.id, {
+                                    ...(acctConfig.quietHours || DEFAULT_QUIET_HOURS),
+                                    enabled: !acctConfig.quietHours?.enabled,
+                                  })}
+                                />
+                              </div>
+                              {acctConfig.quietHours?.enabled && (
+                                <div className="flex items-center gap-2 mt-2">
+                                  <span className="text-xs text-mail-text-muted">{t('common.from')}</span>
+                                  <input
+                                    type="time"
+                                    aria-label={`${t('notifyPolicy.quietHours.title')}: ${t('common.from')}`}
+                                    value={acctConfig.quietHours?.start || DEFAULT_QUIET_HOURS.start}
+                                    onChange={(e) => setAccountQuietHours(account.id, { ...acctConfig.quietHours, start: e.target.value })}
+                                    className="px-2 py-1 bg-mail-bg border border-mail-border rounded text-sm text-mail-text"
+                                  />
+                                  <span className="text-xs text-mail-text-muted">{t('common.to')}</span>
+                                  <input
+                                    type="time"
+                                    aria-label={`${t('notifyPolicy.quietHours.title')}: ${t('common.to')}`}
+                                    value={acctConfig.quietHours?.end || DEFAULT_QUIET_HOURS.end}
+                                    onChange={(e) => setAccountQuietHours(account.id, { ...acctConfig.quietHours, end: e.target.value })}
+                                    className="px-2 py-1 bg-mail-bg border border-mail-border rounded text-sm text-mail-text"
+                                  />
+                                </div>
+                              )}
+                              <p className="text-xs text-mail-text-muted mt-1">{t('notifyPolicy.quietHours.hint')}</p>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -226,6 +285,102 @@ export function NotificationSettings({ accounts }) {
           )}
 
         </div>
+      </div>
+
+      {/* Priority senders */}
+      <div className="settings-section" data-testid="settings-notification-allowlist">
+        <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
+          <Star size={18} className="text-mail-accent-text" />
+          {t('notifyPolicy.allowlist.title')}
+        </h4>
+        <p className="text-sm text-mail-text-muted mb-4">{t('notifyPolicy.allowlist.hint')}</p>
+
+        <div className="space-y-2">
+          {importantSenders.map(entry => (
+            <div key={entry.match} className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-mail-border">
+              <span className="text-sm text-mail-text truncate">{entry.match}</span>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <label className="flex items-center gap-1.5 text-xs text-mail-text-muted cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={entry.throughQuietHours !== false}
+                    onChange={() => setImportantSenderThroughQuietHours(entry.match, entry.throughQuietHours === false)}
+                    className="rounded border-mail-border text-mail-accent-text focus:ring-mail-accent"
+                  />
+                  {t('notifyPolicy.allowlist.throughQuietHours')}
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeImportantSender(entry.match)}
+                  aria-label={`${t('common.remove')}: ${entry.match}`}
+                  className="text-mail-text-muted hover:text-mail-danger transition-colors"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {importantSenders.length === 0 && (
+            <p className="text-sm text-mail-text-muted">{t('notifyPolicy.allowlist.empty')}</p>
+          )}
+        </div>
+
+        <form className="flex items-center gap-2 mt-3" onSubmit={addSender}>
+          <input
+            value={newSender}
+            onChange={(e) => setNewSender(e.target.value)}
+            placeholder={t('notifyPolicy.allowlist.placeholder')}
+            aria-label={t('notifyPolicy.allowlist.placeholder')}
+            className="flex-1 min-w-0 px-3 py-2 bg-mail-bg border border-mail-border rounded-lg text-sm text-mail-text"
+          />
+          <button
+            type="submit"
+            className="px-3 py-2 rounded-lg border border-mail-border text-sm text-mail-text hover:bg-mail-surface-hover transition-colors"
+          >
+            {t('notifyPolicy.allowlist.add')}
+          </button>
+        </form>
+      </div>
+
+      {/* Recent notification decisions */}
+      <div className="settings-section" data-testid="settings-notification-decision-log">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold text-mail-text flex items-center gap-2">
+            <History size={18} className="text-mail-accent-text" />
+            {t('notifyPolicy.log.title')}
+          </h4>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={refreshDecisions} className="text-xs text-mail-text-muted hover:text-mail-text transition-colors">
+              {t('notifyPolicy.log.refresh')}
+            </button>
+            <button
+              type="button"
+              onClick={() => { clearNotificationDecisions(); refreshDecisions(); }}
+              className="text-xs text-mail-text-muted hover:text-mail-danger transition-colors"
+            >
+              {t('common.clear')}
+            </button>
+          </div>
+        </div>
+        <p className="text-sm text-mail-text-muted mb-4">{t('notifyPolicy.log.hint')}</p>
+
+        {decisions.length === 0 ? (
+          <p className="text-sm text-mail-text-muted">{t('notifyPolicy.log.empty')}</p>
+        ) : (
+          <div className="space-y-1 max-h-64 overflow-y-auto">
+            {decisions.map((d, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 py-1.5 text-sm border-b border-mail-border last:border-0">
+                <div className="min-w-0 flex-1">
+                  <div className="text-mail-text truncate">{d.subject}</div>
+                  <div className="text-xs text-mail-text-muted truncate">{d.from} · {new Date(d.ts).toLocaleTimeString()}</div>
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${d.deliver ? 'text-mail-success bg-mail-success-tint' : 'text-mail-text-muted bg-mail-surface-hover'}`}>
+                  {t(reasonI18nKey(d.reason))}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Backup Notifications */}

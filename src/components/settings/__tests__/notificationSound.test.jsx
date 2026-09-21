@@ -5,6 +5,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 
 const send = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../../services/transport.js', () => ({ send: (...args) => send(...args) }));
+// This suite is about sounds, not saved views — mocked light so it never
+// drags in viewStore's real chain (mailStore -> services/db -> keychain.js),
+// which calls the real transport at import time and would race the `send`
+// mock above (TDZ: the mock factory closes over `send` before this file's
+// own `const send` line has run).
+vi.mock('../../../stores/viewStore', () => ({
+  useViewStore: (selector) => selector({ views: [] }),
+  viewLabel: (view) => view?.name || '',
+}));
 
 import { NotificationSettings } from '../NotificationSettings';
 import { useSettingsStore, _mergePersistedSettings } from '../../../stores/settingsStore';

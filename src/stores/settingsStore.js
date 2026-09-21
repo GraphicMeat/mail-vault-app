@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { safeStorage } from './safeStorage';
 import { normalizeNotificationSound } from '../utils/notificationSounds';
+import { decide } from '../utils/notificationPolicy.js';
 import { normalizeInsightsPreferences } from '../utils/insights/preferences';
 import {
   DEFAULT_QUICK_ACTIONS, normalizeQuickActions,
@@ -168,6 +169,12 @@ function normalizeCleanupRule(rule) {
  * `unit` / `'archive-then-delete'`. Rewrite stored rules into the one shape
  * and disarm them (see normalizeCleanupRule).
  *
+ * v5 → v6: the notification policy engine added `mutedViewIds` and
+ * `importantSenders` to `notificationSettings`. Nothing existing changes
+ * shape or meaning — this only backfills the two new arrays when an older
+ * persisted blob doesn't have them yet, so nothing the user already
+ * configured (accounts, folders, sound) is touched.
+ *
  * Exported for tests: the disarm is the safety mechanism of the fix, so it
  * needs a test that can call it directly.
  */
@@ -180,6 +187,16 @@ export function migrateSettings(persisted, version) {
       ...next,
       cleanupRules: next.cleanupRules.map(normalizeCleanupRule),
       cleanupRulesDisarmed: true,
+    };
+  }
+  if (version < 6 && next.notificationSettings) {
+    next = {
+      ...next,
+      notificationSettings: {
+        mutedViewIds: [],
+        importantSenders: [],
+        ...next.notificationSettings,
+      },
     };
   }
   return next;
@@ -257,6 +274,10 @@ export const useSettingsStore = create(
         sound: 'none',
         accounts: {},
         // New accounts get default: { enabled: true, folders: ['INBOX'] }
+        // Per-account quiet hours live on that same account entry:
+        // { enabled, folders, quietHours: { enabled, start: 'HH:MM', end: 'HH:MM' } }
+        mutedViewIds: [], // viewStore ids whose matches never notify
+        importantSenders: [], // [{ match: address|domain, throughQuietHours }]
       },
 
       // Badge settings
@@ -809,13 +830,60 @@ export const useSettingsStore = create(
         },
       })),
 
+      setAccountQuietHours: (accountId, quietHours) => set((state) => ({
+        notificationSettings: {
+          ...state.notificationSettings,
+          accounts: {
+            ...state.notificationSettings.accounts,
+            [accountId]: {
+              ...(state.notificationSettings.accounts[accountId] || { enabled: true, folders: ['INBOX'] }),
+              quietHours,
+            },
+          },
+        },
+      })),
+
+      toggleMutedView: (viewId) => set((state) => {
+        const muted = state.notificationSettings.mutedViewIds || [];
+        const mutedViewIds = muted.includes(viewId) ? muted.filter(id => id !== viewId) : [...muted, viewId];
+        return { notificationSettings: { ...state.notificationSettings, mutedViewIds } };
+      }),
+
+      addImportantSender: (match, throughQuietHours = true) => set((state) => {
+        const m = String(match || '').trim();
+        if (!m) return state;
+        const list = state.notificationSettings.importantSenders || [];
+        if (list.some(e => e.match.toLowerCase() === m.toLowerCase())) return state;
+        return {
+          notificationSettings: {
+            ...state.notificationSettings,
+            importantSenders: [...list, { match: m, throughQuietHours }],
+          },
+        };
+      }),
+
+      removeImportantSender: (match) => set((state) => ({
+        notificationSettings: {
+          ...state.notificationSettings,
+          importantSenders: (state.notificationSettings.importantSenders || []).filter(e => e.match !== match),
+        },
+      })),
+
+      setImportantSenderThroughQuietHours: (match, throughQuietHours) => set((state) => ({
+        notificationSettings: {
+          ...state.notificationSettings,
+          importantSenders: (state.notificationSettings.importantSenders || [])
+            .map(e => e.match === match ? { ...e, throughQuietHours } : e),
+        },
+      })),
+
+      // Thin wrapper over the policy engine (utils/notificationPolicy.decide)
+      // kept so callers written against the old boolean gate keep compiling.
+      // No focus-session awareness here — that precedence lives in
+      // focusStore.notify(), which is the one place that knows about it.
       shouldNotify: (accountId, folder) => {
         const { notificationSettings } = get();
-        if (!notificationSettings.enabled) return false;
-        const acctConfig = notificationSettings.accounts[accountId];
-        if (!acctConfig) return true; // Unconfigured accounts default to enabled INBOX
-        if (!acctConfig.enabled) return false;
-        return acctConfig.folders.includes(folder);
+        return decide({ accountId, folder, now: Date.now() }, notificationSettings).deliver;
       },
 
       // Badge settings
@@ -1059,6 +1127,8 @@ export const useSettingsStore = create(
             showPreview: true,
             sound: 'none',
             accounts: {},
+            mutedViewIds: [],
+            importantSenders: [],
           },
           badgeEnabled: true,
           badgeMode: 'unread',
@@ -1135,7 +1205,7 @@ export const useSettingsStore = create(
     }),
     {
       name: 'mailvault-settings',
-      version: 5,
+      version: 6,
       storage: createJSONStorage(() => safeStorage),
       migrate: migrateSettings,
       // See _mergePersistedSettings above for why the shortcut map gets its
@@ -1150,7 +1220,7 @@ export const useSettingsStore = create(
         if (state && 'notificationsEnabled' in state && !state.notificationSettings) {
           const enabled = state.notificationsEnabled;
           setTimeout(() => useSettingsStore.setState({
-            notificationSettings: { enabled, showPreview: true, sound: 'none', accounts: {} },
+            notificationSettings: { enabled, showPreview: true, sound: 'none', accounts: {}, mutedViewIds: [], importantSenders: [] },
             notificationsEnabled: undefined,
           }), 0);
         }

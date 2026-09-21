@@ -164,7 +164,11 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     expect(mockGetHeaders).toHaveBeenCalledWith('a1', 'INBOX', 1);
     expect(mockNotify).toHaveBeenCalledTimes(1);
     // A click on the banner opens that message in the folder it arrived in.
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 });
+    // The 5th arg is the notification-policy context; notify() itself (not
+    // this mock) is what decides whether the policy actually suppresses it —
+    // see focusStore.test.js for that.
+    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Difference engine', undefined, { accountId: 'a1', mailbox: 'INBOX', uid: 7 },
+      { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
   });
 
   it('notifies for an account that is not on screen without repainting the list', async () => {
@@ -176,7 +180,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     expect(mockLoadEmails).not.toHaveBeenCalled();
-    expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 });
+    expect(mockNotify).toHaveBeenCalledWith('b@two.co', 'Elsewhere', undefined, { accountId: 'a2', mailbox: 'INBOX', uid: 12 },
+      { accountId: 'a2', folder: 'INBOX', from: 'b@two.co', domain: 'two.co', viewIds: [] });
   });
 
   it('attaches the selected sound to incoming mail', async () => {
@@ -189,7 +194,8 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     // No uid on that header: the banner still opens its folder.
-    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping', { accountId: 'a1', mailbox: 'INBOX' });
+    expect(mockNotify).toHaveBeenCalledWith('Ada', 'Hello', 'Ping', { accountId: 'a1', mailbox: 'INBOX' },
+      { accountId: 'a1', folder: 'INBOX', from: '', domain: '', viewIds: [] });
   });
 
   it('opens only the folder when the banner shows no preview', async () => {
@@ -202,20 +208,6 @@ describe('useEmailScheduler — IDLE watchers and the change feed', () => {
     await flush();
 
     expect(mockNotify.mock.calls[0][3]).toEqual({ accountId: 'a1', mailbox: 'INBOX' });
-  });
-
-  it('does not send a sound or banner for a muted folder', async () => {
-    settingsStore.setState({
-      notificationSettings: { ...settingsState().notificationSettings, sound: 'Ping' },
-      shouldNotify: () => false,
-    });
-    mailStore.setState({ accounts: [IMAP_A] });
-    eventReplies = [reply({ gen: 1, changes: [{ gen: 1, accountId: 'a1', mailbox: 'INBOX', newEmails: 1, updatedFlags: 0, at: 1 }] })];
-
-    renderHook(() => useEmailScheduler());
-    await flush();
-
-    expect(mockNotify).not.toHaveBeenCalled();
   });
 
   // Flag-only changes on a folder nobody is looking at are silent.

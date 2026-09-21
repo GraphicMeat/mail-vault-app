@@ -22,7 +22,11 @@ vi.mock('../../services/api', () => ({
 }));
 
 const { sendNotification } = await import('../../services/api');
-const { useFocusStore, useFocusClock, notify, remainingMs, formatRemaining } = await import('../focusStore');
+const {
+  useFocusStore, useFocusClock, notify, remainingMs, formatRemaining,
+  getNotificationDecisions, clearNotificationDecisions,
+} = await import('../focusStore');
+const { useSettingsStore } = await import('../settingsStore');
 
 const T0 = 1_700_000_000_000;
 
@@ -32,6 +36,10 @@ beforeEach(() => {
   useFocusStore.getState().abandon();
   useFocusStore.setState({ held: [] });
   useFocusClock.setState({ now: 0 });
+  clearNotificationDecisions();
+  useSettingsStore.setState({
+    notificationSettings: { enabled: true, showPreview: true, sound: 'none', accounts: {}, mutedViewIds: [], importantSenders: [] },
+  });
   vi.clearAllMocks();
 });
 
@@ -215,5 +223,65 @@ describe('rehydration', () => {
     expect(useFocusStore.getState().endsAt).toBe(null);
     expect(sendNotification).not.toHaveBeenCalled();
     delete mem.store['mailvault-focus'];
+  });
+});
+
+describe('notify() with a mail-arrival context', () => {
+  // A caller that hands notify() no ctx at all (billing, backup, focus's own
+  // banners) is untouched by the policy — that's the whole point of it being
+  // an optional 5th argument.
+  it('delivers as before when no policy context is given', async () => {
+    await notify('Backup complete', 'Saved 200 messages');
+    expect(sendNotification).toHaveBeenCalledWith('Backup complete', 'Saved 200 messages');
+    expect(getNotificationDecisions()).toEqual([]);
+  });
+
+  it('suppresses a notification the policy rejects, and never calls sendNotification for it', async () => {
+    useSettingsStore.setState({
+      notificationSettings: {
+        enabled: true, showPreview: true, sound: 'none', mutedViewIds: [], importantSenders: [],
+        accounts: { a1: { enabled: false, folders: ['INBOX'] } },
+      },
+    });
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+
+    await notify('Rokas', 'Hello', undefined, undefined, ctx);
+
+    expect(sendNotification).not.toHaveBeenCalled();
+    const log = getNotificationDecisions();
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ subject: 'Rokas', from: 'x@y.com', deliver: false, reason: 'account-muted' });
+    expect(typeof log[0].ts).toBe('number');
+  });
+
+  it('records a delivered decision too, and still calls sendNotification', async () => {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+
+    await notify('Rokas', 'Hello', undefined, undefined, ctx);
+
+    expect(sendNotification).toHaveBeenCalledWith('Rokas', 'Hello');
+    const log = getNotificationDecisions();
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ deliver: true, reason: 'delivered-default' });
+  });
+
+  it('a running Focus session still holds a policy-governed notification for later', async () => {
+    useFocusStore.getState().start(25);
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+
+    await notify('Rokas', 'Hello', undefined, undefined, ctx);
+
+    expect(sendNotification).not.toHaveBeenCalled();
+    expect(useFocusStore.getState().held).toHaveLength(1);
+    expect(getNotificationDecisions()[0]).toMatchObject({ deliver: false, reason: 'focus-hold' });
+  });
+
+  it('keeps only the last 200 decisions', async () => {
+    const ctx = { accountId: 'a1', folder: 'INBOX', from: 'x@y.com', domain: 'y.com', viewIds: [] };
+    for (let i = 0; i < 205; i++) await notify(`Subject ${i}`, 'body', undefined, undefined, ctx);
+    const log = getNotificationDecisions();
+    expect(log).toHaveLength(200);
+    expect(log[0].subject).toBe('Subject 5');
+    expect(log[199].subject).toBe('Subject 204');
   });
 });
