@@ -27,6 +27,7 @@ mod migration;
 mod netgate;
 pub mod llm;
 mod restore;
+mod scheduled_send_worker;
 mod server;
 pub mod search_index;
 mod snapshot;
@@ -420,6 +421,7 @@ async fn daemon_main() {
         run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
         backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
         insights: insights::InsightsSnapshots::default(),
+        scheduled_send: scheduled_send_worker::ScheduledSendState::default(),
     });
 
     // Custody, before the socket exists (Task 2.9b Step 1): a route that
@@ -468,6 +470,11 @@ async fn daemon_main() {
 
     // Start background classification queue worker
     classification_worker::start_classification_worker(Arc::clone(&state));
+
+    // Scheduled Send's worker: a catch-up pass over anything already due
+    // (the normal case — the daemon dies with the app in on-demand mode),
+    // then sleeps until the next fire_at or a wake from handlers::scheduled.
+    scheduled_send_worker::start(Arc::clone(&state));
 
     // Its own OS thread; it opens nothing until the app configures it.
     search_index::start(Arc::clone(&state.search_index));

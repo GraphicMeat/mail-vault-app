@@ -576,6 +576,82 @@ pub async fn send_email(account: &ImapConfig, email: &OutgoingEmail) -> Result<S
     send_built(account, email, built).await
 }
 
+/// The recipients a frozen `.eml` was addressed to, kept alongside it because
+/// `send_raw` (below) has no `lettre::Message` to read them back out of.
+/// Comma-separated, same shape as `OutgoingEmail`'s own `to`/`cc`/`bcc`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FrozenEnvelope {
+    pub from: String,
+    #[serde(default)]
+    pub to: String,
+    #[serde(default)]
+    pub cc: String,
+    #[serde(default)]
+    pub bcc: String,
+}
+
+/// Send bytes that were built and frozen at an earlier time (Scheduled Send)
+/// rather than just now.
+///
+/// `send_built`/`send_email` call `transport.send(message)`, and lettre's
+/// default `send()` re-derives both the envelope AND the raw bytes from the
+/// `lettre::Message` object at send time (`message.formatted()`,
+/// `message.envelope()`) — there is no "replay this `Message` verbatim" mode,
+/// and no constructor that parses a `Message` back out of raw `.eml` bytes.
+/// That makes `send_built` unusable for a message frozen to disk in an
+/// earlier process: the whole point of freezing is to replay the exact bytes,
+/// and a `Message` object does not survive a restart. `send_raw` goes
+/// straight to `AsyncTransport::send_raw(envelope, bytes)` instead, so the
+/// envelope has to travel with the frozen bytes (`FrozenEnvelope`, stored
+/// alongside them) rather than being read back off a `Message`.
+pub async fn send_raw(account: &ImapConfig, envelope: &FrozenEnvelope, raw_rfc2822: Vec<u8>) -> Result<SendResult, String> {
+    let smtp_host = account
+        .smtp_host
+        .as_deref()
+        .ok_or_else(|| "SMTP host not configured".to_string())?;
+    let smtp_port = account.smtp_port.unwrap_or(587);
+    let io_timeout = Duration::from_secs(60 + (raw_rfc2822.len() / 50_000) as u64).min(Duration::from_secs(600));
+    let transport = build_transport(account, io_timeout)?;
+
+    let from: lettre::Address = envelope
+        .from
+        .parse()
+        .map_err(|e| format!("Invalid from address '{}': {}", envelope.from, e))?;
+    let mut to: Vec<lettre::Address> = Vec::new();
+    for group in [&envelope.to, &envelope.cc, &envelope.bcc] {
+        if group.trim().is_empty() {
+            continue;
+        }
+        for mb in parse_address_list(group).map_err(|e| format!("Invalid recipient address: {}", e))? {
+            to.push(mb.email);
+        }
+    }
+    if to.is_empty() {
+        return Err("Invalid to address: no recipients".to_string());
+    }
+    let lettre_envelope =
+        lettre::address::Envelope::new(Some(from), to).map_err(|e| format!("Failed to build envelope: {}", e))?;
+
+    info!(
+        "[smtp] Sending a frozen message ({} bytes) via {}:{} (tls={}, oauth2={})",
+        raw_rfc2822.len(),
+        smtp_host,
+        smtp_port,
+        account.smtp_secure.unwrap_or(false),
+        account.is_oauth2()
+    );
+
+    let response = transport
+        .send_raw(&lettre_envelope, &raw_rfc2822)
+        .await
+        .map_err(|e| friendly_smtp_error(smtp_host, smtp_port, account.from_address(), &e.to_string()))?;
+
+    let message_id = response.message().collect::<Vec<_>>().join("");
+    info!("Frozen email sent via SMTP: {}", message_id);
+    Ok(SendResult { message_id, raw_rfc2822 })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -992,6 +1068,51 @@ mod tests {
             let Err(err) = result else { panic!("a 550 at RCPT TO must fail the send") };
             assert!(err.contains("550") || err.to_lowercase().contains("reject"), "{}", err);
             // The refusal is the whole point: nothing may reach the server.
+            assert!(server.sent_messages().is_empty());
+        }
+
+        /// The scheduled-send path: build once, freeze the bytes, then send
+        /// those exact bytes through `send_raw` rather than through the
+        /// `Message` object `send_built` would re-serialize.
+        #[tokio::test]
+        async fn send_raw_delivers_the_exact_frozen_bytes() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+            let cfg = config_for(&server);
+
+            let mut email = outgoing();
+            email.to = "partner@example.com".to_string();
+            let built = build_mime(&cfg, &email).expect("build_mime");
+            let frozen = built.raw_rfc2822.clone();
+
+            let envelope = FrozenEnvelope {
+                from: cfg.from_address().to_string(),
+                to: "partner@example.com".to_string(),
+                ..Default::default()
+            };
+            let result = send_raw(&cfg, &envelope, frozen.clone()).await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+            result.expect("send_raw against the mock SMTP server");
+
+            let sent = server.sent_messages();
+            assert_eq!(sent.len(), 1);
+            assert_eq!(sent[0], frozen, "the server must receive the exact frozen bytes, not a re-serialization");
+        }
+
+        #[tokio::test]
+        async fn send_raw_with_no_recipients_is_an_error_and_nothing_is_sent() {
+            let _guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+            std::env::set_var("MAILVAULT_SMTP_PLAINTEXT", "1");
+            let server = MockImap::start(Scenario::new());
+            let cfg = config_for(&server);
+            let envelope = FrozenEnvelope { from: cfg.from_address().to_string(), ..Default::default() };
+
+            let result = send_raw(&cfg, &envelope, b"From: a@b.com\r\n\r\nbody".to_vec()).await;
+            std::env::remove_var("MAILVAULT_SMTP_PLAINTEXT");
+
+            let Err(err) = result else { panic!("no to/cc/bcc must refuse to send") };
+            assert!(err.contains("no recipients"), "{err}");
             assert!(server.sent_messages().is_empty());
         }
 

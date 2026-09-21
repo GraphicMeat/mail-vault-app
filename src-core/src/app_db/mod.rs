@@ -16,6 +16,7 @@ pub mod fields;
 pub mod import;
 pub mod locations;
 pub mod ops;
+pub mod scheduled;
 pub mod stats;
 pub mod tags;
 pub mod metadata;

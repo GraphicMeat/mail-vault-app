@@ -170,6 +170,11 @@ pub struct DaemonState {
     /// `daemon_main` (`insights::InsightsSnapshots::start_cleanup`), not
     /// per-state.
     pub insights: crate::insights::InsightsSnapshots,
+    /// Scheduled Send's wake signal — `handlers::scheduled`'s RPCs notify it
+    /// on anything that changes what `scheduled_send_worker` should do next
+    /// (create/reschedule/cancel), same shape `classification`'s `notify`
+    /// wakes its own worker.
+    pub scheduled_send: crate::scheduled_send_worker::ScheduledSendState,
 }
 
 /// Start the daemon socket server.
@@ -440,6 +445,9 @@ async fn handle_request(state: &Arc<DaemonState>, req: RpcRequest) -> RpcRespons
     if let Some(resp) = crate::handlers::fields::route(state, &req.method, &req.params, id.clone()).await {
         return resp;
     }
+    if let Some(resp) = crate::handlers::scheduled::route(state, &req.method, &req.params, id.clone()).await {
+        return resp;
+    }
 
     match req.method.as_str() {
         // ── Connectivity ────────────────────────────────────────────
@@ -582,6 +590,7 @@ impl DaemonState {
             run_tokens: std::sync::Mutex::new(std::collections::HashMap::new()),
             backup_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             insights: crate::insights::InsightsSnapshots::default(),
+            scheduled_send: crate::scheduled_send_worker::ScheduledSendState::default(),
         })
     }
 }

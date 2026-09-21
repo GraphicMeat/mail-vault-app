@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, LazyLock, Mutex};
 
 pub const DB_FILE: &str = "app.db";
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE external_locations (
@@ -115,6 +115,30 @@ CREATE TABLE views (
   builtin  TEXT,
   def_json TEXT NOT NULL
 );
+";
+
+/// Scheduled Send's durable queue. A frozen `.eml` sits in the account's
+/// vault `Scheduled` mailbox at `(mailbox, uid)`; this row is what the
+/// daemon's `scheduled_send_worker` fires it off of. `msg_key` does not apply
+/// here (`app_db::scheduled`'s module doc explains why) — a frozen draft has
+/// no Message-ID until sent and lives in a mailbox only this app ever writes.
+const SCHEMA_V3: &str = "
+CREATE TABLE scheduled_sends (
+  id          TEXT PRIMARY KEY,
+  account_id  TEXT NOT NULL,
+  mailbox     TEXT NOT NULL,
+  uid         INTEGER NOT NULL,
+  envelope    TEXT NOT NULL,
+  local_time  TEXT NOT NULL,
+  tz          TEXT NOT NULL,
+  fire_at     INTEGER NOT NULL,
+  status      TEXT NOT NULL,
+  attempts    INTEGER NOT NULL DEFAULT 0,
+  last_error  TEXT NOT NULL DEFAULT '',
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL
+);
+CREATE INDEX scheduled_sends_due ON scheduled_sends(status, fire_at);
 ";
 
 #[derive(Debug, PartialEq, Eq)]
@@ -245,6 +269,12 @@ fn migrate(conn: &Connection) -> Result<(), OpenError> {
             ))
             .map_err(sql)?;
         }
+        if version < 3 {
+            conn.execute_batch(&format!(
+                "{SCHEMA_V3} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3');"
+            ))
+            .map_err(sql)?;
+        }
         Ok(())
     })();
     match stepped {
@@ -309,10 +339,10 @@ mod tests {
     fn open_creates_the_schema_and_is_idempotent() {
         let dir = scratch("create");
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
         drop(conn);
         let again = open(&dir).unwrap();
-        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&again, "schema_version").as_deref(), Some("3"));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -333,15 +363,43 @@ mod tests {
             .unwrap();
         }
         let conn = open(&dir).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
         let kept: i64 = conn.query_row("SELECT COUNT(*) FROM classifications", [], |r| r.get(0)).unwrap();
         assert_eq!(kept, 1);
-        for table in ["tags", "tag_assignments", "fields", "field_values", "views"] {
+        for table in ["tags", "tag_assignments", "fields", "field_values", "views", "scheduled_sends"] {
             let found: i64 = conn
                 .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1", [table], |r| r.get(0))
                 .unwrap();
             assert_eq!(found, 1, "{table} is missing after the migration");
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// v3 adds `scheduled_sends` on top of a v2 store (tags/views/fields, in
+    /// main as of `9b91202f`) without losing what v2 already held — same
+    /// shape as the v1-gains-v2 test above.
+    #[test]
+    fn a_v2_store_gains_scheduled_sends_and_keeps_its_rows() {
+        let dir = scratch("v2");
+        {
+            let conn = Connection::open(db_path(&dir)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}
+                 {SCHEMA_V2}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '2');
+                 INSERT INTO tags(id, name, color, position, created_at) VALUES ('t1', 'Receipts', '', 0, 0);"
+            ))
+            .unwrap();
+        }
+        let conn = open(&dir).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        let kept: i64 = conn.query_row("SELECT COUNT(*) FROM tags", [], |r| r.get(0)).unwrap();
+        assert_eq!(kept, 1, "the v2 row must survive the v3 migration");
+        let found: i64 = conn
+            .query_row("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='scheduled_sends'", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(found, 1, "scheduled_sends is missing after the migration");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
