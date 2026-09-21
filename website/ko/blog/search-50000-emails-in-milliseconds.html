@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식 - MailVault 블로그</title>
+  <meta name="description" content="메시지 50,000개짜리 메일함에서 MailVault 검색 시간을 쟀습니다. 쿼리당 7~14밀리초입니다. 측정 결과, 그 뒤에 있는 SQLite 기술, 그리고 Premium이 첨부 파일과 Vision 이미지 검색을 더하는 방식을 소개합니다.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://mailvaultapp.com/ko/blog/search-50000-emails-in-milliseconds.html">
+  <meta name="theme-color" content="#6366f1">
+  <meta property="og:type" content="article">
+  <meta property="og:url" content="https://mailvaultapp.com/ko/blog/search-50000-emails-in-milliseconds.html">
+  <meta property="og:title" content="이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식">
+  <meta property="og:description" content="메시지 50,000개짜리 메일함에서 MailVault 검색 시간을 쟀습니다. 쿼리당 7~14밀리초입니다. 측정 결과, 그 뒤에 있는 SQLite 기술, 그리고 Premium이 첨부 파일과 Vision 이미지 검색을 더하는 방식을 소개합니다.">
+  <meta property="og:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta property="og:image:alt" content="MailVault: 새 메일을 위한 공간을 만들고, 기존 메일은 보관하세요.">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="MailVault">
+  <meta property="og:locale" content="ko_KR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식">
+  <meta name="twitter:description" content="이메일 50,000통을 7~14 ms에 검색합니다. 실제 테스트 결과와 그 뒤에 있는 SQLite 인덱스.">
+  <meta name="twitter:image" content="https://mailvaultapp.com/assets/og-mailvault-en-v2.png">
+  <meta name="twitter:image:alt" content="MailVault: 새 메일을 위한 공간을 만들고, 기존 메일은 보관하세요.">
+  <meta name="twitter:site" content="@GraphicMeat">
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+  <link rel="preload" href="/assets/fonts/inter-var-latin.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/assets/tailwind.css?v=11">
+  <link rel="stylesheet" href="/assets/english-site.css?v=20260912-demo-card-v4">
+  <link rel="stylesheet" href="/assets/english-content.css?v=3">
+  <!-- i18n:alternates -->
+  <link rel="alternate" hreflang="en" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="de" href="https://mailvaultapp.com/de/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="fr" href="https://mailvaultapp.com/fr/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="es" href="https://mailvaultapp.com/es/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="it" href="https://mailvaultapp.com/it/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="ja" href="https://mailvaultapp.com/ja/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="ko" href="https://mailvaultapp.com/ko/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="zh-Hans" href="https://mailvaultapp.com/zh/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="pt-BR" href="https://mailvaultapp.com/pt-br/blog/search-50000-emails-in-milliseconds.html">
+  <link rel="alternate" hreflang="x-default" href="https://mailvaultapp.com/blog/search-50000-emails-in-milliseconds.html">
+  <!-- /i18n:alternates -->
+</head>
+<body class="mv-site mv-content-page"><a class="mv-skip" href="#main">Skip to content</a>
+  <header class="mv-header">
+    <div class="mv-wrap mv-nav">
+      <div class="mv-brand-family"><a class="mv-brand" href="/ko/" aria-label="MailVault home"><img src="/icon-128.webp" width="32" height="32" alt=""><span>MailVault</span></a><a class="mv-maker" href="https://graphicmeat.com" target="_blank" rel="noopener">by Graphic Meat</a></div>
+      <nav class="mv-navlinks" aria-label="Main navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html" aria-current="true">블로그</a><a href="/ko/docs.html">Help</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모</a></nav>
+      <div class="mv-navtools">
+        <details class="mv-language" translate="no"><summary aria-label="Choose language, 한국어 selected"><span class="mv-language-name">한국어</span><span class="mv-language-code" aria-hidden="true">KO</span></summary><ul>
+          <li><a data-i18n-abs href="/blog/search-50000-emails-in-milliseconds.html" lang="en" hreflang="en" translate="no">English</a></li>
+          <li><a data-i18n-abs href="/de/blog/search-50000-emails-in-milliseconds.html" lang="de" hreflang="de" translate="no">Deutsch</a></li>
+          <li><a data-i18n-abs href="/fr/blog/search-50000-emails-in-milliseconds.html" lang="fr" hreflang="fr" translate="no">Français</a></li>
+          <li><a data-i18n-abs href="/es/blog/search-50000-emails-in-milliseconds.html" lang="es" hreflang="es" translate="no">Español</a></li>
+          <li><a data-i18n-abs href="/it/blog/search-50000-emails-in-milliseconds.html" lang="it" hreflang="it" translate="no">Italiano</a></li>
+          <li><a data-i18n-abs href="/ja/blog/search-50000-emails-in-milliseconds.html" lang="ja" hreflang="ja" translate="no">日本語</a></li>
+          <li><a data-i18n-abs href="/ko/blog/search-50000-emails-in-milliseconds.html" lang="ko" hreflang="ko" translate="no" aria-current="page">한국어</a></li>
+          <li><a data-i18n-abs href="/zh/blog/search-50000-emails-in-milliseconds.html" lang="zh-Hans" hreflang="zh-Hans" translate="no">简体中文</a></li>
+          <li><a data-i18n-abs href="/pt-br/blog/search-50000-emails-in-milliseconds.html" lang="pt-BR" hreflang="pt-BR" translate="no">Português (Brasil)</a></li>
+        </ul></details>
+        <button class="mv-theme" aria-label="Switch color theme" title="Switch color theme">◐</button><a class="mv-button mv-nav-download" href="/ko/get-started.html?plan=free">다운로드</a>
+        <details class="mv-mobile-menu"><summary>메뉴</summary><nav aria-label="Mobile navigation"><a href="/ko/#how-it-works">작동 방식</a><a href="/ko/features.html">기능</a><a href="/ko/pricing.html">가격</a><a href="/ko/blog.html" aria-current="true">블로그</a><a href="/ko/docs.html">Help</a><a href="/demo/?lang=ko" target="_blank" rel="noopener" aria-label="새 창에서 MailVault 데모 열기">데모 사용해 보기</a><a href="/ko/get-started.html?plan=free">Download free</a></nav></details>
+      </div>
+    </div>
+    <svg class="mv-header-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+  </header>
+
+  <main id="main" class="pt-24 pb-20">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
+      <a href="/ko/blog.html" class="inline-flex items-center gap-1 text-sm text-primary-500 hover:text-primary-600 transition-colors mb-8">← 블로그로 돌아가기</a>
+      <article>
+        <header class="mb-8">
+          <time datetime="2026-09-21" class="text-sm text-primary-500 font-medium">2026년 9월 21일</time>
+          <h1 class="text-3xl sm:text-4xl font-bold mt-2 mb-3">이메일 50,000통을 밀리초 만에 검색하기: MailVault 로컬 인덱스의 작동 방식</h1>
+          <div class="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400"><span>7분 분량</span></div>
+        </header>
+        <div class="prose prose-slate dark:prose-invert max-w-none space-y-5 text-slate-700 dark:text-slate-300 leading-relaxed">
+          <p>MailVault에 단어를 입력하면 키를 누르는 순간 가장 최근 일치 결과가 화면에 나타납니다. 메일함이 정말 커도 그렇게 되는지 확인하려고 메시지 50,000개짜리 볼트를 만들어 검색 시간을 쟀습니다. 가장 느린 쿼리가 14밀리초였습니다.</p>
+          <p>이 글에서는 실제 측정값, 무엇을 측정했고 무엇을 측정하지 않았는지, 그리고 그 뒤에 있는 기술, 곧 볼트 안에 들어 있는 작고 평범한 SQL 데이터베이스를 소개합니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">테스트</h3>
+          <p>실제 메일과 같은 형태, 곧 멀티파트 HTML과 일반 텍스트 구성으로 각각 약 3.3 KB인 메시지 50,000개를 만들었습니다. 메시지는 세 폴더(받은편지함, 보관함, 보낸편지함)에 대략 3분의 1씩 나누고, 알려진 단어를 알려진 비율로 심어 두었습니다. "invoice"는 메시지의 5%, "budget"은 8%, "meeting"은 6%이며, 영어가 아닌 검색을 확인하기 위해 일본어와 악센트가 있는 단어도 넣었습니다. 모든 메시지는 릴리스 빌드에서 MailVault의 실제 MIME 파서와 실제 인덱스 코드를 거쳤습니다.</p>
+          <p>테스트 기기는 16 GB 메모리의 Apple M4 Mac mini였습니다. 놀고 있던 기기가 아니어서, 테스트 중에도 다른 빌드가 돌아가고 있었으므로 이 시간은 바쁜 컴퓨터에서 나오는 값이라고 보시면 됩니다. 각 쿼리는 여섯 번씩 실행했고, 세 번은 수정본의 임시 빌드에서, 세 번은 병합된 코드에서 실행했습니다. 아래 수치는 그 실행들의 범위이며, 각 시간에는 검색과 목록에 표시되는 결과 행을 만드는 시간이 모두 포함됩니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">결과</h3>
+<pre><code>50,000 messages · Apple M4 · warm cache · 6 runs each
+
+query                    matches   rows shown   time
+invoice                  ~2,500    500          7.1 – 7.5 ms
+budget meeting           246       246          13.4 – 14.1 ms
+update 4999              15        15           13.5 – 14.0 ms
+会議 (Japanese)         1,529     500          4.3 – 4.6 ms
+last 7 days, no words    1,008     500          1.0 ms
+
+first index build        11 s      (10.9 – 11.9 s)
+index size on disk       225 MB
+status check             5 ms</code></pre>
+          <p>표에서 눈여겨볼 점은 두 가지입니다. 첫째, 시간은 일치하는 개수와 관계가 없습니다. 15건이 나온 쿼리가 2,500건이 나온 쿼리보다 오래 걸렸는데, 시간을 좌우하는 것은 되돌아오는 메일의 양이 아니라 쿼리의 형태(두 단어 구문이 한 단어보다 일이 많습니다)이기 때문입니다. 둘째, 목록은 가장 최근 일치 결과를 최대 500개까지만 보여 주고, 더 있으면 그렇다고 알려 주므로, 일치하는 메시지가 아무리 많아도 결과를 그리는 작업에는 상한이 있습니다.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
+<title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
+<desc id="f1d">Five bars: last 7 days with no words 1.0 ms, Japanese query 4.5 ms, invoice 7.4 ms, budget meeting 14.0 ms, update 4999 14.0 ms. Every bar ends before the 16.7 ms mark, which is one screen refresh at 60 Hz.</desc>
+<line x1="190.0" y1="32" x2="190.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<text x="190.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">0</text>
+<line x1="315.0" y1="32" x2="315.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<text x="315.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">5</text>
+<line x1="440.0" y1="32" x2="440.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<text x="440.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">10</text>
+<line x1="565.0" y1="32" x2="565.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<text x="565.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">15</text>
+<line x1="690.0" y1="32" x2="690.0" y2="260" stroke="currentColor" stroke-opacity="0.18" stroke-width="1"/>
+<text x="690.0" y="280" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">20</text>
+<text x="440.0" y="310" text-anchor="middle" font-size="13" fill="currentColor" fill-opacity=".8">milliseconds, search plus building the result rows</text>
+<text x="178" y="62" text-anchor="end" font-size="14" fill="currentColor">last 7 days, no words</text>
+<rect x="190" y="46" width="25.0" height="24" rx="3" fill="#6366f1"/>
+<text x="223.0" y="63" font-size="14" font-weight="700" fill="currentColor">1 ms</text>
+<text x="178" y="106" text-anchor="end" font-size="14" fill="currentColor">会議 (Japanese)</text>
+<rect x="190" y="90" width="112.5" height="24" rx="3" fill="#6366f1"/>
+<text x="310.5" y="107" font-size="14" font-weight="700" fill="currentColor">4.5 ms</text>
+<text x="178" y="150" text-anchor="end" font-size="14" fill="currentColor">invoice</text>
+<rect x="190" y="134" width="185.0" height="24" rx="3" fill="#6366f1"/>
+<text x="383.0" y="151" font-size="14" font-weight="700" fill="currentColor">7.4 ms</text>
+<text x="178" y="194" text-anchor="end" font-size="14" fill="currentColor">budget meeting</text>
+<rect x="190" y="178" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<text x="548.0" y="195" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
+<text x="178" y="238" text-anchor="end" font-size="14" fill="currentColor">update 4999</text>
+<rect x="190" y="222" width="350.0" height="24" rx="3" fill="#6366f1"/>
+<text x="548.0" y="239" font-size="14" font-weight="700" fill="currentColor">14 ms</text>
+<line x1="607.5" y1="32" x2="607.5" y2="260" stroke="#d97706" stroke-width="2" stroke-dasharray="6 4"/>
+<text x="607.5" y="26" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">one 60 Hz screen refresh: 16.7 ms</text>
+</svg>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">메시지 50,000개에서 쿼리당 검색 시간. 모든 막대가 60 Hz 화면의 다음 갱신보다 먼저 끝납니다.</figcaption>
+          </figure>
+
+          <p>한 번만 드는 비용은 인덱스를 만드는 일입니다. 메시지 50,000개에 약 11초, 초당 대략 4,000개꼴이고 디스크는 225 MB를 씁니다. 이 작업은 백그라운드에서 진행되어 그동안에도 MailVault를 계속 쓸 수 있고, 그 뒤로는 새 메시지와 바뀐 메시지만 인덱싱합니다.</p>
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms와 7 ms는 어떻게 느껴질까</h3>
+          <p>밀리초는 감이 잘 오지 않으니 자를 하나 놓아 봅시다. 60 Hz 화면은 16.7 ms마다 다시 그려지는데, 여기서 가장 느린 검색도 화면이 한 번 다시 그려지는 시간 안에 끝났습니다. 사용성 연구는 1993년부터 같은 세 가지 한계를 써 왔습니다. 0.1초 미만이면 즉각적으로 느껴지고, 1초까지는 생각의 흐름이 끊기지 않으며, 10초가 되면 주의가 떠나갑니다. 14밀리초는 "즉각" 한계의 약 7분의 1입니다. 1 ms인 날짜 필터는 그 한계보다 백 배 빠릅니다.</p>
+          <figure class="my-8 text-slate-700 dark:text-slate-300">
+<svg viewBox="0 0 720 250" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f2t f2d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
+<title id="f2t">How long is a millisecond? Search times on a logarithmic time scale</title>
+<desc id="f2d">A logarithmic ruler from 1 millisecond to 100 seconds. MailVault search sits between 1 and 14 milliseconds, close to one screen refresh at 16.7 milliseconds and far below the 100 millisecond point at which a response feels instant. The old file-by-file search projected to 88 seconds on a 20,000-message folder.</desc>
+<line x1="40" y1="110" x2="680" y2="110" stroke="currentColor" stroke-opacity=".5" stroke-width="3"/>
+<line x1="40.0" y1="103" x2="40.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="40.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 ms</text>
+<line x1="168.0" y1="103" x2="168.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="168.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 ms</text>
+<line x1="296.0" y1="103" x2="296.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="296.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 ms</text>
+<line x1="424.0" y1="103" x2="424.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="424.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">1 s</text>
+<line x1="552.0" y1="103" x2="552.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="552.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">10 s</text>
+<line x1="680.0" y1="103" x2="680.0" y2="117" stroke="currentColor" stroke-opacity=".8" stroke-width="2"/>
+<text x="680.0" y="96" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".9">100 s</text>
+<rect x="40.0" y="100" width="146.7" height="20" rx="4" fill="#6366f1"/>
+<text x="40.0" y="64" font-size="15" font-weight="700" fill="#6366f1">MailVault search on 50,000 messages: 1 to 14 ms</text>
+<line x1="196.5" y1="118" x2="196.5" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="196.5" y="148" text-anchor="start" font-size="13" font-weight="700" fill="#d97706">one screen refresh</text>
+<text x="196.5" y="164" text-anchor="start" font-size="12" fill="currentColor" fill-opacity=".95">16.7 ms at 60 Hz</text>
+<line x1="296.0" y1="118" x2="296.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="296.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">feels instant</text>
+<text x="296.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">under 100 ms</text>
+<line x1="424.0" y1="118" x2="424.0" y2="132" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="424.0" y="148" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">flow of thought</text>
+<text x="424.0" y="164" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">up to 1 s</text>
+<line x1="552.0" y1="118" x2="552.0" y2="176" stroke="#d97706" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="552.0" y="192" text-anchor="middle" font-size="13" font-weight="700" fill="#d97706">attention lost</text>
+<text x="552.0" y="208" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".95">after 10 s</text>
+<line x1="672.9" y1="118" x2="672.9" y2="132" stroke="#dc2626" stroke-width="1.5" stroke-dasharray="4 3"/>
+<text x="672.9" y="148" text-anchor="end" font-size="13" font-weight="700" fill="#dc2626">old search</text>
+<text x="672.9" y="164" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".95">88 s (projected)</text>
+</svg>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">로그 눈금으로 나타낸 시간, 1밀리초에서 100초까지. 눈금 한 칸은 앞 칸의 열 배입니다. 응답 시간 한계: <a href="https://www.nngroup.com/articles/response-times-3-important-limits/" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Jakob Nielsen</a>. 88 s 지점은 파일을 하나씩 열던 기존 검색이 메시지 20,000개짜리 폴더에서 걸릴 것으로 추정된 시간입니다.</figcaption>
+          </figure>
+
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">서버 메일, 보관, 백업까지 한 번에 검색</h3>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-results-1440.webp"><img src="/screenshots/ko/search-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="한 쿼리에 대한 MailVault 검색 결과. 아래쪽 범례가 서버에만 있음, 볼트에 있음, 유일한 사본, 백업 드라이브에 있음 표시를 설명합니다" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">모든 결과에는 메시지가 어디에 있는지 표시됩니다: 서버에만 있음, 볼트에 있음, 유일한 사본, 또는 백업 드라이브에 있음.</figcaption>
+          </figure>
+          <p>MailVault는 세 종류의 메일을 나란히 둡니다. 서버에서 동기화한 메시지, 사용자가 보관한 메시지, 백업에서 복원한 메시지입니다. 모두 같은 볼트 안의 파일이 되므로 같은 인덱스에 들어갑니다. 이번 테스트에서도 메일은 받은편지함, 보관함, 보낸편지함에 나뉘어 있었고, 쿼리 하나로 전부를 훑었습니다. 메시지가 어디에서 왔는지는 찾는 속도에 영향을 주지 않습니다.</p>
+          <p>서버에만 있고 내려받은 적 없는 메일은 볼트에 없으므로 로컬 인덱스는 그 존재를 알 수 없습니다. 그래서 MailVault는 서버에도 물어보며, 서버가 답하는 동안 인덱싱된 로컬 결과가 먼저 나타납니다. 이 구간은 사용 중인 제공업체에 달려 있어서 숫자를 공개하지 않습니다. Premium에서는 서버 편지함 하나 대신 최대 다섯 개를 한꺼번에 검색할 수 있습니다.</p>
+          <p>외부 백업 드라이브는 두 번째의 차가운 사본입니다. 검색은 작업용 볼트에서 이루어지며, 백업 드라이브에도 사본이 있는 결과에는 표시가 붙습니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">기술: 아주 빠르고 아주 단순한 SQL 데이터베이스</h3>
+          <p>검색 서버도, 클라우드 서비스도 없습니다. 인덱스는 볼트 안에 있는 SQLite 파일 하나이며, SQLite는 아마 세계에서 가장 널리 배포된 데이터베이스일 것입니다. MailVault는 SQLite의 전문 검색 엔진인 FTS5를 <strong>trigram</strong> 토크나이저와 함께 사용합니다. 모든 단어가 세 글자씩 겹치는 조각으로 저장됩니다. 그래서 "voic"을 입력하면 "invoice"를 찾을 수 있고, 와일드카드도 정확한 단어 규칙도 필요 없습니다. 악센트는 무시되므로 "reunion"으로 "Réunion"도 찾을 수 있습니다. 단어 사이에 띄어쓰기를 쓰지 않는 일본어와 중국어는 이를 위해 만든 두 번째 테이블을 거칩니다.</p>
+          <p>속도는 세 가지 평범한 결정에서 나옵니다.</p>
+          <ul>
+            <li><strong>검색은 메시지 파일을 열지 않습니다.</strong> 목록에 필요한 모든 정보(보낸 사람, 제목, 날짜, 폴더, 플래그)가 인덱스 행에 저장되어 있습니다. 메시지 50,000개 테스트에서 결과를 만드는 동안 메일 파서는 한 번도 호출되지 않았습니다.</li>
+            <li><strong>파일 하나, 프로세스 하나.</strong> 인덱스는 MailVault의 백그라운드 헬퍼가 소유하며, 한 번 열어 둔 채 계속 유지됩니다. 따로 시작할 것도, 네트워크로 보낼 것도 없습니다.</li>
+            <li><strong>기준은 언제나 사용자의 디스크입니다.</strong> 인덱스는 파생 데이터입니다. 혹시 손상되더라도 MailVault가 저장된 메시지로 다시 만들며, 메시지 자체는 건드리지 않습니다.</li>
+          </ul>
+          <p>오프라인에서도 작동하며, 어떤 것도 컴퓨터 밖으로 나가지 않습니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">첨부 파일과 이미지 (Premium)</h3>
+          <p>무료 검색은 보낸 사람, 제목, 메시지 본문을 다룹니다. Premium은 같은 인덱스, 같은 검색창에서 첨부 파일 안의 텍스트까지 더합니다.</p>
+          <ul>
+            <li><strong>첨부 파일 텍스트.</strong> PDF, Word, Excel, PowerPoint 파일을 읽어 그 안의 텍스트를 인덱싱하므로, 계약 번호로 검색하면 그 번호가 들어 있는 PDF가 첨부된 메시지를 찾을 수 있습니다.</li>
+            <li><strong>macOS의 이미지와 스캔 텍스트.</strong> MailVault는 Mac의 Apple Vision 프레임워크로 사진, 스크린샷, 스캔한 페이지 속 텍스트를 인식해 인덱싱합니다. 인식은 기기 안에서 이루어집니다. Windows와 Linux에는 이 단계가 없습니다.</li>
+          </ul>
+          <p>첨부 파일 안에만 있는 검색 결과에는 클립 표시가 붙으므로, 본문에는 별다른 내용이 없는 메일이 왜 나왔는지 알 수 있습니다. 이번 테스트에서는 첨부 파일 추출 시간을 재지 않았습니다. 사용자의 파일에 따라 달라지며, 검색할 때가 아니라 첨부 파일마다 한 번씩 백그라운드에서 실행되기 때문입니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">다른 클라이언트는 자기 검색을 어떻게 설명하나</h3>
+          <p>다른 메일 앱은 벤치마크하지 않았고, 아래 앱 중 메시지 50,000개에서의 검색 시간을 공개한 곳도 없으므로, 이것은 스톱워치가 아니라 설계를 비교한 것입니다.</p>
+          <ul>
+            <li><strong>Apple Mail:</strong> <a href="https://support.apple.com/en-us/102321" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Apple의 안내</a> 기준으로 Spotlight의 첫 인덱싱은 데이터 양에 따라 몇 시간, 심지어 며칠이 걸릴 수 있고, Mail에는 인덱싱이 아직 끝나지 않았다는 알림이 표시될 수 있습니다.</li>
+            <li><strong>Outlook for Windows</strong>는 Windows Search 인덱스를 사용하며, <a href="https://support.microsoft.com/en-us/outlook/troubleshooting-outlook-search-issues" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Microsoft의 안내</a> 기준으로 인덱싱이 끝날 때까지 결과가 불완전할 수 있고, 로컬에 캐시된 메일만 인덱싱되며, 검색 결과가 너무 많으면 오래된 항목이 숨겨질 수 있습니다.</li>
+            <li><strong>Thunderbird</strong>는 자체 데이터베이스에 전역 인덱스를 둡니다. 버그 트래커에는 <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=585429" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">대용량 메일함에서 인덱싱이 느려진다는</a> 오래된 보고가 이어지고 있으며, 한 사용자는 메시지 36,000개에 며칠이 걸렸다고 적었습니다. 이는 오래된 하드웨어에서의 사용자 보고라서 우리 테스트와 직접 비교할 수 없습니다.</li>
+          </ul>
+          <p>우리의 설계 선택은 흔한 방식과 반대입니다. 사용자가 저장한 사본을 직접 인덱싱하고, 그것을 작은 파일 하나에 두고, 쿼리 경로를 짧게 유지해서 답이 밀리초 단위로 나오게 합니다.</p>
+
+          <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">이 테스트가 보여 주지 않는 것</h3>
+          <p>메일함은 합성 데이터입니다. 실제 메일은 더 크고 지저분하므로 본문이 긴 경우 인덱스는 더 커집니다. 다만 쿼리는 여전히 파일이 아니라 인덱스를 훑습니다. 시간은 웜 캐시 기준이며, 재시작 후 첫 검색은 디스크에서 더 많이 읽습니다. 테스트는 제목, 보낸 사람, 본문을 다루었고 첨부 파일 텍스트는 다루지 않았으며, 기기 한 대에서 실행했습니다.</p>
+          <p>측정은 직접 되풀이해 볼 수 있습니다. 벤치마크는 MailVault 소스 트리에 있는 무시 처리된 Rust 테스트 <code>search_index_bench_50k_real_parser</code>이며, 위의 모든 숫자를 출력합니다.</p>
+
+          <div class="mt-8 p-6 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+            <p class="font-semibold text-slate-900 dark:text-slate-100 mb-3">6년 전의 이메일을 밀리초 만에 찾으십시오.</p>
+            <p class="text-sm mb-4">MailVault는 보관함 옆에 비공개 검색 인덱스를 두므로 메시지 50,000개도 500개만큼 쉽게 검색됩니다. 무료로 사용할 수 있습니다. 첨부 파일과 이미지 검색은 Premium에 포함됩니다.</p>
+            <div class="flex flex-wrap gap-3"><a href="/ko/#download" class="mv-blog-cta mv-blog-cta-primary inline-flex lamp-bg text-white px-6 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity">MailVault 다운로드</a><a href="/ko/features.html" class="mv-blog-cta mv-blog-cta-secondary inline-flex items-center px-6 py-2.5 rounded-lg font-medium border border-primary-300 dark:border-primary-700 text-primary-600 dark:text-primary-300 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">모든 기능 보기</a></div>
+          </div>
+          <p class="text-sm text-slate-500 dark:text-slate-400 mt-6">출처: <a href="https://support.apple.com/en-us/102321" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Apple Support, Spotlight 인덱싱</a>; <a href="https://support.microsoft.com/en-us/outlook/troubleshooting-outlook-search-issues" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Microsoft Support, Outlook 검색 문제</a>; <a href="https://bugzilla.mozilla.org/show_bug.cgi?id=585429" target="_blank" rel="noopener" class="text-primary-500 hover:text-primary-600 underline">Mozilla Bugzilla 585429</a>. 벤치마크는 2026년 9월 21일에 측정했습니다.</p>
+        </div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="mv-studio" aria-labelledby="studio-title"><svg class="mv-section-seam" viewBox="0 0 1440 24" preserveAspectRatio="none" aria-hidden="true"><path d="M0 22 H240 L254 8 H348 L362 22 H438 L460 0 H580 L602 22 H690 L704 8 H798 L812 22 H886 L908 0 H1028 L1050 22 H1126 L1140 8 H1234 L1248 22 H1440" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg><div class="mv-wrap mv-studio-inner"><div><p class="mv-eyebrow">A Graphic Meat creation</p><h2 id="studio-title">Meet the people behind MailVault.</h2><p>저희는 2013년부터 유용한 소프트웨어를 만드는 독립 제품 스튜디오 Graphic Meat입니다.</p><a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat 알아보기 ↗</a></div></div></aside>
+  <footer class="mv-footer"><div class="mv-wrap"><div class="mv-footer-top"><div><a class="mv-brand" href="/ko/"><img src="/icon-128.webp" width="28" height="28" alt="">MailVault</a><p>Read your mail. Keep your mail.</p></div><nav aria-label="Explore MailVault"><a href="/ko/use-cases.html">Use cases</a><a href="/ko/blog.html">블로그</a><a href="/changelog.html">What’s new</a><a href="/ko/faq.html">FAQ</a><a href="https://github.com/GraphicMeat/mail-vault-app" target="_blank" rel="noopener">Code on GitHub ↗</a></nav></div><div class="mv-footer-bottom"><p>© 2026 MailVault. Made by <a href="https://graphicmeat.com" target="_blank" rel="noopener">Graphic Meat</a>.</p><div><a href="/privacy.html">개인정보</a><a href="/terms.html">약관</a></div></div></div></footer>
+  <script defer src="/gm.js?v=af272b7" data-site="mailvault"></script>
+  <script defer src="/assets/english-site.js?v=3"></script>
+</body>
+</html>

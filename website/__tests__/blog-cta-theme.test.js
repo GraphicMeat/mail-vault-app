@@ -21,7 +21,7 @@ describe('blog article CTA theme colors', () => {
       .filter(file => file.endsWith('.html'))
       .filter(file => readCtaAnchors(resolve(blogRoot, file)).length > 0);
 
-    expect(articles).toHaveLength(5);
+    expect(articles).toHaveLength(6);
 
     for (const article of articles) {
       const englishPath = resolve(blogRoot, article);
