@@ -24,6 +24,12 @@ pub struct SyncResult {
     pub account_id: String,
     pub mailbox: String,
     pub new_emails: usize,
+    /// Of `new_emails`, the ones that actually *arrived* since the last sync.
+    /// A cold cache and a UID gap too wide to range-fetch both resolve with a
+    /// whole page of headers, most of them years old — writing them is a
+    /// backfill, and announcing them as new mail is how a 1600-message INBOX
+    /// produced a "500 new emails" banner. Only this number is announceable.
+    pub arrivals: usize,
     pub updated_flags: usize,
     pub total_emails: u32,
     pub success: bool,
@@ -393,7 +399,7 @@ impl SyncEngine {
             return SyncResult {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
-                new_emails: 0, updated_flags: 0, total_emails: 0,
+                new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
                 success: false,
                 error: Some("No internet connection".to_string()),
                 offline: true,
@@ -416,7 +422,7 @@ impl SyncEngine {
             return SyncResult {
                 account_id: account_id.clone(),
                 mailbox: mailbox.to_string(),
-                new_emails: 0, updated_flags: 0, total_emails: 0,
+                new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
                 success: false, error: Some(reason), offline: false,
             };
         }
@@ -548,6 +554,7 @@ impl SyncEngine {
                 account_id,
                 mailbox,
                 new_emails: delta.new_emails,
+                arrivals: delta.arrivals,
                 updated_flags: delta.updated_flags,
                 total_emails: delta.total_emails,
                 success: true,
@@ -557,7 +564,7 @@ impl SyncEngine {
             Err(e) => SyncResult {
                 account_id,
                 mailbox: mailbox.to_string(),
-                new_emails: 0, updated_flags: 0, total_emails: 0,
+                new_emails: 0, arrivals: 0, updated_flags: 0, total_emails: 0,
                 success: false, error: Some(e), offline: false,
             },
         }
@@ -689,7 +696,9 @@ impl SyncEngine {
             })
             .await?;
             info!("[sync] Full page sync for {} ({}): {} headers", account.email, mailbox, new_emails);
-            return Ok(SyncDelta { new_emails, updated_flags: 0, total_emails: total, session_dirty: false });
+            // A backfill, not a delivery: there is no earlier cache to call any
+            // of these an arrival against.
+            return Ok(SyncDelta { new_emails, arrivals: 0, updated_flags: 0, total_emails: total, session_dirty: false });
         }
 
         // ── Delta path ──
@@ -700,12 +709,17 @@ impl SyncEngine {
 
         // 1. New arrivals — UIDs at or above the last known UIDNEXT.
         let mut new_headers = Vec::new();
+        // The page fetched for a wide gap is the newest 500 of the mailbox, not
+        // 500 arrivals: most of it is already cached. Counted separately so the
+        // notification says what landed rather than what was re-read.
+        let mut arrivals = None;
         if server_next > cached_uid_next {
             let gap = server_next - cached_uid_next;
             if gap > MAX_DELTA_UID_GAP {
                 // Too far behind for a range fetch to be cheaper than a page.
                 let (headers, _t, _h, _s) =
                     imap::fetch_emails_page(session, mailbox, 1, 500).await?;
+                arrivals = Some(headers.iter().filter(|h| h.uid >= cached_uid_next).count());
                 new_headers = headers;
             } else {
                 let uids: Vec<u32> = (cached_uid_next..server_next).collect();
@@ -799,6 +813,7 @@ impl SyncEngine {
 
         Ok(SyncDelta {
             new_emails: new_count,
+            arrivals: arrivals.unwrap_or(new_count),
             updated_flags,
             total_emails: total,
             session_dirty,
@@ -1196,6 +1211,8 @@ struct CachedMeta {
 /// What one delta sync changed.
 struct SyncDelta {
     new_emails: usize,
+    /// See `SyncResult::arrivals` — the announceable subset of `new_emails`.
+    arrivals: usize,
     updated_flags: usize,
     total_emails: u32,
     /// A command failed mid-sync without aborting it (the reconcile SEARCH is
@@ -1242,6 +1259,7 @@ mod tests {
             account_id: "acc1".into(),
             mailbox: "INBOX".into(),
             new_emails: 5,
+            arrivals: 5,
             updated_flags: 2,
             total_emails: 100,
             success: true,
@@ -2727,9 +2745,41 @@ mod tests {
         let result = engine.sync_account(&account, "INBOX").await;
         assert!(result.success, "sync failed: {:?}", result.error);
         assert_eq!(result.new_emails, 500, "a gap over the limit falls back to one 500-header page");
+        assert_eq!(
+            result.arrivals, 500,
+            "every header on that page is above the cached UIDNEXT, so all of it did arrive"
+        );
 
         engine.backfill_mailbox(&account, "INBOX").await;
         assert_eq!(cached_count(&engine, "INBOX"), 700, "backfill must finish what the page started");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The first sync of a mailbox writes its whole first page. None of it
+    /// *arrived* — there was no earlier cache to arrive against — and the app
+    /// turns the announced number straight into a "N new emails" banner, so a
+    /// cold sync must announce nothing.
+    #[tokio::test]
+    async fn a_cold_sync_writes_headers_but_announces_no_arrivals() {
+        let dir = scratch_dir("cold_sync_arrivals");
+        let engine = engine_for(&dir);
+
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 40)));
+        let account = account_for(&server);
+        let result = engine.sync_account(&account, "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert_eq!(result.new_emails, 40, "the page is still written");
+        assert_eq!(result.arrivals, 0, "a backfill is not new mail");
+
+        // …and the next sync, now that there is a cache to compare against,
+        // counts what really landed.
+        drop(server);
+        let grown = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 43)));
+        let result = engine.sync_account(&account_for(&grown), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert_eq!(result.arrivals, 3);
 
         fs::remove_dir_all(&dir).unwrap();
     }
