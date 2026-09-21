@@ -156,6 +156,24 @@ fn url_encode(s: &str) -> String {
     url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
+/// Minimal HTML-body escape for text pulled out of the callback query string.
+/// Not a general-purpose sanitizer — used only on the small OAuth error page,
+/// where the text is placed in element content (never in an attribute or URL).
+fn html_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(ch),
+        }
+    }
+    out
+}
+
 // ── Response types ──────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -548,10 +566,13 @@ async fn run_callback_server(senders: SenderMap) -> Result<(), String> {
                 if let Some(tx) = senders.lock().await.remove(&state) {
                     let _ = tx.send(Err(desc.to_string()));
                 }
+                // `desc` is attacker-controllable (any process/tab that can
+                // reach `127.0.0.1:19876/callback` supplies the query string).
+                // Escape before it enters the HTML body.
                 format!(
                     "<html><body style=\"font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0\">\
                     <div style=\"text-align:center\"><h2>Authentication Failed</h2><p>{}</p><p>You can close this window.</p></div></body></html>",
-                    desc
+                    html_escape(desc)
                 )
             } else if let Some(code) = code {
                 if let Some(tx) = senders.lock().await.remove(&state) {
@@ -564,11 +585,37 @@ async fn run_callback_server(senders: SenderMap) -> Result<(), String> {
             };
 
             let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}",
                 html.len(),
                 html
             );
             let _ = stream.write_all(response.as_bytes()).await;
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::html_escape;
+
+    #[test]
+    fn html_escape_neutralizes_script_injection() {
+        let esc = html_escape("<script>alert(1)</script>");
+        assert!(!esc.contains('<'));
+        assert!(!esc.contains('>'));
+        assert_eq!(esc, "&lt;script&gt;alert(1)&lt;/script&gt;");
+    }
+
+    #[test]
+    fn html_escape_handles_ampersand_and_quotes() {
+        assert_eq!(
+            html_escape(r#"A&B "c" 'd'"#),
+            "A&amp;B &quot;c&quot; &#39;d&#39;"
+        );
+    }
+
+    #[test]
+    fn html_escape_leaves_plain_text_intact() {
+        assert_eq!(html_escape("access denied — try again"), "access denied — try again");
     }
 }
