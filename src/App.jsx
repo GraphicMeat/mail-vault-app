@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback, lazy, Suspense } from 'react';
 import { bootstrapTags } from './services/tagMigration';
+import { initScheduledSend } from './stores/scheduledStore';
 import { useMailStore } from './stores/mailStore';
 import { useInsightsStore } from './stores/insightsStore';
 import { createInsightsReaderScope } from './services/insightsReaderScope';
@@ -921,6 +922,9 @@ function App() {
           // the search index cannot place an assignment, and retries on the
           // next launch rather than clearing anything on a blind lookup.
           bootstrapTags();
+          // Loads the queue, recomputes every queued row's fireAt against the
+          // current tz rules, and subscribes to live status updates.
+          initScheduledSend();
         }).catch((err) => {
           console.error('[App] Full init failed:', err);
           clearTimeout(failsafe);

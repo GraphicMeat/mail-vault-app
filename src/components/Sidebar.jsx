@@ -22,6 +22,8 @@ import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
 import { SidebarViews } from './SidebarViews';
 import { useViewStore } from '../stores/viewStore';
+import { useScheduledStore } from '../stores/scheduledStore';
+import { ScheduledFolderModal } from './scheduled/ScheduledFolderModal';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
@@ -54,6 +56,7 @@ import {
   Gift,
   ChevronDown,
   Search,
+  Clock,
 } from 'lucide-react';
 
 const UNIFIED_FOLDERS = () => ([
@@ -528,6 +531,10 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   const loadingMore = useSyncStore(s => s.loadingMore);
   const manualRefreshSpinning = useAccountStore(s => s.manualRefreshSpinning);
   const activateAccount = useAccountStore(s => s.activateAccount);
+  const [showScheduled, setShowScheduled] = useState(false);
+  const scheduledPendingCount = useScheduledStore(
+    s => s.rows.filter(r => r.status === 'queued' || r.status === 'failed').length
+  );
 
   // Single click resumes the folder you last read in that account; double click
   // is the shortcut straight to its Inbox. Bound on the row WRAPPER so all
@@ -898,6 +905,24 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
 
         <div className="w-full py-2 flex justify-center shrink-0">{insightsEntry}</div>
 
+        <div className="w-full py-2 border-b border-mail-border flex justify-center shrink-0">
+          <button
+            type="button"
+            data-testid="sidebar-scheduled-btn-collapsed"
+            onClick={() => setShowScheduled(true)}
+            className="relative p-2 rounded-lg transition-all text-mail-text-muted hover:text-mail-text hover:bg-mail-surface-hover"
+            title={t('scheduled.sidebar.label')}
+          >
+            <Clock size={16} />
+            {scheduledPendingCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full
+                                bg-mail-accent-fill text-white text-[9px] leading-[14px] text-center">
+                {scheduledPendingCount}
+              </span>
+            )}
+          </button>
+        </div>
+
         {/* Account icons */}
         <SidebarViews collapsed />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
@@ -1013,6 +1038,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         {errorModal}
         {hoverBubble}
         {folderOpsUi}
+        {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} />}
       </div>
     );
   }
@@ -1119,6 +1145,19 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       <div className="sidebar-navigation-scroll" data-sidebar-layout={sidebarLayout}>
+        <button
+          type="button"
+          data-testid="sidebar-scheduled-btn"
+          onClick={() => setShowScheduled(true)}
+          className="w-full flex items-center gap-2 px-3 py-2 mx-0 text-sm text-mail-text-muted
+                    hover:text-mail-text hover:bg-mail-surface-hover transition-colors rounded-lg"
+        >
+          <Clock size={14} />
+          <span className="flex-1 text-left">{t('scheduled.sidebar.label')}</span>
+          {scheduledPendingCount > 0 && (
+            <span className="text-xs text-mail-text-muted">{scheduledPendingCount}</span>
+          )}
+        </button>
         <SidebarViews />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
@@ -1230,6 +1269,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       {errorModal}
       {hoverBubble}
       {folderOpsUi}
+      {showScheduled && <ScheduledFolderModal onClose={() => setShowScheduled(false)} />}
     </div>
   );
 }

@@ -26,6 +26,10 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { send } from '../services/transport';
 import { toClientPoint, dropZoneAt, toAttachment } from '../utils/nativeDrop';
+import { useScheduledStore } from '../stores/scheduledStore';
+import { SchedulePicker } from './scheduled/SchedulePicker';
+import { ScheduledSendNotice } from './scheduled/ScheduledFolderModal';
+import { isPastLocalTime, zonedTimeToEpoch } from '../utils/scheduledTime';
 
 // Find the Sent mailbox path for a specific account.
 // Tiers: account.sentFolderOverride → disk/store mailbox tree via SPECIAL-USE
@@ -235,9 +239,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const dragDepth = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [composeDelay, setComposeDelay] = useState(null); // null = use global
+  const [showSchedulePicker, setShowSchedulePicker] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState(() => ({
+    localTime: '',
+    tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  }));
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
+  const scheduleRef = useRef(null);
   const onSaveStateRef = useRef(onSaveState);
   useEffect(() => { onSaveStateRef.current = onSaveState; }, [onSaveState]);
 
@@ -532,6 +542,24 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     };
   }, [showTemplates]);
 
+  // Close the schedule popover on click outside or Escape — same shape as
+  // the templates dropdown above.
+  useEffect(() => {
+    if (!showSchedulePicker) return;
+    const handleClick = (e) => {
+      if (scheduleRef.current && !scheduleRef.current.contains(e.target)) setShowSchedulePicker(false);
+    };
+    const handleKey = (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); setShowSchedulePicker(false); }
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey, true);
+    };
+  }, [showSchedulePicker]);
+
   const insertTemplate = (template) => {
     const editor = editorRef.current;
     if (editor) {
@@ -556,6 +584,80 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     setTemplateName('');
     setSavingTemplate(false);
     setShowTemplates(false);
+  };
+
+  // Build the outgoing message the same way a normal send and a scheduled
+  // send both need it — identity, inline-image handling, quoted-content
+  // composition and Sent-folder resolution must never drift between the two
+  // paths (several of the lines below carry their own scar tissue about
+  // exactly that). `sendFn` below and `handleSchedule` are its only callers.
+  const buildOutgoingPayload = async (freshAccount) => {
+    // Get display name from settings or account
+    const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
+    // Send-as override: the outgoing identity only. Credentials stay bound
+    // to freshAccount.email, so this never touches auth. Applied to BOTH
+    // the build_mime and the send call — if they drift, the staged .eml
+    // and the message that actually leaves carry different From headers.
+    const fromAddress = composeFrom || freshAccount.email;
+    const sendAsEmail = fromAddress !== freshAccount.email ? fromAddress : '';
+
+    // Inline pictures leave as cid: parts — Gmail/Outlook.com strip data: URIs.
+    // Only the outgoing copy is rewritten; composeState.initialData.body keeps
+    // the data URIs so an undone/minimized draft still renders the picture.
+    const inline = extractInlineImages(formData.body);
+
+    // Prepare attachments for nodemailer
+    const emailAttachments = [
+      ...attachments.map(att => ({
+        filename: att.filename,
+        content: att.content,
+        encoding: 'base64',
+        contentType: att.contentType
+      })),
+      ...inline.attachments.map(a => ({
+        filename: a.filename,
+        content: a.content,
+        encoding: 'base64',
+        contentType: a.contentType,
+        cid: a.cid,
+      })),
+    ];
+
+    // Combine compose body with quoted content for the sent email.
+    // Only what was typed here gets the editor's spacing inlined — the
+    // quoted part is someone else's markup and keeps its own.
+    const composed = inlineComposeSpacing(inline.html);
+    const fullHtml = quotedHtml
+      ? composed + '<hr><blockquote>' + quotedHtml + '</blockquote>'
+      : composed;
+    // The text part is rendered from the same HTML the recipient reads.
+    const fullText = quotedHtml
+      ? htmlToText(formData.body) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
+      : htmlToText(formData.body);
+
+    // Resolve the account's Sent folder once — used for both local
+    // Maildir archival (where we write the raw .eml so the email is
+    // visible/retrievable even if the server never sees it) and for the
+    // subsequent server-side IMAP APPEND.
+    const isGraph = freshAccount.oauth2Transport === 'graph';
+    const resolved = await resolveSentMailboxForAccount(freshAccount);
+    const sentFolderPath = resolved.path;
+    const accountForSend = resolved.account;
+    const sentMailbox = isGraph ? null : sentFolderPath;
+
+    const outgoingPayload = {
+      to: formData.to,
+      cc: formData.cc || undefined,
+      bcc: formData.bcc || undefined,
+      subject: formData.subject,
+      text: fullText,
+      html: fullHtml,
+      inReplyTo: formData.inReplyTo || undefined,
+      references: formData.references || undefined,
+      attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
+    };
+
+    return { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, outgoingPayload };
   };
 
   const handleSend = async (e) => {
@@ -598,73 +700,11 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         const freshAccount = await ensureFreshToken(selectedAccount);
         if (!freshAccount) throw new Error('Could not refresh account credentials');
 
-        // Get display name from settings or account
-        const displayName = getDisplayName(selectedAccountId) || freshAccount.name || freshAccount.email;
-        // Send-as override: the outgoing identity only. Credentials stay bound
-        // to freshAccount.email, so this never touches auth. Applied to BOTH
-        // the build_mime and the send call — if they drift, the staged .eml
-        // and the message that actually leaves carry different From headers.
-        const fromAddress = composeFrom || freshAccount.email;
-        const sendAsEmail = fromAddress !== freshAccount.email ? fromAddress : '';
-
-        // Inline pictures leave as cid: parts — Gmail/Outlook.com strip data: URIs.
-        // Only the outgoing copy is rewritten; composeState.initialData.body keeps
-        // the data URIs so an undone/minimized draft still renders the picture.
-        const inline = extractInlineImages(formData.body);
-
-        // Prepare attachments for nodemailer
-        const emailAttachments = [
-          ...attachments.map(att => ({
-            filename: att.filename,
-            content: att.content,
-            encoding: 'base64',
-            contentType: att.contentType
-          })),
-          ...inline.attachments.map(a => ({
-            filename: a.filename,
-            content: a.content,
-            encoding: 'base64',
-            contentType: a.contentType,
-            cid: a.cid,
-          })),
-        ];
-
-        // Combine compose body with quoted content for the sent email.
-        // Only what was typed here gets the editor's spacing inlined — the
-        // quoted part is someone else's markup and keeps its own.
-        const composed = inlineComposeSpacing(inline.html);
-        const fullHtml = quotedHtml
-          ? composed + '<hr><blockquote>' + quotedHtml + '</blockquote>'
-          : composed;
-        // The text part is rendered from the same HTML the recipient reads.
-        const fullText = quotedHtml
-          ? htmlToText(formData.body) + '\n\n-------- Original Message --------\n' + htmlToText(quotedHtml)
-          : htmlToText(formData.body);
-
-        // Resolve the account's Sent folder once — used for both local
-        // Maildir archival (where we write the raw .eml so the email is
-        // visible/retrievable even if the server never sees it) and for the
-        // subsequent server-side IMAP APPEND.
-        const isGraph = freshAccount.oauth2Transport === 'graph';
-        const resolved = await resolveSentMailboxForAccount(freshAccount);
-        const sentFolderPath = resolved.path;
-        const accountForSend = resolved.account;
-        const sentMailbox = isGraph ? null : sentFolderPath;
+        const { displayName, fromAddress, sendAsEmail, accountForSend, sentMailbox, sentFolderPath, outgoingPayload } =
+          await buildOutgoingPayload(freshAccount);
 
         // Quote/angle-aware: '"Doe, John" <j@d.com>' is ONE recipient.
         const parseAddresses = (raw) => splitRecipients(raw).map(s => ({ address: s, name: '' }));
-
-        const outgoingPayload = {
-          to: formData.to,
-          cc: formData.cc || undefined,
-          bcc: formData.bcc || undefined,
-          subject: formData.subject,
-          text: fullText,
-          html: fullHtml,
-          inReplyTo: formData.inReplyTo || undefined,
-          references: formData.references || undefined,
-          attachments: emailAttachments.length > 0 ? emailAttachments : undefined,
-        };
 
         const pseudoUid = staged ? staged.uid : Math.floor(Date.now() / 1000);
         // Local archive target: must be a non-empty string — Maildir dirs use
@@ -1028,7 +1068,59 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       setSending(false);
     }
   };
-  
+
+  // Schedule instead of sending now: same payload-building path as a normal
+  // send (buildOutgoingPayload above), minus the local Sent-folder staging
+  // and optimistic-row machinery — scheduling never touches Sent, the daemon
+  // does that when it actually fires. `scheduled.create` freezes the MIME
+  // itself, so there is no undo-send delay to queue through.
+  const handleSchedule = async () => {
+    if (!formData.to.trim()) { setError(t('compose.pleaseEnterLeastOneRecipient')); return; }
+    if (!selectedAccount) { setError(t('compose.noAccountSelected')); return; }
+    // Refused HERE ONLY — never in what the daemon fires, where "already
+    // past" is the normal catch-up case and must send.
+    if (!scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz)) return;
+
+    setSending(true);
+    setError(null);
+    try {
+      const freshAccount = await ensureFreshToken(selectedAccount);
+      if (!freshAccount) throw new Error('Could not refresh account credentials');
+
+      const { displayName, sendAsEmail, accountForSend, sentMailbox, outgoingPayload } =
+        await buildOutgoingPayload(freshAccount);
+
+      await useScheduledStore.getState().create({
+        accountId: freshAccount.id,
+        account: { ...accountForSend, name: displayName, fromEmail: sendAsEmail || undefined },
+        email: outgoingPayload,
+        localTime: scheduleDraft.localTime,
+        tz: scheduleDraft.tz,
+        fireAt: zonedTimeToEpoch(scheduleDraft.localTime, scheduleDraft.tz),
+        sentMailbox,
+      });
+
+      // No longer a live draft — same cleanup as a real send's success path,
+      // so the outbox/Drafts bubble does not also claim this message.
+      await saveChainRef.current.catch(() => {});
+      if (draftUidRef.current && draftMailboxRef.current) {
+        await deleteLocalDraft({
+          accountId: draftAccountRef.current || freshAccount.id,
+          mailbox: draftMailboxRef.current,
+          uid: draftUidRef.current,
+        });
+        draftUidRef.current = null;
+      }
+
+      setShowSchedulePicker(false);
+      onClose();
+    } catch (err) {
+      setError(err.message || t('scheduled.errors.scheduleFailed'));
+    } finally {
+      setSending(false);
+    }
+  };
+
   const hasUserContent = initialSnapshot.current
     ? (formData.to !== initialSnapshot.current.to ||
        formData.subject !== initialSnapshot.current.subject ||
@@ -1699,6 +1791,47 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                   </>
                 )}
               </button>
+              <div className="relative" ref={scheduleRef}>
+                <button
+                  type="button"
+                  data-testid="compose-schedule-toggle"
+                  disabled={sending}
+                  title={t('scheduled.compose.menuLabel')}
+                  onClick={() => setShowSchedulePicker(v => !v)}
+                  className="flex items-center justify-center px-2 py-2 bg-mail-accent-fill
+                            hover:bg-mail-accent-hover disabled:opacity-50
+                            text-white rounded-lg transition-all"
+                >
+                  <ChevronRight size={16} className={showSchedulePicker ? '-rotate-90 transition-transform' : 'rotate-90 transition-transform'} />
+                </button>
+                {showSchedulePicker && (
+                  <div className="absolute bottom-full right-0 mb-1 w-80 bg-mail-surface border border-mail-border
+                                  rounded-lg z-50 p-3 space-y-2">
+                    <div className="text-sm font-medium text-mail-text">{t('scheduled.compose.pickerTitle')}</div>
+                    <SchedulePicker
+                      localTime={scheduleDraft.localTime}
+                      tz={scheduleDraft.tz}
+                      onChange={setScheduleDraft}
+                      testIdPrefix="compose-schedule"
+                    />
+                    <ScheduledSendNotice />
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button type="button" data-testid="compose-schedule-cancel"
+                        onClick={() => setShowSchedulePicker(false)}
+                        className="px-3 py-1.5 text-sm text-mail-text-muted hover:text-mail-text transition-colors">
+                        {t('common.cancel')}
+                      </button>
+                      <button type="button" data-testid="compose-schedule-submit"
+                        disabled={sending || !scheduleDraft.localTime || isPastLocalTime(scheduleDraft.localTime, scheduleDraft.tz)}
+                        onClick={handleSchedule}
+                        className="px-3 py-1.5 text-sm bg-mail-accent-fill hover:bg-mail-accent-hover
+                                  disabled:opacity-50 text-white font-medium rounded-lg transition-all">
+                        {t('scheduled.compose.submit')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </form>
