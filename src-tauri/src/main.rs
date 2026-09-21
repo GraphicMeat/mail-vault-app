@@ -954,21 +954,25 @@ fn open_with_dialog(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "macos")]
     {
-        let script = format!(
-            r#"
-            set chosenApp to choose application with prompt "Open '{}' with:"
+        // Pass the path and file name via environment, not through string
+        // interpolation: `system attribute` reads them back as opaque strings,
+        // so a filename containing quotes, backslashes or newlines can't end
+        // the AppleScript literal and inject a `do shell script`.
+        let filename = Path::new(&path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_default();
+        let script = r#"
+            set thePath to system attribute "MV_OPEN_PATH"
+            set theName to system attribute "MV_OPEN_NAME"
+            set chosenApp to choose application with prompt ("Open '" & theName & "' with:")
             set appPath to POSIX path of (path to chosenApp)
-            do shell script "open -a " & quoted form of appPath & " " & quoted form of "{}"
-            "#,
-            Path::new(&path)
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_default()
-                .replace("\"", "\\\""),
-            path.replace("\"", "\\\"")
-        );
+            do shell script "open -a " & quoted form of appPath & " " & quoted form of thePath
+        "#;
         Command::new("osascript")
-            .args(["-e", &script])
+            .env("MV_OPEN_PATH", &path)
+            .env("MV_OPEN_NAME", &filename)
+            .args(["-e", script])
             .spawn()
             .map_err(|e| format!("Failed to open 'Open With' dialog: {}", e))?;
     }
