@@ -164,12 +164,19 @@ export const useTagStore = create((set, get) => ({
   },
 
   /// The per-tag counts the manager shows are the daemon's, never derived from
-  /// the render cache: that cache only holds the rows on screen.
+  /// the render cache: that cache only holds the rows on screen. A saved view
+  /// filtered by tag has just changed too, so its badge is refreshed with them.
   refreshCounts: async () => {
     try {
       await get().loadTags();
     } catch {
       // A count that failed to refresh is not worth failing the tagging over.
+    }
+    try {
+      const { useViewStore } = await import('./viewStore');
+      await useViewStore.getState().refreshCounts();
+    } catch {
+      // Same: a stale badge is not worth failing a tag over.
     }
   },
 }));

@@ -510,6 +510,7 @@ pub(crate) async fn handle_request_for_test(state: &Arc<DaemonState>, method: &s
 impl DaemonState {
     /// A state wired the way main.rs wires it, but pointed at scratch dirs.
     pub(crate) fn for_test(mail_dir: PathBuf, app_dir: PathBuf, mail_dir_ok: bool) -> Arc<DaemonState> {
+        let app_dir_for_index = app_dir.clone();
         let imap_pool = Arc::new(imap::ImapPool::new());
         let contacts = contacts_index::ContactsState::new(mail_dir.clone());
         // A gate whose probe always answers "online": these tests are about
@@ -568,7 +569,7 @@ impl DaemonState {
             sync_engine,
             contacts,
             shutdown: Arc::new(tokio::sync::Notify::new()),
-            search_index: crate::search_index::SearchIndexState::new(mail_dir, mail_dir_ok, events.clone()),
+            search_index: crate::search_index::SearchIndexState::new(mail_dir, app_dir_for_index.clone(), mail_dir_ok, events.clone()),
             search_runs: std::sync::Mutex::new(std::collections::HashMap::new()),
             events,
             prefetch_lock: std::sync::Mutex::new(()),

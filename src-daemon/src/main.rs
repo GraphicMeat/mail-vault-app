@@ -383,7 +383,7 @@ async fn daemon_main() {
     );
 
     let events = events::EventBus::new(events::CAPACITY);
-    let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), mail_dir_ok, events.clone());
+    let search_index_state = search_index::SearchIndexState::new(mail_dir.clone(), data_dir.clone(), mail_dir_ok, events.clone());
 
     let custody = custody::CustodyState::default();
     sync_eng.attach_custody_db(Arc::clone(&custody.db));

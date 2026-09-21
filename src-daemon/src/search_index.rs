@@ -29,6 +29,9 @@ pub struct SearchIndexState {
     pub db: SharedConn,
     pub(crate) root: Mutex<Option<PathBuf>>,
     pub(crate) vault_root: PathBuf,
+    /// Where `app.db` lives. A sweep that removes a message has to forget the
+    /// tags and field values keyed to it, and that store is not this one.
+    pub(crate) app_dir: PathBuf,
     pub(crate) mail_dir_ok: bool,
     pub(crate) bus: EventBus,
     pub(crate) config: Mutex<Option<IndexConfig>>,
@@ -61,11 +64,12 @@ pub struct SearchIndexState {
 }
 
 impl SearchIndexState {
-    pub fn new(vault_root: PathBuf, mail_dir_ok: bool, bus: EventBus) -> Arc<Self> {
+    pub fn new(vault_root: PathBuf, app_dir: PathBuf, mail_dir_ok: bool, bus: EventBus) -> Arc<Self> {
         Arc::new(Self {
             db: Mutex::new(None),
             root: Mutex::new(None),
             vault_root,
+            app_dir,
             mail_dir_ok,
             bus,
             config: Mutex::new(None),
@@ -137,9 +141,15 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
     }
     let from = obj.get("from").cloned().unwrap_or(serde_json::Value::Null);
     let mut addrs = vec![addr_text(&from)];
+    let mut to_addrs = Vec::new();
     for key in ["to", "cc", "bcc", "replyTo"] {
         if let Some(list) = obj.get(key).and_then(|v| v.as_array()) {
             addrs.extend(list.iter().map(addr_text));
+            // Reply-To is the sender's own choice of return address, not a
+            // recipient: a view for "addressed to me" must not match on it.
+            if key != "replyTo" {
+                to_addrs.extend(list.iter().map(addr_text));
+            }
         }
     }
     // Attachment candidates need the real MIME tree; the light parse above
@@ -166,6 +176,7 @@ pub fn index_doc_from_light(raw: &[u8], uid: u32, filename: &str) -> Option<Inde
         from_addr: from.get("address").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         from_name: from.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         addrs: addrs.into_iter().filter(|a| !a.is_empty()).collect(),
+        to_addrs: to_addrs.into_iter().filter(|a| !a.is_empty()).collect(),
         subject: obj.get("subject").and_then(|v| v.as_str()).unwrap_or("").to_string(),
         body_text,
         has_attachments: obj.get("hasAttachments").and_then(|v| v.as_bool()).unwrap_or(false),
@@ -407,6 +418,40 @@ pub fn search_reply(st: &SearchIndexState, request: &core::query::SearchRequest)
         "totalMessages": counts.total,
         "complete": counts.total > 0 && counts.indexed >= counts.total,
     }))
+}
+
+/// Forget the tags and custom field values of messages this account no longer
+/// has anywhere.
+///
+/// A move is a removal plus an insertion, and the two halves can land in
+/// either order, so "its row was removed" is never on its own a reason to
+/// forget what a person wrote about a message. Every candidate is checked
+/// against the whole account first — and that check happens here, while the
+/// index lock is held, *before* `app.db` is opened, so no path in the daemon
+/// ever holds both the other way round.
+pub fn prune_metadata(st: &SearchIndexState, account_id: &str, removed_keys: &[String]) -> Result<usize, String> {
+    if removed_keys.is_empty() {
+        return Ok(0);
+    }
+    let gone: Vec<String> = {
+        let guard = lock(&st.db);
+        let Some(conn) = guard.as_ref() else { return Ok(0) };
+        let mut stmt = conn
+            .prepare_cached(&format!(
+                "SELECT EXISTS(SELECT 1 FROM messages m WHERE m.account_id = ?1 AND {} = ?2)",
+                core::query::MSG_KEY_SQL
+            ))
+            .map_err(|e| e.to_string())?;
+        let mut gone = Vec::new();
+        for key in removed_keys {
+            let still_here: i64 = stmt.query_row((account_id, key), |r| r.get(0)).map_err(|e| e.to_string())?;
+            if still_here == 0 {
+                gone.push(key.clone());
+            }
+        }
+        gone
+    };
+    mailvault_core::app_db::with(&st.app_dir, |conn| mailvault_core::app_db::metadata::prune(conn, account_id, &gone))
 }
 
 /// What the index holds for `uids` of one folder: the row's `Message-ID`, or
@@ -1163,6 +1208,15 @@ pub(crate) fn sweep(
                     completed = false;
                     break;
                 }
+                if !s.removed_keys.is_empty() {
+                    match prune_metadata(st, &account, &s.removed_keys) {
+                        Ok(0) => {}
+                        Ok(dropped) => info!("search index {account}: forgot {dropped} metadata rows for deleted mail"),
+                        // Metadata that outlives its message is untidy, not
+                        // broken: never fail a sweep over it.
+                        Err(e) => warn!("search index {account}: could not prune metadata: {e}"),
+                    }
+                }
                 if s.parsed + s.removed + s.renamed > 0 {
                     info!("search index {account}/{dir}: {s:?}");
                 } else if s.failed > 0 {
@@ -1383,7 +1437,7 @@ mod tests {
     fn search_index_status_is_available_during_the_first_build_but_search_is_not() {
         use mailvault_core::search_index::{db, lock, query::SearchRequest};
         let tmp = tempfile::tempdir().unwrap();
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
         let status = || crate::search_index::status_json(&st);
         let search = || {
             let req = SearchRequest { account_id: "acct".into(), query: "budget".into(), ..Default::default() };
@@ -1413,7 +1467,7 @@ mod tests {
     fn vault_rows_reads_flags_off_the_current_filename_and_skips_unindexed_uids() {
         use mailvault_core::search_index::{db, lock};
         let tmp = tempfile::tempdir().unwrap();
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
         assert!(crate::search_index::rows_reply(&st, "acct", "INBOX", &[3]).is_empty(), "closed: nothing, the caller reads the files");
 
         *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
@@ -1451,7 +1505,7 @@ mod tests {
     fn status_carries_first_pass_done() {
         use mailvault_core::search_index::{db, lock};
         let tmp = tempfile::tempdir().unwrap();
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
         assert_eq!(crate::search_index::status_json(&st)["firstPassDone"], false, "closed");
         *lock(&st.db) = Some(db::open(tmp.path()).unwrap());
         *st.root.lock().unwrap() = Some(tmp.path().to_path_buf());
@@ -1464,7 +1518,7 @@ mod tests {
     fn a_disabled_index_reports_off_and_search_unavailable() {
         use mailvault_core::search_index::{db, lock};
         let tmp = tempfile::tempdir().unwrap();
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), true, crate::events::EventBus::new(16));
         // Open, root set and first pass done: the state search actually sees right
         // after configure-off or destroy, not a closed index that already answers
         // {available:false} on its own. Discriminates the `enabled` gate in
@@ -1597,7 +1651,7 @@ mod tests {
     }
 
     fn state(root: &std::path::Path) -> std::sync::Arc<crate::search_index::SearchIndexState> {
-        crate::search_index::SearchIndexState::new(root.to_path_buf(), true, crate::events::EventBus::new(64))
+        crate::search_index::SearchIndexState::new(root.to_path_buf(), root.to_path_buf(), true, crate::events::EventBus::new(64))
     }
 
     fn cfg() -> crate::search_index::ConfigArgs {
@@ -1838,7 +1892,7 @@ mod tests {
     #[test]
     fn an_unreachable_vault_reports_a_retryable_error_and_opens_nothing() {
         let tmp = tempfile::tempdir().unwrap();
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
         crate::search_index::start(std::sync::Arc::clone(&st));
         crate::search_index::configure(&st, cfg());
         std::thread::sleep(std::time::Duration::from_millis(500));
@@ -2128,7 +2182,7 @@ mod tests {
         let planted = dir.join(mailvault_core::search_index::db::DB_FILE);
         std::fs::write(&planted, b"must survive: this is not the real vault's index").unwrap();
 
-        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
+        let st = crate::search_index::SearchIndexState::new(tmp.path().to_path_buf(), tmp.path().to_path_buf(), false, crate::events::EventBus::new(8));
         crate::search_index::start(std::sync::Arc::clone(&st));
         crate::search_index::configure(&st, cfg());
         std::thread::sleep(std::time::Duration::from_millis(300));

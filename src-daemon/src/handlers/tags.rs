@@ -320,6 +320,42 @@ mod tests {
         assert_eq!(other["tags"], json!([[]]), "a bare uid never crosses folders");
     }
 
+    /// A move is a removal plus an insertion and the halves can land in either
+    /// order, so a removed row is not on its own a reason to forget what
+    /// someone wrote about the message.
+    #[tokio::test]
+    async fn a_message_that_moved_keeps_its_tags_when_the_old_row_goes() {
+        let s = st();
+        seed_index(&s, "a", "Archive", 4102, "<abc@example.com>");
+        let tag = tag_named(&s, "Clients").await;
+        let item = json!({"accountId": "a", "mailbox": "INBOX", "uid": 7, "messageId": "<abc@example.com>"});
+        call(&s, "tags.assign", json!({"tagId": tag, "items": [item.clone()]})).await;
+
+        // INBOX's row is gone; the Archive copy is the same message.
+        let pruned = crate::search_index::prune_metadata(&s.search_index, "a", &["abc@example.com".to_string()]).unwrap();
+        assert_eq!(pruned, 0);
+        let still = call(&s, "tags.for_messages", json!({"items": [item]})).await;
+        assert_eq!(still["tags"], json!([[tag]]));
+    }
+
+    #[tokio::test]
+    async fn the_last_copy_going_takes_the_tag_assignment_with_it() {
+        let s = st();
+        seed_index(&s, "a", "INBOX", 7, "<abc@example.com>");
+        let tag = tag_named(&s, "Clients").await;
+        let item = json!({"accountId": "a", "mailbox": "INBOX", "uid": 7, "messageId": "<abc@example.com>"});
+        call(&s, "tags.assign", json!({"tagId": tag, "items": [item.clone()]})).await;
+        {
+            let guard = mailvault_core::search_index::lock(&s.search_index.db);
+            guard.as_ref().unwrap().execute("DELETE FROM messages", []).unwrap();
+        }
+        let pruned = crate::search_index::prune_metadata(&s.search_index, "a", &["abc@example.com".to_string()]).unwrap();
+        assert_eq!(pruned, 1);
+        let gone = call(&s, "tags.for_messages", json!({"items": [item]})).await;
+        assert_eq!(gone["tags"], json!([[]]));
+        assert_eq!(call(&s, "tags.list", json!({})).await[0]["count"], 0, "the tag itself stays");
+    }
+
     #[tokio::test]
     async fn untagging_leaves_the_tag_itself_alone() {
         let s = st();

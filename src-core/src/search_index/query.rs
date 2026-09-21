@@ -65,7 +65,7 @@ pub struct SearchRequest {
 
 /// The `msg_key` of a row, in SQL: the `Message-ID` without its angle
 /// brackets, else the mailbox and uid. Mirrors `app_db::identity::msg_key`.
-const MSG_KEY_SQL: &str =
+pub const MSG_KEY_SQL: &str =
     "COALESCE(NULLIF(trim(m.message_id, '<> '), ''), 'u:' || m.vault_dir || ':' || m.uid)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -232,8 +232,13 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     if !req.to_any.is_empty() {
         let mut branches = Vec::new();
         for address in &req.to_any {
-            branches.push("m.addrs_lc LIKE ? ESCAPE '\\'".to_string());
-            args.push(Value::Text(like_pattern(&address.trim().to_lowercase())));
+            // A row indexed before `to_lc` existed has none, and falling back
+            // to every address on the message is what this filter used to do:
+            // looser, but never emptier than before a reindex.
+            branches.push("(m.to_lc LIKE ? ESCAPE '\\' OR (m.to_lc = '' AND m.addrs_lc LIKE ? ESCAPE '\\'))".to_string());
+            let pattern = like_pattern(&address.trim().to_lowercase());
+            args.push(Value::Text(pattern.clone()));
+            args.push(Value::Text(pattern));
         }
         clauses.push(format!("({})", branches.join(" OR ")));
     }
@@ -362,8 +367,10 @@ mod tests {
             date_utc: h("Date").and_then(|d| mailparse::dateparse(&d).ok()),
             from_addr: from.clone(), from_name: String::new(),
             // The production parser merges From, To, Cc, Bcc and Reply-To into
-            // `addrs`; the recipient half is what `to_any` reads.
-            addrs: vec![from, h("To").unwrap_or_default()], subject: h("Subject").unwrap_or_default(),
+            // `addrs`, and keeps the recipients on their own in `to_addrs`.
+            addrs: vec![from, h("To").unwrap_or_default()],
+            to_addrs: h("To").into_iter().collect(),
+            subject: h("Subject").unwrap_or_default(),
             body_text: m.get_body().unwrap_or_default(),
             has_attachments: h("X-Has-Attachment").is_some(),
             ..Default::default()
@@ -444,6 +451,18 @@ mod tests {
         let (_tmp, db) = fixture();
         assert_eq!(uids(&db, SearchRequest { to_any: vec!["me@x.test".into()], ..req("luke", "") }).len(), 4);
         assert!(uids(&db, SearchRequest { to_any: vec!["nobody@x.test".into()], ..req("luke", "") }).is_empty());
+    }
+
+    /// "Addressed to me" must not mean "mentions me": every message carries its
+    /// own sender among its addresses, so a filter that read them all would
+    /// hand a person their own Sent folder.
+    #[test]
+    fn to_any_is_the_recipients_not_the_sender() {
+        let (_tmp, db) = fixture();
+        assert!(
+            uids(&db, SearchRequest { to_any: vec!["ann@x.test".into()], ..req("luke", "") }).is_empty(),
+            "ann sent uid 1, she did not receive it"
+        );
     }
 
     #[test]

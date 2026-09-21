@@ -97,11 +97,14 @@ fn run(
             for view in &all {
                 let empty = HashMap::new();
                 let per_view = keys.get(&view.id).unwrap_or(&empty);
-                let total = evaluate(index, &view.def, &accounts, per_view, 0)?
-                    .get("total")
-                    .and_then(Value::as_u64)
-                    .unwrap_or(0);
-                counts.insert(view.id.clone(), total.into());
+                let reply = evaluate(index, &view.def, &accounts, per_view, 0)?;
+                // Zero is a claim about the mail. An index that cannot answer
+                // has not made it, so the whole reply is empty rather than a
+                // column of confident noughts.
+                if reply.get("available").and_then(Value::as_bool) != Some(true) {
+                    return Ok(Value::Object(serde_json::Map::new()));
+                }
+                counts.insert(view.id.clone(), reply.get("total").and_then(Value::as_u64).unwrap_or(0).into());
             }
             Ok(Value::Object(counts))
         }
@@ -425,6 +428,16 @@ mod tests {
         let starred_id = call(&s, "views.list", json!({})).await.as_array().unwrap().iter()
             .find(|v| v["builtin"] == "starred").unwrap()["id"].as_str().unwrap().to_string();
         assert_eq!(counts[starred_id], 1);
+    }
+
+    /// A count of zero is a claim about the mail. While the index cannot
+    /// answer, the honest reply is no counts at all.
+    #[tokio::test]
+    async fn counts_say_nothing_rather_than_zero_while_the_index_is_closed() {
+        let s = st();
+        call(&s, "views.list", json!({})).await;
+        let counts = call(&s, "views.counts", json!({ "accounts": accounts() })).await;
+        assert_eq!(counts, json!({}));
     }
 
     /// An index that cannot answer must say so. Returning an empty list would

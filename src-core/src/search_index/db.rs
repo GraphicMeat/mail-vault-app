@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
 pub const DB_FILE: &str = "index.db";
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE messages (
@@ -69,6 +69,17 @@ UPDATE messages SET flags = CASE
   WHEN instr(filename, ':2,') > 0 THEN replace(substr(filename, instr(filename, ':2,') + 3), '.eml', '')
   ELSE '' END;
 CREATE INDEX messages_msgid ON messages (account_id, message_id);
+";
+
+/// The recipients of a message, on their own. `addrs_lc` merges the sender in,
+/// so "addressed to me" read from it also matches the mail this account sent.
+///
+/// Nothing backfills this one: the recipients are in the message, not in its
+/// file name. A row indexed before this column existed keeps an empty value,
+/// and the query falls back to `addrs_lc` for it — looser, never emptier —
+/// until the next reindex reaches it.
+const SCHEMA_V4: &str = "
+ALTER TABLE messages ADD COLUMN to_lc TEXT NOT NULL DEFAULT '';
 ";
 
 #[derive(Debug)]
@@ -192,13 +203,19 @@ fn migrate(conn: &Connection) -> Result<(), Fail> {
         ))
         .map_err(schema_sql)?;
     }
+    if version < 4 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V4} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '4'); COMMIT;"
+        ))
+        .map_err(schema_sql)?;
+    }
     Ok(())
 }
 
 fn validate_schema(conn: &Connection) -> Result<(), Fail> {
     for query in [
         "SELECT key, value FROM meta LIMIT 0",
-        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags FROM messages LIMIT 0",
+        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc FROM messages LIMIT 0",
         "SELECT account_id, vault_dir, scanned_at, file_count FROM mailbox_scan LIMIT 0",
         "SELECT message_row, part_index, filename, mime, size, state, text FROM attachments LIMIT 0",
         "SELECT rowid, subject, addrs, body, attach FROM msg_fts LIMIT 0",
@@ -363,7 +380,7 @@ mod tests {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         assert!(tmp.path().join("search_index/index.db").exists());
         assert!(!tmp.path().join("search_index/index.db-shm").exists(), "exclusive mode must not create a shared-memory file");
     }
@@ -390,7 +407,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         let flags = |uid: u32| -> String {
             conn.query_row("SELECT flags FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
         };
@@ -435,7 +452,7 @@ mod tests {
     fn v2_migration_adds_attachments_table_and_bumps_version() {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'attachments'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1);
     }
@@ -461,7 +478,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("4"));
         let rows: i64 = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap();
         assert_eq!(rows, 1, "v1 rows survive the migration to v2");
         conn.execute(

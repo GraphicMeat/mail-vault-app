@@ -10,6 +10,7 @@ use super::db::{meta_get, meta_set};
 use super::text::{cap_chars, cjk_units};
 use super::{lock, SharedConn};
 use crate::maildir::vault_filename_uid;
+use crate::search_index::query::MSG_KEY_SQL;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
@@ -26,6 +27,10 @@ pub struct IndexDoc {
     pub from_name: String,
     /// Every address line (from, to, cc, bcc, reply-to) as "Name <addr>".
     pub addrs: Vec<String>,
+    /// The recipients alone (To, Cc, Bcc). `addrs` carries the sender too, so
+    /// "addressed to me" cannot be answered from it without also matching the
+    /// mail this account sent.
+    pub to_addrs: Vec<String>,
     pub subject: String,
     /// Plain text; the adapter picks text/plain or runs html_to_text.
     pub body_text: String,
@@ -62,6 +67,12 @@ pub struct ReconcileStats {
     pub parsed: usize,
     pub renamed: usize,
     pub removed: usize,
+    /// The identities (`app_db::identity::msg_key`) of the rows removed in this
+    /// pass. A message whose last copy is gone has tags and custom field values
+    /// still sitting in `app.db`; the caller is what prunes them, because only
+    /// it may open that store, and only after checking no other folder still
+    /// holds the same message.
+    pub removed_keys: Vec<String>,
     pub unchanged: usize,
     pub failed: usize,
     pub interrupted: bool,
@@ -253,7 +264,8 @@ pub fn reconcile_mailbox_guarded(
             return Ok(stats);
         }
         let conn = same_conn(&mut guard, &db_path)?;
-        apply_removals_and_renames(conn, chunk).map_err(db_err)?;
+        let mut gone = apply_removals_and_renames(conn, chunk).map_err(db_err)?;
+        stats.removed_keys.append(&mut gone);
         let removed = chunk.iter().filter(|(_, name)| name.is_none()).count();
         stats.removed += removed;
         stats.renamed += chunk.len() - removed;
@@ -345,11 +357,21 @@ fn load_rows(conn: &Connection, account_id: &str, vault_dir: &str) -> rusqlite::
     rows.collect()
 }
 
-fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]) -> rusqlite::Result<()> {
+/// Returns the identities of the rows it removed.
+fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]) -> rusqlite::Result<Vec<String>> {
     let tx = conn.transaction()?;
+    let mut removed_keys = Vec::new();
     for &(id, rename) in ops {
         match rename {
             None => {
+                // Read the identity before the row carrying it is gone.
+                let key: Option<String> = tx
+                    .prepare_cached(&format!("SELECT {MSG_KEY_SQL} FROM messages m WHERE m.id = ?1"))?
+                    .query_row([id], |r| r.get(0))
+                    .optional()?;
+                if let Some(key) = key {
+                    removed_keys.push(key);
+                }
                 delete_fts(&tx, id)?;
                 tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
             }
@@ -361,17 +383,18 @@ fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]
             }
         }
     }
-    tx.commit()
+    tx.commit()?;
+    Ok(removed_keys)
 }
 
 const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
-    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags, to_lc)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
   ON CONFLICT(account_id, vault_dir, uid) DO UPDATE SET filename=excluded.filename, size=excluded.size,
     mtime_ns=excluded.mtime_ns, message_id=excluded.message_id, date_utc=excluded.date_utc,
     from_addr_lc=excluded.from_addr_lc, from_name_lc=excluded.from_name_lc, subject_lc=excluded.subject_lc,
     addrs_lc=excluded.addrs_lc, has_attachments=excluded.has_attachments, body_state=excluded.body_state,
-    row_json=excluded.row_json, flags=excluded.flags
+    row_json=excluded.row_json, flags=excluded.flags, to_lc=excluded.to_lc
   RETURNING id";
 
 /// The Maildir flag letters a vault file name carries, as stored: the part
@@ -426,6 +449,7 @@ fn commit_batch(
                     body_state,
                     d.row_json,
                     flags_of(&file.filename),
+                    d.to_addrs.join("\n").to_lowercase(),
                 ],
                 |r| r.get(0),
             )?;
@@ -700,6 +724,7 @@ mod tests {
             from_addr: from.clone(),
             from_name: String::new(),
             addrs: vec![from, h("To").unwrap_or_default()],
+            to_addrs: h("To").into_iter().collect(),
             subject,
             body_text: parsed.get_body().unwrap_or_default(),
             has_attachments: false,
@@ -800,6 +825,33 @@ mod tests {
         // Starred reads this column. Leaving it at the parse-time value would
         // make every flag change invisible until the file was rewritten.
         assert_eq!(flags, "S");
+    }
+
+    #[test]
+    fn a_removed_message_reports_the_identity_its_metadata_is_keyed_by() {
+        let v = vault();
+        let identified = "From: A <a@x.test>\r\nSubject: Gone soon\r\nMessage-ID: <gone@x.test>\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
+        put(&v, "a1", "INBOX", "1:2,.eml", identified);
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Stays", "body"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/1:2,.eml")).unwrap();
+        let s = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(s.removed, 1);
+        assert_eq!(s.removed_keys.len(), 1);
+        assert_eq!(s.removed_keys, vec!["gone@x.test".to_string()], "the Message-ID, not a uid");
+    }
+
+    #[test]
+    fn a_message_with_no_message_id_still_reports_a_key_when_it_goes() {
+        let v = vault();
+        let raw = "From: A <a@x.test>\r\nSubject: No identity\r\nDate: Sat, 12 Sep 2026 10:00:00 +0000\r\n\r\nbody\r\n";
+        put(&v, "a1", "INBOX", "5:2,.eml", raw);
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        std::fs::remove_file(v.root.join("Maildir/a1/INBOX/cur/5:2,.eml")).unwrap();
+        let s = run(&v, "a1", "INBOX", ON, &n);
+        assert_eq!(s.removed_keys, vec!["u:INBOX:5".to_string()]);
     }
 
     #[test]
