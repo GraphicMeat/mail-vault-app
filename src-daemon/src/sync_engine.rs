@@ -691,7 +691,7 @@ impl SyncEngine {
                 imap::fetch_emails_page(session, mailbox, 1, 500).await?;
             let new_emails = headers.len();
             cache_io(&io, move |io| {
-                io.write_meta(total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile)?;
+                io.write_meta(total, uid_validity, server_uid_next, highest_modseq, preserved_reconcile, Some(total))?;
                 io.write_headers(&headers)
             })
             .await?;
@@ -703,7 +703,13 @@ impl SyncEngine {
 
         // ── Delta path ──
         let cached_uid_next = cached_uid_next.unwrap();
-        let cached_total = cached.as_ref().and_then(|c| c.total_emails).unwrap_or(0);
+        // The daemon's own baseline, falling back to `totalEmails` for a cache
+        // written before this key existed — one sync of the old behaviour per
+        // mailbox, rather than a UID listing storm across every account.
+        let cached_total = cached
+            .as_ref()
+            .and_then(|c| c.sync_total_emails.or(c.total_emails))
+            .unwrap_or(0);
         let cached_modseq = cached.as_ref().and_then(|c| c.highest_modseq);
         let server_next = server_uid_next.unwrap_or(cached_uid_next);
 
@@ -766,8 +772,19 @@ impl SyncEngine {
         //    a deleted message would linger. So also reconcile on a timer — one
         //    UID SEARCH ALL per RECONCILE_INTERVAL_MS bounds how long any missed
         //    expunge can survive, at negligible cost.
+        //
+        //    The count it compares against is the daemon's own (`cached_total`,
+        //    see above): the app writes the shared `totalEmails`, and a fresh
+        //    server count landing there beside a still-cached deleted row made
+        //    the arithmetic come out even with the expunge still on disk.
+        //
+        //    Holding MORE rows than the server says exist is the same divergence
+        //    seen from the other side, and costs nothing to check. It cannot fire
+        //    on a partly-cached mailbox — the cold path caches the newest 500 of
+        //    15,000, which is fewer rows than EXISTS, not more — so it never
+        //    turns into a UID listing on every sync.
         let expected_total = cached_total + new_headers.len() as u32;
-        let counts_disagree = total != expected_total;
+        let counts_disagree = total != expected_total || sidecar_count as u32 > total;
         let reconcile_due = cached
             .as_ref()
             .and_then(|c| c.last_reconcile)
@@ -775,10 +792,18 @@ impl SyncEngine {
 
         let mut reconciled_at = cached.as_ref().and_then(|c| c.last_reconcile);
         let mut session_dirty = false;
+        // Advance the baseline only when this sync can account for the count it
+        // saw. A reconcile that was needed and did not complete leaves it where
+        // it was, so the next sync disagrees again and retries — adopting the
+        // unexplained total instead would forget the divergence for 6 hours.
+        let mut sync_total = Some(total);
         if counts_disagree || reconcile_due {
             match imap::search_all_uids(session, mailbox, false).await {
                 Ok(uids) if uids.is_empty() && total > 0 => {
                     warn!("[sync] UID SEARCH returned 0 but EXISTS={} — skipping prune", total);
+                    if counts_disagree {
+                        sync_total = None;
+                    }
                 }
                 Ok(uids) => {
                     let server_uid_count = uids.len();
@@ -792,13 +817,16 @@ impl SyncEngine {
                 Err(e) => {
                     warn!("[sync] UID listing failed for {}: {}", account.email, e);
                     session_dirty = true;
+                    if counts_disagree {
+                        sync_total = None;
+                    }
                 }
             }
         }
 
         let new_count = new_headers.len();
         cache_io(&io, move |io| {
-            io.write_meta(total, uid_validity, server_uid_next, highest_modseq, reconciled_at)?;
+            io.write_meta(total, uid_validity, server_uid_next, highest_modseq, reconciled_at, sync_total)?;
             if new_headers.is_empty() {
                 return Ok(());
             }
@@ -1106,11 +1134,16 @@ impl CacheCtx {
         uid_next: Option<u32>,
         highest_modseq: Option<u64>,
         last_reconcile: Option<u64>,
+        sync_total: Option<u32>,
     ) -> Result<(), String> {
         self.vault_open()?;
+        // `syncTotalEmails` is the daemon's own copy of EXISTS. `None` writes a
+        // JSON null, which the meta merge skips — the stored baseline survives
+        // a sync that could not account for the count it just saw.
         let value = serde_json::json!({
             "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
             "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
+            "syncTotalEmails": sync_total,
         });
         self.require_db(|conn| {
             mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
@@ -1178,6 +1211,7 @@ fn cached_meta_from_json(text: &str) -> Option<CachedMeta> {
         uid_next: meta.get("uidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
         highest_modseq: meta.get("highestModseq").and_then(|v| v.as_u64()),
         total_emails: meta.get("totalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
+        sync_total_emails: meta.get("syncTotalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
         last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
     })
 }
@@ -1203,6 +1237,12 @@ struct CachedMeta {
     uid_next: Option<u32>,
     highest_modseq: Option<u64>,
     total_emails: Option<u32>,
+    /// The server's EXISTS as the DAEMON last accounted for it. `totalEmails`
+    /// is written by the app too — a fresh server count landing there while a
+    /// deleted message still sits in the cache makes the expunge gate's
+    /// arithmetic come out even, and the expunge goes unnoticed until the 6h
+    /// timer. The gate needs a number only its own bookkeeping moves.
+    sync_total_emails: Option<u32>,
     /// Epoch ms of the last UID SEARCH ALL reconcile. None = never reconciled,
     /// or the generation was dropped on a UIDVALIDITY change.
     last_reconcile: Option<u64>,
@@ -1299,7 +1339,7 @@ mod tests {
 
         // Meta round-trips, including highestModseq (the daemon used to drop it,
         // which silently disabled the app's CONDSTORE fast path).
-        c.write_meta(42, Some(7), Some(101), Some(999), None).unwrap();
+        c.write_meta(42, Some(7), Some(101), Some(999), None, Some(42)).unwrap();
         let (meta, count) = c.meta_and_count();
         let meta = meta.unwrap();
         assert_eq!(meta.total_emails, Some(42));
@@ -1310,7 +1350,7 @@ mod tests {
         assert_eq!(meta.last_reconcile, None);
         assert_eq!(count, 0);
 
-        c.write_meta(42, Some(7), Some(101), Some(999), Some(1_700_000_000_000)).unwrap();
+        c.write_meta(42, Some(7), Some(101), Some(999), Some(1_700_000_000_000), Some(42)).unwrap();
         assert_eq!(c.meta_and_count().0.unwrap().last_reconcile, Some(1_700_000_000_000));
 
         // Two headers, one seen and one unseen.
@@ -1366,7 +1406,7 @@ mod tests {
         let c = ctx(&dir, true);
 
         for err in [
-            c.write_meta(1, None, None, None, None).unwrap_err(),
+            c.write_meta(1, None, None, None, None, Some(1)).unwrap_err(),
             c.write_headers(&[test_header(1)]).unwrap_err(),
             c.patch_flags(&[(1, vec!["\\Seen".to_string()])]).unwrap_err(),
             c.prune(&[]).unwrap_err(),
@@ -2135,6 +2175,202 @@ mod tests {
         let cached = cached_uid_set(&engine, "INBOX");
         assert!(!cached.contains(&6));
         assert!(cached.contains(&8));
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// What the app writes into the shared header-cache metadata. It owns
+    /// `totalEmails` too, which is the whole point of these tests.
+    fn app_wrote_meta(engine: &SyncEngine, mailbox: &str, meta: serde_json::Value) {
+        with_store(engine, |c| {
+            mailvault_core::custody::cache::save_headers(c, "acc1", mailbox, &meta.to_string()).unwrap()
+        });
+    }
+
+    /// THE regression (2026-09-21, Gmail INBOX): a message deleted in another
+    /// client sat in the cache for hours. The app synced the same mailbox and
+    /// wrote the *post-delete* server count into the shared `totalEmails`, so
+    /// the daemon's `cached_total + arrivals == EXISTS` came out even with the
+    /// dead row still on disk, and only the 6h timer would ever have caught it.
+    /// The gate must compare against a count the daemon alone writes.
+    #[tokio::test]
+    async fn an_app_written_total_cannot_disarm_the_expunge_gate() {
+        let dir = scratch_dir("app_written_total");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        assert_eq!(cached_count(&engine, "INBOX"), 20, "precondition: a warm cache");
+        drop(warm);
+
+        // The app's own sync lands first: the fresh count, and a reconcile stamp
+        // so the timed reconcile is NOT what rescues this test.
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({"totalEmails": 19, "lastReconcile": now_ms()}),
+        );
+
+        let mut smaller = synthetic_mailbox("INBOX", 20);
+        smaller.messages.retain(|m| m.uid != 6);
+        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert!(
+            !cached_uid_set(&engine, "INBOX").contains(&6),
+            "the expunged message must be pruned even though the app already \
+             wrote the post-delete total into the shared metadata"
+        );
+        assert_eq!(cached_count(&engine, "INBOX"), 19);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The same disarm on a mailbox the cache only holds part of — the shape the
+    /// cold path leaves on a large mailbox, where it caches the newest 500 of
+    /// 15,000. Rows are FEWER than EXISTS here, so the cheap "more rows than the
+    /// server has" half of the gate cannot see it: only the daemon-owned count
+    /// baseline can.
+    #[tokio::test]
+    async fn a_partly_cached_mailbox_still_notices_an_expunge() {
+        let dir = scratch_dir("partial_expunge");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        drop(warm);
+
+        let keep: Vec<u32> = (10..=20).collect();
+        drop_cached(&engine, "INBOX", &keep);
+        assert_eq!(cached_count(&engine, "INBOX"), 11, "precondition: a partial cache");
+
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({"totalEmails": 19, "lastReconcile": now_ms()}),
+        );
+
+        // uid 15 is gone from the server and IS one of the rows still cached.
+        let mut smaller = synthetic_mailbox("INBOX", 20);
+        smaller.messages.retain(|m| m.uid != 15);
+        let shrunk = MockImap::start(Scenario::new().mailbox(smaller));
+        let result = engine.sync_account(&account_for(&shrunk), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        assert!(!cached_uid_set(&engine, "INBOX").contains(&15), "expunged row must be pruned");
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A reconcile that was NEEDED and did not complete must not advance the
+    /// daemon's count baseline. Adopting the unexplained total would make the
+    /// next sync agree with itself and forget the divergence until the 6h
+    /// timer — the same "the gate reads a number that does not describe what it
+    /// accounted for" bug, one layer in.
+    ///
+    /// Only a partly-cached mailbox can prove it: with a full cache the
+    /// more-rows-than-EXISTS half re-fires on the next sync regardless.
+    #[tokio::test]
+    async fn a_failed_reconcile_does_not_advance_the_count_baseline() {
+        let dir = scratch_dir("withheld_baseline");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        drop(warm);
+
+        let keep: Vec<u32> = (10..=20).collect();
+        drop_cached(&engine, "INBOX", &keep);
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({"totalEmails": 19, "lastReconcile": now_ms()}),
+        );
+
+        // uid 15 is expunged, the count gate fires — and the listing is poisoned.
+        // UIDNEXT is unchanged, so the reconcile's `UID FETCH 1:*` is the only
+        // FETCH this sync issues; if another one creeps in it eats the fault and
+        // this test silently stops testing anything.
+        let mut smaller = synthetic_mailbox("INBOX", 20);
+        smaller.messages.retain(|m| m.uid != 15);
+        let poisoned = MockImap::start(
+            Scenario::new()
+                .mailbox(smaller.clone())
+                .fault(Trigger::on("FETCH"), Action::InjectMidLine("* OK Still here\r\n".into())),
+        );
+        let _ = engine.sync_account(&account_for(&poisoned), "INBOX").await;
+        assert_eq!(
+            poisoned.count_commands("UID FETCH"),
+            1,
+            "the reconcile's listing must be the only fetch: {:?}",
+            poisoned.commands()
+        );
+        assert!(
+            cached_uid_set(&engine, "INBOX").contains(&15),
+            "precondition: the failed listing pruned nothing"
+        );
+        drop(poisoned);
+
+        // Next sync, healthy server, nothing else changed: the divergence is
+        // still unaccounted for, so it must be retried now rather than in 6h.
+        let healthy = MockImap::start(Scenario::new().mailbox(smaller));
+        let result = engine.sync_account(&account_for(&healthy), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+        assert!(
+            !cached_uid_set(&engine, "INBOX").contains(&15),
+            "a sync that could not reconcile must not leave the next one agreeing \
+             with the count it never explained"
+        );
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The cost ceiling on all of the above: a mailbox whose cache is merely
+    /// INCOMPLETE — 10 rows of 50, nothing deleted — must not list its UIDs.
+    /// Comparing the row count against EXISTS would do exactly that, on every
+    /// sync, for every large mailbox, which is why the gate compares counts the
+    /// server reported instead.
+    #[tokio::test]
+    async fn a_partly_cached_mailbox_does_not_list_uids_every_sync() {
+        let dir = scratch_dir("partial_no_listing");
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 50)));
+        let engine = engine_for(&dir);
+
+        // 10 of 50, written the way the app writes it: no daemon baseline at
+        // all, which is also the state of every cache upgraded into this build.
+        // `highestModseq` matches the server's, so CONDSTORE reports no flag
+        // changes and the reconcile's `UID FETCH 1:*` would be the only one.
+        let emails: Vec<_> = (41..=50u32)
+            .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
+            .collect();
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({
+                "emails": emails, "totalEmails": 50, "uidValidity": 1, "uidNext": 51,
+                "highestModseq": 1, "lastReconcile": now_ms(),
+            }),
+        );
+
+        let account = account_for(&server);
+        for pass in 1..=2 {
+            let result = engine.sync_account(&account, "INBOX").await;
+            assert!(result.success, "sync {} failed: {:?}", pass, result.error);
+            assert_eq!(result.total_emails, 50, "sync {} never reached the server", pass);
+        }
+        assert!(
+            server.count_commands("SELECT") >= 2,
+            "both syncs must really have run the delta path, or this test proves nothing: {:?}",
+            server.commands()
+        );
+
+        assert_eq!(
+            server.count_commands("UID FETCH 1:*"),
+            0,
+            "an incomplete cache is not an expunge — no UID listing may be issued: {:?}",
+            server.commands()
+        );
+        assert_eq!(cached_count(&engine, "INBOX"), 10, "nothing fetched, nothing pruned");
 
         fs::remove_dir_all(&dir).unwrap();
     }
