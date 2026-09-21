@@ -20,8 +20,15 @@ pub struct ViewDef {
     pub accounts: Vec<String>,
     /// Server mailbox paths, or empty for every mailbox.
     pub mailboxes: Vec<String>,
-    /// Mailboxes to leave out — how a view says "not Trash, not Spam".
+    /// Mailboxes to leave out by server path — only ever what a person picked
+    /// themselves, never a folder MailVault guessed the name of.
     pub mailboxes_excluded: Vec<String>,
+    /// Mailboxes to leave out by IMAP special-use attribute (`\\Trash`,
+    /// `\\Junk`, `\\Archive`). A folder's *name* is a per-mailbox word —
+    /// a German account's trash is `Papierkorb` — so a view that means "not
+    /// the bin" has to say it this way. The app resolves these to server paths
+    /// per account when it runs the view.
+    pub exclude_special: Vec<String>,
     pub query: String,
     pub sender: Option<String>,
     pub date_from: Option<i64>,
@@ -33,7 +40,10 @@ pub struct ViewDef {
     pub unread: Option<bool>,
     pub starred: Option<bool>,
     pub answered: Option<bool>,
-    /// Keep only messages addressed to the account itself.
+    /// Keep only messages whose address headers carry the account's own
+    /// address. The index merges From, To, Cc, Bcc and Reply-To into one
+    /// column, so this reads as "involves me", and on its own it would also
+    /// match the mail the account sent — `not_from_me` is what excludes that.
     pub to_me: bool,
     /// Drop messages the account itself sent.
     pub not_from_me: bool,
@@ -63,9 +73,11 @@ pub struct View {
 /// The views MailVault ships with. A person may edit or delete any of them;
 /// they are seeded once, not re-asserted on every start.
 pub fn starters() -> Vec<View> {
-    let base = |id: &str, name: &str, icon: &str, position: i64, def: ViewDef| View {
+    // No name: the app translates a starter by its `builtin` id, and only a
+    // name the user typed is ever stored.
+    let base = |id: &str, _name: &str, icon: &str, position: i64, def: ViewDef| View {
         id: format!("builtin-{id}"),
-        name: name.into(),
+        name: String::new(),
         icon: icon.into(),
         position,
         builtin: Some(id.into()),
@@ -84,7 +96,7 @@ pub fn starters() -> Vec<View> {
                 to_me: true,
                 not_from_me: true,
                 within_days: Some(30),
-                mailboxes_excluded: vec!["Trash".into(), "Spam".into(), "Junk".into(), "Archive".into()],
+                exclude_special: vec!["\\Trash".into(), "\\Junk".into(), "\\Archive".into()],
                 sort: Some("date".into()),
                 ..ViewDef::default()
             },
@@ -111,7 +123,8 @@ pub fn get(conn: &Connection, id: &str) -> Result<Option<View>, String> {
 /// Insert or replace one view, keeping its position when it already has one.
 pub fn save(conn: &Connection, view: &View) -> Result<View, String> {
     let name = view.name.trim();
-    if name.is_empty() {
+    // A starter carries no name of its own until someone types one.
+    if name.is_empty() && view.builtin.is_none() {
         return Err("a view needs a name".into());
     }
     in_txn(conn, || {
@@ -254,6 +267,44 @@ mod tests {
         delete(&c, &list(&c).unwrap()[0].id).unwrap();
         assert_eq!(ensure_starters(&c).unwrap(), 0, "a starter the user deleted does not come back");
         assert_eq!(list(&c).unwrap().len(), 2);
+    }
+
+    /// A starter's name is the app's to translate: storing "Needs reply" here
+    /// would pin an English sidebar into the database for a German user, and
+    /// changing language later could not undo it.
+    #[test]
+    fn a_starter_stores_no_name_of_its_own() {
+        for starter in starters() {
+            assert_eq!(starter.name, "", "{:?} carries a name to translate", starter.builtin);
+            assert!(starter.builtin.is_some());
+        }
+    }
+
+    #[test]
+    fn a_starter_can_be_given_a_name_and_keeps_it() {
+        let c = conn();
+        ensure_starters(&c).unwrap();
+        let starred = list(&c).unwrap().into_iter().find(|v| v.builtin.as_deref() == Some("starred")).unwrap();
+        save(&c, &View { name: "Pinned".into(), ..starred.clone() }).unwrap();
+        let again = get(&c, &starred.id).unwrap().unwrap();
+        assert_eq!(again.name, "Pinned");
+        assert_eq!(again.builtin.as_deref(), Some("starred"));
+    }
+
+    #[test]
+    fn a_view_the_user_made_still_needs_a_name() {
+        let c = conn();
+        assert!(save(&c, &View { name: "  ".into(), ..view("v1", "unused") }).is_err());
+    }
+
+    /// Folder names are per-mailbox words: a German account's trash is
+    /// `Papierkorb`. A starter that excluded the English name would exclude
+    /// nothing there, which is how the Graph folder keys broke.
+    #[test]
+    fn needs_reply_excludes_folders_by_special_use_not_by_name() {
+        let needs_reply = starters().into_iter().find(|v| v.builtin.as_deref() == Some("needs-reply")).unwrap().def;
+        assert!(needs_reply.mailboxes_excluded.is_empty(), "no English folder names");
+        assert_eq!(needs_reply.exclude_special, vec!["\\Trash", "\\Junk", "\\Archive"]);
     }
 
     #[test]

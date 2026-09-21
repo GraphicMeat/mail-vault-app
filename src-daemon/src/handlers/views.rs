@@ -27,6 +27,10 @@ struct Account {
     /// the vault directory it is stored in.
     #[serde(default)]
     known_mailboxes: Vec<String>,
+    /// IMAP special-use attribute to server path, for this account. A folder
+    /// name is a per-mailbox word, so "not the bin" is only answerable here.
+    #[serde(default)]
+    special_use: HashMap<String, String>,
 }
 
 fn json_of<T: serde::Serialize>(v: T) -> Result<Value, String> {
@@ -140,7 +144,12 @@ fn request_for(def: &ViewDef, account: &Account, keys: &HashMap<String, Vec<Stri
         account_id: account.account_id.clone(),
         query: def.query.clone(),
         mailboxes: (!def.mailboxes.is_empty()).then(|| def.mailboxes.clone()),
-        mailboxes_excluded: def.mailboxes_excluded.clone(),
+        mailboxes_excluded: def
+            .mailboxes_excluded
+            .iter()
+            .cloned()
+            .chain(def.exclude_special.iter().filter_map(|use_| account.special_use.get(use_).cloned()))
+            .collect(),
         sender: def.sender.clone(),
         // "The last N days" is resolved now, not when the view was saved.
         date_from: def.within_days.map(|days| now - days * 86_400).or(def.date_from),
@@ -179,6 +188,12 @@ fn evaluate(
             Err(reason) => return Ok(serde_json::json!({ "available": false, "reason": reason, "rows": [] })),
             Ok(result) => {
                 total += result.page.total;
+                // `views.counts` wants the totals and nothing else. Assembling
+                // every row's JSON per view per account, on the sidebar path,
+                // only to throw it away is the 50k cliff.
+                if limit == 0 {
+                    continue;
+                }
                 let mut page = crate::search_index::assemble_rows(&result.page);
                 for row in &mut page {
                     let vault_dir = row.get("vaultDir").and_then(Value::as_str).unwrap_or("").to_owned();
@@ -196,12 +211,12 @@ fn evaluate(
         }
     }
     // Newest first across every account, the way the list already reads.
-    rows.sort_by_key(|row| std::cmp::Reverse(row.get("date").and_then(Value::as_str).and_then(|d| mailparse::dateparse(d).ok()).unwrap_or(0)));
-    if limit > 0 {
-        rows.truncate(limit);
-    } else {
-        rows.clear();
-    }
+    // Cached key: re-parsing each date inside the comparator would run
+    // `dateparse` O(n log n) times.
+    rows.sort_by_cached_key(|row| {
+        std::cmp::Reverse(row.get("date").and_then(Value::as_str).and_then(|d| mailparse::dateparse(d).ok()).unwrap_or(0))
+    });
+    rows.truncate(limit);
     Ok(serde_json::json!({ "available": true, "rows": rows, "total": total }))
 }
 
@@ -254,6 +269,36 @@ mod tests {
 
     fn accounts() -> Value {
         json!([{ "accountId": "a", "address": "me@x.test", "knownMailboxes": ["INBOX"] }])
+    }
+
+    /// The app knows which folder is the bin on this account; the daemon must
+    /// never guess it from a name.
+    #[tokio::test]
+    async fn a_special_use_exclusion_is_resolved_through_the_account_that_named_it() {
+        let s = st();
+        {
+            let conn = index_db::open(&s.data_dir).unwrap();
+            seed(&conn, 1, "1:2,S.eml", "Kept", false, "<one@x.test>");
+            conn.execute(
+                "UPDATE messages SET vault_dir = 'Papierkorb' WHERE uid = 1",
+                [],
+            )
+            .unwrap();
+            seed(&conn, 2, "2:2,S.eml", "Also kept", false, "<two@x.test>");
+            index_db::meta_set(&conn, index_db::FIRST_PASS_DONE, "1").unwrap();
+            *lock(&s.search_index.db) = Some(conn);
+        }
+        let accounts = json!([{
+            "accountId": "a", "address": "me@x.test",
+            "knownMailboxes": ["INBOX", "Papierkorb"],
+            "specialUse": { "\\Trash": "Papierkorb" }
+        }]);
+        let out = call(&s, "views.evaluate", json!({
+            "def": { "excludeSpecial": ["\\Trash"] }, "accounts": accounts
+        }))
+        .await;
+        let uids: Vec<u64> = out["rows"].as_array().unwrap().iter().map(|r| r["uid"].as_u64().unwrap()).collect();
+        assert_eq!(uids, vec![2], "the message in this account's bin is left out");
     }
 
     async fn evaluate(s: &Arc<DaemonState>, def: Value) -> Value {
