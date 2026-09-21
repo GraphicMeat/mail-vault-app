@@ -119,6 +119,28 @@ export const vaultStoreFlags = (flags = []) => [
 ];
 
 
+// A body fetch that came back "the server does not hold this uid" (a tagged OK
+// with no rows, twice — see uid_still_present) proves the same fact selectEmail
+// acts on: the row is stale, not the fetch. Prune it rather than report a
+// failure the user can only retry into the same answer. Every OTHER failure
+// proves nothing about the server and must be left alone.
+//
+// Same flags as selectEmail's prune: `skipRefresh` because this started as one
+// row's action, not a mailbox reload, and `deletedByUs` left false — this app
+// issued no delete, so nothing may stamp custody with one.
+async function _pruneIfGone(error, uid, { accountId, mailbox, isUnified = false }) {
+  if (!error?.messageGone) return false;
+  try {
+    await applyServerRemoval(uid, {
+      accountId, mailbox, isUnified, skipRefresh: true, clearSelection: false,
+    });
+  } catch (pruneError) {
+    console.warn('[messageMutations] Could not prune the vanished row:', pruneError);
+  }
+  return true;
+}
+
+
 // ── saveEmailLocally workflow ──
 
 export async function saveEmailLocally(uid) {
@@ -177,6 +199,11 @@ export async function saveEmailLocally(uid) {
     }
     get().updateSortedEmails();
   } catch (error) {
+    // The one failure that is not a failure: the server proved the uid is
+    // gone. The banner below would claim "your server copy is still there",
+    // which is exactly false here, so prune the row and say nothing — the row
+    // leaving the list IS the explanation, as it is in selectEmail.
+    if (await _pruneIfGone(error, uid, { accountId, mailbox, isUnified })) return;
     // Says what did NOT happen, too: an archive that fails is the moment a
     // user most needs to know their server copy is still there.
     useMailStore.setState({ error: tr('svc.messageMutations.couldCopyEmailIntoVault', { error: error.message }) });
@@ -325,6 +352,11 @@ async function _archiveGroup(useMailStore, { accountId, mailbox, uids }, tally) 
       emails.push(email);
       completed++;
     } catch (error) {
+      // Proven-gone gets the row pruned here too, but still counts against the
+      // run: the user asked for this message to be archived and it was not.
+      // A group's rows carry their own location, so the live view may well
+      // span mailboxes — read it here rather than assuming a single folder.
+      await _pruneIfGone(error, uid, { accountId, mailbox, isUnified: spansMailboxes(get()) });
       console.error(`Failed to fetch email ${uid}:`, error);
       errors++;
     }

@@ -175,16 +175,35 @@ export async function fetchHeadersByUids(account, mailbox = 'INBOX', uids = []) 
   });
 }
 
+/**
+ * The full-fetch RPC reports proven absence as an error string with this
+ * prefix, where `imap_get_email_light` reports it as `gone: true` (see
+ * handlers/imap.rs). The prefix stays the wire format — `errors.E_UID_GONE` is
+ * a live catalog key in every locale, and src-tauri/src-daemon tests pin it —
+ * so the shapes are reconciled here instead: one fact, one JS type.
+ */
+const UID_GONE_PREFIX = 'E_UID_GONE:';
+
 export async function fetchEmail(account, uid, mailbox = 'INBOX') {
-  if (IS_TAURI) {
-    const data = await tauriInvoke('imap_get_email', { account, uid, mailbox });
+  try {
+    if (IS_TAURI) {
+      const data = await tauriInvoke('imap_get_email', { account, uid, mailbox });
+      return data.email;
+    }
+    const data = await httpRequest(`/email/${uid}`, {
+      method: 'POST',
+      body: JSON.stringify({ account, mailbox }),
+    });
     return data.email;
+  } catch (error) {
+    // Rejections reach here as an ApiError, a bare string, or something else
+    // entirely — read the message defensively rather than assuming a shape.
+    const message = typeof error === 'string' ? error : error?.message;
+    if (typeof message === 'string' && message.startsWith(UID_GONE_PREFIX)) {
+      throw new MessageGoneError(uid, mailbox);
+    }
+    throw error;
   }
-  const data = await httpRequest(`/email/${uid}`, {
-    method: 'POST',
-    body: JSON.stringify({ account, mailbox }),
-  });
-  return data.email;
 }
 
 /**
@@ -192,8 +211,9 @@ export async function fetchEmail(account, uid, mailbox = 'INBOX') {
  * twice (see `uid_still_present` in src-core/src/imap/mod.rs). Distinct from
  * every other body-fetch failure, which proves only that the fetch failed.
  *
- * Thrown rather than returned so the four existing callers keep the contract
- * they already have; only `selectEmail` reads the flag, to prune the row.
+ * Thrown rather than returned so the existing callers keep the contract they
+ * already have; `selectEmail` and `saveEmailLocally` read the flag, to prune
+ * the row instead of reporting a failure that has nothing to retry.
  */
 export class MessageGoneError extends Error {
   constructor(uid, mailbox) {
