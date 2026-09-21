@@ -353,6 +353,42 @@ function buildSenderChildren(emails, options) {
     });
 }
 
+/// One group per distinct value of a custom field. The values are not in the
+/// headers, so the caller hands the lookup in: this module stays pure and knows
+/// nothing about the field store.
+function buildFieldChildren(emails, { scope, context, fieldGroup }) {
+  const valued = [];
+  const valueless = [];
+  for (const email of emails) (fieldGroup.valueOf(email) ? valued : valueless).push(email);
+
+  const children = [...groupBy(valued, email => fieldGroup.valueOf(email)).entries()]
+    .map(([value, groupEmails]) => node(
+      'field',
+      makeId('field', scope, value),
+      value,
+      groupEmails,
+      [],
+      context,
+      { detail: fieldGroup.label },
+    ))
+    .sort((a, b) => compareNames(a.label, b.label) || compareStable(a.id, b.id));
+
+  // "No value" is an answer someone can act on, not a missing group — and it
+  // goes last, the way an unknown date does.
+  if (valueless.length) {
+    children.push(node(
+      'field',
+      makeId('field', scope, 'no-value'),
+      translated('fields.noValue', '—'),
+      valueless,
+      [],
+      context,
+      { detail: fieldGroup.label },
+    ));
+  }
+  return children;
+}
+
 function buildConversationIndex(scopeEmails, conversationEmails, context) {
   const all = dedupeEmails([...(conversationEmails || []), ...scopeEmails], context);
   const byAccount = groupBy(all, email => accountOf(email, context));
@@ -418,6 +454,7 @@ export function buildExplorerTree(emails, {
   context = {},
   conversationEmails = emails,
   includeThreads = false,
+  fieldGroup = null,
 } = {}) {
   const scoped = dedupeEmails(emails, context);
   const scope = `${grouping}|${contextTag(context)}`;
@@ -429,6 +466,8 @@ export function buildExplorerTree(emails, {
 
   if (grouping === 'sender') {
     children = buildSenderChildren(scoped, { scope, context, locale, dateDepth });
+  } else if (grouping?.startsWith('field:') && fieldGroup) {
+    children = buildFieldChildren(scoped, { scope, context, fieldGroup });
   } else if (grouping === 'conversation') {
     children = dateChildren(scoped, {
       scope,

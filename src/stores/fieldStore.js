@@ -47,6 +47,14 @@ export const useFieldStore = create((set, get) => ({
     return saved;
   },
 
+  /// Move a field one place within its own scope. The daemon owns the
+  /// renumbering: `fields.save` keeps a position, so the two-saves trick the
+  /// views use cannot work here.
+  moveField: async (accountId, fieldId, delta) => {
+    await daemonCall('fields.reorder', { id: fieldId, delta });
+    await get().loadFields(accountId);
+  },
+
   deleteField: async (accountId, fieldId) => {
     await daemonCall('fields.delete', { id: fieldId });
     set(state => ({

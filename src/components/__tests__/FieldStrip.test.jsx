@@ -35,6 +35,10 @@ const PRIORITY = {
 };
 const DONE = { id: 'f2', scope: 'acct-1', name: 'Done', kind: 'checkbox', position: 2, options: [] };
 const OWNER = { id: 'g1', scope: '*', name: 'Owner', kind: 'text', position: 0, options: [] };
+const TAGS = {
+  id: 'f3', scope: 'acct-1', name: 'Tags', kind: 'multi_select', position: 3,
+  options: [{ id: 'red', label: 'Red', color: '#ff0000' }, { id: 'blue', label: 'Blue', color: '' }],
+};
 
 const email = { uid: 7, messageId: '<abc@x>', _mailbox: 'INBOX' };
 
@@ -110,6 +114,26 @@ describe('the property strip in the reader', () => {
     expect(screen.getByTestId('field-input-f1').value).toBe('');
     act(() => { useFieldStoreMock.setState({ byRow: { 'acct-1|INBOX|7': { f1: 'lo' } } }); });
     expect(screen.getByTestId('field-input-f1').value).toBe('lo');
+  });
+
+  /// A colour is the whole point of a choice at a glance: the chip has to
+  /// carry it, not just the editor that set it.
+  it('a chosen choice of a multi-select renders in its own colour', () => {
+    useFieldStoreMock.setState({
+      fields: { 'acct-1': [TAGS] },
+      byRow: { 'acct-1|INBOX|7': { f3: ['red'] } },
+    });
+    render(<FieldStrip email={email} />);
+    const chosen = screen.getByTestId('field-input-f3').querySelectorAll('label.is-chosen');
+    expect(chosen).toHaveLength(1);
+    expect(chosen[0].style.getPropertyValue('--tag-color')).toBe('#ff0000');
+  });
+
+  it('a select shows a swatch for the choice it is holding', () => {
+    const COLOURED = { ...PRIORITY, options: [{ id: 'hi', label: 'High', color: '#0000ff' }] };
+    useFieldStoreMock.setState({ fields: { 'acct-1': [COLOURED] }, byRow: { 'acct-1|INBOX|7': { f1: 'hi' } } });
+    const { container } = render(<FieldStrip email={email} />);
+    expect(container.querySelector('.field-swatch').style.getPropertyValue('--tag-color')).toBe('#0000ff');
   });
 
   /// A unified list holds messages from accounts whose schema was never asked

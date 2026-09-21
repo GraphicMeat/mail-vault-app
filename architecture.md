@@ -175,11 +175,21 @@ Two rules worth keeping: editing a field is an `UPDATE`, never
 delete the row and cascade every value away — and clearing a value deletes the
 row rather than storing a null, so "no answer" and "answered nothing" cannot
 read the same to a filter. `fields.set` refuses a payload with no `value` key
-at all: forgetting an answer has to be asked for.
+at all: forgetting an answer has to be asked for. `fields.save` keeps the
+position a field already had, so an ordinary edit can never renumber a schema
+behind the person's back; moving one is `fields.reorder`, which renumbers a
+whole scope group in one transaction and refuses to trade places across the
+line between the shared fields and an account's own.
 
 Views narrow on fields the same way they narrow on tags: `app.db` answers which
 identities match, the index answers which rows those are, and the two sets
 intersect. `field:` in the search box does the same over a search's frames.
+
+A view that groups by a field (`def.group` of `field:<id>`) is the one place
+the render cache is filled ahead of the rows: `openView` loads the values for
+everything it is about to show before `showRows`, because values arriving one
+rendered row at a time would group every row as "no value" and then reshuffle
+the list under the reader.
 
 ### Saved views
 

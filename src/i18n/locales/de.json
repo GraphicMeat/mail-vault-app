@@ -2514,5 +2514,19 @@
   "views.tristate.no": "Nein",
   "fields.newOption": "Auswahl hinzufügen",
   "fields.optionRemoveConfirm": "Entfernen, {count} Nachrichten haben sie",
-  "common.remove": "Entfernen"
+  "common.remove": "Entfernen",
+  "fields.moveUp": "Nach oben",
+  "fields.moveDown": "Nach unten",
+  "fields.optionColor": "Farbe der Auswahl",
+  "views.filter.group": "Gruppieren nach",
+  "views.group.none": "Keine Gruppierung",
+  "views.group.sender": "Absender",
+  "views.group.date": "Datum",
+  "views.filter.op": "Bedingung",
+  "views.op.is": "ist",
+  "views.op.isNot": "ist nicht",
+  "views.op.isSet": "hat einen Wert",
+  "views.op.isEmpty": "ist leer",
+  "views.op.before": "vor",
+  "views.op.after": "nach"
 }

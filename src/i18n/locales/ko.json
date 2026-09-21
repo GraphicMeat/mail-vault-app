@@ -2514,5 +2514,19 @@
   "views.tristate.no": "아니요",
   "fields.newOption": "선택지 추가",
   "fields.optionRemoveConfirm": "제거, {count}개 메시지가 사용 중",
-  "common.remove": "제거"
+  "common.remove": "제거",
+  "fields.moveUp": "위로",
+  "fields.moveDown": "아래로",
+  "fields.optionColor": "선택 항목 색상",
+  "views.filter.group": "그룹 기준",
+  "views.group.none": "그룹 없음",
+  "views.group.sender": "보낸 사람",
+  "views.group.date": "날짜",
+  "views.filter.op": "조건",
+  "views.op.is": "같음",
+  "views.op.isNot": "같지 않음",
+  "views.op.isSet": "값 있음",
+  "views.op.isEmpty": "비어 있음",
+  "views.op.before": "이전",
+  "views.op.after": "이후"
 }

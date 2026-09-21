@@ -95,6 +95,45 @@ describe('editing a saved view', () => {
       .toEqual([{ fieldId: 'f1', op: 'is', value: 'hi' }]);
   });
 
+  /// Read back as a bare value, a saved `isNot` reopened as `is` — the editor
+  /// then saved the opposite of what the view said.
+  it('reopens a saved condition on the operator it was saved with', () => {
+    const view = { ...MINE, def: { ...MINE.def, fields: [{ fieldId: 'f1', op: 'isNot', value: 'hi' }] } };
+    render(<ViewEditor view={view} onClose={() => {}} />);
+    expect(screen.getByTestId('view-field-op-f1').value).toBe('isNot');
+    expect(screen.getByTestId('view-field-f1').value).toBe('hi');
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.fields)
+      .toEqual([{ fieldId: 'f1', op: 'isNot', value: 'hi' }]);
+  });
+
+  it('keeps a condition that needs no value at all', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.change(screen.getByTestId('view-field-op-f1'), { target: { value: 'isEmpty' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.fields)
+      .toEqual([{ fieldId: 'f1', op: 'isEmpty' }]);
+  });
+
+  it('a field nobody touched narrows nothing', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].def.fields).toEqual([]);
+  });
+
+  it('groups the view by a field, and reopens on it', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    expect(screen.getByTestId('view-group').value).toBe('');
+    fireEvent.change(screen.getByTestId('view-group'), { target: { value: 'field:f1' } });
+    fireEvent.submit(screen.getByTestId('view-editor-form'));
+    const [saved] = useViewStoreMock.getState().saveView.mock.calls[0];
+    expect(saved.def.group).toBe('field:f1');
+
+    cleanup();
+    render(<ViewEditor view={saved} onClose={() => {}} />);
+    expect(screen.getByTestId('view-group').value).toBe('field:f1');
+  });
+
   it('a starter keeps its own name when none is typed', () => {
     render(<ViewEditor view={STARRED} onClose={() => {}} />);
     expect(screen.getByTestId('view-name').value).toBe('');

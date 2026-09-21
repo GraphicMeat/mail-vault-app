@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const harness = vi.hoisted(() => ({
   daemonCall: vi.fn(),
@@ -17,6 +17,7 @@ vi.mock('../../services/cacheManager', () => ({
 
 const { useViewStore, viewLabel } = await import('../viewStore');
 const { useSearchStore } = await import('../searchStore.js');
+const { useFieldStore } = await import('../fieldStore');
 
 const STARRED = { id: 'builtin-starred', name: '', icon: 'star', position: 1, builtin: 'starred', def: { starred: true } };
 const MINE = { id: 'v1', name: 'Receipts', icon: 'tag', position: 3, builtin: null, def: { query: 'invoice' } };
@@ -115,6 +116,55 @@ describe('saved views', () => {
     expect(def.tags).toEqual(['t1']);
     expect(def.sender).toBe('ann@x.test');
     expect(def.hasAttachments).toBe(true);
+  });
+});
+
+/// Field values arriving one rendered row at a time would group every row as
+/// "no value" and then reshuffle the list under the reader.
+describe('a view grouped by a custom field', () => {
+  const GROUPED = { id: 'v2', name: 'By priority', icon: 'tag', position: 4, builtin: null, def: { group: 'field:f1' } };
+  let loadRowValues;
+
+  beforeEach(() => {
+    loadRowValues = useFieldStore.getState().loadRowValues;
+  });
+  afterEach(() => {
+    // Replacing a store action outlives the test that did it.
+    useFieldStore.setState({ loadRowValues });
+  });
+
+  it('has the values before the rows are shown', async () => {
+    const order = [];
+    useFieldStore.setState({
+      loadRowValues: vi.fn(async (rows) => {
+        order.push(['values', rows.map(({ email }) => email.uid), useSearchStore.getState().searchActive]);
+      }),
+    });
+    harness.daemonCall
+      .mockResolvedValueOnce({ available: true, rows: [row(1), row(2)], total: 2 })
+      .mockResolvedValueOnce({});
+
+    expect(await useViewStore.getState().openView(GROUPED)).toBe(true);
+    // Asked for every row, and asked before the list showed any of them.
+    expect(order).toEqual([['values', [1, 2], false]]);
+    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([1, 2]);
+  });
+
+  it('opens the view even when the values will not load', async () => {
+    useFieldStore.setState({ loadRowValues: vi.fn(async () => { throw new Error('no daemon'); }) });
+    harness.daemonCall
+      .mockResolvedValueOnce({ available: true, rows: [row(1)], total: 1 })
+      .mockResolvedValueOnce({});
+
+    expect(await useViewStore.getState().openView(GROUPED)).toBe(true);
+    expect(useSearchStore.getState().searchResults.map(r => r.uid)).toEqual([1]);
+  });
+
+  it('leaves the values alone for a view that groups by nothing', async () => {
+    useFieldStore.setState({ loadRowValues: vi.fn(async () => {}) });
+    harness.daemonCall.mockResolvedValueOnce({ available: true, rows: [row(1)], total: 1 });
+    await useViewStore.getState().openView(MINE);
+    expect(useFieldStore.getState().loadRowValues).not.toHaveBeenCalled();
   });
 });
 

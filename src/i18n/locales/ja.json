@@ -2514,5 +2514,19 @@
   "views.tristate.no": "いいえ",
   "fields.newOption": "選択肢を追加",
   "fields.optionRemoveConfirm": "削除（{count} 件が使用中）",
-  "common.remove": "削除"
+  "common.remove": "削除",
+  "fields.moveUp": "上へ",
+  "fields.moveDown": "下へ",
+  "fields.optionColor": "選択肢の色",
+  "views.filter.group": "グループ化",
+  "views.group.none": "グループ化なし",
+  "views.group.sender": "送信者",
+  "views.group.date": "日付",
+  "views.filter.op": "条件",
+  "views.op.is": "が次と一致",
+  "views.op.isNot": "が次と不一致",
+  "views.op.isSet": "値あり",
+  "views.op.isEmpty": "値なし",
+  "views.op.before": "より前",
+  "views.op.after": "より後"
 }

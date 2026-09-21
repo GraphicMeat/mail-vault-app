@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, Globe, User } from 'lucide-react';
+import { Trash2, Globe, User, ChevronUp, ChevronDown } from 'lucide-react';
 import { useMailStore } from '../../stores/mailStore';
 import { useFieldStore } from '../../stores/fieldStore';
 import { useT } from '../../i18n/index.js';
@@ -52,6 +52,9 @@ function OptionEditor({ field, onSave, usageOf }) {
     apply(options.map(item => (item.id === option.id ? { ...item, label: trimmed } : item)));
   };
 
+  const recolour = (option, color) =>
+    apply(options.map(item => (item.id === option.id ? { ...item, color } : item)));
+
   const askToRemove = async (option) => {
     setRemoving(option.id);
     setUsage(await usageOf(field.id));
@@ -61,6 +64,8 @@ function OptionEditor({ field, onSave, usageOf }) {
     {options.map(option => <span key={option.id} className="field-option">
       <input data-testid={`option-label-${option.id}`} defaultValue={option.label} maxLength={80}
         aria-label={option.label} onBlur={event => rename(option, event.target.value)} />
+      <input type="color" data-testid={`option-color-${option.id}`} value={option.color || '#808080'}
+        aria-label={t('fields.optionColor')} onChange={event => recolour(option, event.target.value)} />
       {removing === option.id
         ? <button type="button" data-testid={`option-remove-confirm-${option.id}`}
           onClick={() => { setRemoving(null); apply(options.filter(item => item.id !== option.id)); }}>
@@ -87,6 +92,7 @@ export function FieldsSettings() {
   const loadFields = useFieldStore(state => state.loadFields);
   const saveField = useFieldStore(state => state.saveField);
   const deleteField = useFieldStore(state => state.deleteField);
+  const moveField = useFieldStore(state => state.moveField);
   const copyFields = useFieldStore(state => state.copyFields);
   const optionUsage = useFieldStore(state => state.optionUsage);
   const [name, setName] = useState('');
@@ -126,6 +132,20 @@ export function FieldsSettings() {
 
   const saveOptions = (field, options) => saveField(accountId, { ...field, options });
 
+  /// Where a field sits inside its own scope. The list renders the global
+  /// fields before the account's own, so a button at the end of a group would
+  /// otherwise ask for a move across that line — which the daemon refuses
+  /// anyway, silently.
+  const placeInScope = (field) => {
+    const group = schema.filter(item => item.scope === field.scope);
+    return [group.findIndex(item => item.id === field.id), group.length];
+  };
+  const canMoveUp = field => placeInScope(field)[0] > 0;
+  const canMoveDown = (field) => {
+    const [at, size] = placeInScope(field);
+    return at >= 0 && at < size - 1;
+  };
+
   return <section className="fields-settings" aria-label={t('fields.section')}>
     <div className="sidebar-section-heading"><h2>{t('fields.section')}</h2></div>
     <p className="text-xs text-mail-text-muted">{t('fields.explainer')}</p>
@@ -134,6 +154,14 @@ export function FieldsSettings() {
       {schema.map(field => <li key={field.id} className="fields-row" data-testid={`field-row-${field.id}`}>
         <span className="fields-row-name">{field.name}</span>
         <span className="fields-row-kind">{t(`fields.kind.${field.kind}`)}</span>
+        <button type="button" data-testid={`field-move-up-${field.id}`} aria-label={t('fields.moveUp')}
+          disabled={!canMoveUp(field)} onClick={() => moveField(accountId, field.id, -1)}>
+          <ChevronUp size={12} />
+        </button>
+        <button type="button" data-testid={`field-move-down-${field.id}`} aria-label={t('fields.moveDown')}
+          disabled={!canMoveDown(field)} onClick={() => moveField(accountId, field.id, 1)}>
+          <ChevronDown size={12} />
+        </button>
         <button type="button" data-testid={`field-scope-${field.id}`} onClick={() => toggleScope(field)}
           title={t(field.scope === GLOBAL ? 'fields.scope.makeAccount' : 'fields.scope.makeGlobal')}>
           {field.scope === GLOBAL ? <Globe size={12} /> : <User size={12} />}

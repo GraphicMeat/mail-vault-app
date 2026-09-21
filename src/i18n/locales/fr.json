@@ -2514,5 +2514,19 @@
   "views.tristate.no": "Non",
   "fields.newOption": "Ajouter un choix",
   "fields.optionRemoveConfirm": "Retirer, {count} messages le portent",
-  "common.remove": "Retirer"
+  "common.remove": "Retirer",
+  "fields.moveUp": "Monter",
+  "fields.moveDown": "Descendre",
+  "fields.optionColor": "Couleur du choix",
+  "views.filter.group": "Grouper par",
+  "views.group.none": "Sans groupe",
+  "views.group.sender": "Expéditeur",
+  "views.group.date": "Date",
+  "views.filter.op": "Condition",
+  "views.op.is": "est",
+  "views.op.isNot": "n’est pas",
+  "views.op.isSet": "a une valeur",
+  "views.op.isEmpty": "est vide",
+  "views.op.before": "avant",
+  "views.op.after": "après"
 }

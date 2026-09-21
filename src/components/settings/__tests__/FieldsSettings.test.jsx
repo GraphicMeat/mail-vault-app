@@ -39,6 +39,7 @@ beforeEach(() => {
     optionUsage: vi.fn(async () => ({ hi: 2 })),
     saveField: vi.fn(async () => ({})),
     deleteField: vi.fn(async () => {}),
+    moveField: vi.fn(async () => {}),
     copyFields: vi.fn(async () => []),
   }));
 });
@@ -84,6 +85,29 @@ describe('the custom field editor', () => {
     expect(useFieldStoreMock.getState().deleteField).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId('field-delete-confirm-f1'));
     expect(useFieldStoreMock.getState().deleteField).toHaveBeenCalledWith('acct-1', 'f1');
+  });
+
+  it('moves a field up and down inside its own scope', () => {
+    const CLIENT = { id: 'f2', scope: 'acct-1', name: 'Client', kind: 'text', position: 1, options: [] };
+    useFieldStoreMock.setState({ fields: { 'acct-1': [OWNER, PRIORITY, CLIENT] } });
+    render(<FieldsSettings />);
+    fireEvent.click(screen.getByTestId('field-move-down-f1'));
+    fireEvent.click(screen.getByTestId('field-move-up-f2'));
+    expect(useFieldStoreMock.getState().moveField.mock.calls).toEqual([
+      ['acct-1', 'f1', 1],
+      ['acct-1', 'f2', -1],
+    ]);
+  });
+
+  /// The shared fields are listed before the account's own, so the last of one
+  /// group sits against the first of the other. Moving there is a scope change,
+  /// not a reorder, and the button that would ask for it is not offered.
+  it('will not offer a move across the line between shared and own fields', () => {
+    render(<FieldsSettings />);
+    expect(screen.getByTestId('field-move-down-g1').disabled).toBe(true);
+    expect(screen.getByTestId('field-move-up-f1').disabled).toBe(true);
+    expect(screen.getByTestId('field-move-up-g1').disabled).toBe(true);
+    expect(screen.getByTestId('field-move-down-f1').disabled).toBe(true);
   });
 
   it('copies another account’s fields into this one', () => {
@@ -139,6 +163,21 @@ describe('the custom field editor', () => {
     fireEvent.click(screen.getByTestId('option-remove-confirm-hi'));
     const [, field] = useFieldStoreMock.getState().saveField.mock.calls[0];
     expect(field.options).toEqual([]);
+  });
+
+  it('gives a choice a colour without losing the rename a moment before it', () => {
+    // saveField that never resolves: the component is on its own local state.
+    useFieldStoreMock.setState({ saveField: vi.fn(() => new Promise(() => {})) });
+    render(<FieldsSettings />);
+
+    const label = screen.getByTestId('option-label-hi');
+    fireEvent.change(label, { target: { value: 'Highest' } });
+    fireEvent.blur(label);
+    fireEvent.change(screen.getByTestId('option-color-hi'), { target: { value: '#00ff00' } });
+
+    const calls = useFieldStoreMock.getState().saveField.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[1][1].options).toEqual([{ id: 'hi', label: 'Highest', color: '#00ff00' }]);
   });
 
   /// The daemon round-trip is slower than a second click, and blur fires when

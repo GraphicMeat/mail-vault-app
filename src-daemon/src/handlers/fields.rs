@@ -40,6 +40,14 @@ fn run(app_dir: &std::path::Path, method: &str, params: &Value) -> Result<Value,
                 .map_err(|e| format!("field: {e}"))?;
             json_of(fields::save(conn, &field)?)
         }
+        // `fields.save` deliberately keeps a field's stored position, so an
+        // edit can never renumber a schema behind the person's back. Moving one
+        // is its own request.
+        "fields.reorder" => {
+            let delta = params.get("delta").and_then(Value::as_i64).ok_or("Missing delta")?;
+            let moved = fields::reorder(conn, &arg(params, "id")?, delta)?;
+            Ok(serde_json::json!({ "moved": moved }))
+        }
         "fields.delete" => {
             let dropped = fields::delete(conn, &arg(params, "id")?)?;
             Ok(serde_json::json!({ "droppedValues": dropped }))

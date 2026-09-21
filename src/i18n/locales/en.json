@@ -2514,5 +2514,19 @@
   "views.tristate.no": "No",
   "fields.newOption": "Add a choice",
   "fields.optionRemoveConfirm": "Remove, {count} messages hold it",
-  "common.remove": "Remove"
+  "common.remove": "Remove",
+  "fields.moveUp": "Move up",
+  "fields.moveDown": "Move down",
+  "fields.optionColor": "Choice color",
+  "views.filter.group": "Group by",
+  "views.group.none": "No grouping",
+  "views.group.sender": "Sender",
+  "views.group.date": "Date",
+  "views.filter.op": "Condition",
+  "views.op.is": "is",
+  "views.op.isNot": "is not",
+  "views.op.isSet": "has any value",
+  "views.op.isEmpty": "is empty",
+  "views.op.before": "before",
+  "views.op.after": "after"
 }

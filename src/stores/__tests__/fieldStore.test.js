@@ -101,6 +101,14 @@ describe('custom fields', () => {
     expect(useFieldStore.getState().valuesFor(email, location)).toEqual({ g1: 'Ann' });
   });
 
+  it('moving a field asks the daemon to renumber, then reloads the schema', async () => {
+    mockDaemonCall.mockResolvedValueOnce({ moved: true }).mockResolvedValueOnce([PRIORITY, OWNER]);
+    await useFieldStore.getState().moveField('acct-1', 'f1', -1);
+    expect(mockDaemonCall.mock.calls[0]).toEqual(['fields.reorder', { id: 'f1', delta: -1 }]);
+    expect(mockDaemonCall.mock.calls[1]).toEqual(['fields.list', { accountId: 'acct-1' }]);
+    expect(useFieldStore.getState().fieldsFor('acct-1')).toEqual([PRIORITY, OWNER]);
+  });
+
   it('copying a schema reloads the account that received it', async () => {
     mockDaemonCall.mockResolvedValueOnce([PRIORITY]).mockResolvedValueOnce([PRIORITY]);
     await useFieldStore.getState().copyFields(['f1'], 'acct-2');

@@ -2514,5 +2514,19 @@
   "views.tristate.no": "No",
   "fields.newOption": "Añadir una opción",
   "fields.optionRemoveConfirm": "Quitar, {count} mensajes la tienen",
-  "common.remove": "Quitar"
+  "common.remove": "Quitar",
+  "fields.moveUp": "Subir",
+  "fields.moveDown": "Bajar",
+  "fields.optionColor": "Color de la opción",
+  "views.filter.group": "Agrupar por",
+  "views.group.none": "Sin agrupar",
+  "views.group.sender": "Remitente",
+  "views.group.date": "Fecha",
+  "views.filter.op": "Condición",
+  "views.op.is": "es",
+  "views.op.isNot": "no es",
+  "views.op.isSet": "tiene algún valor",
+  "views.op.isEmpty": "está vacío",
+  "views.op.before": "antes de",
+  "views.op.after": "después de"
 }

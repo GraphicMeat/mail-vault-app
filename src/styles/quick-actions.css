@@ -674,6 +674,22 @@
   color: var(--mail-text);
 }
 
+/* A choice that carries a colour tints the chip it was chosen on; the swatch
+   is the same idea for a native select, which cannot tint its own option. */
+.field-multi label.is-chosen[style*="--tag-color"] {
+  color: var(--tag-color);
+}
+
+.field-swatch {
+  /* An inline span ignores a width; the swatch is the only thing this element
+     is, so it takes a box of its own. */
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--tag-color);
+}
+
 .fields-list {
   display: flex;
   flex-direction: column;

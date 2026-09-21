@@ -2,8 +2,9 @@ import { create } from 'zustand';
 import { daemonCall } from '../services/daemonClient';
 import { useMailStore } from './mailStore';
 import { useSearchStore } from './searchStore.js';
+import { useFieldStore } from './fieldStore';
 import { getAccountCacheMailboxes } from '../services/cacheManager';
-import { flattenMailboxes } from './slices/unifiedHelpers.js';
+import { flattenMailboxes, resolveEmailLocation } from './slices/unifiedHelpers.js';
 import { parseSearchQuery } from '../utils/searchQuery';
 
 /// What a view is called. A starter carries no name in the database — storing
@@ -94,13 +95,30 @@ export const useViewStore = create((set, get) => ({
     }
     // A view opened while this one was still running owns the screen now.
     if (mine !== runGeneration) return false;
-    set({ loading: false });
     if (!reply?.available) {
       // Not an empty view: the index could not answer at all.
-      set({ unavailableReason: reply?.reason || 'unavailable' });
+      set({ loading: false, unavailableReason: reply?.reason || 'unavailable' });
       return false;
     }
-    useSearchStore.getState().showRows(reply.rows || []);
+    const rows = reply.rows || [];
+    // A view grouped by a field needs its values before the rows are on screen:
+    // arriving one rendered row at a time, they would group every row as "no
+    // value" and then reshuffle the list under the reader. Bounded by the
+    // evaluate limit, and a load that fails only costs the grouping.
+    const def = (typeof view === 'object' && view?.def) || get().views.find(saved => saved.id === id)?.def;
+    if (def?.group?.startsWith('field:')) {
+      const mail = useMailStore.getState();
+      try {
+        await useFieldStore.getState().loadRowValues(
+          rows.map(email => ({ email, location: resolveEmailLocation(email, mail) })),
+        );
+      } catch (error) {
+        console.warn('[views] could not load the field values to group by:', error?.message || error);
+      }
+      if (mine !== runGeneration) return false;
+    }
+    set({ loading: false });
+    useSearchStore.getState().showRows(rows);
     // The badge beside every view is only true as of its last count, and
     // opening one is the moment a person looks at them.
     void get().refreshCounts();

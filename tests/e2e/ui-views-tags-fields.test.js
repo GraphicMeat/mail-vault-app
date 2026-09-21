@@ -8,7 +8,8 @@
  *   1. the Views section holds the three starters the daemon seeds,
  *   2. their names are translated in the app (the daemon stores none),
  *   3. opening one names it in the list header,
- *   4. the Fields tab in Mail preferences answers a fields.list.
+ *   4. the Fields tab in Mail preferences answers a fields.list,
+ *   5. a grouping chosen in the view editor is stored and read back.
  */
 
 import { waitForApp, openSettings, closeSettings, clickSettingsNav } from './helpers.js';
@@ -93,6 +94,47 @@ describe('Saved views, tags and custom fields', function () {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
       setter.call(input, '');
       input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
+    });
+  });
+
+  /// The editor's grouping control is the one new affordance a headless run
+  /// can reach: it needs no account and no schema. Saving it and reading it
+  /// back off a reopened editor proves the daemon stored `def.group`.
+  it('saves a grouping on a view, and reads it back from the daemon', async function () {
+    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-attachments"]')?.click());
+    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-group"]')),
+      { timeout: 10000, timeoutMsg: 'the view editor never offered a grouping' });
+
+    const options = await browser.execute(() => Array.from(document.querySelectorAll('[data-testid="view-group"] option'))
+      .map(node => node.value));
+    // The per-field options need a schema; these three never do.
+    expect(options).toEqual(expect.arrayContaining(['', 'sender', 'date']));
+
+    await browser.execute(() => {
+      const select = document.querySelector('[data-testid="view-group"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, 'sender');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
+    });
+
+    // Reopening reads the stored view, not the form that was just closed.
+    await browser.waitUntil(async () => browser.execute(() => !document.querySelector('[data-testid="view-group"]')),
+      { timeout: 10000, timeoutMsg: 'the editor never closed after saving' });
+    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-attachments"]')?.click());
+    const stored = await browser.waitUntil(async () => {
+      const value = await browser.execute(() => document.querySelector('[data-testid="view-group"]')?.value ?? null);
+      return value === null ? false : value;
+    }, { timeout: 10000, timeoutMsg: 'the editor never reopened' });
+    expect(stored).toBe('sender');
+
+    // Put it back: a starter groups by nothing.
+    await browser.execute(() => {
+      const select = document.querySelector('[data-testid="view-group"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+      setter.call(select, '');
+      select.dispatchEvent(new Event('change', { bubbles: true }));
       document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
     });
   });

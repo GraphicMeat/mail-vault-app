@@ -2514,5 +2514,19 @@
   "views.tristate.no": "No",
   "fields.newOption": "Aggiungi una scelta",
   "fields.optionRemoveConfirm": "Rimuovi, {count} messaggi la usano",
-  "common.remove": "Rimuovi"
+  "common.remove": "Rimuovi",
+  "fields.moveUp": "Sposta su",
+  "fields.moveDown": "Sposta giù",
+  "fields.optionColor": "Colore della scelta",
+  "views.filter.group": "Raggruppa per",
+  "views.group.none": "Nessun raggruppamento",
+  "views.group.sender": "Mittente",
+  "views.group.date": "Data",
+  "views.filter.op": "Condizione",
+  "views.op.is": "è",
+  "views.op.isNot": "non è",
+  "views.op.isSet": "ha un valore",
+  "views.op.isEmpty": "è vuoto",
+  "views.op.before": "prima di",
+  "views.op.after": "dopo"
 }

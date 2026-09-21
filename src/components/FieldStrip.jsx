@@ -46,16 +46,23 @@ export function FieldStrip({ email, className = '' }) {
         aria-label={field.name} onChange={event => store(field, event.target.value || null)} />;
     }
     if (field.kind === 'select') {
-      return <select data-testid={testId} value={typeof value === 'string' ? value : ''} aria-label={field.name}
-        onChange={event => store(field, event.target.value || null)}>
-        <option value="">{t('fields.noValue')}</option>
-        {field.options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
-      </select>;
+      // A native <option> cannot be tinted portably, so the chosen choice's
+      // colour is shown beside the control instead of inside it.
+      const chosen = field.options.find(option => option.id === value);
+      return <>
+        {chosen?.color && <span className="field-swatch" aria-hidden="true" style={{ '--tag-color': chosen.color }} />}
+        <select data-testid={testId} value={typeof value === 'string' ? value : ''} aria-label={field.name}
+          onChange={event => store(field, event.target.value || null)}>
+          <option value="">{t('fields.noValue')}</option>
+          {field.options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+        </select>
+      </>;
     }
     if (field.kind === 'multi_select') {
       const chosen = Array.isArray(value) ? value : [];
       return <span className="field-multi" data-testid={testId}>
-        {field.options.map(option => <label key={option.id} className={chosen.includes(option.id) ? 'is-chosen' : ''}>
+        {field.options.map(option => <label key={option.id} className={chosen.includes(option.id) ? 'is-chosen' : ''}
+          style={chosen.includes(option.id) && option.color ? { '--tag-color': option.color } : undefined}>
           <input type="checkbox" checked={chosen.includes(option.id)}
             onChange={event => store(field, event.target.checked
               ? [...chosen, option.id]

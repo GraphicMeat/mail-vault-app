@@ -5,7 +5,8 @@ import { useAccountStore } from '../stores/accountStore';
 import { useMessageListStore } from '../stores/messageListStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
-import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey } from '../stores/slices/unifiedHelpers';
+import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey, resolveEmailLocation } from '../stores/slices/unifiedHelpers';
+import { useFieldStore, fieldRowKey } from '../stores/fieldStore';
 import { useUiStore } from '../stores/uiStore';
 import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSearchStore } from '../stores/searchStore';
@@ -174,6 +175,7 @@ function EmailListComponent({ stacked = false }) {
   const toggleUnreadOnly = useUiStore(s => s.toggleUnreadOnly);
   const searchActive = useSearchStore(s => s.searchActive);
   const activeView = useViewStore(s => s.views.find(view => view.id === s.activeViewId) || null);
+  const closeView = useViewStore(s => s.closeView);
   const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useUiStore(s => s._flagSeq);
   const archivedSize = useMessageListStore(s => s.archivedEmailIds.size);
@@ -211,7 +213,34 @@ function EmailListComponent({ stacked = false }) {
   const emailListGrouping = useSettingsStore(s => s.emailListGrouping);
   const emailListView = useSettingsStore(s => s.emailListView);
   const setEmailListView = useSettingsStore(s => s.setEmailListView);
-  const isExplorer = emailListView === 'explorer';
+  // A saved view that groups is shown grouped, whichever list mode is on: the
+  // grouping is what the view says it is, not a setting of this screen.
+  const viewGrouping = activeView?.def?.group || null;
+  const isExplorer = emailListView === 'explorer' || !!viewGrouping;
+  const fieldSchemas = useFieldStore(s => s.fields);
+  const fieldValues = useFieldStore(s => s.byRow);
+  // Grouping by a custom field: the value of a row, as the word to group it
+  // under. Subscribed, not read once — the view store fills this cache while
+  // the rows are being shown.
+  const viewFieldGroup = useMemo(() => {
+    const fieldId = viewGrouping?.startsWith('field:') ? viewGrouping.slice('field:'.length) : null;
+    if (!fieldId) return null;
+    const fieldIn = accountId => (fieldSchemas[accountId] || []).find(field => field.id === fieldId);
+    return {
+      label: fieldIn(activeAccountId)?.name || '',
+      valueOf: (email) => {
+        const location = resolveEmailLocation(email, useMailStore.getState());
+        if (!location) return null;
+        const raw = fieldValues[fieldRowKey(location.accountId, location.mailbox, email.uid)]?.[fieldId];
+        const field = fieldIn(location.accountId);
+        const labelOf = value => field?.options?.find(option => option.id === value)?.label || String(value);
+        if (Array.isArray(raw)) return raw.map(labelOf).join(', ') || null;
+        if (raw === true) return t('views.tristate.yes');
+        if (raw === null || raw === undefined || raw === '' || raw === false) return null;
+        return labelOf(raw);
+      },
+    };
+  }, [viewGrouping, fieldSchemas, fieldValues, activeAccountId, t]);
   const explorerContext = useMemo(() => ({ activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope }),
     [activeAccountId, activeMailbox, viewMode, unifiedInbox, mailboxScope]);
   const setEmailListGrouping = useSettingsStore(s => s.setEmailListGrouping);
@@ -1040,9 +1069,15 @@ function EmailListComponent({ stacked = false }) {
           </select>
         )}
         <div className="mail-list-view-switch" role="group" aria-label={t('explorer.view')}>
+          {/* A grouped view owns how its rows are laid out, so neither button can
+              keep its promise while one is open. A control that does nothing is
+              worse than one that says it cannot: disable both until the view is
+              closed. */}
           <button type="button" data-testid="mail-view-list" className="mail-toolbar-button" aria-pressed={!isExplorer}
+            disabled={!!viewGrouping}
             onClick={() => setEmailListView('list')}><List size={14} /><span>{t('explorer.list')}</span></button>
           <button type="button" data-testid="mail-view-explorer" className="mail-toolbar-button" aria-pressed={isExplorer}
+            disabled={!!viewGrouping}
             onClick={() => { setEmailListView('explorer'); setShowSearch(false); }}><Network size={14} /><span>{t('explorer.name')}</span></button>
         </div>
       </div>
@@ -1095,9 +1130,12 @@ function EmailListComponent({ stacked = false }) {
             onSetSelection={setEmailsSelected} onOpenThread={selectThread} rowHeight={ROW_HEIGHT}
             hasOpenThread={!!selectedThread} onThreadsChanged={syncSelectedThread}
             onSelectEmail={email => selectEmailRow(selKey(email), email)}
-            onSearchMailbox={() => { setEmailListView('list'); setShowSearch(true); }}
+            // Searching a folder is leaving the view, not narrowing it: while a
+            // grouped view is open, setting the list mode alone changes nothing.
+            onSearchMailbox={() => { if (viewGrouping) closeView(); setEmailListView('list'); setShowSearch(true); }}
             partial={!searchActive && windowIsPartial} hasMore={!searchActive && viewMode !== 'local' && hasMoreEmails}
             loadingMore={loadingMore} loading={loading || showSkeleton} onLoadMore={loadMoreEmails} searchActive={searchActive}
+            groupingOverride={viewGrouping} fieldGroup={viewFieldGroup}
             renderEmail={email => {
               const key = selKey(email);
               return <RowComponent rowId={key} email={email} style={rowStyle}

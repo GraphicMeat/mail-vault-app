@@ -27,10 +27,14 @@ export function ExplorerView({
   unreadOnly = false, selectedEmailIds, getSelectionKey, onSetSelection,
   renderEmail, onSelectEmail, onOpenThread, onSearchMailbox, hasOpenThread = false, onThreadsChanged,
   partial = false, hasMore = false, loadingMore = false, loading = false, onLoadMore,
-  rowHeight = 56, searchActive = false,
+  rowHeight = 56, searchActive = false, groupingOverride = null, fieldGroup = null,
 }) {
   const t = useT();
-  const grouping = useSettingsStore(s => s.explorerGrouping);
+  const storedGrouping = useSettingsStore(s => s.explorerGrouping);
+  // A saved view brings its own grouping. It is never written to the settings
+  // store: closing the view would strand the reader in a grouping they never
+  // picked.
+  const grouping = groupingOverride || storedGrouping;
   const dateDepth = useSettingsStore(s => s.explorerDateDepth);
   const setGrouping = useSettingsStore(s => s.setExplorerGrouping);
   const setDateDepth = useSettingsStore(s => s.setExplorerDateDepth);
@@ -39,8 +43,8 @@ export function ExplorerView({
     context.unifiedInbox, context.mailboxScope?.paths, grouping, dateDepth, searchActive]);
   const rememberedPath = useSettingsStore(s => s.explorerPaths[scope] || EMPTY_PATH);
   const locale = getLocale();
-  const tree = useMemo(() => buildExplorerTree(emails, { grouping, dateDepth, locale, context, conversationEmails, includeThreads: hasOpenThread }),
-    [emails, grouping, dateDepth, locale, context, conversationEmails, hasOpenThread]);
+  const tree = useMemo(() => buildExplorerTree(emails, { grouping, dateDepth, locale, context, conversationEmails, includeThreads: hasOpenThread, fieldGroup }),
+    [emails, grouping, dateDepth, locale, context, conversationEmails, hasOpenThread, fieldGroup]);
   useEffect(() => { if (tree.threads.size) onThreadsChanged?.(tree.threads); }, [tree, onThreadsChanged]);
   const { node, breadcrumbs, path } = resolveExplorerPath(tree, rememberedPath);
   const location = JSON.stringify([scope, path]);
@@ -160,11 +164,11 @@ export function ExplorerView({
       }
     }}>
     <div className="explorer-controls">
-      <label>{t('explorer.browseBy')}<select data-testid="explorer-grouping" aria-label={t('explorer.browseBy')}
+      {!groupingOverride && <label>{t('explorer.browseBy')}<select data-testid="explorer-grouping" aria-label={t('explorer.browseBy')}
         value={grouping} onChange={event => setGrouping(event.target.value)}>
         <option value="date">{t('explorer.date')}</option><option value="sender">{t('explorer.sender')}</option>
         <option value="conversation">{t('explorer.conversation')}</option>
-      </select></label>
+      </select></label>}
       <label>{t('explorer.dateDepth')}<select aria-label={t('explorer.dateDepth')} value={dateDepth} onChange={event => setDateDepth(event.target.value)}>
         <option value="month">{t('explorer.month')}</option><option value="day">{t('explorer.day')}</option>
       </select></label>

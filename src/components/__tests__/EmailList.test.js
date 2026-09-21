@@ -1453,3 +1453,81 @@ describe('select messages while a search is on', () => {
     expect(useMailStore.getState().openBulkModal).toHaveBeenCalled();
   });
 });
+
+
+// A saved view that groups owns how its rows are laid out: the list renders
+// through Explorer with the view's grouping whatever `emailListView` says, and
+// the two mode buttons stop pretending they can change it.
+describe('a saved view drives the grouping', () => {
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 5)); });
+
+  const mount = async ({ def = null, fields = {}, byRow = {} } = {}) => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    const { useFieldStore } = await import('../../stores/fieldStore');
+    useMailStore.setState({
+      sortedEmails: makeEmails(2), totalEmails: 2,
+      activeMailbox: 'INBOX', activeAccountId: 'acc1',
+      unreadOnly: false, selectedEmailIds: new Set(), selectedThread: null,
+    });
+    // The list mode stays 'list' for every case below: the view, not the
+    // setting, is what is under test.
+    useSettingsStore.setState({ emailListView: 'list', emailListGrouping: 'chronological', explorerPaths: {} });
+    useViewStore.setState({ views: def ? [{ id: 'v1', name: 'Saved', def }] : [], activeViewId: def ? 'v1' : null });
+    // Only ever setState on these two — an action would call the daemon.
+    useFieldStore.setState({ fields, byRow });
+    const { EmailList } = await import('../EmailList.jsx');
+    const utils = render(React.createElement(EmailList.type));
+    await settle();
+    return utils;
+  };
+
+  // These are real module singletons, shared with every other test in this
+  // file: a leaked activeViewId makes `isExplorer` true for all of them.
+  afterEach(async () => {
+    cleanup();
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSettingsStore } = await import('../../stores/settingsStore');
+    const { useViewStore } = await import('../../stores/viewStore');
+    const { useFieldStore } = await import('../../stores/fieldStore');
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, activeMailbox: 'INBOX' });
+    useSettingsStore.setState({ emailListView: 'list' });
+    useViewStore.setState({ views: [], activeViewId: null });
+    useFieldStore.setState({ fields: {}, byRow: {} });
+  });
+
+  it('renders the explorer surface with the view’s grouping while the list mode is still “list”', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    expect(container.querySelector('[data-testid="explorer-view"]').dataset.grouping).toBe('sender');
+  });
+
+  it('groups by the chosen choice’s label, and gathers the rows the field never answered for', async () => {
+    const { container } = await mount({
+      def: { group: 'field:f1' },
+      fields: { acc1: [{ id: 'f1', name: 'Priority', kind: 'select', options: [{ id: 'hi', label: 'High' }] }] },
+      // Only uid 1 carries a value; uid 2 is the null side of `valueOf`.
+      byRow: { 'acc1|INBOX|1': { f1: 'hi' } },
+    });
+    const groups = [...container.querySelectorAll('[data-testid="explorer-group-row"]')];
+    // 'High', not the stored 'hi' — and the no-value group for the other row.
+    expect(groups.map(n => n.dataset.label)).toEqual(['High', '—']);
+    // The field's own name, which only the schema knows: without it the memo
+    // fell back to ''.
+    expect(groups[0].dataset.detail).toBe('Priority');
+  });
+
+  // Both buttons did nothing at all while a grouped view was open. A control
+  // that cannot keep its promise has to say so.
+  it('disables both list-mode buttons while a grouped view is open', async () => {
+    const { container } = await mount({ def: { group: 'sender' } });
+    expect(container.querySelector('[data-testid="mail-view-list"]').disabled).toBe(true);
+    expect(container.querySelector('[data-testid="mail-view-explorer"]').disabled).toBe(true);
+  });
+
+  it('leaves both list-mode buttons alone when no view is open', async () => {
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="mail-view-list"]').disabled).toBe(false);
+    expect(container.querySelector('[data-testid="mail-view-explorer"]').disabled).toBe(false);
+  });
+});

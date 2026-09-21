@@ -2514,5 +2514,19 @@
   "views.tristate.no": "否",
   "fields.newOption": "添加选项",
   "fields.optionRemoveConfirm": "移除，{count} 封邮件在使用",
-  "common.remove": "移除"
+  "common.remove": "移除",
+  "fields.moveUp": "上移",
+  "fields.moveDown": "下移",
+  "fields.optionColor": "选项颜色",
+  "views.filter.group": "分组方式",
+  "views.group.none": "不分组",
+  "views.group.sender": "发件人",
+  "views.group.date": "日期",
+  "views.filter.op": "条件",
+  "views.op.is": "等于",
+  "views.op.isNot": "不等于",
+  "views.op.isSet": "有值",
+  "views.op.isEmpty": "为空",
+  "views.op.before": "早于",
+  "views.op.after": "晚于"
 }

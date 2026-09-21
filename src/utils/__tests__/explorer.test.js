@@ -121,6 +121,37 @@ describe('buildExplorerTree sender grouping', () => {
   });
 });
 
+describe('buildExplorerTree custom field grouping', () => {
+  /// The values are not in the headers, so the caller hands the lookup in.
+  it('puts every message under its value, and the valueless under one group', () => {
+    const high = message(40, { date: localDate(2026, 1, 5) });
+    const alsoHigh = message(41, { date: localDate(2026, 1, 6) });
+    const low = message(42, { date: localDate(2026, 1, 7) });
+    const none = message(43, { date: localDate(2026, 1, 8) });
+    const values = { 40: 'High', 41: 'High', 42: 'Low' };
+
+    const root = buildExplorerTree([high, alsoHigh, low, none], {
+      grouping: 'field:f1',
+      locale: 'en-US',
+      fieldGroup: { label: 'Priority', valueOf: email => values[email.uid] || null },
+    });
+
+    expect(root.children.map(({ kind, label, detail, emails }) => ({
+      kind, label, detail, uids: emails.map(email => email.uid),
+    }))).toEqual([
+      { kind: 'field', label: 'High', detail: 'Priority', uids: [41, 40] },
+      { kind: 'field', label: 'Low', detail: 'Priority', uids: [42] },
+      { kind: 'field', label: '—', detail: 'Priority', uids: [43] },
+    ]);
+    expect(root.emails.map(email => email.uid)).toEqual([43, 42, 41, 40]);
+  });
+
+  it('falls back to dates when no lookup is handed in', () => {
+    const root = buildExplorerTree([message(44)], { grouping: 'field:f1', locale: 'en-US' });
+    expect(root.children.map(({ kind }) => kind)).toEqual(['year']);
+  });
+});
+
 describe('buildExplorerTree conversation grouping', () => {
   it('does not merge a headerless Re: orphan by subject alone', () => {
     const original = message(29, {

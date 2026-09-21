@@ -118,6 +118,45 @@ pub fn save(conn: &Connection, field: &Field) -> Result<Field, String> {
     })
 }
 
+/// Move a field one place up (`delta` -1) or down (+1) within its own scope.
+/// False when it is already at the end of that scope: a global field must not
+/// change places with an account's own, because [`list`] puts every global
+/// field first and a move across that line is a scope change, not a reorder.
+///
+/// The whole group is renumbered rather than the two rows swapped: [`save`]
+/// keeps a field's position when its scope changes, so one scope can hold two
+/// fields at the same position, and swapping those two would report success
+/// while changing nothing.
+pub fn reorder(conn: &Connection, id: &str, delta: i64) -> Result<bool, String> {
+    in_txn(conn, || {
+        let Some(scope) = conn
+            .query_row("SELECT scope FROM fields WHERE id = ?1", [id], |r| r.get::<_, String>(0))
+            .optional()
+            .map_err(|e| e.to_string())?
+        else {
+            return Ok(false);
+        };
+        // The same order `list` renders within a scope: its `scope = ?2` term
+        // is constant inside one group, so this is the order on screen.
+        let mut stmt = conn
+            .prepare("SELECT id FROM fields WHERE scope = ?1 ORDER BY position, name COLLATE NOCASE")
+            .map_err(|e| e.to_string())?;
+        let rows = stmt.query_map([&scope], |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+        let mut ordered = rows.collect::<Result<Vec<String>, _>>().map_err(|e| e.to_string())?;
+        let Some(index) = ordered.iter().position(|row| row == id) else { return Ok(false) };
+        let target = index as i64 + delta;
+        if target < 0 || target as usize >= ordered.len() {
+            return Ok(false);
+        }
+        ordered.swap(index, target as usize);
+        for (position, row) in ordered.iter().enumerate() {
+            conn.execute("UPDATE fields SET position = ?2 WHERE id = ?1", params![row, position as i64])
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(true)
+    })
+}
+
 /// Delete the field and every value anyone gave it. Returns how many values went.
 pub fn delete(conn: &Connection, id: &str) -> Result<usize, String> {
     in_txn(conn, || {
@@ -500,6 +539,44 @@ mod tests {
         let c = conn();
         save(&c, &field("f1", "work", "Priority", "select")).unwrap();
         assert!(option_usage(&c, "f1").unwrap().is_empty());
+    }
+
+    fn order(c: &Connection, account_id: &str) -> Vec<String> {
+        list(c, account_id).unwrap().into_iter().map(|f| f.name).collect()
+    }
+
+    #[test]
+    fn moving_a_field_changes_the_order_it_is_listed_in() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        save(&c, &field("f2", "work", "Client", "text")).unwrap();
+        assert_eq!(order(&c, "work"), vec!["Priority".to_string(), "Client".to_string()]);
+        assert!(reorder(&c, "f2", -1).unwrap());
+        assert_eq!(order(&c, "work"), vec!["Client".to_string(), "Priority".to_string()]);
+        assert!(reorder(&c, "f2", 1).unwrap());
+        assert_eq!(order(&c, "work"), vec!["Priority".to_string(), "Client".to_string()]);
+    }
+
+    #[test]
+    fn a_field_at_the_end_of_its_scope_does_not_move() {
+        let c = conn();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        save(&c, &field("f2", "work", "Client", "text")).unwrap();
+        assert!(!reorder(&c, "f1", -1).unwrap(), "already first");
+        assert!(!reorder(&c, "f2", 1).unwrap(), "already last");
+        assert_eq!(order(&c, "work"), vec!["Priority".to_string(), "Client".to_string()]);
+    }
+
+    /// Every global field is listed before the account's own, so trading places
+    /// across that line would be a scope change wearing a reorder's clothes.
+    #[test]
+    fn a_global_field_never_changes_places_with_an_accounts_own() {
+        let c = conn();
+        save(&c, &field("g1", GLOBAL, "Owner", "text")).unwrap();
+        save(&c, &field("f1", "work", "Priority", "select")).unwrap();
+        assert!(!reorder(&c, "g1", 1).unwrap(), "the last global cannot move down into the account's fields");
+        assert!(!reorder(&c, "f1", -1).unwrap(), "the first of the account's cannot move up into the globals");
+        assert_eq!(order(&c, "work"), vec!["Owner".to_string(), "Priority".to_string()]);
     }
 
     #[test]

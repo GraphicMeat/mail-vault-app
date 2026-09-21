@@ -14,6 +14,15 @@ const TRISTATE = [['any', null], ['yes', true], ['no', false]];
 const toTri = value => (value === true ? 'yes' : value === false ? 'no' : 'any');
 const fromTri = value => TRISTATE.find(([name]) => name === value)?.[1] ?? null;
 
+/// Every operator the daemon's SQL implements. `before`/`after` compare the
+/// `YYYY-MM-DD` a date field stores, so only a date field offers them.
+const OPS = ['is', 'isNot', 'isSet', 'isEmpty'];
+const DATE_OPS = ['before', 'after'];
+/// Two operators are the whole condition: asking for a value as well would ask
+/// which value is missing.
+const VALUELESS = ['isSet', 'isEmpty'];
+const NO_FILTER = { op: 'is', value: '' };
+
 export function ViewEditor({ view, onClose }) {
   const t = useT();
   const saveView = useViewStore(state => state.saveView);
@@ -32,10 +41,20 @@ export function ViewEditor({ view, onClose }) {
   });
   const [attachments, setAttachments] = useState(!!def.hasAttachments);
   const [chosenTags, setChosenTags] = useState(def.tags || []);
-  const [fieldValues, setFieldValues] = useState(() => Object.fromEntries(
-    (def.fields || []).map(filter => [filter.fieldId, typeof filter.value === 'string' ? filter.value : '']),
+  /// Field id → `{ op, value }`. The operator is part of what was saved: read
+  /// back as a bare value, an `isNot` view would silently reopen as `is`.
+  const [fieldFilters, setFieldFilters] = useState(() => Object.fromEntries(
+    (def.fields || []).map(filter => [filter.fieldId, {
+      op: filter.op || 'is',
+      value: typeof filter.value === 'string' ? filter.value : '',
+    }]),
   ));
+  const [group, setGroup] = useState(def.group || '');
   const [confirming, setConfirming] = useState(false);
+
+  const filterFor = id => fieldFilters[id] || NO_FILTER;
+  const setFilter = (id, patch) =>
+    setFieldFilters(current => ({ ...current, [id]: { ...(current[id] || NO_FILTER), ...patch } }));
 
   /// What the form currently says, as a view.
   const edited = () => {
@@ -52,9 +71,14 @@ export function ViewEditor({ view, onClose }) {
         answered: fromTri(flags.answered),
         hasAttachments: attachments,
         tags: chosenTags,
-        fields: Object.entries(fieldValues)
-          .filter(([, value]) => value)
-          .map(([fieldId, value]) => ({ fieldId, op: 'is', value })),
+        // A field nobody touched is not a filter — an empty value still means
+        // "any" — but `isSet`/`isEmpty` are filters that carry no value.
+        fields: Object.entries(fieldFilters)
+          .filter(([, filter]) => filter.value || VALUELESS.includes(filter.op))
+          .map(([fieldId, filter]) => (VALUELESS.includes(filter.op)
+            ? { fieldId, op: filter.op }
+            : { fieldId, op: filter.op, value: filter.value })),
+        group: group || null,
       },
     };
   };
@@ -114,6 +138,19 @@ export function ViewEditor({ view, onClose }) {
       </label>
     </div>
 
+    {/* Outside the schema block on purpose: none/sender/date need no schema,
+        and an app with no account yet still has a grouping to choose. */}
+    <label className="view-editor-row">
+      {t('views.filter.group')}
+      <select data-testid="view-group" value={group} aria-label={t('views.filter.group')}
+        onChange={event => setGroup(event.target.value)}>
+        <option value="">{t('views.group.none')}</option>
+        <option value="sender">{t('views.group.sender')}</option>
+        <option value="date">{t('views.group.date')}</option>
+        {schema.map(field => <option key={field.id} value={`field:${field.id}`}>{field.name}</option>)}
+      </select>
+    </label>
+
     {tags.length > 0 && <div className="view-editor-row">
       <span>{t('views.filter.tags')}</span>
       {tags.map(tag => <label key={tag.id}>
@@ -129,15 +166,21 @@ export function ViewEditor({ view, onClose }) {
       <span>{t('views.filter.fields')}</span>
       {schema.map(field => <label key={field.id}>
         {field.name}
+        <select data-testid={`view-field-op-${field.id}`} value={filterFor(field.id).op} aria-label={t('views.filter.op')}
+          onChange={event => setFilter(field.id, { op: event.target.value })}>
+          {[...OPS, ...(field.kind === 'date' ? DATE_OPS : [])]
+            .map(op => <option key={op} value={op}>{t(`views.op.${op}`)}</option>)}
+        </select>
         {field.options?.length
-          ? <select data-testid={`view-field-${field.id}`} value={fieldValues[field.id] || ''} aria-label={field.name}
-            onChange={event => setFieldValues(current => ({ ...current, [field.id]: event.target.value }))}>
+          ? <select data-testid={`view-field-${field.id}`} value={filterFor(field.id).value} aria-label={field.name}
+            disabled={VALUELESS.includes(filterFor(field.id).op)}
+            onChange={event => setFilter(field.id, { value: event.target.value })}>
             <option value="">{t('views.tristate.any')}</option>
             {field.options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
-          : <input data-testid={`view-field-${field.id}`} value={fieldValues[field.id] || ''} maxLength={200}
-            aria-label={field.name}
-            onChange={event => setFieldValues(current => ({ ...current, [field.id]: event.target.value }))} />}
+          : <input data-testid={`view-field-${field.id}`} value={filterFor(field.id).value} maxLength={200}
+            aria-label={field.name} disabled={VALUELESS.includes(filterFor(field.id).op)}
+            onChange={event => setFilter(field.id, { value: event.target.value })} />}
       </label>)}
     </div>}
 
