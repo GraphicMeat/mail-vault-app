@@ -10,14 +10,19 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
-/// Find a file by UID in a Maildir/cur directory.
+/// Find a file by UID in a Maildir/cur directory. Matches a name that starts
+/// with the canonical decimal uid followed by an info separator (`:`, or `;`
+/// on Windows) — under either spelling, on every platform, since a vault
+/// written on one OS is routinely read on another.
 pub fn find_by_uid(cur_dir: &Path, uid: u32) -> Option<PathBuf> {
-    let prefix = format!("{}:", uid);
+    let prefix = uid.to_string();
     if let Ok(entries) = fs::read_dir(cur_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().to_string();
-            if name.starts_with(&prefix) {
-                return Some(entry.path());
+            if let Some(rest) = name.strip_prefix(prefix.as_str()) {
+                if rest.starts_with(is_info_sep) {
+                    return Some(entry.path());
+                }
             }
         }
     }
@@ -57,8 +62,9 @@ pub fn has_info(name: &str) -> bool {
 }
 
 /// The uid a vault filename carries, by `find_by_uid`'s exact rule: the name
-/// starts with the canonical decimal uid and a `:`. `u32::parse` alone would
-/// also take `07:` and `+7:`, which `find_by_uid(7)` never matches.
+/// starts with the canonical decimal uid and an info separator (`:`, or `;`
+/// on Windows — either spelling parses on every platform). `u32::parse` alone
+/// would also take `07:` and `+7:`, which `find_by_uid(7)` never matches.
 pub fn vault_filename_uid(name: &str) -> Option<u32> {
     let (digits, _) = name.split_once(is_info_sep)?;
     let canonical = !digits.is_empty()
@@ -793,6 +799,27 @@ mod tests {
         assert_eq!(with_uid("7;2,S.eml", 9), "9;2,S.eml");
         assert_eq!(with_uid("7:S:1700000000.eml", 9), "9:S:1700000000.eml");
         assert_eq!(with_uid("7", 9), "9");
+    }
+
+    #[test]
+    fn find_by_uid_matches_either_separator_and_rejects_prefixes_and_legacy_names() {
+        for sep in [':', ';'] {
+            let tmp = tempfile::tempdir().unwrap();
+            let cur = tmp.path();
+            // A longer uid that has `101` as a textual prefix must not match.
+            fs::write(cur.join(format!("1010{sep}2,S.eml")), b"x").unwrap();
+            // Legacy names (no info separator at all) must not match either.
+            fs::write(cur.join("12.eml"), b"x").unwrap();
+            fs::write(cur.join("13_S.eml"), b"x").unwrap();
+            assert_eq!(find_by_uid(cur, 101), None, "sep={sep}");
+            assert_eq!(find_by_uid(cur, 12), None, "sep={sep}");
+            assert_eq!(find_by_uid(cur, 13), None, "sep={sep}");
+
+            // The real file under this separator is still found.
+            let real = cur.join(format!("101{sep}2,S.eml"));
+            fs::write(&real, b"x").unwrap();
+            assert_eq!(find_by_uid(cur, 101), Some(real), "sep={sep}");
+        }
     }
 
     #[test]

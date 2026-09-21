@@ -402,7 +402,7 @@ const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename
 /// parsed message, because a flag change is a RENAME and the name is the truth
 /// — an unparseable message still has flags.
 pub fn flags_of(filename: &str) -> String {
-    let Some((_, rest)) = filename.split_once(":2,") else { return String::new() };
+    let Some(rest) = crate::maildir::info_flags(filename) else { return String::new() };
     rest.trim_end_matches(".eml").to_string()
 }
 

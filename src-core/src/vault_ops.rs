@@ -29,7 +29,7 @@ pub fn count_messages(dir: &Path) -> usize {
             let path = entry.path();
             if path.is_dir() {
                 walk(&path, count);
-            } else if entry.file_name().to_string_lossy().contains(":2,") {
+            } else if crate::maildir::has_info(&entry.file_name().to_string_lossy()) {
                 *count += 1;
             }
         }
