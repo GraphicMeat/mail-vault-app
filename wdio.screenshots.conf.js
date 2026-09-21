@@ -12,7 +12,7 @@
  */
 
 import { resolve, join } from 'path';
-import { mkdtempSync } from 'fs';
+import { mkdtempSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { spawn, execFileSync } from 'child_process';
 import { writeFileSync } from 'fs';
@@ -27,6 +27,7 @@ import {
 import { demoScenarios } from './scripts/screenshots/demoData.js';
 import { appCode } from './scripts/screenshots/locales.js';
 import { PREMIUM_BILLING_PROFILE } from './scripts/screenshots/premiumSeed.js';
+import { writeCorpus } from './scripts/screenshots/search50kCorpus.mjs';
 
 // SHOTS_LOCALE is a website directory name (`de`, `pt-br`, `zh`). It picks the
 // app language, the demo mailbox and the output directory together — one knob,
@@ -43,6 +44,12 @@ const ONBOARDING = process.env.SHOTS_ONBOARDING === '1';
 // runs every locale twice; dark keeps the existing paths and light writes a
 // `light/` subdirectory (scripts/screenshots/capture.js).
 const THEME = process.env.SHOTS_THEME === 'light' ? 'light' : 'dark';
+
+// SHOTS_SEARCH50K=1 runs the two 50,000-message search shots instead: the same
+// demo accounts, plus a vault of 50,000 messages seeded before the app boots
+// (scripts/screenshots/search50kCorpus.mjs). SHOTS_CORPUS_DIR points at a
+// pre-built corpus that is APFS-cloned in; without it the corpus is written here.
+const SEARCH50K = process.env.SHOTS_SEARCH50K === '1';
 
 const { DEMO_ACCOUNTS } = demoScenarios(APP_LOCALE);
 
@@ -168,9 +175,28 @@ function seedFrontendSettings(accounts) {
   console.log(`[shots] seeded ${path}`);
 }
 
+/**
+ * 50,000 messages in the first demo account's vault, before the app boots — the
+ * daemon's first index pass then builds the index over them, exactly as it would
+ * for someone whose archive is that big.
+ */
+function seedSearch50kVault(accountId) {
+  const maildir = join(appDataDir(dataDir), 'Maildir');
+  const template = process.env.SHOTS_CORPUS_DIR;
+  if (template) {
+    mkdirSync(maildir, { recursive: true });
+    // `cp -c` clones on APFS: near-instant and no extra disk per pass.
+    execFileSync('cp', ['-Rc', join(template, 'Maildir', accountId), maildir]);
+  } else {
+    writeCorpus(appDataDir(dataDir), accountId);
+  }
+  console.log(`[shots] seeded the 50,000-message vault for ${accountId}`);
+}
+
 export const config = {
   runner: 'local',
-  specs: [ONBOARDING ? './scripts/screenshots/onboarding-shots.js' : './scripts/screenshots/shots.js'],
+  specs: [ONBOARDING ? './scripts/screenshots/onboarding-shots.js'
+    : SEARCH50K ? './scripts/screenshots/search50k-shots.js' : './scripts/screenshots/shots.js'],
   maxInstances: 1,
   capabilities: [{
     browserName: 'wry',
@@ -204,6 +230,7 @@ export const config = {
     }
     const credentialsPath = seedAccounts(dataDir, accounts);
     seedFrontendSettings(accounts);
+    if (SEARCH50K) seedSearch50kVault(accounts[0].id);
 
     // capture.js pins the screenshot to the window owned by this exact binary —
     // see appPid() there. Without it a MailVault the user already has open is a
