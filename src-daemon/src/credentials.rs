@@ -9,6 +9,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use keyring::Entry;
 
@@ -65,16 +66,89 @@ pub fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, Strin
 }
 
 /// Guards every test (in this module or elsewhere in the crate, e.g.
-/// `server.rs`'s RPC-level sync.now test) that sets the process-global
-/// `MAILVAULT_TEST_CREDENTIALS` env var. Cargo runs a crate's tests on
-/// parallel threads by default; two tests setting this var to two different
-/// paths at once would race (one test's `resolve_account_credentials` could
-/// read the other's file). Take this lock for the env var's entire
-/// set-use-remove span.
+/// `server.rs`'s RPC-level sync.now test) that sets a process-global test env
+/// var this file reads (`MAILVAULT_TEST_CREDENTIALS`, `MAILVAULT_TEST_AI_KEY`
+/// below). Cargo runs a crate's tests on parallel threads by default; two
+/// tests setting the same var to two different values at once would race.
+/// Take this lock for the env var's entire set-use-remove span.
 #[cfg(test)]
 pub(crate) fn test_env_lock() -> &'static std::sync::Mutex<()> {
     static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
     LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+// ── AI endpoint API key (Phase 3b) ──────────────────────────────────────────
+//
+// A dedicated keychain entry, distinct from `CREDENTIALS_KEY`'s per-account
+// blob above: `ai.set_endpoint_key` writes here, `Provider::Endpoint`'s
+// generate call reads it. Never mixed into app.db, settings JSON, or a log
+// line — Ollama's OpenAI-compatible endpoint works fine with nothing stored
+// here at all (`resolve_ai_endpoint_key` reads that case as `Ok(None)`, not
+// an error).
+
+const AI_ENDPOINT_KEY_ENTRY: &str = "ai_endpoint_api_key";
+const AI_KEY_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// Same debug-only file bypass as `test_credentials_path` above, so tests
+/// don't have to touch a real OS keychain.
+#[cfg(debug_assertions)]
+fn test_ai_key_path() -> Option<PathBuf> {
+    std::env::var_os("MAILVAULT_TEST_AI_KEY").map(PathBuf::from)
+}
+
+#[cfg(not(debug_assertions))]
+fn test_ai_key_path() -> Option<PathBuf> {
+    None
+}
+
+fn store_ai_endpoint_key(key: &str) -> Result<(), String> {
+    if let Some(path) = test_ai_key_path() {
+        return std::fs::write(&path, key).map_err(|e| format!("failed to write test ai key file: {e}"));
+    }
+    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
+    entry.set_password(key).map_err(|e| format!("failed to write keychain: {e}"))
+}
+
+/// `Ok(None)` (not an error) means nothing has been stored yet — the normal
+/// state for an endpoint (e.g. Ollama) that needs no key at all.
+fn resolve_ai_endpoint_key() -> Result<Option<String>, String> {
+    if let Some(path) = test_ai_key_path() {
+        return match std::fs::read_to_string(&path) {
+            Ok(s) => Ok(Some(s)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(e) => Err(format!("failed to read test ai key file: {e}")),
+        };
+    }
+    let entry = Entry::new(KEYRING_SERVICE, AI_ENDPOINT_KEY_ENTRY).map_err(|e| format!("failed to create keyring entry: {e}"))?;
+    match entry.get_password() {
+        Ok(pw) => Ok(Some(pw)),
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(e) => Err(format!("failed to read keychain: {e}")),
+    }
+}
+
+/// A keychain ACL can prompt the user and then block the reader until
+/// somebody answers — an API key this binary was never approved for is
+/// exactly that case. Never call `resolve_ai_endpoint_key`/
+/// `store_ai_endpoint_key` inline in an async fn; go through these guarded
+/// wrappers instead, which mirror `scheduled_send_worker::resolve_credentials`'s
+/// spawn_blocking + timeout shape.
+pub async fn resolve_ai_endpoint_key_guarded() -> Result<Option<String>, String> {
+    let read = tokio::task::spawn_blocking(resolve_ai_endpoint_key);
+    match tokio::time::timeout(AI_KEY_TIMEOUT, read).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(format!("the keychain read panicked: {e}")),
+        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+    }
+}
+
+pub async fn store_ai_endpoint_key_guarded(key: String) -> Result<(), String> {
+    let write = tokio::task::spawn_blocking(move || store_ai_endpoint_key(&key));
+    match tokio::time::timeout(AI_KEY_TIMEOUT, write).await {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => Err(format!("the keychain write panicked: {e}")),
+        Err(_) => Err("the keychain did not answer in time (it may be locked or waiting on a prompt)".to_string()),
+    }
 }
 
 #[cfg(test)]
@@ -132,5 +206,21 @@ mod tests {
         assert!(err.contains("acct-does-not-exist"));
 
         std::env::remove_var("MAILVAULT_TEST_CREDENTIALS");
+    }
+
+    #[tokio::test]
+    async fn ai_endpoint_key_round_trips_through_the_test_file_bypass() {
+        let _guard = test_env_lock().lock().unwrap_or_else(|e| e.into_inner());
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("ai_key");
+        std::env::set_var("MAILVAULT_TEST_AI_KEY", &path);
+
+        assert_eq!(resolve_ai_endpoint_key_guarded().await.unwrap(), None, "nothing stored yet reads as None, not an error");
+
+        store_ai_endpoint_key_guarded("sk-test-123".to_string()).await.unwrap();
+        assert_eq!(resolve_ai_endpoint_key_guarded().await.unwrap().as_deref(), Some("sk-test-123"));
+
+        std::env::remove_var("MAILVAULT_TEST_AI_KEY");
     }
 }

@@ -17,6 +17,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tracing::{error, info};
 
+pub(crate) mod ai;
 pub(crate) mod archive;
 pub(crate) mod backup;
 pub(crate) mod backup_zip;

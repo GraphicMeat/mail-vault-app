@@ -3,8 +3,12 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
+
+use crate::credentials;
+use crate::inference;
 
 // ── Model Registry ─────────────────────────────────────────────────────────
 
@@ -393,6 +397,221 @@ pub async fn get_status(state: &LlmState) -> LlmStatus {
     }
 }
 
+// ── Provider abstraction (Phase 3b) ─────────────────────────────────────────
+//
+// One `generate()` entry point every AI feature (Auto Tags, Quick Replies, AI
+// Compose) calls through, so the privacy invariant lives in exactly one
+// place: `Provider::Endpoint` is the ONLY arm below that ever constructs a
+// `reqwest::Client` or reaches the network. `LocalGguf` delegates to the
+// existing `InferenceEngine` (candle + a local tokenizer, no network client
+// anywhere in `inference.rs`); `AppleFm` spawns a local sidecar binary and
+// talks to it over its stdin/stdout, never a socket.
+
+/// Which backend `generate()` should use. Selection is a user setting owned
+/// by the frontend — the daemon takes this in every RPC's params and never
+/// persists a choice.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum Provider {
+    LocalGguf,
+    Endpoint { url: String, model: String },
+    AppleFm,
+}
+
+/// 60s: generous enough for a cold Apple Intelligence load (the probe's cold
+/// run was ~1.25s) plus a slow prompt, short enough that a hung helper can't
+/// wedge an `ai.generate` RPC forever.
+const FM_HELPER_TIMEOUT: Duration = Duration::from_secs(60);
+
+pub async fn generate(
+    provider: &Provider,
+    inference: &inference::InferenceEngine,
+    prompt: &str,
+    system: Option<&str>,
+    max_tokens: usize,
+) -> Result<String, String> {
+    match provider {
+        Provider::LocalGguf => {
+            let full_prompt = match system {
+                Some(s) if !s.is_empty() => format!("{s}\n\n{prompt}"),
+                _ => prompt.to_string(),
+            };
+            inference.infer(&full_prompt, max_tokens).await
+        }
+        Provider::Endpoint { url, model } => generate_via_endpoint(url, model, prompt, system, max_tokens).await,
+        Provider::AppleFm => generate_via_apple_fm(prompt, system, max_tokens).await,
+    }
+}
+
+async fn generate_via_endpoint(url: &str, model: &str, prompt: &str, system: Option<&str>, max_tokens: usize) -> Result<String, String> {
+    let body = mailvault_core::ai::chat_request_body(model, prompt, system, max_tokens);
+    let endpoint = format!("{}/chat/completions", url.trim_end_matches('/'));
+
+    let mut req = reqwest::Client::new().post(&endpoint).json(&body);
+    match credentials::resolve_ai_endpoint_key_guarded().await {
+        Ok(Some(key)) if !key.is_empty() => req = req.bearer_auth(key),
+        Ok(_) => {} // No key stored — fine for e.g. a local Ollama endpoint.
+        Err(e) => warn!("could not read the ai endpoint key, calling without one: {e}"),
+    }
+
+    let resp = req.send().await.map_err(|e| format!("endpoint request failed: {e}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("endpoint returned HTTP {status}: {text}"));
+    }
+    let json: serde_json::Value = resp.json().await.map_err(|e| format!("endpoint response was not JSON: {e}"))?;
+    mailvault_core::ai::parse_chat_response(&json)
+}
+
+#[cfg(target_os = "macos")]
+fn host_triple() -> &'static str {
+    if cfg!(target_arch = "aarch64") {
+        "aarch64-apple-darwin"
+    } else {
+        "x86_64-apple-darwin"
+    }
+}
+
+/// Locate the Apple FM helper sidecar. Mirrors `find_daemon_binary` in
+/// `src-tauri/src/main.rs` (packaged layout first, then dev build locations)
+/// — the daemon has no `AppHandle` to ask for a resource dir, so `cwd` stands
+/// in for it in dev, same as that function's `current_dir` fallback.
+#[cfg(target_os = "macos")]
+pub fn find_fm_helper_binary() -> Option<PathBuf> {
+    // 1. Next to this binary — packaged layout (Tauri strips the triple).
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join("mailvault-fm-helper");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 2. Dev: scripts/build-fm-helper.sh drops it in src-tauri/binaries/
+    // (it's a Swift binary — `cargo build` never produces it), but check
+    // target/{debug,release} too in case a future build step places it there.
+    let triple_name = format!("mailvault-fm-helper-{}", host_triple());
+    if let Ok(cwd) = std::env::current_dir() {
+        let candidate = cwd.join("src-tauri").join("binaries").join(&triple_name);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+        for profile in ["debug", "release"] {
+            let candidate = cwd.join("target").join(profile).join(&triple_name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn find_fm_helper_binary() -> Option<PathBuf> {
+    None
+}
+
+/// Spawn the helper, write one request line, read one reply line, kill it.
+///
+/// ponytail: one process per call, no reuse across requests or callers —
+/// simplest thing that can't leak state between them and needs no lifecycle
+/// management. Revisit with a long-lived child (the protocol's `id` field is
+/// already there to multiplex replies) if per-request spawn cost shows up in
+/// practice; the probe's cold run was ~1.25s, which is spawn + model load,
+/// not spawn overhead itself.
+#[cfg(target_os = "macos")]
+async fn run_fm_helper(helper: &Path, request_line: &str) -> Result<String, String> {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio::process::Command;
+
+    let mut child = Command::new(helper)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("failed to spawn fm helper: {e}"))?;
+
+    let mut stdin = child.stdin.take().ok_or_else(|| "fm helper stdin not piped".to_string())?;
+    let stdout = child.stdout.take().ok_or_else(|| "fm helper stdout not piped".to_string())?;
+
+    let round_trip = async {
+        stdin.write_all(request_line.as_bytes()).await.map_err(|e| format!("write to fm helper failed: {e}"))?;
+        stdin.write_all(b"\n").await.map_err(|e| format!("write to fm helper failed: {e}"))?;
+        stdin.flush().await.map_err(|e| format!("write to fm helper failed: {e}"))?;
+
+        let mut line = String::new();
+        BufReader::new(stdout).read_line(&mut line).await.map_err(|e| format!("read from fm helper failed: {e}"))?;
+        if line.is_empty() {
+            return Err("fm helper closed without answering".to_string());
+        }
+        Ok(line)
+    };
+
+    let result = match tokio::time::timeout(FM_HELPER_TIMEOUT, round_trip).await {
+        Ok(r) => r,
+        Err(_) => Err("Apple FM helper timed out".to_string()),
+    };
+    let _ = child.kill().await;
+    result
+}
+
+#[cfg(target_os = "macos")]
+async fn generate_via_apple_fm(prompt: &str, system: Option<&str>, max_tokens: usize) -> Result<String, String> {
+    let helper = find_fm_helper_binary().ok_or_else(|| "Apple FM helper not found".to_string())?;
+    let req = mailvault_core::ai::FmRequest::generate("1", prompt, system, max_tokens);
+    let reply = run_fm_helper(&helper, &mailvault_core::ai::encode_fm_request(&req)).await?;
+    let resp = mailvault_core::ai::decode_fm_response(&reply)?;
+    if resp.ok {
+        resp.text.ok_or_else(|| "Apple FM helper answered ok with no text".to_string())
+    } else {
+        Err(resp.error.or(resp.reason).unwrap_or_else(|| "Apple FM helper failed".to_string()))
+    }
+}
+
+// A machine/build without Apple's framework at all: never spawns anything,
+// answers exactly like a helper that reported itself unavailable would.
+#[cfg(not(target_os = "macos"))]
+async fn generate_via_apple_fm(_prompt: &str, _system: Option<&str>, _max_tokens: usize) -> Result<String, String> {
+    Err("Apple Intelligence is only available on macOS".to_string())
+}
+
+#[cfg(target_os = "macos")]
+async fn apple_fm_status() -> mailvault_core::ai::ProviderStatus {
+    let Some(helper) = find_fm_helper_binary() else {
+        return mailvault_core::ai::apple_fm_status(false, None);
+    };
+    let req = mailvault_core::ai::FmRequest::availability("1");
+    match run_fm_helper(&helper, &mailvault_core::ai::encode_fm_request(&req)).await {
+        Ok(reply) => match mailvault_core::ai::decode_fm_response(&reply) {
+            Ok(resp) => mailvault_core::ai::apple_fm_status(true, Some(&resp)),
+            Err(_) => mailvault_core::ai::apple_fm_status(true, None),
+        },
+        Err(_) => mailvault_core::ai::apple_fm_status(true, None),
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn apple_fm_status() -> mailvault_core::ai::ProviderStatus {
+    mailvault_core::ai::apple_fm_status(false, None)
+}
+
+/// Status for every provider, for `ai.providers`. `endpoint_url` is whatever
+/// the frontend currently has typed into the endpoint URL setting, if
+/// anything — the daemon does not persist it, so a caller that wants an
+/// accurate `endpoint` entry passes it every time.
+pub async fn providers_status(state: &LlmState, endpoint_url: Option<&str>) -> Vec<mailvault_core::ai::ProviderStatus> {
+    let active = state.active_model_id.lock().await.clone();
+    let any_downloaded = list_models(&state.data_dir, active.as_deref()).iter().any(|m| m.downloaded);
+    vec![
+        mailvault_core::ai::local_gguf_status(any_downloaded),
+        mailvault_core::ai::endpoint_status(endpoint_url),
+        apple_fm_status().await,
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -436,5 +655,74 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mailvault-test-llm-unknown-{}", uuid::Uuid::new_v4()));
         let result = delete_model(&dir, "nonexistent-model");
         assert!(result.is_err());
+    }
+
+    // ── Provider abstraction: privacy invariant ─────────────────────────
+    //
+    // `Provider::Endpoint` is the only arm of `generate()`'s match that
+    // touches `reqwest` at all — these tests exercise the other two and
+    // check the result never looks like a network attempt got made.
+
+    #[tokio::test]
+    async fn local_gguf_never_reaches_the_network() {
+        let engine = inference::InferenceEngine::new();
+        // No model loaded — this must fail from InferenceEngine itself,
+        // near-instantly, never having constructed an HTTP client.
+        let err = tokio::time::timeout(Duration::from_millis(500), generate(&Provider::LocalGguf, &engine, "hi", None, 8))
+            .await
+            .expect("LocalGguf must resolve near-instantly with no model loaded")
+            .unwrap_err();
+        assert!(err.contains("No model loaded"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn apple_fm_answers_or_refuses_within_its_own_timeout_never_via_the_endpoint_path() {
+        // Runs the real sidecar on a checkout that has one built (this repo
+        // ships `src-tauri/binaries/mailvault-fm-helper-*`, see
+        // docs/plans' Phase 3a-bis probe); skips cleanly everywhere else
+        // rather than asserting on a binary that may not exist.
+        let Some(_helper) = find_fm_helper_binary() else {
+            eprintln!("skipping apple_fm_answers_or_refuses_within_its_own_timeout: no fm-helper binary in this checkout");
+            return;
+        };
+        let engine = inference::InferenceEngine::new();
+        let result = tokio::time::timeout(
+            FM_HELPER_TIMEOUT + Duration::from_secs(5),
+            generate(&Provider::AppleFm, &engine, "Reply with exactly: OK", None, 16),
+        )
+        .await
+        .expect("must resolve within its own 60s timeout, never hang past it");
+
+        // Whatever it answers (a real reply, or "unavailable" on this
+        // hardware/OS), the error must never be reqwest's shape — proving
+        // this path never fell through to generate_via_endpoint.
+        if let Err(e) = &result {
+            let lowered = e.to_lowercase();
+            assert!(!lowered.contains("endpoint returned") && !lowered.contains("endpoint request failed"), "{e}");
+        }
+    }
+
+    #[tokio::test]
+    async fn providers_status_is_degraded_but_not_erroring_with_nothing_configured() {
+        let dir = std::env::temp_dir().join(format!("mailvault-test-llm-providers-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&dir).unwrap();
+        let state = LlmState::new(dir.clone());
+
+        let statuses = providers_status(&state, None).await;
+        assert_eq!(statuses.len(), 3);
+
+        let local = statuses.iter().find(|s| s.provider == "localGguf").unwrap();
+        assert!(!local.available, "no model downloaded in a fresh temp dir");
+        assert_eq!(local.reason, "no model downloaded");
+
+        let endpoint = statuses.iter().find(|s| s.provider == "endpoint").unwrap();
+        assert!(!endpoint.available);
+        assert_eq!(endpoint.reason, "not configured");
+
+        // appleFm's answer depends on this host — just check it never errors
+        // the whole call, i.e. the list always comes back complete.
+        assert!(statuses.iter().any(|s| s.provider == "appleFm"));
+
+        let _ = fs::remove_dir_all(&dir);
     }
 }

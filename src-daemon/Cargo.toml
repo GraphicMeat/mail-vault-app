@@ -14,7 +14,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 mailparse = "0.15"
 rusqlite = { version = "0.40", features = ["bundled"] }
-tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "rt-multi-thread", "macros", "signal"] }
+tokio = { version = "1", features = ["sync", "net", "io-util", "time", "rt", "rt-multi-thread", "macros", "signal", "process"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tracing-appender = "0.2"
