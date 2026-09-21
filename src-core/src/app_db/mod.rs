@@ -17,6 +17,7 @@ pub mod locations;
 pub mod ops;
 pub mod stats;
 pub mod tags;
+pub mod views;
 
 pub use db::{handle, with};
 pub use rusqlite::Connection;

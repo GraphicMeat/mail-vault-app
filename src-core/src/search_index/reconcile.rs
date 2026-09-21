@@ -354,7 +354,10 @@ fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]
                 tx.prepare_cached("DELETE FROM messages WHERE id = ?1")?.execute([id])?;
             }
             Some(filename) => {
-                tx.prepare_cached("UPDATE messages SET filename = ?1 WHERE id = ?2")?.execute(params![filename, id])?;
+                // The flags ride the name, so a rename is how a star, a read
+                // receipt or an archive reaches the index at all.
+                tx.prepare_cached("UPDATE messages SET filename = ?1, flags = ?2 WHERE id = ?3")?
+                    .execute(params![filename, flags_of(filename), id])?;
             }
         }
     }
@@ -362,14 +365,23 @@ fn apply_removals_and_renames(conn: &mut Connection, ops: &[(i64, Option<&str>)]
 }
 
 const UPSERT: &str = "INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc,
-    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json)
-  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+    from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags)
+  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
   ON CONFLICT(account_id, vault_dir, uid) DO UPDATE SET filename=excluded.filename, size=excluded.size,
     mtime_ns=excluded.mtime_ns, message_id=excluded.message_id, date_utc=excluded.date_utc,
     from_addr_lc=excluded.from_addr_lc, from_name_lc=excluded.from_name_lc, subject_lc=excluded.subject_lc,
     addrs_lc=excluded.addrs_lc, has_attachments=excluded.has_attachments, body_state=excluded.body_state,
-    row_json=excluded.row_json
+    row_json=excluded.row_json, flags=excluded.flags
   RETURNING id";
+
+/// The Maildir flag letters a vault file name carries, as stored: the part
+/// after `:2,` with the extension off. Kept here rather than derived from the
+/// parsed message, because a flag change is a RENAME and the name is the truth
+/// — an unparseable message still has flags.
+pub fn flags_of(filename: &str) -> String {
+    let Some((_, rest)) = filename.split_once(":2,") else { return String::new() };
+    rest.trim_end_matches(".eml").to_string()
+}
 
 /// One transaction per batch. `docs` bodies are already capped (or emptied
 /// when bodies are off) by the caller.
@@ -413,6 +425,7 @@ fn commit_batch(
                     d.has_attachments,
                     body_state,
                     d.row_json,
+                    flags_of(&file.filename),
                 ],
                 |r| r.get(0),
             )?;
@@ -777,8 +790,31 @@ mod tests {
         assert_eq!((s.renamed, s.parsed), (1, 0));
         assert_eq!(n.load(Ordering::SeqCst), 1);
         let g = crate::search_index::lock(&v.db);
-        let name: String = g.as_ref().unwrap().query_row("SELECT filename FROM messages WHERE uid = 1", [], |r| r.get(0)).unwrap();
+        let (name, flags): (String, String) = g
+            .as_ref()
+            .unwrap()
+            .query_row("SELECT filename, flags FROM messages WHERE uid = 1", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
         assert_eq!(name, "1:2,S.eml");
+        // A star or a read receipt IS a rename, and a saved view filtering on
+        // Starred reads this column. Leaving it at the parse-time value would
+        // make every flag change invisible until the file was rewritten.
+        assert_eq!(flags, "S");
+    }
+
+    #[test]
+    fn an_indexed_message_carries_the_flags_its_file_name_spells() {
+        let v = vault();
+        put(&v, "a1", "INBOX", "1:2,FS.eml", &eml("Starred", "body"));
+        put(&v, "a1", "INBOX", "2:2,.eml", &eml("Plain", "body"));
+        let n = AtomicUsize::new(0);
+        run(&v, "a1", "INBOX", ON, &n);
+        let g = crate::search_index::lock(&v.db);
+        let flags = |uid: u32| -> String {
+            g.as_ref().unwrap().query_row("SELECT flags FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(flags(1), "FS");
+        assert_eq!(flags(2), "");
     }
 
     #[test]

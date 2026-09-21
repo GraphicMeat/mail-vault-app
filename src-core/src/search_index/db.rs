@@ -4,7 +4,7 @@ use std::path::Path;
 
 pub const DB_DIR: &str = "search_index";
 pub const DB_FILE: &str = "index.db";
-pub const SCHEMA_VERSION: i64 = 2;
+pub const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA_V1: &str = "
 CREATE TABLE messages (
@@ -53,6 +53,22 @@ CREATE TABLE attachments (
   PRIMARY KEY (message_row, part_index)
 );
 CREATE INDEX attachments_pending ON attachments (state) WHERE state = 'pending';
+";
+
+/// Saved views filter on what a message's flags say (Starred, unread,
+/// answered), and the index never held them: the flags live in the Maildir
+/// file name, and `index_doc_from_light` strips them out of `row_json`.
+///
+/// The backfill reads them straight back out of the file names already
+/// recorded, so an existing index gains the column without re-reading a single
+/// message off disk. `messages_msgid` is for looking a row up by identity,
+/// which is how a view filtered by tag finds its messages.
+const SCHEMA_V3: &str = "
+ALTER TABLE messages ADD COLUMN flags TEXT NOT NULL DEFAULT '';
+UPDATE messages SET flags = CASE
+  WHEN instr(filename, ':2,') > 0 THEN replace(substr(filename, instr(filename, ':2,') + 3), '.eml', '')
+  ELSE '' END;
+CREATE INDEX messages_msgid ON messages (account_id, message_id);
 ";
 
 #[derive(Debug)]
@@ -170,13 +186,19 @@ fn migrate(conn: &Connection) -> Result<(), Fail> {
         ))
         .map_err(schema_sql)?;
     }
+    if version < 3 {
+        conn.execute_batch(&format!(
+            "BEGIN; {SCHEMA_V3} INSERT OR REPLACE INTO meta(key, value) VALUES ('schema_version', '3'); COMMIT;"
+        ))
+        .map_err(schema_sql)?;
+    }
     Ok(())
 }
 
 fn validate_schema(conn: &Connection) -> Result<(), Fail> {
     for query in [
         "SELECT key, value FROM meta LIMIT 0",
-        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json FROM messages LIMIT 0",
+        "SELECT id, account_id, vault_dir, uid, filename, size, mtime_ns, message_id, date_utc, from_addr_lc, from_name_lc, subject_lc, addrs_lc, has_attachments, body_state, row_json, flags FROM messages LIMIT 0",
         "SELECT account_id, vault_dir, scanned_at, file_count FROM mailbox_scan LIMIT 0",
         "SELECT message_row, part_index, filename, mime, size, state, text FROM attachments LIMIT 0",
         "SELECT rowid, subject, addrs, body, attach FROM msg_fts LIMIT 0",
@@ -341,9 +363,39 @@ mod tests {
             let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = ?1", [table], |r| r.get(0)).unwrap();
             assert_eq!(n, 1, "{table}");
         }
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
         assert!(tmp.path().join("search_index/index.db").exists());
         assert!(!tmp.path().join("search_index/index.db-shm").exists(), "exclusive mode must not create a shared-memory file");
+    }
+
+    /// Saved views filter on flags (Starred, unread, answered), which the
+    /// index never held: `index_doc_from_light` strips them from `row_json`
+    /// because they live in the file name. A v2 index already holds those file
+    /// names, so the column is backfilled rather than waiting for a rebuild
+    /// that would re-read every message on disk.
+    #[test]
+    fn a_v2_index_gains_flags_read_back_out_of_the_file_names_it_holds() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join(DB_DIR)).unwrap();
+        {
+            let conn = Connection::open(tmp.path().join(DB_DIR).join(DB_FILE)).unwrap();
+            conn.execute_batch(&format!(
+                "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                 {SCHEMA_V1}{SCHEMA_V2}
+                 INSERT INTO meta(key, value) VALUES ('schema_version', '2');
+                 INSERT INTO messages (account_id, vault_dir, uid, filename, size, mtime_ns, date_utc)
+                   VALUES ('a', 'INBOX', 7, '7:2,FS.eml', 0, 0, 0),
+                          ('a', 'INBOX', 8, '8.eml', 0, 0, 0);"
+            ))
+            .unwrap();
+        }
+        let conn = open(tmp.path()).unwrap();
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
+        let flags = |uid: u32| -> String {
+            conn.query_row("SELECT flags FROM messages WHERE uid = ?1", [uid], |r| r.get(0)).unwrap()
+        };
+        assert_eq!(flags(7), "FS");
+        assert_eq!(flags(8), "", "a file name with no flag part carries no flags");
     }
 
     #[test]
@@ -383,7 +435,7 @@ mod tests {
     fn v2_migration_adds_attachments_table_and_bumps_version() {
         let tmp = tempfile::tempdir().unwrap();
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
         let n: i64 = conn.query_row("SELECT count(*) FROM sqlite_master WHERE name = 'attachments'", [], |r| r.get(0)).unwrap();
         assert_eq!(n, 1);
     }
@@ -409,7 +461,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(tmp.path()).unwrap();
-        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("2"));
+        assert_eq!(meta_get(&conn, "schema_version").as_deref(), Some("3"));
         let rows: i64 = conn.query_row("SELECT count(*) FROM messages", [], |r| r.get(0)).unwrap();
         assert_eq!(rows, 1, "v1 rows survive the migration to v2");
         conn.execute(

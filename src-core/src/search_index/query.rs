@@ -31,15 +31,42 @@ pub struct SearchRequest {
     pub query: String,
     /// Server paths; sanitized here.
     pub mailboxes: Option<Vec<String>>,
+    /// Server paths to leave out, whatever else matched — how a view says
+    /// "not Trash, not Spam". Applied after `mailboxes`.
+    pub mailboxes_excluded: Vec<String>,
     pub sender: Option<String>,
     /// Unix seconds, inclusive.
     pub date_from: Option<i64>,
     /// Unix seconds, inclusive.
     pub date_to: Option<i64>,
     pub has_attachments: bool,
+    /// Saved-view filters. `None` leaves the flag alone; `Some(true)` demands
+    /// it. Flags are the Maildir letters the file name carries (`S` seen,
+    /// `F` flagged, `R` replied), which is the only place they live.
+    pub unread: Option<bool>,
+    pub starred: Option<bool>,
+    pub answered: Option<bool>,
+    /// Keep a message only if one of these appears among its addresses. Used
+    /// by "Needs reply" for the account's own address; matched against
+    /// `addrs_lc`, which merges To, Cc, Bcc and Reply-To, so a message that
+    /// only Cc'd you counts.
+    pub to_any: Vec<String>,
+    /// Drop a message sent by any of these. "Needs reply" excludes your own
+    /// sent mail this way.
+    pub from_none: Vec<String>,
+    /// Restrict to these identities (`app_db::identity::msg_key`). This is how
+    /// a view filtered by tag or by a custom field narrows: the identities come
+    /// from `app.db`, the rows from here. `Some(empty)` matches nothing, which
+    /// is what a tag nobody has used means.
+    pub msg_keys: Option<Vec<String>>,
     /// Default 500, max 2000.
     pub limit: Option<usize>,
 }
+
+/// The `msg_key` of a row, in SQL: the `Message-ID` without its angle
+/// brackets, else the mailbox and uid. Mirrors `app_db::identity::msg_key`.
+const MSG_KEY_SQL: &str =
+    "COALESCE(NULLIF(trim(m.message_id, '<> '), ''), 'u:' || m.vault_dir || ':' || m.uid)";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchHit {
@@ -178,6 +205,10 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
         clauses.push(format!("m.vault_dir IN ({})", vec!["?"; boxes.len()].join(",")));
         args.extend(boxes.iter().map(|b| Value::Text(vault_dir_name(b))));
     }
+    if !req.mailboxes_excluded.is_empty() {
+        clauses.push(format!("m.vault_dir NOT IN ({})", vec!["?"; req.mailboxes_excluded.len()].join(",")));
+        args.extend(req.mailboxes_excluded.iter().map(|b| Value::Text(vault_dir_name(b))));
+    }
     if let Some(sender) = req.sender.as_ref().map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()) {
         clauses.push("(m.from_addr_lc LIKE ? ESCAPE '\\' OR m.from_name_lc LIKE ? ESCAPE '\\')".into());
         args.push(Value::Text(like_pattern(&sender)));
@@ -193,6 +224,37 @@ pub fn search(conn: &rusqlite::Connection, req: &SearchRequest) -> Result<Search
     }
     if req.has_attachments {
         clauses.push("m.has_attachments = 1".into());
+    }
+    for (letter, wanted) in [('S', req.unread.map(|u| !u)), ('F', req.starred), ('R', req.answered)] {
+        let Some(wanted) = wanted else { continue };
+        clauses.push(format!("instr(m.flags, '{letter}') {} 0", if wanted { ">" } else { "=" }));
+    }
+    if !req.to_any.is_empty() {
+        let mut branches = Vec::new();
+        for address in &req.to_any {
+            branches.push("m.addrs_lc LIKE ? ESCAPE '\\'".to_string());
+            args.push(Value::Text(like_pattern(&address.trim().to_lowercase())));
+        }
+        clauses.push(format!("({})", branches.join(" OR ")));
+    }
+    for address in &req.from_none {
+        clauses.push("m.from_addr_lc NOT LIKE ? ESCAPE '\\'".into());
+        args.push(Value::Text(like_pattern(&address.trim().to_lowercase())));
+    }
+    if let Some(keys) = &req.msg_keys {
+        // A temp table rather than an `IN (?, ?, ...)`: a view's identity list
+        // is unbounded and SQLite's parameter limit is 999. Temp tables are
+        // per-connection, and the index holds exactly one.
+        conn.execute_batch("CREATE TEMP TABLE IF NOT EXISTS view_keys (k TEXT PRIMARY KEY); DELETE FROM view_keys;")
+            .map_err(|e| e.to_string())?;
+        {
+            let mut insert =
+                conn.prepare_cached("INSERT OR IGNORE INTO temp.view_keys(k) VALUES (?1)").map_err(|e| e.to_string())?;
+            for key in keys {
+                insert.execute([key]).map_err(|e| e.to_string())?;
+            }
+        }
+        clauses.push(format!("{MSG_KEY_SQL} IN (SELECT k FROM temp.view_keys)"));
     }
 
     let where_sql = clauses.join(" AND ");
@@ -299,7 +361,9 @@ mod tests {
             message_id: h("Message-ID"),
             date_utc: h("Date").and_then(|d| mailparse::dateparse(&d).ok()),
             from_addr: from.clone(), from_name: String::new(),
-            addrs: vec![from], subject: h("Subject").unwrap_or_default(),
+            // The production parser merges From, To, Cc, Bcc and Reply-To into
+            // `addrs`; the recipient half is what `to_any` reads.
+            addrs: vec![from, h("To").unwrap_or_default()], subject: h("Subject").unwrap_or_default(),
             body_text: m.get_body().unwrap_or_default(),
             has_attachments: h("X-Has-Attachment").is_some(),
             ..Default::default()
@@ -326,6 +390,94 @@ mod tests {
             reconcile_mailbox(&db, &root.join("Maildir"), &a, &d, IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
         }
         (tmp, db)
+    }
+
+    /// The fixture's files are all `:2,` with no flags, so a flag filter is
+    /// tested by renaming one the way a star does and reconciling again.
+    fn star(tmp: &tempfile::TempDir, db: &SharedConn, acct: &str, dir: &str, uid: u32, letters: &str) {
+        let root = tmp.path().to_path_buf();
+        let cur = root.join("Maildir").join(acct).join(dir).join("cur");
+        std::fs::rename(cur.join(format!("{uid}:2,.eml")), cur.join(format!("{uid}:2,{letters}.eml"))).unwrap();
+        reconcile_mailbox(db, &root.join("Maildir"), acct, dir, IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
+    }
+
+    #[test]
+    fn an_excluded_mailbox_is_left_out_whatever_else_matched() {
+        let (_tmp, db) = fixture();
+        let all = uids(&db, req("luke", ""));
+        let kept = uids(&db, SearchRequest { mailboxes_excluded: vec!["Projects/2026".into()], ..req("luke", "") });
+        assert_eq!(all.len(), 4);
+        assert_eq!(kept.len(), 3);
+        assert!(!kept.iter().any(|(dir, _)| dir == "Projects_2026"));
+    }
+
+    #[test]
+    fn starred_narrows_to_the_flagged_messages() {
+        let (tmp, db) = fixture();
+        star(&tmp, &db, "luke", "INBOX", 2, "FS");
+        let hits = uids(&db, SearchRequest { starred: Some(true), ..req("luke", "") });
+        assert_eq!(hits, vec![("INBOX".to_string(), 2)]);
+    }
+
+    #[test]
+    fn unread_is_the_absence_of_the_seen_flag() {
+        let (tmp, db) = fixture();
+        star(&tmp, &db, "luke", "INBOX", 2, "S");
+        let unread = uids(&db, SearchRequest { unread: Some(true), ..req("luke", "") });
+        assert!(!unread.contains(&("INBOX".to_string(), 2)), "uid 2 has been seen");
+        assert_eq!(unread.len(), 3, "the other three luke messages are unread");
+        let read = uids(&db, SearchRequest { unread: Some(false), ..req("luke", "") });
+        assert_eq!(read, vec![("INBOX".to_string(), 2)]);
+    }
+
+    #[test]
+    fn answered_filters_on_the_replied_flag() {
+        let (tmp, db) = fixture();
+        star(&tmp, &db, "luke", "INBOX", 1, "RS");
+        assert_eq!(uids(&db, SearchRequest { answered: Some(true), ..req("luke", "") }), vec![("INBOX".to_string(), 1)]);
+        let unanswered = uids(&db, SearchRequest { answered: Some(false), ..req("luke", "") });
+        assert_eq!(unanswered.len(), 3);
+    }
+
+    #[test]
+    fn to_any_matches_a_recipient_the_message_carries() {
+        let (_tmp, db) = fixture();
+        assert_eq!(uids(&db, SearchRequest { to_any: vec!["me@x.test".into()], ..req("luke", "") }).len(), 4);
+        assert!(uids(&db, SearchRequest { to_any: vec!["nobody@x.test".into()], ..req("luke", "") }).is_empty());
+    }
+
+    #[test]
+    fn from_none_drops_the_senders_it_names() {
+        let (_tmp, db) = fixture();
+        let hits = uids(&db, SearchRequest { from_none: vec!["billing@acme.test".into()], ..req("luke", "") });
+        assert!(!hits.contains(&("INBOX".to_string(), 2)));
+        assert_eq!(hits.len(), 3);
+    }
+
+    /// How a view filtered by tag finds its messages: the identities come from
+    /// `app.db`, the rows from here.
+    #[test]
+    fn msg_keys_restrict_the_result_to_those_identities() {
+        let (_tmp, db) = fixture();
+        let keys = vec!["luke.INBOX.2@x.test".to_string()];
+        assert_eq!(uids(&db, SearchRequest { msg_keys: Some(keys), ..req("luke", "") }), vec![("INBOX".to_string(), 2)]);
+    }
+
+    #[test]
+    fn a_message_with_no_message_id_is_reachable_by_its_mailbox_and_uid() {
+        let (tmp, db) = fixture();
+        let root = tmp.path().to_path_buf();
+        let cur = root.join("Maildir/luke/INBOX/cur");
+        std::fs::write(cur.join("9:2,.eml"), eml("No identity", "Ann <ann@x.test>", "Mon, 07 Sep 2026 10:00:00 +0000", "body")).unwrap();
+        reconcile_mailbox(&db, &root.join("Maildir"), "luke", "INBOX", IndexConfig { bodies: true, attachments: false, image_text: false }, &parse, &|| true, &mut |_| {}).unwrap();
+        let keys = vec!["u:INBOX:9".to_string()];
+        assert_eq!(uids(&db, SearchRequest { msg_keys: Some(keys), ..req("luke", "") }), vec![("INBOX".to_string(), 9)]);
+    }
+
+    #[test]
+    fn an_empty_identity_list_matches_nothing() {
+        let (_tmp, db) = fixture();
+        assert!(uids(&db, SearchRequest { msg_keys: Some(Vec::new()), ..req("luke", "") }).is_empty());
     }
 
     fn uids(db: &SharedConn, req: SearchRequest) -> Vec<(String, u32)> {
