@@ -667,7 +667,10 @@ impl SyncEngine {
             _ => true, // unknown on either side — don't force a full reload over it
         };
 
-        let cached_uid_next = cached.as_ref().and_then(|c| c.uid_next);
+        // The daemon's own copies throughout — see `CachedMeta`. Read once, so
+        // the cold-path gate and the delta arithmetic below cannot disagree
+        // about which UIDNEXT a legacy cache has.
+        let cached_uid_next = cached.as_ref().and_then(|c| c.sync_uid_next.or(c.uid_next));
         let can_delta = sidecar_count > 0 && uid_validity_ok && cached_uid_next.is_some();
 
         // ── Cold path: no usable cache — fetch the first page ──
@@ -710,22 +713,19 @@ impl SyncEngine {
             .as_ref()
             .and_then(|c| c.sync_total_emails.or(c.total_emails))
             .unwrap_or(0);
-        let cached_modseq = cached.as_ref().and_then(|c| c.highest_modseq);
+        let cached_modseq = cached
+            .as_ref()
+            .and_then(|c| c.sync_highest_modseq.or(c.highest_modseq));
         let server_next = server_uid_next.unwrap_or(cached_uid_next);
 
         // 1. New arrivals — UIDs at or above the last known UIDNEXT.
         let mut new_headers = Vec::new();
-        // The page fetched for a wide gap is the newest 500 of the mailbox, not
-        // 500 arrivals: most of it is already cached. Counted separately so the
-        // notification says what landed rather than what was re-read.
-        let mut arrivals = None;
         if server_next > cached_uid_next {
             let gap = server_next - cached_uid_next;
             if gap > MAX_DELTA_UID_GAP {
                 // Too far behind for a range fetch to be cheaper than a page.
                 let (headers, _t, _h, _s) =
                     imap::fetch_emails_page(session, mailbox, 1, 500).await?;
-                arrivals = Some(headers.iter().filter(|h| h.uid >= cached_uid_next).count());
                 new_headers = headers;
             } else {
                 let uids: Vec<u32> = (cached_uid_next..server_next).collect();
@@ -734,6 +734,23 @@ impl SyncEngine {
                 new_headers = headers;
             }
         }
+
+        // Of those, the ones that are really a DELIVERY. Two things disqualify
+        // a fetched header: it sits below the baseline (the page fetched for a
+        // wide gap is the newest 500 of the mailbox, not 500 arrivals), or the
+        // cache already holds it — the app fetches the same mail into the same
+        // cache, and announcing what it already put on screen is a second
+        // banner for one message. Read before the header write at the bottom,
+        // and only when something was fetched, so a quiet sync pays nothing.
+        let arrivals = if new_headers.is_empty() {
+            0
+        } else {
+            let have = cache_io(&io, |io| Ok(io.cached_uids())).await?;
+            new_headers
+                .iter()
+                .filter(|h| h.uid >= cached_uid_next && !have.contains(&h.uid))
+                .count()
+        };
 
         // 2. Flag changes — CONDSTORE tells us exactly which UIDs moved.
         let mut updated_flags = 0;
@@ -841,7 +858,7 @@ impl SyncEngine {
 
         Ok(SyncDelta {
             new_emails: new_count,
-            arrivals: arrivals.unwrap_or(new_count),
+            arrivals,
             updated_flags,
             total_emails: total,
             session_dirty,
@@ -1143,7 +1160,8 @@ impl CacheCtx {
         let value = serde_json::json!({
             "totalEmails": total, "uidValidity": uid_validity, "uidNext": uid_next,
             "highestModseq": highest_modseq, "lastReconcile": last_reconcile, "lastSynced": now_ms(),
-            "syncTotalEmails": sync_total,
+            "syncTotalEmails": sync_total, "syncUidNext": uid_next,
+            "syncHighestModseq": highest_modseq,
         });
         self.require_db(|conn| {
             mailvault_core::custody::cache::save_headers(conn, &self.account, &self.mailbox, &value.to_string())
@@ -1212,6 +1230,8 @@ fn cached_meta_from_json(text: &str) -> Option<CachedMeta> {
         highest_modseq: meta.get("highestModseq").and_then(|v| v.as_u64()),
         total_emails: meta.get("totalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
         sync_total_emails: meta.get("syncTotalEmails").and_then(|v| v.as_u64()).map(|v| v as u32),
+        sync_uid_next: meta.get("syncUidNext").and_then(|v| v.as_u64()).map(|v| v as u32),
+        sync_highest_modseq: meta.get("syncHighestModseq").and_then(|v| v.as_u64()),
         last_reconcile: meta.get("lastReconcile").and_then(|v| v.as_u64()),
     })
 }
@@ -1243,6 +1263,14 @@ struct CachedMeta {
     /// arithmetic come out even, and the expunge goes unnoticed until the 6h
     /// timer. The gate needs a number only its own bookkeeping moves.
     sync_total_emails: Option<u32>,
+    /// Likewise for the delta's other two inputs. The app writes `uidNext` and
+    /// `highestModseq` from its own STATUS as well, so the daemon reading them
+    /// would skip the arrivals — and the flag changes — the app had already
+    /// moved the marker past. Unlike `syncTotalEmails` these are never withheld:
+    /// a failed arrival or flag fetch aborts the whole sync before `write_meta`
+    /// runs, so there is no window where the marker moves past unread work.
+    sync_uid_next: Option<u32>,
+    sync_highest_modseq: Option<u64>,
     /// Epoch ms of the last UID SEARCH ALL reconcile. None = never reconciled,
     /// or the generation was dropped on a UIDVALIDITY change.
     last_reconcile: Option<u64>,
@@ -2371,6 +2399,107 @@ mod tests {
             server.commands()
         );
         assert_eq!(cached_count(&engine, "INBOX"), 10, "nothing fetched, nothing pruned");
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The sibling of the count baseline: the app writes `uidNext` into the same
+    /// shared metadata, from its own STATUS. A page-1 refresh that saw five
+    /// arrivals but cached only the newest two still moved the marker past all
+    /// five, and the daemon — reading that marker — fetched none of them, so
+    /// three messages had nowhere left to come from. The same write also made
+    /// the count gate fire for an arrival the daemon never accounted for, which
+    /// costs a full `UID FETCH 1:*` of the whole mailbox on every such refresh.
+    #[tokio::test]
+    async fn an_app_written_uidnext_cannot_hide_an_arrival_from_the_daemon() {
+        let dir = scratch_dir("app_written_uidnext");
+        let warm = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 20)));
+        let engine = engine_for(&dir);
+        engine.sync_account(&account_for(&warm), "INBOX").await;
+        assert_eq!(cached_count(&engine, "INBOX"), 20, "precondition: a warm cache");
+        drop(warm);
+
+        // Five arrived. The app refreshed first, cached the newest two, and
+        // wrote the server's UIDNEXT, its count and a fresh reconcile stamp.
+        let rows: Vec<_> = (24..=25u32)
+            .map(|uid| serde_json::json!({"uid":uid,"flags":[],"subject":format!("Message {uid}")}))
+            .collect();
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({
+                "emails": rows, "totalEmails": 25, "uidNext": 26, "lastReconcile": now_ms(),
+            }),
+        );
+
+        let server = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 25)));
+        let result = engine.sync_account(&account_for(&server), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let cached = cached_uid_set(&engine, "INBOX");
+        for uid in [21u32, 22, 23] {
+            assert!(cached.contains(&uid), "uid {} had nowhere else to come from", uid);
+        }
+        assert_eq!(cached_count(&engine, "INBOX"), 25);
+
+        // Only the three the cache did not already hold are a delivery: the two
+        // the app cached are already on screen, and announcing them again is a
+        // second banner for one message.
+        assert_eq!(result.new_emails, 5, "all five are re-read");
+        assert_eq!(result.arrivals, 3, "only the ones the cache did not hold are announced");
+
+        // And the count gate is satisfied by the arrivals it fetched itself.
+        assert_eq!(
+            server.count_commands("UID FETCH 1:*"),
+            0,
+            "an arrival the daemon fetched is not a divergence — no UID listing: {:?}",
+            server.commands()
+        );
+
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// The third key in that blob. The app writes `highestModseq` too, and the
+    /// daemon treats "modseq unchanged" as "no flags moved" — so an app refresh
+    /// that moved the marker made every flag change below it permanently
+    /// invisible to the daemon, on rows the app's own window does not cover.
+    #[tokio::test]
+    async fn an_app_written_modseq_cannot_hide_a_flag_change_from_the_daemon() {
+        let dir = scratch_dir("app_written_modseq");
+        let engine = engine_for(&dir);
+        let first = MockImap::start(Scenario::new().mailbox(synthetic_mailbox("INBOX", 10)));
+        engine.sync_account(&account_for(&first), "INBOX").await;
+        assert_eq!(cached_count(&engine, "INBOX"), 10);
+        drop(first);
+
+        app_wrote_meta(
+            &engine,
+            "INBOX",
+            serde_json::json!({"totalEmails": 10, "highestModseq": 50, "lastReconcile": now_ms()}),
+        );
+
+        // uid 5 was read and starred elsewhere since.
+        let mut changed = synthetic_mailbox("INBOX", 10);
+        {
+            let msg = changed.by_uid_mut(5).expect("uid 5");
+            msg.flags = vec!["\\Seen".to_string(), "\\Flagged".to_string()];
+            msg.modseq = 50;
+        }
+        changed.highest_modseq = 50;
+        let second = MockImap::start(Scenario::new().mailbox(changed));
+
+        let result = engine.sync_account(&account_for(&second), "INBOX").await;
+        assert!(result.success, "sync failed: {:?}", result.error);
+
+        let uid5 = with_store(&engine, |c| {
+            mailvault_core::custody::cache::load_by_uids(c, "acc1", "INBOX", &[5]).unwrap()
+        })
+        .remove(0);
+        assert_eq!(
+            uid5["flags"],
+            serde_json::json!(["\\Seen", "\\Flagged"]),
+            "the app moving the modseq marker must not make the change invisible"
+        );
 
         fs::remove_dir_all(&dir).unwrap();
     }
