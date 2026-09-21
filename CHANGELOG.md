@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Keep the conversation beside your reply.** Compose has a remembered toggle for reading the original message, or the thread you replied from, beside the message you are writing.
 - **Settings now lists the server actions MailVault still owes.** Background Daemon shows every delete, move or flag change your server has not accepted yet, with the reason it last failed, a Retry now button, and a Cancel for one that has been failing for too long.
 - **Search terms are highlighted in the message you open.** Opening a result now marks every occurrence of what you searched for inside the message body, in the reading pane, in a thread and in the full-window view. The highlight follows the query while you refine it.
 - **A result that only matched inside an attachment says so.** When the term is in an attached file and not in the message itself, the row's paperclip is highlighted instead of leaving you hunting for text that was never in the body.
@@ -11,6 +12,10 @@
 - **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
 
 ### Fixed
+- **Unfinished messages return as draft bubbles after a restart.** Compose keeps the message, attachments, sending identity and reply context so you can continue where you left off.
+- **Reply quotes the text you selected.** Selecting part of a message before Reply or Reply All quotes that passage. Without a selection, the whole original is quoted as before.
+- **Tab from Subject goes straight to the message editor.** Formatting controls remain available from the keyboard.
+- **Switching accounts keeps the email-list header steady.** Loading, empty folders and changing counts no longer move the list controls up and down.
 - **Search on large vaults is back to milliseconds.** Marking attachment-only hits made every search re-probe the index once per row, which took a fifth of a second to half a second on a 50,000-message vault. It is back to a few milliseconds.
 - **A delete the server refuses is retried instead of quietly coming back.** A failed delete used to put the row back on the list and forget the whole thing, so a dead connection was enough to undo a delete you had confirmed. It is now re-sent straight away, and if that fails too it stays queued and is retried on reconnect, every few minutes, and at the next launch.
 - **Deleting a search result takes it out of the results straight away.** A message deleted from a result list stayed on screen, still clickable, until the search was run again. It now disappears the moment it is deleted, the same way a moved message already did.

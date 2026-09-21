@@ -11,10 +11,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
-const { buildOutgoingMime } = vi.hoisted(() => ({
+const { buildOutgoingMime, saveLocalDraft } = vi.hoisted(() => ({
   buildOutgoingMime: vi.fn().mockResolvedValue({
     rawBase64: 'AAAA', messageId: '<mine@example.test>', rawSize: 4,
   }),
+  saveLocalDraft: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn(async () => () => {}) }));
@@ -37,12 +38,18 @@ vi.mock('framer-motion', () => ({
 // the quote and its text part, so they stay real.
 vi.mock('../RichTextEditor', async (importOriginal) => ({
   ...(await importOriginal()),
-  RichTextEditor: () => React.createElement('div', { 'data-testid': 'editor-stub' }),
+  RichTextEditor: ({ editorRef }) => {
+    const ref = React.useRef(null);
+    React.useEffect(() => {
+      editorRef.current = { chain: () => ({ focus: () => ({ run: () => ref.current?.focus() }) }) };
+    }, [editorRef]);
+    return React.createElement('div', { ref, tabIndex: -1, 'data-testid': 'editor-stub' });
+  },
 }));
 vi.mock('../ContactsPicker', () => ({ ContactsPickerButton: () => null, ContactsAutocomplete: () => null }));
 vi.mock('../../services/localDrafts', () => ({
   resolveDraftsMailbox: vi.fn().mockResolvedValue('Drafts'),
-  saveLocalDraft: vi.fn().mockResolvedValue(undefined),
+  saveLocalDraft,
   deleteLocalDraft: vi.fn().mockResolvedValue(undefined),
   newDraftUid: () => 1,
 }));
@@ -122,7 +129,6 @@ function openReply(replyTo) {
 }
 
 async function expandQuote() {
-  fireEvent.click(await screen.findByTestId('compose-quoted-toggle'));
   return screen.findByTestId('compose-quoted');
 }
 
@@ -139,10 +145,33 @@ beforeEach(() => {
   mail.sentEmails = [];
   mail.emails = [];
   buildOutgoingMime.mockClear();
+  saveLocalDraft.mockReset();
+  saveLocalDraft.mockResolvedValue(undefined);
 });
 afterEach(() => cleanup());
 
 describe('the quoted original in a reply', () => {
+  it('does not publish an autosave snapshot after unmount', async () => {
+    let resolveSave;
+    saveLocalDraft.mockImplementationOnce(() => new Promise(resolve => { resolveSave = resolve; }));
+    const onSaveState = vi.fn();
+    const { unmount } = render(<ComposeModal mode="new" initialData={{
+      to: 'recipient@example.test',
+      subject: 'Saved subject',
+      body: '<p>Saved body</p>',
+      _baseline: null,
+    }} onClose={() => {}} onMinimize={() => {}} onSaveState={onSaveState} />);
+
+    await waitFor(() => expect(saveLocalDraft).toHaveBeenCalledTimes(1));
+    unmount();
+    onSaveState.mockClear();
+    resolveSave();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onSaveState).not.toHaveBeenCalled();
+  });
+
   it('runs nothing from the original in the app window', async () => {
     openReply({
       ...original,
@@ -174,6 +203,45 @@ describe('the quoted original in a reply', () => {
     expect(shown.body.querySelector('b')?.textContent).toBe('much');
   });
 
+  it('shows full reading context by default and hides it with one toggle', async () => {
+    openReply(original);
+    const toggle = await screen.findByTestId('compose-context-toggle');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    expect(await screen.findByTestId('compose-context-panel')).not.toBeNull();
+    expect((await screen.findByTestId('compose-quoted')).querySelector('iframe')).not.toBeNull();
+
+    fireEvent.click(toggle);
+    expect((await screen.findByTestId('compose-context-toggle')).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByTestId('compose-context-panel')).toBeNull();
+  });
+
+  it('moves forward Tab from Subject into the editor but leaves Shift-Tab native', async () => {
+    openReply(original);
+    const subject = await screen.findByTestId('compose-subject');
+    const forward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    fireEvent(subject, forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId('editor-stub'));
+
+    const backward = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    fireEvent(subject, backward);
+    expect(backward.defaultPrevented).toBe(false);
+  });
+
+  it('keeps every originating thread message in reading context', async () => {
+    openReply({
+      ...original,
+      _threadContext: [
+        original,
+        { ...original, uid: 11, subject: 'Follow up', html: '<p>Second message</p>' },
+      ],
+    });
+    const frame = (await screen.findByTestId('compose-quoted')).querySelector('iframe');
+    const shown = new DOMParser().parseFromString(frame.getAttribute('srcdoc'), 'text/html');
+    expect(shown.body.textContent).toContain('Quote request');
+    expect(shown.body.textContent).toContain('Second message');
+  });
+
   it('quotes a plain-text original as the characters it holds', async () => {
     const text = `On Monday, Ann <ann@example.com> wrote:\n${BROKEN_IMG}`;
     const sent = await sendReplyTo({ ...original, html: '', text });
@@ -181,6 +249,13 @@ describe('the quoted original in a reply', () => {
     expect(sent.html).toContain('<p>On Monday, Ann &lt;ann@example.com&gt; wrote:</p>');
     expect(sent.html).not.toContain('<img');
     expect(sent.text.endsWith(`\n${text}`)).toBe(true);
+  });
+
+  it('sends only the selected reply excerpt while context keeps the full source', async () => {
+    const sent = await sendReplyTo({ ...original, _selectedQuoteHtml: 'only<br>this' });
+
+    expect(sent.html).toContain('only<br>this');
+    expect(sent.html).not.toContain(original.html);
   });
 
   it('writes the header fields into the quote as text', async () => {

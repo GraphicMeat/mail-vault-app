@@ -1,9 +1,13 @@
+// @vitest-environment jsdom
 import { describe, it, expect, afterAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
 import { setLocale } from '../../src/i18n/index.js';
 import { formatEmailDate } from '../../src/utils/dateFormat.js';
+import { MailboxHeaderSummary, MailboxCustodyStatus } from '../../src/components/EmailList.jsx';
 
 const SRC = resolve(dirname(fileURLToPath(import.meta.url)), '../../src');
 
@@ -39,5 +43,34 @@ describe('list chrome is localized', () => {
   it('does not hardcode the word emails beside the count', () => {
     const src = readFileSync(resolve(SRC, 'components/Sidebar.jsx'), 'utf-8');
     expect(src).not.toMatch(/\{totalEmails\.toLocaleString\(\)\}\s*emails/);
+  });
+
+  it('keeps summary and custody status slots through account loading', () => {
+    const longSummary = '1,234 messages across a very long mailbox scope that must not wrap the header';
+    const longStatus = '1,234 of 1,234 loaded messages are saved in your vault while this account finishes loading';
+    const renderHeaderDetails = (summary, vaultShare, vaultShareLabel) => React.createElement(React.Fragment, null,
+      React.createElement(MailboxHeaderSummary, {
+        summary,
+        scope: 'Across 42 folders',
+        dateRange: 'January 1, 2020 – September 21, 2026',
+      }),
+      React.createElement(MailboxCustodyStatus, { vaultShare, vaultShareLabel })
+    );
+    const { rerender } = render(renderHeaderDetails(longSummary, { pct: 100 }, longStatus));
+
+    const status = screen.getByTestId('email-list-custody-status');
+    expect(screen.getByTestId('email-list-count').getAttribute('title')).toBe(longSummary);
+    expect(screen.getByTestId('email-list-vault-share').getAttribute('title')).toBe(longStatus);
+
+    rerender(renderHeaderDetails('No messages', null, ''));
+
+    expect(screen.getByTestId('email-list-custody-status')).toBe(status);
+    expect(status.textContent).toBe('');
+  });
+
+  it('uses one-line summary and reserved custody status CSS contracts', () => {
+    const css = readFileSync(resolve(SRC, 'styles/index.css'), 'utf-8');
+    expect(css).toMatch(/\.mail-list-summary\s*\{[^}]*flex-wrap:\s*nowrap[^}]*min-height:/s);
+    expect(css).toMatch(/\.mail-list-custody-status\s*\{[^}]*min-height:/s);
   });
 });

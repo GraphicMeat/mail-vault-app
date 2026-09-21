@@ -46,6 +46,8 @@ import { getDarkReaderInlineScripts } from '../utils/darkReaderInject';
 import { getQuoteFoldingScript, getSignatureFoldingScript } from '../utils/iframeQuoteFolding';
 import { getEmailColors } from '../utils/mailChrome';
 import { openMailtoCompose } from '../utils/mailto';
+import { replySelection } from '../utils/replySelection';
+import { registerActiveReply } from '../utils/composeOpener';
 import { AddressText } from './email/AddressText';
 import { ReadDelayProgress } from './ReadDelayProgress';
 import { LocalMailLabels } from './LocalMailLabels';
@@ -112,6 +114,23 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
   const moveButtonRef = useRef(null);
   const confirmationReturnRef = useRef(null);
   const iframeRef = useRef(null);
+  const plainBodyRef = useRef(null);
+  const selectedReplyHtml = () => {
+    const frame = iframeRef.current;
+    return frame?.contentDocument
+      ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
+      : replySelection(plainBodyRef.current);
+  };
+  useEffect(() => {
+    if (selectedThread || !selectedEmail) return undefined;
+    const reply = (mode) => {
+      if (mode !== 'reply' && mode !== 'replyAll') return false;
+      onComposeReply?.(mode, { ...selectedEmail, _selectedQuoteHtml: selectedReplyHtml() });
+      return true;
+    };
+    registerActiveReply(reply);
+    return () => registerActiveReply(null);
+  }, [selectedThread, selectedEmail, onComposeReply]);
 
   const effectiveEmailTheme = emailThemeOverride ?? theme;
   const emailDarkMode = effectiveEmailTheme === 'dark';
@@ -629,7 +648,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         variant="single"
         expanded={headerExpanded}
         onToggle={() => setHeaderExpanded(!headerExpanded)}
-        onReply={() => onComposeReply?.('reply', selectedEmail)}
+        onReply={() => onComposeReply?.('reply', { ...selectedEmail, _selectedQuoteHtml: selectedReplyHtml() })}
         showRaw={showRaw}
         onToggleRaw={toggleRawSource}
         loadingRaw={loadingRaw}
@@ -644,8 +663,8 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
         <EmailActionBar
             email={selectedEmail}
             variant="single"
-            onReply={(email) => onComposeReply?.('reply', email)}
-            onReplyAll={(email) => onComposeReply?.('replyAll', email)}
+            onReply={(email) => onComposeReply?.('reply', { ...email, _selectedQuoteHtml: selectedReplyHtml() })}
+            onReplyAll={(email) => onComposeReply?.('replyAll', { ...email, _selectedQuoteHtml: selectedReplyHtml() })}
             onForward={(email) => onComposeReply?.('forward', email)}
             onArchive={(email, entry) => entry?.action === 'unarchive' || (typeof email.isArchived === 'boolean' ? email.isArchived : archivedEmailIds.has(email.uid))
               ? handleRemoveLocal(email) : handleSave(email)}
@@ -770,6 +789,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
             </div>
           ) : (
             <div
+              ref={plainBodyRef}
               className="email-content email-plain-body whitespace-pre-wrap rounded-lg"
               style={{
                 backgroundColor: emailColors.background,

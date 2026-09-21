@@ -130,6 +130,15 @@ function AttachmentPreview({ attachment, onRemove }) {
 // Fields of a received message go into the quote's HTML as text.
 const escapeHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
+function originalHtml(message, label) {
+  const fromAddress = message.from?.address || '';
+  const fromName = message.from?.name || '';
+  const originalDate = message.date ? formatDateTime(message.date) : '';
+  const originalTo = message.to?.map(recipient => recipient.address).join(', ') || '';
+  const header = `<p><strong>${label}</strong><br>From: ${escapeHtml(fromName)} &lt;${escapeHtml(fromAddress)}&gt;<br>Date: ${escapeHtml(originalDate)}<br>Subject: ${escapeHtml(message.subject || '')}<br>To: ${escapeHtml(originalTo)}</p>`;
+  return header + (message.html || textToHtml(message.text || ''));
+}
+
 // The message a reply answers: someone else's HTML, shown in the app's own
 // window, where withGlobalTauri puts the IPC bridge. The sandbox has no
 // allow-scripts, so nothing in the frame runs: no <script>, no onerror, no
@@ -181,6 +190,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const spellcheckEnabled = useSettingsStore(s => s.spellcheckEnabled ?? true);
   const addEmailTemplate = useSettingsStore(s => s.addEmailTemplate);
   const getOrderedAccounts = useSettingsStore(s => s.getOrderedAccounts);
+  const composeContextVisible = useSettingsStore(s => s.composeContextVisible ?? true);
+  const setComposeContextVisible = useSettingsStore(s => s.setComposeContextVisible);
   const accounts = getOrderedAccounts(rawAccounts);
   // Replies and forwards leave from the mailbox the message is in (falling back
   // to the one being read); a restored draft keeps its saved identity; a fresh
@@ -208,6 +219,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     identities = [...identities, { key: `${selectedAccountId} ${pickedFrom}`, accountId: selectedAccountId, address: pickedFrom }];
   }
   const composeFrom = pickedFrom || composeSendAs || selectedAccount?.email || '';
+  const actionReplyTo = replyTo || initialData?._replyTo || null;
 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
@@ -215,8 +227,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const [showTemplates, setShowTemplates] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
-  const [quotedExpanded, setQuotedExpanded] = useState(false);
   const [quotedHtml, setQuotedHtml] = useState('');
+  const [contextHtml, setContextHtml] = useState('');
+  const [showContext, setShowContext] = useState(() => initialData?._showContext ?? ((mode === 'reply' || mode === 'replyAll') && composeContextVisible));
   // WebKit reports a null relatedTarget on dragleave, so the old
   // `contains(relatedTarget)` check never worked — count enter/leave instead.
   const dragDepth = useRef(0);
@@ -225,6 +238,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const fileInputRef = useRef(null);
   const editorRef = useRef(null);
   const templatesRef = useRef(null);
+  const onSaveStateRef = useRef(onSaveState);
+  useEffect(() => { onSaveStateRef.current = onSaveState; }, [onSaveState]);
 
   // ── Autosaved draft (see services/localDrafts.js) ──
   // The vault draft this window owns. The uid is allocated on the first save
@@ -257,9 +272,18 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   const initialSnapshot = useRef(null);
   const replyTemplateApplied = useRef(false);
   const replyTemplateCurrentBody = useRef('');
+  const initializedRef = useRef(false);
+  const publishedSnapshotRef = useRef(false);
+  const aliveRef = useRef(true);
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => { aliveRef.current = false; };
+  }, []);
 
   // Initialize form based on mode and replyTo email
   useEffect(() => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
     const initForm = (next, { preserveSnapshot = false } = {}) => {
       if (!preserveSnapshot) {
         initialSnapshot.current = { to: next.to, subject: next.subject, body: next.body };
@@ -312,31 +336,31 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           setAttachments(initialData.attachments);
         }
         // Restore quoted content from minimized state
-        if (initialData._quotedHtml) {
-          setQuotedHtml(initialData._quotedHtml);
-        }
+        setQuotedHtml(initialData._quotedHtml || '');
+        setContextHtml(initialData._contextHtml || initialData._quotedHtml || '');
+        setShowContext(initialData._showContext ?? composeContextVisible);
       } else {
         initForm({ ...formData, body: signatureHtml });
       }
       return;
     }
 
-    const fromAddress = replyTo.from?.address || '';
-    const fromName = replyTo.from?.name || '';
     const originalSubject = replyTo.subject || '';
-    const originalDate = replyTo.date ? formatDateTime(replyTo.date) : '';
-    const originalTo = replyTo.to?.map(t => t.address).join(', ') || '';
-
-    // Build quoted content as HTML — stored separately for collapsible display
-    const quotedHeaderHtml = `<p><strong>${t('compose.originalMessage')}</strong><br>From: ${escapeHtml(fromName)} &lt;${escapeHtml(fromAddress)}&gt;<br>Date: ${escapeHtml(originalDate)}<br>Subject: ${escapeHtml(originalSubject)}<br>To: ${escapeHtml(originalTo)}</p>`;
-    const quotedBodyHtml = replyTo.html
-      ? replyTo.html
-      : textToHtml(replyTo.text || '');
+    const fullQuotedHtml = originalHtml(replyTo, t('compose.originalMessage'));
+    const quotedHeaderHtml = fullQuotedHtml.slice(0, fullQuotedHtml.indexOf('</p>') + 4);
+    const fullQuotedBodyHtml = fullQuotedHtml.slice(quotedHeaderHtml.length);
+    const quotedBodyHtml = replyTo._selectedQuoteHtml || fullQuotedBodyHtml;
+    const contextMessages = replyTo._threadContext?.length ? replyTo._threadContext : [replyTo];
+    const fullContextHtml = contextMessages.map(message => originalHtml(message, t('compose.originalMessage'))).join('<hr>');
 
     // Replies keep the original behind the collapsible toggle. A forward puts
     // it inline in the body, so storing it here as well would render the
     // toggle AND append the original a second time at send.
-    if (mode !== 'forward') setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
+    if (mode !== 'forward') {
+      setQuotedHtml(quotedHeaderHtml + quotedBodyHtml);
+      setContextHtml(fullContextHtml);
+      setShowContext(composeContextVisible);
+    }
 
     const replyBody = templateBody == null
       ? signatureHtml
@@ -369,7 +393,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         cc: '',
         bcc: '',
         subject: originalSubject.startsWith('Fwd:') ? originalSubject : t('compose.fwd', { originalSubject }),
-        body: signatureHtml + quotedHeaderHtml + quotedBodyHtml,
+        body: signatureHtml + quotedHeaderHtml + fullQuotedBodyHtml,
         inReplyTo: '',
         references: ''
       });
@@ -384,7 +408,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
         })));
       }
     }
-  }, [mode, replyTo, initialData, templateBody, selectedAccountId]);
+  }, [mode, replyTo, initialData, templateBody, selectedAccountId, composeContextVisible]);
 
   // Mine each account's Sent cache so the From list offers every address the
   // mailbox can actually send from, not just its login.
@@ -554,25 +578,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       // Capture compose state for undo
       const composeState = {
         mode,
-        replyTo,
-        initialData: {
-          to: formData.to,
-          cc: formData.cc,
-          bcc: formData.bcc,
-          subject: formData.subject,
-          body: formData.body,
-          inReplyTo: formData.inReplyTo,
-          references: formData.references,
-          attachments: [...attachments],
-          // Undo-send reopens compose: keep the account + From it was sent as.
-          _accountId: selectedAccountId,
-          _fromAddress: pickedFrom,
-          // An undone or failed send comes back to the same vault draft rather
-          // than starting a second one.
-          _baseline: initialSnapshot.current,
-          _draftUid: draftUidRef.current,
-          _draftMailbox: draftMailboxRef.current,
-        },
+        replyTo: actionReplyTo,
+        initialData: composeSnapshot(),
       };
 
       // The ONE staged identity of this outbox item: the vault uid the copy is
@@ -897,8 +904,8 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
           // Tell the server the original was answered / forwarded, the way
           // every other client on the account does. Fire-and-forget: the send
           // has already happened and a flag must never fail it.
-          if (mode === 'reply' || mode === 'replyAll') markAnswered(replyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
-          else if (mode === 'forward') markForwarded(replyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
+          if (mode === 'reply' || mode === 'replyAll') markAnswered(actionReplyTo).catch(e => console.warn('[compose] \\Answered not set:', e));
+          else if (mode === 'forward') markForwarded(actionReplyTo).catch(e => console.warn('[compose] $Forwarded not set:', e));
 
           // New composes default to the identity that actually sent last.
           useSettingsStore.getState().setLastComposeIdentity(freshAccount.id, fromAddress);
@@ -1030,6 +1037,57 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
     : (formData.to.trim() !== '' || formData.subject.trim() !== '' ||
        htmlToText(formData.body).trim() !== '' || attachments.length > 0);
 
+  const composeSnapshot = useCallback(() => {
+    // Allocate before either the session or vault debounce starts. A quit in
+    // their gap must resume the same local draft identity, not create another.
+    if (hasUserContent && !draftUidRef.current) draftUidRef.current = newDraftUid();
+    return {
+      to: formData.to,
+      cc: formData.cc,
+      bcc: formData.bcc,
+      subject: formData.subject,
+      body: formData.body,
+      inReplyTo: formData.inReplyTo,
+      references: formData.references,
+      attachments: [...attachments],
+      _quotedHtml: quotedHtml,
+      _contextHtml: contextHtml,
+      _showContext: showContext,
+      _replyTo: replyTo || initialData?._replyTo || null,
+      _accountId: selectedAccountId,
+      _fromAddress: pickedFrom,
+      _baseline: initialSnapshot.current,
+      _draftUid: draftUidRef.current,
+      _draftMailbox: draftMailboxRef.current,
+    };
+  }, [formData, attachments, quotedHtml, contextHtml, showContext, replyTo, initialData, selectedAccountId, pickedFrom, hasUserContent]);
+
+  const latestSnapshotRef = useRef(composeSnapshot);
+  latestSnapshotRef.current = composeSnapshot;
+  const publishSnapshot = useCallback(() => {
+    if (!aliveRef.current) return;
+    publishedSnapshotRef.current = true;
+    onSaveStateRef.current?.(latestSnapshotRef.current());
+  }, []);
+
+  const hasSessionState = publishedSnapshotRef.current || Boolean(initialData) || Boolean(
+    formData.to || formData.cc || formData.bcc || formData.subject || formData.body || attachments.length ||
+    selectedAccountId !== initialIdentity.accountId || pickedFrom !== initialIdentity.address
+  );
+  const sessionSignature = JSON.stringify([
+    formData.to, formData.cc, formData.bcc, formData.subject, formData.body,
+    attachments, quotedHtml, contextHtml, showContext, selectedAccountId, pickedFrom,
+  ]);
+
+  // Keep the UI session current independently of the vault draft write. App
+  // stores this snapshot without passing it back as `initialData`, so it cannot
+  // re-run this component's initialization effect while the user is typing.
+  useEffect(() => {
+    if (!hasSessionState || sending) return undefined;
+    const timer = setTimeout(publishSnapshot, 300);
+    return () => clearTimeout(timer);
+  }, [hasSessionState, sending, sessionSignature, publishSnapshot]);
+
   // ── Autosave into the vault's Drafts folder, 0.3s after typing stops ──
   //
   // The window is no longer the only copy of what the user wrote. Local only:
@@ -1100,6 +1158,9 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             snippet: text,
             hasAttachments: attachments.length > 0,
           });
+          // Mailbox resolution happens asynchronously. Publish the latest
+          // state now, not the body captured when this save began.
+          publishSnapshot();
         } catch (err) {
           // Typing must never be interrupted by a failed save. Clearing the
           // signature makes the next pause try again instead of assuming the
@@ -1110,7 +1171,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
       });
     }, 300);
     return () => clearTimeout(timer);
-  }, [formData, attachments, quotedHtml, hasUserContent, sending, selectedAccountId, composeFrom]);
+  }, [formData, attachments, quotedHtml, hasUserContent, sending, selectedAccountId, composeFrom, publishSnapshot]);
 
   /** Drop the vault draft this window owns — the message is being thrown away. */
   const discardDraft = useCallback(() => {
@@ -1199,25 +1260,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
   // Save editor state before minimizing so it persists across unmount/remount
   const handleMinimize = () => {
     if (onSaveState) {
-      onSaveState({
-        to: formData.to,
-        cc: formData.cc,
-        bcc: formData.bcc,
-        subject: formData.subject,
-        body: formData.body,
-        inReplyTo: formData.inReplyTo,
-        references: formData.references,
-        attachments: [...attachments],
-        _quotedHtml: quotedHtml,
-        _accountId: selectedAccountId,
-        _fromAddress: pickedFrom,
-        // The dirty baseline and the vault draft this window owns. Both have
-        // to survive the unmount, or the restored window forgets that it is
-        // still editing an existing draft.
-        _baseline: initialSnapshot.current,
-        _draftUid: draftUidRef.current,
-        _draftMailbox: draftMailboxRef.current,
-      });
+      publishSnapshot();
     }
     if (onMinimize) onMinimize();
   };
@@ -1389,6 +1432,15 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
                 data-testid="compose-subject"
                 value={formData.subject}
                 onChange={handleChange}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !e.shiftKey) {
+                    const editor = editorRef.current;
+                    if (editor?.chain) {
+                      e.preventDefault();
+                      editor.chain().focus().run();
+                    }
+                  }
+                }}
                 placeholder={t('compose.subject')}
                 spellCheck={spellcheckEnabled}
                 className="flex-1 bg-transparent text-mail-text placeholder-mail-text-muted
@@ -1416,6 +1468,7 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             </div>
           )}
           
+          <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
           {/* Body — Rich Text Editor */}
           <div
             className={`compose-editor relative flex-1 overflow-hidden flex flex-col ${dragging ? 'ring-2 ring-inset ring-mail-accent' : ''}`}
@@ -1460,30 +1513,40 @@ export function ComposeModal({ mode = 'new', replyTo = null, initialData = null,
             </div>
           )}
 
-          {/* Collapsible quoted original message */}
-          {quotedHtml && (
-            <div className="border-t border-mail-border">
+          {/* The full source remains reading context. The selected excerpt is
+              only the outgoing quote and never changes this panel. */}
+          {contextHtml && (
+            <div className={`border-t border-mail-border lg:border-t-0 ${showContext ? 'lg:border-l lg:w-80 lg:shrink-0 lg:overflow-y-auto' : ''}`}>
               <button
                 type="button"
-                data-testid="compose-quoted-toggle"
-                aria-expanded={quotedExpanded}
-                onClick={() => setQuotedExpanded(prev => !prev)}
+                data-testid="compose-context-toggle"
+                aria-pressed={showContext}
+                aria-expanded={showContext}
+                onClick={() => {
+                  const next = !showContext;
+                  setShowContext(next);
+                  setComposeContextVisible?.(next);
+                }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-xs text-mail-text-muted
                           hover:bg-mail-surface-hover transition-colors"
               >
                 <ChevronRight
                   size={14}
-                  className={`transition-transform ${quotedExpanded ? 'rotate-90' : ''}`}
+                  className={`transition-transform ${showContext ? 'rotate-90' : ''}`}
                 />
-                <span>{t('compose.showHideOriginalMessage', { action: quotedExpanded ? t('settings.backup.verify.hide') : t('compose.show') })}</span>
+                <span>{t('compose.showHideOriginalMessage', { action: showContext ? t('settings.backup.verify.hide') : t('compose.show') })}</span>
               </button>
-              {quotedExpanded && (
-                <div data-testid="compose-quoted" className="px-4 pb-3 max-h-[300px] overflow-y-auto">
-                  <QuotedOriginal html={quotedHtml} />
+              {showContext && (
+                <div data-testid="compose-context-panel" className="px-4 pb-3 max-h-[35vh] overflow-y-auto lg:max-h-none">
+                  <div data-testid="compose-quoted" className="pt-2">
+                    <QuotedOriginal html={contextHtml} />
+                  </div>
                 </div>
               )}
             </div>
           )}
+
+          </div>
 
           {/* Error */}
           {error && (

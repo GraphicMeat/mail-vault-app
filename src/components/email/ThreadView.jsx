@@ -40,6 +40,8 @@ import { LinkAlertIcon } from '../LinkAlertIcon';
 import { getEmailColors } from '../../utils/mailChrome';
 import { openMailtoCompose } from '../../utils/mailto';
 import { replyTarget } from '../../utils/replyTarget';
+import { replySelection } from '../../utils/replySelection';
+import { registerActiveReply } from '../../utils/composeOpener';
 import { describePurge } from '../../utils/custodyCopy';
 import { MoveToFolderDropdown } from '../MoveToFolderDropdown';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
@@ -51,9 +53,16 @@ import { ReadDelayProgress } from '../ReadDelayProgress';
 
 // ── Thread Email Item Content ────────────────────────────────────────────────
 
-function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme }) {
+function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, signatureDisplay, shouldShowSignature, effectiveTheme, selectionRef }) {
   const t = useT();
   const iframeRef = useRef(null);
+  const plainBodyRef = useRef(null);
+  selectionRef.current = () => {
+    const frame = iframeRef.current;
+    return frame?.contentDocument
+      ? replySelection(frame.contentDocument.body, frame.contentWindow?.getSelection?.())
+      : replySelection(plainBodyRef.current);
+  };
   const [quotesExpanded, setQuotesExpanded] = useState(false);
   const [sigExpanded, setSigExpanded] = useState(false);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -233,6 +242,7 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
         </div>
       ) : (
         <div
+          ref={plainBodyRef}
           className="email-content email-plain-body whitespace-pre-wrap mt-2 text-sm break-words overflow-hidden rounded-lg"
           style={{
             backgroundColor: emailColors.background,
@@ -295,11 +305,12 @@ function ThreadEmailItemContent({ email, loadedEmail, isLoading, loadError, sign
 
 // ── Thread Email Item (one email in a thread conversation view) ──────────────
 
-function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false }) {
+function ThreadEmailItem({ email, threadEmails = [], bodiesMapRef, registerListener, archivedEmailIds, signatureDisplay, shouldShowSignature, onComposeReply, onDelete, onDeleteEverywhere, onArchive, onToggleRead, onToggleFlag, onActionStart, saving = false, expanded, onToggle, compact = false }) {
   const t = useT();
 
   const [, forceUpdate] = useState(0);
   const [headerExpanded, setHeaderExpanded] = useState(false);
+  const selectionRef = useRef(() => '');
   const [showRaw, setShowRaw] = useState(false);
   const [rawSource, setRawSource] = useState(null);
   const [rawError, setRawError] = useState(null);
@@ -336,8 +347,16 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
 
   // The click, Reply, Reply All and Forward all quote this message; the body
   // is fetched first when the loader has not reached it yet.
-  const compose = (mode) => replyTarget(email, loadedEmail, useMailStore.getState())
-    .then(target => onComposeReply?.(mode, target));
+  const compose = async (mode) => {
+    const selectedHtml = mode === 'forward' ? '' : selectionRef.current();
+    const store = useMailStore.getState();
+    const target = await replyTarget(email, loadedEmail, store, selectedHtml);
+    const threadContext = await Promise.all(threadEmails.map(message => {
+      const loaded = bodiesMapRef.current.get(emailKey(message))?.email || null;
+      return replyTarget(message, loaded, store);
+    }));
+    onComposeReply?.(mode, { ...target, _threadContext: threadContext });
+  };
 
   // Both the header's "View Source" and the action bar's open the same panel.
   const toggleRawSource = async () => {
@@ -470,7 +489,7 @@ function ThreadEmailItem({ email, bodiesMapRef, registerListener, archivedEmailI
                 {rawError || atob(rawSource)}
               </pre>
             ) : (
-              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} />
+              <ThreadEmailItemContent email={email} loadedEmail={loadedEmail} isLoading={isLoading} loadError={loadError} signatureDisplay={signatureDisplay} shouldShowSignature={shouldShowSignature} effectiveTheme={effectiveTheme} selectionRef={selectionRef} />
             )}
           </div>
 
@@ -653,6 +672,20 @@ export function ThreadView({ thread, onComposeReply }) {
 
   const selectedEmail = sortedEmails.find(email => emailKey(email) === selectedMessage)
     || sortedEmails.find(email => emailKey(email) === newestKey);
+  useEffect(() => {
+    if (!selectedEmail) return undefined;
+    const reply = async (mode) => {
+      if (mode !== 'reply' && mode !== 'replyAll') return false;
+      const store = useMailStore.getState();
+      const target = await replyTarget(selectedEmail, bodiesMapRef.current.get(emailKey(selectedEmail))?.email || null, store);
+      const context = await Promise.all(sortedEmails.map(message =>
+        replyTarget(message, bodiesMapRef.current.get(emailKey(message))?.email || null, store)));
+      onComposeReply?.(mode, { ...target, _threadContext: context });
+      return true;
+    };
+    registerActiveReply(reply);
+    return () => registerActiveReply(null);
+  }, [selectedEmail, sortedEmails, bodiesMapRef, onComposeReply]);
   const THREAD_ROW_HEIGHT = readerLayout === 'timeline' ? 72 : 56;
   const virtualizer = useVirtualizer({
     count: sortedEmails.length,
@@ -794,6 +827,7 @@ export function ThreadView({ thread, onComposeReply }) {
                   onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(email)]: !(previous[emailKey(email)] ?? isNewest) }))}
                   compact={readerLayout === 'compact'}
                   email={email}
+                  threadEmails={sortedEmails}
                   bodiesMapRef={bodiesMapRef}
                   registerListener={registerListener}
                   archivedEmailIds={archivedEmailIds}
@@ -816,7 +850,7 @@ export function ThreadView({ thread, onComposeReply }) {
 
       {readerLayout === 'split' && selectedEmail && (
         <div className="min-w-0 min-h-0 overflow-auto border-mail-border thread-reader-detail">
-          <ThreadEmailItem key={emailKey(selectedEmail)} email={selectedEmail} expanded={expandedMessages[emailKey(selectedEmail)] ?? true}
+          <ThreadEmailItem key={emailKey(selectedEmail)} email={selectedEmail} threadEmails={sortedEmails} expanded={expandedMessages[emailKey(selectedEmail)] ?? true}
             onToggle={() => setExpandedMessages(previous => ({ ...previous, [emailKey(selectedEmail)]: !(previous[emailKey(selectedEmail)] ?? true) }))}
             bodiesMapRef={bodiesMapRef} registerListener={registerListener} archivedEmailIds={archivedEmailIds}
             signatureDisplay={signatureDisplay} shouldShowSignature={sigVisMap[selectedEmail.uid] !== false}

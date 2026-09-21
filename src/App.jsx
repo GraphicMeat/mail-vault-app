@@ -64,7 +64,8 @@ import { restoreManager } from './services/restoreManager.js';
 import { setComposeOpener } from './services/localDrafts';
 import { setMailtoComposeOpener, startMailtoBridge } from './utils/mailto';
 import { openNotificationTarget, startNotificationOpenBridge } from './utils/notificationOpen';
-import { registerComposeOpener } from './utils/composeOpener';
+import { openActiveReply, registerComposeOpener } from './utils/composeOpener';
+import { loadComposeSession, mergeComposeSession, saveComposeSession } from './services/composeSession';
 import { sameReply } from './utils/sameReply';
 import { openInBrowser } from './services/billingApi';
 import { faqUrl } from './services/faqUrl';
@@ -256,6 +257,26 @@ function App() {
   const [composeWindows, setComposeWindows] = useState([]);
   const composeIdRef = useRef(0);
 
+  // UI session is separate from settings and the vault draft. Hydrate before
+  // persisting so an empty first render cannot replace disk state.
+  const composeSessionHydrated = useRef(false);
+  useEffect(() => {
+    let alive = true;
+    loadComposeSession().then((windows) => {
+      if (!alive) return;
+      setComposeWindows(current => {
+        const merged = mergeComposeSession(current, windows);
+        composeIdRef.current = Math.max(composeIdRef.current, 0, ...merged.map(window => window.id || 0));
+        return merged;
+      });
+      composeSessionHydrated.current = true;
+    });
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => {
+    if (composeSessionHydrated.current) saveComposeSession(composeWindows);
+  }, [composeWindows]);
+
   // A reply already open on this message comes forward instead of stacking —
   // see utils/sameReply.js for why the header made that necessary.
   const openCompose = useCallback((state = {}) => {
@@ -272,15 +293,22 @@ function App() {
   }, []);
 
   const minimizeCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: true } : w));
+    setComposeWindows(prev => prev.map(w => w.id === id
+      ? { ...w, initialData: w.snapshot || w.initialData, minimized: true }
+      : w));
   }, []);
 
   const saveComposeState = useCallback((id, savedData) => {
-    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, initialData: savedData } : w));
+    setComposeWindows(prev => prev.map(w => {
+      if (w.id !== id || JSON.stringify(w.snapshot) === JSON.stringify(savedData)) return w;
+      return { ...w, snapshot: savedData };
+    }));
   }, []);
 
   const restoreCompose = useCallback((id) => {
-    setComposeWindows(prev => prev.map(w => w.id === id ? { ...w, minimized: false } : w));
+    setComposeWindows(prev => prev.map(w => w.id === id
+      ? { ...w, initialData: w.snapshot || w.initialData, minimized: false }
+      : w));
   }, []);
 
   // Clicking a draft row in the Drafts folder reopens it here rather than in
@@ -291,9 +319,12 @@ function App() {
   // it: two windows autosaving one vault uid interleave their writes, and the
   // loser's text is gone.
   const openDraftCompose = useCallback((initialData) => {
-    const already = composeWindows.find(w =>
-      w.initialData?._draftUid === initialData._draftUid &&
-      w.initialData?._draftMailbox === initialData._draftMailbox);
+    const already = composeWindows.find(w => {
+      const saved = w.snapshot || w.initialData;
+      return saved?._draftUid === initialData._draftUid &&
+        saved?._draftMailbox === initialData._draftMailbox &&
+        saved?._accountId === initialData._accountId;
+    });
     if (already) {
       restoreCompose(already.id);
       return;
@@ -435,12 +466,16 @@ function App() {
   useKeyboardShortcuts({
     compose: () => setComposeState({}),
     reply: () => {
-      const email = useMailStore.getState().selectedEmail;
-      if (email) setComposeState({ mode: 'reply', replyTo: email });
+      if (!openActiveReply('reply')) {
+        const email = useMailStore.getState().selectedEmail;
+        if (email) setComposeState({ mode: 'reply', replyTo: email });
+      }
     },
     replyAll: () => {
-      const email = useMailStore.getState().selectedEmail;
-      if (email) setComposeState({ mode: 'replyAll', replyTo: email });
+      if (!openActiveReply('replyAll')) {
+        const email = useMailStore.getState().selectedEmail;
+        if (email) setComposeState({ mode: 'replyAll', replyTo: email });
+      }
     },
     forward: () => {
       const email = useMailStore.getState().selectedEmail;
@@ -1057,7 +1092,7 @@ function App() {
         {composeWindows.filter(w => !w.minimized).map(w => (
           <ComposeModal
             key={w.id}
-            mode={w.initialData ? 'new' : (w.mode || 'new')}
+            mode={w.mode || 'new'}
             replyTo={w.initialData ? null : (w.replyTo || null)}
             initialData={w.initialData}
             templateBody={w.templateBody}

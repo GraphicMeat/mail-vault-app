@@ -6,8 +6,11 @@
 // utils/mailto.js use: App registers the opener, callers hand it a state.
 
 let _open = null;
+let _reply = null;
 
 export function registerComposeOpener(fn) { _open = fn; }
+export function registerActiveReply(fn) { _reply = fn; }
+export function openActiveReply(mode) { return _reply ? _reply(mode) !== false : false; }
 
 /**
  * Open a compose window. `state` is what App's compose state takes:

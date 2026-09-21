@@ -21,6 +21,14 @@ describe('replyTarget', () => {
     expect(resolveMessageBody).not.toHaveBeenCalled();
   });
 
+  it('keeps a selection captured before body loading with the resolved reply target', async () => {
+    resolveMessageBody.mockResolvedValue({ ok: true, email: { html: '<p>fetched</p>' } });
+
+    await expect(replyTarget(header, null, store, 'selected<br>lines')).resolves.toEqual({
+      ...header, html: '<p>fetched</p>', _selectedQuoteHtml: 'selected<br>lines',
+    });
+  });
+
   it('merges the resolved body over the header when nothing is loaded yet', async () => {
     resolveMessageBody.mockResolvedValue({ ok: true, email: { html: '<p>fetched</p>' } });
     const target = await replyTarget(header, null, store);

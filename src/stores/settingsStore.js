@@ -241,6 +241,9 @@ export const useSettingsStore = create(
       // Spellcheck while composing — the toolbar toggle writes here so the
       // choice outlives the compose window that made it.
       spellcheckEnabled: true,
+      // Remember whether replies show their reading context. Restored drafts
+      // carry their own value so their state is never changed by a later toggle.
+      composeContextVisible: true,
 
       // Email sync settings
       refreshInterval: 5, // minutes (0 = disabled)
@@ -715,6 +718,7 @@ export const useSettingsStore = create(
       setLastComposeIdentity: (accountId, address) => {
         set({ lastComposeIdentity: { accountId, address: (address || '').trim() } });
       },
+      setComposeContextVisible: (visible) => set({ composeContextVisible: Boolean(visible) }),
 
       // Account color management
       setAccountColor: (accountId, color) => {

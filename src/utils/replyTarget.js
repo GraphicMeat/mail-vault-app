@@ -13,9 +13,10 @@ import { resolveMessageBody } from '../services/export/bodyResolver';
  * with what the resolver finds (the fetched copy wins every field it
  * carries, the header keeps the rest); else the header untouched.
  */
-export async function replyTarget(header, loaded, store) {
-  if (loaded) return loaded;
+export async function replyTarget(header, loaded, store, selectedHtml = '') {
+  if (loaded) return selectedHtml ? { ...loaded, _selectedQuoteHtml: selectedHtml } : loaded;
   let res = null;
   try { res = await resolveMessageBody(header, store); } catch { res = null; }
-  return res?.ok ? { ...header, ...res.email } : header;
+  const target = res?.ok ? { ...header, ...res.email } : header;
+  return selectedHtml ? { ...target, _selectedQuoteHtml: selectedHtml } : target;
 }

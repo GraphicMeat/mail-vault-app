@@ -935,7 +935,9 @@ input[type="range"]::-moz-range-thumb:hover {
 /* Mail workspace: stable reading hierarchy shared by both pane layouts. */
 .mail-list { container-type: inline-size; container-name: mail-list; }
 .mail-list-header { padding: 16px 16px 12px; background: var(--mail-surface); }
-.mail-list-summary { display: flex; flex-wrap: wrap; column-gap: 8px; row-gap: 2px; margin-top: 2px; }
+.mail-list-summary { display: flex; flex-wrap: nowrap; min-height: 16px; column-gap: 8px; margin-top: 2px; overflow: clip; }
+.mail-list-summary > span { flex: 0 1 auto; min-width: 0; }
+.mail-list-custody-status { display: flex; align-items: center; gap: 8px; min-height: 16px; min-width: 0; margin-top: 8px; }
 .mail-list-date-range { display: none; }
 .mail-list-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; padding: 6px 10px; border-block: 1px solid var(--mail-border); background: var(--mail-surface); }
 .mail-toolbar-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 5px 8px; border-radius: 6px; font-size: 12px; font-weight: 500; color: var(--mail-text-muted); transition: background-color 150ms, color 150ms; }
@@ -968,8 +970,9 @@ input[type="range"]::-moz-range-thumb:hover {
 .mail-list-header .custody-meter { width: 64px; flex: 0 0 64px; }
 @container mail-list (min-width: 480px) {
   .mail-list[data-stacked] .mail-list-header { padding-block: 8px; }
-  .mail-list[data-stacked] .mail-list-header h2 { display: inline; vertical-align: baseline; }
-  .mail-list[data-stacked] .mail-list-summary { display: inline-flex; margin-left: 10px; }
+  .mail-list[data-stacked] .mail-list-header > div:first-child > div:first-child { display: flex; align-items: baseline; min-width: 0; }
+  .mail-list[data-stacked] .mail-list-header h2 { display: block; flex: 0 1 auto; min-width: 0; vertical-align: baseline; }
+  .mail-list[data-stacked] .mail-list-summary { display: flex; flex: 1 1 0; min-width: 0; margin-left: 10px; }
   .mail-list[data-stacked] .mail-list-header > div:nth-child(2) { margin-top: 4px; }
 }
 

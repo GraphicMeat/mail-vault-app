@@ -30,6 +30,7 @@ import { describePurge } from '../../utils/custodyCopy';
 import { useExportStore } from '../../stores/exportStore';
 import { openCompose } from '../../utils/composeOpener';
 import { replyTarget } from '../../utils/replyTarget';
+import { replySelection } from '../../utils/replySelection';
 import { isBackedUp as isEmailBackedUp } from './MessageStateIcon';
 import { applyFlagToKeys, purgeEverywhere } from '../../services/workflows/messageMutations';
 
@@ -45,6 +46,10 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
   const backedUpScopes = useMailStore(s => s.backedUpScopes);
   const backupConfigured = useMailStore(s => s.backupConfigured);
   const iframeRef = useRef(null);
+  const selectedReplyHtml = () => {
+    const frame = iframeRef.current;
+    return replySelection(frame?.contentDocument?.body, frame?.contentWindow?.getSelection?.());
+  };
   const [fetchedEmail, setFetchedEmail] = useState(null);
   const selectionOwnership = useRef(null);
   const [linkSafetyAlert, setLinkSafetyAlert] = useState(null);
@@ -294,8 +299,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
         <div className="px-3 py-2 border-b border-mail-border bg-mail-bg shrink-0">
           <LocalMailLabels email={email} />
           <EmailActionBar email={email} variant="single"
-            onReply={async target => openCompose({ mode: 'reply', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
-            onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
+            onReply={async target => openCompose({ mode: 'reply', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
+            onReplyAll={async target => openCompose({ mode: 'replyAll', replyTo: await replyTarget(target, null, useMailStore.getState(), selectedReplyHtml()) })}
             onForward={async target => openCompose({ mode: 'forward', replyTo: await replyTarget(target, null, useMailStore.getState()) })}
             onArchive={target => {
               if (target.isArchived) {

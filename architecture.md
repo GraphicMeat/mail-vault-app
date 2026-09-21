@@ -35,6 +35,8 @@ The frontend owns:
 - Coordination of async work through stores, hooks, and service adapters.
 - User feedback, optimistic UI, and progress indicators.
 
+Open compose windows keep a separate UI-session snapshot through `safeStorage`, alongside persisted preferences. App restores these snapshots as minimized draft bubbles after storage hydration. The snapshots retain editor fields, attachments, sending identity and reply context; the existing local-draft service still writes the message itself into the vault through the daemon. Sending or discarding a compose window removes its session entry.
+
 The frontend should not:
 
 - Reimplement transport or storage logic that belongs to the daemon.

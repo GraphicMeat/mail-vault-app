@@ -130,6 +130,27 @@ export function formatListCount({ shown, loaded, total, unreadOnly }) {
     : t('list.emails2', { total: total.toLocaleString() });
 }
 
+export function MailboxHeaderSummary({ summary, scope, dateRange, searchActive }) {
+  return <div className="mail-list-summary text-xs text-mail-text-muted">
+    <span data-testid="email-list-count" className="truncate" title={summary}>{summary}</span>
+    {scope && <span className="truncate" title={scope}>{scope}</span>}
+    {!searchActive && dateRange && <span className="mail-list-date-range truncate" title={dateRange}>{dateRange}</span>}
+  </div>;
+}
+
+export function MailboxCustodyStatus({ vaultShare, vaultShareLabel, searchActive }) {
+  return <div data-testid="email-list-custody-status" className="mail-list-custody-status">
+    {vaultShare && !searchActive && <>
+      <span className="custody-meter" aria-hidden="true">
+        <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
+      </span>
+      <span data-testid="email-list-vault-share" className="truncate flex-1 text-xs text-mail-text-muted" title={vaultShareLabel}>
+        {vaultShareLabel}
+      </span>
+    </>}
+  </div>;
+}
+
 function EmailListComponent({ stacked = false }) {
   const t = useT();
   // Individual selectors — component only re-renders when these specific fields change
@@ -942,21 +963,25 @@ function EmailListComponent({ stacked = false }) {
     setBulkOpProgress(null);
   };
 
+  const mailboxTitle = searchActive ? t('list.searchResults')
+    : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes')
+      : activeMailbox === 'INBOX' ? t('sidebar.inbox')
+        : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox);
+  const mailboxSummary = formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly });
+  const mailboxScopeLabel = mailboxScope && t('list.acrossFolders', { count: mailboxScope.paths.length });
+  const vaultShareLabel = vaultShare && t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
+    inVault: vaultShare.inVault.toLocaleString(), loaded: vaultShare.loaded.toLocaleString(),
+  });
+
   return (
     <div data-stacked={stacked || undefined} className="mail-list flex flex-col h-full min-h-0 overflow-hidden">
       <div data-tauri-drag-region data-testid="email-list-header" className="mail-list-header">
         <div className="flex items-start justify-between gap-3 min-w-0">
           <div className="min-w-0 flex-1">
-            <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate">
-              {searchActive ? t('list.searchResults') : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes') : activeMailbox === 'INBOX' ? t('sidebar.inbox') : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox)}
+            <h2 data-testid="mailbox-title" className="text-lg font-semibold text-mail-text truncate" title={mailboxTitle}>
+              {mailboxTitle}
             </h2>
-            <div className="mail-list-summary text-xs text-mail-text-muted">
-              <span data-testid="email-list-count">
-                {formatListCount({ shown: displayEmails.length, loaded: sortedEmails.length, total: totalEmails, unreadOnly })}
-              </span>
-              {mailboxScope && <span>{t('list.acrossFolders', { count: mailboxScope.paths.length })}</span>}
-              {!searchActive && <span className="mail-list-date-range">{dateRange}</span>}
-            </div>
+            <MailboxHeaderSummary summary={mailboxSummary} scope={mailboxScopeLabel} dateRange={dateRange} searchActive={searchActive} />
           </div>
           <button type="button" data-testid="mail-search-toggle" onClick={e => {
             if (isExplorer) {
@@ -972,18 +997,7 @@ function EmailListComponent({ stacked = false }) {
             <Search size={16} /><span>{t('workspace.search')}</span>
           </button>
         </div>
-        {vaultShare && !searchActive && (
-          <div className="flex items-center gap-2 mt-2">
-            <span className="custody-meter w-16 shrink-0" aria-hidden="true">
-              <span style={{ transform: `scaleX(${vaultShare.pct / 100})` }} />
-            </span>
-            <span data-testid="email-list-vault-share" className="text-xs text-mail-text-muted">
-              {t(windowIsPartial ? 'list.vaultShareLoaded' : 'list.vaultShare', {
-                inVault: vaultShare.inVault.toLocaleString(), loaded: vaultShare.loaded.toLocaleString(),
-              })}
-            </span>
-          </div>
-        )}
+        <MailboxCustodyStatus vaultShare={vaultShare} vaultShareLabel={vaultShareLabel} searchActive={searchActive} />
         {searchActive && (
           <button type="button" className="mt-2 text-xs text-mail-accent-text hover:underline"
             onClick={() => { clearSearch(); setShowSearch(false); }}>{t('list.clearSearch')}</button>
