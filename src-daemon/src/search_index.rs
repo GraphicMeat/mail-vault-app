@@ -1719,7 +1719,11 @@ mod tests {
         assert_eq!(status["available"], true);
         assert_eq!(status["indexed"], 1);
         let guard = lock(&st.db);
-        assert_eq!(db::meta_get(guard.as_ref().unwrap(), "schema_version").as_deref(), Some("2"));
+        assert_eq!(
+            db::meta_get(guard.as_ref().unwrap(), "schema_version"),
+            Some(db::SCHEMA_VERSION.to_string()),
+            "the rebuild writes the schema this build knows, whatever number that is"
+        );
     }
 
     #[test]

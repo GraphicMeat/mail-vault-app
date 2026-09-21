@@ -1100,6 +1100,8 @@ fn request_to_index(request: &MailSearchStart, target: &MailSearchTarget) -> Sea
         date_to: request.date_to,
         has_attachments: request.has_attachments,
         limit: None,
+        // Saved-view filters: a plain search sets none of them.
+        ..SearchRequest::default()
     }
 }
 
@@ -1163,7 +1165,7 @@ fn mailbox_for_vault_dir(vault_dir: &str, known_mailboxes: &[String]) -> (String
     }
 }
 
-fn stamp_local_row(
+pub(crate) fn stamp_local_row(
     row: &mut Value,
     account_id: &str,
     vault_dir: &str,

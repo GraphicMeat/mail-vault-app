@@ -169,6 +169,31 @@ pub fn for_messages(conn: &Connection, account_id: &str, msg_keys: &[String]) ->
     Ok(out)
 }
 
+/// The identities that carry **every** one of these tags, for one account.
+/// This is what a saved view filtered by tag narrows on: the identities come
+/// from here, the rows from the search index.
+///
+/// An empty tag list returns nothing rather than everything — a caller with no
+/// tag filter must not call this at all.
+pub fn messages_with_every_tag(conn: &Connection, account_id: &str, tag_ids: &[String]) -> Result<Vec<String>, String> {
+    if tag_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let places = std::iter::repeat("?").take(tag_ids.len()).collect::<Vec<_>>().join(",");
+    // The count is a literal, not a parameter: bound through `params_from_iter`
+    // it arrives as TEXT, and SQLite compares an INTEGER to a TEXT as unequal
+    // whatever the digits say — so every intersection came back empty.
+    let sql = format!(
+        "SELECT msg_key FROM tag_assignments WHERE account_id = ?1 AND tag_id IN ({places})
+         GROUP BY msg_key HAVING COUNT(DISTINCT tag_id) = {}",
+        tag_ids.len()
+    );
+    let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
+    let args = std::iter::once(account_id.to_string()).chain(tag_ids.iter().cloned());
+    let rows = stmt.query_map(params_from_iter(args), |r| r.get::<_, String>(0)).map_err(|e| e.to_string())?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
+}
+
 fn get(conn: &Connection, id: &str) -> Result<Tag, String> {
     conn.query_row(
         "SELECT t.id, t.name, t.color, t.position, COUNT(a.tag_id)
@@ -312,6 +337,35 @@ mod tests {
         let mut want = vec![a.id, b.id];
         want.sort();
         assert_eq!(ids, want);
+    }
+
+    #[test]
+    fn messages_with_every_tag_is_the_intersection_not_the_union() {
+        let c = conn();
+        let a = ensure(&c, "A", "").unwrap();
+        let b = ensure(&c, "B", "").unwrap();
+        assign(&c, &a.id, &[t("acct", "both@x"), t("acct", "only-a@x")]).unwrap();
+        assign(&c, &b.id, &[t("acct", "both@x")]).unwrap();
+        let mut both = messages_with_every_tag(&c, "acct", &[a.id.clone(), b.id.clone()]).unwrap();
+        both.sort();
+        assert_eq!(both, vec!["both@x".to_string()]);
+        let mut just_a = messages_with_every_tag(&c, "acct", &[a.id]).unwrap();
+        just_a.sort();
+        assert_eq!(just_a, vec!["both@x".to_string(), "only-a@x".to_string()]);
+    }
+
+    #[test]
+    fn a_tag_id_that_exists_nowhere_carries_no_messages() {
+        let c = conn();
+        assert!(messages_with_every_tag(&c, "acct", &["nope".to_string()]).unwrap().is_empty());
+    }
+
+    #[test]
+    fn asking_for_no_tags_at_all_is_not_a_filter() {
+        let c = conn();
+        let a = ensure(&c, "A", "").unwrap();
+        assign(&c, &a.id, &[t("acct", "one@x")]).unwrap();
+        assert!(messages_with_every_tag(&c, "acct", &[]).unwrap().is_empty(), "callers must not ask");
     }
 
     #[test]
