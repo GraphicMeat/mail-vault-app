@@ -35,20 +35,20 @@ state.setQuickActionSurface.mockImplementation((surface, _scope, config) => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe('QuickActionsSettings', () => {
-  it('exposes surface, scope inheritance, mode and ordered action controls', () => {
+  it('uses surface tabs with one matching preview, scope inheritance, mode and ordered action controls', () => {
     state.quickActions = {
       defaults: { row: { mode: 'favorite-menu', entries: [{ id: 'archive', action: 'archive' }], favoriteId: 'archive', palette: 'neutral' } },
       overrides: {},
     };
     render(<QuickActionsSettings />);
 
-    expect(screen.getByLabelText('Surface')).toBeTruthy();
+    expect(screen.getByRole('tablist', { name: 'Surface' })).toBeTruthy();
     expect(screen.getByLabelText('Scope')).toBeTruthy();
     expect(screen.getByLabelText('Layout')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Add action' })).toBeTruthy();
     const preview = screen.getByRole('region', { name: 'Preview' });
     expect(within(screen.getByRole('group', { name: 'Message rows' })).getByRole('button', { name: 'Archive' })).toBeTruthy();
-    expect(within(preview).getByRole('group', { name: 'Email reader' })).toBeTruthy();
+    expect(within(preview).queryByRole('group', { name: 'Email reader' })).toBeNull();
   });
 
   it('updates production preview through harmless sample callbacks without invoking mail operations', () => {
@@ -57,6 +57,7 @@ describe('QuickActionsSettings', () => {
       overrides: {},
     };
     render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
     fireEvent.click(within(screen.getByRole('group', { name: 'Email reader' })).getByRole('button', { name: 'Archive' }));
     expect(screen.getByText('Preview action selected')).toBeTruthy();
     expect(mailState.archiveEmails).not.toHaveBeenCalled();
@@ -72,6 +73,7 @@ describe('QuickActionsSettings', () => {
       overrides: {},
     };
     render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Email reader' }));
     const reader = within(screen.getByRole('group', { name: 'Email reader' }));
     fireEvent.click(reader.getByRole('button', { name: 'Move: Archive' }));
     expect(screen.getByText('Preview action selected')).toBeTruthy();
@@ -91,5 +93,19 @@ describe('QuickActionsSettings', () => {
     view.rerender(<QuickActionsSettings />);
     fireEvent.change(screen.getByLabelText('Layout'), { target: { value: 'menu' } });
     expect(state.quickActions.defaults.row.entries[0].color).toBe('#ff9900');
+  });
+
+  it('resets only the active surface', () => {
+    state.quickActions = {
+      defaults: {
+        row: { mode: 'menu', entries: [{ id: 'delete', action: 'delete' }], favoriteId: null, palette: 'neutral' },
+        reader: { mode: 'menu', entries: [{ id: 'reply', action: 'reply' }], favoriteId: 'reply', palette: 'custom' },
+      },
+      overrides: {},
+    };
+    render(<QuickActionsSettings />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }));
+    expect(state.quickActions.defaults.row.entries[0].action).toBe('archive');
+    expect(state.quickActions.defaults.reader).toMatchObject({ mode: 'menu', palette: 'custom' });
   });
 });

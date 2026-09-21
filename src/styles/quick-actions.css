@@ -5,6 +5,29 @@
   min-width: 0;
 }
 
+/* Bright defaults keep wedge icons readable on MailVault's dark surfaces. */
+:root {
+  --quick-action-archive: #58d5bb; --quick-action-unarchive: #83b8ff;
+  --quick-action-delete: #ff8b99; --quick-action-delete-server: #ff7891; --quick-action-delete-everywhere: #ff6d87;
+  --quick-action-toggle-read: #8baeff; --quick-action-mark-read: #91a9ff; --quick-action-mark-unread: #b29aff;
+  --quick-action-star: #f2c56d; --quick-action-unstar: #d7af78; --quick-action-tag: #d49aef;
+  --quick-action-move: #71cde4; --quick-action-spam: #f2a26c; --quick-action-reply: #75c7f1;
+  --quick-action-reply-all: #84b5ff; --quick-action-forward: #9cacff; --quick-action-reply-template: #b2a4ea;
+  --quick-action-export: #d1c789; --quick-action-new-message: #68d4bd; --quick-action-open: #9abbd0;
+  --quick-action-source: #d0aedf; --quick-action-theme: #d5bd77;
+}
+
+[data-theme="light"] {
+  --quick-action-archive: #176d5c; --quick-action-unarchive: #2868af;
+  --quick-action-delete: #bd4057; --quick-action-delete-server: #a92b4a; --quick-action-delete-everywhere: #92223d;
+  --quick-action-toggle-read: #3559ad; --quick-action-mark-read: #4056a3; --quick-action-mark-unread: #6843ad;
+  --quick-action-star: #8b5a09; --quick-action-unstar: #775226; --quick-action-tag: #784092;
+  --quick-action-move: #116e89; --quick-action-spam: #9c4c18; --quick-action-reply: #16729e;
+  --quick-action-reply-all: #2e5ca4; --quick-action-forward: #3e4faa; --quick-action-reply-template: #55488e;
+  --quick-action-export: #655d20; --quick-action-new-message: #116c5c; --quick-action-open: #315f7c;
+  --quick-action-source: #68457a; --quick-action-theme: #72530a;
+}
+
 .quick-actions-trigger,
 .quick-action-button {
   display: inline-flex;
@@ -76,58 +99,96 @@
   padding: 0 !important;
   overflow: hidden;
   border-radius: 50% !important;
+  isolation: isolate;
+  background: var(--mail-bg);
 }
 
-.quick-action-radial-position {
-  position: absolute;
+.quick-actions-radial-preview {
+  position: relative;
+  width: min(304px, 100%);
+  height: 304px;
+  margin: 4px auto;
 }
 
 .quick-action-radial-item {
-  width: 72px;
-  height: 72px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  padding: 5px;
-  overflow: hidden;
-  border: 1px solid var(--mail-border);
-  border-radius: 50%;
-  color: var(--quick-action-color, var(--mail-text));
-  background: var(--mail-bg);
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  padding: 0;
+  border: 0;
+  color: var(--quick-action-color, var(--mail-text-muted));
+  background: radial-gradient(circle at center, var(--mail-surface) 0 67%, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 72%, var(--mail-surface)) 68% 71%, var(--mail-surface) 72%);
   cursor: pointer;
-  text-align: center;
+  transition: background-color var(--mv-transition), color var(--mv-transition), filter var(--mv-transition);
 }
 
-.quick-action-radial-item span {
-  display: -webkit-box;
-  max-width: 60px;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  font-size: 11px;
-  line-height: 1.15;
+.quick-action-radial-content {
+  position: absolute;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  transform: translate(-50%, -50%);
 }
 
-.quick-action-radial-item:hover:not(:disabled) {
-  background: var(--mail-surface-hover);
+.quick-action-radial-item:hover:not(:disabled),
+.quick-action-radial-item:focus-visible:not(:disabled) {
+  z-index: 2;
+  color: var(--quick-action-color, var(--mail-text));
+  background: radial-gradient(circle at center, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 22%, var(--mail-surface)) 0 67%, var(--quick-action-color, var(--mail-accent)) 68% 71%, color-mix(in srgb, var(--quick-action-color, var(--mail-accent)) 22%, var(--mail-surface)) 72%);
+  filter: brightness(1.08);
 }
 
 .quick-action-radial-item:disabled {
-  opacity: .5;
+  opacity: .42;
   cursor: not-allowed;
+}
+
+.quick-actions-radial-center {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: 126px;
+  min-height: 126px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid var(--mail-border);
+  border-radius: 50%;
+  color: var(--mail-text);
+  background: var(--mail-bg);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--mail-text) 16%, transparent);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.quick-actions-radial-center > span {
+  max-width: 92px;
+  overflow-wrap: anywhere;
+}
+
+.quick-actions-radial-center.has-pages {
+  padding-bottom: 42px;
 }
 
 .quick-action-radial-pages {
   position: absolute;
-  inset: 50% auto auto 50%;
+  inset: auto auto 10px 50%;
   display: flex;
   align-items: center;
   gap: 4px;
-  transform: translate(-50%, -50%);
+  transform: translateX(-50%);
   color: var(--mail-text-muted);
   font-size: 11px;
+  pointer-events: auto;
 }
 
 .quick-action-radial-pages button {
@@ -171,6 +232,10 @@
   text-overflow: ellipsis;
 }
 
+.quick-actions-selection {
+  flex-wrap: nowrap;
+}
+
 .quick-actions-editor-controls,
 .quick-actions-add-row,
 .quick-actions-parameter {
@@ -193,7 +258,8 @@
 .quick-actions-editor-controls select,
 .quick-actions-add-row select,
 .quick-actions-parameter select,
-.quick-actions-parameter input {
+.quick-actions-parameter input,
+.quick-actions-editor-controls input {
   min-height: 34px;
   padding: 6px 9px;
   border: 1px solid var(--mail-border);
@@ -204,7 +270,9 @@
 
 .quick-actions-add-row > button,
 .quick-actions-settings > button,
-.quick-actions-settings button:not(.quick-actions-trigger):not(.quick-action-button) {
+.quick-actions-editor-controls > button,
+.quick-actions-entry-list > li > button,
+.quick-actions-label-list button {
   min-height: 30px;
   padding: 5px 9px;
   border-radius: 6px;
@@ -217,6 +285,15 @@
 .quick-actions-settings input:focus-visible {
   outline: 2px solid var(--mail-accent);
   outline-offset: 2px;
+}
+
+.quick-actions-settings > .settings-tabbed-page > .settings-tabs {
+  position: static;
+}
+
+.quick-actions-settings > .settings-tabbed-page > .settings-form {
+  max-width: none;
+  padding: 16px 0 0;
 }
 
 .quick-actions-entry-list {
@@ -292,8 +369,23 @@
   background: var(--mail-bg);
 }
 
-.quick-actions-preview-row > span,
-.quick-actions-preview-reader > header {
+.quick-actions-preview-row[data-radial="true"],
+.quick-actions-preview-selection[data-radial="true"],
+.quick-actions-preview-reader[data-radial="true"] {
+  display: block;
+  padding: 10px;
+}
+
+.quick-actions-preview-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.quick-actions-preview-copy > span,
+.quick-actions-preview-copy > header {
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -301,9 +393,20 @@
   font-size: 12px;
 }
 
-.quick-actions-preview-row small,
-.quick-actions-preview-reader header span,
-.quick-actions-preview-row time {
+.quick-actions-preview-row[data-radial="true"] .quick-actions-radial-preview,
+.quick-actions-preview-selection[data-radial="true"] .quick-actions-radial-preview,
+.quick-actions-preview-reader[data-radial="true"] .quick-actions-radial-preview {
+  width: 304px;
+  max-width: 100%;
+  aspect-ratio: 1;
+  height: auto;
+  margin: 12px auto 2px;
+  flex-shrink: 0;
+}
+
+.quick-actions-preview-copy small,
+.quick-actions-preview-copy header span,
+.quick-actions-preview-copy time {
   overflow: hidden;
   color: var(--mail-text-muted);
   font-size: 11px;
