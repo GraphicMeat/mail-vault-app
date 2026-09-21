@@ -106,5 +106,9 @@
   "88ae7e182b0a": "Voir toutes les fonctionnalités",
   "35bb268aa9fc": "Nous avons chronométré la recherche MailVault sur une boîte de 50 000 messages : de 7 à 14 millisecondes par requête. Les résultats, la technologie SQLite qui les sous-tend, et comment Premium ajoute la recherche dans les pièces jointes et les images via Vision.",
   "44cf12d8a38e": "50 000 e-mails, recherchés en 7 à 14 ms. Les résultats réels du test et l’index SQLite qui les sous-tend.",
-  "53787cf7768c": "Résultats de recherche MailVault pour une requête, avec la légende en bas expliquant les marqueurs serveur uniquement, dans votre coffre, seule copie et sur disque de sauvegarde"
+  "53787cf7768c": "Résultats de recherche MailVault pour une requête, avec la légende en bas expliquant les marqueurs serveur uniquement, dans votre coffre, seule copie et sur disque de sauvegarde",
+  "6f90ff3223c0": "Réglages, Stockage, Index de recherche une fois la construction terminée : 50 000 messages sur 50 000 indexés, environ 270 Mo sur le disque. C’est une exécution distincte dans l’app, donc sa taille diffère des 225 Mo du tableau du benchmark ci-dessus.",
+  "c0d3f1b8d28b": "Résultats de recherche MailVault pour le mot invoice dans un coffre de 50 000 messages. Sous le champ de recherche, l’en-tête indique que la liste affiche les 500 plus récents sur environ 2 500 résultats enregistrés dans tous les dossiers, au-dessus d’une liste de lignes de messages.",
+  "cd5d804fb443": "MailVault, Réglages, onglet Stockage, carte Index de recherche affichant 50 000 / 50 000 indexés et environ 270 Mo, avec des interrupteurs pour le corps des messages, le texte des pièces jointes et le texte dans les images.",
+  "ab484ee9a7fa": "Le même type de recherche dans l’app : « invoice » sur un coffre de 50 000 messages. La liste affiche les 500 plus récents sur environ 2 500 résultats enregistrés, et le dit. Les quelques lignes du haut viennent des boîtes de démonstration qui partagent cette fenêtre, et les dossiers du coffre s’appellent Projects, Correspondence et Clients, contrairement à ceux du benchmark."
 }

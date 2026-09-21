@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>この表から読み取れることが 2 つあります。1 つ目は、時間が一致件数に比例しないことです。15 件の一致のほうが 2,500 件よりも長くかかりました。時間を左右するのはクエリの形(2 語のフレーズは 1 語より手間がかかる)で、返ってくるメールの量ではありません。2 つ目は、一覧に表示されるのは新しい順で最大 500 件までで、それを超える場合はその旨が表示されることです。そのため、何通一致しても結果の描画にかかる作業量には上限があります。</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-results-1440.webp"><img src="/screenshots/ja/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="50,000 通のメッセージを保管した MailVault の保管庫で、invoice という語を検索した結果です。検索ボックスの下に、すべてのフォルダーで保存済みの一致約 2,500 件のうち新しい 500 件を表示していると示され、その下にメッセージ行の一覧が続きます。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">アプリでの同じ種類の検索です。50,000 通のメッセージを保管した保管庫で「invoice」を検索しました。一覧には保存済みの一致約 2,500 件のうち新しい 500 件が表示され、そのことも明記されています。先頭の数行はこのウィンドウを共有するデモ用メールボックスのもので、保管庫のフォルダー名はベンチマークとは異なり Projects、Correspondence、Clients です。</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>一度だけかかるコストはインデックスの構築で、50,000 通でおよそ 11 秒、毎秒約 4,000 通のペースで、ディスクは 225 MB です。構築はバックグラウンドで行われ、実行中も MailVault を使い続けられます。その後は、新しいメッセージと変更されたメッセージだけがインデックスされます。</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ja/search-50k-index-1440.webp"><img src="/screenshots/ja/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault の設定、ストレージタブにある検索インデックスのカードです。50,000 / 50,000 件がインデックス済みで約 270 MB と表示され、メッセージ本文、添付ファイルのテキスト、画像内のテキストのスイッチが並んでいます。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">設定、ストレージ、検索インデックスの構築が完了した状態です。50,000 通中 50,000 通がインデックス済みで、ディスク上の容量は約 270 MB です。アプリ内の別の実行なので、上のベンチマーク表の 225 MB とは容量が異なります。</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms と 7 ms はどんな感覚か</h3>
           <p>ミリ秒は想像しにくいので、ものさしを用意しました。60 Hz のディスプレイは 16.7 ms ごとに再描画され、ここでの最も遅い検索でも 1 回の再描画の間に終わりました。ユーザビリティ研究では 1993 年から同じ 3 つの限界が使われています。0.1 秒未満なら瞬時に感じ、1 秒までなら思考の流れが途切れず、10 秒になると注意が離れてしまいます。14 ミリ秒は「瞬時」の限界の約 7 分の 1 です。1 ms の日付フィルターは、その 100 分の 1 です。</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>De esa tabla se pueden sacar dos conclusiones. Primero, el tiempo no depende del número de coincidencias: 15 resultados tardaron más que 2.500, porque lo que cuesta tiempo es la forma de la consulta (una frase de dos palabras da más trabajo que una sola palabra), no cuánto correo devuelve. Segundo, la lista muestra como máximo las 500 coincidencias más recientes y lo indica cuando hay más, así que dibujar los resultados es un trabajo acotado sea cual sea el número de mensajes que coincidan.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/es/search-50k-results-1440.webp"><img src="/screenshots/es/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="Resultados de búsqueda de MailVault para la palabra invoice en una bóveda de 50 000 mensajes. Bajo el cuadro de búsqueda, el encabezado indica que la lista muestra los 500 más recientes de unas 2500 coincidencias guardadas en todas las carpetas, encima de una lista de filas de mensajes." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">El mismo tipo de búsqueda en la app: «invoice» sobre una bóveda de 50 000 mensajes. La lista muestra los 500 más recientes de unas 2500 coincidencias guardadas y lo indica. Las pocas filas de arriba vienen de los buzones de demostración que comparten esta ventana, y las carpetas de la bóveda se llaman Projects, Correspondence y Clients, no como las del benchmark.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>El coste que se paga una sola vez es construir el índice: unos once segundos para 50.000 mensajes, más o menos 4.000 mensajes por segundo, y 225 MB de disco. Ocurre en segundo plano, puedes seguir usando MailVault mientras tanto, y después solo se indexan los mensajes nuevos y los modificados.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/es/search-50k-index-1440.webp"><img src="/screenshots/es/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Ajustes, pestaña Almacenamiento, tarjeta Índice de búsqueda con 50 000 / 50 000 indexados y unos 270 MB, con interruptores para el cuerpo de los mensajes, el texto de los adjuntos y el texto en imágenes." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Ajustes, Almacenamiento, Índice de búsqueda al terminar la construcción: 50 000 de 50 000 mensajes indexados, unos 270 MB en disco. Es una ejecución aparte en la app, por eso su tamaño difiere de los 225 MB de la tabla del benchmark de arriba.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Qué se siente con 1 ms y con 7 ms</h3>
           <p>Los milisegundos son difíciles de imaginar, así que aquí tienes una regla. Una pantalla de 60 Hz se redibuja cada 16,7 ms, y hasta la búsqueda más lenta de esta prueba terminó dentro de un solo redibujado. La investigación de usabilidad usa los mismos tres límites desde 1993: por debajo de 0,1 segundos se siente instantáneo, hasta 1 segundo no se rompe tu hilo de pensamiento, y a los 10 segundos tu atención ya se ha ido. Catorce milisegundos es aproximadamente una séptima parte del límite de lo «instantáneo». El filtro de fechas, con 1 ms, queda cien veces por debajo.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

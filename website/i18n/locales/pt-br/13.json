@@ -106,5 +106,9 @@
   "88ae7e182b0a": "Ver todos os recursos",
   "35bb268aa9fc": "Cronometramos a pesquisa do MailVault em uma caixa de correio de 50.000 mensagens: de 7 a 14 milissegundos por consulta. Os resultados, a tecnologia SQLite por trás deles e como o Premium acrescenta a pesquisa em anexos e em imagens com Vision.",
   "44cf12d8a38e": "50.000 e-mails pesquisados em 7 a 14 ms. Os resultados reais do teste e o índice SQLite por trás deles.",
-  "53787cf7768c": "Resultados de pesquisa do MailVault para uma consulta, com a legenda na parte inferior explicando os marcadores só no servidor, no seu cofre, única cópia e na unidade de backup"
+  "53787cf7768c": "Resultados de pesquisa do MailVault para uma consulta, com a legenda na parte inferior explicando os marcadores só no servidor, no seu cofre, única cópia e na unidade de backup",
+  "6f90ff3223c0": "Configurações, Armazenamento, Índice de busca depois de concluída a construção: 50.000 de 50.000 mensagens indexadas, cerca de 270 MB em disco. É uma execução separada no app, por isso o tamanho difere dos 225 MB da tabela do benchmark acima.",
+  "c0d3f1b8d28b": "Resultados de busca do MailVault para a palavra invoice em um cofre de 50.000 mensagens. Abaixo do campo de busca, o cabeçalho informa que a lista mostra as 500 mais recentes de cerca de 2.500 correspondências salvas em todas as pastas, acima de uma lista de linhas de mensagens.",
+  "cd5d804fb443": "MailVault, Configurações, aba Armazenamento, cartão Índice de busca mostrando 50.000 / 50.000 indexadas e cerca de 270 MB, com interruptores para o corpo das mensagens, o texto dos anexos e o texto em imagens.",
+  "ab484ee9a7fa": "O mesmo tipo de busca no app: “invoice” em um cofre de 50.000 mensagens. A lista mostra as 500 mais recentes de cerca de 2.500 correspondências salvas e informa isso. As poucas linhas do topo vêm das caixas de demonstração que dividem esta janela, e as pastas do cofre se chamam Projects, Correspondence e Clients, e não as do benchmark."
 }

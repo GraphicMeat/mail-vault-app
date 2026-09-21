@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Deux choses se lisent dans ce tableau. D’abord, le temps n’est pas lié au nombre de résultats : 15 correspondances ont pris plus de temps que 2 500, car ce qui coûte du temps, c’est la forme de la requête (une expression de deux mots demande plus de travail qu’un seul mot), et non la quantité de courrier renvoyée. Ensuite, la liste affiche au plus les 500 correspondances les plus récentes et l’indique lorsqu’il y en a davantage, de sorte que l’affichage des résultats représente un travail borné, quel que soit le nombre de messages correspondants.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/search-50k-results-1440.webp"><img src="/screenshots/fr/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="Résultats de recherche MailVault pour le mot invoice dans un coffre de 50 000 messages. Sous le champ de recherche, l’en-tête indique que la liste affiche les 500 plus récents sur environ 2 500 résultats enregistrés dans tous les dossiers, au-dessus d’une liste de lignes de messages." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Le même type de recherche dans l’app : « invoice » sur un coffre de 50 000 messages. La liste affiche les 500 plus récents sur environ 2 500 résultats enregistrés, et le dit. Les quelques lignes du haut viennent des boîtes de démonstration qui partagent cette fenêtre, et les dossiers du coffre s’appellent Projects, Correspondence et Clients, contrairement à ceux du benchmark.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>Le coût ponctuel est la construction de l’index : environ onze secondes pour 50 000 messages, soit environ 4 000 messages par seconde, et 225 MB d’espace disque. Elle se fait en arrière-plan, vous pouvez continuer à utiliser MailVault pendant ce temps, et ensuite seuls les messages nouveaux et modifiés sont indexés.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/fr/search-50k-index-1440.webp"><img src="/screenshots/fr/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Réglages, onglet Stockage, carte Index de recherche affichant 50 000 / 50 000 indexés et environ 270 Mo, avec des interrupteurs pour le corps des messages, le texte des pièces jointes et le texte dans les images." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Réglages, Stockage, Index de recherche une fois la construction terminée : 50 000 messages sur 50 000 indexés, environ 270 Mo sur le disque. C’est une exécution distincte dans l’app, donc sa taille diffère des 225 Mo du tableau du benchmark ci-dessus.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">À quoi ressemblent 1 ms et 7 ms</h3>
           <p>Les millisecondes sont difficiles à se représenter, voici donc une règle graduée. Un écran à 60 Hz se redessine toutes les 16.7 ms, et même la recherche la plus lente ici s’est terminée à l’intérieur d’un seul rafraîchissement. La recherche en ergonomie utilise les mêmes trois seuils depuis 1993 : sous 0.1 seconde, la réponse paraît instantanée ; jusqu’à 1 seconde, le fil de votre pensée reste intact ; à 10 secondes, votre attention est partie. Quatorze millisecondes, c’est environ un septième du seuil « instantané ». Le filtre par date, à 1 ms, est cent fois en dessous.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

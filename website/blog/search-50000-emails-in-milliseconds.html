@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Two things are worth reading off that table. First, time is not tied to the number of matches: 15 hits took longer than 2,500, because what costs time is the shape of the query (a two-word phrase is more work than a single word), not how much mail comes back. Second, the list shows at most the newest 500 matches and says so when there are more, so drawing the results is bounded work however many messages match.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/search-50k-results-1440.webp"><img src="/screenshots/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault search results for the word invoice on a 50,000-message vault. Under the search box, the header says the list shows the newest 500 of about 2,500 saved matches in all folders, above a list of message rows." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">The same kind of search in the app: “invoice” over a 50,000-message vault. The list draws the newest 500 of about 2,500 saved matches and says so. The few rows at the top come from the demo mailboxes that share this window, and the vault folders are named Projects, Correspondence and Clients rather than the benchmark’s three.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>The one-time cost is building the index: about eleven seconds for 50,000 messages, roughly 4,000 messages a second, and 225 MB of disk. It happens in the background, you can keep using MailVault while it runs, and after that only new and changed messages are indexed.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/search-50k-index-1440.webp"><img src="/screenshots/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault Settings, Storage tab, Search index card showing 50,000 / 50,000 indexed and about 270 MB, with switches for message bodies, attachment text and text in images." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Settings, Storage, Search index once the build has finished: 50,000 of 50,000 messages indexed, about 270 MB on disk. This is a separate run in the app, so its size differs from the 225 MB in the benchmark table above.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">What 1 ms and 7 ms feel like</h3>
           <p>Milliseconds are hard to picture, so here is a ruler. A 60 Hz display redraws every 16.7 ms, and even the slowest search here finished inside a single redraw. Usability research has used the same three limits since 1993: under 0.1 seconds feels instantaneous, up to 1 second keeps your train of thought unbroken, and by 10 seconds your attention has gone. Fourteen milliseconds is about a seventh of the "instant" limit. The date filter, at 1 ms, is a hundred times under it.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

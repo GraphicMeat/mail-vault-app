@@ -106,5 +106,9 @@
   "88ae7e182b0a": "Alle Funktionen ansehen",
   "35bb268aa9fc": "Wir haben die MailVault-Suche in einem Postfach mit 50.000 Nachrichten gemessen: 7 bis 14 Millisekunden pro Abfrage. Die Ergebnisse, die SQLite-Technik dahinter und wie Premium die Suche in Anhängen und die Bildsuche mit Vision ergänzt.",
   "44cf12d8a38e": "50.000 E-Mails, durchsucht in 7 bis 14 ms. Die echten Testergebnisse und der SQLite-Index dahinter.",
-  "53787cf7768c": "MailVault-Suchergebnisse zu einer Abfrage, mit der Legende unten, die die Markierungen „nur auf dem Server“, „in deinem Vault“, „einzige Kopie“ und „auf Backup-Laufwerk“ erklärt"
+  "53787cf7768c": "MailVault-Suchergebnisse zu einer Abfrage, mit der Legende unten, die die Markierungen „nur auf dem Server“, „in deinem Vault“, „einzige Kopie“ und „auf Backup-Laufwerk“ erklärt",
+  "6f90ff3223c0": "Einstellungen, Speicher, Suchindex nach Abschluss des Aufbaus: 50.000 von 50.000 Nachrichten indexiert, etwa 270 MB auf der Festplatte. Das ist ein eigener Lauf in der App, deshalb weicht die Größe von den 225 MB in der Benchmark-Tabelle oben ab.",
+  "c0d3f1b8d28b": "MailVault-Suchergebnisse für das Wort invoice in einem Tresor mit 50.000 Nachrichten. Unter dem Suchfeld steht, dass die Liste die neuesten 500 von etwa 2.500 gespeicherten Treffern in allen Ordnern zeigt, darunter eine Liste von Nachrichtenzeilen.",
+  "cd5d804fb443": "MailVault, Einstellungen, Tab Speicher, Karte Suchindex mit der Anzeige 50.000 / 50.000 indexiert und etwa 270 MB, dazu Schalter für Nachrichtentext, Anhangstext und Text in Bildern.",
+  "ab484ee9a7fa": "Dieselbe Art von Suche in der App: „invoice“ über einen Tresor mit 50.000 Nachrichten. Die Liste zeigt die neuesten 500 von etwa 2.500 gespeicherten Treffern und sagt das auch. Die wenigen Zeilen ganz oben stammen aus den Demo-Postfächern, die sich dieses Fenster teilen, und die Tresorordner heißen Projects, Correspondence und Clients statt wie im Benchmark."
 }

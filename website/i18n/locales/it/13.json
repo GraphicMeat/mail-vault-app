@@ -106,5 +106,9 @@
   "88ae7e182b0a": "Vedi tutte le funzionalità",
   "35bb268aa9fc": "Abbiamo misurato la ricerca di MailVault su una casella da 50.000 messaggi: da 7 a 14 millisecondi a query. I risultati, la tecnologia SQLite che c’è dietro e come Premium aggiunge la ricerca negli allegati e nelle immagini con Vision.",
   "44cf12d8a38e": "50.000 email, cercate in un tempo da 7 a 14 ms. I risultati reali del test e l’indice SQLite che li rende possibili.",
-  "53787cf7768c": "Risultati di ricerca di MailVault per una query, con la legenda in basso che spiega i contrassegni solo sul server, nel tuo vault, unica copia e sul disco di backup"
+  "53787cf7768c": "Risultati di ricerca di MailVault per una query, con la legenda in basso che spiega i contrassegni solo sul server, nel tuo vault, unica copia e sul disco di backup",
+  "6f90ff3223c0": "Impostazioni, Archiviazione, Indice di ricerca a costruzione ultimata: 50.000 messaggi su 50.000 indicizzati, circa 270 MB su disco. È un’esecuzione separata nell’app, quindi la dimensione differisce dai 225 MB della tabella del benchmark qui sopra.",
+  "c0d3f1b8d28b": "Risultati di ricerca di MailVault per la parola invoice in un archivio di 50.000 messaggi. Sotto il campo di ricerca, l’intestazione indica che l’elenco mostra i 500 più recenti di circa 2.500 risultati salvati in tutte le cartelle, sopra un elenco di righe di messaggi.",
+  "cd5d804fb443": "MailVault, Impostazioni, scheda Archiviazione, scheda Indice di ricerca con 50.000 / 50.000 indicizzati e circa 270 MB, con interruttori per il corpo dei messaggi, il testo degli allegati e il testo nelle immagini.",
+  "ab484ee9a7fa": "Lo stesso tipo di ricerca nell’app: «invoice» su un archivio di 50.000 messaggi. L’elenco mostra i 500 più recenti di circa 2.500 risultati salvati e lo dichiara. Le poche righe in alto vengono dalle caselle demo che condividono questa finestra, e le cartelle dell’archivio si chiamano Projects, Correspondence e Clients invece di quelle del benchmark."
 }

@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Vale extrair duas coisas dessa tabela. Primeiro, o tempo não está ligado ao número de correspondências: 15 resultados levaram mais tempo que 2.500, porque o que custa tempo é o formato da consulta (uma frase de duas palavras dá mais trabalho que uma palavra só), e não a quantidade de e-mails devolvidos. Segundo, a lista mostra no máximo as 500 correspondências mais recentes e avisa quando há mais, então desenhar os resultados é um trabalho limitado, não importa quantas mensagens correspondam.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/search-50k-results-1440.webp"><img src="/screenshots/pt-br/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="Resultados de busca do MailVault para a palavra invoice em um cofre de 50.000 mensagens. Abaixo do campo de busca, o cabeçalho informa que a lista mostra as 500 mais recentes de cerca de 2.500 correspondências salvas em todas as pastas, acima de uma lista de linhas de mensagens." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">O mesmo tipo de busca no app: “invoice” em um cofre de 50.000 mensagens. A lista mostra as 500 mais recentes de cerca de 2.500 correspondências salvas e informa isso. As poucas linhas do topo vêm das caixas de demonstração que dividem esta janela, e as pastas do cofre se chamam Projects, Correspondence e Clients, e não as do benchmark.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>O custo único é construir o índice: cerca de onze segundos para 50.000 mensagens, aproximadamente 4.000 mensagens por segundo, e 225 MB de disco. Isso acontece em segundo plano, você pode continuar usando o MailVault enquanto ele roda, e depois disso só as mensagens novas e alteradas são indexadas.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/pt-br/search-50k-index-1440.webp"><img src="/screenshots/pt-br/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Configurações, aba Armazenamento, cartão Índice de busca mostrando 50.000 / 50.000 indexadas e cerca de 270 MB, com interruptores para o corpo das mensagens, o texto dos anexos e o texto em imagens." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Configurações, Armazenamento, Índice de busca depois de concluída a construção: 50.000 de 50.000 mensagens indexadas, cerca de 270 MB em disco. É uma execução separada no app, por isso o tamanho difere dos 225 MB da tabela do benchmark acima.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Como são 1 ms e 7 ms</h3>
           <p>Milissegundos são difíceis de imaginar, então aqui vai uma régua. Uma tela de 60 Hz se redesenha a cada 16.7 ms, e até a pesquisa mais lenta daqui terminou dentro de um único redesenho. A pesquisa de usabilidade usa os mesmos três limites desde 1993: abaixo de 0.1 segundo parece instantâneo, até 1 segundo mantém o fio do pensamento e, aos 10 segundos, a atenção já se foi. Quatorze milissegundos é cerca de um sétimo do limite de “instantâneo”. O filtro de data, com 1 ms, fica cem vezes abaixo dele.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

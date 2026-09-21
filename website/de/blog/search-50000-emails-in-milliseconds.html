@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Zwei Dinge lassen sich aus dieser Tabelle ablesen. Erstens hängt die Zeit nicht von der Zahl der Treffer ab: 15 Treffer brauchten länger als 2.500, denn Zeit kostet die Form der Abfrage (eine Phrase aus zwei Wörtern ist mehr Arbeit als ein einzelnes Wort), nicht die Menge der zurückgegebenen Mail. Zweitens zeigt die Liste höchstens die neuesten 500 Treffer und sagt das, wenn es mehr gibt, sodass das Anzeigen der Ergebnisse begrenzte Arbeit ist, egal wie viele Nachrichten passen.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-results-1440.webp"><img src="/screenshots/de/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault-Suchergebnisse für das Wort invoice in einem Tresor mit 50.000 Nachrichten. Unter dem Suchfeld steht, dass die Liste die neuesten 500 von etwa 2.500 gespeicherten Treffern in allen Ordnern zeigt, darunter eine Liste von Nachrichtenzeilen." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Dieselbe Art von Suche in der App: „invoice“ über einen Tresor mit 50.000 Nachrichten. Die Liste zeigt die neuesten 500 von etwa 2.500 gespeicherten Treffern und sagt das auch. Die wenigen Zeilen ganz oben stammen aus den Demo-Postfächern, die sich dieses Fenster teilen, und die Tresorordner heißen Projects, Correspondence und Clients statt wie im Benchmark.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>Der einmalige Aufwand ist der Aufbau des Index: etwa elf Sekunden für 50.000 Nachrichten, ungefähr 4.000 Nachrichten pro Sekunde, und 225 MB Speicherplatz. Er läuft im Hintergrund, du kannst MailVault währenddessen weiter nutzen, und danach werden nur neue und geänderte Nachrichten indexiert.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/de/search-50k-index-1440.webp"><img src="/screenshots/de/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Einstellungen, Tab Speicher, Karte Suchindex mit der Anzeige 50.000 / 50.000 indexiert und etwa 270 MB, dazu Schalter für Nachrichtentext, Anhangstext und Text in Bildern." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Einstellungen, Speicher, Suchindex nach Abschluss des Aufbaus: 50.000 von 50.000 Nachrichten indexiert, etwa 270 MB auf der Festplatte. Das ist ein eigener Lauf in der App, deshalb weicht die Größe von den 225 MB in der Benchmark-Tabelle oben ab.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Wie sich 1 ms und 7 ms anfühlen</h3>
           <p>Millisekunden sind schwer vorstellbar, deshalb hier ein Lineal. Ein 60-Hz-Display zeichnet alle 16.7 ms neu, und selbst die langsamste Suche hier war innerhalb eines einzigen Neuzeichnens fertig. Die Usability-Forschung nutzt seit 1993 dieselben drei Grenzen: Unter 0.1 Sekunden fühlt sich sofort an, bis 1 Sekunde bleibt dein Gedankengang ungestört, und nach 10 Sekunden ist deine Aufmerksamkeit weg. Vierzehn Millisekunden sind etwa ein Siebtel der Grenze für „sofort“. Der Datumsfilter liegt mit 1 ms hundertmal darunter.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

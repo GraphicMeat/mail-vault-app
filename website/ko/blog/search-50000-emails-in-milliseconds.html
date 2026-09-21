@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>표에서 눈여겨볼 점은 두 가지입니다. 첫째, 시간은 일치하는 개수와 관계가 없습니다. 15건이 나온 쿼리가 2,500건이 나온 쿼리보다 오래 걸렸는데, 시간을 좌우하는 것은 되돌아오는 메일의 양이 아니라 쿼리의 형태(두 단어 구문이 한 단어보다 일이 많습니다)이기 때문입니다. 둘째, 목록은 가장 최근 일치 결과를 최대 500개까지만 보여 주고, 더 있으면 그렇다고 알려 주므로, 일치하는 메시지가 아무리 많아도 결과를 그리는 작업에는 상한이 있습니다.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-50k-results-1440.webp"><img src="/screenshots/ko/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="메시지 50,000개가 든 MailVault 보관함에서 invoice라는 단어를 검색한 결과입니다. 검색창 아래 머리글에는 모든 폴더에서 저장된 일치 항목 약 2,500개 중 최신 500개를 표시한다고 나와 있고, 그 아래에 메시지 행 목록이 이어집니다." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">앱에서 같은 종류의 검색입니다. 메시지 50,000개가 든 보관함에서 “invoice”를 검색했습니다. 목록에는 저장된 일치 항목 약 2,500개 중 최신 500개가 표시되고, 그 사실도 함께 알려 줍니다. 맨 위의 몇 줄은 이 창을 함께 쓰는 데모 메일함에서 온 것이고, 보관함 폴더 이름은 벤치마크와 달리 Projects, Correspondence, Clients입니다.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>한 번만 드는 비용은 인덱스를 만드는 일입니다. 메시지 50,000개에 약 11초, 초당 대략 4,000개꼴이고 디스크는 225 MB를 씁니다. 이 작업은 백그라운드에서 진행되어 그동안에도 MailVault를 계속 쓸 수 있고, 그 뒤로는 새 메시지와 바뀐 메시지만 인덱싱합니다.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/ko/search-50k-index-1440.webp"><img src="/screenshots/ko/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 설정의 저장 공간 탭에 있는 검색 인덱스 카드입니다. 50,000 / 50,000개 색인됨, 약 270 MB로 표시되며 메시지 본문, 첨부 파일 텍스트, 이미지 속 텍스트를 켜고 끄는 스위치가 보입니다." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">설정, 저장 공간, 검색 인덱스 구축이 끝난 뒤의 모습입니다. 메시지 50,000개 중 50,000개가 색인되었고 디스크 사용량은 약 270 MB입니다. 앱에서 따로 실행한 결과라서 위 벤치마크 표의 225 MB와 크기가 다릅니다.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms와 7 ms는 어떻게 느껴질까</h3>
           <p>밀리초는 감이 잘 오지 않으니 자를 하나 놓아 봅시다. 60 Hz 화면은 16.7 ms마다 다시 그려지는데, 여기서 가장 느린 검색도 화면이 한 번 다시 그려지는 시간 안에 끝났습니다. 사용성 연구는 1993년부터 같은 세 가지 한계를 써 왔습니다. 0.1초 미만이면 즉각적으로 느껴지고, 1초까지는 생각의 흐름이 끊기지 않으며, 10초가 되면 주의가 떠나갑니다. 14밀리초는 "즉각" 한계의 약 7분의 1입니다. 1 ms인 날짜 필터는 그 한계보다 백 배 빠릅니다.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

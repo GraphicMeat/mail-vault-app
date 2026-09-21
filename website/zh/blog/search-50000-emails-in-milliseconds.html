@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>这张表有两点值得看。第一，耗时与匹配数量无关：15 条命中比 2,500 条用得更久，因为花时间的是查询的形态（两个词的短语比单个词更费事），而不是返回多少邮件。第二，列表最多显示最新的 500 条匹配，超出时会明确说明，所以无论匹配多少封邮件，绘制结果的工作量都是有上限的。</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-results-1440.webp"><img src="/screenshots/zh/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 在一个包含 50,000 封邮件的保管库中搜索 invoice 一词的结果。搜索框下方的标题说明列表显示所有文件夹中约 2,500 条已保存匹配结果里最新的 500 条，下面是一列邮件行。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">应用中的同类搜索：在一个包含 50,000 封邮件的保管库里搜索“invoice”。列表显示约 2,500 条已保存匹配结果中最新的 500 条，并明确说明了这一点。顶部的几行来自共用这个窗口的演示邮箱，保管库的文件夹名为 Projects、Correspondence 和 Clients，与基准测试中的不同。</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>一次性的成本是构建索引：50,000 封邮件大约十一秒，约每秒 4,000 封，占用 225 MB 磁盘。它在后台进行，运行期间你可以继续使用 MailVault，之后只会为新增和变更的邮件建立索引。</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/zh/search-50k-index-1440.webp"><img src="/screenshots/zh/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault 设置的“存储”标签页中的搜索索引卡片，显示已索引 50,000 / 50,000 和约 270 MB，并带有邮件正文、附件文本和图片文字的开关。" class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">设置、存储、搜索索引构建完成后的状态：50,000 封邮件中已索引 50,000 封，磁盘占用约 270 MB。这是在应用中单独进行的一次运行，因此大小与上方基准测试表中的 225 MB 不同。</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">1 ms 和 7 ms 是什么感觉</h3>
           <p>毫秒很难想象，所以这里放一把尺子。60 Hz 的显示器每 16.7 ms 重绘一次，而这里最慢的搜索也在一次重绘之内完成。可用性研究自 1993 年以来一直使用同样的三个界限：低于 0.1 秒感觉是瞬时的，最长 1 秒能让你的思路不被打断，到 10 秒时你的注意力就已经离开了。十四毫秒大约是“瞬时”界限的七分之一。日期筛选只要 1 ms，比这个界限低了一百倍。</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

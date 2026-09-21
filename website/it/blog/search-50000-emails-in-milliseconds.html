@@ -99,6 +99,10 @@ first index build        11 s      (10.9 – 11.9 s)
 index size on disk       225 MB
 status check             5 ms</code></pre>
           <p>Dalla tabella vale la pena ricavare due cose. Primo, il tempo non dipende dal numero di corrispondenze: 15 risultati hanno richiesto più di 2.500, perché a costare tempo è la forma della query (una frase di due parole richiede più lavoro di una parola singola), non la quantità di posta che torna indietro. Secondo, l’elenco mostra al massimo le 500 corrispondenze più recenti e lo dice quando ce ne sono di più, quindi disegnare i risultati è un lavoro limitato, qualunque sia il numero di messaggi trovati.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/it/search-50k-results-1440.webp"><img src="/screenshots/it/search-50k-results-light-1440.webp" width="1440" height="932" loading="lazy" alt="Risultati di ricerca di MailVault per la parola invoice in un archivio di 50.000 messaggi. Sotto il campo di ricerca, l’intestazione indica che l’elenco mostra i 500 più recenti di circa 2.500 risultati salvati in tutte le cartelle, sopra un elenco di righe di messaggi." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Lo stesso tipo di ricerca nell’app: «invoice» su un archivio di 50.000 messaggi. L’elenco mostra i 500 più recenti di circa 2.500 risultati salvati e lo dichiara. Le poche righe in alto vengono dalle caselle demo che condividono questa finestra, e le cartelle dell’archivio si chiamano Projects, Correspondence e Clients invece di quelle del benchmark.</figcaption>
+          </figure>
           <figure class="my-8 text-slate-700 dark:text-slate-300">
 <svg viewBox="0 0 720 318" style="width:100%;height:auto;display:block" role="img" aria-labelledby="f1t f1d" xmlns="http://www.w3.org/2000/svg" font-family="ui-sans-serif,system-ui,sans-serif">
 <title id="f1t">Search time per query on 50,000 messages, in milliseconds</title>
@@ -136,6 +140,10 @@ status check             5 ms</code></pre>
           </figure>
 
           <p>Il costo una tantum è la costruzione dell’indice: circa undici secondi per 50.000 messaggi, circa 4.000 messaggi al secondo, e 225 MB di disco. Avviene in background, puoi continuare a usare MailVault mentre procede, e dopo vengono indicizzati solo i messaggi nuovi e modificati.</p>
+          <figure class="my-6">
+            <picture><source media="(prefers-color-scheme: dark)" srcset="/screenshots/it/search-50k-index-1440.webp"><img src="/screenshots/it/search-50k-index-light-1440.webp" width="1440" height="932" loading="lazy" alt="MailVault, Impostazioni, scheda Archiviazione, scheda Indice di ricerca con 50.000 / 50.000 indicizzati e circa 270 MB, con interruttori per il corpo dei messaggi, il testo degli allegati e il testo nelle immagini." class="rounded-xl border border-slate-200 dark:border-slate-700"></picture>
+            <figcaption class="text-sm text-slate-500 dark:text-slate-400 mt-2">Impostazioni, Archiviazione, Indice di ricerca a costruzione ultimata: 50.000 messaggi su 50.000 indicizzati, circa 270 MB su disco. È un’esecuzione separata nell’app, quindi la dimensione differisce dai 225 MB della tabella del benchmark qui sopra.</figcaption>
+          </figure>
           <h3 class="text-xl font-semibold text-slate-900 dark:text-slate-100 pt-2">Come si sentono 1 ms e 7 ms</h3>
           <p>I millisecondi sono difficili da immaginare, quindi ecco un righello. Un display a 60 Hz ridisegna lo schermo ogni 16,7 ms, e perfino la ricerca più lenta qui ha finito entro un singolo ridisegno. La ricerca sull’usabilità usa gli stessi tre limiti dal 1993: sotto 0,1 secondi sembra istantaneo, fino a 1 secondo il filo dei pensieri resta intatto, e a 10 secondi l’attenzione è sparita. Quattordici millisecondi sono circa un settimo del limite dell’«istantaneo». Il filtro per data, con 1 ms, è cento volte sotto.</p>
           <figure class="my-8 text-slate-700 dark:text-slate-300">

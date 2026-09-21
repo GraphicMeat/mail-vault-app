@@ -106,5 +106,9 @@
   "88ae7e182b0a": "Ver todas las funciones",
   "35bb268aa9fc": "Medimos la búsqueda de MailVault en un buzón de 50.000 mensajes: de 7 a 14 milisegundos por consulta. Los resultados, la tecnología SQLite que hay detrás y cómo Premium añade la búsqueda en adjuntos y en imágenes con Vision.",
   "44cf12d8a38e": "50.000 correos buscados en un tiempo de 7 a 14 ms. Los resultados reales de la prueba y el índice SQLite que los hace posibles.",
-  "53787cf7768c": "Resultados de búsqueda de MailVault para una consulta, con la leyenda al pie que explica los marcadores solo en el servidor, en tu bóveda, única copia y en la unidad de copia de seguridad"
+  "53787cf7768c": "Resultados de búsqueda de MailVault para una consulta, con la leyenda al pie que explica los marcadores solo en el servidor, en tu bóveda, única copia y en la unidad de copia de seguridad",
+  "6f90ff3223c0": "Ajustes, Almacenamiento, Índice de búsqueda al terminar la construcción: 50 000 de 50 000 mensajes indexados, unos 270 MB en disco. Es una ejecución aparte en la app, por eso su tamaño difiere de los 225 MB de la tabla del benchmark de arriba.",
+  "c0d3f1b8d28b": "Resultados de búsqueda de MailVault para la palabra invoice en una bóveda de 50 000 mensajes. Bajo el cuadro de búsqueda, el encabezado indica que la lista muestra los 500 más recientes de unas 2500 coincidencias guardadas en todas las carpetas, encima de una lista de filas de mensajes.",
+  "cd5d804fb443": "MailVault, Ajustes, pestaña Almacenamiento, tarjeta Índice de búsqueda con 50 000 / 50 000 indexados y unos 270 MB, con interruptores para el cuerpo de los mensajes, el texto de los adjuntos y el texto en imágenes.",
+  "ab484ee9a7fa": "El mismo tipo de búsqueda en la app: «invoice» sobre una bóveda de 50 000 mensajes. La lista muestra los 500 más recientes de unas 2500 coincidencias guardadas y lo indica. Las pocas filas de arriba vienen de los buzones de demostración que comparten esta ventana, y las carpetas de la bóveda se llaman Projects, Correspondence y Clients, no como las del benchmark."
 }
