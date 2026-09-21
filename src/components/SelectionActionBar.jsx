@@ -165,9 +165,17 @@ export function SelectionActionBar() {
       setShowMoveDropdown(false);
       return;
     }
-    const btn = moveButtonRef.current?.getBoundingClientRect();
-    const bar = barRef.current?.getBoundingClientRect();
-    setMoveLeft(btn && bar ? btn.left - bar.left : 0);
+    // Which verbs are inline is configuration: by default Move is a menu
+    // entry, so `moveButtonRef` points into the popover that closes as this
+    // runs, and measuring it anchored the dropdown to wherever that panel sat
+    // — 188px left of the trigger on a 1200px window. Measure whatever the
+    // user actually pressed inside the bar.
+    const bar = barRef.current;
+    const anchor = bar?.contains(moveButtonRef.current)
+      ? moveButtonRef.current
+      : bar?.querySelector(".quick-actions-trigger");
+    const rect = anchor?.getBoundingClientRect();
+    setMoveLeft(rect && bar ? rect.left - bar.getBoundingClientRect().left : 0);
     setShowMoveDropdown(true);
   };
 

@@ -228,6 +228,26 @@ describe('Selection Action Bar effects', function () {
       { timeout: 10_000, interval: 200, timeoutMsg: 'Move-to-folder dropdown never opened' },
     );
 
+    // Move is a menu entry under the default configuration, so `moveButtonRef`
+    // points into the popover that is closing as the dropdown opens. Anchoring
+    // to it put the dropdown 188px left of the control the user actually
+    // pressed — far enough to hang off the bar, close enough that a hit test on
+    // the dropdown's own option still passed. Assert where it is anchored, not
+    // only that something can click it.
+    const anchored = await browser.execute(() => {
+      const bar = document.querySelector('[data-testid="selection-action-bar"]');
+      const pressed = bar.querySelector('[data-quick-action="move"]')
+        || bar.querySelector('.quick-actions-trigger');
+      const dropdown = document.querySelector('[data-testid="move-to-folder-dropdown"]');
+      if (!pressed || !dropdown) return null;
+      return {
+        pressed: Math.round(pressed.getBoundingClientRect().left),
+        dropdown: Math.round(dropdown.getBoundingClientRect().left),
+      };
+    });
+    expect(anchored).not.toBe(null);
+    expect(Math.abs(anchored.dropdown - anchored.pressed)).toBeLessThanOrEqual(4);
+
     // The wait above is satisfied by a dropdown nothing can click: the bar's
     // inner div scrolls horizontally, an auto overflow-x makes overflow-y auto
     // too, and the box above the bar was clipped away while still mounting and
