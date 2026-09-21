@@ -171,6 +171,36 @@ export const useSearchStore = create((set, get) => ({
     }
   },
 
+  // A flag change anywhere has to reach the rows a search is showing.
+  // `searchResults` is the ONE list the mutation paths never map — a hit is in
+  // it and in no list of the store they write through — so marking a message
+  // read (by hand, or by opening it) left its search row bold until the query
+  // was run again. Keyed on the copy, never on a bare uid: folder A's uid 34
+  // and folder B's are two messages. A row that names no account or folder
+  // (a single-folder result) matches on what it does name.
+  patchResultFlags: (targets, map) => {
+    if (!targets?.length) return;
+    set(state => {
+      if (!state.searchResults.length) return state;
+      // All three fields, all present: a row that names no account or folder
+      // would otherwise match on the uid alone, and a bare uid names a
+      // different message in every other folder. A miss leaves a stale bold
+      // row — what this repaint already had to live with; a false match paints
+      // another message's row read.
+      const hit = row => row._accountId && row._mailbox && targets.some(t =>
+        row.uid === t.uid && row._accountId === t.accountId && row._mailbox === t.mailbox);
+      let changed = false;
+      const searchResults = state.searchResults.map(row => {
+        if (!hit(row)) return row;
+        const flags = map(row.flags);
+        if (String(flags) === String(row.flags)) return row;
+        changed = true;
+        return { ...row, flags };
+      });
+      return changed ? { searchResults } : state;
+    });
+  },
+
   removeSearchResults: keys => {
     const copyKeys = new Set(keys);
     if (!copyKeys.size) return;

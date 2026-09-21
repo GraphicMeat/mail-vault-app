@@ -120,7 +120,7 @@ export function RowQuickActions({ emails, exportEmails = emails, actions, onRequ
     title: t('rowMenu.deleteServer2'),
     description: describeServerDelete(serverEmails.length, serverEmails.filter(email => email.isArchived).length),
     confirmLabel: t('rowMenu.deleteServer'),
-  });
+  }, { confirmOptional: true });
   const requestUnarchive = () => {
     const archived = emails.filter(email => email.isArchived);
     const localOnly = archived.some(isLocalOnly);

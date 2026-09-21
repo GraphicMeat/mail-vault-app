@@ -20,6 +20,8 @@ export function BehaviorSettings() {
     setMarkAsReadMode,
     markAsReadDelay,
     setMarkAsReadDelay,
+    confirmBeforeDelete,
+    setConfirmBeforeDelete,
     afterDeleteSelect,
     setAfterDeleteSelect,
     autoDownloadAttachments,
@@ -288,12 +290,34 @@ export function BehaviorSettings() {
         </div>
       </div>
 
-      {/* After deleting */}
+      {/* Deleting */}
       <div className="settings-section">
         <h4 className="font-semibold text-mail-text mb-4 flex items-center gap-2">
           <Trash2 size={18} className="text-mail-accent-text" />
-          {t('settings.behavior.afterDeleting')}
+          {t('settings.behavior.deleting')}
         </h4>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-mail-text mb-2">
+            {t('settings.behavior.confirmBeforeDelete')}
+          </label>
+          <select aria-label={t('settings.behavior.confirmBeforeDelete')}
+            data-testid="confirm-before-delete-select"
+            value={confirmBeforeDelete ? 'ask' : 'skip'}
+            onChange={(e) => setConfirmBeforeDelete(e.target.value === 'ask')}
+            className="w-full px-4 py-2.5 bg-mail-bg border border-mail-border rounded-lg
+                      text-mail-text focus:border-mail-accent transition-all
+                      cursor-pointer"
+          >
+            <option value="ask">{t('settings.behavior.confirmDeleteAsk')}</option>
+            <option value="skip">{t('settings.behavior.confirmDeleteSkip')}</option>
+          </select>
+          <p className="text-xs text-mail-text-muted mt-1">
+            {confirmBeforeDelete
+              ? t('settings.behavior.confirmDeleteAskHint')
+              : t('settings.behavior.confirmDeleteSkipHint')}
+          </p>
+        </div>
 
         <p className="text-sm text-mail-text-muted mb-4">
           {t('settings.behavior.chooseWhatOpensAfterDelete')}

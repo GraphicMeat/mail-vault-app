@@ -287,9 +287,11 @@ function EmailListComponent({ stacked = false }) {
   const handleRowActionStart = useCallback((_event, trigger, entry) => {
     if (['delete', 'deleteServer', 'deleteEverywhere', 'unarchive'].includes(entry?.action)) confirmationReturnRef.current = trigger;
   }, []);
-  const requestRowDelete = useCallback((executor, copy) => {
+  // `options` carries `confirmOptional`, which is what lets the
+  // skip-confirmation setting reach this delete — see DeleteConfirmModal.
+  const requestRowDelete = useCallback((executor, copy, options) => {
     setActiveMenuRowId(null);
-    setPendingDelete({ executor, copy });
+    setPendingDelete({ executor, copy, ...options });
   }, []);
   const scrollContainerRef = useRef(null);
   useEffect(() => {

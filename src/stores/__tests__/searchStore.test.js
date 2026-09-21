@@ -349,4 +349,48 @@ describe('daemon-backed search lifecycle', () => {
       ['acct-2', 'INBOX'],
     ]);
   });
+  // A search row is in `searchResults` and in no list the flag paths map, so
+  // marking a message read — by hand, or by opening it — left its search row
+  // bold until the query was run again.
+  it('repaints a result row when its message is marked read', async () => {
+    const run = await startSearch('flag repaint');
+    progress(run, 1, { rows: [
+      result(7, 'the opened hit', { _accountId: 'acct-1', _mailbox: 'Archive', messageId: '<a@example.test>', source: 'local', flags: [] }),
+      result(7, 'another folder, same uid', { _accountId: 'acct-1', _mailbox: 'INBOX', messageId: '<b@example.test>', source: 'local', flags: [] }),
+    ] });
+
+    useSearchStore.getState().patchResultFlags(
+      [{ accountId: 'acct-1', mailbox: 'Archive', uid: 7 }],
+      flags => [...(flags || []), '\\Seen'],
+    );
+
+    const rows = useSearchStore.getState().searchResults;
+    expect(rows.find(r => r.subject === 'the opened hit').flags).toEqual(['\\Seen']);
+    // The uid alone is not the key: the other folder's message is untouched.
+    expect(rows.find(r => r.subject === 'another folder, same uid').flags).toEqual([]);
+  });
+
+  // A row that names no folder is not a row this can key: the uid alone would
+  // match a different message in every other folder.
+  it('leaves an unstamped row alone rather than guessing', async () => {
+    const run = await startSearch('unstamped');
+    progress(run, 1, { rows: [result(7, 'no folder on it', { messageId: '<c@example.test>', flags: [] })] });
+
+    useSearchStore.getState().patchResultFlags(
+      [{ accountId: 'acct-1', mailbox: 'INBOX', uid: 7 }],
+      flags => [...(flags || []), '\\Seen'],
+    );
+
+    expect(useSearchStore.getState().searchResults[0].flags).toEqual([]);
+  });
+
+  it('leaves the results identical when nothing matched', async () => {
+    const run = await startSearch('no match');
+    progress(run, 1, { rows: [result(7, 'hit', { _accountId: 'acct-1', _mailbox: 'INBOX', flags: [] })] });
+    const before = useSearchStore.getState().searchResults;
+
+    useSearchStore.getState().patchResultFlags([{ accountId: 'acct-9', mailbox: 'INBOX', uid: 7 }], () => ['\\Seen']);
+
+    expect(useSearchStore.getState().searchResults).toBe(before);
+  });
 });

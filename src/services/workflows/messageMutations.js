@@ -996,6 +996,16 @@ export async function markServerDeleted(accountId, mailbox, uid) {
 //
 // The key is `emailKey`'s, never a selection key — a single folder's list keys
 // its selection by bare uid, which matches no result row at all.
+// The flag half of the same problem: a search row is in `searchResults` and in
+// no list the writes above map, so it kept the read state it was found with.
+// Fire-and-forget — the rows are already correct everywhere else, and nothing
+// downstream waits on the repaint.
+function patchSearchFlags(targets, map) {
+  import('../../stores/searchStore')
+    .then(({ useSearchStore }) => useSearchStore.getState().patchResultFlags(targets, map))
+    .catch(error => console.warn('[messageMutations] Could not repaint the search rows:', error));
+}
+
 export async function pruneSearchResults(copies) {
   if (!copies.length) return;
   const { useSearchStore } = await import('../../stores/searchStore');
@@ -1357,6 +1367,8 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
     if (row) after.keepVisibleWhileUnreadFiltered([selectionKey(row, after)]);
   }
 
+  patchSearchFlags([{ accountId, mailbox, uid }], (f) => _withSeen(f, read));
+
   _refreshAfterFlagChange(useMailStore);
   // …which recounts the badge for a single-account list. The unified one is on
   // us: counting its rows against `accountId` would put every account's unread
@@ -1486,6 +1498,7 @@ export async function applyFlagToTargets(targets, flag, on, { undoable = true } 
     const entry = get().emailCache.get(`${t.accountId}-${t.mailbox}-${t.uid}`);
     if (entry) entry.email = { ...entry.email, flags: map(entry.email.flags) };
   }
+  patchSearchFlags(targets, map);
   _refreshAfterFlagChange(useMailStore);
 
   // The rows have changed; offer the change back. Only the two flags the user

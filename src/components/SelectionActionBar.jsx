@@ -562,6 +562,12 @@ export function SelectionActionBar() {
       )}
       <DeleteConfirmModal
         pending={deleteMode === null ? null : {
+          // Skippable only when every ticked row is a server copy the delete
+          // journals an undo for. One local-only row in the selection and the
+          // same button destroys the only copy there is, which is the line
+          // this preference does not cross — `allServerBacked` is the same
+          // test the bar already uses to decide the action is offered at all.
+          confirmOptional: deleteMode === "server" && allServerBacked,
           executor: confirmDelete,
           copy: {
             title: deleteMode === "unarchive"

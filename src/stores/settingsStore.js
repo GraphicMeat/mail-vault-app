@@ -267,6 +267,11 @@ export const useSettingsStore = create(
       markAsReadMode: 'delay', // 'delay' | 'auto' | 'manual'
       markAsReadDelay: 3, // seconds to wait before marking as read (when mode is 'delay')
 
+      // Whether a delete asks first. Confirming is the default; turning it off
+      // deletes on the click. "Delete everywhere" always asks — it destroys
+      // every copy and clears the undo, so there is nothing left to take back.
+      confirmBeforeDelete: true,
+
       // What the reading pane shows after the open message is deleted.
       // 'none' closes it — the safe default, because the next message opens
       // itself the moment it is selected and that marks it read.
@@ -811,6 +816,7 @@ export const useSettingsStore = create(
       setBadgeMode: (mode) => set({ badgeMode: mode }),
 
       // Mark as read settings
+      setConfirmBeforeDelete: (confirm) => set({ confirmBeforeDelete: !!confirm }),
       setMarkAsReadMode: (mode) => set({ markAsReadMode: mode }),
       setMarkAsReadDelay: (delay) => set({ markAsReadDelay: delay }),
       setAfterDeleteSelect: (mode) => set({ afterDeleteSelect: mode }),
@@ -1089,6 +1095,7 @@ export const useSettingsStore = create(
           badgeMode: 'unread',
           markAsReadMode: 'delay',
           markAsReadDelay: 3,
+          confirmBeforeDelete: true,
           afterDeleteSelect: 'none',
           updateTrack: null,
           layoutMode: 'three-column',

@@ -62,6 +62,7 @@ export function AppearanceStep({ onContinue }) {
     settings.setEmailListStyle('compact');
     settings.setThreadMode('expandable');
     settings.setAfterDeleteSelect('none');
+    settings.setConfirmBeforeDelete(true);
     settings.setEmailRowHighlight('hover');
     settings.setQuickActionStyleLink(null, false, 'row');
     QUICK_ACTION_SURFACES.forEach(surface => {
@@ -142,6 +143,22 @@ export function AppearanceStep({ onContinue }) {
               {!disabled && hint && <p className="onboarding-choice-hint">{t(hint)}</p>}
             </fieldset>;
           })}
+          {/* Its own fieldset rather than a `groups` entry: this one preference
+              is a boolean, and the group map reads `settings[key]` as the
+              option value. Never disabled — deleting works the same in the
+              chat view. */}
+          {section === 'reading' && <fieldset data-testid="appearance-control-delete-confirm">
+            <legend>{t('settings.behavior.confirmBeforeDelete')}</legend>
+            <div className="onboarding-choices">
+              {[['ask', true], ['skip', false]].map(([id, value]) => <Choice key={id} id={`appearance-delete-confirm-${id}`}
+                active={settings.confirmBeforeDelete !== false} value={value} onPick={settings.setConfirmBeforeDelete}>
+                {t(value ? 'settings.behavior.confirmDeleteAsk' : 'settings.behavior.confirmDeleteSkip')}
+              </Choice>)}
+            </div>
+            <p className="onboarding-choice-hint">{t(settings.confirmBeforeDelete !== false
+              ? 'settings.behavior.confirmDeleteAskHint'
+              : 'settings.behavior.confirmDeleteSkipHint')}</p>
+          </fieldset>}
           {chat && ['layout', 'reading'].includes(section) && <p className="onboarding-choice-hint">{t('workspace.emailViewOnly')}</p>}
         </div>
         <div className="onboarding-appearance-example">

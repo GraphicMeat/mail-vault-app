@@ -323,6 +323,9 @@ const MessageBubble = memo(function MessageBubble({ email, eKey, fromUser, avata
     const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
     setPendingConfirmation({
+      // A local-only copy is the only copy: removing it is not undoable, so it
+      // keeps asking whatever the setting says.
+      confirmOptional: !localOnly,
       executor: () => localOnly
         ? useMailStore.getState().removeLocalEmail(target.uid, explicitLocation)
         : useMailStore.getState().deleteEmailFromServer(target.uid, {

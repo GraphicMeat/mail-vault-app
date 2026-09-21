@@ -77,6 +77,24 @@ describe('appearance step', () => {
     expect(useSettingsStore.getState().quickActions.styleLinks.global).toBe(false);
   });
 
+  // "must be in onboarding as well" — the delete-confirmation choice ships in
+  // initial setup, on the Reading tab, next to the other reading preferences.
+  it('offers the delete confirmation choice on the reading tab', () => {
+    useSettingsStore.setState({ confirmBeforeDelete: true });
+    render(<AppearanceStep onContinue={() => {}} />);
+    expect(screen.queryByTestId('appearance-control-delete-confirm')).toBeNull();
+    fireEvent.click(tab('reading'));
+    const group = screen.getByTestId('appearance-control-delete-confirm');
+    expect(within(group).getByTestId('appearance-delete-confirm-ask').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(within(group).getByTestId('appearance-delete-confirm-skip'));
+    expect(useSettingsStore.getState().confirmBeforeDelete).toBe(false);
+    expect(within(group).getByTestId('appearance-delete-confirm-skip').getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(screen.getByTestId('appearance-recommended'));
+    expect(useSettingsStore.getState().confirmBeforeDelete).toBe(true);
+  });
+
   it('persists linked radial pagination through the quick-actions tab and Continue', () => {
     const onContinue = vi.fn();
     render(<AppearanceStep onContinue={onContinue} />);

@@ -164,6 +164,8 @@ export function FullViewEmailModal({ email: initialEmail, onClose }) {
     const explicitLocation = { accountId: location.accountId, mailbox: location.mailbox };
     const localOnly = target.source === 'local-only' || target._origin === 'local-only';
     setPendingDelete({
+      // Removing the only copy is not undoable — that one always asks.
+      confirmOptional: !localOnly,
       executor: () => localOnly
         ? useMailStore.getState().removeLocalEmail(target.uid, explicitLocation)
         : useMailStore.getState().deleteEmailFromServer(target.uid, { accountId: explicitLocation.accountId, mailboxOverride: explicitLocation.mailbox }),

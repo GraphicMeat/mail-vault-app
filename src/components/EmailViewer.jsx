@@ -286,6 +286,7 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
     const location = resolveEmailLocation(target, useMailStore.getState());
     if (!location) return;
     setPendingDelete({
+      confirmOptional: true,
       executor: () => confirmDeleteEmail(target, location),
       copy: {
         title: t('viewer.deleteEmail'),

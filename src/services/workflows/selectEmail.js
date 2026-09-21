@@ -433,6 +433,22 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
       email = localEmail;
       actualSource = source === 'local-only' ? 'local-only' : 'local';
       get().addToCache(cacheKey, email, cacheLimitMB);
+      // Opening a message marks it read on EVERY other path through here —
+      // the cache hit, Graph, IMAP — and this one fell straight through to the
+      // publish. So an archived message, or any search hit the vault answered,
+      // stayed unread on first open and only marked itself on a reopen, off
+      // the in-memory cache. The server half is skipped where there is nothing
+      // to write to (a vault-only copy, a row the server has lost): the same
+      // rule applyFlag keeps, and without it the throw would be swallowed and
+      // the vault write below it never happen.
+      email = await _autoMarkRead(useMailStore, {
+        email, accountId, mailbox, uid: realUid, isUnified, isCurrent,
+        markOnServer: async () => {
+          if (actualSource === 'local-only' || headerRow?.serverDeleted || headerRow?.serverAbsent) return;
+          await _setSeenOnServer(account, accountId, mailbox, realUid, true);
+        },
+      });
+      if (!isCurrent()) return;
     } else if (source === 'local-only') {
       // Local-only means there is no server copy to fall back to, so a vault
       // copy that failed the check above leaves nothing to render. Throwing

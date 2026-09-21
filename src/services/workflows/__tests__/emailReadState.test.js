@@ -365,6 +365,77 @@ describe('selectEmail — auto mark as read', () => {
   });
 });
 
+// A message whose body the vault already holds opens without a fetch — and
+// used to open without ever being marked read. Every other path through
+// selectEmail (cache hit, Graph, IMAP) marks on open; the vault branch fell
+// straight through to the publish, so an archived message, or any search hit
+// answered from the vault, stayed unread until it was reopened from the
+// in-memory cache. Reported 2026-09-21 as "opening the first email from a
+// search list does not trigger the delayed mark as read".
+describe('selectEmail — a body served from the vault', () => {
+  const vaultBody = (flags = []) => ({
+    uid: 1, messageId: 'a@mock', subject: 'General', flags, html: '<p>vault</p>', text: 'vault',
+  });
+
+  it('marks it read on open, without fetching', async () => {
+    primeStore([]);
+    mockGetLocalEmailLight.mockResolvedValue(vaultBody());
+
+    await useMailStore.getState().selectEmail(1);
+
+    expect(mockFetchEmailLight).not.toHaveBeenCalled();
+    expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'add', 'INBOX');
+    expect(viewerSeen()).toBe(true);
+    expect(seenOf(1)).toBe(true);
+  });
+
+  it('leaves the server alone for a vault-only copy, and still marks it read here', async () => {
+    primeStore([]);
+    mockGetLocalEmailLight.mockResolvedValue(vaultBody());
+
+    await useMailStore.getState().selectEmail(1, 'local-only');
+
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(seenOf(1)).toBe(true);
+  });
+
+  it('leaves the server alone for a row the server no longer holds', async () => {
+    primeStore([]);
+    useMailStore.setState(state => ({ emails: state.emails.map(e => ({ ...e, serverDeleted: true })) }));
+    useMailStore.getState().updateSortedEmails();
+    mockGetLocalEmailLight.mockResolvedValue(vaultBody());
+
+    await useMailStore.getState().selectEmail(1);
+
+    expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+    expect(seenOf(1)).toBe(true);
+  });
+
+  describe('delay mode', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('runs the countdown, then marks', async () => {
+      markAsReadMode = 'delay';
+      markAsReadDelay = 3;
+      primeStore([]);
+      mockGetLocalEmailLight.mockResolvedValue(vaultBody());
+
+      await useMailStore.getState().selectEmail(1);
+
+      expect(useMailStore.getState().markReadProgress).toEqual({
+        startedAt: Date.now(), endsAt: Date.now() + 3000,
+      });
+      expect(mockUpdateEmailFlags).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(mockUpdateEmailFlags).toHaveBeenCalledWith(ACCOUNT, 1, ['\\Seen'], 'add', 'INBOX');
+      expect(seenOf(1)).toBe(true);
+      expect(useMailStore.getState().markReadProgress).toBeNull();
+    });
+  });
+});
+
 describe('selectEmail — cached body, current flags', () => {
   it('reopens with the read state the list holds, not the cached one', async () => {
     markAsReadMode = 'manual';

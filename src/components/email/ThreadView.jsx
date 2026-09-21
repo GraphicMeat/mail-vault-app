@@ -547,6 +547,8 @@ export function ThreadView({ thread, onComposeReply }) {
     const location = resolveEmailLocation(email, state);
     const localOnly = email.source === 'local-only' || email._origin === 'local-only';
     setPendingDelete({
+      // Removing the only copy is not undoable — that one always asks.
+      confirmOptional: !localOnly,
       executor: () => localOnly
         ? useMailStore.getState().removeLocalEmail(email.uid, location)
         : useMailStore.getState().deleteEmailFromServer(email.uid, { accountId: location?.accountId, mailboxOverride: location?.mailbox }),
