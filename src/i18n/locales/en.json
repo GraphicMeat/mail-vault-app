@@ -723,6 +723,8 @@
   "viewer.emailContent": "Email content",
   "viewer.selectEmailRead": "Select an email to read",
   "viewer.couldnTLoadMessage": "Couldn’t load this message",
+  "viewer.messageRemovedElsewhere": "This message is no longer on the server",
+  "viewer.messageRemovedElsewhereHint": "It was deleted or moved in another email client.",
   "viewer.tryAgain": "Try again",
   "viewer.deleteEmail": "Delete email?",
   "email.original.originalEmail": "Original email",

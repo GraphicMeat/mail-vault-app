@@ -1178,18 +1178,24 @@ export async function applyServerRemoval(uid, {
   get().updateSortedEmails();
 
   const exactTargetFolder = !liveSpansMailboxes && targetViewMatches;
-  if (!isUnified) {
-    // When the user changed folders while this delete was on the wire, the
-    // rows in memory belong to another mailbox. Prune the target sidecar by
-    // UID while leaving its existing rows/count intact; never write the other
-    // mailbox's rows into this cache.
-    await db.saveEmailHeaders(
-      accountId, mailbox,
-      exactTargetFolder ? filteredEmails : [],
-      exactTargetFolder ? newTotal : null,
-      { removedUids: [uid] },
-    );
-  }
+  // When the user changed folders while this delete was on the wire, the
+  // rows in memory belong to another mailbox. Prune the target sidecar by
+  // UID while leaving its existing rows/count intact; never write the other
+  // mailbox's rows into this cache.
+  //
+  // A spanning view takes exactly that shape — `[]` and a null total, so the
+  // write is the prune and nothing else. Skipping it there is what made the
+  // unified list the one place a vanished row outlived the session: the
+  // filtered row came straight back from the header cache on the next
+  // loadUnifiedInbox (it reads each account's cache, never a live listing),
+  // and every click on it failed again until the daemon's own reconcile came
+  // round, up to six hours later.
+  await db.saveEmailHeaders(
+    accountId, mailbox,
+    exactTargetFolder ? filteredEmails : [],
+    exactTargetFolder ? newTotal : null,
+    { removedUids: [uid] },
+  );
 
   // Saving the sidecar is another await. The user may switch views while it
   // runs, so validate the destination again before a reload can repaint the

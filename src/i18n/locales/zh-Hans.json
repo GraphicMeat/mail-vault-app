@@ -1592,6 +1592,8 @@
   "viewer.emailOnlyExistsLocalArchive": "这封邮件只存在于你的本地存档中。删除后无法恢复。",
   "viewer.emailPermanentlyDeletedServer": "这封邮件将从服务器永久删除。",
   "viewer.exportEmail": "导出邮件",
+  "viewer.messageRemovedElsewhere": "该邮件已不在服务器上",
+  "viewer.messageRemovedElsewhereHint": "它在其他邮件客户端中被删除或移动了。",
   "viewer.noMessageIdMessageLook": "这封邮件没有可供查询的 Message-ID。",
   "viewer.noVaultCopyKeep": "保险库中没有可保留的副本。",
   "viewer.selectEmailRead": "选择一封邮件来阅读",

@@ -770,23 +770,32 @@ function EmailViewerComponent({ onComposeReply, onClose }) {
               data-testid="email-body-error"
               className="rounded-lg p-6 flex flex-col items-center text-center gap-3 border border-mail-border bg-mail-surface"
             >
-              <AlertTriangle size={28} className="text-mail-warning" />
+              {selectedEmail._bodyGone
+                ? <CloudOff size={28} className="text-mail-text-muted" />
+                : <AlertTriangle size={28} className="text-mail-warning" />}
               <div>
-                <p className="text-sm font-medium text-mail-text">{t('viewer.couldnTLoadMessage')}</p>
+                <p className="text-sm font-medium text-mail-text">
+                  {t(selectedEmail._bodyGone ? 'viewer.messageRemovedElsewhere' : 'viewer.couldnTLoadMessage')}
+                </p>
                 <p className="text-xs text-mail-text-muted mt-1 max-w-md break-words">
+                  {selectedEmail._bodyGone && `${t('viewer.messageRemovedElsewhereHint')} `}
                   {tErr(selectedEmail._bodyError)}
                 </p>
               </div>
-              <button
-                data-testid="email-body-retry"
-                // A bare uid names no message in a spanning view.
-                onClick={() => selectEmail(rowKey(selectedEmail, spansMailboxes(useMailStore.getState())), 'server')}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-mail-text bg-mail-bg
-                          border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
-              >
-                <RefreshCw size={14} />
-                {t('viewer.tryAgain')}
-              </button>
+              {/* No retry on a proven removal: the server already answered, and
+                  the only thing a second ask can do is fail the same way. */}
+              {!selectedEmail._bodyGone && (
+                <button
+                  data-testid="email-body-retry"
+                  // A bare uid names no message in a spanning view.
+                  onClick={() => selectEmail(rowKey(selectedEmail, spansMailboxes(useMailStore.getState())), 'server')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-mail-text bg-mail-bg
+                            border border-mail-border rounded-lg hover:bg-mail-surface-hover transition-colors"
+                >
+                  <RefreshCw size={14} />
+                  {t('viewer.tryAgain')}
+                </button>
+              )}
             </div>
           ) : (
             <div

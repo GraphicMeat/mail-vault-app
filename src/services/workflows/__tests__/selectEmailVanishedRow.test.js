@@ -279,3 +279,104 @@ describe('selectEmail — a row the server no longer holds', () => {
     expect(useMailStore.getState().selectedEmail?._bodyError).toContain('refused');
   });
 });
+
+// ── All Inboxes ────────────────────────────────────────────────────────────
+//
+// The same row, in the view the 2026-09-21 report was filed from. The store
+// was already pruned here; the header cache was not, because the durable half
+// of the removal was gated on `!isUnified`. loadUnifiedInbox reads each
+// account's header cache (never a live listing), so the dead row came back on
+// the next paint of the view and failed again on every click — for up to six
+// hours, until the daemon's own timed reconcile pruned it.
+describe('selectEmail — a vanished row in a spanning view', () => {
+  const stamp = (e) => ({ ...e, _accountId: ACCOUNT.id, _mailbox: 'INBOX' });
+
+  function primeUnified() {
+    useMailStore.setState({
+      accounts: [ACCOUNT],
+      activeAccountId: ACCOUNT.id,
+      activeMailbox: 'UNIFIED',
+      unifiedInbox: true,
+      unifiedFolder: 'INBOX',
+      viewMode: 'all',
+      emails: [stamp(VANISHED), stamp(NEIGHBOUR)],
+      sentEmails: [],
+      localEmails: [],
+      savedEmailIds: new Set(),
+      archivedEmailIds: new Set(),
+      // Cross-account merges are never a complete enumeration.
+      serverUids: serverUids(new Set([31056, 31051]), { complete: false }),
+      deleteTombstones: new Set(),
+      totalEmails: 2,
+      selectedEmailIds: new Set(),
+      selectedEmail: null,
+      selectedEmailId: null,
+      emailCache: new Map(),
+      loadEmails: vi.fn(),
+      _sortedEmailsFingerprint: '',
+    });
+    useMailStore.getState().updateSortedEmails();
+  }
+
+  it('writes the removal through to that account’s header cache', async () => {
+    mockFetchEmailLight.mockRejectedValue(goneError(31056));
+    primeUnified();
+
+    await useMailStore.getState().selectEmail(`${ACCOUNT.id}:INBOX:31056`, 'server');
+
+    expect(uids()).toEqual([31051]);
+    const prune = mockSaveEmailHeaders.mock.calls.find(c => c[4]?.removedUids?.includes(31056));
+    expect(prune).toBeDefined();
+    const [accountId, mailbox, headers, total] = prune;
+    expect(accountId).toBe('acct1');
+    expect(mailbox).toBe('INBOX');
+    // Rows and count belong to no single mailbox here, so the write is the
+    // prune and nothing else — it must not stamp the merged list onto one
+    // account's cache.
+    expect(headers).toEqual([]);
+    expect(total).toBe(null);
+  });
+
+  it('does not reload the mailbox behind a spanning view', async () => {
+    mockFetchEmailLight.mockRejectedValue(goneError(31056));
+    primeUnified();
+
+    await useMailStore.getState().selectEmail(`${ACCOUNT.id}:INBOX:31056`, 'server');
+
+    expect(useMailStore.getState().loadEmails).not.toHaveBeenCalled();
+  });
+});
+
+// ── The prefetch knew first ────────────────────────────────────────────────
+//
+// In the report, the adjacent-row prefetch got the server's proven "gone" at
+// 19:43Z and dropped it; the user's first failing click was at 19:51Z. The
+// answer is the same answer — act on it.
+describe('_prefetchAdjacentEmails — a neighbour the server no longer holds', () => {
+  // The prefetch reads forward, so the vanished row has to be the OLDER one:
+  // the open message is 31056 and 31051 is the row under it.
+  function primeForPrefetch() {
+    primeStore();
+    useMailStore.setState({ selectedEmailId: VANISHED.uid });
+  }
+
+  it('prunes the row instead of swallowing the answer', async () => {
+    mockFetchEmailLight.mockRejectedValue(goneError(31051));
+    primeForPrefetch();
+
+    await useMailStore.getState()._prefetchAdjacentEmails(VANISHED.uid);
+
+    expect(uids()).toEqual([31056]);
+    expect(mockSaveEmailHeaders.mock.calls.some(c => c[4]?.removedUids?.includes(31051))).toBe(true);
+  });
+
+  it('keeps a neighbour whose fetch merely failed', async () => {
+    mockFetchEmailLight.mockRejectedValue(new Error('Server refused UID FETCH 31051: no response'));
+    primeForPrefetch();
+
+    await useMailStore.getState()._prefetchAdjacentEmails(VANISHED.uid);
+
+    expect(uids()).toEqual([31056, 31051]);
+    expect(mockSaveEmailHeaders).not.toHaveBeenCalled();
+  });
+});

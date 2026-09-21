@@ -152,7 +152,15 @@ export async function _prefetchAdjacentEmails(currentUid) {
     if (!nextEmail) break;
 
     const prefetchAccountId = (isUnified && nextEmail._accountId) ? nextEmail._accountId : activeAccountId;
-    const prefetchMailbox = isUnified ? 'INBOX' : activeMailbox;
+    // The row's own folder, not the literal 'INBOX' this used to assume: a
+    // spanning view also spans Sent, Archive and every unified folder, and a
+    // uid fetched from the wrong mailbox is either another message or an
+    // absence the server reports honestly — the exact false "no longer in
+    // INBOX" the prune below would then act on. Same rule as
+    // resolveEmailLocation: an untagged row stays unresolved rather than
+    // guessing a folder, because here the guess costs a cache row.
+    const prefetchMailbox = isUnified ? nextEmail._mailbox : activeMailbox;
+    if (!prefetchMailbox) continue;
     const cacheKey = `${prefetchAccountId}-${prefetchMailbox}-${nextEmail.uid}`;
     if (emailCache.has(cacheKey)) continue;
 
@@ -180,6 +188,23 @@ export async function _prefetchAdjacentEmails(currentUid) {
         get().addToCache(cacheKey, email, cacheLimitMB, { prefetch: true });
       }
     } catch (e) {
+      // A prefetch proves the same thing a click does, and it gets there
+      // first: the 2026-09-21 report's row answered "gone" to a background
+      // fetch eight minutes before the user ever clicked it, and that answer
+      // was dropped here — so the row stayed, and the failure was the user's
+      // to find. Only a PROVEN absence prunes (see uid_still_present); every
+      // other failure is speculative work that failed and stops the run.
+      if (e?.messageGone) {
+        try {
+          await applyServerRemoval(nextEmail.uid, {
+            accountId: prefetchAccountId, mailbox: prefetchMailbox,
+            isUnified, skipRefresh: true, clearSelection: false,
+          });
+        } catch (pruneError) {
+          console.warn('[prefetch] Could not prune the vanished row:', pruneError);
+        }
+        continue;
+      }
       break;
     }
   }
@@ -306,7 +331,7 @@ async function _selectExplicitEmail(uid, source, mailboxOverride, location) {
     return true;
   } catch (error) {
     if (!isCurrent()) return false;
-    publish({ selectedEmail: stamp({ ...header, _bodyError: error.message || String(error) }),
+    publish({ selectedEmail: stamp({ ...header, _bodyError: error.message || String(error), _bodyGone: error?.messageGone === true }),
       selectedEmailSource: 'header-only', error: error.message || String(error), loadingEmail: false });
     throw error;
   } finally {
@@ -538,7 +563,17 @@ export async function selectEmail(uid, source = 'server', mailboxOverride = null
         return;
       }
       publish({
-        selectedEmail: withAccount({ ...headerEmail, text: headerEmail.snippet || '', _bodyError: detail }),
+        selectedEmail: withAccount({
+          ...headerEmail,
+          text: headerEmail.snippet || '',
+          _bodyError: detail,
+          // A proven removal is not a failed fetch. Both leave the body
+          // unloaded, and the viewer used to say the same alarming thing about
+          // each — "Couldn't load this message", with a retry that cannot
+          // succeed because the server has already answered. The flag is what
+          // lets the viewer name what actually happened.
+          _bodyGone: error?.messageGone === true,
+        }),
         selectedEmailSource: 'header-only',
       });
     };

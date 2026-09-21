@@ -16,6 +16,7 @@
 - **MailVault keeps its own state in a database instead of loose JSON files.** Where the vault is, the folders it can reach, your transfer counters, the classification model and the list of server actions still owed all move into two SQLite stores the first time this version starts. The old files are renamed rather than deleted, so nothing is thrown away, and cached message headers now live beside your custody records instead of one small file per message.
 
 ### Fixed
+- **A message deleted in another email client stops haunting All Inboxes.** Its row used to come back every time the view repainted, and every click on it failed, because the removal was only ever written down in a single-folder view. The reading pane also stops calling it a failed load: when the server has proved the message is gone it now says it was removed elsewhere, instead of offering a retry that cannot succeed.
 - **Unfinished messages return as draft bubbles after a restart.** Compose keeps the message, attachments, sending identity and reply context so you can continue where you left off.
 - **Reply quotes the text you selected.** Selecting part of a message before Reply or Reply All quotes that passage. Without a selection, the whole original is quoted as before.
 - **Tab from Subject goes straight to the message editor.** Formatting controls remain available from the keyboard.

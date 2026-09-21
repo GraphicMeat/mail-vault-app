@@ -1592,6 +1592,8 @@
   "viewer.emailOnlyExistsLocalArchive": "このメールはローカルのアーカイブにしかありません。削除すると元に戻せません。",
   "viewer.emailPermanentlyDeletedServer": "このメールはサーバーから完全に削除されます。",
   "viewer.exportEmail": "メールを書き出す",
+  "viewer.messageRemovedElsewhere": "このメッセージはサーバー上にありません",
+  "viewer.messageRemovedElsewhereHint": "他のメールクライアントで削除または移動されました。",
   "viewer.noMessageIdMessageLook": "このメッセージには照合できる Message-ID がありません。",
   "viewer.noVaultCopyKeep": "保管庫に残すコピーはありません。",
   "viewer.selectEmailRead": "読むメールを選択してください",

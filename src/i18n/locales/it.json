@@ -1592,6 +1592,8 @@
   "viewer.emailOnlyExistsLocalArchive": "Questa email esiste solo nel tuo archivio locale. Eliminarla è definitivo e non reversibile.",
   "viewer.emailPermanentlyDeletedServer": "Questa email verrà eliminata definitivamente dal server.",
   "viewer.exportEmail": "Esporta l'email",
+  "viewer.messageRemovedElsewhere": "Questo messaggio non è più sul server",
+  "viewer.messageRemovedElsewhereHint": "È stato eliminato o spostato da un altro client di posta.",
   "viewer.noMessageIdMessageLook": "Questo messaggio non ha un Message-ID da cercare.",
   "viewer.noVaultCopyKeep": "Nessuna copia in cassaforte da conservare.",
   "viewer.selectEmailRead": "Seleziona un'email da leggere",

@@ -42,18 +42,18 @@ const failedEmail = {
   html: '', text: '', attachments: [], flags: [], date: '2026-09-07', _bodyError: 'fetch failed',
 };
 
-function renderViewer(mockSelectEmail) {
+function renderViewer(mockSelectEmail, email = failedEmail) {
   useThemeStore.setState({ palette: 'graphite', theme: 'dark' });
   useSettingsStore.setState({ emailViewerTheme: 'system', linkSafetyEnabled: false, threadReaderLayout: 'timeline', signatureDisplay: 'smart' });
   useMailStore.setState({
     accounts: [{ id: 'acct-1', email: 'sender@example.test' }],
     activeAccountId: 'acct-1',
-    selectedEmail: failedEmail,
+    selectedEmail: email,
     selectedThread: null,
     loadingEmail: false,
     selectedEmailSource: 'header-only',
-    emails: [failedEmail],
-    sortedEmails: [failedEmail],
+    emails: [email],
+    sortedEmails: [email],
     savedEmailIds: new Set(),
     archivedEmailIds: new Set(),
     selectEmail: mockSelectEmail,
@@ -89,5 +89,36 @@ describe('EmailViewer body-error retry, spanning vs. single-folder', () => {
     expect(mockSelectEmail).toHaveBeenCalledTimes(1);
     expect(mockSelectEmail.mock.calls[0][0]).toBe(282);
     expect(mockSelectEmail.mock.calls[0][1]).toBe('server');
+  });
+});
+
+// A proven removal is the other half of this card. The server has already
+// answered ("Message UID N is no longer in INBOX", api.js's MessageGoneError),
+// so there is nothing to try again - and calling that a failed load is what
+// the 2026-09-21 report objected to.
+describe('EmailViewer body-error card, proven removal vs. failed fetch', () => {
+  const goneEmail = {
+    ...failedEmail,
+    _bodyError: 'Message UID 282 is no longer in Sent',
+    _bodyGone: true,
+  };
+
+  it('names the removal and offers no retry', () => {
+    useMailStore.setState({ activeMailbox: 'UNIFIED', mailboxScope: null });
+    renderViewer(vi.fn(), goneEmail);
+
+    const card = screen.getByTestId('email-body-error');
+    expect(card.innerHTML).not.toBe('');
+    expect(screen.queryByTestId('email-body-retry')).toBe(null);
+    // The folder is still named - a removal from one mailbox is not a removal
+    // from the account, and the e2e spec reads this line too.
+    expect(card.textContent).toContain('no longer in Sent');
+  });
+
+  it('still offers the retry when the fetch merely failed', () => {
+    useMailStore.setState({ activeMailbox: 'UNIFIED', mailboxScope: null });
+    renderViewer(vi.fn());
+
+    expect(screen.getByTestId('email-body-retry')).toBeTruthy();
   });
 });
