@@ -341,9 +341,37 @@ describe('DownloadAllButton', () => {
     await waitFor(() => expect(screen.getByText('Q3 report - Attachments')).toBeTruthy());
   });
 
-  it('says so when the export fails instead of claiming a download', async () => {
+  // The daemon is the only writer here that has never written outside the
+  // vault, and the Developer ID sidecar holds no downloads entitlement of its
+  // own. If it cannot reach ~/Downloads, the app writes the files itself
+  // rather than the button failing.
+  it('writes the files from the app when the daemon cannot reach Downloads', async () => {
+    invoke.mockImplementation(async (cmd, args) => {
+      if (cmd === 'export_attachments') throw new Error('Failed to create export folder: Operation not permitted');
+      if (cmd === 'maildir_read_attachment') return PNG_B64;
+      if (cmd === 'save_attachment_to') return args?.destPath;
+      return null;
+    });
+    renderAll();
+    fireEvent.click(screen.getByTestId('attachment-download-all'));
+
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to')).toHaveLength(2));
+    const written = invoke.mock.calls.filter(([cmd]) => cmd === 'save_attachment_to').map(([, a]) => a.destPath);
+    // Both files, inside the one folder, read back from the daemon by index.
+    expect(written).toEqual([
+      '/Users/test/Downloads/Q3 report - Attachments/invoice.pdf',
+      '/Users/test/Downloads/Q3 report - Attachments/bundle.zip',
+    ]);
+    expect(invoke.mock.calls.filter(([cmd]) => cmd === 'maildir_read_attachment').map(([, a]) => a.attachmentIndex))
+      .toEqual([0, 3]);
+    expect(screen.queryByText('Failed to download')).toBeNull();
+  });
+
+  it('says so when neither the daemon nor the app can write, instead of claiming a download', async () => {
     invoke.mockImplementation(async (cmd) => {
-      if (cmd === 'export_attachments') throw new Error('disk full');
+      if (cmd === 'export_attachments') throw new Error('Operation not permitted');
+      if (cmd === 'maildir_read_attachment') return PNG_B64;
+      if (cmd === 'save_attachment_to') throw new Error('Operation not permitted');
       return null;
     });
     renderAll();

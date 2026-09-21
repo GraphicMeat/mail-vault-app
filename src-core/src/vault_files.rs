@@ -687,7 +687,11 @@ pub struct ExportedAttachments {
 /// anything: an unrelated `invoice.pdf` in the export folder is not ours to
 /// destroy, and two `image.png` on one forwarded message are both wanted.
 fn next_free(path: &Path) -> PathBuf {
-    if !path.exists() {
+    // `symlink_metadata`, not `exists`: a DANGLING symlink at this name reads
+    // as "does not exist", and then `create_dir_all`/`write_atomic` fails on
+    // it and takes the whole export down instead of stepping to `(1)`.
+    let taken = |p: &Path| fs::symlink_metadata(p).is_ok();
+    if !taken(path) {
         return path.to_path_buf();
     }
     let name = path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
@@ -701,7 +705,7 @@ fn next_free(path: &Path) -> PathBuf {
     // probe in the viewer, and the cap keeps a pathological folder finite.
     for n in 1..1000 {
         let candidate = path.with_file_name(format!("{} ({}){}", base, n, ext));
-        if !candidate.exists() {
+        if !taken(&candidate) {
             return candidate;
         }
     }

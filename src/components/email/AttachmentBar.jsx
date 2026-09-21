@@ -734,6 +734,46 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
 }
 
 /**
+ * Write the attachments from the app instead of the daemon.
+ *
+ * Only reached when the daemon's `export_attachments` failed. The bytes still
+ * come from the daemon (`maildir_read_attachment`), so this adds no parsing —
+ * only the `save_attachment_to` write the single-file Download already makes,
+ * which creates its parent directories itself.
+ */
+async function exportFromApp({ accountId, mailbox, uid, indices, destDir }, attachments) {
+  const { join } = await import('@tauri-apps/api/path');
+  const { invoke } = window.__TAURI__.core;
+  const byIndex = new Map(attachments.map((a) => [a._originalIndex, a]));
+  const files = [];
+  for (const index of indices) {
+    const filename = byIndex.get(index)?.filename || `attachment-${index}`;
+    const b64 = await send('maildir_read_attachment', { accountId, mailbox, uid, attachmentIndex: index });
+    // A sender picks the filename; only its last component may name a file
+    // here, and a name already taken in the folder gets the same `(n)` the
+    // daemon would have given it.
+    const leaf = filename.split('/').pop().split('\\').pop() || 'attachment';
+    const dest = await uniqueIn(destDir, leaf, join);
+    await invoke('save_attachment_to', { filename: leaf, contentBase64: getCleanBase64(b64), destPath: dest });
+    files.push(dest.split('/').pop());
+  }
+  return { dir: destDir, files };
+}
+
+/** The first free name for `leaf` inside `dir`, `name (1).ext` style. */
+async function uniqueIn(dir, leaf, join) {
+  const { exists } = await import('@tauri-apps/plugin-fs');
+  const dot = leaf.lastIndexOf('.');
+  const base = dot > 0 ? leaf.slice(0, dot) : leaf;
+  const ext = dot > 0 ? leaf.slice(dot) : '';
+  for (let n = 0; n < 500; n++) {
+    const candidate = await join(dir, n === 0 ? leaf : `${base} (${n})${ext}`);
+    if (!await exists(candidate).catch(() => false)) return candidate;
+  }
+  return await join(dir, `${base} (${Date.now()})${ext}`);
+}
+
+/**
  * Export every attachment of one message into a folder of its own.
  *
  * It used to loop `cache_attachment`, which writes into the app's PRIVATE
@@ -761,13 +801,31 @@ export function DownloadAllButton({ attachments, emailUid, accountId, mailbox, s
             return join(await downloadDir(), exportFolderName(subject, t('email.attachments.folderName')));
           })()
         : '';
-      const result = await send('export_attachments', {
+      const args = {
         accountId,
         mailbox,
         uid: emailUid,
         indices: attachments.map((a) => a._originalIndex),
         destDir,
-      });
+      };
+      let result;
+      try {
+        result = await send('export_attachments', args);
+      } catch (err) {
+        if (!isTauri) throw err;
+        // The daemon is the only writer here that has never written OUTSIDE
+        // the vault root: on a signed build it reaches ~/Downloads only
+        // through the sandbox it inherits from the app, and the Developer ID
+        // sidecar carries neither `app-sandbox` nor `inherit` of its own
+        // (`src-daemon/entitlements.plist`). If that turns out not to hold,
+        // the app itself demonstrably can write there — that is what the
+        // per-file Download button has done since it stopped writing into
+        // the cache — so the export falls back to exactly that command
+        // rather than failing. Not app-side logic: the same one-file write,
+        // run N times, only when the daemon could not do it.
+        console.warn('[Attachment] Daemon export failed, writing from the app:', err);
+        result = await exportFromApp(args, attachments);
+      }
       // The folder's own name, not "Downloaded": when Finder refuses to open
       // (a sandbox scope it does not hold), this is the only thing that says
       // where the files went.
