@@ -37,13 +37,10 @@ export function ViewEditor({ view, onClose }) {
   ));
   const [confirming, setConfirming] = useState(false);
 
-  const submit = (event) => {
-    event.preventDefault();
+  /// What the form currently says, as a view.
+  const edited = () => {
     const trimmed = name.trim();
-    // A starter carries no name of its own — the app translates it — so only a
-    // view someone made needs one.
-    if (!trimmed && !view.builtin) return;
-    saveView({
+    return {
       ...view,
       name: trimmed,
       icon,
@@ -59,8 +56,23 @@ export function ViewEditor({ view, onClose }) {
           .filter(([, value]) => value)
           .map(([fieldId, value]) => ({ fieldId, op: 'is', value })),
       },
-    });
+    };
+  };
+
+  const submit = (event) => {
+    event.preventDefault();
+    // A starter carries no name of its own — the app translates it — so only a
+    // view someone made needs one.
+    if (!name.trim() && !view.builtin) return;
+    saveView(edited());
     onClose?.();
+  };
+
+  /// Moving re-reads the stored view, so anything typed and not yet saved
+  /// would be thrown away when the list reloads. Save first.
+  const move = (delta) => {
+    if (name.trim() || view.builtin) saveView(edited());
+    moveView(view.id, delta);
   };
 
   const tri = (key) => <select data-testid={`view-${key}`} value={flags[key]} aria-label={t(`views.filter.${key}`)}
@@ -77,10 +89,10 @@ export function ViewEditor({ view, onClose }) {
         onChange={event => setIcon(event.target.value)}>
         {ICONS.map(option => <option key={option} value={option}>{t(`views.iconName.${option}`)}</option>)}
       </select>
-      <button type="button" data-testid="view-move-up" aria-label={t('views.moveUp')} onClick={() => moveView(view.id, -1)}>
+      <button type="button" data-testid="view-move-up" aria-label={t('views.moveUp')} onClick={() => move(-1)}>
         <ChevronUp size={12} />
       </button>
-      <button type="button" data-testid="view-move-down" aria-label={t('views.moveDown')} onClick={() => moveView(view.id, 1)}>
+      <button type="button" data-testid="view-move-down" aria-label={t('views.moveDown')} onClick={() => move(1)}>
         <ChevronDown size={12} />
       </button>
     </div>

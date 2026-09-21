@@ -140,4 +140,26 @@ describe('the custom field editor', () => {
     const [, field] = useFieldStoreMock.getState().saveField.mock.calls[0];
     expect(field.options).toEqual([]);
   });
+
+  /// The daemon round-trip is slower than a second click, and blur fires when
+  /// you move to the next control — so "rename one, then rename another" is
+  /// the ordinary interaction, not an edge case. A handler that rebuilds from
+  /// the field it was rendered with silently drops the first edit.
+  it('keeps the first edit when a second lands before the store comes back', () => {
+    // saveField that never resolves: the component is on its own local state.
+    useFieldStoreMock.setState({ saveField: vi.fn(() => new Promise(() => {})) });
+    render(<FieldsSettings />);
+
+    fireEvent.change(screen.getByTestId('new-option-f1'), { target: { value: 'Urgent' } });
+    fireEvent.submit(screen.getByTestId('new-option-form-f1'));
+
+    const label = screen.getByTestId('option-label-hi');
+    fireEvent.change(label, { target: { value: 'Highest' } });
+    fireEvent.blur(label);
+
+    const calls = useFieldStoreMock.getState().saveField.mock.calls;
+    expect(calls).toHaveLength(2);
+    const second = calls[1][1].options;
+    expect(second.map(option => option.label)).toEqual(['Highest', 'Urgent']);
+  });
 });

@@ -124,4 +124,14 @@ describe('editing a saved view', () => {
     expect(useViewStoreMock.getState().deleteView).toHaveBeenCalledWith('v1');
     expect(onClose).toHaveBeenCalled();
   });
+
+  /// Moving re-reads the stored view, so an unsaved name would be thrown away
+  /// the moment the list reloads.
+  it('saves what is typed before it moves the view', () => {
+    render(<ViewEditor view={MINE} onClose={() => {}} />);
+    fireEvent.change(screen.getByTestId('view-name'), { target: { value: 'Unpaid' } });
+    fireEvent.click(screen.getByTestId('view-move-up'));
+    expect(useViewStoreMock.getState().saveView.mock.calls[0][0].name).toBe('Unpaid');
+    expect(useViewStoreMock.getState().moveView).toHaveBeenCalledWith('v1', -1);
+  });
 });

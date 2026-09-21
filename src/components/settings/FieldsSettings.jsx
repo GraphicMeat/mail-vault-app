@@ -15,16 +15,32 @@ function OptionEditor({ field, onSave, usageOf }) {
   const [label, setLabel] = useState('');
   const [removing, setRemoving] = useState(null);
   const [usage, setUsage] = useState({});
+  // The list being edited, not the list this render was handed. The save is a
+  // daemon round-trip and blur fires when you move to the next control, so a
+  // second edit routinely lands before the store answers — rebuilding from the
+  // prop would drop the first one.
+  const [options, setOptions] = useState(field.options || []);
+  const [known, setKnown] = useState(field.options || []);
+  if (field.options !== known) {
+    // The store came back (or someone else changed the field): adopt it.
+    setKnown(field.options || []);
+    setOptions(field.options || []);
+  }
+
+  const apply = (next) => {
+    setOptions(next);
+    onSave(next);
+  };
 
   const add = (event) => {
     event.preventDefault();
     const trimmed = label.trim();
     if (!trimmed) return;
-    const taken = field.options.some(option => option.label.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
+    const taken = options.some(option => option.label.toLocaleLowerCase() === trimmed.toLocaleLowerCase());
     if (taken) return;
     setLabel('');
-    onSave([...field.options, {
-      id: globalThis.crypto?.randomUUID?.() || `option-${Date.now()}-${field.options.length}`,
+    apply([...options, {
+      id: globalThis.crypto?.randomUUID?.() || `option-${Date.now()}-${options.length}`,
       label: trimmed,
       color: '',
     }]);
@@ -33,7 +49,7 @@ function OptionEditor({ field, onSave, usageOf }) {
   const rename = (option, next) => {
     const trimmed = next.trim();
     if (!trimmed || trimmed === option.label) return;
-    onSave(field.options.map(item => (item.id === option.id ? { ...item, label: trimmed } : item)));
+    apply(options.map(item => (item.id === option.id ? { ...item, label: trimmed } : item)));
   };
 
   const askToRemove = async (option) => {
@@ -42,12 +58,12 @@ function OptionEditor({ field, onSave, usageOf }) {
   };
 
   return <span className="field-options" data-testid={`field-options-${field.id}`}>
-    {field.options.map(option => <span key={option.id} className="field-option">
+    {options.map(option => <span key={option.id} className="field-option">
       <input data-testid={`option-label-${option.id}`} defaultValue={option.label} maxLength={80}
         aria-label={option.label} onBlur={event => rename(option, event.target.value)} />
       {removing === option.id
         ? <button type="button" data-testid={`option-remove-confirm-${option.id}`}
-          onClick={() => { setRemoving(null); onSave(field.options.filter(item => item.id !== option.id)); }}>
+          onClick={() => { setRemoving(null); apply(options.filter(item => item.id !== option.id)); }}>
           {t('fields.optionRemoveConfirm', { count: usage[option.id] || 0 })}
         </button>
         : <button type="button" data-testid={`option-remove-${option.id}`} onClick={() => askToRemove(option)}
