@@ -56,7 +56,12 @@ fn load_credentials_blob() -> Result<HashMap<String, String>, String> {
 /// Resolve one account's `ImapConfig` (password / oauth2AccessToken included)
 /// from the shared keychain entry, or the `MAILVAULT_TEST_CREDENTIALS` file
 /// bypass in debug builds.
-pub fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
+/// Private on purpose: the blocking body of
+/// `resolve_account_credentials_guarded`. Every caller outside this file is
+/// async, and calling this one inline would park a runtime worker on a
+/// keychain that is locked or prompting — the exact hang the guard exists to
+/// prevent. A guard a caller can walk around is a convention, not a guard.
+fn resolve_account_credentials(account_id: &str) -> Result<ImapConfig, String> {
     let credentials = load_credentials_blob()?;
     let raw = credentials
         .get(account_id)
