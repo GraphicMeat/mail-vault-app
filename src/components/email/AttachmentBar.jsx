@@ -82,7 +82,10 @@ async function downloadsDest(filename) {
   // `exists` from spinning forever.
   for (let n = 0; n < 500; n++) {
     const candidate = await join(dir, n === 0 ? filename : `${base} (${n})${ext}`);
-    if (!await exists(candidate)) return candidate;
+    // A refused `exists` must not cost the download: the worst it can do is
+    // overwrite a same-named file, while letting it throw turns every
+    // download into "Failed to download".
+    if (!await exists(candidate).catch(() => false)) return candidate;
   }
   return await join(dir, `${base} (${Date.now()})${ext}`);
 }
