@@ -22,7 +22,7 @@ import { openFolder } from './loadSubtree';
 import { adoptGraphFolderKeys, adoptGraphFolderKeysFromListing } from './adoptGraphFolderKeys';
 import { takeForcedMailboxRefetch } from './helpers/mailboxRefetch';
 import { refreshFolderStatus } from './folderStatus';
-import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveUnifiedContext, _selKey, _parseSelKey, readerClearOnNavigation } from '../../stores/slices/unifiedHelpers';
 import { serverVerifiedPatch, shortWindowPatch } from '../../stores/slices/syncSlice';
 import { serverUids, NO_SERVER_UIDS } from '../../stores/slices/serverUids';
 import {
@@ -553,6 +553,12 @@ export async function activateAccount(accountId, mailbox, options = {}) {
   }
 
   if (!isBackgroundRefresh) {
+    // The reader is cleared only when this really is a move to another view —
+    // Refresh and the network retry come through here for the folder already
+    // on screen, and closing the open message on one of those reads as the app
+    // throwing away what you were reading. The unread filter's keep set is
+    // scoped to the view, so it goes with the same set.
+    const reader = readerClearOnNavigation(useMailStore.getState(), accountId, mailbox);
     useMailStore.setState({
       activeAccountId: accountId,
       activeMailbox: mailbox,
@@ -571,11 +577,8 @@ export async function activateAccount(accountId, mailbox, options = {}) {
       hasMoreEmails: true,
       currentPage: 1,
       loading: true,
-      selectedEmailId: null,
-      selectedEmail: null,
-      selectedEmailSource: null,
-      selectedThread: null,
-      selectedEmailIds: new Set(),
+      ...reader,
+      ...(Object.keys(reader).length ? { unreadKeep: new Set() } : {}),
       connectionError: null,
       connectionErrorType: null,
       error: null,

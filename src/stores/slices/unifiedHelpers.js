@@ -233,6 +233,31 @@ export function selectionKey(email, state) {
 }
 
 /**
+ * The reader's clear-set for a list load — or nothing at all.
+ *
+ * A reload of the view already on screen (the Refresh button, the network
+ * retry, the repaint after an undo, refreshCurrentView on its timer) is not a
+ * navigation, and both list loaders used to write this set unconditionally. So
+ * a refresh landing while a message was open threw the message off the screen,
+ * mid-read, for no reason the user could see.
+ *
+ * Navigation still clears it: every path that really moves (a sidebar click,
+ * switchUnifiedFolder, setUnifiedInbox) writes the new view's identity before
+ * it reloads, so the comparison here sees a different view. All Inboxes is its
+ * own view — its mailbox is the `UNIFIED` pseudo-folder.
+ */
+export function readerClearOnNavigation(prev, accountId, mailbox) {
+  if (prev.activeAccountId === accountId && prev.activeMailbox === mailbox) return {};
+  return {
+    selectedEmailId: null,
+    selectedEmail: null,
+    selectedEmailSource: null,
+    selectedThread: null,
+    selectedEmailIds: new Set(),
+  };
+}
+
+/**
  * The open thread minus one message, as a store update. Null when no thread is
  * open or it does not hold the message; the reader's clear-set when the message
  * was the thread's last.

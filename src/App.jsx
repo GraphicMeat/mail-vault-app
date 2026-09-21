@@ -423,10 +423,10 @@ function App() {
       return;
     }
     const state = useMailStore.getState();
-    const { sortedEmails, selectedEmailId, selectEmail, unreadOnly } = state;
+    const { sortedEmails, selectedEmailId, selectEmail, unreadOnly, unreadKeep } = state;
     const spans = spansMailboxes(state);
     const keyOf = (e) => rowKey(e, spans);
-    const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf);
+    const visible = filterUnread(sortedEmails, unreadOnly, selectedEmailId, keyOf, unreadKeep);
     const target = stepThroughList(visible, selectedEmailId, spans, delta);
     if (target) selectEmail(keyOf(target));
   };

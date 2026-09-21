@@ -58,3 +58,38 @@ describe('filterUnread', () => {
     expect(filterUnread(null, true)).toEqual([]);
   });
 });
+
+// A message read while the filter is on must stay on screen until the filter
+// is toggled — otherwise it vanishes the moment the selection moves on, and
+// the list looks like it lost the message you just opened.
+describe('filterUnread sticky keep set', () => {
+  const list = [read(1), unread(2), read(3), unread(4)];
+
+  it('keeps every key the keep set names, not just the open one', () => {
+    const keep = new Set([1, 3]);
+    expect(filterUnread(list, true, null, e => e.uid, keep).map(e => e.uid)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('keeps the open message and the keep set together', () => {
+    const keep = new Set([1]);
+    expect(filterUnread(list, true, 3, e => e.uid, keep).map(e => e.uid)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('ignores an empty keep set', () => {
+    expect(filterUnread(list, true, null, e => e.uid, new Set()).map(e => e.uid)).toEqual([2, 4]);
+  });
+
+  it('matches the keep set on the composite key a spanning list uses', () => {
+    const spanning = [
+      { ...unread(2), _accountId: 'a', _mailbox: 'INBOX' },
+      { ...read(3), _accountId: 'b', _mailbox: 'Archive' },
+    ];
+    const keyOf = e => `${e._accountId}:${e._mailbox}:${e.uid}`;
+    expect(filterUnread(spanning, true, null, keyOf, new Set(['b:Archive:3'])).map(keyOf))
+      .toEqual(['a:INBOX:2', 'b:Archive:3']);
+  });
+
+  it('still returns the same array reference when the filter is off', () => {
+    expect(filterUnread(list, false, null, e => e.uid, new Set([1]))).toBe(list);
+  });
+});

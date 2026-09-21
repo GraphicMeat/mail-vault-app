@@ -82,6 +82,15 @@ vi.mock('../../stores/exportStore', () => ({
   useExportStore: { getState: () => ({ openExport }) },
 }));
 
+// Search results are their own row pool: a hit can name a message no loaded
+// list holds, and the bar resolves selection keys back to rows before it
+// decides which buttons are live.
+let searchResultRows = [];
+const searchState = () => ({ searchResults: searchResultRows, searchActive: searchResultRows.length > 0 });
+vi.mock('../../stores/searchStore', () => ({
+  useSearchStore: Object.assign((selector) => selector(searchState()), { getState: () => searchState() }),
+}));
+
 import { SelectionActionBar } from '../SelectionActionBar';
 
 function quickAction(title) {
@@ -370,5 +379,54 @@ describe('SelectionActionBar export', () => {
     render(<SelectionActionBar />);
     fireEvent.click(quickAction('Export selected'));
     expect(openExport).not.toHaveBeenCalled();
+  });
+});
+
+
+// A search hit lives only in `searchResults` — no loaded list holds it. The
+// bar could not resolve its selection key back to a row, so
+// `selectionIsFullyResolved` stayed false and Mark read / Mark unread /
+// Delete from server / Delete everywhere were all greyed out over a selection
+// the user had just made.
+describe('SelectionActionBar over search results', () => {
+  const searchRow = {
+    uid: 5, _accountId: 'acct-1', _mailbox: 'Archive', source: 'server',
+    flags: [], isArchived: false,
+  };
+  const KEY = 'acct-1:Archive:5';
+
+  beforeEach(() => {
+    searchResultRows = [searchRow];
+    useMailStoreMock.setState({
+      activeAccountId: 'acct-1', activeMailbox: 'INBOX', accounts: [{ id: 'acct-1' }], mailboxes: [],
+      emails: [], sortedEmails: [], localEmails: [], sentEmails: [],
+      selectedEmailIds: new Set([KEY]),
+      archivedEmailIds: new Set(),
+      clearSelection: vi.fn(),
+      saveSelectedLocally: vi.fn(),
+      markSelectedAsRead: vi.fn(),
+      markSelectedAsUnread: vi.fn(),
+      deleteSelectedFromServer: vi.fn().mockResolvedValue(),
+      purgeSelectedEverywhere: vi.fn().mockResolvedValue({ deleted: 1, failed: 0, queuedBackup: 0, needsResync: 0 }),
+      removeLocalEmail: vi.fn(),
+      getSelectionSummary: vi.fn(() => ({ threads: 1, emails: 1 })),
+    });
+  });
+  afterEach(() => { cleanup(); searchResultRows = []; });
+
+  it('leaves the destructive actions live for a row only the search holds', () => {
+    render(<SelectionActionBar />);
+    expect(quickAction('Delete from server').disabled).toBe(false);
+    expect(quickAction('Delete everywhere').disabled).toBe(false);
+  });
+
+  it('deletes a search hit from the server', async () => {
+    render(<SelectionActionBar />);
+    fireEvent.click(quickAction('Delete from server'));
+
+    const confirmButtons = screen.getAllByRole('button', { name: 'Delete from server' });
+    fireEvent.click(confirmButtons[confirmButtons.length - 1]);
+
+    await waitFor(() => expect(useMailStoreMock.getState().deleteSelectedFromServer).toHaveBeenCalledTimes(1));
   });
 });

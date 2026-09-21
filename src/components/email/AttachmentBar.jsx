@@ -58,6 +58,35 @@ function browserDownload(attachment) {
   }, 500);
 }
 
+/**
+ * Where in ~/Downloads this file goes.
+ *
+ * The sandbox entitlement (`files.downloads.read-write`, both plists) covers
+ * this folder without a save panel, which is what makes Download a one-click
+ * action — it used to write into the app's own attachment cache, so getting
+ * the file where the user expected it still needed a right-click and a dialog.
+ *
+ * A name already taken gets a counter rather than being overwritten: an
+ * unrelated `invoice.pdf` sitting in Downloads is not ours to destroy, and no
+ * browser download does that either.
+ */
+async function downloadsDest(filename) {
+  const { downloadDir, join } = await import('@tauri-apps/api/path');
+  const { exists } = await import('@tauri-apps/plugin-fs');
+  const dir = await downloadDir();
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : '';
+  // ponytail: a linear probe, capped — a folder holding 500 copies of one
+  // name is not a case worth a smarter search, and the cap stops a failing
+  // `exists` from spinning forever.
+  for (let n = 0; n < 500; n++) {
+    const candidate = await join(dir, n === 0 ? filename : `${base} (${n})${ext}`);
+    if (!await exists(candidate)) return candidate;
+  }
+  return await join(dir, `${base} (${Date.now()})${ext}`);
+}
+
 /** Read one attachment's bytes (base64) from the message's cached .eml. */
 async function readAttachment({ accountId, mailbox, uid, attachmentIndex }) {
   const args = { accountId, mailbox, uid, attachmentIndex };
@@ -287,7 +316,13 @@ export function AttachmentItem({ attachment, attachmentIndex, emailUid, accountI
     setError(null);
     try {
       if (isTauri) {
-        flashDownloaded(await send('cache_attachment', location));
+        const fname = attachment.filename || 'attachment';
+        const b64 = await ensureContent();
+        flashDownloaded(await window.__TAURI__.core.invoke('save_attachment_to', {
+          filename: fname,
+          contentBase64: getCleanBase64(b64),
+          destPath: await downloadsDest(fname),
+        }));
       } else {
         browserDownload({ ...attachment, content: await ensureContent() });
       }

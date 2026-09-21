@@ -1121,9 +1121,21 @@ export function isUnread(email) {
 /**
  * `keepId` is the open message, kept on screen even once it is read — compared
  * through `keyOf`, because in a list spanning mailboxes a uid names two rows.
+ *
+ * `keep` is every message read EARLIER in this filter session (the store's
+ * `unreadKeep`). Keeping only the open one was not enough: move to the next
+ * message and the one just read vanished, so the list lost a message the user
+ * had been looking at a second ago. The set is emptied when the filter is
+ * toggled, which is the only moment the user asks for the list to be re-cut.
  */
-export function filterUnread(emails, unreadOnly, keepId, keyOf = (e) => e.uid) {
+export function filterUnread(emails, unreadOnly, keepId, keyOf = (e) => e.uid, keep = null) {
   if (!unreadOnly) return emails || [];
   if (!emails) return [];
-  return emails.filter(e => isUnread(e) || (keepId != null && keyOf(e) === keepId));
+  const sticky = keep?.size ? keep : null;
+  if (keepId == null && !sticky) return emails.filter(isUnread);
+  return emails.filter(e => {
+    if (isUnread(e)) return true;
+    const key = keyOf(e);
+    return (keepId != null && key === keepId) || !!sticky?.has(key);
+  });
 }

@@ -19,6 +19,15 @@ const { invoke } = vi.hoisted(() => ({ invoke: vi.fn() }));
 // invoke.mockImplementation(...) above still drives their responses.
 vi.mock('../../services/transport', () => ({ send: (...args) => invoke(...args) }));
 
+// The Download button writes into the user's Downloads folder — the sandbox
+// entitlement covers it, so no save dialog and no second click.
+const existing = new Set();
+vi.mock('@tauri-apps/api/path', () => ({
+  downloadDir: async () => '/Users/test/Downloads',
+  join: async (...parts) => parts.join('/'),
+}));
+vi.mock('@tauri-apps/plugin-fs', () => ({ exists: async (p) => existing.has(p) }));
+
 vi.mock('lucide-react', () => {
   const icon = (name) => (props) => React.createElement('span', { 'data-icon': name, ...props });
   return new Proxy({}, {
@@ -61,13 +70,15 @@ function renderItem(attachment, props = {}) {
 beforeEach(() => {
   window.__TAURI__ = { core: { invoke } };
   invoke.mockReset();
-  invoke.mockImplementation(async (cmd) => {
+  invoke.mockImplementation(async (cmd, args) => {
     if (cmd === 'cached_attachment_path') return null;
     if (cmd === 'maildir_read_attachment') return PNG_B64;
     if (cmd === 'cache_attachment') return '/cache/acct-1_INBOX_7_0_invoice.pdf';
+    if (cmd === 'save_attachment_to') return args?.destPath;
     if (cmd === 'open_file') return null;
     throw new Error(`unexpected command ${cmd}`);
   });
+  existing.clear();
   URL.createObjectURL = vi.fn(() => 'blob:mock-pdf');
   URL.revokeObjectURL = vi.fn();
 });
@@ -77,14 +88,40 @@ afterEach(() => {
 });
 
 describe('AttachmentItem download', () => {
-  it("caches the bytes from the message's own mailbox, not the active view", async () => {
+  it("reads the bytes from the message's own mailbox, not the active view", async () => {
     renderItem(PDF);
     fireEvent.click(screen.getByTestId('attachment-download'));
 
     await waitFor(() => expect(screen.getByText('Downloaded')).toBeTruthy());
-    const call = invoke.mock.calls.find(([cmd]) => cmd === 'cache_attachment');
+    const call = invoke.mock.calls.find(([cmd]) => cmd === 'maildir_read_attachment');
     expect(call[1]).toEqual({ accountId: 'acct-1', mailbox: 'INBOX', uid: 7, attachmentIndex: 0 });
     expect(invoke.mock.calls.some(([, args]) => args?.mailbox === 'UNIFIED')).toBe(false);
+  });
+
+  // The reported defect: Download put the file in the app's own cache, so
+  // getting it into Downloads still needed a right-click and a save dialog.
+  it('writes the file straight into the Downloads folder', async () => {
+    renderItem(PDF);
+    fireEvent.click(screen.getByTestId('attachment-download'));
+
+    await waitFor(() => expect(screen.getByText('Downloaded')).toBeTruthy());
+    const save = invoke.mock.calls.find(([cmd]) => cmd === 'save_attachment_to');
+    expect(save[1].destPath).toBe('/Users/test/Downloads/invoice.pdf');
+    expect(save[1].filename).toBe('invoice.pdf');
+    expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(false);
+  });
+
+  // Overwriting a file already in Downloads would destroy an unrelated one
+  // with the same name, which no browser download does either.
+  it('does not overwrite a file of the same name already in Downloads', async () => {
+    existing.add('/Users/test/Downloads/invoice.pdf');
+    existing.add('/Users/test/Downloads/invoice (1).pdf');
+    renderItem(PDF);
+    fireEvent.click(screen.getByTestId('attachment-download'));
+
+    await waitFor(() => expect(screen.getByText('Downloaded')).toBeTruthy());
+    const save = invoke.mock.calls.find(([cmd]) => cmd === 'save_attachment_to');
+    expect(save[1].destPath).toBe('/Users/test/Downloads/invoice (2).pdf');
   });
 
   it('shows an attachment the prefetch already cached as ready to open', async () => {
@@ -129,7 +166,7 @@ describe('AttachmentItem preview', () => {
     await screen.findByTestId('attachment-preview-image');
 
     fireEvent.click(screen.getByTestId('attachment-preview-download'));
-    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'cache_attachment')).toBe(true));
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === 'save_attachment_to')).toBe(true));
   });
 });
 

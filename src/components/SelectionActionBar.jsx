@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSelectionStore } from "../stores/selectionStore";
 import { useMessageListStore } from "../stores/messageListStore";
+import { useSearchStore } from "../stores/searchStore";
 import {
   Archive,
   ArchiveRestore,
@@ -59,6 +60,12 @@ export function SelectionActionBar() {
   const serverEmails = useMailStore((s) => s.emails);
   const localEmails = useMailStore((s) => s.localEmails);
   const sentEmails = useMailStore((s) => s.sentEmails);
+  // A search hit can name a message no loaded list holds. Without this pool a
+  // key ticked in the search results resolved to no row at all, so the bar
+  // read the selection as unresolvable and greyed out mark read/unread,
+  // delete from server and delete everywhere over a selection the user had
+  // just made.
+  const searchResults = useSearchStore((s) => s.searchResults);
 
   // Which delete was requested — 'server' or 'everywhere' — so a single
   // popover can show the right confirmation copy for whichever button
@@ -249,6 +256,7 @@ export function SelectionActionBar() {
       ...(serverEmails || []),
       ...(localEmails || []),
       ...(sentEmails || []),
+      ...(searchResults || []),
     ];
     const seen = new Set();
     return allRows.filter((email) => {
@@ -257,15 +265,16 @@ export function SelectionActionBar() {
       seen.add(key);
       return true;
     });
-  }, [selectedEmailIds, sortedEmails, serverEmails, localEmails, sentEmails]);
+  }, [selectedEmailIds, sortedEmails, serverEmails, localEmails, sentEmails, searchResults]);
   const allSelectionRows = useMemo(
     () => [
       ...(sortedEmails || []),
       ...(serverEmails || []),
       ...(localEmails || []),
       ...(sentEmails || []),
+      ...(searchResults || []),
     ],
-    [sortedEmails, serverEmails, localEmails, sentEmails],
+    [sortedEmails, serverEmails, localEmails, sentEmails, searchResults],
   );
   const selectionTarget = resolveQuickActionSelectionTarget(
     [...selectedEmailIds],

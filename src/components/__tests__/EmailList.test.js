@@ -133,7 +133,9 @@ vi.mock('../../stores/mailStore', () => {
     getSentMailboxPath: vi.fn(() => 'Sent'),
     refreshBackedUpUids: vi.fn(),
     unreadOnly: false,
+    unreadKeep: new Set(),
     toggleUnreadOnly: vi.fn(),
+    setEmailsSelected: vi.fn(),
     saveEmailLocally: vi.fn(),
     removeLocalEmail: vi.fn(),
     deleteEmailFromServer: vi.fn(),
@@ -653,6 +655,24 @@ describe('unread-only filter', () => {
     render(React.createElement(EmailList));
 
     expect(lastVirtualizerConfig.count).toBe(2);
+  });
+
+  // Reading a message marks it read. Once the selection moves on, only the
+  // keep set holds its row — and it has to hold it until the filter is
+  // toggled, not until the next repaint.
+  it('keeps a message read earlier in this filter session, after the selection moves on', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.setState({
+      sortedEmails: mixed(10), totalEmails: 10, unreadOnly: true,
+      selectedEmailId: 3, unreadKeep: new Set([2]),
+    });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    // 5 unread + uid 2 (read, kept) — uid 3 is unread and already counted.
+    expect(lastVirtualizerConfig.count).toBe(6);
+    useMailStore.setState({ unreadKeep: new Set() });
   });
 
   it('counts the unread rows in the header, not the whole window', async () => {
@@ -1387,5 +1407,49 @@ describe('Explorer search conversation scope', () => {
       Object.assign(search, previousSearch);
       mail.getChatEmails.mockImplementation(previousChat);
     }
+  });
+});
+
+
+// Searching narrows the list to the hits, and "Select messages" has to mean
+// those hits. It opened the bulk modal instead — a date-range picker over the
+// whole mailbox, which is a different question from the one the search asked.
+describe('select messages while a search is on', () => {
+  afterEach(async () => {
+    cleanup();
+    const { useSearchStore } = await import('../../stores/searchStore');
+    Object.assign(useSearchStore.getState(), { searchActive: false, searchResults: [] });
+  });
+
+  it('selects every visible hit instead of opening the bulk modal', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    const { useSearchStore } = await import('../../stores/searchStore');
+    const hits = makeEmails(3);
+    Object.assign(useSearchStore.getState(), { searchActive: true, searchResults: hits });
+    useMailStore.getState().setEmailsSelected.mockClear();
+    useMailStore.getState().openBulkModal.mockClear();
+    useMailStore.setState({ unreadOnly: false, selectedEmailIds: new Set() });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    fireEvent.click(screen.getByTitle('Select messages…'));
+
+    expect(useMailStore.getState().openBulkModal).not.toHaveBeenCalled();
+    const [rows, selected] = useMailStore.getState().setEmailsSelected.mock.calls[0];
+    expect(rows.map(e => e.uid)).toEqual([1, 2, 3]);
+    expect(selected).toBe(true);
+  });
+
+  it('still opens the bulk modal when no search is on', async () => {
+    const { useMailStore } = await import('../../stores/mailStore');
+    useMailStore.getState().openBulkModal.mockClear();
+    useMailStore.setState({ sortedEmails: mockEmails, totalEmails: 500, selectedEmailIds: new Set() });
+
+    const { EmailList } = await import('../EmailList.jsx');
+    render(React.createElement(EmailList));
+
+    fireEvent.click(screen.getByTitle('Select messages…'));
+    expect(useMailStore.getState().openBulkModal).toHaveBeenCalled();
   });
 });

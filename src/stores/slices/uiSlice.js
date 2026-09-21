@@ -15,6 +15,14 @@ export const createUiSlice = (set, get) => ({
   // as lost mail, not as a filter.
   unreadOnly: false,
 
+  // Selection keys of messages read WHILE the filter was on. Reading a message
+  // marks it read, and cutting its row at that moment made the message the
+  // user had just opened disappear the instant they moved to the next one.
+  // They stay until the filter is toggled — the only moment the user asks for
+  // the list to be re-cut. Emptied on a folder/account switch with the rest of
+  // the view's state (activateAccount).
+  unreadKeep: new Set(),
+
   // Incremented on flag changes (read/unread) — allows thread caches to invalidate
   _flagSeq: 0,
 
@@ -161,7 +169,19 @@ export const createUiSlice = (set, get) => ({
     }
   },
 
-  toggleUnreadOnly: () => set(state => ({ unreadOnly: !state.unreadOnly })),
+  toggleUnreadOnly: () => set(state => ({ unreadOnly: !state.unreadOnly, unreadKeep: new Set() })),
+
+  // Hold these rows on screen for the rest of this filter session. A no-op
+  // while the filter is off — nothing is being hidden, so nothing needs
+  // holding — and always a fresh Set, because EmailList memoizes on identity
+  // and a mutated one would never reach the list.
+  keepVisibleWhileUnreadFiltered: (keys) => set(state => {
+    if (!state.unreadOnly) return {};
+    const next = new Set(state.unreadKeep);
+    const before = next.size;
+    for (const key of keys) if (key != null) next.add(key);
+    return next.size === before ? {} : { unreadKeep: next };
+  }),
 
   setExportProgress: (progress) => {
     set({ exportProgress: progress });

@@ -15,6 +15,11 @@
 - **A delete the server refuses is retried instead of quietly coming back.** A failed delete used to put the row back on the list and forget the whole thing, so a dead connection was enough to undo a delete you had confirmed. It is now re-sent straight away, and if that fails too it stays queued and is retried on reconnect, every few minutes, and at the next launch.
 - **Deleting a search result takes it out of the results straight away.** A message deleted from a result list stayed on screen, still clickable, until the search was run again. It now disappears the moment it is deleted, the same way a moved message already did.
 - **Marking the open message unread no longer closes it.** Only deleting it, moving it, or closing the reader yourself takes a message off the screen now.
+- **A message you read with the unread filter on stays in the list.** Opening an unread message marks it read, which took its row out of the filtered list the moment you moved to the next one. Messages read while the filter is on now stay on screen until you switch the filter off and on again.
+- **Refreshing the list no longer closes the message you are reading.** Refresh, the automatic reconnect and the periodic sync all closed the reading pane, in a single folder and in All Inboxes. Only moving to another account or folder does now.
+- **Attachments download straight to your Downloads folder.** The Download button used to put the file in MailVault's own cache, so saving it where you expected still needed a right-click and a save dialog. It goes to Downloads on the first click, and a file already there with the same name is never overwritten.
+- **Select messages selects the search results while you are searching.** It opened the date-range picker for the whole mailbox instead, which could not see the search at all.
+- **Search results you tick can be deleted and marked read again.** Delete from server, Delete everywhere and Mark read/unread were greyed out for a message found only by search, because the selection bar could not match it to a loaded row.
 - **A selection made while a delete, purge or move is still running is no longer cleared.** Ticking more rows while a bulk action was talking to the server wiped those ticks when it finished, so they had to be made again. Only the rows the action actually handled are now cleared.
 
 ## [2.15.0] - 2026-09-20

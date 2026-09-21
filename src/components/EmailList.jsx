@@ -146,6 +146,9 @@ function EmailListComponent({ stacked = false }) {
   const sentEmails = useMessageListStore(s => s.sentEmails);
   const hasMoreEmails = useMessageListStore(s => s.hasMoreEmails);
   const unreadOnly = useUiStore(s => s.unreadOnly);
+  // Messages read earlier in this filter session — they stay on screen until
+  // the filter is toggled. See uiSlice's `unreadKeep`.
+  const unreadKeep = useUiStore(s => s.unreadKeep);
   const toggleUnreadOnly = useUiStore(s => s.toggleUnreadOnly);
   const searchActive = useSearchStore(s => s.searchActive);
   const searchResults = useSearchStore(s => s.searchResults);
@@ -408,8 +411,8 @@ function EmailListComponent({ stacked = false }) {
   // identity checks downstream (row cache, thread cache) stay hot.
   const displayEmails = useMemo(
     () => filterUnread(searchActive ? searchResults : sortedEmails, unreadOnly, selectedEmailId,
-      e => selectionKey(e, useMailStore.getState())),
-    [searchActive, searchResults, sortedEmails, unreadOnly, selectedEmailId]
+      e => selectionKey(e, useMailStore.getState()), unreadKeep),
+    [searchActive, searchResults, sortedEmails, unreadOnly, selectedEmailId, unreadKeep]
   );
 
   // Exit skeleton mode once loading finishes for the current view (even if empty)
@@ -528,9 +531,9 @@ function EmailListComponent({ stacked = false }) {
     // Only merge INBOX + Sent when viewing INBOX; other folders use their own emails
     const usesMerged = activeAccountEmail && activeMailbox === 'INBOX';
     const emails = usesMerged
-      ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId, e => selectionKey(e, useMailStore.getState()))
+      ? filterUnread(getChatEmails(), unreadOnly, selectedEmailId, e => selectionKey(e, useMailStore.getState()), unreadKeep)
       : displayEmails;
-    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}-${unreadOnly}`;
+    const fp = `sender-${activeAccountId}-${activeMailbox}-${emails.length}-${emails[0]?.uid}-${emails[emails.length - 1]?.uid}-${archivedSize}-${activeAccountEmail}-${sentEmails.length}-${alertCount}-${unreadOnly}-${unreadKeep.size}`;
 
     if (senderGroupCacheRef.current.fingerprint === fp) {
       if (senderGroups !== senderGroupCacheRef.current.groups) {
@@ -548,7 +551,7 @@ function EmailListComponent({ stacked = false }) {
     }, 0);
 
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, selectedEmailId]);
+  }, [isExplorer, displayEmails, sentEmails, emailListGrouping, archivedSize, activeAccountEmail, activeMailbox, alertCount, unreadOnly, unreadKeep, selectedEmailId]);
 
   // ── Cached display-row builder ──
   // Separates structural rebuilds (membership/order) from lightweight flag-freshening passes.
@@ -987,10 +990,16 @@ function EmailListComponent({ stacked = false }) {
         )}
       </div>
       <div className="mail-list-toolbar" role="toolbar" aria-label={t('workspace.listControls')}>
+        {/* Searching has already narrowed the list to the hits, so "select
+            messages" means those hits — the bulk modal asks a different
+            question (a date range over the whole mailbox) and cannot see the
+            search at all. */}
         <Button variant="ghost" icon size="sm" className="shrink-0"
           title={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
           aria-label={allSelected ? t('workspace.clearSelection') : t('workspace.selectMessages')}
-          onClick={() => allSelected ? clearSelection() : openBulkModal()}>
+          onClick={() => allSelected ? clearSelection()
+            : searchActive ? setEmailsSelected(displayEmails, true)
+            : openBulkModal()}>
           {allSelected ? <CheckSquare size={18} className="text-mail-accent-text" /> : <Square size={18} />}
         </Button>
         <button type="button" data-testid="unread-filter-toggle" onClick={toggleUnreadOnly}

@@ -62,6 +62,20 @@ export async function reloadListInView() {
 }
 
 
+// Rows a selection key can be resolved against, beyond the loaded lists.
+//
+// A search hit can name a message no list holds — it is in `searchResults` and
+// nowhere else. A pool without them resolved that key to no row, and the row
+// is what carries the local-only proof the delete paths refuse to guess at, so
+// a ticked local-only hit would have been journalled as a server delete.
+// Search rows go FIRST everywhere they are merged in: a real list row is the
+// better copy wherever both exist, and the maps built from these pools keep
+// either the first or the last entry depending on the site.
+async function _searchRows() {
+  const { useSearchStore } = await import('../../stores/searchStore');
+  return useSearchStore.getState().searchResults || [];
+}
+
 // One message as the custody store keeps it. `local_index_append` upserts by
 // uid, so this doubles as the shape any later writer has to preserve — see
 // markServerDeleted, which re-appends an entry to add one field.
@@ -385,7 +399,7 @@ export async function saveSelectedLocally() {
   useMailStore.setState({ selectedEmailIds: new Set() });
   // Each key names its own account and folder (a full key), or the view's (a
   // bare uid) — the same reading every other selection workflow does.
-  const emailMap = new Map([...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]
+  const emailMap = new Map([...(await _searchRows()), ...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]
     .map(e => [selectionKey(e, state), e]));
   const rows = [];
   for (const key of keys) {
@@ -557,7 +571,7 @@ export async function removeLocalEmail(uidOrKey, location = null) {
 function _openAfterDelete(state, isOpenRow, isRemoved) {
   if (useSettingsStore.getState().afterDeleteSelect !== 'next') return null;
   const keyOf = (e) => selectionKey(e, state);
-  const visible = filterUnread(state.sortedEmails, state.unreadOnly, state.selectedEmailId, keyOf);
+  const visible = filterUnread(state.sortedEmails, state.unreadOnly, state.selectedEmailId, keyOf, state.unreadKeep);
   return nextAfterRemoval(visible, isOpenRow, isRemoved);
 }
 
@@ -1330,6 +1344,19 @@ export function applySeenLocally(useMailStore, { accountId, mailbox, uid, read, 
   const entry = useMailStore.getState().emailCache.get(`${accountId}-${mailbox}-${uid}`);
   if (entry) entry.email = { ...entry.email, flags: _withSeen(entry.email.flags, read) };
 
+  // With the unread filter on, this row has just stopped matching it. Hold it
+  // on screen for the rest of the filter session — auto-mark-on-open is the
+  // main caller, and a message that vanishes a beat after you open it reads as
+  // the list losing mail. Keyed the way the list keys its rows, off the row
+  // itself: a hand-built key is the wrong shape half the time (a bare uid in
+  // one folder's list, `account:mailbox:uid` in a spanning one).
+  if (read) {
+    const after = useMailStore.getState();
+    const row = [...after.emails, ...(after.localEmails || []), ...(after.sentEmails || [])].find(matches)
+      || (after.selectedEmail && matches(after.selectedEmail) ? after.selectedEmail : null);
+    if (row) after.keepVisibleWhileUnreadFiltered([selectionKey(row, after)]);
+  }
+
   _refreshAfterFlagChange(useMailStore);
   // …which recounts the badge for a single-account list. The unified one is on
   // us: counting its rows against `accountId` would put every account's unread
@@ -1544,7 +1571,7 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
   const state = useMailStore.getState();
 
   const emailMap = new Map();
-  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || [])]) {
+  for (const e of [...state.emails, ...(state.localEmails || []), ...(state.sentEmails || []), ...(await _searchRows())]) {
     const k = selectionKey(e, state);
     if (!emailMap.has(k)) emailMap.set(k, e);
   }
@@ -1557,6 +1584,12 @@ export async function applyFlagToKeys(keys, flag, on, opts) {
     }
     targets.push({ key, ...ctx });
   }
+
+  // Same hold as applySeenLocally's: these rows stop matching the unread
+  // filter the moment this lands, and a bulk "mark read" that emptied the list
+  // it was run from is the same defect at scale. The keys here are already
+  // selection keys.
+  if (flag === '\\Seen' && on) state.keepVisibleWhileUnreadFiltered(keys);
 
   // A bulk path hands the selection back empty, as mark read always has. A
   // single row acted on while an unrelated bulk selection is live is NOT that,
@@ -1701,7 +1734,7 @@ export async function deleteSelectedFromServer() {
 
   const keys = Array.from(selectedEmailIds);
 
-  const allEmails = [...state.emails, ...state.sentEmails];
+  const allEmails = [...(await _searchRows()), ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
   const contextOf = (key) => _resolveKeyContext(key, state, emailMap);
 
@@ -2025,7 +2058,7 @@ export async function purgeEverywhere(keys, { onProgress } = {}) {
   // the winning object. Emails/sentEmails must win the collision so a stale
   // `_localStaged` duplicate sitting in `localEmails` can never masquerade as
   // the server-backed row's verdict.
-  const allEmails = [...state.localEmails, ...state.emails, ...state.sentEmails];
+  const allEmails = [...(await _searchRows()), ...state.localEmails, ...state.emails, ...state.sentEmails];
   const emailMap = new Map(allEmails.map(e => [selectionKey(e, state), e]));
 
   const contexts = keys.map(key => _resolveKeyContext(key, state, emailMap));

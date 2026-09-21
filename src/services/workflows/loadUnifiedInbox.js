@@ -3,7 +3,7 @@
 import * as db from '../db';
 import * as api from '../api';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { _buildRestoreDescriptor, _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
+import { _buildRestoreDescriptor, _resolveMailboxPath, readerClearOnNavigation } from '../../stores/slices/unifiedHelpers';
 import { serverUids } from '../../stores/slices/serverUids';
 import { getRestoreDescriptor as _getRestore, getAccountCacheMailboxes as _getAccountMailboxes } from '../cacheManager';
 import {
@@ -214,6 +214,12 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
   const allServerUids = new Set();
   for (const e of firstBatch) allServerUids.add(e.uid);
 
+  // Refresh in All Inboxes lands here too, and closing the open message on a
+  // plain reload of the view already on screen is not something the user
+  // asked for. The paths that really move into (or across) this view —
+  // setUnifiedInbox, switchUnifiedFolder — clear the reader themselves before
+  // they call this, so nothing is lost by leaving it alone here.
+  const reader = readerClearOnNavigation(useMailStore.getState(), useMailStore.getState().activeAccountId, 'UNIFIED');
   useMailStore.setState({
     emails: firstBatch,
     // firstBatch is a rendered chunk of a cross-account cache merge, never a
@@ -222,11 +228,7 @@ export async function loadUnifiedInbox(preUnifiedSnapshot = null, mailbox = null
     _sortedEmailsFingerprint: '',
     activeMailbox: 'UNIFIED',
     totalEmails: total,
-    selectedEmailId: null,
-    selectedEmail: null,
-    selectedEmailSource: null,
-    selectedThread: null,
-    selectedEmailIds: new Set(),
+    ...reader,
     hasMoreEmails: false,
     currentPage: 1,
     loading: false,
