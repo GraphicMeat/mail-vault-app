@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "サーバーから削除",
   "settings.pendingActions.opMove": "別のフォルダーに移動",
   "settings.pendingActions.opFlag": "フラグの変更",
-  "settings.pendingActions.opOther": "サーバー操作"
+  "settings.pendingActions.opOther": "サーバー操作",
+  "views": {
+    "section": "ビュー",
+    "builtin": {
+      "needs-reply": "要返信",
+      "starred": "スター付き",
+      "attachments": "添付ファイル"
+    },
+    "unavailable": {
+      "building": "メールをインデックス中です。完了するにつれてこのビューに表示されます。",
+      "unavailable": "検索インデックスが開いていないため、このビューを今は計算できません。",
+      "off": "保存したビューを使うには検索インデックスを有効にしてください。",
+      "error": "このビューを計算できませんでした。"
+    },
+    "saveSearch": "この検索をビューとして保存"
+  }
 }

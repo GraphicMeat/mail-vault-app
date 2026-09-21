@@ -146,6 +146,39 @@ export const useSearchStore = create((set, get) => ({
   // half of the last search, null when the scan did.
   searchIndexCoverage: null,
 
+  /// Show rows the app did not search for — a saved view's result. They
+  /// arrive in the same shape the index lane of a search produces, so they go
+  /// through the same snapshot and the same `finalize`: custody glyphs, backup
+  /// state and the copy-per-message rules are all in there, and a second
+  /// render path would have to re-derive every one of them.
+  showRows: (rows) => {
+    const mail = useMailStore.getState();
+    const searchSnapshot = {
+      backedUpKeys: mail.backedUpKeys,
+      backedUpScopes: mail.backedUpScopes,
+      backupConfigured: mail.backupConfigured,
+      activeAccountId: mail.activeAccountId,
+      activeMailbox: mail.activeMailbox,
+    };
+    stopActiveRun();
+    set({
+      searchGeneration: ++generation,
+      activeSearchId: null,
+      lastSequence: 0,
+      searchSnapshot,
+      searchActive: true,
+      isSearching: false,
+      searchProgress: null,
+      searchError: null,
+      searchFallback: null,
+      searchIndexCoverage: null,
+      indexedSearchRows: {},
+      excludedSearchCopies: new Set(),
+      searchRowsOutsideIndex: rows,
+      searchResults: finalize(rows, searchSnapshot),
+    });
+  },
+
   setSearchQuery: (query) => set({ searchQuery: query }),
 
   setSearchFilters: (filters) => set(state => ({

@@ -7,6 +7,7 @@ import { useSelectionStore } from '../stores/selectionStore';
 import { useSyncStore } from '../stores/syncStore';
 import { selectionKey, rowKey, spansMailboxes, emailKey as messageKey, emailScopeKey } from '../stores/slices/unifiedHelpers';
 import { useUiStore } from '../stores/uiStore';
+import { useViewStore, viewLabel } from '../stores/viewStore';
 import { useSearchStore } from '../stores/searchStore';
 import { useSettingsStore, getAccountInitial, hashColor } from '../stores/settingsStore';
 import { shouldPrefetch } from '../services/cachePressure';
@@ -172,6 +173,7 @@ function EmailListComponent({ stacked = false }) {
   const unreadKeep = useUiStore(s => s.unreadKeep);
   const toggleUnreadOnly = useUiStore(s => s.toggleUnreadOnly);
   const searchActive = useSearchStore(s => s.searchActive);
+  const activeView = useViewStore(s => s.views.find(view => view.id === s.activeViewId) || null);
   const searchResults = useSearchStore(s => s.searchResults);
   const flagSeq = useUiStore(s => s._flagSeq);
   const archivedSize = useMessageListStore(s => s.archivedEmailIds.size);
@@ -965,7 +967,8 @@ function EmailListComponent({ stacked = false }) {
     setBulkOpProgress(null);
   };
 
-  const mailboxTitle = searchActive ? t('list.searchResults')
+  const mailboxTitle = activeView ? viewLabel(activeView, t)
+    : searchActive ? t('list.searchResults')
     : activeMailbox === 'UNIFIED' ? t('sidebar.allInboxes')
       : activeMailbox === 'INBOX' ? t('sidebar.inbox')
         : decodeImapUtf7(activeMailbox.includes('.') ? activeMailbox.split('.').pop() : activeMailbox.includes('/') ? activeMailbox.split('/').pop() : activeMailbox);

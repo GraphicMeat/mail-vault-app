@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Delete from server",
   "settings.pendingActions.opMove": "Move to another folder",
   "settings.pendingActions.opFlag": "Flag change",
-  "settings.pendingActions.opOther": "Server action"
+  "settings.pendingActions.opOther": "Server action",
+  "views": {
+    "section": "Views",
+    "builtin": {
+      "needs-reply": "Needs reply",
+      "starred": "Starred",
+      "attachments": "Attachments"
+    },
+    "unavailable": {
+      "building": "Still indexing your mail — this view will fill in as it finishes.",
+      "unavailable": "The search index is not open, so this view cannot be worked out right now.",
+      "off": "Turn the search index on to use saved views.",
+      "error": "This view could not be worked out."
+    },
+    "saveSearch": "Save this search as a view"
+  }
 }

@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Supprimer du serveur",
   "settings.pendingActions.opMove": "Déplacer vers un autre dossier",
   "settings.pendingActions.opFlag": "Changement de marqueur",
-  "settings.pendingActions.opOther": "Action serveur"
+  "settings.pendingActions.opOther": "Action serveur",
+  "views": {
+    "section": "Vues",
+    "builtin": {
+      "needs-reply": "À répondre",
+      "starred": "Suivis",
+      "attachments": "Pièces jointes"
+    },
+    "unavailable": {
+      "building": "Vos messages sont encore en cours d’indexation : cette vue se remplira au fur et à mesure.",
+      "unavailable": "L’index de recherche n’est pas ouvert, cette vue ne peut donc pas être calculée pour l’instant.",
+      "off": "Activez l’index de recherche pour utiliser les vues enregistrées.",
+      "error": "Cette vue n’a pas pu être calculée."
+    },
+    "saveSearch": "Enregistrer cette recherche comme vue"
+  }
 }

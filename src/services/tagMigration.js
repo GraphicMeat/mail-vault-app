@@ -1,6 +1,7 @@
 import { daemonCall } from './daemonClient';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTagStore } from '../stores/tagStore';
+import { useViewStore } from '../stores/viewStore';
 
 /// Hand the settings-file labels (`localMailLabels`) to the daemon once.
 ///
@@ -17,6 +18,13 @@ export async function bootstrapTags() {
     await useTagStore.getState().loadTags();
   } catch (error) {
     console.warn('[tags] could not load tags:', error?.message || error);
+  }
+  try {
+    // The starters are seeded by the daemon on this first list.
+    await useViewStore.getState().loadViews();
+    await useViewStore.getState().refreshCounts();
+  } catch (error) {
+    console.warn('[views] could not load the saved views:', error?.message || error);
   }
   return migrateLocalMailLabels();
 }

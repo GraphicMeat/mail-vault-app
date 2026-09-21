@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Excluir do servidor",
   "settings.pendingActions.opMove": "Mover para outra pasta",
   "settings.pendingActions.opFlag": "Mudança de marcação",
-  "settings.pendingActions.opOther": "Ação no servidor"
+  "settings.pendingActions.opOther": "Ação no servidor",
+  "views": {
+    "section": "Visões",
+    "builtin": {
+      "needs-reply": "Precisa de resposta",
+      "starred": "Com estrela",
+      "attachments": "Anexos"
+    },
+    "unavailable": {
+      "building": "Seus e-mails ainda estão sendo indexados — esta visão vai se preencher conforme terminar.",
+      "unavailable": "O índice de busca não está aberto, então esta visão não pode ser calculada agora.",
+      "off": "Ative o índice de busca para usar visões salvas.",
+      "error": "Não foi possível calcular esta visão."
+    },
+    "saveSearch": "Salvar esta busca como visão"
+  }
 }

@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "从服务器删除",
   "settings.pendingActions.opMove": "移动到其他文件夹",
   "settings.pendingActions.opFlag": "标记变更",
-  "settings.pendingActions.opOther": "服务器操作"
+  "settings.pendingActions.opOther": "服务器操作",
+  "views": {
+    "section": "视图",
+    "builtin": {
+      "needs-reply": "待回复",
+      "starred": "已加星标",
+      "attachments": "附件"
+    },
+    "unavailable": {
+      "building": "邮件仍在建立索引，此视图会随之逐步填充。",
+      "unavailable": "搜索索引未打开，因此暂时无法计算此视图。",
+      "off": "启用搜索索引后即可使用已保存的视图。",
+      "error": "无法计算此视图。"
+    },
+    "saveSearch": "将此搜索保存为视图"
+  }
 }

@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Elimina dal server",
   "settings.pendingActions.opMove": "Sposta in un’altra cartella",
   "settings.pendingActions.opFlag": "Modifica del contrassegno",
-  "settings.pendingActions.opOther": "Azione sul server"
+  "settings.pendingActions.opOther": "Azione sul server",
+  "views": {
+    "section": "Viste",
+    "builtin": {
+      "needs-reply": "Da rispondere",
+      "starred": "Speciali",
+      "attachments": "Allegati"
+    },
+    "unavailable": {
+      "building": "La posta è ancora in fase di indicizzazione: questa vista si completerà man mano.",
+      "unavailable": "L’indice di ricerca non è aperto, quindi questa vista non può essere calcolata ora.",
+      "off": "Attiva l’indice di ricerca per usare le viste salvate.",
+      "error": "Non è stato possibile calcolare questa vista."
+    },
+    "saveSearch": "Salva questa ricerca come vista"
+  }
 }

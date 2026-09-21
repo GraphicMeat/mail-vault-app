@@ -533,3 +533,65 @@
   color: var(--mail-text-muted);
   font-size: 12px;
 }
+
+/* ── Saved views ─────────────────────────────────────────────────────────── */
+
+.sidebar-views-section {
+  padding-bottom: 4px;
+}
+
+.sidebar-view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 8px 4px;
+}
+
+.sidebar-view-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--mail-text);
+  font-size: 13px;
+  text-align: left;
+}
+
+.sidebar-view-row:hover {
+  background: var(--mail-surface-hover, rgba(127, 127, 127, 0.12));
+}
+
+.sidebar-view-row.is-active {
+  background: var(--mail-accent-tint, rgba(127, 127, 127, 0.2));
+  font-weight: 600;
+}
+
+.sidebar-view-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-view-count {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--mail-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-views-unavailable {
+  padding: 0 16px 6px;
+  font-size: 11px;
+  color: var(--mail-text-muted);
+}
+
+/* The collapsed rail is a second render of the same list: a section that only
+   exists in the wide sidebar vanishes the moment someone narrows it. */
+.sidebar-collapsed-views .sidebar-view-row {
+  width: auto;
+  justify-content: center;
+  padding: 8px;
+}

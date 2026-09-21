@@ -20,6 +20,8 @@ import { formatBytes } from '../utils/formatBytes';
 import { lastDaysSeries } from '../utils/transferLimits';
 import { t as tr, useT } from '../i18n/index.js';
 import { FolderTree, FolderBubbles } from './FolderTree';
+import { SidebarViews } from './SidebarViews';
+import { useViewStore } from '../stores/viewStore';
 import { FolderContextMenu } from './FolderContextMenu';
 import { FolderNameDialog } from './FolderNameDialog';
 import { FocusTimerButton } from './FocusTimerButton';
@@ -700,7 +702,12 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
   // A folder with folders under it lists the whole branch; a leaf is an
   // ordinary folder and takes the ordinary path. The decision itself lives in
   // openFolder, because a remembered folder has to be restored the same way.
-  const openMailFolder = (accountId, path) => { onOpenMail?.(); return openFolder(accountId, path); };
+  const openMailFolder = (accountId, path) => {
+    // Opening a folder leaves the view: the list shows one or the other.
+    if (useViewStore.getState().activeViewId) useViewStore.getState().closeView();
+    onOpenMail?.();
+    return openFolder(accountId, path);
+  };
   const selectFolder = (path) => openMailFolder(activeAccountId, path);
 
   // ── Folder operations ──
@@ -892,6 +899,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
         <div className="w-full py-2 flex justify-center shrink-0">{insightsEntry}</div>
 
         {/* Account icons */}
+        <SidebarViews collapsed />
         <div className="sidebar-collapsed-accounts w-full py-2 border-b border-mail-border flex flex-col items-center gap-1 flex-1 min-h-0 overflow-y-auto">
           {orderedAccounts.map(account => (
             <div
@@ -1111,6 +1119,7 @@ export function Sidebar({ onAddAccount, onCompose, onOpenSettings, onOpenBackup,
       </div>
 
       <div className="sidebar-navigation-scroll" data-sidebar-layout={sidebarLayout}>
+        <SidebarViews />
         <section className={`sidebar-account-section ${useSwitcher ? 'sidebar-switcher-section' : ''}`} aria-label={t('workspace.accounts')}>
           {useSwitcher ? <>
             <div className="sidebar-section-heading"><h2>{t('workspace.accounts')}</h2>

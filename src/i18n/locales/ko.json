@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "서버에서 삭제",
   "settings.pendingActions.opMove": "다른 폴더로 이동",
   "settings.pendingActions.opFlag": "플래그 변경",
-  "settings.pendingActions.opOther": "서버 작업"
+  "settings.pendingActions.opOther": "서버 작업",
+  "views": {
+    "section": "보기",
+    "builtin": {
+      "needs-reply": "답장 필요",
+      "starred": "별표",
+      "attachments": "첨부 파일"
+    },
+    "unavailable": {
+      "building": "메일을 아직 색인하는 중입니다. 완료되면서 이 보기가 채워집니다.",
+      "unavailable": "검색 색인이 열려 있지 않아 지금은 이 보기를 계산할 수 없습니다.",
+      "off": "저장된 보기를 사용하려면 검색 색인을 켜세요.",
+      "error": "이 보기를 계산하지 못했습니다."
+    },
+    "saveSearch": "이 검색을 보기로 저장"
+  }
 }

@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Vom Server löschen",
   "settings.pendingActions.opMove": "In anderen Ordner verschieben",
   "settings.pendingActions.opFlag": "Markierungsänderung",
-  "settings.pendingActions.opOther": "Serveraktion"
+  "settings.pendingActions.opOther": "Serveraktion",
+  "views": {
+    "section": "Ansichten",
+    "builtin": {
+      "needs-reply": "Antwort nötig",
+      "starred": "Markiert",
+      "attachments": "Anhänge"
+    },
+    "unavailable": {
+      "building": "Ihre E-Mails werden noch indiziert — diese Ansicht füllt sich nach und nach.",
+      "unavailable": "Der Suchindex ist nicht geöffnet, daher lässt sich diese Ansicht gerade nicht ermitteln.",
+      "off": "Schalten Sie den Suchindex ein, um gespeicherte Ansichten zu nutzen.",
+      "error": "Diese Ansicht konnte nicht ermittelt werden."
+    },
+    "saveSearch": "Diese Suche als Ansicht speichern"
+  }
 }

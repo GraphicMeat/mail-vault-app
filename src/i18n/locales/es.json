@@ -2454,5 +2454,20 @@
   "settings.pendingActions.opDelete": "Eliminar del servidor",
   "settings.pendingActions.opMove": "Mover a otra carpeta",
   "settings.pendingActions.opFlag": "Cambio de marca",
-  "settings.pendingActions.opOther": "Acción del servidor"
+  "settings.pendingActions.opOther": "Acción del servidor",
+  "views": {
+    "section": "Vistas",
+    "builtin": {
+      "needs-reply": "Necesita respuesta",
+      "starred": "Destacados",
+      "attachments": "Adjuntos"
+    },
+    "unavailable": {
+      "building": "Todavía se está indexando tu correo: esta vista se completará al terminar.",
+      "unavailable": "El índice de búsqueda no está abierto, así que esta vista no se puede calcular ahora.",
+      "off": "Activa el índice de búsqueda para usar vistas guardadas.",
+      "error": "No se ha podido calcular esta vista."
+    },
+    "saveSearch": "Guardar esta búsqueda como vista"
+  }
 }
