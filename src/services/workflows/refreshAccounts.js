@@ -13,6 +13,37 @@ import { invalidateFolderStatus } from './folderStatus';
 import { _resolveMailboxPath } from '../../stores/slices/unifiedHelpers';
 
 
+// ── who counts as "new" ──────────────────────────────────────────────────
+//
+// A set difference only names arrivals when the set it subtracts already held
+// the whole folder. Neither of the two sets the app had at hand qualifies: the
+// open list renders 500 rows from cache and drains the rest behind it
+// (loadEmails), and the disk cache is capped at one 500-header page by a cold
+// daemon sync and wiped outright by a UIDVALIDITY change. Diffing a full
+// server listing against either announced the whole mailbox as new mail —
+// "1134 new emails" is a 1634-message INBOX minus the 500 rows that happened
+// to be loaded.
+//
+// So the baseline is the disk cache, and it only speaks when it is provably
+// complete: as many cached headers as the server says the folder holds. While
+// a backfill is still running nothing is announced, which is right — none of
+// those messages arrived.
+async function arrivalBaseline(accountId, mailbox) {
+  const cached = await db.getEmailHeaders(accountId, mailbox).catch(() => null);
+  const uids = new Set(cached?.emails?.map(e => e.uid) || []);
+  const total = cached?.totalEmails ?? 0;
+  return { uids, complete: total > 0 && uids.size >= total };
+}
+
+// `from` is an object ({name, address}), and interpolating it into the banner
+// body is where every notification's "[object Object]: <subject>" came from.
+function senderLabel(email) {
+  const from = email?.from;
+  if (typeof from === 'string') return from;
+  return from?.name || from?.address || email?.sender || '';
+}
+
+
 // ── refreshCurrentView workflow ──
 
 export async function refreshCurrentView() {
@@ -98,7 +129,11 @@ export async function refreshAllAccounts(options = {}) {
 
     try {
       if (account.id === activeAccountId && !refreshingUnifiedView) {
-        const beforeUids = new Set(get().emails.map(e => e.uid));
+        // Against the cache, not against the rows on screen: the open list is
+        // still filling while this runs, and every row it had yet to drain
+        // used to read as an arrival.
+        const openMailbox = get().activeMailbox || 'INBOX';
+        const baseline = await arrivalBaseline(account.id, openMailbox);
         // No badge write here. This branch reloads whatever folder is OPEN, and
         // it counted that folder — so a refresh landing while the Bin was on
         // screen put the Bin's unread on the account's badge, and a branch
@@ -107,15 +142,15 @@ export async function refreshAllAccounts(options = {}) {
         // account's inbox (see updateSortedEmails).
         await get().loadEmails();
         const afterEmails = get().emails;
-        const newForAccount = afterEmails.filter(e => !beforeUids.has(e.uid));
-        if (newForAccount.length > 0) {
+        const newForAccount = afterEmails.filter(e => !baseline.uids.has(e.uid));
+        if (newForAccount.length > 0 && baseline.complete) {
           const newest = newForAccount[0];
           perAccountResults.push({
             accountId: account.id,
             accountEmail: account.email,
-            folder: get().activeMailbox || 'INBOX',
+            folder: openMailbox,
             newCount: newForAccount.length,
-            newestSender: newest.from || newest.sender || '',
+            newestSender: senderLabel(newest),
             newestSubject: newest.subject || '',
             newestUid: newest.uid,
           });
@@ -128,8 +163,7 @@ export async function refreshAllAccounts(options = {}) {
           const targetFolder = folders.find(f => storageKeyOf(f) === targetMailbox);
           if (targetFolder) {
             const normalizedMailbox = storageKeyOf(targetFolder);
-            const cached = await db.getEmailHeaders(account.id, normalizedMailbox).catch(() => null);
-            const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
+            const baseline = await arrivalBaseline(account.id, normalizedMailbox);
 
             const { headers } = await listGraphMessages(account.id, normalizedMailbox, token, targetFolder.id);
             if (headers.length > 0) {
@@ -141,15 +175,15 @@ export async function refreshAllAccounts(options = {}) {
               countedUnread[account.id] = graphUnread;
             }
 
-            const newHeaders = headers.filter(e => !cachedUids.has(e.uid));
-            if (newHeaders.length > 0 && cachedUids.size > 0) {
+            const newHeaders = headers.filter(e => !baseline.uids.has(e.uid));
+            if (newHeaders.length > 0 && baseline.complete) {
               const newest = newHeaders[0];
               perAccountResults.push({
                 accountId: account.id,
                 accountEmail: account.email,
                 folder: normalizedMailbox,
                 newCount: newHeaders.length,
-                newestSender: newest.from || newest.sender || '',
+                newestSender: senderLabel(newest),
                 newestSubject: newest.subject || '',
                 newestUid: newest.uid,
               });
@@ -164,8 +198,7 @@ export async function refreshAllAccounts(options = {}) {
           if (!mailboxes?.length) mailboxes = await db.getCachedMailboxes(account.id);
           const resolvedMailbox = _resolveMailboxPath(mailboxes || [], targetMailbox);
 
-          const cached = await db.getEmailHeaders(account.id, resolvedMailbox).catch(() => null);
-          const cachedUids = new Set(cached?.emails?.map(e => e.uid) || []);
+          const baseline = await arrivalBaseline(account.id, resolvedMailbox);
 
           const allEmails = [];
           let page = 1;
@@ -191,15 +224,15 @@ export async function refreshAllAccounts(options = {}) {
             countedUnread[account.id] = imapUnread;
           }
 
-          const newHeaders = allEmails.filter(e => !cachedUids.has(e.uid));
-          if (newHeaders.length > 0 && cachedUids.size > 0) {
+          const newHeaders = allEmails.filter(e => !baseline.uids.has(e.uid));
+          if (newHeaders.length > 0 && baseline.complete) {
             const newest = newHeaders[0];
             perAccountResults.push({
               accountId: account.id,
               accountEmail: account.email,
               folder: resolvedMailbox,
               newCount: newHeaders.length,
-              newestSender: newest.from || newest.sender || '',
+              newestSender: senderLabel(newest),
               newestSubject: newest.subject || '',
               newestUid: newest.uid,
             });
