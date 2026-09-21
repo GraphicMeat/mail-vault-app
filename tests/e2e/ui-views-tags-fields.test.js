@@ -61,6 +61,42 @@ describe('Saved views, tags and custom fields', function () {
     expect(title.length).toBeGreaterThan(0);
   });
 
+  /// The editor writes through the daemon and the sidebar reads back from it,
+  /// so a name that survives a reload was really stored.
+  it('renames a view from the sidebar, and the name sticks', async function () {
+    const renamed = `Starred ${Date.now()}`;
+    await browser.execute(() => document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click());
+    await browser.waitUntil(async () => browser.execute(() => !!document.querySelector('[data-testid="view-editor-form"]')),
+      { timeout: 10000, timeoutMsg: 'the view editor never opened' });
+
+    await browser.execute((name) => {
+      const input = document.querySelector('[data-testid="view-name"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, name);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
+    }, renamed);
+
+    const label = await browser.waitUntil(async () => {
+      const text = await browser.execute(() => document.querySelector('[data-testid="view-row-builtin-starred"]')?.textContent?.trim() || '');
+      return text.includes('Starred ') ? text : false;
+    }, { timeout: 15000, timeoutMsg: 'the sidebar never showed the new name' });
+    expect(label).toContain(renamed);
+
+    // Put it back: the starter carries no name of its own.
+    await browser.execute(() => {
+      document.querySelector('[data-testid="view-edit-builtin-starred"]')?.click();
+    });
+    await browser.pause(300);
+    await browser.execute(() => {
+      const input = document.querySelector('[data-testid="view-name"]');
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+      setter.call(input, '');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('[data-testid="view-editor-form"]').requestSubmit();
+    });
+  });
+
   it('offers the custom field editor, and it answers', async function () {
     await openSettings();
     await browser.pause(400);
